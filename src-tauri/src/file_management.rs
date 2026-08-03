@@ -99,11 +99,8 @@ fn resolve_image_metadata(
     }
     let mut metadata = crate::exif_processing::load_sidecar(sidecar_path);
 
-    if enable_xmp_sync
-        && sync_metadata_from_xmp(image_path, &mut metadata)
-        && let Ok(json) = serde_json::to_string_pretty(&metadata)
-    {
-        let _ = fs::write(sidecar_path, json);
+    if enable_xmp_sync && sync_metadata_from_xmp(image_path, &mut metadata) {
+        let _ = crate::exif_processing::save_sidecar(sidecar_path, &metadata);
     }
 
     let is_raw = crate::formats::is_raw_file(image_path);
@@ -469,9 +466,7 @@ pub async fn update_exif_fields(
             let mut final_metadata = crate::exif_processing::load_sidecar(&primary_path);
 
             final_metadata.exif = Some(exif_data);
-            if let Ok(json) = serde_json::to_string_pretty(&final_metadata) {
-                let _ = std::fs::write(&primary_path, json);
-            }
+            let _ = crate::exif_processing::save_sidecar(&primary_path, &final_metadata);
         });
         Ok(())
     })
@@ -1390,9 +1385,7 @@ pub fn generate_thumbnail_data(
         );
         None
     } else {
-        fs::read_to_string(&sidecar_path)
-            .ok()
-            .and_then(|content| serde_json::from_str(&content).ok())
+        crate::exif_processing::load_sidecar_checked(&sidecar_path).ok()
     };
 
     let adjustments = metadata
@@ -1716,19 +1709,15 @@ fn generate_single_thumbnail_and_cache(
             sidecar_path.clone(),
         );
         (0, false, Vec::new())
-    } else if let Ok(content) = fs::read_to_string(&sidecar_path) {
-        if let Ok(meta) = serde_json::from_str::<ImageMetadata>(&content) {
-            let is_raw = crate::formats::is_raw_file(path_str);
-            let tm = crate::image_processing::resolve_tonemapper_override(settings, is_raw);
+    } else if let Ok(meta) = crate::exif_processing::load_sidecar_checked(&sidecar_path) {
+        let is_raw = crate::formats::is_raw_file(path_str);
+        let tm = crate::image_processing::resolve_tonemapper_override(settings, is_raw);
 
-            (
-                meta.rating,
-                crate::image_processing::is_image_edited(&meta.adjustments, is_raw, tm),
-                serde_json::to_vec(&meta.adjustments).unwrap_or_default(),
-            )
-        } else {
-            (0, false, Vec::new())
-        }
+        (
+            meta.rating,
+            crate::image_processing::is_image_edited(&meta.adjustments, is_raw, tm),
+            serde_json::to_vec(&meta.adjustments).unwrap_or_default(),
+        )
     } else {
         (0, false, Vec::new())
     };
@@ -2222,7 +2211,8 @@ pub fn duplicate_file(
         && let Some(dest_str) = dest_path.to_str()
     {
         let (_, dest_sidecar_path) = parse_virtual_path(dest_str);
-        fs::copy(&source_sidecar_path, &dest_sidecar_path).map_err(|e| e.to_string())?;
+        let metadata = crate::exif_processing::load_sidecar_checked(&source_sidecar_path)?;
+        crate::exif_processing::save_sidecar(&dest_sidecar_path, &metadata)?;
     }
 
     let dest_path_str = dest_path.to_string_lossy().into_owned();
@@ -2264,7 +2254,7 @@ pub fn copy_files(source_paths: Vec<String>, destination_folder: String) -> Resu
                 .unwrap_or("");
 
             let mut counter = 1;
-            let new_base_path = loop {
+            loop {
                 let new_stem = format!("{}_copy_{}", stem, counter);
                 let temp_path = if extension.is_empty() {
                     source_parent.join(new_stem)
@@ -2275,8 +2265,7 @@ pub fn copy_files(source_paths: Vec<String>, destination_folder: String) -> Resu
                     break temp_path;
                 }
                 counter += 1;
-            };
-            new_base_path
+            }
         } else {
             dest_path.join(
                 source_image_path
@@ -2425,8 +2414,7 @@ pub fn save_metadata_and_update_thumbnail(
 
     metadata.adjustments = final_adjustments;
 
-    let json_string = serde_json::to_string_pretty(&metadata).map_err(|e| e.to_string())?;
-    std::fs::write(&sidecar_path, json_string).map_err(|e| e.to_string())?;
+    crate::exif_processing::save_sidecar(&sidecar_path, &metadata)?;
 
     if let Ok(settings) = load_settings(app_handle.clone())
         && settings.enable_xmp_sync.unwrap_or(false)
@@ -2544,9 +2532,7 @@ pub async fn apply_adjustments_to_paths(
 
             existing_metadata.adjustments = new_adjustments;
 
-            if let Ok(json_string) = serde_json::to_string_pretty(&existing_metadata) {
-                let _ = std::fs::write(&sidecar_path, json_string);
-            }
+            let _ = crate::exif_processing::save_sidecar(&sidecar_path, &existing_metadata);
 
             if enable_xmp_sync {
                 let source_path = parse_virtual_path(path).0;
@@ -2613,9 +2599,7 @@ pub async fn reset_adjustments_for_paths(
 
             existing_metadata.adjustments = serde_json::json!({});
 
-            if let Ok(json_string) = serde_json::to_string_pretty(&existing_metadata) {
-                let _ = std::fs::write(&sidecar_path, json_string);
-            }
+            let _ = crate::exif_processing::save_sidecar(&sidecar_path, &existing_metadata);
 
             if enable_xmp_sync {
                 let source_path = parse_virtual_path(path).0;
@@ -2739,9 +2723,7 @@ pub async fn apply_auto_adjustments_to_paths(
                     }
                 }
 
-                if let Ok(json_string) = serde_json::to_string_pretty(&existing_metadata) {
-                    let _ = std::fs::write(&sidecar_path, json_string);
-                }
+                let _ = crate::exif_processing::save_sidecar(&sidecar_path, &existing_metadata);
 
                 if enable_xmp_sync {
                     sync_metadata_to_xmp(&source_path, &existing_metadata, create_xmp_if_missing);
@@ -2802,9 +2784,7 @@ pub fn set_color_label_for_paths(
             metadata.tags = Some(tags);
         }
 
-        if let Ok(json_string) = serde_json::to_string_pretty(&metadata) {
-            let _ = std::fs::write(&sidecar_path, json_string);
-        }
+        let _ = crate::exif_processing::save_sidecar(&sidecar_path, &metadata);
 
         if enable_xmp_sync {
             let source_path = parse_virtual_path(path).0;
@@ -2832,9 +2812,7 @@ pub fn set_rating_for_paths(
 
         metadata.rating = rating;
 
-        if let Ok(json_string) = serde_json::to_string_pretty(&metadata) {
-            let _ = std::fs::write(&sidecar_path, json_string);
-        }
+        let _ = crate::exif_processing::save_sidecar(&sidecar_path, &metadata);
 
         if enable_xmp_sync {
             let source_path = parse_virtual_path(path).0;
@@ -2853,11 +2831,8 @@ pub fn load_metadata(path: String, app_handle: AppHandle) -> Result<ImageMetadat
     let (source_path, sidecar_path) = parse_virtual_path(&path);
     let mut metadata = crate::exif_processing::load_sidecar(&sidecar_path);
 
-    if enable_xmp_sync
-        && sync_metadata_from_xmp(&source_path, &mut metadata)
-        && let Ok(json) = serde_json::to_string_pretty(&metadata)
-    {
-        let _ = fs::write(&sidecar_path, json);
+    if enable_xmp_sync && sync_metadata_from_xmp(&source_path, &mut metadata) {
+        let _ = crate::exif_processing::save_sidecar(&sidecar_path, &metadata);
     }
 
     Ok(metadata)
@@ -3042,61 +3017,6 @@ pub fn handle_export_presets_to_file(
     let json_string = serde_json::to_string_pretty(&preset_file)
         .map_err(|e| format!("Failed to serialize presets: {}", e))?;
     fs::write(file_path, json_string).map_err(|e| format!("Failed to write preset file: {}", e))
-}
-
-#[tauri::command]
-pub fn save_community_preset(
-    name: String,
-    adjustments: Value,
-    app_handle: AppHandle,
-    include_masks: Option<bool>,
-    include_crop_transform: Option<bool>,
-    preset_type: Option<String>,
-) -> Result<(), String> {
-    let mut current_presets = load_presets(app_handle.clone())?;
-
-    let community_folder_name = "Community";
-    let community_folder_id = match current_presets.iter_mut().find(|item| {
-        if let PresetItem::Folder(f) = item {
-            f.name == community_folder_name
-        } else {
-            false
-        }
-    }) {
-        Some(PresetItem::Folder(folder)) => folder.id.clone(),
-        _ => {
-            let new_folder_id = Uuid::new_v4().to_string();
-            let new_folder = PresetItem::Folder(PresetFolder {
-                id: new_folder_id.clone(),
-                name: community_folder_name.to_string(),
-                children: Vec::new(),
-            });
-            current_presets.insert(0, new_folder);
-            new_folder_id
-        }
-    };
-
-    let new_preset = Preset {
-        id: Uuid::new_v4().to_string(),
-        name,
-        adjustments,
-        include_masks,
-        include_crop_transform,
-        preset_type: preset_type.or(Some("style".to_string())),
-    };
-
-    if let Some(PresetItem::Folder(folder)) = current_presets.iter_mut().find(|item| {
-        if let PresetItem::Folder(f) = item {
-            f.id == community_folder_id
-        } else {
-            false
-        }
-    }) {
-        folder.children.retain(|p| p.name != new_preset.name);
-        folder.children.push(new_preset);
-    }
-
-    save_presets(current_presets, app_handle)
 }
 
 #[tauri::command]
@@ -3392,15 +3312,10 @@ pub fn get_thumb_cache_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
 pub fn get_cache_key_hash(path_str: &str) -> Option<String> {
     let (_, sidecar_path) = parse_virtual_path(path_str);
 
-    let adjustments_bytes = if let Ok(content) = fs::read_to_string(&sidecar_path) {
-        if let Ok(meta) = serde_json::from_str::<ImageMetadata>(&content) {
-            serde_json::to_vec(&meta.adjustments).unwrap_or_default()
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
+    let adjustments_bytes = crate::exif_processing::load_sidecar_checked(&sidecar_path)
+        .ok()
+        .and_then(|metadata| serde_json::to_vec(&metadata.adjustments).ok())
+        .unwrap_or_default();
 
     compute_thumbnail_cache_hash(path_str, &adjustments_bytes)
 }
@@ -3742,15 +3657,12 @@ pub fn create_virtual_copy(
     let new_virtual_path = format!("{}?vc={}", source_path.to_string_lossy(), new_copy_id);
     let (_, new_sidecar_path) = parse_virtual_path(&new_virtual_path);
 
-    if source_sidecar_path.exists() {
-        fs::copy(&source_sidecar_path, &new_sidecar_path)
-            .map_err(|e| format!("Failed to copy sidecar file: {}", e))?;
+    let metadata = if source_sidecar_path.exists() {
+        crate::exif_processing::load_sidecar_checked(&source_sidecar_path)?
     } else {
-        let default_metadata = ImageMetadata::default();
-        let json_string =
-            serde_json::to_string_pretty(&default_metadata).map_err(|e| e.to_string())?;
-        fs::write(new_sidecar_path, json_string).map_err(|e| e.to_string())?;
-    }
+        ImageMetadata::default()
+    };
+    crate::exif_processing::save_sidecar(&new_sidecar_path, &metadata)?;
 
     if let Some(album_id) = target_album_id {
         let _ = add_to_album(album_id, vec![new_virtual_path.clone()], app_handle);

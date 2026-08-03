@@ -13,6 +13,8 @@ import { useProcessStore } from '../../../store/useProcessStore';
 import { ExifOverlay } from '../../ui/AppProperties';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 
+const VirtualizedLibraryRow = (props: React.ComponentProps<typeof Row>) => <Row {...props} />;
+
 function ListHeader({ widths, setWidths, containerRef, sortCriteria, onSortChange }: any) {
   const { t } = useTranslation();
   const exifOverlay = useSettingsStore((s) => s.appSettings?.exifOverlay || ExifOverlay.Off);
@@ -279,7 +281,8 @@ export default function LibraryGrid(props: any) {
   const handleToggleRecursiveFolder = useCallback((path: string) => {
     setCollapsedRecursiveFolders((prev) => {
       const next = new Set(prev);
-      next.has(path) ? next.delete(path) : next.add(path);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
       return next;
     });
   }, []);
@@ -405,7 +408,7 @@ export default function LibraryGrid(props: any) {
     prevDisplayMode.current = libraryDisplayMode;
     prevListElement.current = element;
 
-    const { rows, rowHeight, headerHeight, columnCount } = gridData;
+    const { rowHeight, headerHeight, columnCount } = gridData;
 
     let targetTop = 0;
     let found = false;
@@ -429,7 +432,7 @@ export default function LibraryGrid(props: any) {
         targetTop += rowsInGroup * rowHeight;
       }
     } else {
-      const index = imageList.findIndex((img) => img.path === activePath);
+      const index = imageList.findIndex((img: { path: string }) => img.path === activePath);
       if (index !== -1) {
         const rowIndex = Math.floor(index / columnCount);
         targetTop = rowIndex * rowHeight;
@@ -570,7 +573,7 @@ export default function LibraryGrid(props: any) {
             rowHeight={getItemSize}
             onScroll={(e: React.UIEvent<HTMLElement>) => handleScroll(e.currentTarget.scrollTop)}
             className="custom-scrollbar"
-            rowComponent={Row}
+            rowComponent={VirtualizedLibraryRow}
             rowProps={memoizedRowProps}
           />
         </div>

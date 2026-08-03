@@ -111,7 +111,7 @@ function buildParametricPoints(settings: ParametricCurveSettings): Array<Coord> 
 
   const clamp = (v: number) => Math.max(0, Math.min(1, v));
 
-  let points = xs.map((x, i) => ({
+  const points = xs.map((x, i) => ({
     x: x * 255,
     y: clamp(ys[i]) * 255,
   }));
@@ -485,9 +485,9 @@ export default function CurveGraph({
     [histogram],
   );
 
-  const activePoints = isParametricMode
+  const activePoints: Coord[] = isParametricMode
     ? buildParametricPoints(activeParametricSettings)
-    : (localPoints ?? adjustments?.curves?.[activeChannel]);
+    : (localPoints ?? adjustments?.curves?.[activeChannel] ?? DEFAULT_POINT_CURVES[activeChannel]);
 
   const { color, data: histogramData } = channelConfig[activeChannel];
 
@@ -508,7 +508,7 @@ export default function CurveGraph({
     if (index > 0 && index < activePoints.length - 1) {
       e.preventDefault();
       e.stopPropagation();
-      const newPoints = activePoints.filter((_, i) => i !== index);
+      const newPoints = activePoints.filter((_: Coord, i: number) => i !== index);
       setLocalPoints(newPoints);
       localPointsRef.current = newPoints;
       setAdjustments((prev: any) => ({
@@ -666,7 +666,7 @@ export default function CurveGraph({
     }
 
     const handleCopy = () => {
-      curveClipboard = activePoints.map((p) => ({ ...p }));
+      curveClipboard = activePoints.map((p: Coord) => ({ ...p }));
     };
 
     const handlePaste = () => {
@@ -805,9 +805,9 @@ export default function CurveGraph({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {Object.keys(channelConfig).map((channel: any) => {
+          {(Object.keys(channelConfig) as ActiveChannel[]).map((channel) => {
             const selected = activeChannel === channel;
-            const channelLabel = t(`adjustments.curves.channels.${channel}`);
+            const channelLabel = t(`adjustments.curves.channels.${channel}` as never) as string;
             return (
               <button
                 key={channel}

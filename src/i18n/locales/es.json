@@ -707,7 +707,7 @@
         "sortAll": "Ordenar todo alfabéticamente"
       },
       "status": {
-        "empty": "Aún no hay ajustes guardados. Crea el tuyo, impórtalo desde un archivo o explora los de la comunidad.",
+        "empty": "Aún no hay ajustes guardados. Crea el tuyo o impórtalo desde un archivo.",
         "getCommunity": "Obtener ajustes de la comunidad",
         "loading": "Cargando ajustes preestablecidos..."
       },

@@ -49,6 +49,9 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': 'off',
+      // RapidRAW's UI and Tauri bridge still expose broad dynamic payloads. TypeScript's
+      // noEmit gate remains mandatory while these call sites are migrated incrementally.
+      '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
@@ -78,6 +81,13 @@ module.exports = [
           ],
         },
       ],
+    },
+  },
+  {
+    // Daily RAW-owned foundations must not add new untyped escape hatches.
+    files: ['src/config/**/*.ts', 'src/i18n/**/*.{ts,tsx}', 'src/types/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 ];

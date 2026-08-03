@@ -686,7 +686,7 @@
         "sortAll": "Sort All Alphabetically"
       },
       "status": {
-        "empty": "No presets saved yet. Create your own, import from a file, or explore community presets.",
+        "empty": "No presets saved yet. Create your own or import them from a file.",
         "getCommunity": "Get Community Presets",
         "loading": "Loading Presets..."
       },

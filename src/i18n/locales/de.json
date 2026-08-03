@@ -686,7 +686,7 @@
         "sortAll": "Alle alphabetisch sortieren"
       },
       "status": {
-        "empty": "Noch keine Vorgaben gespeichert. Eigene erstellen, importieren oder Community-Vorgaben entdecken.",
+        "empty": "Noch keine Vorgaben gespeichert. Erstellen Sie eigene oder importieren Sie sie aus einer Datei.",
         "getCommunity": "Community-Vorgaben holen",
         "loading": "Vorgaben laden..."
       },

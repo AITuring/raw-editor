@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "fixtureRootEnvironment": "RAW_EDITOR_ACCEPTANCE_DIR",
+  "files": [],
+  "deferredSonyA7RVScenarios": [
+    "daylight",
+    "tungsten",
+    "high-iso",
+    "underexposed",
+    "saturated-light",
+    "lossy-arw",
+    "lossless-l-arw",
+    "uncompressed-arw"
+  ]
+}

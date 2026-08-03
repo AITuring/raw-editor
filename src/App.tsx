@@ -1,6 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ToastContainer, toast, Slide } from 'react-toastify';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -110,8 +109,6 @@ function App() {
     isWindowFullScreen,
     isInstantTransition,
     isLayoutReady,
-    uiVisibility,
-    isLibraryExportPanelVisible,
     leftPanelWidth,
     rightPanelWidth,
     compactEditorPanelHeightOverride,
@@ -465,18 +462,6 @@ function App() {
     }
   }, [activeRightPanel, activeMaskContainerId, activeAiPatchContainerId, setEditor]);
 
-  useEffect(() => {
-    const unlisten = listen('ai-connector-status-update', (event: any) => {
-      setEditor({ isAIConnectorConnected: event.payload.connected });
-    });
-    invoke(Invokes.CheckAIConnectorStatus);
-    const interval = setInterval(() => invoke(Invokes.CheckAIConnectorStatus), 10000);
-    return () => {
-      clearInterval(interval);
-      unlisten.then((f) => f());
-    };
-  }, [setEditor]);
-
   const createResizeHandler = (stateKey: string, startSize: number) => (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
@@ -613,16 +598,12 @@ function App() {
           return (
             <FolderTree
               isResizing={isResizing}
-              isVisible={true}
               onContextMenu={handleFolderTreeContextMenu}
               onAlbumContextMenu={handleAlbumTreeContextMenu}
               onSelectAlbum={handleSelectAlbum}
               onFolderSelect={(path) => handleSelectSubfolder(path, false)}
               onToggleFolder={handleToggleFolder}
               onOpenFolder={handleOpenFolder}
-              setIsVisible={(value: boolean) =>
-                setUI((state) => ({ uiVisibility: { ...state.uiVisibility, folderTree: value } }))
-              }
               style={{ width: '100%', height: '100%' }}
               isInstantTransition={isInstantTransition}
             />
@@ -652,7 +633,7 @@ function App() {
         case Panel.Ai:
           return BASIC_MODE ? null : <AIPanel />;
         case Panel.Presets:
-          return <PresetsPanel onNavigateToCommunity={() => setUI({ activeView: 'community' })} />;
+          return <PresetsPanel />;
         default:
           return null;
       }

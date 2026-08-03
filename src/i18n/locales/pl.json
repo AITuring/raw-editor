@@ -728,7 +728,7 @@
         "sortAll": "Sortuj wszystko alfabetycznie"
       },
       "status": {
-        "empty": "Brak zapisanych presetów. Utwórz własne, zaimportuj z pliku lub odkryj presety społeczności.",
+        "empty": "Brak zapisanych presetów. Utwórz własne lub zaimportuj je z pliku.",
         "getCommunity": "Pobierz presety społeczności",
         "loading": "Wczytywanie presetów..."
       },

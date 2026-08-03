@@ -14,7 +14,6 @@
     "process:default",
     "os:allow-os-type",
     "core:window:allow-set-fullscreen",
-    "core:window:allow-set-decorations",
-    "shell:default"
+    "core:window:allow-set-decorations"
   ]
 }

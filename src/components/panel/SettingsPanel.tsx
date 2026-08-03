@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Cpu,
   ExternalLink as ExternalLinkIcon,
-  Server,
   Info,
   Trash2,
-  Wifi,
-  WifiOff,
   Plus,
   X,
   SlidersHorizontal,
@@ -21,7 +18,7 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup, type Variants } from 'framer-motion';
 import clsx from 'clsx';
 import Button from '../ui/Button';
 import ConfirmModal from '../modals/ConfirmModal';
@@ -42,24 +39,20 @@ import {
 import Text from '../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useOsPlatform } from '../../hooks/useOsPlatform';
-import { open } from '@tauri-apps/plugin-shell';
-import { UPSTREAM_NAME, UPSTREAM_REPOSITORY_URL } from '../../config/app';
+import { UPSTREAM_NAME } from '../../config/app';
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../../i18n/languages';
 
-// Cloud/Clerk is intentionally unavailable in Daily RAW basic mode. Keep the
-// upstream settings component render-safe without introducing an online auth
-// dependency into the native editor.
-const getOfflineToken = async () => null;
-type OfflineUser = {
-  publicMetadata?: { plan?: string };
-  fullName?: string | null;
-  primaryEmailAddress?: { emailAddress?: string | null } | null;
-};
-const useUser = (): { user: OfflineUser | null } => ({ user: null });
-const useAuth = () => ({ getToken: getOfflineToken });
-const useClerk = () => ({ signOut: async () => undefined });
-const Show = ({ children }: { when?: string; children?: ReactNode }) => null;
-const SignIn = (_props: Record<string, unknown>) => null;
+const THIRD_PARTY_DISPLAY_NAMES = {
+  rawler: 'rawler',
+  lensfun: 'lensfun',
+  negpy: 'NegPy',
+  lama: 'LaMa',
+  sam2: 'SAM 2',
+  u2net: 'U-2-Net',
+  depthAnything: 'Depth Anything V2',
+  nind: 'nind-denoise',
+  darktable: 'darktable & co.',
+} as const;
 
 interface ConfirmModalState {
   confirmText: string;
@@ -103,12 +96,6 @@ interface SettingsPanelProps {
   onLibraryRefresh(): void;
   onSettingsChange(settings: any): Promise<void>;
   rootPaths: string[];
-}
-
-interface TestStatus {
-  message: string;
-  success: boolean | null;
-  testing: boolean;
 }
 
 interface MyLens {
@@ -267,145 +254,6 @@ const DataActionItem = ({
   );
 };
 
-interface AiProviderSwitchProps {
-  selectedProvider: string;
-  onProviderChange: (provider: string) => void;
-}
-
-const AiProviderSwitch = ({ selectedProvider, onProviderChange }: AiProviderSwitchProps) => {
-  const { t } = useTranslation();
-
-  const aiProviders = useMemo(
-    () => [
-      { id: 'cpu', label: t('settings.processing.ai.providers.cpu'), icon: Cpu },
-      { id: 'ai-connector', label: t('settings.processing.ai.providers.aiConnector'), icon: Server },
-      //{ id: 'cloud', label: t('settings.processing.ai.providers.cloud'), icon: Cloud },
-    ],
-    [t],
-  );
-
-  return (
-    <div className="relative flex w-full p-1 bg-bg-primary rounded-md border border-border-color">
-      {aiProviders.map((provider) => (
-        <button
-          key={provider.id}
-          onClick={() => onProviderChange(provider.id)}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-            {
-              'text-text-primary hover:bg-surface': selectedProvider !== provider.id,
-              'text-button-text': selectedProvider === provider.id,
-            },
-          )}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          {selectedProvider === provider.id && (
-            <motion.span
-              layoutId="ai-provider-switch-bubble"
-              className="absolute inset-0 z-0 bg-accent"
-              style={{ borderRadius: 6 }}
-              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-            />
-          )}
-          <span className="relative z-10 flex items-center">
-            <provider.icon size={16} className="mr-2" />
-            {provider.label}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-};
-
-const CloudDashboard = () => {
-  const { user } = useUser();
-  const { getToken } = useAuth();
-  const { signOut } = useClerk();
-  const [usage, setUsage] = useState<{ requests: number; limit: number; month: string } | null>(null);
-  const { t } = useTranslation();
-
-  useEffect(() => {
-    const fetchUsage = async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetch('https://getrapidraw.com/api/usage', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          setUsage(await res.json());
-        }
-      } catch (e) {
-        console.error('Failed to fetch cloud usage', e);
-      }
-    };
-    fetchUsage();
-  }, [getToken]);
-
-  const isPro = user?.publicMetadata?.plan === 'pro';
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-border-color pb-4">
-        <div className="flex items-center gap-3">
-          <div>
-            <Text variant={TextVariants.heading}>{user?.fullName || user?.primaryEmailAddress?.emailAddress}</Text>
-            <Text variant={TextVariants.small} color={isPro ? TextColors.success : TextColors.error}>
-              {isPro
-                ? t('settings.processing.ai.cloud.signedIn.active')
-                : t('settings.processing.ai.cloud.signedIn.inactive')}
-            </Text>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            className="bg-transparent text-text-secondary hover:text-text-primary hover:bg-surface border-none shadow-none"
-            onClick={() => open('https://www.getrapidraw.com/dashboard')}
-          >
-            {t('settings.processing.ai.cloud.signedIn.manage')} <ExternalLinkIcon size={14} className="ml-1" />
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={async () => {
-              await signOut();
-            }}
-          >
-            {t('settings.processing.ai.cloud.signedIn.logout')}
-          </Button>
-        </div>
-      </div>
-
-      {isPro ? (
-        <div className="bg-surface p-4 rounded-md">
-          <div className="flex justify-between items-center mb-2">
-            <Text variant={TextVariants.label}>{t('settings.processing.ai.cloud.signedIn.usage')}</Text>
-            <Text variant={TextVariants.small}>
-              {t('settings.processing.ai.cloud.signedIn.usageStats', {
-                requests: usage?.requests ?? 0,
-                limit: usage?.limit ?? 500,
-              })}
-            </Text>
-          </div>
-          <div className="w-full bg-bg-primary rounded-full h-2">
-            <div
-              className="bg-accent h-2 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, ((usage?.requests ?? 0) / (usage?.limit ?? 500)) * 100)}%` }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="bg-red-900/10 border border-red-500/50 p-4 rounded-md text-center">
-          <Text className="mb-3">{t('settings.processing.ai.cloud.signedOut.upgradeDesc')}</Text>
-          <Button onClick={() => open('https://www.getrapidraw.com/cloud')}>
-            {t('settings.processing.ai.cloud.signedOut.upgradeBtn')}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-};
-
 interface CanvasInputModeSwitchProps {
   mode: 'mouse' | 'trackpad';
   onModeChange: (mode: 'mouse' | 'trackpad') => void;
@@ -511,7 +359,6 @@ export default function SettingsPanel({
   onSettingsChange,
   rootPaths,
 }: SettingsPanelProps) {
-  const { user: _user } = useUser();
   const { t } = useTranslation();
   const [isClearing, setIsClearing] = useState(false);
   const [clearMessage, setClearMessage] = useState('');
@@ -529,12 +376,9 @@ export default function SettingsPanel({
     onConfirm: () => {},
     title: '',
   });
-  const [testStatus, setTestStatus] = useState<TestStatus>({ message: '', success: null, testing: false });
   const [hasInteractedWithLivePreview, setHasInteractedWithLivePreview] = useState(false);
   const [recordingAction, setRecordingAction] = useState<string | null>(null);
 
-  const [aiProvider, setAiProvider] = useState(appSettings?.aiProvider || 'cpu');
-  const [aiConnectorAddress, setAiConnectorAddress] = useState<string>(appSettings?.aiConnectorAddress || '');
   const [newShortcut, setNewShortcut] = useState('');
   const [newAiTag, setNewAiTag] = useState('');
 
@@ -646,12 +490,6 @@ export default function SettingsPanel({
   const taggingShortcuts = Array.from(new Set<string>(appSettings?.taggingShortcuts || []));
 
   useEffect(() => {
-    if (appSettings?.aiConnectorAddress !== aiConnectorAddress) {
-      setAiConnectorAddress(appSettings?.aiConnectorAddress || '');
-    }
-    if (appSettings?.aiProvider !== aiProvider) {
-      setAiProvider(appSettings?.aiProvider || 'cpu');
-    }
     setProcessingSettings({
       editorPreviewResolution: appSettings?.editorPreviewResolution || 1920,
       thumbnailResolution: appSettings?.thumbnailResolution || 720,
@@ -718,11 +556,6 @@ export default function SettingsPanel({
       ...processingSettings,
     });
     await relaunch();
-  };
-
-  const handleProviderChange = (provider: string) => {
-    setAiProvider(provider);
-    onSettingsChange({ ...appSettings, aiProvider: provider });
   };
 
   const handlePreviewModeChange = (mode: 'static' | 'dynamic') => {
@@ -872,7 +705,7 @@ export default function SettingsPanel({
     });
   };
 
-  const shortcutTagVariants = {
+  const shortcutTagVariants: Variants = {
     visible: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 500, damping: 30 } },
     exit: { opacity: 0, scale: 0.8, transition: { duration: 0.15 } },
   };
@@ -904,22 +737,6 @@ export default function SettingsPanel({
       onConfirm: executeClearCache,
       title: t('settings.data.modals.confirmCacheTitle'),
     });
-  };
-
-  const handleTestConnection = async () => {
-    if (!aiConnectorAddress) {
-      return;
-    }
-    setTestStatus({ testing: true, message: t('settings.processing.ai.connector.testing'), success: null });
-    try {
-      await invoke(Invokes.TestAIConnectorConnection, { address: aiConnectorAddress });
-      setTestStatus({ testing: false, message: t('settings.processing.ai.connector.success'), success: true });
-    } catch (err) {
-      setTestStatus({ testing: false, message: t('settings.processing.ai.connector.failed'), success: false });
-      console.error('AI Connector connection test failed:', err);
-    } finally {
-      setTimeout(() => setTestStatus({ testing: false, message: '', success: null }), EXECUTE_TIMEOUT);
-    }
   };
 
   const closeConfirmModal = () => {
@@ -1565,116 +1382,23 @@ export default function SettingsPanel({
                     </Text>
                     <Text className="mb-4">{t('settings.thanks.description')}</Text>
                     <Text as="ul" className="space-y-3 list-disc ml-5 pl-1">
-                      <li>
-                        <a
-                          href={UPSTREAM_REPOSITORY_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          {UPSTREAM_NAME}
-                        </a>
-                        : {t('settings.thanks.list.rapidraw')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/dnglab/dnglab/tree/main/rawler"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          rawler
-                        </a>
-                        : {t('settings.thanks.list.rawler')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://lensfun.github.io/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          lensfun
-                        </a>
-                        : {t('settings.thanks.list.lensfun')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/marcinz606/NegPy"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          NegPy
-                        </a>
-                        : {t('settings.thanks.list.negpy')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/advimman/lama"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          LaMa
-                        </a>
-                        : {t('settings.thanks.list.lama')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/facebookresearch/sam2"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          SAM 2
-                        </a>
-                        : {t('settings.thanks.list.sam2')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/xuebinqin/U-2-Net"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          U-2-Net
-                        </a>
-                        : {t('settings.thanks.list.u2net')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/DepthAnything/Depth-Anything-V2"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          Depth Anything V2
-                        </a>
-                        : {t('settings.thanks.list.depth')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/trougnouf/nind-denoise"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          nind-denoise
-                        </a>
-                        : {t('settings.thanks.list.nind')}
-                      </li>
-                      <li>
-                        <a
-                          href="https://github.com/darktable-org/darktable"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-accent hover:underline"
-                        >
-                          darktable & co.
-                        </a>
-                        : {t('settings.thanks.list.darktable')}
-                      </li>
+                      {[
+                        [UPSTREAM_NAME, t('settings.thanks.list.rapidraw')],
+                        [THIRD_PARTY_DISPLAY_NAMES.rawler, t('settings.thanks.list.rawler')],
+                        [THIRD_PARTY_DISPLAY_NAMES.lensfun, t('settings.thanks.list.lensfun')],
+                        [THIRD_PARTY_DISPLAY_NAMES.negpy, t('settings.thanks.list.negpy')],
+                        [THIRD_PARTY_DISPLAY_NAMES.lama, t('settings.thanks.list.lama')],
+                        [THIRD_PARTY_DISPLAY_NAMES.sam2, t('settings.thanks.list.sam2')],
+                        [THIRD_PARTY_DISPLAY_NAMES.u2net, t('settings.thanks.list.u2net')],
+                        [THIRD_PARTY_DISPLAY_NAMES.depthAnything, t('settings.thanks.list.depth')],
+                        [THIRD_PARTY_DISPLAY_NAMES.nind, t('settings.thanks.list.nind')],
+                        [THIRD_PARTY_DISPLAY_NAMES.darktable, t('settings.thanks.list.darktable')],
+                      ].map(([name, description]) => (
+                        <li key={name}>
+                          <span className="font-semibold text-accent">{name}</span>:{' '}
+                          {description}
+                        </li>
+                      ))}
                       <li>
                         <span className="font-semibold text-accent">{t('settings.thanks.list.youLabel')}</span>:{' '}
                         {t('settings.thanks.list.you')}
@@ -2121,182 +1845,13 @@ export default function SettingsPanel({
                     <Text variant={TextVariants.title} color={TextColors.accent} className="mb-8">
                       {t('settings.processing.ai.title')}
                     </Text>
-                    <Text className="mb-4">{t('settings.processing.ai.description')}</Text>
-
-                    <AiProviderSwitch selectedProvider={aiProvider} onProviderChange={handleProviderChange} />
-
-                    <div className="mt-8">
-                      <AnimatePresence mode="wait">
-                        {aiProvider === 'cpu' && (
-                          <motion.div
-                            key="cpu"
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <Text variant={TextVariants.heading}>{t('settings.processing.ai.cpu.title')}</Text>
-                            <Text className="mt-1">{t('settings.processing.ai.cpu.description')}</Text>
-                            <Text as="ul" className="mt-3 space-y-1 list-disc list-inside">
-                              <li>{t('settings.processing.ai.cpu.feature1')}</li>
-                              <li>{t('settings.processing.ai.cpu.feature2')}</li>
-                              <li>{t('settings.processing.ai.cpu.feature3')}</li>
-                            </Text>
-                          </motion.div>
-                        )}
-
-                        {aiProvider === 'ai-connector' && (
-                          <motion.div
-                            key="ai-connector"
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <div className="space-y-8">
-                              <div>
-                                <Text variant={TextVariants.heading}>
-                                  {t('settings.processing.ai.connector.title')}
-                                </Text>
-                                <Text className="mt-1">{t('settings.processing.ai.connector.description')}</Text>
-                                <Text as="ul" className="mt-3 space-y-1 list-disc list-inside">
-                                  <li>{t('settings.processing.ai.connector.feature1')}</li>
-                                  <li>{t('settings.processing.ai.connector.feature2')}</li>
-                                  <li>{t('settings.processing.ai.connector.feature3')}</li>
-                                </Text>
-                              </div>
-                              <SettingItem
-                                label={t('settings.processing.ai.connector.address')}
-                                description={t('settings.processing.ai.connector.addressDesc')}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    className="grow"
-                                    id="ai-connector-address"
-                                    onBlur={() =>
-                                      onSettingsChange({ ...appSettings, aiConnectorAddress: aiConnectorAddress })
-                                    }
-                                    onChange={(e: any) => setAiConnectorAddress(e.target.value)}
-                                    onKeyDown={(e: any) => e.stopPropagation()}
-                                    placeholder="127.0.0.1:8188"
-                                    type="text"
-                                    value={aiConnectorAddress}
-                                    bgClassName="bg-bg-primary"
-                                  />
-                                  <Button
-                                    className="w-32"
-                                    disabled={testStatus.testing || !aiConnectorAddress}
-                                    onClick={handleTestConnection}
-                                  >
-                                    {testStatus.testing
-                                      ? t('settings.processing.ai.connector.testing')
-                                      : t('settings.processing.ai.connector.test')}
-                                  </Button>
-                                </div>
-                                {testStatus.message && (
-                                  <Text
-                                    color={testStatus.success ? TextColors.success : TextColors.error}
-                                    className="mt-2 flex items-center gap-2"
-                                  >
-                                    {testStatus.success === true && <Wifi size={16} />}
-                                    {testStatus.success === false && <WifiOff size={16} />}
-                                    {testStatus.message}
-                                  </Text>
-                                )}
-                              </SettingItem>
-                            </div>
-                          </motion.div>
-                        )}
-
-                        {aiProvider === 'cloud' && (
-                          <motion.div
-                            key="cloud"
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <Text variant={TextVariants.heading}>{t('settings.processing.ai.cloud.title')}</Text>
-                            <Text className="mt-1">{t('settings.processing.ai.cloud.description')}</Text>
-                            <Text as="ul" className="mt-3 space-y-1 list-disc list-inside">
-                              <li>{t('settings.processing.ai.cloud.feature1')}</li>
-                              <li>{t('settings.processing.ai.cloud.feature2')}</li>
-                              <li>{t('settings.processing.ai.cloud.feature3')}</li>
-                            </Text>
-
-                            <div className="mt-8">
-                              <Show when="signed-in">
-                                <div className="p-6 bg-bg-primary rounded-xl border border-border-color shadow-inner">
-                                  <CloudDashboard />
-                                </div>
-                              </Show>
-                              <Show when="signed-out">
-                                <div className="w-full max-w-md">
-                                  <SignIn
-                                    routing="hash"
-                                    fallbackRedirectUrl="/"
-                                    forceRedirectUrl="/"
-                                    appearance={{
-                                      variables: {
-                                        colorBackground: 'transparent',
-                                        colorInput: 'transparent',
-                                        colorForeground: 'inherit',
-                                        colorInputForeground: 'inherit',
-                                        colorPrimaryForeground: 'inherit',
-                                        colorBorder: 'transparent',
-                                        colorShadow: 'none',
-                                        colorNeutral: 'inherit',
-                                      },
-                                      elements: {
-                                        rootBox: '',
-
-                                        cardBox: '!shadow-none !m-0 !p-0 !rounded-none',
-
-                                        card: '!bg-transparent !border-none !shadow-none !py-0 !px-1 !rounded-none',
-
-                                        header: '!hidden',
-
-                                        formFieldLabel: '!text-base !font-semibold !text-text-primary !block !mb-2',
-
-                                        formFieldAction:
-                                          '!text-text-secondary hover:!text-text-primary !transition-colors !no-underline hover:!underline',
-
-                                        formFieldInput:
-                                          '!bg-bg-primary !border !border-border-color !text-text-primary focus:!border-accent focus:!ring-1 focus:!ring-accent !rounded-md !px-3 !py-2',
-
-                                        formButtonPrimary:
-                                          '!bg-accent !text-button-text hover:!bg-accent/90 !shadow-none !transition-colors !rounded-md !mt-4 !py-2',
-
-                                        footer:
-                                          '!bg-transparent !p-0 !mt-4 opacity-50 hover:opacity-100 transition-opacity',
-                                        footerAction: '!hidden',
-
-                                        identityPreview:
-                                          '!bg-bg-primary !border !border-border-color !rounded-md !mb-4',
-                                        identityPreviewText: '!text-text-primary !font-medium',
-                                        identityPreviewEditButtonIcon:
-                                          '!text-text-secondary hover:!text-text-primary !transition-colors',
-                                      },
-                                    }}
-                                  />
-                                  <div className="mt-6">
-                                    <Text variant={TextVariants.small}>
-                                      {t('settings.processing.ai.cloud.signedOut.noAccount')}{' '}
-                                      <button
-                                        onClick={() => open('https://www.getrapidraw.com/dashboard')}
-                                        className="text-accent hover:underline focus:outline-none"
-                                      >
-                                        {t('settings.processing.ai.cloud.signedOut.signup')}
-                                      </button>
-                                    </Text>
-                                  </div>
-                                </div>
-                              </Show>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
+                    <Text variant={TextVariants.heading}>{t('settings.processing.ai.cpu.title')}</Text>
+                    <Text className="mt-1">{t('settings.processing.ai.cpu.description')}</Text>
+                    <Text as="ul" className="mt-3 space-y-1 list-disc list-inside">
+                      <li>{t('settings.processing.ai.cpu.feature1')}</li>
+                      <li>{t('settings.processing.ai.cpu.feature2')}</li>
+                      <li>{t('settings.processing.ai.cpu.feature3')}</li>
+                    </Text>
                   </div>
 
                   <div className="p-6 bg-surface rounded-xl shadow-md">

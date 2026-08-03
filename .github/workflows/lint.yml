@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -27,11 +27,15 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
-        continue-on-error: true
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Enforce local-only product boundary
+        run: npm run local-only:check
 
       - name: Check Translation Sync
         run: npm run i18n:check
-        continue-on-error: true
 
   fmt:
     name: cargo fmt

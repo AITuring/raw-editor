@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufReader, Cursor};
+use std::io::{BufReader, Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::formats::is_raw_file;
-use crate::image_processing::ImageMetadata;
+use crate::image_processing::{ImageMetadata, SIDECAR_SCHEMA_VERSION};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use exif::{Exif, In, Value};
 use little_exif::exif_tag::ExifTag;
@@ -12,6 +13,151 @@ use little_exif::filetype::FileExtension;
 use little_exif::metadata::Metadata;
 use little_exif::rational::{iR64, uR64};
 use rawler::decoders::RawMetadata;
+use tempfile::NamedTempFile;
+
+static SIDECAR_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Debug)]
+enum SidecarReadError {
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    Invalid(String),
+    FutureVersion(u32),
+}
+
+impl std::fmt::Display for SidecarReadError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "{error}"),
+            Self::Json(error) => write!(formatter, "{error}"),
+            Self::Invalid(message) => formatter.write_str(message),
+            Self::FutureVersion(version) => write!(
+                formatter,
+                "sidecar schema version {version} is newer than supported version {SIDECAR_SCHEMA_VERSION}"
+            ),
+        }
+    }
+}
+
+fn sidecar_backup_path(sidecar_path: &Path) -> PathBuf {
+    let mut filename = sidecar_path.file_name().unwrap_or_default().to_os_string();
+    filename.push(".bak");
+    sidecar_path.with_file_name(filename)
+}
+
+fn atomic_write_bytes(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("Sidecar path has no parent directory"))?;
+    fs::create_dir_all(parent)?;
+
+    let mut temporary = NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.flush()?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(path).map_err(|error| error.error)?;
+
+    #[cfg(unix)]
+    fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+fn read_sidecar_document(path: &Path) -> Result<(ImageMetadata, bool), SidecarReadError> {
+    let content = fs::read_to_string(path).map_err(SidecarReadError::Io)?;
+    let mut document: serde_json::Value =
+        serde_json::from_str(&content).map_err(SidecarReadError::Json)?;
+
+    let version = match document.get("version") {
+        None => 0,
+        Some(version) => version.as_u64().ok_or_else(|| {
+            SidecarReadError::Invalid("sidecar version must be a non-negative integer".to_string())
+        })?,
+    };
+    let version = u32::try_from(version)
+        .map_err(|_| SidecarReadError::Invalid("sidecar version is out of range".to_string()))?;
+    if version > SIDECAR_SCHEMA_VERSION {
+        return Err(SidecarReadError::FutureVersion(version));
+    }
+
+    let mut migrated = version != SIDECAR_SCHEMA_VERSION;
+    if migrated {
+        let object = document.as_object_mut().ok_or_else(|| {
+            SidecarReadError::Invalid("sidecar root must be a JSON object".to_string())
+        })?;
+        object.insert(
+            "version".to_string(),
+            serde_json::Value::from(SIDECAR_SCHEMA_VERSION),
+        );
+    }
+
+    let mut metadata: ImageMetadata =
+        serde_json::from_value(document).map_err(SidecarReadError::Json)?;
+    if metadata.rating > 5 {
+        return Err(SidecarReadError::Invalid(format!(
+            "sidecar rating {} is outside the supported 0-5 range",
+            metadata.rating
+        )));
+    }
+    metadata.version = SIDECAR_SCHEMA_VERSION;
+
+    if let Some(ref mut exif_map) = metadata.exif {
+        for value in exif_map.values_mut() {
+            if value.len() > 500 {
+                *value = truncate_large_exif(value);
+                migrated = true;
+            }
+        }
+    }
+
+    Ok((metadata, migrated))
+}
+
+fn write_metadata_without_backup(
+    sidecar_path: &Path,
+    metadata: &ImageMetadata,
+) -> Result<(), String> {
+    let json = serde_json::to_vec_pretty(metadata).map_err(|error| error.to_string())?;
+    atomic_write_bytes(sidecar_path, &json).map_err(|error| error.to_string())
+}
+
+pub fn save_sidecar(sidecar_path: &Path, metadata: &ImageMetadata) -> Result<(), String> {
+    if metadata.version != SIDECAR_SCHEMA_VERSION {
+        return Err(format!(
+            "cannot save sidecar schema version {}; expected {SIDECAR_SCHEMA_VERSION}",
+            metadata.version
+        ));
+    }
+    if metadata.rating > 5 {
+        return Err(format!(
+            "cannot save sidecar rating {}; expected 0-5",
+            metadata.rating
+        ));
+    }
+
+    let _write_guard = SIDECAR_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    if sidecar_path.is_file() {
+        match read_sidecar_document(sidecar_path) {
+            Ok(_) => {
+                let current = fs::read(sidecar_path).map_err(|error| error.to_string())?;
+                atomic_write_bytes(&sidecar_backup_path(sidecar_path), &current)
+                    .map_err(|error| error.to_string())?;
+            }
+            Err(SidecarReadError::FutureVersion(version)) => {
+                return Err(format!(
+                    "refusing to overwrite newer sidecar schema version {version}"
+                ));
+            }
+            Err(_) => {
+                // Preserve the last known-good backup when the primary is already damaged.
+            }
+        }
+    }
+
+    write_metadata_without_backup(sidecar_path, metadata)
+}
 
 pub fn truncate_large_exif(value: &str) -> String {
     if value.len() <= 500 {
@@ -37,36 +183,54 @@ pub fn truncate_large_exif(value: &str) -> String {
     value.to_string()
 }
 
-pub fn load_sidecar(sidecar_path: &Path) -> ImageMetadata {
+pub fn load_sidecar_checked(sidecar_path: &Path) -> Result<ImageMetadata, String> {
     if !sidecar_path.exists() {
-        return ImageMetadata::default();
+        return Ok(ImageMetadata::default());
     }
 
-    let Ok(content) = fs::read_to_string(sidecar_path) else {
-        return ImageMetadata::default();
-    };
-
-    let mut meta = serde_json::from_str::<ImageMetadata>(&content).unwrap_or_default();
-    let mut healed = false;
-
-    if let Some(ref mut exif_map) = meta.exif {
-        for val in exif_map.values_mut() {
-            if val.len() > 500 {
-                *val = truncate_large_exif(val);
-                healed = true;
+    match read_sidecar_document(sidecar_path) {
+        Ok((metadata, migrated)) => {
+            if migrated {
+                save_sidecar(sidecar_path, &metadata)?;
+                log::info!("Migrated sidecar to schema 1: {}", sidecar_path.display());
             }
+            Ok(metadata)
+        }
+        Err(SidecarReadError::FutureVersion(version)) => Err(format!(
+            "sidecar schema version {version} is newer than supported version {SIDECAR_SCHEMA_VERSION}"
+        )),
+        Err(primary_error) => {
+            let backup_path = sidecar_backup_path(sidecar_path);
+            let (metadata, _) = read_sidecar_document(&backup_path).map_err(|backup_error| {
+                format!(
+                    "failed to read sidecar {} ({primary_error}); recovery backup {} is unavailable ({backup_error})",
+                    sidecar_path.display(),
+                    backup_path.display()
+                )
+            })?;
+
+            let _write_guard = SIDECAR_WRITE_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            write_metadata_without_backup(sidecar_path, &metadata)?;
+            log::warn!(
+                "Recovered damaged sidecar {} from {}",
+                sidecar_path.display(),
+                backup_path.display()
+            );
+            Ok(metadata)
         }
     }
+}
 
-    if healed && let Ok(json) = serde_json::to_string_pretty(&meta) {
-        let _ = fs::write(sidecar_path, json);
-        log::info!(
-            "Auto-healed bloated sidecar for: {}",
-            sidecar_path.display()
-        );
+pub fn load_sidecar(sidecar_path: &Path) -> ImageMetadata {
+    match load_sidecar_checked(sidecar_path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            log::error!("Failed to load sidecar {}: {error}", sidecar_path.display());
+            ImageMetadata::default()
+        }
     }
-
-    meta
 }
 
 fn to_ur64(val: &exif::Rational) -> uR64 {
@@ -1222,8 +1386,7 @@ fn load_primary_metadata(image_path: &Path) -> ImageMetadata {
 
 fn save_primary_metadata(image_path: &Path, metadata: &ImageMetadata) -> std::io::Result<()> {
     let primary = get_primary_sidecar_path(image_path);
-    let json = serde_json::to_string_pretty(metadata).map_err(std::io::Error::other)?;
-    fs::write(&primary, json)
+    save_sidecar(&primary, metadata).map_err(std::io::Error::other)
 }
 
 pub fn read_rrexif_sidecar(image_path: &Path) -> Option<HashMap<String, String>> {
@@ -1349,4 +1512,115 @@ pub fn write_rrexif_sidecar(source_path_str: &str, target_image_path: &Path) -> 
     metadata.exif = Some(exif_data);
     save_primary_metadata(target_image_path, &metadata)
         .map_err(|e| format!("Failed to write sidecar: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_schema_contract_matches_runtime_version() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../schemas/sidecar-v1.schema.json"))
+                .expect("parse sidecar JSON schema");
+        assert_eq!(
+            schema["properties"]["version"]["const"].as_u64(),
+            Some(SIDECAR_SCHEMA_VERSION as u64)
+        );
+        assert_eq!(
+            schema["additionalProperties"],
+            serde_json::Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn migrates_legacy_sidecar_and_preserves_unknown_fields() {
+        let directory = tempfile::tempdir().expect("create sidecar test directory");
+        let path = directory.path().join("legacy.rrdata");
+        fs::write(
+            &path,
+            br#"{"rating":2,"adjustments":{"exposure":1.25},"futureUi":{"panel":"local"}}"#,
+        )
+        .expect("write legacy sidecar");
+
+        let metadata = load_sidecar_checked(&path).expect("migrate legacy sidecar");
+        assert_eq!(metadata.version, SIDECAR_SCHEMA_VERSION);
+        assert_eq!(metadata.rating, 2);
+        assert_eq!(metadata.extra["futureUi"]["panel"], "local");
+
+        save_sidecar(&path, &metadata).expect("round-trip migrated sidecar");
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).expect("read migrated sidecar"))
+                .expect("parse migrated sidecar");
+        assert_eq!(saved["version"], SIDECAR_SCHEMA_VERSION);
+        assert_eq!(saved["futureUi"]["panel"], "local");
+    }
+
+    #[test]
+    fn recovers_truncated_primary_from_last_known_good_backup() {
+        let directory = tempfile::tempdir().expect("create sidecar test directory");
+        let path = directory.path().join("primary.rrdata");
+
+        let first = ImageMetadata {
+            rating: 1,
+            ..ImageMetadata::default()
+        };
+        save_sidecar(&path, &first).expect("save first revision");
+
+        let mut second = first.clone();
+        second.rating = 4;
+        save_sidecar(&path, &second).expect("save second revision");
+        assert!(sidecar_backup_path(&path).is_file());
+
+        fs::write(&path, br#"{"version":1,"rating":"#).expect("simulate interrupted write");
+        let recovered = load_sidecar_checked(&path).expect("recover from backup");
+        assert_eq!(recovered.rating, 1);
+
+        let restored = read_sidecar_document(&path)
+            .expect("restored primary is valid")
+            .0;
+        assert_eq!(restored.rating, 1);
+    }
+
+    #[test]
+    fn refuses_to_read_or_overwrite_future_schema_versions() {
+        let directory = tempfile::tempdir().expect("create sidecar test directory");
+        let path = directory.path().join("future.rrdata");
+        let future_document = br#"{"version":2,"rating":5,"adjustments":null,"futureOnly":true}"#;
+        fs::write(&path, future_document).expect("write future sidecar");
+
+        let load_error = load_sidecar_checked(&path).expect_err("future schema must be rejected");
+        assert!(load_error.contains("newer than supported"));
+
+        let save_error = save_sidecar(&path, &ImageMetadata::default())
+            .expect_err("future schema must be protected");
+        assert!(save_error.contains("refusing to overwrite"));
+        assert_eq!(
+            fs::read(&path).expect("read protected sidecar"),
+            future_document
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_schema_versions_instead_of_treating_them_as_legacy() {
+        let directory = tempfile::tempdir().expect("create sidecar test directory");
+        let path = directory.path().join("malformed-version.rrdata");
+        fs::write(&path, br#"{"version":"1","rating":2,"adjustments":null}"#)
+            .expect("write malformed sidecar");
+
+        let error = load_sidecar_checked(&path).expect_err("string version must be rejected");
+        assert!(error.contains("non-negative integer"));
+    }
+
+    #[test]
+    fn invalid_rating_is_rejected_before_persistence() {
+        let directory = tempfile::tempdir().expect("create sidecar test directory");
+        let path = directory.path().join("invalid.rrdata");
+        let metadata = ImageMetadata {
+            rating: 6,
+            ..ImageMetadata::default()
+        };
+        assert!(save_sidecar(&path, &metadata).is_err());
+        assert!(!path.exists());
+    }
 }

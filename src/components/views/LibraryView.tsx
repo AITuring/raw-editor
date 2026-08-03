@@ -1,6 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
 
-import CommunityPage from '../panel/CommunityPage';
 import MainLibrary from '../panel/MainLibrary';
 import BottomBar from '../panel/BottomBar';
 
@@ -66,12 +65,7 @@ export default function LibraryView({
   handleResetAdjustments,
   requestThumbnails,
 }: LibraryViewProps) {
-  const { activeView, setUI } = useUIStore(
-    useShallow((state) => ({
-      activeView: state.activeView,
-      setUI: state.setUI,
-    })),
-  );
+  const setUI = useUIStore((state) => state.setUI);
 
   const {
     rootPaths,
@@ -95,10 +89,9 @@ export default function LibraryView({
     })),
   );
 
-  const { appSettings, supportedTypes, handleSettingsChange } = useSettingsStore(
+  const { appSettings, handleSettingsChange } = useSettingsStore(
     useShallow((state) => ({
       appSettings: state.appSettings,
-      supportedTypes: state.supportedTypes,
       handleSettingsChange: state.handleSettingsChange,
     })),
   );
@@ -119,15 +112,7 @@ export default function LibraryView({
   return (
     <div className="flex flex-row grow h-full min-h-0">
       <div className="flex-1 flex flex-col min-w-0 gap-2">
-        {activeView === 'community' ? (
-          <CommunityPage
-            onBackToLibrary={() => setUI({ activeView: 'library' })}
-            supportedTypes={supportedTypes}
-            imageList={sortedImageList}
-            currentFolderPath={currentFolderPath}
-          />
-        ) : (
-          <MainLibrary
+        <MainLibrary
             activePath={libraryActivePath}
             aiModelDownloadStatus={aiModelDownloadStatus}
             appSettings={appSettings}
@@ -162,9 +147,7 @@ export default function LibraryView({
             thumbnailAspectRatio={thumbnailAspectRatio}
             thumbnailProgress={thumbnailProgress}
             thumbnailSize={thumbnailSize}
-            onNavigateToCommunity={() => setUI({ activeView: 'community' })}
           />
-        )}
         {rootPaths && rootPaths.length > 0 && (
           <BottomBar
             isCopied={isCopied}

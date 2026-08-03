@@ -415,8 +415,6 @@ pub struct AppSettings {
     #[serde(default)]
     pub font_family: Option<String>,
     pub decorations: Option<bool>,
-    #[serde(alias = "comfyuiAddress")]
-    pub ai_connector_address: Option<String>,
     pub last_folder_state: Option<LastFolderState>,
     pub ui_visibility: Option<Value>,
     pub enable_ai_tagging: Option<bool>,
@@ -429,7 +427,6 @@ pub struct AppSettings {
     pub ai_tag_count: Option<u32>,
     pub thumbnail_size: Option<String>,
     pub thumbnail_aspect_ratio: Option<String>,
-    pub ai_provider: Option<String>,
     #[serde(default = "default_adjustment_visibility")]
     pub adjustment_visibility: HashMap<String, bool>,
     #[serde(default = "default_open_tree_sections")]
@@ -540,7 +537,6 @@ impl Default for AppSettings {
             theme: Some("dark".to_string()),
             font_family: None,
             decorations: Some(false),
-            ai_connector_address: None,
             last_folder_state: None,
             ui_visibility: None,
             enable_ai_tagging: Some(false),
@@ -553,7 +549,6 @@ impl Default for AppSettings {
             #[cfg(not(target_os = "android"))]
             thumbnail_size: Some("medium".to_string()),
             thumbnail_aspect_ratio: Some("cover".to_string()),
-            ai_provider: Some("cpu".to_string()),
             adjustment_visibility: default_adjustment_visibility(),
             open_tree_sections: default_open_tree_sections(),
             copy_paste_settings: CopyPasteSettings::default(),

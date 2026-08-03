@@ -255,3 +255,36 @@ pub fn get_fast_demosaic_scale_factor(
     }
     1.0
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rawler_bundles_sony_a7r_v_camera_profile_and_color_matrices() {
+        let loader = rawler::RawLoader::new();
+        let matching_profile_count = loader
+            .get_cameras()
+            .iter()
+            .filter(|((make, model, _), _)| make == "SONY" && model == "ILCE-7RM5")
+            .count();
+
+        assert!(
+            matching_profile_count >= 1,
+            "expected the bundled α7R V base camera profile"
+        );
+        let base_profile = loader
+            .get_cameras()
+            .iter()
+            .find_map(|((make, model, mode), camera)| {
+                (make == "SONY" && model == "ILCE-7RM5" && mode.is_empty()).then_some(camera)
+            })
+            .expect("Sony ILCE-7RM5 base camera profile");
+
+        assert_eq!(base_profile.clean_make, "Sony");
+        assert_eq!(base_profile.clean_model, "ILCE-7RM5");
+        assert_eq!((base_profile.cfa.width, base_profile.cfa.height), (2, 2));
+        assert!(
+            base_profile.color_matrix.len() >= 2,
+            "α7R V profile must contain at least illuminant A and D65 matrices"
+        );
+    }
+}

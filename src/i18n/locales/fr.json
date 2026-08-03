@@ -707,7 +707,7 @@
         "sortAll": "Trier tout par ordre alphabétique"
       },
       "status": {
-        "empty": "Aucun paramètre prédéfini enregistré pour le moment. Créez les vôtres, importez-en à partir d'un fichier ou explorez ceux de la communauté.",
+        "empty": "Aucun paramètre prédéfini enregistré pour le moment. Créez les vôtres ou importez-en à partir d'un fichier.",
         "getCommunity": "Obtenir les paramètres de la communauté",
         "loading": "Chargement des paramètres prédéfinis..."
       },

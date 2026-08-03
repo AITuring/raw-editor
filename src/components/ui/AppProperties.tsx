@@ -37,7 +37,6 @@ export enum Invokes {
   ApplyDenoising = 'apply_denoising',
   CalculateAutoAdjustments = 'calculate_auto_adjustments',
   CancelExport = 'cancel_export',
-  CheckAIConnectorStatus = 'check_ai_connector_status',
   ClearAllSidecars = 'clear_all_sidecars',
   ClearAiTags = 'clear_ai_tags',
   ClearAllTags = 'clear_all_tags',
@@ -97,12 +96,8 @@ export enum Invokes {
   StartBackgroundIndexing = 'start_background_indexing',
   StitchPanorama = 'stitch_panorama',
   MergeHdr = 'merge_hdr',
-  TestAIConnectorConnection = 'test_ai_connector_connection',
   UpdateWgpuTransform = 'update_wgpu_transform',
   UpdateExifFields = 'update_exif_fields',
-  FetchCommunityPresets = 'fetch_community_presets',
-  GenerateAllCommunityPreviews = 'generate_all_community_previews',
-  SaveCommunityPreset = 'save_community_preset',
   SaveTempFile = 'save_temp_file',
   GetAlbums = 'get_albums',
   SaveAlbums = 'save_albums',
@@ -177,8 +172,6 @@ export type GroupPreference = 'jpeg' | 'raw';
 export type GroupingMode = 'off' | GroupPreference;
 
 export interface AppSettings {
-  aiConnectorAddress?: string;
-  aiProvider?: string;
   decorations?: any;
   editorPreviewResolution?: number;
   enableZoomHifi?: boolean;
@@ -315,6 +308,7 @@ export interface Preset {
 export interface Progress {
   completed?: number;
   current?: number;
+  stage?: string;
   total: number;
 }
 

@@ -537,7 +537,7 @@ export default function MetadataPanel() {
                           return (
                             <EditableMetadataItem
                               key={field.key}
-                              label={t(`editor.metadata.fields.${field.label}`)}
+                              label={t(`editor.metadata.fields.${field.label}` as never) as string}
                               value={displayValue}
                               onSave={(newVal) => {
                                 handleUpdateExif(targetPaths, { [field.key]: newVal });
@@ -745,30 +745,6 @@ export default function MetadataPanel() {
                   {t('editor.metadata.gps.title')}
                 </Text>
                 <div className="bg-surface border border-surface rounded-xl p-3 flex flex-col gap-3">
-                  <div className="relative rounded-md overflow-hidden shadow-sm">
-                    <iframe
-                      className="pointer-events-none"
-                      frameBorder="0"
-                      height="180"
-                      loading="lazy"
-                      marginHeight={0}
-                      marginWidth={0}
-                      scrolling="no"
-                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsData.lon - 0.01}%2C${
-                        gpsData.lat - 0.01
-                      }%2C${gpsData.lon + 0.01}%2C${gpsData.lat + 0.01}&layer=mapnik&marker=${gpsData.lat}%2C${
-                        gpsData.lon
-                      }`}
-                      width="100%"
-                    ></iframe>
-                    <a
-                      className="absolute inset-0 cursor-pointer hover:bg-black/10 transition-colors"
-                      href={`https://www.openstreetmap.org/?mlat=${gpsData.lat}&mlon=${gpsData.lon}#map=15/${gpsData.lat}/${gpsData.lon}`}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                      data-tooltip={t('editor.metadata.gps.clickToOpenTooltip')}
-                    ></a>
-                  </div>
                   <div className="flex flex-col gap-0.5">
                     <MetadataItem label={t('editor.metadata.gps.latitude')} value={gpsData.lat?.toFixed(6)} />
                     <MetadataItem label={t('editor.metadata.gps.longitude')} value={gpsData.lon?.toFixed(6)} />

@@ -6,10 +6,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use image::codecs::jpeg::JpegEncoder;
-use image::{DynamicImage, GenericImageView, GrayImage, ImageBuffer, ImageFormat, Luma, imageops};
+use image::codecs::{jpeg::JpegEncoder, png::PngEncoder, tiff::TiffEncoder};
+use image::{
+    DynamicImage, GenericImageView, GrayImage, ImageBuffer, ImageEncoder, ImageFormat, Luma,
+    imageops,
+};
 use jxl_encoder::{
-    LosslessConfig, LossyConfig, PixelLayout,
+    ImageMetadata as JxlImageMetadata, LosslessConfig, LossyConfig, PixelLayout,
     api::{calibrated_jxl_quality, quality_to_distance},
 };
 use serde::{Deserialize, Serialize};
@@ -37,6 +40,7 @@ use crate::lut_processing::{
 use crate::mask_generation::{MaskDefinition, generate_mask_bitmap};
 
 use crate::cache_utils::{calculate_full_job_hash, calculate_transform_hash};
+use crate::color_management::srgb_v4_profile;
 use crate::{
     apply_all_transformations, generate_transformed_preview, get_cached_or_generate_mask,
     hydrate_adjustments, load_settings, resolve_warped_image_for_masks,
@@ -298,6 +302,26 @@ enum ExportCancellationRequest {
     Requested,
     AlreadyRequested,
     NoActiveTask,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BatchExportSummary {
+    completed: usize,
+    errors: Vec<String>,
+}
+
+fn summarize_batch_export_results(
+    results: impl IntoIterator<Item = Result<(), String>>,
+) -> BatchExportSummary {
+    let mut completed = 0;
+    let mut errors = Vec::new();
+    for result in results {
+        completed += 1;
+        if let Err(error) = result {
+            errors.push(error);
+        }
+    }
+    BatchExportSummary { completed, errors }
 }
 
 struct ExportTaskGuard {
@@ -591,17 +615,22 @@ fn encode_image_to_bytes(
         "jxl" => {
             let (width, height) = image.dimensions();
             let has_alpha = image.color().has_alpha();
+            let metadata = JxlImageMetadata::new().with_icc_profile(srgb_v4_profile());
 
             let jxl_data = if jpeg_quality == 100 {
                 if has_alpha {
                     let rgba = image.to_rgba8();
                     LosslessConfig::new()
-                        .encode(rgba.as_raw(), width, height, PixelLayout::Rgba8)
+                        .encode_request(width, height, PixelLayout::Rgba8)
+                        .with_metadata(&metadata)
+                        .encode(rgba.as_raw())
                         .map_err(|e| format!("Failed to encode lossless JXL: {}", e))?
                 } else {
                     let rgb = image.to_rgb8();
                     LosslessConfig::new()
-                        .encode(rgb.as_raw(), width, height, PixelLayout::Rgb8)
+                        .encode_request(width, height, PixelLayout::Rgb8)
+                        .with_metadata(&metadata)
+                        .encode(rgb.as_raw())
                         .map_err(|e| format!("Failed to encode lossless JXL: {}", e))?
                 }
             } else {
@@ -611,12 +640,16 @@ fn encode_image_to_bytes(
                 if has_alpha {
                     let rgba = image.to_rgba8();
                     LossyConfig::new(distance)
-                        .encode(rgba.as_raw(), width, height, PixelLayout::Rgba8)
+                        .encode_request(width, height, PixelLayout::Rgba8)
+                        .with_metadata(&metadata)
+                        .encode(rgba.as_raw())
                         .map_err(|e| format!("Failed to encode lossy JXL: {}", e))?
                 } else {
                     let rgb = image.to_rgb8();
                     LossyConfig::new(distance)
-                        .encode(rgb.as_raw(), width, height, PixelLayout::Rgb8)
+                        .encode_request(width, height, PixelLayout::Rgb8)
+                        .with_metadata(&metadata)
+                        .encode(rgb.as_raw())
                         .map_err(|e| format!("Failed to encode lossy JXL: {}", e))?
                 }
             };
@@ -627,11 +660,20 @@ fn encode_image_to_bytes(
             let encoder = webp::Encoder::from_image(image)
                 .map_err(|_| "Failed to create WebP encoder".to_string())?;
             let webp_mem = encoder.encode(jpeg_quality as f32);
-            return Ok(webp_mem.to_vec());
+            return embed_icc_in_webp(
+                webp_mem.as_ref(),
+                srgb_v4_profile(),
+                image.width(),
+                image.height(),
+                image.color().has_alpha(),
+            );
         }
         "jpg" | "jpeg" => {
             let rgb_image = image.to_rgb8();
-            let encoder = JpegEncoder::new_with_quality(&mut cursor, jpeg_quality);
+            let mut encoder = JpegEncoder::new_with_quality(&mut cursor, jpeg_quality);
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|e| format!("Failed to attach JPEG ICC profile: {e}"))?;
             rgb_image
                 .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
@@ -643,13 +685,21 @@ fn encode_image_to_bytes(
                 image.clone()
             };
 
+            let mut encoder = PngEncoder::new(&mut cursor);
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|e| format!("Failed to attach PNG ICC profile: {e}"))?;
             image_to_encode
-                .write_to(&mut cursor, image::ImageFormat::Png)
+                .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
         }
         "tiff" => {
+            let mut encoder = TiffEncoder::new(&mut cursor);
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|e| format!("Failed to attach TIFF ICC profile: {e}"))?;
             DynamicImage::ImageRgb16(image.to_rgb16())
-                .write_to(&mut cursor, image::ImageFormat::Tiff)
+                .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
         }
         "avif" => {
@@ -660,6 +710,100 @@ fn encode_image_to_bytes(
         _ => return Err(format!("Unsupported file format: {}", output_format)),
     };
     Ok(image_bytes)
+}
+
+fn write_webp_chunk(output: &mut Vec<u8>, fourcc: &[u8; 4], payload: &[u8]) {
+    output.extend_from_slice(fourcc);
+    output.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    output.extend_from_slice(payload);
+    if !payload.len().is_multiple_of(2) {
+        output.push(0);
+    }
+}
+
+fn embed_icc_in_webp(
+    encoded: &[u8],
+    icc_profile: &[u8],
+    width: u32,
+    height: u32,
+    has_alpha: bool,
+) -> Result<Vec<u8>, String> {
+    if encoded.len() < 12 || &encoded[0..4] != b"RIFF" || &encoded[8..12] != b"WEBP" {
+        return Err("WebP encoder returned an invalid RIFF container".to_string());
+    }
+    if width == 0 || height == 0 || width > 0x01_00_00_00 || height > 0x01_00_00_00 {
+        return Err("WebP dimensions cannot be represented by a VP8X header".to_string());
+    }
+
+    let mut output = Vec::with_capacity(encoded.len() + icc_profile.len() + 32);
+    output.extend_from_slice(b"RIFF\0\0\0\0WEBP");
+
+    let mut offset = 12;
+    let mut wrote_icc = false;
+    let mut found_vp8x = false;
+    while offset + 8 <= encoded.len() {
+        let fourcc: [u8; 4] = encoded[offset..offset + 4]
+            .try_into()
+            .map_err(|_| "Invalid WebP chunk identifier".to_string())?;
+        let chunk_len = u32::from_le_bytes(
+            encoded[offset + 4..offset + 8]
+                .try_into()
+                .map_err(|_| "Invalid WebP chunk length".to_string())?,
+        ) as usize;
+        let padded_len = chunk_len + (chunk_len % 2);
+        let chunk_end = offset
+            .checked_add(8 + padded_len)
+            .ok_or_else(|| "WebP chunk size overflow".to_string())?;
+        if chunk_end > encoded.len() {
+            return Err("WebP chunk extends past the RIFF container".to_string());
+        }
+
+        if &fourcc == b"ICCP" {
+            if found_vp8x && !wrote_icc {
+                write_webp_chunk(&mut output, b"ICCP", icc_profile);
+                wrote_icc = true;
+            }
+        } else if &fourcc == b"VP8X" {
+            if chunk_len != 10 {
+                return Err("WebP VP8X chunk has an invalid length".to_string());
+            }
+            let mut payload = encoded[offset + 8..offset + 18].to_vec();
+            payload[0] |= 0x20;
+            write_webp_chunk(&mut output, b"VP8X", &payload);
+            found_vp8x = true;
+            if !wrote_icc {
+                write_webp_chunk(&mut output, b"ICCP", icc_profile);
+                wrote_icc = true;
+            }
+        } else {
+            output.extend_from_slice(&encoded[offset..chunk_end]);
+        }
+        offset = chunk_end;
+    }
+
+    if offset != encoded.len() {
+        return Err("WebP container has trailing partial chunk data".to_string());
+    }
+
+    if !found_vp8x {
+        let image_chunks = output.split_off(12);
+        let mut vp8x = [0u8; 10];
+        vp8x[0] = 0x20 | if has_alpha { 0x10 } else { 0 };
+        let width_minus_one = width - 1;
+        let height_minus_one = height - 1;
+        vp8x[4..7].copy_from_slice(&width_minus_one.to_le_bytes()[..3]);
+        vp8x[7..10].copy_from_slice(&height_minus_one.to_le_bytes()[..3]);
+        write_webp_chunk(&mut output, b"VP8X", &vp8x);
+        write_webp_chunk(&mut output, b"ICCP", icc_profile);
+        output.extend_from_slice(&image_chunks);
+    } else if !wrote_icc {
+        return Err("Failed to insert the WebP ICC profile".to_string());
+    }
+
+    let riff_size = u32::try_from(output.len().saturating_sub(8))
+        .map_err(|_| "WebP output is too large for RIFF".to_string())?;
+    output[4..8].copy_from_slice(&riff_size.to_le_bytes());
+    Ok(output)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1201,7 +1345,9 @@ pub(crate) async fn export_images_impl(
             }
         }
 
-        let errors: Vec<String> = results.into_iter().filter_map(Result::err).collect();
+        let summary = summarize_batch_export_results(results);
+        debug_assert_eq!(summary.completed, total_paths);
+        let errors = summary.errors;
         let error_count = errors.len();
         let export_state = app_handle.state::<AppState>();
         let finalized = finish_export_task(
@@ -1689,4 +1835,123 @@ pub async fn estimate_export_sizes(
     };
 
     Ok(single_image_extrapolated_size * paths.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::color_management::validate_icc_profile;
+    use image::codecs::{jpeg::JpegDecoder, png::PngDecoder, tiff::TiffDecoder, webp::WebPDecoder};
+    use image::{ImageDecoder, Rgb, RgbImage};
+    use jxl_oxide::integration::JxlDecoder;
+
+    use super::*;
+
+    fn fixture_image(width: u32, height: u32) -> DynamicImage {
+        DynamicImage::ImageRgb8(RgbImage::from_fn(width, height, |x, y| {
+            Rgb([
+                ((x * 17 + y * 3) % 256) as u8,
+                ((x * 5 + y * 13) % 256) as u8,
+                ((x * 11 + y * 7) % 256) as u8,
+            ])
+        }))
+    }
+
+    fn assert_decoder_contract<D: ImageDecoder>(
+        mut decoder: D,
+        expected: (u32, u32),
+        expect_exact_profile_bytes: bool,
+    ) {
+        assert_eq!(decoder.dimensions(), expected);
+        let profile = decoder
+            .icc_profile()
+            .expect("read embedded ICC")
+            .expect("export must contain an ICC profile");
+        validate_icc_profile(&profile).expect("exported ICC profile must be valid RGB ICC");
+
+        if expect_exact_profile_bytes {
+            assert_eq!(profile, srgb_v4_profile());
+        }
+    }
+
+    #[test]
+    fn supported_color_managed_exports_round_trip_dimensions_and_icc() {
+        let image = fixture_image(37, 23);
+
+        let jpeg = encode_image_to_bytes(&image, "jpeg", 92).expect("encode JPEG");
+        assert_decoder_contract(
+            JpegDecoder::new(Cursor::new(jpeg)).expect("decode JPEG"),
+            (37, 23),
+            true,
+        );
+
+        let png = encode_image_to_bytes(&image, "png", 100).expect("encode PNG");
+        assert_decoder_contract(
+            PngDecoder::new(Cursor::new(png)).expect("decode PNG"),
+            (37, 23),
+            true,
+        );
+
+        let tiff = encode_image_to_bytes(&image, "tiff", 100).expect("encode TIFF");
+        assert_decoder_contract(
+            TiffDecoder::new(Cursor::new(tiff)).expect("decode TIFF"),
+            (37, 23),
+            true,
+        );
+
+        let webp = encode_image_to_bytes(&image, "webp", 90).expect("encode WebP");
+        assert_decoder_contract(
+            WebPDecoder::new(Cursor::new(webp)).expect("decode WebP"),
+            (37, 23),
+            true,
+        );
+
+        let jxl = encode_image_to_bytes(&image, "jxl", 90).expect("encode JPEG XL");
+        assert_decoder_contract(
+            JxlDecoder::new(Cursor::new(jxl)).expect("decode JPEG XL"),
+            (37, 23),
+            false,
+        );
+    }
+
+    #[test]
+    fn no_resize_export_keeps_the_full_input_dimensions() {
+        let image = fixture_image(2049, 1367);
+        let settings = ExportSettings {
+            jpeg_quality: 90,
+            resize: None,
+            keep_metadata: false,
+            preserve_timestamps: false,
+            strip_gps: false,
+            filename_template: None,
+            watermark: None,
+            export_masks: false,
+            preserve_folders: false,
+        };
+
+        let processed =
+            apply_export_resize_and_watermark(image, &settings).expect("apply export options");
+        assert_eq!(processed.dimensions(), (2049, 1367));
+
+        let bytes = encode_image_to_bytes(&processed, "png", 100).expect("encode full image");
+        let decoder = PngDecoder::new(Cursor::new(bytes)).expect("decode full image");
+        assert_eq!(decoder.dimensions(), (2049, 1367));
+    }
+
+    #[test]
+    fn batch_summary_retains_later_results_after_an_item_failure() {
+        let summary = summarize_batch_export_results([
+            Ok(()),
+            Err("second.jpg: simulated encoder failure".to_string()),
+            Ok(()),
+            Err("fourth.jpg: simulated disk failure".to_string()),
+            Ok(()),
+        ]);
+
+        assert_eq!(summary.completed, 5);
+        assert_eq!(summary.errors.len(), 2);
+        assert!(summary.errors[0].contains("second.jpg"));
+        assert!(summary.errors[1].contains("fourth.jpg"));
+    }
 }

@@ -294,23 +294,13 @@ export default function NegativeConversionModal({
             <div className="text-xs text-text-tertiary leading-tight space-y-1">
               <Trans i18nKey="modals.negativeConversion.noticeText">
                 Inversion logic inspired by{' '}
-                <a
-                  href="https://github.com/marcinz606/NegPy"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-primary transition-colors"
-                >
+                <span className="font-medium">
                   NegPy
-                </a>{' '}
+                </span>{' '}
                 created by marcinz606 (
-                <a
-                  href="https://github.com/marcinz606/NegPy/blob/main/LICENSE"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-primary transition-colors"
-                >
+                <span className="font-medium">
                   GPL-3.0
-                </a>
+                </span>
                 ).
               </Trans>
             </div>

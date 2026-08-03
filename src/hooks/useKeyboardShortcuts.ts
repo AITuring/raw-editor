@@ -153,7 +153,7 @@ export const useKeyboardShortcuts = ({
           e.preventDefault();
           const currentIndex = sortedListRef.current.findIndex((img) => img.path === s.editor.selectedImage!.path);
           if (currentIndex === -1) return;
-          let nextIndex = currentIndex - 1 < 0 ? sortedListRef.current.length - 1 : currentIndex - 1;
+          const nextIndex = currentIndex - 1 < 0 ? sortedListRef.current.length - 1 : currentIndex - 1;
           handleImageSelect(sortedListRef.current[nextIndex].path, true);
         },
       },
@@ -163,7 +163,7 @@ export const useKeyboardShortcuts = ({
           e.preventDefault();
           const currentIndex = sortedListRef.current.findIndex((img) => img.path === s.editor.selectedImage!.path);
           if (currentIndex === -1) return;
-          let nextIndex = currentIndex + 1 >= sortedListRef.current.length ? 0 : currentIndex + 1;
+          const nextIndex = currentIndex + 1 >= sortedListRef.current.length ? 0 : currentIndex + 1;
           handleImageSelect(sortedListRef.current[nextIndex].path, true);
         },
       },

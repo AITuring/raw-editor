@@ -707,7 +707,7 @@
         "sortAll": "Ordina Tutti in Ordine Alfabetico"
       },
       "status": {
-        "empty": "Ancora nessun predefinito salvato. Creane uno, importalo da un file o esplora i predefiniti della community.",
+        "empty": "Ancora nessun predefinito salvato. Creane uno o importalo da un file.",
         "getCommunity": "Ottieni Predefiniti della Community",
         "loading": "Caricamento Predefiniti..."
       },

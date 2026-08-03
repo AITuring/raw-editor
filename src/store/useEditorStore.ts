@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Adjustments, MaskContainer, AiPatch } from '../utils/adjustments';
+import { Adjustments, MaskContainer } from '../utils/adjustments';
 import { SelectedImage, WaveformData, BrushSettings } from '../components/ui/AppProperties';
 import { ChannelConfig } from '../components/adjustments/Curves';
 import { ImageDimensions } from '../hooks/useImageRenderSize';
@@ -73,7 +73,6 @@ interface EditorState {
   isMaskControlHovered: boolean;
   isGeneratingAiMask: boolean;
   isGeneratingAi: boolean;
-  isAIConnectorConnected: boolean;
   hasRenderedFirstFrame: boolean;
   patchesSentToBackend: Set<string>;
 
@@ -134,7 +133,6 @@ export const useEditorStore = create<EditorState>((set) => ({
   copiedAdjustments: null,
 
   isGeneratingAiMask: false,
-  isAIConnectorConnected: false,
   isGeneratingAi: false,
   isMaskControlHovered: false,
   hasRenderedFirstFrame: false,

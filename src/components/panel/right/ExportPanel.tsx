@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { FileInput, CheckCircle, XCircle, Loader, Ban, ChevronDown, ChevronRight, Settings, X } from 'lucide-react';
+import { FileInput, CheckCircle, XCircle, Loader, Ban, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import debounce from 'lodash.debounce';
@@ -324,7 +324,7 @@ export default function ExportPanel({
           path: watermarkPath,
         });
         setWatermarkImageAspectRatio(dimensions.height > 0 ? dimensions.width / dimensions.height : 1);
-      } catch (error) {
+      } catch (_error) {
         setWatermarkImageAspectRatio(1);
       }
     };
@@ -363,7 +363,7 @@ export default function ExportPanel({
             currentEditAdjustments: currentAdj || null,
           });
           setEstimatedSize(size);
-        } catch (err) {
+        } catch (_err) {
           setEstimatedSize(null);
         } finally {
           setIsEstimating(false);

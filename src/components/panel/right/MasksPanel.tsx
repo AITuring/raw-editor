@@ -1,6 +1,5 @@
 import {
   type ChangeEvent,
-  type PointerEvent as ReactPointerEvent,
   useState,
   useEffect,
   useRef,
@@ -102,6 +101,8 @@ const SUB_MASK_CONFIG: Record<Mask, any> = {
   },
   [Mask.Brush]: { showBrushTools: true },
   [Mask.Flow]: { showBrushTools: true, showFlowControl: true },
+  [Mask.Clone]: { showBrushTools: true },
+  [Mask.Heal]: { showBrushTools: true },
   [Mask.Linear]: { parameters: [] },
   [Mask.Color]: {
     parameters: [
@@ -296,7 +297,7 @@ export default function MasksPanel() {
     })),
   );
 
-  const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, setWaveformHeight, handleWaveformResize } =
+  const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, handleWaveformResize } =
     useWaveformControls();
 
   const setBrushSettings = useCallback(
@@ -813,9 +814,10 @@ export default function MasksPanel() {
           handleAddSubMask(overData.item!.id, dragData.maskType!);
         } else if (overData?.type === 'SubMask') {
           const container = adjustments.masks.find((m) => m.id === overData.parentId);
-          if (container) {
-            const targetIndex = container.subMasks.findIndex((sm) => sm.id === over.id);
-            handleAddSubMask(overData.parentId!, dragData.maskType!, targetIndex);
+          const overId = over?.id;
+          if (container && overId) {
+            const targetIndex = container.subMasks.findIndex((sm) => sm.id === overId);
+            handleAddSubMask(overData.parentId!, dragData.maskType!, SubMaskMode.Additive, targetIndex);
           }
         } else {
           handleAddMaskContainer(dragData.maskType!);
@@ -1162,7 +1164,6 @@ export default function MasksPanel() {
                       isSettingsSectionOpen={isSettingsSectionOpen}
                       setSettingsSectionOpen={setSettingsSectionOpen}
                       presets={presets}
-                      handleGenerateAiDepthMask={handleGenerateAiDepthMask}
                     />
                   </motion.div>
                 )}
@@ -1649,7 +1650,7 @@ function SubMaskRow({
     setNodeRef(node);
     setDroppableRef(node);
   };
-  const MaskIcon = MASK_ICON_MAP[subMask.type] || Circle;
+  const MaskIcon = MASK_ICON_MAP[subMask.type as Mask] || Circle;
   const { showContextMenu } = useContextMenu();
   const [isHovered, setIsHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1880,7 +1881,6 @@ function SettingsPanel({
   isSettingsSectionOpen,
   setSettingsSectionOpen,
   presets,
-  handleGenerateAiDepthMask,
 }: any) {
   const { t } = useTranslation();
   const { showContextMenu } = useContextMenu();
@@ -1964,7 +1964,7 @@ function SettingsPanel({
     updateSubMask(activeSubMask.id, { parameters: newParams });
   };
 
-  const subMaskConfig = activeSubMask ? SUB_MASK_CONFIG[activeSubMask.type] || {} : {};
+  const subMaskConfig = activeSubMask ? SUB_MASK_CONFIG[activeSubMask.type as Mask] || {} : {};
   const isAiMask = activeSubMask && ['ai-subject', 'ai-foreground', 'ai-sky', 'ai-depth'].includes(activeSubMask.type);
   const isComponentMode = !!activeSubMask;
 
@@ -2182,7 +2182,7 @@ function SettingsPanel({
                   label={
                     param.key === 'feather' && activeSubMask.type === Mask.AiDepth
                       ? t('editor.masks.params.globalFeather')
-                      : t('editor.masks.params.' + param.key)
+                      : (t(('editor.masks.params.' + param.key) as never) as string)
                   }
                   min={param.min}
                   max={param.max}

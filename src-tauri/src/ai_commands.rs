@@ -5,13 +5,11 @@ use std::io::Cursor;
 use base64::{Engine as _, engine::general_purpose};
 use image::{GrayImage, ImageFormat};
 
-use crate::ai_connector;
 use crate::ai_processing::{
     AiDepthMaskParameters, AiForegroundMaskParameters, AiSkyMaskParameters,
     AiSubjectMaskParameters, CachedDepthMap, generate_image_embeddings, get_or_init_ai_models,
     run_depth_anything_model, run_sam_decoder, run_sky_seg_model, run_u2netp_model,
 };
-use crate::app_settings::load_settings;
 use crate::app_state::AppState;
 use crate::cache_utils::GEOMETRY_KEYS;
 use crate::get_cached_full_warped_image;
@@ -401,28 +399,4 @@ pub async fn precompute_ai_subject_mask(
     ai_state.embeddings = Some(new_embeddings);
 
     Ok(())
-}
-
-#[tauri::command]
-pub async fn check_ai_connector_status(app_handle: tauri::AppHandle) {
-    let settings = load_settings(app_handle.clone()).unwrap_or_default();
-    let is_connected = if let Some(address) = settings.ai_connector_address {
-        ai_connector::check_status(&address).await.unwrap_or(false)
-    } else {
-        false
-    };
-    use tauri::Emitter;
-    let _ = app_handle.emit(
-        "ai-connector-status-update",
-        serde_json::json!({ "connected": is_connected }),
-    );
-}
-
-#[tauri::command]
-pub async fn test_ai_connector_connection(address: String) -> Result<(), String> {
-    match ai_connector::check_status(&address).await {
-        Ok(true) => Ok(()),
-        Ok(false) => Err("Server reachable but returned bad health status".to_string()),
-        Err(e) => Err(e.to_string()),
-    }
 }

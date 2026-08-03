@@ -707,7 +707,7 @@
         "sortAll": "Classificar Todos em Ordem Alfabética"
       },
       "status": {
-        "empty": "Nenhuma predefinição salva ainda. Crie a sua própria, importe de um arquivo ou explore as predefinições da comunidade.",
+        "empty": "Nenhuma predefinição salva ainda. Crie a sua própria ou importe de um arquivo.",
         "getCommunity": "Obter Predefinições da Comunidade",
         "loading": "Carregando Predefinições..."
       },

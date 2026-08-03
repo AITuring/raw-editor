@@ -405,8 +405,6 @@ export default function ColorPanel({
   const { t } = useTranslation();
   const [activeColor, setActiveColor] = useState('reds');
   const adjustmentVisibility = appSettings?.adjustmentVisibility || {};
-  const isWgpuEnabled = appSettings?.useWgpuRenderer !== false;
-
   const HSL_COLORS = useMemo<Array<ColorProps>>(
     () => [
       { name: 'reds', color: '#f87171', label: t('adjustments.color.mixerColors.reds') },

@@ -33,10 +33,19 @@ AGPL-3.0 的前提下继续开发。现阶段不追求 AI 功能，也不追求�
 
 当前仓库已经合并 RapidRAW 上游代码，并保留 `rapidraw-upstream` 远程用于里程碑边界同步。
 应用身份已切换为 RAW Editor，默认启用 `basic` 模式：保留 RAW 导入、预览、全局调整、裁剪、
-非 AI 蒙版、sidecar 和导出主链路，同时隐藏 AI 面板、移除 Clerk 登录依赖，并且默认不下载
-ONNX Runtime。旧版浏览器编辑器的 `ImageState` 参数模型通过
+非 AI 蒙版、sidecar 和导出主链路。旧版浏览器编辑器的 `ImageState` 参数模型通过
 `src/basic/legacyAdjustmentAdapter.ts` 映射到 RapidRAW 的原生 `Adjustments`，因此后续可以
 继续复用旧页面的参数语义，而不再依赖旧的 WebGL/浏览器 RAW 解码器。
+
+应用现已固定为纯本地产品：没有账号或登录、社区与在线预设、云端处理、远程 AI connector、
+在线地图、自动更新检查和遥测，也不会把照片、EXIF、编辑参数或提示词上传到服务器。公开开源
+依赖不在此限制内：构建时可以从公共源获取依赖，用户明确启用本地模型能力时也可以下载
+ONNX Runtime 或公开模型到应用私有数据目录；推理由本机完成。依赖与模型也可以预先打包，
+准备完成后核心编辑流程不要求联网。
+
+编辑数据统一写入应用私有数据目录的 `sidecars-v1`，不再在照片文件夹旁生成 `.rrdata` 等内部
+文件。首次遇到旧版相邻 sidecar 时会先原子迁移到私有目录，确认成功后删除旧文件。Daily RAW 1.0
+格式契约见 [`schemas/sidecar-v1.schema.json`](schemas/sidecar-v1.schema.json)。
 
 本地运行：
 
@@ -47,8 +56,8 @@ npm run start            # Tauri 2 开发窗口
 ```
 
 `VITE_RAW_EDITOR_MODE=full` 只用于后续调试上游完整面板；日常开发保持默认的 basic 模式。
-如果未来需要单独验证上游 AI 功能，必须显式设置
-`RAW_EDITOR_ENABLE_AI_RUNTIME=1`，否则原生构建不会下载或打包 ONNX Runtime。
+需要构建或打包本地 ONNX 功能时，显式设置 `RAW_EDITOR_ENABLE_AI_RUNTIME=1`；默认构建不会
+预取或打包 ONNX Runtime。该开关只允许获取公开运行时，不会启用任何云端产品能力。
 
 ### 应用身份与语言
 
@@ -63,26 +72,34 @@ npm run start            # Tauri 2 开发窗口
 
 ### 当前进度（2026-08-03）
 
-当前处于 **M0 基础整合完成、M1 RAW 与色彩基线准备阶段**。本轮已完成：
+当前处于 **M0 基础整合完成、M1 真实 RAW 基线待采集阶段**。本轮已完成：
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
 - ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、包元数据、Linux/Android 信息和基础 EXIF 软件标识调整。
 - ✅ 完成中英文首启自动选择、设置持久化、语言代码归一化和翻译完整性校验。
-- ✅ 默认启用离线 `basic` 模式，隐藏 AI 面板并移除 Clerk 登录依赖。
+- ✅ 固定为本地软件，移除账号、登录、社区、在线预设、云端处理、远程 connector、在线地图和更新检查链路。
+- ✅ 保留公开开源依赖与模型的可选下载/本地打包能力；所有照片处理和模型推理均在本机完成。
+- ✅ 增加 `npm run local-only:check` 回归边界，阻止重新引入产品云端地址、前端网络 API、
+  shell 权限、社区命令，或在公开资源下载模块以外新增 Rust 网络客户端。
 - ✅ 复用旧版 `raw-editor` 页面的 `ImageState` 参数语义，适配到 RapidRAW 原生 `Adjustments`。
-- ✅ 保留 RAW 导入、预览、全局调整、裁剪、非 AI 蒙版、sidecar 和导出主链路。
-- ✅ 默认关闭 ONNX Runtime 下载，避免基础版本引入 AI 模型运行时。
-- ✅ `npm run build`、`cargo check`、Rust 格式检查和 `git diff --check` 已通过。
+- ✅ 清理 RapidRAW 遗留的 TypeScript 类型与 lint 问题，`tsc --noEmit` 和零警告 ESLint 成为合并门槛；
+  上游动态 UI/Tauri payload 暂保留显式 `any` 例外，新建的配置、i18n 和公共类型代码继续严格禁止。
+- ✅ 增加 α7R V/rawler 相机矩阵、Sony Lensfun、确定性本地降噪、全尺寸导出和 ICC 往返验收。
+- ✅ 为 JPEG、PNG、TIFF、WebP 和 JPEG XL 导出嵌入固定 sRGB v4 ICC，并记录第三方来源与哈希。
+- ✅ 冻结 Daily RAW 1.0 sidecar schema v1；支持 v0 迁移、未知字段保留、原子写入、上一版备份、
+  损坏恢复、未来版本拒绝和评分范围校验。
+- ✅ 覆盖私有 sidecar 迁移/复制，以及“单张失败不丢弃后续结果”的批量导出聚合回归。
+- ✅ 常规验收不携带派生图片，使用内存生成的确定性图样；测试合同与真实 RAW 清单见
+  [`tests/acceptance`](tests/acceptance/README.md)。
 
-本轮暂未完成：
+当前唯一明确延期项是 Sony α7R V 60MP ARW 的真实画质、性能和导出基线。下一步在取得可合法
+使用的样片后，按照 `tests/acceptance/raw-manifest.json` 记录原文件哈希、授权和传感器尺寸，
+再逐节点核对 RAW 解包、白平衡、去马赛克、色彩变换、预览与全分辨率导出的一致性；在此之前
+不会用合成样片冒充真实相机画质结论。
 
-- ⏳ 使用 Sony α7R V 60MP ARW 建立可复现的画质、性能和导出回归基线。
-- ⏳ 清理 RapidRAW 上游遗留的 TypeScript 类型检查和 lint 问题。
-- ⏳ 补齐相机配置文件、ICC、Lensfun、降噪和全分辨率导出的验收样片。
-- ⏳ 冻结 Daily RAW 1.0 的 sidecar schema，并补充迁移、崩溃恢复和批量导出测试。
-
-下一步优先进入 M1：准备真实 RAW 测试集，逐节点核对 RAW 解包、白平衡、去马赛克、色彩
-变换、预览与全分辨率导出的结果一致性。AI、云端账号和订阅功能继续保持在 1.0 之后。
+本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
+`npm run local-only:check`、`npm run build`、`cargo fmt --all -- --check`、
+`cargo check --lib`、15 项 Rust 单元/回归测试、严格 Clippy 和 `git diff --check`。
 
 ## 1.0 范围
 
@@ -142,10 +159,19 @@ npm run start            # Tauri 2 开发窗口
 - 反射移除、自动尘点识别、生成式移除和生成式扩图。
 - Lens Blur、景深重建。
 - HDR 合并、全景拼接和焦点堆栈。
-- 云图库、云 AI、账号、订阅和在线同步。
 - Photoshop 插件或 PSD 智能对象兼容。
 
-这些功能只有在 Daily RAW 1.0 的 RAW 管线、导出一致性和日常稳定性达标后才进入规划。
+这些本地功能只有在 Daily RAW 1.0 的 RAW 管线、导出一致性和日常稳定性达标后才进入规划。
+
+### 不属于产品范围
+
+- 账号、登录、订阅和用户画像。
+- 社区、在线预设市场和社交功能。
+- 云图库、云端 AI、在线同步和远程编辑服务。
+- 上传照片、EXIF、编辑参数、提示词、使用数据或崩溃数据。
+
+允许从公共源下载开源库、运行时、算法数据和模型，或随安装包离线分发；这类资源只服务于
+本机计算，不改变上述产品边界。
 
 ## 完成标准
 
@@ -180,7 +206,7 @@ Daily RAW 1.0 只有同时满足以下条件才算完成：
 - ICC：优先接入 LittleCMS。
 - 数据：版本化 JSON 编辑数据统一保存在应用私有数据目录；SQLite 保存索引、缩略图、评分和队列状态，不在照片目录生成内部文件。
 - 输出：原生分块渲染和编码，不通过 WebView IPC、JSON 或 Base64 传输整张图。
-- AI：1.0 不引入模型和 AI 运行时。
+- AI：1.0 默认不启用；后续能力只接受公开模型的可选下载或本地打包，并且只在本机推理。
 
 处理管线必须保持明确顺序，不能继续演变成一个难以验证的超大 shader：
 
@@ -310,7 +336,7 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 
 工作内容：
 
-- 定义并冻结 sidecar 1.0 schema，加入版本迁移测试。
+- 维护已冻结的 sidecar 1.0 schema、版本迁移、原子写入和崩溃恢复测试。
 - 完成历史、快照、虚拟副本和每相机默认值。
 - 完成胶片栏、多选、部分参数复制、同步及撤销。
 - 完成后台导出队列、暂停、取消、重试和文件级错误。
@@ -412,6 +438,6 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 原片安全优先于功能数量。
 - 预览和导出一致优先于单纯追求预览速度。
 - 真实相机样片优先于合成 demo。
-- 非 AI 核心稳定前，不扩张到 AI、云端和资产管理平台。
+- 非 AI 核心稳定前不扩张本地 AI；云端、账号和社区能力不进入产品规划。
 - 不复制 Camera Raw 的品牌、图标或界面；对齐的是工作流和摄影能力。
 - 每次发布附带支持机型、已知限制、性能基准、迁移说明和完整对应源代码。

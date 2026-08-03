@@ -242,7 +242,7 @@ export default function CullingModal({
         <div className="w-full bg-surface rounded-full h-2.5 mt-2">
           <div
             className="bg-accent h-2.5 rounded-full"
-            style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            style={{ width: `${((progress.current ?? 0) / progress.total) * 100}%` }}
           />
         </div>
       )}

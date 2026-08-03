@@ -20,6 +20,7 @@ import {
 } from '../components/ui/AppProperties';
 import { useTranslation } from 'react-i18next';
 import { getSystemLanguage, resolveSupportedLanguage } from '../i18n/languages';
+import type { FolderTree } from '../components/panel/right/FolderTree';
 
 interface UseAppInitializationProps {
   preloadedDataRef: React.RefObject<any>;
@@ -198,7 +199,7 @@ export const useAppInitialization = ({
 
         if (settings?.pinnedFolders && settings.pinnedFolders.length > 0) {
           try {
-            const trees = await invoke(Invokes.GetPinnedFolderTrees, {
+            const trees = await invoke<FolderTree[]>(Invokes.GetPinnedFolderTrees, {
               paths: settings.pinnedFolders,
               expandedFolders: settings.lastFolderState?.expandedFolders || [],
               showImageCounts: settings.enableFolderImageCounts || settings.folderTreeSort?.key === 'imageCount',
@@ -443,7 +444,6 @@ export const useAppInitialization = ({
           setLibrary({ isTreeLoading: false });
         });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appSettings?.enableFolderImageCounts, appSettings?.folderTreeSort?.key]);
 
   useEffect(() => {
@@ -455,7 +455,7 @@ export const useAppInitialization = ({
       THEMES.find((t: ThemeProps) => t.id === DEFAULT_THEME_ID);
     if (!baseTheme) return;
 
-    let finalCssVariables: any = { ...baseTheme.cssVariables };
+    const finalCssVariables: any = { ...baseTheme.cssVariables };
 
     Object.entries(finalCssVariables).forEach(([key, value]) => {
       root.style.setProperty(key, value as string);

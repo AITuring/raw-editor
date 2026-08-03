@@ -17,7 +17,6 @@ use walkdir::WalkDir;
 use crate::file_management::{self, parse_virtual_path};
 use crate::formats::is_supported_image_file;
 use crate::hierarchy::TAG_HIERARCHY;
-use crate::image_processing::ImageMetadata;
 use crate::{AppState, candidates::TAG_CANDIDATES};
 
 pub const COLOR_TAG_PREFIX: &str = "color:";
@@ -370,10 +369,10 @@ pub async fn start_background_indexing(
 
                                     metadata.tags = Some(final_tags);
 
-                                    if let Ok(json_string) = serde_json::to_string_pretty(&metadata)
-                                    {
-                                        let _ = fs::write(sidecar_path, json_string);
-                                    }
+                                    let _ = crate::exif_processing::save_sidecar(
+                                        &sidecar_path,
+                                        &metadata,
+                                    );
                                 }
                             }
                             Err(e) => {
@@ -433,8 +432,7 @@ fn modify_tags_for_path(
         metadata.tags = Some(tags);
     }
 
-    let json_string = serde_json::to_string_pretty(&metadata).map_err(|e| e.to_string())?;
-    fs::write(sidecar_path, json_string).map_err(|e| e.to_string())
+    crate::exif_processing::save_sidecar(&sidecar_path, &metadata)
 }
 
 #[tauri::command]
@@ -489,8 +487,7 @@ pub fn clear_ai_tags(root_path: String) -> Result<usize, String> {
     let mut updated_count = 0;
 
     for path in sidecar_paths_for_root(root_path) {
-        if let Ok(content) = fs::read_to_string(&path)
-            && let Ok(mut metadata) = serde_json::from_str::<ImageMetadata>(&content)
+        if let Ok(mut metadata) = crate::exif_processing::load_sidecar_checked(&path)
             && let Some(tags) = &mut metadata.tags
         {
             let original_len = tags.len();
@@ -503,9 +500,7 @@ pub fn clear_ai_tags(root_path: String) -> Result<usize, String> {
                 if tags.is_empty() {
                     metadata.tags = None;
                 }
-                if let Ok(json_string) = serde_json::to_string_pretty(&metadata)
-                    && fs::write(&path, json_string).is_ok()
-                {
+                if crate::exif_processing::save_sidecar(&path, &metadata).is_ok() {
                     updated_count += 1;
                 }
             }
@@ -524,8 +519,7 @@ pub fn clear_all_tags(root_path: String) -> Result<usize, String> {
     let mut updated_count = 0;
 
     for path in sidecar_paths_for_root(root_path) {
-        if let Ok(content) = fs::read_to_string(&path)
-            && let Ok(mut metadata) = serde_json::from_str::<ImageMetadata>(&content)
+        if let Ok(mut metadata) = crate::exif_processing::load_sidecar_checked(&path)
             && let Some(tags) = &mut metadata.tags
         {
             let original_len = tags.len();
@@ -536,9 +530,7 @@ pub fn clear_all_tags(root_path: String) -> Result<usize, String> {
                 if tags.is_empty() {
                     metadata.tags = None;
                 }
-                if let Ok(json_string) = serde_json::to_string_pretty(&metadata)
-                    && fs::write(&path, json_string).is_ok()
-                {
+                if crate::exif_processing::save_sidecar(&path, &metadata).is_ok() {
                     updated_count += 1;
                 }
             }

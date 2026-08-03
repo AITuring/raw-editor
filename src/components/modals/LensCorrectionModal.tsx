@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslation, Trans } from 'react-i18next';
 import {
   RotateCcw,
-  Search,
   Check,
   Info,
   Loader,
@@ -550,31 +549,6 @@ export default function LensCorrectionModal({
     }));
   }, [myLenses, t]);
 
-  const autoDetectButtonContent = () => {
-    switch (detectionStatus) {
-      case 'detecting':
-        return (
-          <>
-            <Loader size={16} className="animate-spin" /> {t('modals.lensCorrection.detecting')}
-          </>
-        );
-      case 'not_found':
-        return t('modals.lensCorrection.notFound');
-      case 'success':
-        return (
-          <>
-            <Check size={16} /> {t('modals.lensCorrection.lensFound')}
-          </>
-        );
-      default:
-        return (
-          <>
-            <Search size={16} /> {t('modals.lensCorrection.autoDetectLens')}
-          </>
-        );
-    }
-  };
-
   const handleModeChange = (mode: 'auto' | 'manual') => {
     const newParams = { ...params, lensCorrectionMode: mode };
     setParams(newParams);
@@ -844,19 +818,13 @@ export default function LensCorrectionModal({
               <Trans
                 i18nKey="modals.lensCorrection.databaseNotice"
                 components={[
-                  <a
+                  <span
                     key="0"
-                    href="https://lensfun.github.io/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-primary transition-colors"
+                    className="font-medium"
                   />,
-                  <a
+                  <span
                     key="1"
-                    href="https://creativecommons.org/licenses/by-sa/3.0/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-primary transition-colors"
+                    className="font-medium"
                   />,
                 ]}
               />

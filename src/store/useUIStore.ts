@@ -1,24 +1,12 @@
 import { create } from 'zustand';
 import {
   ImageFile,
-  LibraryViewMode,
   Panel,
   UiVisibility,
   CullingSuggestions,
   PanelRegion,
 } from '../components/ui/AppProperties';
 import { BASIC_MODE } from '../basic/runtime';
-
-const RIGHT_PANEL_ORDER = [
-  Panel.Metadata,
-  Panel.Adjustments,
-  Panel.Crop,
-  Panel.Masks,
-  ...(BASIC_MODE ? [] : [Panel.Ai]),
-  Panel.Presets,
-  Panel.Export,
-  Panel.FolderTree,
-];
 
 export type SwitcherPlacement = 'bottom' | 'right' | 'left' | 'top';
 
@@ -255,13 +243,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
       const active = { ...state.activePanels };
 
-      let fromRegion: PanelRegion | null = null;
-      (Object.keys(layout) as PanelRegion[]).forEach((r) => {
-        if (layout[r].includes(panel)) {
-          fromRegion = r;
-          layout[r] = layout[r].filter((p) => p !== panel);
-        }
-      });
+      const fromRegion = (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
+      if (fromRegion) layout[fromRegion] = layout[fromRegion].filter((candidate) => candidate !== panel);
 
       if (!layout[toRegion].includes(panel)) layout[toRegion].push(panel);
 
@@ -290,13 +273,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
       const active = { ...state.activePanels };
 
-      let fromRegion: PanelRegion | null = null;
-      (Object.keys(layout) as PanelRegion[]).forEach((r) => {
-        if (layout[r].includes(panel)) {
-          fromRegion = r;
-          layout[r] = layout[r].filter((p) => p !== panel);
-        }
-      });
+      const fromRegion = (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
+      if (fromRegion) layout[fromRegion] = layout[fromRegion].filter((candidate) => candidate !== panel);
 
       const clampedIndex = Math.max(0, Math.min(index, layout[toRegion].length));
       layout[toRegion].splice(clampedIndex, 0, panel);

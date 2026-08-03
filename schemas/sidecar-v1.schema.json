@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AITuring/raw-editor/schemas/sidecar-v1.schema.json",
+  "title": "Daily RAW 1.0 sidecar",
+  "description": "Versioned non-destructive edit metadata stored in the application's private data directory.",
+  "type": "object",
+  "required": ["version", "rating", "adjustments"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "rating": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "adjustments": {},
+    "tags": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "exif": {
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

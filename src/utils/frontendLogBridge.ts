@@ -198,7 +198,7 @@ function serializeValue(
   }
 
   if (typeof value === 'function') {
-    return `[Function ${(value as Function).name || 'anonymous'}]`;
+    return `[Function ${(value as (...args: unknown[]) => unknown).name || 'anonymous'}]`;
   }
 
   if (typeof value === 'bigint') {

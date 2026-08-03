@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter};
 struct ProgressReporter<'a> {
     counter: &'a Arc<AtomicUsize>,
     total_work: usize,
-    app_handle: &'a AppHandle,
+    app_handle: Option<&'a AppHandle>,
 }
 
 const BLOCK_SIZE: usize = 8;
@@ -167,8 +167,21 @@ pub async fn batch_denoise_images(
                     {
                         let (_, dest_sidecar_path) =
                             crate::file_management::parse_virtual_path(output_path_str);
-                        if let Err(e) = std::fs::copy(&source_sidecar_path, &dest_sidecar_path) {
-                            log::warn!("Failed to copy sidecar file for denoised image: {}", e);
+                        match crate::exif_processing::load_sidecar_checked(&source_sidecar_path) {
+                            Ok(metadata) => {
+                                if let Err(e) = crate::exif_processing::save_sidecar(
+                                    &dest_sidecar_path,
+                                    &metadata,
+                                ) {
+                                    log::warn!(
+                                        "Failed to copy sidecar file for denoised image: {}",
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to read sidecar for denoised image: {}", e);
+                            }
                         }
                     }
 
@@ -236,8 +249,16 @@ pub async fn save_denoised_image(
         && let Some(output_path_str) = output_path.to_str()
     {
         let (_, dest_sidecar_path) = crate::file_management::parse_virtual_path(output_path_str);
-        if let Err(e) = std::fs::copy(&source_sidecar_path, &dest_sidecar_path) {
-            log::warn!("Failed to copy sidecar file for denoised image: {}", e);
+        match crate::exif_processing::load_sidecar_checked(&source_sidecar_path) {
+            Ok(metadata) => {
+                if let Err(e) = crate::exif_processing::save_sidecar(&dest_sidecar_path, &metadata)
+                {
+                    log::warn!("Failed to copy sidecar file for denoised image: {}", e);
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to read sidecar for denoised image: {}", e);
+            }
         }
     }
 
@@ -249,6 +270,18 @@ fn run_bm3d(
     intensity: f32,
     app_handle: &AppHandle,
 ) -> Result<DynamicImage, String> {
+    Ok(run_bm3d_core(rgb_img, intensity, Some(app_handle)))
+}
+
+fn run_bm3d_core(
+    rgb_img: &Rgb32FImage,
+    intensity: f32,
+    app_handle: Option<&AppHandle>,
+) -> DynamicImage {
+    if intensity <= 0.0 {
+        return DynamicImage::ImageRgb32F(rgb_img.clone());
+    }
+
     let (width, height) = rgb_img.dimensions();
     let params = Bm3dParams::from_intensity(intensity);
     let dct_tables = Arc::new(DctTables::new());
@@ -263,7 +296,9 @@ fn run_bm3d(
     let total_work_units = (patches_x * patches_y) * 2;
     let progress_counter = Arc::new(AtomicUsize::new(0));
 
-    let _ = app_handle.emit("denoise-progress", "Processing (Step 1/2)...");
+    if let Some(app_handle) = app_handle {
+        let _ = app_handle.emit("denoise-progress", "Processing (Step 1/2)...");
+    }
 
     let progress = ProgressReporter {
         counter: &progress_counter,
@@ -274,7 +309,9 @@ fn run_bm3d(
         bm3d_process_joint(&channels, width, height, &params, &dct_tables, &progress);
 
     {
-        let _ = app_handle.emit("denoise-progress", "Blending detail...");
+        if let Some(app_handle) = app_handle {
+            let _ = app_handle.emit("denoise-progress", "Blending detail...");
+        }
         let blurred_y = gaussian_blur_1ch(&original_y, width as usize, height as usize, 3.0);
         let detail_strength = (intensity * 0.5_f32).clamp(0.0_f32, 0.5_f32);
         let y_ch = &mut denoised_channels[0];
@@ -291,7 +328,7 @@ fn run_bm3d(
     );
 
     let out_img_buffer = merge_channels(&[r, g, b], width, height);
-    Ok(DynamicImage::ImageRgb32F(out_img_buffer))
+    DynamicImage::ImageRgb32F(out_img_buffer)
 }
 
 fn denoise_image(
@@ -496,7 +533,9 @@ fn run_bm3d_step_joint(
             let pct = (c as f32 / progress.total_work as f32) * 100.0;
             let step_str = if is_step_1 { "Step 1/2" } else { "Step 2/2" };
             let msg = format!("{} - {:.0}%", step_str, pct);
-            let _ = progress.app_handle.emit("denoise-progress", msg);
+            if let Some(app_handle) = progress.app_handle {
+                let _ = app_handle.emit("denoise-progress", msg);
+            }
         }
 
         let mut group_locs_buf = [(0, 0); MAX_GROUP_SIZE];
@@ -1018,4 +1057,76 @@ fn gaussian_blur_1ch(data: &[f32], width: usize, height: usize, sigma: f32) -> V
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mean_squared_error(left: &Rgb32FImage, right: &Rgb32FImage) -> f32 {
+        left.pixels()
+            .zip(right.pixels())
+            .flat_map(|(left, right)| {
+                (0..3).map(move |channel| {
+                    let difference = left[channel] - right[channel];
+                    difference * difference
+                })
+            })
+            .sum::<f32>()
+            / (left.width() * left.height() * 3) as f32
+    }
+
+    #[test]
+    fn zero_intensity_is_pixel_exact() {
+        let source = Rgb32FImage::from_fn(17, 13, |x, y| {
+            let value = ((x * 17 + y * 11) % 97) as f32 / 96.0;
+            Rgb([value, value * 0.8, value * 0.6])
+        });
+        let output = run_bm3d_core(&source, 0.0, None).to_rgb32f();
+        assert_eq!(source.as_raw(), output.as_raw());
+    }
+
+    #[test]
+    fn deterministic_bm3d_reduces_noise_without_destroying_primary_edge() {
+        let clean = Rgb32FImage::from_fn(48, 48, |x, _| {
+            let value = if x < 24 { 0.25 } else { 0.75 };
+            Rgb([value, value, value])
+        });
+        let noisy = Rgb32FImage::from_fn(48, 48, |x, y| {
+            let clean_value = if x < 24 { 0.25 } else { 0.75 };
+            let hash = x
+                .wrapping_mul(1_103_515_245)
+                .wrapping_add(y.wrapping_mul(12_345))
+                .rotate_left((y % 31) + 1);
+            let noise = (hash % 10_001) as f32 / 10_000.0 * 0.16 - 0.08;
+            let value = (clean_value + noise).clamp(0.0, 1.0);
+            Rgb([value, value, value])
+        });
+
+        let denoised = run_bm3d_core(&noisy, 0.25, None).to_rgb32f();
+        assert!(
+            mean_squared_error(&denoised, &clean) < mean_squared_error(&noisy, &clean),
+            "denoise output should be closer to the deterministic clean fixture"
+        );
+        assert!(
+            denoised
+                .pixels()
+                .flat_map(|pixel| pixel.0)
+                .all(|value| value.is_finite() && (0.0..=1.0).contains(&value))
+        );
+
+        let left_mean = denoised
+            .enumerate_pixels()
+            .filter(|(x, _, _)| *x < 20)
+            .map(|(_, _, pixel)| pixel[0])
+            .sum::<f32>()
+            / (20 * 48) as f32;
+        let right_mean = denoised
+            .enumerate_pixels()
+            .filter(|(x, _, _)| *x >= 28)
+            .map(|(_, _, pixel)| pixel[0])
+            .sum::<f32>()
+            / (20 * 48) as f32;
+        assert!(right_mean - left_mean > 0.35);
+    }
 }

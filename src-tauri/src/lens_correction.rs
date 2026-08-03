@@ -722,6 +722,34 @@ pub fn find_best_lens_match(
     None
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_sony_lensfun_data_covers_a7r_v_and_calibrated_e_mount_lenses() {
+        let database: LensDatabase =
+            quick_xml::de::from_str(include_str!("../lensfun_db/mil-sony.xml"))
+                .expect("parse bundled Sony Lensfun database");
+
+        let a7r_v = database
+            .cameras
+            .iter()
+            .find(|camera| camera.model.iter().any(|name| name.value == "ILCE-7RM5"));
+        let a7r_v = a7r_v.expect("Sony ILCE-7RM5 Lensfun camera entry");
+        assert_eq!(a7r_v.mount, "Sony E");
+        assert_eq!(a7r_v.cropfactor, 1.0);
+
+        assert!(database.lenses.iter().any(|lens| {
+            lens.mount.iter().any(|mount| mount == "Sony E")
+                && lens
+                    .calibration
+                    .as_ref()
+                    .is_some_and(|calibration| !calibration.elements.is_empty())
+        }));
+    }
+}
+
 #[tauri::command]
 pub fn autodetect_lens(
     maker: String,

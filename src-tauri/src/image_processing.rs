@@ -48,7 +48,10 @@ impl<'a> IntoCowImage<'a> for &'a std::sync::Arc<DynamicImage> {
     }
 }
 
+pub const SIDECAR_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
 pub struct ImageMetadata {
     pub version: u32,
     pub rating: u8,
@@ -57,16 +60,19 @@ pub struct ImageMetadata {
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exif: Option<std::collections::HashMap<String, String>>,
+    #[serde(flatten)]
+    pub extra: std::collections::BTreeMap<String, Value>,
 }
 
 impl Default for ImageMetadata {
     fn default() -> Self {
         ImageMetadata {
-            version: 1,
+            version: SIDECAR_SCHEMA_VERSION,
             rating: 0,
             adjustments: Value::Null,
             tags: None,
             exif: None,
+            extra: std::collections::BTreeMap::new(),
         }
     }
 }

@@ -7,7 +7,6 @@ import {
   Star as StarIcon,
   ZoomIn,
   ZoomOut,
-  Maximize,
   Link,
   SquarePen,
   Tag,
@@ -980,6 +979,8 @@ const Row = React.memo(
   },
 );
 
+const VirtualizedCullingRow = (props: React.ComponentProps<typeof Row>) => <Row {...props} />;
+
 export default function CullingView(props: any) {
   const { t } = useTranslation();
   const {
@@ -1233,7 +1234,7 @@ export default function CullingView(props: any) {
             listRef={setListHandle}
             rowCount={imageList.length}
             rowHeight={sidebarWidth - 16}
-            rowComponent={Row}
+            rowComponent={VirtualizedCullingRow}
             rowProps={rowProps}
             className="custom-scrollbar"
           />

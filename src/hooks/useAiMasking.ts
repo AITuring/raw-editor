@@ -30,7 +30,6 @@ const getTransformAdjustments = (adj: Adjustments) => ({
 export function useAiMasking() {
   const { setAdjustments } = useEditorActions();
   const setEditor = useEditorStore((state) => state.setEditor);
-  const getToken = useCallback(async () => null, []);
 
   const updateSubMask = useCallback(
     (subMaskId: string, updatedData: any) => {
@@ -90,7 +89,7 @@ export function useAiMasking() {
         }));
       }
     },
-    [setAdjustments, getToken],
+    [setAdjustments],
   );
 
   const handleGenerativeReplace = useCallback(
@@ -102,7 +101,6 @@ export function useAiMasking() {
       if (!patch) return;
 
       const patchDefinition = { ...patch, prompt };
-      const token = await getToken();
 
       setAdjustments((prev: Adjustments) => ({
         ...prev,
@@ -115,9 +113,7 @@ export function useAiMasking() {
         const newPatchDataJson: any = await invoke(Invokes.InvokeGenerativeReplaseWithMaskDef, {
           currentAdjustments: adjustments,
           patchDefinition: patchDefinition,
-          path: selectedImage.path,
           useFastInpaint: useFastInpaint,
-          token: token || null,
         });
 
         const newPatchData = JSON.parse(newPatchDataJson);
@@ -154,7 +150,6 @@ export function useAiMasking() {
     async (subMaskId: string | null, startPoint: Coord, endPoint: Coord) => {
       const { selectedImage, adjustments, isGeneratingAi, patchesSentToBackend } = useEditorStore.getState();
       if (!selectedImage?.path || isGeneratingAi) return;
-      const token = await getToken();
 
       const patchId = adjustments.aiPatches.find((p: AiPatch) =>
         p.subMasks.some((sm: SubMask) => sm.id === subMaskId),
@@ -202,9 +197,7 @@ export function useAiMasking() {
         const newPatchDataJson: any = await invoke(Invokes.InvokeGenerativeReplaseWithMaskDef, {
           currentAdjustments: updatedAdjustmentsForBackend,
           patchDefinition: { ...patchDefinitionForBackend, prompt: '' },
-          path: selectedImage.path,
           useFastInpaint: true,
-          token: token || null,
         });
 
         const newPatchData = JSON.parse(newPatchDataJson);
@@ -284,7 +277,7 @@ export function useAiMasking() {
 
     try {
       const transformAdjustments = getTransformAdjustments(adjustments);
-      const newParameters = await invoke(Invokes.GenerateAiSubjectMask, {
+      const newParameters = await invoke<Record<string, unknown>>(Invokes.GenerateAiSubjectMask, {
         jsAdjustments: transformAdjustments,
         endPoint: [endPoint.x, endPoint.y],
         flipHorizontal: adjustments.flipHorizontal,
@@ -315,7 +308,7 @@ export function useAiMasking() {
 
     try {
       const transformAdjustments = getTransformAdjustments(adjustments);
-      const newParameters = await invoke('generate_ai_depth_mask', {
+      const newParameters = await invoke<Record<string, unknown>>('generate_ai_depth_mask', {
         jsAdjustments: transformAdjustments,
         path: selectedImage.path,
         minDepth: parameters.minDepth ?? 20,
@@ -349,7 +342,7 @@ export function useAiMasking() {
 
     try {
       const transformAdjustments = getTransformAdjustments(adjustments);
-      const newParameters = await invoke(Invokes.GenerateAiForegroundMask, {
+      const newParameters = await invoke<Record<string, unknown>>(Invokes.GenerateAiForegroundMask, {
         jsAdjustments: transformAdjustments,
         flipHorizontal: adjustments.flipHorizontal,
         flipVertical: adjustments.flipVertical,
@@ -377,7 +370,7 @@ export function useAiMasking() {
 
     try {
       const transformAdjustments = getTransformAdjustments(adjustments);
-      const newParameters = await invoke(Invokes.GenerateAiSkyMask, {
+      const newParameters = await invoke<Record<string, unknown>>(Invokes.GenerateAiSkyMask, {
         jsAdjustments: transformAdjustments,
         flipHorizontal: adjustments.flipHorizontal,
         flipVertical: adjustments.flipVertical,
