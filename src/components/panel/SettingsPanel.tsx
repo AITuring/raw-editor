@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
-  Cloud,
   Cpu,
   ExternalLink as ExternalLinkIcon,
   Server,
@@ -24,7 +23,6 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import clsx from 'clsx';
-import { Show, SignIn, useUser, useAuth, useClerk } from '@clerk/react';
 import Button from '../ui/Button';
 import ConfirmModal from '../modals/ConfirmModal';
 import Dropdown, { OptionItem } from '../ui/Dropdown';
@@ -45,6 +43,21 @@ import Text from '../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useOsPlatform } from '../../hooks/useOsPlatform';
 import { open } from '@tauri-apps/plugin-shell';
+
+// Cloud/Clerk is intentionally unavailable in Daily RAW basic mode. Keep the
+// upstream settings component render-safe without introducing an online auth
+// dependency into the native editor.
+const getOfflineToken = async () => null;
+type OfflineUser = {
+  publicMetadata?: { plan?: string };
+  fullName?: string | null;
+  primaryEmailAddress?: { emailAddress?: string | null } | null;
+};
+const useUser = (): { user: OfflineUser | null } => ({ user: null });
+const useAuth = () => ({ getToken: getOfflineToken });
+const useClerk = () => ({ signOut: async () => undefined });
+const Show = ({ children }: { when?: string; children?: ReactNode }) => null;
+const SignIn = (_props: Record<string, unknown>) => null;
 
 interface ConfirmModalState {
   confirmText: string;

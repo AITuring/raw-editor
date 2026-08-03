@@ -69,6 +69,20 @@ fn download_and_verify(
 }
 
 fn main() {
+    let ai_runtime_enabled = env::var("RAW_EDITOR_ENABLE_AI_RUNTIME")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    // Daily RAW is intentionally offline and non-AI by default. Keep the
+    // upstream AI modules available for later work, but do not download or
+    // bundle ONNX Runtime unless an explicit build flag opts in.
+    if !ai_runtime_enabled {
+        println!("cargo:warning=AI runtime disabled; skipping ONNX Runtime download");
+        println!("cargo:rerun-if-env-changed=RAW_EDITOR_ENABLE_AI_RUNTIME");
+        tauri_build::build();
+        return;
+    }
+
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
@@ -174,6 +188,7 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=RAW_EDITOR_ENABLE_AI_RUNTIME");
 
     tauri_build::build()
 }

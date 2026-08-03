@@ -22,6 +22,7 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
 import { useWaveformControls } from '../../../hooks/useWaveformControls';
+import { BASIC_MODE } from '../../../basic/runtime';
 
 export default function Controls() {
   const { t } = useTranslation();
@@ -210,7 +211,10 @@ export default function Controls() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-        <Text variant={TextVariants.title}>{t('editor.adjustments.title')}</Text>
+        <div className="min-w-0">
+          <Text variant={TextVariants.title}>{t('editor.adjustments.title')}</Text>
+          {BASIC_MODE && <div className="mt-0.5 text-[10px] text-text-secondary">Daily RAW · 非 AI 基础模式</div>}
+        </div>
         <div className="flex items-center gap-1">
           <button
             className="p-2 rounded-full hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

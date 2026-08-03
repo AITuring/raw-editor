@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { Adjustments, INITIAL_ADJUSTMENTS, MaskContainer, AiPatch } from '../utils/adjustments';
+import { Adjustments, MaskContainer, AiPatch } from '../utils/adjustments';
 import { SelectedImage, WaveformData, BrushSettings } from '../components/ui/AppProperties';
 import { ChannelConfig } from '../components/adjustments/Curves';
 import { ImageDimensions } from '../hooks/useImageRenderSize';
 import { ToolType } from '../components/panel/right/Masks';
 import { OverlayMode } from '../components/panel/right/CropPanel';
+import { LEGACY_DEFAULT_IMAGE_STATE, legacyStateToAdjustments } from '../basic/legacyAdjustmentAdapter';
 
 export interface InteractivePatch {
   url: string;
@@ -13,6 +14,8 @@ export interface InteractivePatch {
   normW: number;
   normH: number;
 }
+
+const BASIC_INITIAL_ADJUSTMENTS = legacyStateToAdjustments(LEGACY_DEFAULT_IMAGE_STATE);
 
 interface BaseRenderSize extends ImageDimensions {
   containerHeight: number;
@@ -90,9 +93,9 @@ interface EditorState {
 
 export const useEditorStore = create<EditorState>((set) => ({
   selectedImage: null,
-  adjustments: INITIAL_ADJUSTMENTS,
+  adjustments: BASIC_INITIAL_ADJUSTMENTS,
   previewOverride: null,
-  history: [INITIAL_ADJUSTMENTS],
+  history: [BASIC_INITIAL_ADJUSTMENTS],
   historyIndex: 0,
 
   finalPreviewUrl: null,

@@ -6,7 +6,6 @@ import { useEditorActions } from './useEditorActions';
 import { Adjustments, AiPatch, MaskContainer, Coord } from '../utils/adjustments';
 import { SubMask } from '../components/panel/right/Masks';
 import { Invokes } from '../components/ui/AppProperties';
-import { useAuth } from '@clerk/react';
 
 const getTransformAdjustments = (adj: Adjustments) => ({
   transformDistortion: adj.transformDistortion,
@@ -31,7 +30,7 @@ const getTransformAdjustments = (adj: Adjustments) => ({
 export function useAiMasking() {
   const { setAdjustments } = useEditorActions();
   const setEditor = useEditorStore((state) => state.setEditor);
-  const { getToken } = useAuth();
+  const getToken = useCallback(async () => null, []);
 
   const updateSubMask = useCallback(
     (subMaskId: string, updatedData: any) => {

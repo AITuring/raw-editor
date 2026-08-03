@@ -28,6 +28,49 @@ AGPL-3.0 的前提下继续开发。现阶段不追求 AI 功能，也不追求�
 界面，也不要求使用同一参数值后得到完全相同的像素。Adobe 的相机配置文件、色彩算法
 和处理模型并不开源，本项目将通过公开标准、开源算法和自己的回归样片建立独立画质基线。
 
+## 当前基础版本
+
+当前仓库已经合并 RapidRAW 上游代码，并保留 `rapidraw-upstream` 远程用于里程碑边界同步。
+应用身份已切换为 RAW Editor，默认启用 `basic` 模式：保留 RAW 导入、预览、全局调整、裁剪、
+非 AI 蒙版、sidecar 和导出主链路，同时隐藏 AI 面板、移除 Clerk 登录依赖，并且默认不下载
+ONNX Runtime。旧版浏览器编辑器的 `ImageState` 参数模型通过
+`src/basic/legacyAdjustmentAdapter.ts` 映射到 RapidRAW 的原生 `Adjustments`，因此后续可以
+继续复用旧页面的参数语义，而不再依赖旧的 WebGL/浏览器 RAW 解码器。
+
+本地运行：
+
+```bash
+npm install
+npm run dev              # 仅启动 Vite 前端
+npm run start            # Tauri 2 开发窗口
+```
+
+`VITE_RAW_EDITOR_MODE=full` 只用于后续调试上游完整面板；日常开发保持默认的 basic 模式。
+如果未来需要单独验证上游 AI 功能，必须显式设置
+`RAW_EDITOR_ENABLE_AI_RUNTIME=1`，否则原生构建不会下载或打包 ONNX Runtime。
+
+### 当前进度（2026-08-03）
+
+当前处于 **M0 基础整合完成、M1 RAW 与色彩基线准备阶段**。本轮已完成：
+
+- ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
+- ✅ 完成 RAW Editor 应用身份、窗口标题、包名和基础 EXIF 软件标识调整。
+- ✅ 默认启用离线 `basic` 模式，隐藏 AI 面板并移除 Clerk 登录依赖。
+- ✅ 复用旧版 `raw-editor` 页面的 `ImageState` 参数语义，适配到 RapidRAW 原生 `Adjustments`。
+- ✅ 保留 RAW 导入、预览、全局调整、裁剪、非 AI 蒙版、sidecar 和导出主链路。
+- ✅ 默认关闭 ONNX Runtime 下载，避免基础版本引入 AI 模型运行时。
+- ✅ `npm run build`、`cargo check`、Rust 格式检查和 `git diff --check` 已通过。
+
+本轮暂未完成：
+
+- ⏳ 使用 Sony α7R V 60MP ARW 建立可复现的画质、性能和导出回归基线。
+- ⏳ 清理 RapidRAW 上游遗留的 TypeScript 类型检查和 lint 问题。
+- ⏳ 补齐相机配置文件、ICC、Lensfun、降噪和全分辨率导出的验收样片。
+- ⏳ 冻结 Daily RAW 1.0 的 sidecar schema，并补充迁移、崩溃恢复和批量导出测试。
+
+下一步优先进入 M1：准备真实 RAW 测试集，逐节点核对 RAW 解包、白平衡、去马赛克、色彩
+变换、预览与全分辨率导出的结果一致性。AI、云端账号和订阅功能继续保持在 1.0 之后。
+
 ## 1.0 范围
 
 ### 必须完成
@@ -359,4 +402,3 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 非 AI 核心稳定前，不扩张到 AI、云端和资产管理平台。
 - 不复制 Camera Raw 的品牌、图标或界面；对齐的是工作流和摄影能力。
 - 每次发布附带支持机型、已知限制、性能基准、迁移说明和完整对应源代码。
-

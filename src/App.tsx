@@ -2,7 +2,6 @@ import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallbac
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ClerkProvider } from '@clerk/react';
 import { ToastContainer, toast, Slide } from 'react-toastify';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import clsx from 'clsx';
@@ -67,8 +66,7 @@ import {
 
 import ImageProcessingManager from './components/managers/ImageProcessingManager';
 import ImageLoaderManager from './components/managers/ImageLoaderManager';
-
-const CLERK_PUBLISHABLE_KEY = 'pk_test_YnJpZWYtc2Vhc25haWwtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA'; // local dev key
+import { BASIC_MODE } from './basic/runtime';
 
 const insertChildrenIntoTree = (node: any, targetPath: string, newChildren: any[]): any => {
   if (!node) return null;
@@ -652,7 +650,7 @@ function App() {
         case Panel.Masks:
           return <MasksPanel />;
         case Panel.Ai:
-          return <AIPanel />;
+          return BASIC_MODE ? null : <AIPanel />;
         case Panel.Presets:
           return <PresetsPanel onNavigateToCommunity={() => setUI({ activeView: 'community' })} />;
         default:
@@ -905,12 +903,10 @@ function App() {
 }
 
 const AppWrapper = () => (
-  <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} routerPush={(to) => {}} routerReplace={(to) => {}}>
-    <ContextMenuProvider>
-      <App />
-      <GlobalTooltip />
-    </ContextMenuProvider>
-  </ClerkProvider>
+  <ContextMenuProvider>
+    <App />
+    <GlobalTooltip />
+  </ContextMenuProvider>
 );
 
 export default AppWrapper;

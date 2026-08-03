@@ -7,13 +7,14 @@ import {
   CullingSuggestions,
   PanelRegion,
 } from '../components/ui/AppProperties';
+import { BASIC_MODE } from '../basic/runtime';
 
 const RIGHT_PANEL_ORDER = [
   Panel.Metadata,
   Panel.Adjustments,
   Panel.Crop,
   Panel.Masks,
-  Panel.Ai,
+  ...(BASIC_MODE ? [] : [Panel.Ai]),
   Panel.Presets,
   Panel.Export,
   Panel.FolderTree,
@@ -169,7 +170,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   panelLayout: {
     leftTop: [Panel.Metadata, Panel.FolderTree, Panel.Export],
     leftBottom: [],
-    rightTop: [Panel.Adjustments, Panel.Crop, Panel.Masks, Panel.Ai, Panel.Presets],
+    rightTop: [Panel.Adjustments, Panel.Crop, Panel.Masks, ...(BASIC_MODE ? [] : [Panel.Ai]), Panel.Presets],
     rightBottom: [],
   },
   activePanels: {

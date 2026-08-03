@@ -17,6 +17,7 @@ import {
 import { calculateCenteredCrop } from '../utils/cropUtils';
 import { Invokes } from '../components/ui/AppProperties';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { LEGACY_DEFAULT_IMAGE_STATE, legacyStateToAdjustments } from '../basic/legacyAdjustmentAdapter';
 
 export const debouncedSetHistory = debounce((newAdj: Adjustments) => {
   useEditorStore.getState().pushHistory(newAdj);
@@ -140,7 +141,11 @@ export function useEditorActions() {
           if (selectedImage && pathsToReset.includes(selectedImage.path)) {
             const aspect =
               selectedImage.width && selectedImage.height ? selectedImage.width / selectedImage.height : null;
-            const resetData = { ...INITIAL_ADJUSTMENTS, aspectRatio: aspect, aiPatches: [] };
+            const resetData = legacyStateToAdjustments(LEGACY_DEFAULT_IMAGE_STATE, {
+              ...INITIAL_ADJUSTMENTS,
+              aspectRatio: aspect,
+              aiPatches: [],
+            });
             resetHistory(resetData);
             setEditor({ adjustments: resetData });
           }
