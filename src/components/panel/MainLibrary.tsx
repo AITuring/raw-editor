@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { open } from '@tauri-apps/plugin-shell';
 import {
@@ -18,10 +18,9 @@ import {
   Rows3,
 } from 'lucide-react';
 import CullingView from './library/CullingView';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
-import { ThemeProps, THEMES, DEFAULT_THEME_ID } from '../../utils/themes';
 import {
   AppSettings,
   ImageFile,
@@ -40,6 +39,8 @@ import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
 import SettingsPanel from './SettingsPanel';
+import { APP_LATEST_RELEASE_API_URL, APP_RELEASES_URL, APP_REPOSITORY_URL } from '../../config/app';
+import { COVER_IMAGES, COVER_ROTATION_INTERVAL_MS } from '../../config/coverImages';
 
 import LibraryGrid from './library/LibraryGrid';
 import { SearchInput, ViewOptionsDropdown } from './library/LibraryHeader';
@@ -84,7 +85,6 @@ interface MainLibraryProps {
   onRequestThumbnails?(paths: string[]): void;
   rootPaths: string[];
   setLibraryViewMode(mode: LibraryViewMode): void;
-  theme: string;
   thumbnailAspectRatio: ThumbnailAspectRatio;
   thumbnailProgress: Progress;
   thumbnailSize: ThumbnailSize;
@@ -170,7 +170,11 @@ function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitch
 
 export default function MainLibrary(props: MainLibraryProps) {
   const { t } = useTranslation();
+  const prefersReducedMotion = useReducedMotion();
   const setUI = useUIStore((state) => state.setUI);
+  const [coverImageIndex, setCoverImageIndex] = useState(() =>
+    COVER_IMAGES.length > 0 ? Math.floor(Math.random() * COVER_IMAGES.length) : 0,
+  );
   const [appVersion, setAppVersion] = useState('');
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
   const [latestVersion, setLatestVersion] = useState('');
@@ -297,7 +301,7 @@ export default function MainLibrary(props: MainLibraryProps) {
         const currentVersion = await getVersion();
         setAppVersion(currentVersion);
 
-        const response = await fetch('https://api.github.com/repos/CyberTimon/RapidRAW/releases/latest');
+        const response = await fetch(APP_LATEST_RELEASE_API_URL);
         if (!response.ok) {
           console.error('Failed to fetch latest release info from GitHub.');
           return;
@@ -320,40 +324,84 @@ export default function MainLibrary(props: MainLibraryProps) {
     checkVersion();
   }, []);
 
+  const isCoverVisible = !props.rootPaths || props.rootPaths.length === 0;
+  useEffect(() => {
+    if (!isCoverVisible || prefersReducedMotion || COVER_IMAGES.length < 2) return;
+
+    const rotationTimer = window.setInterval(() => {
+      setCoverImageIndex((currentIndex) => (currentIndex + 1) % COVER_IMAGES.length);
+    }, COVER_ROTATION_INTERVAL_MS);
+
+    return () => window.clearInterval(rotationTimer);
+  }, [isCoverVisible, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!isCoverVisible || COVER_IMAGES.length < 2) return;
+    const nextCoverImage = COVER_IMAGES[(coverImageIndex + 1) % COVER_IMAGES.length];
+    if (!nextCoverImage) return;
+
+    const nextImage = new Image();
+    nextImage.decoding = 'async';
+    nextImage.src = nextCoverImage;
+  }, [coverImageIndex, isCoverVisible]);
+
   if (!props.rootPaths || props.rootPaths.length === 0) {
     if (!props.appSettings) {
       return null;
     }
     const hasLastPath = !!props.appSettings.lastRootPath || !!props.appSettings.rootFolders?.length;
-    const currentThemeId = props.theme || DEFAULT_THEME_ID;
-    const selectedTheme: ThemeProps | undefined =
-      THEMES.find((t: ThemeProps) => t.id === currentThemeId) ||
-      THEMES.find((t: ThemeProps) => t.id === DEFAULT_THEME_ID);
-    const splashImage = selectedTheme?.splashImage;
+    const coverImage = COVER_IMAGES[coverImageIndex] ?? COVER_IMAGES[0];
 
     return (
       <div className="flex-1 flex h-full p-2 bg-transparent">
         <div className="flex w-full h-full bg-bg-secondary rounded-lg border border-border-color/25 overflow-hidden">
           <div className="w-1/2 hidden md:block relative overflow-hidden bg-black">
-            <AnimatePresence>
-              <motion.img
-                alt="Splash screen background"
-                className="absolute inset-0 w-full h-full object-cover"
-                key={splashImage}
-                src={splashImage}
-              />
+            <AnimatePresence initial={false}>
+              {coverImage && (
+                <motion.img
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute -inset-[5%] w-[110%] h-[110%] object-cover blur-2xl opacity-50"
+                  key={`${coverImage}-backdrop`}
+                  src={coverImage}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.5 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 1.1, ease: 'easeInOut' }}
+                />
+              )}
+            </AnimatePresence>
+            <div className="absolute inset-0 bg-black/20" aria-hidden="true" />
+            <AnimatePresence initial={false}>
+              {coverImage && (
+                <motion.img
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-contain"
+                  key={coverImage}
+                  src={coverImage}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 1.1, ease: 'easeInOut' }}
+                />
+              )}
             </AnimatePresence>
           </div>
 
           <div className="w-full md:w-1/2 relative overflow-hidden isolate">
             <div className="absolute inset-0 -z-10 pointer-events-none">
-              <AnimatePresence>
-                {splashImage && (
+              <AnimatePresence initial={false}>
+                {coverImage && (
                   <motion.img
-                    key={splashImage + '-ambient'}
-                    src={splashImage}
+                    key={`${coverImage}-ambient`}
+                    src={coverImage}
                     className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-50 pointer-events-none"
                     aria-hidden="true"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.5 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 1.1, ease: 'easeInOut' }}
                   />
                 )}
               </AnimatePresence>
@@ -434,17 +482,6 @@ export default function MainLibrary(props: MainLibraryProps) {
                     as="div"
                     className="absolute bottom-8 left-8 lg:left-16 space-y-1 z-10 drop-shadow-sm"
                   >
-                    <p>
-                      {t('library.splash.imagesBy')}{' '}
-                      <a
-                        href="https://instagram.com/timonkaech.photography"
-                        className="hover:underline"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Timon Käch
-                      </a>
-                    </p>
                     {appVersion && (
                       <div className="flex items-center space-x-2">
                         <p>
@@ -456,7 +493,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                             }`}
                             onClick={() => {
                               if (isUpdateAvailable) {
-                                open('https://github.com/CyberTimon/RapidRAW/releases/latest');
+                                open(APP_RELEASES_URL);
                               }
                             }}
                             data-tooltip={
@@ -478,16 +515,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                         <span>-</span>
                         <p>
                           <a
-                            href="https://ko-fi.com/cybertimon"
-                            className="hover:underline"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {t('library.splash.donate')}
-                          </a>
-                          <span className="mx-1">{t('library.splash.or')}</span>
-                          <a
-                            href="https://github.com/CyberTimon/RapidRAW"
+                            href={APP_REPOSITORY_URL}
                             className="hover:underline"
                             target="_blank"
                             rel="noopener noreferrer"

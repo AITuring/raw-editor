@@ -1,6 +1,17 @@
 {
   "name": "raw-editor",
-  "author": "Timon Käch",
+  "version": "0.1.0",
+  "description": "A cross-platform, non-destructive RAW photo editor.",
+  "author": "AITuring contributors",
+  "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/AITuring/raw-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AITuring/raw-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AITuring/raw-editor/issues"
+  },
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -13,7 +24,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "i18n:extract": "i18next-cli extract",
-    "i18n:check": "i18next-cli extract --ci --dry-run && npm run i18n:runtime-check",
+    "i18n:check": "i18next-cli extract --ci --dry-run && npm run i18n:runtime-check && npm run i18n:language-check",
+    "i18n:language-check": "node src/i18n/check-language-resolution.mjs",
     "i18n:runtime-check": "node src/i18n/check-runtime.mjs",
     "i18n:lint": "i18next-cli lint"
   },

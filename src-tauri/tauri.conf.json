@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RAW Editor",
   "identifier": "io.github.AITuring.RawEditor",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -34,6 +35,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "AITuring",
+    "homepage": "https://github.com/AITuring/raw-editor",
+    "copyright": "Copyright © 2026 RAW Editor contributors",
+    "license": "AGPL-3.0-only",
+    "licenseFile": "../LICENSE",
+    "shortDescription": "A cross-platform, non-destructive RAW photo editor.",
+    "longDescription": "RAW Editor provides a fast, non-destructive photography workflow with GPU-accelerated previews and cross-platform desktop support.",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "resources": ["resources", "lensfun_db"],
     "category": "Photography",
@@ -93,5 +101,5 @@
       }
     }
   },
-  "version": "1.6.1"
+  "version": "0.1.0"
 }

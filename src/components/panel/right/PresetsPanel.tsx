@@ -1040,7 +1040,7 @@ export default function PresetsPanel({ onNavigateToCommunity }: PresetsPanelProp
       const selectedPath = await openDialog({
         filters: [
           { name: t('editor.presets.dialog.allPresetFiles'), extensions: ['rrpreset', 'xmp', 'lrtemplate'] },
-          { name: t('editor.presets.dialog.rapidRawPreset'), extensions: ['rrpreset'] },
+          { name: t('editor.presets.dialog.rawEditorPreset'), extensions: ['rrpreset'] },
           { name: t('editor.presets.dialog.legacyPreset'), extensions: ['xmp', 'lrtemplate'] },
         ],
         multiple: false,

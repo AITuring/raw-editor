@@ -144,6 +144,7 @@ const SegmentedSwitch = ({ options, value, onChange }: SegmentedSwitchProps) => 
 };
 
 const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) => {
+  const { t } = useTranslation();
   const [bubbleStyle, setBubbleStyle] = useState({});
   const isInitialAnimation = useRef(true);
 
@@ -185,7 +186,9 @@ const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) =
             activeIndex === 0 ? 'text-text-primary font-semibold' : 'text-text-secondary hover:text-text-primary',
           )}
         >
-          <span className="relative z-10">{ratingFilterOptions.find((o: any) => o.value === 0)?.label || 'All'}</span>
+          <span className="relative z-10">
+            {ratingFilterOptions.find((o: any) => o.value === 0)?.label || t('library.filters.rating.all')}
+          </span>
         </button>
 
         <button
@@ -196,7 +199,7 @@ const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) =
           )}
         >
           <span className="relative z-10">
-            {ratingFilterOptions.find((o: any) => o.value === -1)?.label || 'Unrated'}
+            {ratingFilterOptions.find((o: any) => o.value === -1)?.label || t('library.filters.rating.unrated')}
           </span>
         </button>
 

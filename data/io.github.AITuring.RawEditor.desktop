@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=RAW Editor
+Name[zh_CN]=RAW Editor
+Comment=A fast, non-destructive RAW photo editor
+Comment[zh_CN]=快速、非破坏性的 RAW 照片编辑器
+Exec=raw-editor %F
+Icon=io.github.AITuring.RawEditor
+Terminal=false
+Categories=Graphics;Photography;
+Keywords=RAW;Photo;Photography;Image;Editor;
+Keywords[zh_CN]=RAW;照片;摄影;图像;编辑器;
+StartupNotify=true

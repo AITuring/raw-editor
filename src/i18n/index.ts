@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { getSystemLanguage, SUPPORTED_LANGUAGES } from './languages';
 
 import en from './locales/en.json';
 import de from './locales/de.json';
@@ -14,7 +15,9 @@ import ja from './locales/ja.json';
 import ko from './locales/ko.json';
 import ru from './locales/ru.json';
 
-i18n.use(initReactI18next).init({
+const initialLanguage = getSystemLanguage();
+
+void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
     de: { translation: de },
@@ -29,12 +32,23 @@ i18n.use(initReactI18next).init({
     ko: { translation: ko },
     ru: { translation: ru },
   },
-  lng: 'en',
+  lng: initialLanguage,
   fallbackLng: 'en',
+  supportedLngs: [...SUPPORTED_LANGUAGES],
+  load: 'currentOnly',
   returnEmptyString: false,
   interpolation: {
     escapeValue: false,
   },
 });
+
+const updateDocumentLanguage = (language: string) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = language;
+  document.documentElement.dir = i18n.dir(language);
+};
+
+updateDocumentLanguage(initialLanguage);
+i18n.on('languageChanged', updateDocumentLanguage);
 
 export default i18n;

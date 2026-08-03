@@ -19,6 +19,7 @@ import {
   ThumbnailAspectRatio,
 } from '../components/ui/AppProperties';
 import { useTranslation } from 'react-i18next';
+import { getSystemLanguage, resolveSupportedLanguage } from '../i18n/languages';
 
 interface UseAppInitializationProps {
   preloadedDataRef: React.RefObject<any>;
@@ -29,22 +30,6 @@ interface UseAppInitializationProps {
   libraryViewMode: LibraryViewMode;
   setLibraryViewMode: (mode: LibraryViewMode) => void;
 }
-
-const getDefaultLanguage = (i18nInstance: any): string => {
-  const browserLang = navigator.language || (navigator as any).userLanguage || 'en';
-  const shortLang = browserLang.split('-')[0].toLowerCase();
-  const supportedLanguages = Object.keys(i18nInstance.options.resources || {});
-  const fallbackLang =
-    typeof i18nInstance.options.fallbackLng === 'string'
-      ? i18nInstance.options.fallbackLng
-      : i18nInstance.options.fallbackLng?.[0] || 'en';
-
-  return supportedLanguages.includes(browserLang)
-    ? browserLang
-    : supportedLanguages.includes(shortLang)
-      ? shortLang
-      : fallbackLang;
-};
 
 export const useAppInitialization = ({
   preloadedDataRef,
@@ -155,9 +140,10 @@ export const useAppInitialization = ({
           settings.copyPasteSettings = { mode: 'merge', includedAdjustments: COPYABLE_ADJUSTMENT_KEYS };
         }
 
-        if (!settings.language) {
-          settings.language = getDefaultLanguage(i18n);
-          handleSettingsChange(settings);
+        const resolvedLanguage = resolveSupportedLanguage(settings.language ?? getSystemLanguage());
+        if (settings.language !== resolvedLanguage) {
+          settings.language = resolvedLanguage;
+          void handleSettingsChange(settings);
         }
 
         // legacy
@@ -170,7 +156,7 @@ export const useAppInitialization = ({
         }
 
         setAppSettings(settings);
-        i18n.changeLanguage(settings.language);
+        void i18n.changeLanguage(resolvedLanguage);
 
         if (settings?.sortCriteria) setSortCriteria(settings.sortCriteria);
 
@@ -354,10 +340,11 @@ export const useAppInitialization = ({
 
   useEffect(() => {
     if (isInitialMount.current || !appSettings) return;
-    if (appSettings.language && appSettings.language !== i18n.language) {
-      i18n.changeLanguage(appSettings.language);
+    const resolvedLanguage = resolveSupportedLanguage(appSettings.language);
+    if (resolvedLanguage !== i18n.resolvedLanguage) {
+      void i18n.changeLanguage(resolvedLanguage);
     }
-  }, [appSettings?.language, i18n.language]);
+  }, [appSettings?.language, i18n]);
 
   useEffect(() => {
     if (isInitialMount.current || !appSettings) return;

@@ -66,13 +66,13 @@
       "whiteBalance": "白平衡"
     },
     "curves": {
-      "channelTitle": "{{channel}} 通道",
       "channels": {
         "blue": "藍色",
         "green": "綠色",
         "luma": "亮度",
         "red": "紅色"
       },
+      "channelTitle": "{{channel}} 通道",
       "copyParametric": "複製 {{channel}} 參數曲線",
       "copyPoint": "複製 {{channel}} 點曲線",
       "curveDataUnavailable": "曲線資料不可用。",
@@ -293,6 +293,7 @@
         "pasteSettings": "貼上設定",
         "resetSectionSettings": "重置 {{section}} 設定"
       },
+      "basicMode": "Daily RAW · 非 AI 基礎模式",
       "sections": {
         "basic": "基礎",
         "color": "顏色",
@@ -649,8 +650,8 @@
       "organization": {
         "addTagPlaceholder": "新增標籤...",
         "colorLabel": "顏色標籤",
-        "noTags": "無標籤",
         "none": "無",
+        "noTags": "無標籤",
         "rating": "評分",
         "ratingLabels": "評分與標籤",
         "tags": "標籤",
@@ -667,7 +668,7 @@
         "importPresetsTitle": "匯入預設",
         "legacyPreset": "舊版預設",
         "presetFile": "預設檔案",
-        "rapidRawPreset": "RapidRAW 預設"
+        "rawEditorPreset": "RAW Editor 預設"
       },
       "menu": {
         "configurePreset": "配置預設",
@@ -795,12 +796,12 @@
       "estimatedSize": "預計檔案大小：約 {{size}}",
       "estimatedTotalSize": "預計總大小：約 {{size}}",
       "estimatingSize": "正在估算大小...",
+      "exporting": "匯出中…",
+      "exportingProgress": "匯出中…（{{current}}/{{total}}）",
       "exportMultiple": "匯出 {{count}} {{label}}",
       "exportMultiple_one": "匯出 {{count}} {{label}}",
       "exportMultiple_other": "匯出 {{count}} {{label}}",
       "exportSingle": "匯出 {{label}}",
-      "exporting": "匯出中…",
-      "exportingProgress": "匯出中…（{{current}}/{{total}}）",
       "failed": "匯出失敗",
       "noImageSelected": "未選擇要匯出的影像。",
       "noImagesSelected": "未選擇影像。",
@@ -859,8 +860,8 @@
       "iso": "ISO",
       "metadata": "中繼資料",
       "noMetadataAvailable": "無可用中繼資料",
-      "noTagsAdded": "未新增標籤",
       "none": "無",
+      "noTagsAdded": "未新增標籤",
       "rateAndLabel": "評分與標籤",
       "rating": "評分",
       "selectImagesToCompare": "選擇要比較的影像",
@@ -1011,7 +1012,7 @@
     },
     "splash": {
       "addFolder": "新增資料夾",
-      "brand": "RapidRAW",
+      "brand": "RAW Editor",
       "continueSession": "繼續會話",
       "contribute": "在 GitHub 上貢獻",
       "descriptionAndroid": "一款極速、GPU 加速的 RAW 影像編輯器。開啟相簿以開始。",
@@ -1019,7 +1020,6 @@
       "donate": "在 Ko-Fi 上捐贈",
       "downloadVersion": "點選下載版本 {{version}}",
       "goToSettings": "前往設定",
-      "imagesBy": "影像來源",
       "latestVersion": "您已是最新版本",
       "newVersionAvailable": "新版本可用！",
       "openFolder": "開啟資料夾",
@@ -1050,6 +1050,11 @@
       "communityPresets": "社群預設",
       "goHome": "返回首頁",
       "importImages": "匯入影像"
+    },
+    "viewMode": {
+      "culling": "選片檢視",
+      "grid": "網格檢視",
+      "list": "清單檢視"
     }
   },
   "masks": {
@@ -1175,9 +1180,9 @@
       "applyButton_one": "應用到 1 張影像",
       "applyButton_other": "應用到 {{count}} 張影像",
       "bestImage": "最佳影像",
+      "blurryImagesTab": "模糊影像",
       "blurThreshold": "模糊臨界值",
       "blurThresholdDesc": "銳度評分低於此值的影像將被標記。值越高越嚴格。",
-      "blurryImagesTab": "模糊影像",
       "cancel": "取消",
       "close": "關閉",
       "cullingFailed": "篩選失敗",
@@ -1416,7 +1421,7 @@
     "data": {
       "clearSidecars": "清除所有附屬檔案",
       "clearSidecarsButton": "清除",
-      "clearSidecarsDesc": "這將刪除您的根資料夾中的所有 .rrdata 檔案（包含您的編輯資料）：",
+      "clearSidecarsDesc": "這將刪除與以下根資料夾內影像關聯的應用程式私有編輯資料，不會修改您的照片資料夾：",
       "clearThumbnail": "清除縮圖快取",
       "clearThumbnailButton": "清除",
       "clearThumbnailDesc": "這將刪除所有快取的縮圖。在您瀏覽相簿時，它們會自動重新生成。",
@@ -1476,7 +1481,7 @@
       "font": "字型",
       "fontDesc": "更改應用程式字型。",
       "nativeTitlebar": "原生標題欄",
-      "nativeTitlebarDesc": "使用系統預設的視窗標題欄，而非 RapidRAW 的自定義標題欄。",
+      "nativeTitlebarDesc": "使用系統預設的視窗標題欄，而非 RAW Editor 的自定義標題欄。",
       "poppins": "Poppins",
       "showImageCounts": "顯示影像計數",
       "system": "系統預設",
@@ -1585,7 +1590,7 @@
         "connector": {
           "address": "AI 聯結器地址",
           "addressDesc": "輸入您正在執行的 AI 聯結器實例的地址和連接埠。這是使用生成式 AI 功能所必需的。",
-          "description": "對於擁有強大 GPU 且希望最大程度控制的使用者，可以將 RapidRAW 連線到您自己的聯結器伺服器。這為您提供了技術工作流的完全控制。",
+          "description": "對於擁有強大 GPU 且希望最大程度控制的使用者，可以將 RAW Editor 連線到您自己的聯結器伺服器。這為您提供了技術工作流的完全控制。",
           "failed": "連線失敗。",
           "feature1": "使用您自己的 ComfyUI 實例",
           "feature2": "免費的進階生成式編輯",
@@ -1593,16 +1598,16 @@
           "success": "連線成功！",
           "test": "測試",
           "testing": "測試中...",
-          "title": "自託管（RapidRAW AI 聯結器）"
+          "title": "自託管（RAW Editor AI 聯結器）"
         },
         "cpu": {
-          "description": "直接整合到 RapidRAW 中，這些功能完全在您的計算機上執行。它們快速、免費且無需設定，非常適合日常加速工作流程。",
+          "description": "直接整合到 RAW Editor 中，這些功能完全在您的計算機上執行。它們快速、免費且無需設定，非常適合日常加速工作流程。",
           "feature1": "AI 遮色片（主體、天空、前景）",
           "feature2": "自動影像標籤",
           "feature3": "簡單的 CPU 生成式替換",
           "title": "內建 AI（CPU）"
         },
-        "description": "RapidRAW 的 AI 專為靈活性而設計。選擇您理想的工作流程，從快速的本地工具到強大的自託管。",
+        "description": "RAW Editor 的 AI 專為靈活性而設計。選擇您理想的工作流程，從快速的本地工具到強大的自託管。",
         "providers": {
           "aiConnector": "AI 聯結器",
           "cloud": "雲端",
@@ -1703,21 +1708,21 @@
     "tagging": {
       "addCustomPlaceholder": "新增自定義 AI 標籤（逗號分隔）...",
       "addCustomTooltip": "新增 AI 標籤",
-      "addShortcutTooltip": "新增快捷方式",
       "addShortcutsPlaceholder": "新增快捷方式（逗號分隔）...",
+      "addShortcutTooltip": "新增快捷方式",
       "aiTagging": "AI 標籤",
       "aiTaggingDesc": "使用 AI（CLIP）模型啟用自動影像標籤。這將下載額外的模型，並在瀏覽資料夾時影響效能。標籤用於搜尋資料夾。",
       "amount": "數量",
       "automaticAiTagging": "自動 AI 標籤",
       "clearAiTagsButton": "清除",
-      "clearAiTagsDesc": "這將從所有活動根資料夾中的 .rrdata 檔案中移除所有 AI 生成的標籤。使用者新增的標籤將被保留。",
+      "clearAiTagsDesc": "這將移除所有活動根資料夾中影像的 AI 生成標籤。使用者新增的標籤將被保留。",
       "clearAiTagsTitle": "清除 AI 標籤",
-      "clearAllTagsDesc": "這將從所有活動根資料夾中的 .rrdata 檔案中移除所有 AI 生成和使用者新增的標籤。顏色標籤將被保留。",
+      "clearAllTagsDesc": "這將移除所有活動根資料夾中影像的 AI 生成標籤和使用者標籤。顏色標籤將被保留。",
       "clearAllTagsTitle": "清除所有標籤",
       "clearCustomTooltip": "清除 AI 標籤列表",
       "clearShortcutsTooltip": "清除快捷方式標籤列表",
       "customList": "自定義 AI 標籤列表",
-      "customListDesc": "如果提供，AI 將僅使用此列表中的標籤，覆蓋 RapidRAW 內建的標籤列表。標籤功能僅支援英文。",
+      "customListDesc": "如果提供，AI 將僅使用此列表中的標籤，覆蓋 RAW Editor 內建的標籤列表。標籤功能僅支援英文。",
       "maxAiTags": "最大 AI 標籤數",
       "maxAiTagsDesc": "每張影像生成的最大標籤數量。",
       "noCustomTags": "無自定義 AI 標籤（使用內建列表）",
@@ -1729,18 +1734,19 @@
       "title": "標籤"
     },
     "thanks": {
-      "description": "衷心感謝以下專案，它們在 RapidRAW 的開發過程中非常重要：",
+      "description": "衷心感謝以下專案，它們在 RAW Editor 的開發過程中非常重要：",
       "list": {
         "darktable": "為部分參考實現提供了指導。",
         "depth": "為強大的單目深度估計模型提供支援，實現了 AI 深度遮色片功能。",
         "lama": "為強大且簡單的影像修復模型提供支援，實現了內容感知填充和物件移除。",
         "lensfun": "為無價的開源庫和全面的資料庫提供支援，實現了自動鏡頭校正。",
         "negpy": "為負片轉換邏輯提供了靈感。",
-        "nind": "為 AI 模型提供支援，驅動了 RapidRAW 中的 AI 降噪功能。",
+        "nind": "為 AI 模型提供支援，驅動了 RAW Editor 中的 AI 降噪功能。",
+        "rapidraw": "為本專案提供原始應用程式基礎、GPU 管線、遮罩、附屬檔案、圖庫和批次處理工作流程。",
         "rawler": "為優秀的 Rust 庫提供支援，構成了本專案 RAW 檔案處理的基礎。",
         "sam2": "為提供基礎模型，用於 AI 主體檢測功能。",
         "u2net": "為提供穩健的架構，用於 AI 天空和前景檢測功能。",
-        "you": "感謝您使用和支援 RapidRAW。您的關注使本專案持續發展。",
+        "you": "感謝您使用和支援 RAW Editor。您的關注使本專案持續發展。",
         "youLabel": "您"
       },
       "title": "特別鳴謝"
@@ -1836,6 +1842,12 @@
         "showClipping": "顯示裁剪警告",
         "vectorscope": "向量示波器"
       }
+    },
+    "windowControls": {
+      "close": "關閉視窗",
+      "maximize": "最大化視窗",
+      "minimize": "最小化視窗",
+      "restore": "還原視窗"
     }
   }
 }

@@ -1,0 +1,11 @@
+RAW Editor
+Copyright (c) 2026 RAW Editor contributors
+
+RAW Editor is based on RapidRAW by Timon Käch:
+https://github.com/CyberTimon/RapidRAW
+
+The project and its modifications are distributed under the GNU Affero
+General Public License version 3. The full license text is in LICENSE.
+
+Bundled libraries, models, databases, and other third-party components remain
+subject to their respective copyright notices and licenses.

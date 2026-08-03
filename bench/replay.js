@@ -1,5 +1,5 @@
 // Deterministic UI perf benchmark. Paste into the browser devtools Console
-// of a running RapidRAW build (right-click -> Inspect) and press Enter.
+// of a running RAW Editor build (right-click -> Inspect) and press Enter.
 //
 // Drives the same scroll/open/slider-drag interaction with fixed synthetic
 // timing, repeated over several iterations (with a discarded warmup

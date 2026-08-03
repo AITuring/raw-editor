@@ -35,6 +35,7 @@ mod panorama_stitching;
 mod panorama_utils;
 mod preset_converter;
 mod raw_processing;
+mod sidecar_storage;
 mod tagging;
 mod tagging_utils;
 mod window_customizer;
@@ -1194,7 +1195,7 @@ async fn fetch_community_presets() -> Result<Vec<CommunityPreset>, String> {
 
     let response = client
         .get(url)
-        .header("User-Agent", "RapidRAW-App")
+        .header("User-Agent", "RAW-Editor-App")
         .send()
         .await
         .map_err(|e| format!("Failed to fetch manifest from GitHub: {}", e))?;
@@ -1966,6 +1967,12 @@ pub fn run() {
             }
 
             let app_handle = app.handle().clone();
+
+            let app_data_dir = app_handle
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?;
+            sidecar_storage::initialize(&app_data_dir)?;
 
             {
                 let disks_app_handle = app_handle.clone();

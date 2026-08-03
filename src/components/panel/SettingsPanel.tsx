@@ -43,6 +43,8 @@ import Text from '../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useOsPlatform } from '../../hooks/useOsPlatform';
 import { open } from '@tauri-apps/plugin-shell';
+import { UPSTREAM_NAME, UPSTREAM_REPOSITORY_URL } from '../../config/app';
+import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../../i18n/languages';
 
 // Cloud/Clerk is intentionally unavailable in Daily RAW basic mode. Keep the
 // upstream settings component render-safe without introducing an online auth
@@ -1079,21 +1081,8 @@ export default function SettingsPanel({
 
                       <SettingItem label={t('settings.language')} description={t('settings.languageDesc')}>
                         <Dropdown
-                          onChange={(value: any) => onSettingsChange({ ...appSettings, language: value })}
-                          options={[
-                            { value: 'en', label: 'English' },
-                            { value: 'de', label: 'Deutsch' },
-                            { value: 'es', label: 'Español' },
-                            { value: 'fr', label: 'Français' },
-                            { value: 'it', label: 'Italiano' },
-                            { value: 'ja', label: '日本語' },
-                            { value: 'ko', label: '한국어' },
-                            { value: 'pl', label: 'Polski' },
-                            { value: 'pt', label: 'Português' },
-                            { value: 'ru', label: 'Русский' },
-                            { value: 'zh-CN', label: '简体中文' },
-                            { value: 'zh-TW', label: '繁體中文' },
-                          ]}
+                          onChange={(value: SupportedLanguage) => onSettingsChange({ ...appSettings, language: value })}
+                          options={LANGUAGE_OPTIONS.map((option) => ({ ...option }))}
                           value={appSettings?.language || 'en'}
                           triggerClassName="bg-bg-primary"
                         />
@@ -1576,6 +1565,17 @@ export default function SettingsPanel({
                     </Text>
                     <Text className="mb-4">{t('settings.thanks.description')}</Text>
                     <Text as="ul" className="space-y-3 list-disc ml-5 pl-1">
+                      <li>
+                        <a
+                          href={UPSTREAM_REPOSITORY_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-accent hover:underline"
+                        >
+                          {UPSTREAM_NAME}
+                        </a>
+                        : {t('settings.thanks.list.rapidraw')}
+                      </li>
                       <li>
                         <a
                           href="https://github.com/dnglab/dnglab/tree/main/rawler"
@@ -2309,9 +2309,7 @@ export default function SettingsPanel({
                         buttonText={t('settings.data.clearSidecarsButton')}
                         description={
                           <Text as="span" variant={TextVariants.small}>
-                            {t('settings.data.clearSidecarsDesc')}{' '}
-                            <code className="bg-bg-primary px-1 rounded-sm text-text-primary">.rrdata</code> files
-                            (containing your edits) within your root folders:
+                            {t('settings.data.clearSidecarsDesc')}
                             <span className="block font-mono bg-bg-primary p-2 rounded-sm mt-2 break-all border border-border-color whitespace-pre-wrap">
                               {effectiveRootPaths.length > 0
                                 ? effectiveRootPaths.join('\n')

@@ -1208,15 +1208,11 @@ pub fn write_image_with_metadata(
 }
 
 pub fn get_primary_sidecar_path(image_path: &Path) -> PathBuf {
-    let mut filename = image_path.file_name().unwrap_or_default().to_os_string();
-    filename.push(".rrdata");
-    image_path.with_file_name(filename)
+    crate::sidecar_storage::primary_sidecar_path(image_path)
 }
 
 pub fn get_rrexif_path(image_path: &Path) -> PathBuf {
-    let mut filename = image_path.file_name().unwrap_or_default().to_os_string();
-    filename.push(".rrexif");
-    image_path.with_file_name(filename)
+    crate::sidecar_storage::legacy_rrexif_path(image_path)
 }
 
 fn load_primary_metadata(image_path: &Path) -> ImageMetadata {
@@ -1233,6 +1229,10 @@ fn save_primary_metadata(image_path: &Path, metadata: &ImageMetadata) -> std::io
 pub fn read_rrexif_sidecar(image_path: &Path) -> Option<HashMap<String, String>> {
     let metadata = load_primary_metadata(image_path);
     if let Some(exif) = metadata.exif {
+        let legacy = get_rrexif_path(image_path);
+        if legacy.exists() {
+            let _ = fs::remove_file(legacy);
+        }
         return Some(exif);
     }
 

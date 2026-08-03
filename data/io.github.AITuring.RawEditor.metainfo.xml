@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.AITuring.RawEditor</id>
+  <name>RAW Editor</name>
+  <summary>A fast, non-destructive RAW photo editor</summary>
+  <summary xml:lang="zh-CN">快速、非破坏性的 RAW 照片编辑器</summary>
+
+  <developer id="io.github.AITuring">
+    <name>RAW Editor contributors</name>
+  </developer>
+
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <description>
+    <p>
+      RAW Editor is a cross-platform photo editor focused on a fast,
+      non-destructive RAW workflow, responsive GPU-accelerated previews, and
+      reliable everyday editing tools.
+    </p>
+    <p xml:lang="zh-CN">
+      RAW Editor 是一款跨平台照片编辑器，专注于快速、非破坏性的 RAW 工作流、
+      流畅的 GPU 加速预览以及可靠的日常编辑工具。
+    </p>
+    <p>
+      The project is based on the open-source RapidRAW codebase and preserves
+      its upstream attribution under the AGPL-3.0 license.
+    </p>
+    <p xml:lang="zh-CN">
+      本项目基于开源 RapidRAW 代码库，并依照 AGPL-3.0 许可证保留上游署名。
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.AITuring.RawEditor.desktop</launchable>
+  <provides>
+    <binary>raw-editor</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+
+  <url type="homepage">https://github.com/AITuring/raw-editor</url>
+  <url type="bugtracker">https://github.com/AITuring/raw-editor/issues</url>
+  <url type="vcs-browser">https://github.com/AITuring/raw-editor</url>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-03">
+      <description>
+        <p>Initial RAW Editor development release.</p>
+        <p xml:lang="zh-CN">RAW Editor 首个开发版本。</p>
+      </description>
+    </release>
+  </releases>
+</component>

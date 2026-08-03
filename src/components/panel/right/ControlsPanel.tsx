@@ -213,7 +213,9 @@ export default function Controls() {
       <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
         <div className="min-w-0">
           <Text variant={TextVariants.title}>{t('editor.adjustments.title')}</Text>
-          {BASIC_MODE && <div className="mt-0.5 text-[10px] text-text-secondary">Daily RAW · 非 AI 基础模式</div>}
+          {BASIC_MODE && (
+            <div className="mt-0.5 text-[10px] text-text-secondary">{t('editor.adjustments.basicMode')}</div>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button

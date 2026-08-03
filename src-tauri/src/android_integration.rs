@@ -555,7 +555,7 @@ pub fn save_image_bytes_to_android_gallery(
     save_bytes_to_android_media_store(
         file_name,
         mime_type,
-        "Pictures/RapidRaw",
+        "Pictures/RAW Editor",
         "android/provider/MediaStore$Images$Media",
         bytes,
     )
@@ -570,7 +570,7 @@ pub fn save_file_bytes_to_android_downloads(
     save_bytes_to_android_media_store(
         file_name,
         mime_type,
-        "Download/RapidRaw",
+        "Download/RAW Editor",
         "android/provider/MediaStore$Downloads",
         bytes,
     )

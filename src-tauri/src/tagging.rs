@@ -465,20 +465,31 @@ pub fn remove_tag_for_paths(paths: Vec<String>, tag: String) -> Result<(), Strin
     Ok(())
 }
 
+fn sidecar_paths_for_root(root_path: &Path) -> Vec<PathBuf> {
+    WalkDir::new(root_path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .map(|entry| entry.into_path())
+        .filter(|path| path.is_file() && is_supported_image_file(path))
+        .flat_map(|image_path| {
+            crate::sidecar_storage::sidecar_entries(&image_path)
+                .into_iter()
+                .map(|(_, sidecar_path)| sidecar_path)
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn clear_ai_tags(root_path: String) -> Result<usize, String> {
-    if !Path::new(&root_path).exists() {
-        return Err(format!("Root path does not exist: {}", root_path));
+    let root_path = Path::new(&root_path);
+    if !root_path.exists() {
+        return Err(format!("Root path does not exist: {}", root_path.display()));
     }
 
     let mut updated_count = 0;
-    let walker = WalkDir::new(root_path).into_iter();
 
-    for entry in walker.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_file()
-            && path.extension().and_then(|s| s.to_str()) == Some("rrdata")
-            && let Ok(content) = fs::read_to_string(path)
+    for path in sidecar_paths_for_root(root_path) {
+        if let Ok(content) = fs::read_to_string(&path)
             && let Ok(mut metadata) = serde_json::from_str::<ImageMetadata>(&content)
             && let Some(tags) = &mut metadata.tags
         {
@@ -493,7 +504,7 @@ pub fn clear_ai_tags(root_path: String) -> Result<usize, String> {
                     metadata.tags = None;
                 }
                 if let Ok(json_string) = serde_json::to_string_pretty(&metadata)
-                    && fs::write(path, json_string).is_ok()
+                    && fs::write(&path, json_string).is_ok()
                 {
                     updated_count += 1;
                 }
@@ -505,18 +516,15 @@ pub fn clear_ai_tags(root_path: String) -> Result<usize, String> {
 
 #[tauri::command]
 pub fn clear_all_tags(root_path: String) -> Result<usize, String> {
-    if !Path::new(&root_path).exists() {
-        return Err(format!("Root path does not exist: {}", root_path));
+    let root_path = Path::new(&root_path);
+    if !root_path.exists() {
+        return Err(format!("Root path does not exist: {}", root_path.display()));
     }
 
     let mut updated_count = 0;
-    let walker = WalkDir::new(root_path).into_iter();
 
-    for entry in walker.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_file()
-            && path.extension().and_then(|s| s.to_str()) == Some("rrdata")
-            && let Ok(content) = fs::read_to_string(path)
+    for path in sidecar_paths_for_root(root_path) {
+        if let Ok(content) = fs::read_to_string(&path)
             && let Ok(mut metadata) = serde_json::from_str::<ImageMetadata>(&content)
             && let Some(tags) = &mut metadata.tags
         {
@@ -529,7 +537,7 @@ pub fn clear_all_tags(root_path: String) -> Result<usize, String> {
                     metadata.tags = None;
                 }
                 if let Ok(json_string) = serde_json::to_string_pretty(&metadata)
-                    && fs::write(path, json_string).is_ok()
+                    && fs::write(&path, json_string).is_ok()
                 {
                     updated_count += 1;
                 }

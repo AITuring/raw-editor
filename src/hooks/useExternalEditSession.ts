@@ -10,7 +10,7 @@ import { debouncedSave } from './useEditorActions';
 
 /**
  * Handles files handed to the app from outside (OS "open with" and the
- * external editor protocol: rapidraw --edit <file> --output <file>).
+ * external editor protocol: raw-editor --edit <file> --output <file>).
  * Opens the requested image in the editor and, for edit sessions, exports
  * the result to the caller-provided output path and exits the app.
  */

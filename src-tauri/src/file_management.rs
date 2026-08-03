@@ -94,6 +94,9 @@ fn resolve_image_metadata(
     enable_xmp_sync: bool,
     settings: &AppSettings,
 ) -> ImageFileMetadata {
+    if crate::exif_processing::get_rrexif_path(image_path).exists() {
+        let _ = crate::exif_processing::read_rrexif_sidecar(image_path);
+    }
     let mut metadata = crate::exif_processing::load_sidecar(sidecar_path);
 
     if enable_xmp_sync
@@ -372,33 +375,13 @@ pub struct ImportSettings {
 
 pub fn parse_virtual_path(virtual_path: &str) -> (PathBuf, PathBuf) {
     let (source_path_str, copy_id) = if let Some((base, id)) = virtual_path.rsplit_once("?vc=") {
-        (base.to_string(), Some(id.to_string()))
+        (base, Some(id))
     } else {
-        (virtual_path.to_string(), None)
+        (virtual_path, None)
     };
 
     let source_path = PathBuf::from(source_path_str);
-
-    let sidecar_filename = if let Some(id) = copy_id {
-        format!(
-            "{}.{}.rrdata",
-            source_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy(),
-            &id
-        )
-    } else {
-        format!(
-            "{}.rrdata",
-            source_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        )
-    };
-
-    let sidecar_path = source_path.with_file_name(sidecar_filename);
+    let sidecar_path = crate::sidecar_storage::sidecar_path(&source_path, copy_id);
     (source_path, sidecar_path)
 }
 
@@ -457,16 +440,17 @@ pub async fn update_exif_fields(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         paths.par_iter().for_each(|path| {
-            let original_path = Path::new(&path);
-            let primary_path = crate::exif_processing::get_primary_sidecar_path(original_path);
+            let (original_path, _) = parse_virtual_path(path);
+            let primary_path = crate::exif_processing::get_primary_sidecar_path(&original_path);
             let temp_metadata = crate::exif_processing::load_sidecar(&primary_path);
 
             let mut exif_data = temp_metadata.exif.unwrap_or_else(|| {
-                if let Some(existing) = crate::exif_processing::read_rrexif_sidecar(original_path) {
+                if let Some(existing) = crate::exif_processing::read_rrexif_sidecar(&original_path)
+                {
                     existing
-                } else if let Ok(mmap) = read_file_mapped(original_path) {
+                } else if let Ok(mmap) = read_file_mapped(&original_path) {
                     crate::exif_processing::read_exif_data_from_bytes(path, &mmap)
-                } else if let Ok(bytes) = fs::read(original_path) {
+                } else if let Ok(bytes) = fs::read(&original_path) {
                     crate::exif_processing::read_exif_data_from_bytes(path, &bytes)
                 } else {
                     HashMap::new()
@@ -556,7 +540,6 @@ pub fn list_images_in_dir(path: String, app_handle: AppHandle) -> Result<Vec<Ima
 
     let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
     let mut images = Vec::new();
-    let mut sidecars_by_filename: HashMap<String, Vec<Option<String>>> = HashMap::new();
 
     for entry in entries.filter_map(Result::ok) {
         let entry_path = entry.path();
@@ -565,44 +548,28 @@ pub fn list_images_in_dir(path: String, app_handle: AppHandle) -> Result<Vec<Ima
             .into_string()
             .unwrap_or_else(|os| os.to_string_lossy().into_owned());
 
-        if file_name.ends_with(".rrdata") {
-            let base = &file_name[..file_name.len() - 7];
-
-            let (source_filename, copy_id) =
-                if base.len() >= 7 && base.as_bytes()[base.len() - 7] == b'.' {
-                    let id = &base[base.len() - 6..];
-                    if id.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')) {
-                        (&base[..base.len() - 7], Some(id.to_string()))
-                    } else {
-                        (base, None)
-                    }
-                } else {
-                    (base, None)
-                };
-
-            sidecars_by_filename
-                .entry(source_filename.to_string())
-                .or_default()
-                .push(copy_id);
-        } else if is_supported_image_file(&file_name) {
-            images.push((file_name, entry_path));
+        if is_supported_image_file(&file_name) {
+            images.push(entry_path);
         }
     }
 
     let tasks: Vec<_> = images
         .into_iter()
-        .map(|(file_name, path_buf)| {
-            let sidecars = sidecars_by_filename
-                .remove(&file_name)
-                .unwrap_or_else(|| vec![None]);
+        .map(|path_buf| {
+            let mut sidecars = vec![None];
+            sidecars.extend(
+                crate::sidecar_storage::virtual_copy_ids(&path_buf)
+                    .into_iter()
+                    .map(Some),
+            );
             let path_str = path_buf.to_string_lossy().into_owned();
-            (path_str, file_name, path_buf, sidecars)
+            (path_str, path_buf, sidecars)
         })
         .collect();
 
     let mut result_list: Vec<ImageFile> = tasks
         .into_par_iter()
-        .flat_map(|(path_str, file_name, path_buf, sidecars)| {
+        .flat_map(|(path_str, path_buf, sidecars)| {
             let modified = fs::metadata(&path_buf)
                 .ok()
                 .and_then(|m| m.modified().ok())
@@ -615,16 +582,13 @@ pub fn list_images_in_dir(path: String, app_handle: AppHandle) -> Result<Vec<Ima
             let mut file_results = Vec::with_capacity(sidecars.len());
 
             for copy_id_opt in sidecars {
-                let (virtual_path, is_virtual_copy, sidecar_filename) = match copy_id_opt {
-                    Some(id) => (
-                        format!("{}?vc={}", path_str, id),
-                        true,
-                        format!("{}.{}.rrdata", file_name, id),
-                    ),
-                    None => (path_str.clone(), false, format!("{}.rrdata", file_name)),
+                let (virtual_path, is_virtual_copy) = match &copy_id_opt {
+                    Some(id) => (format!("{}?vc={}", path_str, id), true),
+                    None => (path_str.clone(), false),
                 };
 
-                let sidecar_path = path_buf.with_file_name(sidecar_filename);
+                let sidecar_path =
+                    crate::sidecar_storage::sidecar_path(&path_buf, copy_id_opt.as_deref());
 
                 let xmp_is_placeholder = enable_xmp_sync
                     && resolve_xmp_path(&path_buf)
@@ -684,35 +648,13 @@ pub fn list_images_recursive(
     let root_path = Path::new(&path);
     let mut images = Vec::new();
 
-    let mut sidecars_by_path: HashMap<PathBuf, Vec<Option<String>>> = HashMap::new();
-
     for entry in WalkDir::new(root_path).into_iter().filter_map(Result::ok) {
         let entry_path = entry.path();
         if !entry_path.is_file() {
             continue;
         }
 
-        let file_name = entry_path.file_name().unwrap_or_default().to_string_lossy();
-        if let Some(base) = file_name.strip_suffix(".rrdata") {
-            let (source_filename, copy_id) =
-                if base.len() >= 7 && base.as_bytes()[base.len() - 7] == b'.' {
-                    let id = &base[base.len() - 6..];
-                    if id.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')) {
-                        (&base[..base.len() - 7], Some(id.to_string()))
-                    } else {
-                        (base, None)
-                    }
-                } else {
-                    (base, None)
-                };
-
-            if let Some(parent) = entry_path.parent() {
-                sidecars_by_path
-                    .entry(parent.join(source_filename))
-                    .or_default()
-                    .push(copy_id);
-            }
-        } else if is_supported_image_file(entry_path.to_string_lossy().as_ref()) {
+        if is_supported_image_file(entry_path.to_string_lossy().as_ref()) {
             images.push(entry_path.to_path_buf());
         }
     }
@@ -720,22 +662,20 @@ pub fn list_images_recursive(
     let tasks: Vec<_> = images
         .into_iter()
         .map(|path_buf| {
-            let sidecars = sidecars_by_path
-                .remove(&path_buf)
-                .unwrap_or_else(|| vec![None]);
+            let mut sidecars = vec![None];
+            sidecars.extend(
+                crate::sidecar_storage::virtual_copy_ids(&path_buf)
+                    .into_iter()
+                    .map(Some),
+            );
             let path_str = path_buf.to_string_lossy().into_owned();
-            let file_name = path_buf
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            (path_str, file_name, path_buf, sidecars)
+            (path_str, path_buf, sidecars)
         })
         .collect();
 
     let mut result_list: Vec<ImageFile> = tasks
         .into_par_iter()
-        .flat_map(|(path_str, file_name, path_buf, sidecars)| {
+        .flat_map(|(path_str, path_buf, sidecars)| {
             let modified = fs::metadata(&path_buf)
                 .ok()
                 .and_then(|m| m.modified().ok())
@@ -748,16 +688,13 @@ pub fn list_images_recursive(
             let mut file_results = Vec::with_capacity(sidecars.len());
 
             for copy_id_opt in sidecars {
-                let (virtual_path, is_virtual_copy, sidecar_filename) = match copy_id_opt {
-                    Some(id) => (
-                        format!("{}?vc={}", path_str, id),
-                        true,
-                        format!("{}.{}.rrdata", file_name, id),
-                    ),
-                    None => (path_str.clone(), false, format!("{}.rrdata", file_name)),
+                let (virtual_path, is_virtual_copy) = match &copy_id_opt {
+                    Some(id) => (format!("{}?vc={}", path_str, id), true),
+                    None => (path_str.clone(), false),
                 };
 
-                let sidecar_path = path_buf.with_file_name(sidecar_filename);
+                let sidecar_path =
+                    crate::sidecar_storage::sidecar_path(&path_buf, copy_id_opt.as_deref());
 
                 let xmp_is_placeholder = enable_xmp_sync
                     && resolve_xmp_path(&path_buf)
@@ -2148,6 +2085,15 @@ pub fn create_folder(path: String) -> Result<(), String> {
     fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
+fn image_paths_in_tree(root: &Path) -> Vec<PathBuf> {
+    WalkDir::new(root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .map(|entry| entry.into_path())
+        .filter(|path| path.is_file() && is_supported_image_file(path))
+        .collect()
+}
+
 #[tauri::command]
 pub fn rename_folder(path: String, new_name: String, app_handle: AppHandle) -> Result<(), String> {
     let p = Path::new(&path);
@@ -2163,8 +2109,30 @@ pub fn rename_folder(path: String, new_name: String, app_handle: AppHandle) -> R
                 return Err("A folder with that name already exists.".to_string());
             }
         }
+        let image_paths = image_paths_in_tree(p);
+        for image_path in &image_paths {
+            if crate::exif_processing::get_rrexif_path(image_path).exists() {
+                let _ = crate::exif_processing::read_rrexif_sidecar(image_path);
+            }
+        }
         let new_path = parent.join(&new_name);
         fs::rename(p, &new_path).map_err(|e| e.to_string())?;
+
+        for old_image_path in image_paths {
+            let Ok(relative_path) = old_image_path.strip_prefix(p) else {
+                continue;
+            };
+            let new_image_path = new_path.join(relative_path);
+            if let Err(error) =
+                crate::sidecar_storage::move_sidecars(&old_image_path, &new_image_path)
+            {
+                log::error!(
+                    "Failed to move private sidecars after renaming folder for {}: {}",
+                    old_image_path.display(),
+                    error
+                );
+            }
+        }
 
         let new_folder_str = new_path.to_string_lossy().into_owned();
         sync_album_path_changes(&app_handle, None, None, Some((&path, &new_folder_str)));
@@ -2177,6 +2145,8 @@ pub fn rename_folder(path: String, new_name: String, app_handle: AppHandle) -> R
 
 #[tauri::command]
 pub fn delete_folder(path: String, app_handle: AppHandle) -> Result<(), String> {
+    let image_paths = image_paths_in_tree(Path::new(&path));
+
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
         if let Err(trash_error) = trash::delete(&path) {
@@ -2191,6 +2161,10 @@ pub fn delete_folder(path: String, app_handle: AppHandle) -> Result<(), String> 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+
+    for image_path in image_paths {
+        crate::sidecar_storage::remove_sidecars(&image_path)?;
     }
 
     let mut deletions = HashSet::new();
@@ -2240,22 +2214,15 @@ pub fn duplicate_file(
 
     fs::copy(&source_path, &dest_path).map_err(|e| e.to_string())?;
 
+    if crate::exif_processing::get_rrexif_path(&source_path).exists() {
+        let _ = crate::exif_processing::read_rrexif_sidecar(&source_path);
+    }
+
     if source_sidecar_path.exists()
         && let Some(dest_str) = dest_path.to_str()
     {
         let (_, dest_sidecar_path) = parse_virtual_path(dest_str);
         fs::copy(&source_sidecar_path, &dest_sidecar_path).map_err(|e| e.to_string())?;
-    }
-
-    let mut source_rrexif_name = source_path.file_name().unwrap().to_os_string();
-    source_rrexif_name.push(".rrexif");
-    let source_rrexif = source_path.with_file_name(source_rrexif_name);
-
-    if source_rrexif.exists() {
-        let mut dest_rrexif_name = dest_path.file_name().unwrap().to_os_string();
-        dest_rrexif_name.push(".rrexif");
-        let dest_rrexif = dest_path.with_file_name(dest_rrexif_name);
-        let _ = fs::copy(&source_rrexif, &dest_rrexif);
     }
 
     let dest_path_str = dest_path.to_string_lossy().into_owned();
@@ -2265,53 +2232,6 @@ pub fn duplicate_file(
     }
 
     Ok(dest_path_str)
-}
-
-fn find_all_associated_files(source_image_path: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut associated_files = vec![source_image_path.to_path_buf()];
-
-    let mut rrexif_name = source_image_path
-        .file_name()
-        .unwrap_or_default()
-        .to_os_string();
-    rrexif_name.push(".rrexif");
-    let rrexif_path = source_image_path.with_file_name(rrexif_name);
-
-    if rrexif_path.exists() {
-        associated_files.push(rrexif_path);
-    }
-
-    let parent_dir = source_image_path
-        .parent()
-        .ok_or("Could not determine parent directory")?;
-    let source_filename = source_image_path
-        .file_name()
-        .ok_or("Could not get source filename")?
-        .to_string_lossy();
-
-    let primary_sidecar_name = format!("{}.rrdata", source_filename);
-    let virtual_copy_prefix = format!("{}.", source_filename);
-
-    if let Ok(entries) = fs::read_dir(parent_dir) {
-        for entry in entries.filter_map(Result::ok) {
-            let entry_path = entry.path();
-            if !entry_path.is_file() {
-                continue;
-            }
-
-            let entry_os_filename = entry.file_name();
-            let entry_filename = entry_os_filename.to_string_lossy();
-
-            if entry_filename == primary_sidecar_name
-                || (entry_filename.starts_with(&virtual_copy_prefix)
-                    && entry_filename.ends_with(".rrdata"))
-            {
-                associated_files.push(entry_path);
-            }
-        }
-    }
-
-    Ok(associated_files)
 }
 
 #[tauri::command]
@@ -2330,12 +2250,10 @@ pub fn copy_files(source_paths: Vec<String>, destination_folder: String) -> Resu
         .collect();
 
     for source_image_path in unique_source_images {
-        let all_files_to_copy = find_all_associated_files(&source_image_path)?;
-
         let source_parent = source_image_path
             .parent()
             .ok_or("Could not get parent directory")?;
-        if source_parent == dest_path {
+        let destination_image = if source_parent == dest_path {
             let stem = source_image_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -2348,30 +2266,42 @@ pub fn copy_files(source_paths: Vec<String>, destination_folder: String) -> Resu
             let mut counter = 1;
             let new_base_path = loop {
                 let new_stem = format!("{}_copy_{}", stem, counter);
-                let temp_path = source_parent.join(format!("{}.{}", new_stem, extension));
+                let temp_path = if extension.is_empty() {
+                    source_parent.join(new_stem)
+                } else {
+                    source_parent.join(format!("{}.{}", new_stem, extension))
+                };
                 if !temp_path.exists() {
                     break temp_path;
                 }
                 counter += 1;
             };
-            let new_filename = new_base_path.file_name().unwrap().to_string_lossy();
-
-            for original_file in all_files_to_copy {
-                let original_full_filename = original_file.file_name().unwrap().to_string_lossy();
-                let source_base_filename = source_image_path.file_name().unwrap().to_string_lossy();
-                let new_dest_filename =
-                    original_full_filename.replacen(&*source_base_filename, &new_filename, 1);
-                let final_dest_path = dest_path.join(new_dest_filename);
-
-                fs::copy(&original_file, &final_dest_path).map_err(|e| e.to_string())?;
-            }
+            new_base_path
         } else {
-            for file_to_copy in all_files_to_copy {
-                if let Some(file_name) = file_to_copy.file_name() {
-                    let dest_file_path = dest_path.join(file_name);
-                    fs::copy(&file_to_copy, &dest_file_path).map_err(|e| e.to_string())?;
-                }
-            }
+            dest_path.join(
+                source_image_path
+                    .file_name()
+                    .ok_or("Could not get source filename")?,
+            )
+        };
+
+        if destination_image.exists() {
+            return Err(format!(
+                "File already exists at destination: {}",
+                destination_image.display()
+            ));
+        }
+
+        if crate::exif_processing::get_rrexif_path(&source_image_path).exists() {
+            let _ = crate::exif_processing::read_rrexif_sidecar(&source_image_path);
+        }
+        fs::copy(&source_image_path, &destination_image).map_err(|e| e.to_string())?;
+        if let Err(error) =
+            crate::sidecar_storage::copy_sidecars(&source_image_path, &destination_image)
+        {
+            let _ = fs::remove_file(&destination_image);
+            let _ = crate::sidecar_storage::remove_sidecars(&destination_image);
+            return Err(error);
         }
     }
     Ok(())
@@ -2396,7 +2326,7 @@ pub fn move_files(
         .map(|p| parse_virtual_path(p).0)
         .collect();
 
-    let mut all_files_to_trash = Vec::new();
+    let mut source_images_to_trash = Vec::new();
     let mut renames = HashMap::new();
 
     for source_image_path in unique_source_images {
@@ -2407,47 +2337,48 @@ pub fn move_files(
             return Err("Cannot move files into the same folder they are already in.".to_string());
         }
 
-        let files_to_move = find_all_associated_files(&source_image_path)?;
-
-        for file_to_move in &files_to_move {
-            if let Some(file_name) = file_to_move.file_name() {
-                let dest_file_path = dest_path.join(file_name);
-                if dest_file_path.exists() {
-                    return Err(format!(
-                        "File already exists at destination: {}",
-                        dest_file_path.display()
-                    ));
-                }
-            }
+        let dest_image_path = dest_path.join(
+            source_image_path
+                .file_name()
+                .ok_or("Could not get source filename")?,
+        );
+        if dest_image_path.exists() {
+            return Err(format!(
+                "File already exists at destination: {}",
+                dest_image_path.display()
+            ));
         }
 
-        for file_to_move in &files_to_move {
-            if let Some(file_name) = file_to_move.file_name() {
-                let dest_file_path = dest_path.join(file_name);
-                fs::copy(file_to_move, &dest_file_path).map_err(|e| e.to_string())?;
-            }
+        if crate::exif_processing::get_rrexif_path(&source_image_path).exists() {
+            let _ = crate::exif_processing::read_rrexif_sidecar(&source_image_path);
+        }
+        fs::copy(&source_image_path, &dest_image_path).map_err(|e| e.to_string())?;
+        if let Err(error) =
+            crate::sidecar_storage::copy_sidecars(&source_image_path, &dest_image_path)
+        {
+            let _ = fs::remove_file(&dest_image_path);
+            return Err(error);
         }
 
-        let dest_image_path = dest_path.join(source_image_path.file_name().unwrap());
         renames.insert(
             source_image_path.to_string_lossy().into_owned(),
             dest_image_path.to_string_lossy().into_owned(),
         );
 
-        all_files_to_trash.extend(files_to_move);
+        source_images_to_trash.push(source_image_path);
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-    if !all_files_to_trash.is_empty()
-        && let Err(trash_error) = trash::delete_all(&all_files_to_trash)
+    if !source_images_to_trash.is_empty()
+        && let Err(trash_error) = trash::delete_all(&source_images_to_trash)
     {
         log::warn!(
             "Failed to move source files to trash: {}. Falling back to permanent delete.",
             trash_error
         );
-        for path in all_files_to_trash {
+        for path in &source_images_to_trash {
             if path.is_file() {
-                fs::remove_file(&path).map_err(|e| {
+                fs::remove_file(path).map_err(|e| {
                     format!("Failed to delete source file {}: {}", path.display(), e)
                 })?;
             }
@@ -2455,11 +2386,15 @@ pub fn move_files(
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    for path in all_files_to_trash {
+    for path in &source_images_to_trash {
         if path.is_file() {
-            fs::remove_file(&path)
+            fs::remove_file(path)
                 .map_err(|e| format!("Failed to delete source file {}: {}", path.display(), e))?;
         }
+    }
+
+    for source_image_path in &source_images_to_trash {
+        crate::sidecar_storage::remove_sidecars(source_image_path)?;
     }
 
     sync_album_path_changes(&app_handle, Some(&renames), None, None);
@@ -3166,24 +3101,37 @@ pub fn save_community_preset(
 
 #[tauri::command]
 pub fn clear_all_sidecars(root_path: String) -> Result<usize, String> {
-    if !Path::new(&root_path).exists() {
-        return Err(format!("Root path does not exist: {}", root_path));
+    let root_path = Path::new(&root_path);
+    if !root_path.exists() {
+        return Err(format!("Root path does not exist: {}", root_path.display()));
     }
 
     let mut deleted_count = 0;
-    let walker = WalkDir::new(root_path).into_iter();
+    let paths: Vec<PathBuf> = WalkDir::new(root_path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .map(|entry| entry.into_path())
+        .filter(|path| path.is_file())
+        .collect();
 
-    for entry in walker.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_file()
-            && let Some(extension) = path.extension()
+    for image_path in paths.iter().filter(|path| is_supported_image_file(path)) {
+        deleted_count += crate::sidecar_storage::remove_sidecars(image_path)?;
+    }
+
+    // Remove orphaned legacy sidecars whose source image no longer exists.
+    for path in paths {
+        if let Some(extension) = path.extension()
             && (extension == "rrdata" || extension == "rrexif")
+            && path.exists()
         {
-            if fs::remove_file(path).is_ok() {
-                deleted_count += 1;
-            } else {
-                eprintln!("Failed to delete sidecar file: {:?}", path);
-            }
+            fs::remove_file(&path).map_err(|error| {
+                format!(
+                    "Failed to delete legacy sidecar {}: {}",
+                    path.display(),
+                    error
+                )
+            })?;
+            deleted_count += 1;
         }
     }
 
@@ -3258,68 +3206,53 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn delete_files_from_disk(paths: Vec<String>, app_handle: AppHandle) -> Result<(), String> {
-    let mut files_to_trash = HashSet::new();
-
+    let mut images_to_trash = HashSet::new();
     let mut deletions = HashSet::new();
 
     for path_str in paths {
-        let (source_path, sidecar_path) = parse_virtual_path(&path_str);
+        let (source_path, _) = parse_virtual_path(&path_str);
         deletions.insert(path_str.clone());
 
-        if path_str.contains("?vc=") {
-            if sidecar_path.exists() {
-                files_to_trash.insert(sidecar_path);
-            }
-        } else {
-            if source_path.exists() {
-                match find_all_associated_files(&source_path) {
-                    Ok(associated_files) => {
-                        for file in associated_files {
-                            files_to_trash.insert(file);
-                        }
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "Could not find associated files for {}: {}",
-                            source_path.display(),
-                            e
-                        );
-                    }
+        if let Some((_, copy_id)) = path_str.rsplit_once("?vc=") {
+            crate::sidecar_storage::remove_virtual_copy(&source_path, copy_id)?;
+        } else if source_path.exists() {
+            images_to_trash.insert(source_path);
+        }
+    }
+
+    if !images_to_trash.is_empty() {
+        let final_paths_to_delete: Vec<PathBuf> = images_to_trash.iter().cloned().collect();
+        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+        if let Err(trash_error) = trash::delete_all(&final_paths_to_delete) {
+            log::warn!(
+                "Failed to move files to trash: {}. Falling back to permanent delete.",
+                trash_error
+            );
+            for path in &final_paths_to_delete {
+                if path.is_file() {
+                    fs::remove_file(path)
+                        .map_err(|e| format!("Failed to delete file {}: {}", path.display(), e))?;
+                } else if path.is_dir() {
+                    fs::remove_dir_all(path).map_err(|e| {
+                        format!("Failed to delete directory {}: {}", path.display(), e)
+                    })?;
                 }
             }
         }
-    }
 
-    if files_to_trash.is_empty() {
-        return Ok(());
-    }
-
-    let final_paths_to_delete: Vec<PathBuf> = files_to_trash.into_iter().collect();
-    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-    if let Err(trash_error) = trash::delete_all(&final_paths_to_delete) {
-        log::warn!(
-            "Failed to move files to trash: {}. Falling back to permanent delete.",
-            trash_error
-        );
-        for path in final_paths_to_delete {
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        for path in &final_paths_to_delete {
             if path.is_file() {
-                fs::remove_file(&path)
+                fs::remove_file(path)
                     .map_err(|e| format!("Failed to delete file {}: {}", path.display(), e))?;
             } else if path.is_dir() {
-                fs::remove_dir_all(&path)
+                fs::remove_dir_all(path)
                     .map_err(|e| format!("Failed to delete directory {}: {}", path.display(), e))?;
             }
         }
-    }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    for path in final_paths_to_delete {
-        if path.is_file() {
-            fs::remove_file(&path)
-                .map_err(|e| format!("Failed to delete file {}: {}", path.display(), e))?;
-        } else if path.is_dir() {
-            fs::remove_dir_all(&path)
-                .map_err(|e| format!("Failed to delete directory {}: {}", path.display(), e))?;
+        for image_path in &images_to_trash {
+            crate::sidecar_storage::remove_sidecars(image_path)?;
         }
     }
 
@@ -3407,6 +3340,11 @@ pub fn delete_files_with_associated(
         return Ok(());
     }
 
+    let image_paths_to_cleanup: Vec<PathBuf> = files_to_trash
+        .iter()
+        .filter(|path| is_supported_image_file(path))
+        .cloned()
+        .collect();
     let final_paths_to_delete: Vec<PathBuf> = files_to_trash.into_iter().collect();
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     if let Err(trash_error) = trash::delete_all(&final_paths_to_delete) {
@@ -3428,6 +3366,10 @@ pub fn delete_files_with_associated(
             fs::remove_file(&path)
                 .map_err(|e| format!("Failed to delete file {}: {}", path.display(), e))?;
         }
+    }
+
+    for image_path in image_paths_to_cleanup {
+        crate::sidecar_storage::remove_sidecars(&image_path)?;
     }
 
     sync_album_path_changes(&app_handle, None, Some(&deletions), None);
@@ -3614,22 +3556,14 @@ pub async fn import_files(
                 }
 
                 fs::copy(&source_path, &dest_file_path).map_err(|e| e.to_string())?;
+                if crate::exif_processing::get_rrexif_path(&source_path).exists() {
+                    let _ = crate::exif_processing::read_rrexif_sidecar(&source_path);
+                }
                 if source_sidecar.exists()
                     && let Some(dest_str) = dest_file_path.to_str()
                 {
                     let (_, dest_sidecar) = parse_virtual_path(dest_str);
                     fs::copy(&source_sidecar, &dest_sidecar).map_err(|e| e.to_string())?;
-                }
-
-                let mut source_rrexif_name = source_path.file_name().unwrap().to_os_string();
-                source_rrexif_name.push(".rrexif");
-                let source_rrexif = source_path.with_file_name(source_rrexif_name);
-
-                if source_rrexif.exists() {
-                    let mut dest_rrexif_name = dest_file_path.file_name().unwrap().to_os_string();
-                    dest_rrexif_name.push(".rrexif");
-                    let dest_rrexif = dest_file_path.with_file_name(dest_rrexif_name);
-                    let _ = fs::copy(&source_rrexif, &dest_rrexif);
                 }
 
                 if settings.delete_after_import {
@@ -3643,16 +3577,6 @@ pub async fn import_files(
                             );
                             fs::remove_file(&source_path).map_err(|e| e.to_string())?;
                         }
-                        if source_sidecar.exists()
-                            && let Err(trash_error) = trash::delete(&source_sidecar)
-                        {
-                            log::warn!(
-                                "Failed to trash source sidecar {}: {}. Deleting permanently.",
-                                source_sidecar.display(),
-                                trash_error
-                            );
-                            fs::remove_file(&source_sidecar).map_err(|e| e.to_string())?;
-                        }
                     }
 
                     #[cfg(not(any(
@@ -3662,13 +3586,9 @@ pub async fn import_files(
                     )))]
                     {
                         fs::remove_file(&source_path).map_err(|e| e.to_string())?;
-                        if source_sidecar.exists() {
-                            fs::remove_file(&source_sidecar).map_err(|e| e.to_string())?;
-                        }
-                        if source_rrexif.exists() {
-                            let _ = fs::remove_file(&source_rrexif);
-                        }
                     }
+
+                    crate::sidecar_storage::remove_sidecars(&source_path)?;
                 }
 
                 Ok(())
@@ -3768,52 +3688,11 @@ pub fn rename_files(
             ));
         }
 
+        if crate::exif_processing::get_rrexif_path(&original_path).exists() {
+            let _ = crate::exif_processing::read_rrexif_sidecar(&original_path);
+        }
         operations.insert(original_path, new_path);
     }
-
-    let mut sidecar_operations: HashMap<PathBuf, PathBuf> = HashMap::new();
-    for (original_path, new_path) in &operations {
-        let parent = original_path
-            .parent()
-            .ok_or("Could not get parent directory")?;
-        let original_filename_str = original_path.file_name().unwrap().to_string_lossy();
-        let new_filename_str = new_path.file_name().unwrap().to_string_lossy();
-
-        if let Ok(entries) = fs::read_dir(parent) {
-            for entry in entries.filter_map(Result::ok) {
-                let entry_path = entry.path();
-                let entry_os_filename = entry.file_name();
-                let entry_filename = entry_os_filename.to_string_lossy();
-
-                if entry_filename.starts_with(&format!("{}.", original_filename_str))
-                    && entry_filename.ends_with(".rrdata")
-                {
-                    let new_sidecar_filename =
-                        entry_filename.replacen(&*original_filename_str, &new_filename_str, 1);
-                    let new_sidecar_path = parent.join(new_sidecar_filename);
-                    sidecar_operations.insert(entry_path, new_sidecar_path);
-                } else if entry_filename == format!("{}.rrdata", original_filename_str) {
-                    let mut new_sidecar_name = new_path.file_name().unwrap().to_os_string();
-                    new_sidecar_name.push(".rrdata");
-                    let new_sidecar_path = new_path.with_file_name(new_sidecar_name);
-
-                    sidecar_operations.insert(entry_path, new_sidecar_path);
-                }
-            }
-        }
-
-        let mut old_rrexif_name = original_path.file_name().unwrap().to_os_string();
-        old_rrexif_name.push(".rrexif");
-        let old_rrexif = original_path.with_file_name(old_rrexif_name);
-
-        if old_rrexif.exists() {
-            let mut new_rrexif_name = new_path.file_name().unwrap().to_os_string();
-            new_rrexif_name.push(".rrexif");
-            let new_rrexif = new_path.with_file_name(new_rrexif_name);
-            sidecar_operations.insert(old_rrexif, new_rrexif);
-        }
-    }
-    operations.extend(sidecar_operations);
 
     for (old_path, new_path) in operations {
         fs::rename(&old_path, &new_path).map_err(|e| {
@@ -3824,6 +3703,17 @@ pub fn rename_files(
                 e
             )
         })?;
+
+        if let Err(error) = crate::sidecar_storage::move_sidecars(&old_path, &new_path) {
+            let rollback_result = fs::rename(&new_path, &old_path);
+            return Err(match rollback_result {
+                Ok(()) => format!("Failed to move edit data while renaming: {}", error),
+                Err(rollback_error) => format!(
+                    "File was renamed, but edit data could not be moved ({}), and rollback failed: {}",
+                    error, rollback_error
+                ),
+            });
+        }
 
         let old_str = old_path.to_string_lossy().into_owned();
         let new_str = new_path.to_string_lossy().into_owned();
@@ -3996,7 +3886,7 @@ pub fn sync_metadata_to_xmp(source_path: &Path, metadata: &ImageMetadata, create
             return;
         }
         let skeleton = r#"<?xml version="1.0" encoding="UTF-8"?>
-<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RapidRAW">
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RAW Editor">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
     xmlns:xmp="http://ns.adobe.com/xap/1.0/"

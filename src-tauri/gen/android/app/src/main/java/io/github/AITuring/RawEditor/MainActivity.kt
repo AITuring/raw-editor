@@ -1,4 +1,4 @@
-package io.github.CyberTimon.RapidRAW
+package io.github.AITuring.RawEditor
 
 import android.graphics.Color
 import android.os.Bundle

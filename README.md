@@ -6,6 +6,7 @@
 AGPL-3.0 的前提下继续开发。现阶段不追求 AI 功能，也不追求与 Adobe Camera Raw
 像素级完全一致；目标是先实现一套画质可靠、响应流畅、可以每天使用，并且核心摄影
 工作流与 Camera Raw 基本一致的非 AI RAW 编辑器。
+上游来源与再发行声明见 [NOTICE](NOTICE)。
 
 ## 项目目标
 
@@ -49,12 +50,24 @@ npm run start            # Tauri 2 开发窗口
 如果未来需要单独验证上游 AI 功能，必须显式设置
 `RAW_EDITOR_ENABLE_AI_RUNTIME=1`，否则原生构建不会下载或打包 ONNX Runtime。
 
+### 应用身份与语言
+
+- 产品名：`RAW Editor`
+- 应用标识：`io.github.AITuring.RawEditor`
+- 当前开发版本：`0.1.0`
+- 项目主页：<https://github.com/AITuring/raw-editor>
+
+首次启动会按照系统语言自动选择最接近的界面语言，并在设置中持久化用户选择。英语、
+简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
+必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
+
 ### 当前进度（2026-08-03）
 
 当前处于 **M0 基础整合完成、M1 RAW 与色彩基线准备阶段**。本轮已完成：
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
-- ✅ 完成 RAW Editor 应用身份、窗口标题、包名和基础 EXIF 软件标识调整。
+- ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、包元数据、Linux/Android 信息和基础 EXIF 软件标识调整。
+- ✅ 完成中英文首启自动选择、设置持久化、语言代码归一化和翻译完整性校验。
 - ✅ 默认启用离线 `basic` 模式，隐藏 AI 面板并移除 Clerk 登录依赖。
 - ✅ 复用旧版 `raw-editor` 页面的 `ImageState` 参数语义，适配到 RapidRAW 原生 `Adjustments`。
 - ✅ 保留 RAW 导入、预览、全局调整、裁剪、非 AI 蒙版、sidecar 和导出主链路。
@@ -165,7 +178,7 @@ Daily RAW 1.0 只有同时满足以下条件才算完成：
   或 RawSpeed 后备。
 - 镜头：Lensfun。
 - ICC：优先接入 LittleCMS。
-- 数据：版本化 JSON sidecar；SQLite 保存索引、缩略图、评分和队列状态。
+- 数据：版本化 JSON 编辑数据统一保存在应用私有数据目录；SQLite 保存索引、缩略图、评分和队列状态，不在照片目录生成内部文件。
 - 输出：原生分块渲染和编码，不通过 WebView IPC、JSON 或 Base64 传输整张图。
 - AI：1.0 不引入模型和 AI 运行时。
 

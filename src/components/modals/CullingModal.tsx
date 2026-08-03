@@ -289,7 +289,7 @@ export default function CullingModal({
           {t('modals.culling.cullingSuggestions')}
         </Text>
         <div className="border-b border-surface mb-4">
-          <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+          <nav className="-mb-px flex space-x-4" aria-label={t('modals.culling.title')}>
             {numSimilar > 0 && (
               <button
                 onClick={() => setActiveTab('similar')}
