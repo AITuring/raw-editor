@@ -10,6 +10,7 @@ import { Invokes, Panel } from '../components/ui/AppProperties';
 import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { parsePreviewResponse } from '../utils/previewProtocol';
+import { createImageObjectUrl } from '../utils/imageObjectUrl';
 
 export function useImageProcessing(
   transformWrapperRef: any,
@@ -44,6 +45,8 @@ export function useImageProcessing(
   const inFlightCountRef = useRef(0);
   const pendingApplyRef = useRef<{ adjustments: Adjustments; targetRes?: number } | null>(null);
   const currentOriginalResRef = useRef<number>(0);
+  const originalPreviewJobIdRef = useRef(0);
+  const uncroppedPreviewJobIdRef = useRef(0);
   const lastViewportRequestKeyRef = useRef<string | null>(null);
   const dragIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeWaveformChannelRef = useRef(activeWaveformChannel);
@@ -293,13 +296,29 @@ export function useImageProcessing(
   );
 
   const generateUncroppedPreview = useCallback(
-    (currentAdjustments: Adjustments) => {
-      if (!selectedImage?.isReady) return;
-      invoke(Invokes.GenerateUncroppedPreview, { jsAdjustments: currentAdjustments }).catch((err) =>
-        console.error('Failed to generate uncropped preview:', err),
-      );
+    async (currentAdjustments: Adjustments) => {
+      const currentPath = selectedImage?.path;
+      if (!selectedImage?.isReady || !currentPath) return;
+
+      const jobId = ++uncroppedPreviewJobIdRef.current;
+      try {
+        const buffer: ArrayBuffer = await invoke(Invokes.GenerateUncroppedPreview, {
+          jsAdjustments: currentAdjustments,
+        });
+        if (jobId !== uncroppedPreviewJobIdRef.current || currentPath !== selectedImagePathRef.current) {
+          return;
+        }
+
+        const url = createImageObjectUrl(buffer, 'image/jpeg');
+        if (!url) throw new Error('Uncropped preview returned no image data');
+        setEditor({ uncroppedAdjustedPreviewUrl: url });
+      } catch (err) {
+        if (jobId === uncroppedPreviewJobIdRef.current) {
+          console.error('Failed to generate uncropped preview:', err);
+        }
+      }
     },
-    [selectedImage?.isReady],
+    [selectedImage?.isReady, selectedImage?.path, setEditor],
   );
 
   const calculateTargetRes = useCallback(() => {
@@ -348,30 +367,51 @@ export function useImageProcessing(
     [applyAdjustments, currentResRef],
   );
 
+  const generateOriginalPreview = useCallback(
+    async (currentAdjustments: Adjustments, targetRes: number) => {
+      const currentPath = selectedImagePathRef.current;
+      if (!currentPath) return false;
+
+      const jobId = ++originalPreviewJobIdRef.current;
+      const buffer: ArrayBuffer = await invoke(Invokes.GenerateOriginalTransformedPreview, {
+        jsAdjustments: currentAdjustments,
+        targetResolution: targetRes,
+      });
+      if (jobId !== originalPreviewJobIdRef.current || currentPath !== selectedImagePathRef.current) {
+        return false;
+      }
+
+      const url = createImageObjectUrl(buffer, 'image/jpeg');
+      if (!url) throw new Error('Original preview returned no image data');
+      currentOriginalResRef.current = targetRes;
+      setEditor({ transformedOriginalUrl: url });
+      return true;
+    },
+    [setEditor],
+  );
+
   const requestHiFiOriginalZoom = useMemo(
     () =>
       debounce(async (currentAdjustments: Adjustments, targetRes: number) => {
-        if (targetRes > currentOriginalResRef.current) {
-          try {
-            const base64Data: string = await invoke('generate_original_transformed_preview', {
-              jsAdjustments: currentAdjustments,
-              targetResolution: targetRes,
-            });
-            currentOriginalResRef.current = targetRes;
-            setEditor({ transformedOriginalUrl: base64Data });
-          } catch (e) {
-            console.error('Failed to generate hi-fi original preview:', e);
-          }
+        if (targetRes <= currentOriginalResRef.current) return;
+
+        try {
+          await generateOriginalPreview(currentAdjustments, targetRes);
+        } catch (e) {
+          console.error('Failed to generate hi-fi original preview:', e);
         }
       }, 200),
-    [setEditor],
+    [generateOriginalPreview],
   );
 
   useEffect(() => {
     if (activeView === 'editor' && activeRightPanel === Panel.Crop && selectedImage?.isReady) {
       generateUncroppedPreview(adjustments);
+    } else {
+      uncroppedPreviewJobIdRef.current += 1;
+      setEditor({ uncroppedAdjustedPreviewUrl: null });
     }
-  }, [activeView, adjustments, activeRightPanel, selectedImage?.isReady, generateUncroppedPreview]);
+  }, [activeView, adjustments, activeRightPanel, selectedImage?.isReady, generateUncroppedPreview, setEditor]);
 
   useEffect(() => {
     if (activeView === 'editor' && selectedImage?.isReady && displaySize.width > 0 && !isSliderDragging) {
@@ -476,6 +516,7 @@ export function useImageProcessing(
   ]);
 
   useEffect(() => {
+    originalPreviewJobIdRef.current += 1;
     setEditor({ transformedOriginalUrl: null });
     currentOriginalResRef.current = 0;
   }, [geometricAdjustmentsKey, selectedImage?.path, setEditor]);
@@ -514,14 +555,7 @@ export function useImageProcessing(
       if (activeView === 'editor' && showOriginal && selectedImage?.path && !transformedOriginalUrl) {
         try {
           const targetRes = calculateTargetRes();
-          const base64Data: string = await invoke('generate_original_transformed_preview', {
-            jsAdjustments: adjustments,
-            targetResolution: targetRes,
-          });
-          if (isEffectActive) {
-            currentOriginalResRef.current = targetRes;
-            setEditor({ transformedOriginalUrl: base64Data });
-          }
+          await generateOriginalPreview(adjustments, targetRes);
         } catch (e) {
           if (isEffectActive) {
             console.error('Failed to generate original preview:', e);
@@ -533,6 +567,7 @@ export function useImageProcessing(
     generate();
     return () => {
       isEffectActive = false;
+      originalPreviewJobIdRef.current += 1;
     };
   }, [
     activeView,
@@ -541,6 +576,7 @@ export function useImageProcessing(
     adjustments,
     transformedOriginalUrl,
     calculateTargetRes,
+    generateOriginalPreview,
     setEditor,
   ]);
 

@@ -17,6 +17,8 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
+import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
+import { createImageObjectUrl } from '../../utils/imageObjectUrl';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
   const match = rgbStr.match(/[\d.]+/g);
@@ -140,7 +142,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const [isMaskHovered, setIsMaskHovered] = useState(false);
   const [isMaskTouchInteracting, setIsMaskTouchInteracting] = useState(false);
   const [isLoaderVisible, setIsLoaderVisible] = useState(false);
-  const [maskOverlayUrl, setMaskOverlayUrl] = useState<string | null>(null);
+  const { url: maskOverlayUrl, replace: replaceMaskOverlayUrl, clear: clearMaskOverlayUrl } = useImageObjectUrl();
   const [transformState, setTransformState] = useState<TransformState>({ scale: 1, positionX: 0, positionY: 0 });
 
   const imageContainerRef = useRef<HTMLDivElement>(null);
@@ -158,6 +160,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const isTransitioningRef = useRef(false);
   const [toolbarOverflowVisible, setToolbarOverflowVisible] = useState(!isFullScreen);
   const isGeneratingOverlayRef = useRef(false);
+  const overlayGenerationEpochRef = useRef(0);
   const pendingOverlayRequestRef = useRef<any>(null);
   const animationFrameId = useRef<number | null>(null);
   const physicsFrameId = useRef<number | null>(null);
@@ -1002,11 +1005,12 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const processOverlayQueue = useCallback(async () => {
     if (isGeneratingOverlayRef.current || !pendingOverlayRequestRef.current) return;
 
+    const generationEpoch = overlayGenerationEpochRef.current;
     const { maskDef, renderSize, jsAdjustments } = pendingOverlayRequestRef.current;
     pendingOverlayRequestRef.current = null;
 
     if (!maskDef || !maskDef.visible || renderSize.width === 0) {
-      setMaskOverlayUrl(null);
+      clearMaskOverlayUrl();
       return;
     }
 
@@ -1037,7 +1041,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       const strippedMaskDef = structuredClone(maskDef);
       stripSubMasks(strippedMaskDef.subMasks);
 
-      const dataUrl: string = await invoke(Invokes.GenerateMaskOverlay, {
+      const buffer: ArrayBuffer = await invoke(Invokes.GenerateMaskOverlay, {
         cropOffset,
         height: Math.round(renderSize.height),
         maskDef: strippedMaskDef,
@@ -1046,21 +1050,29 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         jsAdjustments: strippedAdjustments,
       });
 
-      if (dataUrl) {
-        setMaskOverlayUrl(dataUrl);
-      } else {
-        setMaskOverlayUrl(null);
+      if (generationEpoch !== overlayGenerationEpochRef.current || pendingOverlayRequestRef.current) {
+        return;
       }
+
+      replaceMaskOverlayUrl(createImageObjectUrl(buffer, 'image/png'));
     } catch (e) {
       console.error('Failed to generate live mask overlay:', e);
-      setMaskOverlayUrl(null);
+      if (!pendingOverlayRequestRef.current) clearMaskOverlayUrl();
     } finally {
       isGeneratingOverlayRef.current = false;
       if (pendingOverlayRequestRef.current) {
         requestAnimationFrame(processOverlayQueue);
       }
     }
-  }, []);
+  }, [clearMaskOverlayUrl, replaceMaskOverlayUrl]);
+
+  useEffect(
+    () => () => {
+      overlayGenerationEpochRef.current += 1;
+      pendingOverlayRequestRef.current = null;
+    },
+    [],
+  );
 
   const requestMaskOverlay = useCallback(
     (maskDef: any, renderSize: any, currentAdjustments: any) => {

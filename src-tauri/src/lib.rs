@@ -48,7 +48,6 @@ use std::io::Write;
 use std::panic;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
 
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
@@ -704,11 +703,11 @@ async fn apply_adjustments(
 }
 
 #[tauri::command]
-fn generate_uncropped_preview(
+async fn generate_uncropped_preview(
     js_adjustments: serde_json::Value,
-    state: tauri::State<AppState>,
+    state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<Response, String> {
     let context = get_or_init_gpu_context(&state, &app_handle)?;
     let mut adjustments_clone = js_adjustments.clone();
     hydrate_adjustments(&state, &mut adjustments_clone);
@@ -720,7 +719,7 @@ fn generate_uncropped_preview(
         .clone()
         .ok_or("No original image loaded")?;
 
-    thread::spawn(move || {
+    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
         let state = app_handle.state::<AppState>();
         let path = loaded_image.path.clone();
         let is_raw = loaded_image.is_raw;
@@ -801,7 +800,7 @@ fn generate_uncropped_preview(
         let lut_path = adjustments_clone["lutPath"].as_str();
         let lut = lut_path.and_then(|p| lut_processing::get_or_load_lut(&state, p).ok());
 
-        if let Ok(processed_image) = process_and_get_dynamic_image(
+        let processed_image = process_and_get_dynamic_image(
             &context,
             &state,
             &processing_base,
@@ -813,26 +812,19 @@ fn generate_uncropped_preview(
                 roi: None,
             },
             "generate_uncropped_preview",
-        ) {
-            let (width, height) = processed_image.dimensions();
-            let rgb_pixels = processed_image.to_rgb8().into_vec();
-            match Encoder::new(Preset::BaselineFastest)
-                .quality(80)
-                .encode_rgb(&rgb_pixels, width, height)
-            {
-                Ok(bytes) => {
-                    let base64_str = general_purpose::STANDARD.encode(&bytes);
-                    let data_url = format!("data:image/jpeg;base64,{}", base64_str);
-                    let _ = app_handle.emit("preview-update-uncropped", data_url);
-                }
-                Err(e) => {
-                    log::error!("Failed to encode uncropped preview with mozjpeg-rs: {}", e);
-                }
-            }
-        }
-    });
+        )?;
 
-    Ok(())
+        let (width, height) = processed_image.dimensions();
+        let rgb_pixels = processed_image.to_rgb8().into_vec();
+        Encoder::new(Preset::BaselineFastest)
+            .quality(80)
+            .encode_rgb(&rgb_pixels, width, height)
+            .map_err(|e| format!("Failed to encode uncropped preview with mozjpeg-rs: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Uncropped preview worker failed: {}", e))??;
+
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
@@ -841,7 +833,7 @@ fn generate_original_transformed_preview(
     target_resolution: Option<u32>,
     state: tauri::State<AppState>,
     app_handle: tauri::AppHandle,
-) -> Result<String, String> {
+) -> Result<Response, String> {
     let loaded_image = state
         .original_image
         .lock()
@@ -887,8 +879,7 @@ fn generate_original_transformed_preview(
         .encode_rgb(&rgb_pixels, width, height)
         .map_err(|e| format!("Failed to encode with mozjpeg-rs: {}", e))?;
 
-    let base64_str = general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/jpeg;base64,{}", base64_str))
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
@@ -898,7 +889,7 @@ async fn preview_geometry_transform(
     show_lines: bool,
     state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
-) -> Result<String, String> {
+) -> Result<Response, String> {
     let (loaded_image_path, is_raw) = {
         let guard = state.original_image.lock().unwrap();
         let loaded = guard.as_ref().ok_or("No image loaded")?;
@@ -1087,8 +1078,7 @@ async fn preview_geometry_transform(
         .encode_rgb(&rgb_pixels, width, height)
         .map_err(|e| format!("Failed to encode with mozjpeg-rs: {}", e))?;
 
-    let base64_str = general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/jpeg;base64,{}", base64_str))
+    Ok(Response::new(bytes))
 }
 
 pub fn get_original_image(
