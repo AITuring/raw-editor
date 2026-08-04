@@ -227,7 +227,10 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
   const handleZoomed = useCallback(
     (state: TransformState) => {
-      setEditor({ zoom: state.scale });
+      setEditor((editorState) => ({
+        zoom: state.scale,
+        viewportRevision: editorState.viewportRevision + 1,
+      }));
     },
     [setEditor],
   );

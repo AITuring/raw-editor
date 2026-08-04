@@ -34,6 +34,7 @@ mod negative_conversion;
 mod panorama_stitching;
 mod panorama_utils;
 mod preset_converter;
+mod preview_protocol;
 mod raw_processing;
 mod sidecar_storage;
 mod tagging;
@@ -71,8 +72,11 @@ use tempfile::NamedTempFile;
 use tokio::sync::Mutex as TokioMutex;
 
 use crate::cache_utils::{
-    DecodedImageCache, GEOMETRY_KEYS, calculate_full_job_hash, calculate_geometry_hash,
-    calculate_transform_hash, calculate_visual_hash,
+    BudgetedCache, DECODED_IMAGE_CACHE_MAX_BYTES, DecodedImageCache, GEOMETRY_CACHE_MAX_BYTES,
+    GEOMETRY_CACHE_MAX_ENTRIES, GEOMETRY_KEYS, LUT_CACHE_MAX_BYTES, LUT_CACHE_MAX_ENTRIES,
+    MASK_CACHE_MAX_BYTES, MASK_CACHE_MAX_ENTRIES, THUMBNAIL_GEOMETRY_CACHE_MAX_BYTES,
+    THUMBNAIL_GEOMETRY_CACHE_MAX_ENTRIES, calculate_full_job_hash, calculate_geometry_hash,
+    calculate_transform_hash, calculate_visual_hash, dynamic_image_weight,
 };
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::formats::is_raw_file;
@@ -88,6 +92,7 @@ use crate::mask_generation::{
     MaskDefinition, generate_mask_bitmap, get_cached_or_generate_mask,
     resolve_warped_image_for_masks,
 };
+use crate::preview_protocol::{encode_preview_patch, normalized_roi_to_pixels};
 use crate::window_customizer::PinchZoomDisablePlugin;
 pub use adjustment_utils::*;
 pub use android_integration::*;
@@ -137,12 +142,14 @@ pub struct WgpuTransformPayload {
     pub pixelated: bool,
 }
 
+pub type TransformedPreview = (Arc<DynamicImage>, f32, (f32, f32));
+
 pub fn generate_transformed_preview(
     state: &tauri::State<AppState>,
     loaded_image: &LoadedImage,
     adjustments: &serde_json::Value,
     preview_dim: u32,
-) -> Result<(DynamicImage, f32, (f32, f32)), String> {
+) -> Result<TransformedPreview, String> {
     let transform_hash = calculate_transform_hash(adjustments);
 
     let (transformed_full_res, unscaled_crop_offset) = {
@@ -165,9 +172,13 @@ pub fn generate_transformed_preview(
     let (full_res_w, full_res_h) = transformed_full_res.dimensions();
 
     let final_preview_base = if full_res_w > preview_dim || full_res_h > preview_dim {
-        downscale_f32_image(&transformed_full_res, preview_dim, preview_dim)
+        Arc::new(downscale_f32_image(
+            &transformed_full_res,
+            preview_dim,
+            preview_dim,
+        ))
     } else {
-        (*transformed_full_res).clone()
+        Arc::clone(&transformed_full_res)
     };
 
     let scale_for_gpu = if full_res_w > 0 {
@@ -362,9 +373,7 @@ fn process_preview_job(
     } else {
         *state.gpu_image_cache.lock().unwrap() = None;
 
-        let (base, scale, offset) =
-            generate_transformed_preview(&state, &loaded_image, &adjustments_clone, preview_dim)?;
-        (Arc::new(base), scale, offset)
+        generate_transformed_preview(&state, &loaded_image, &adjustments_clone, preview_dim)?
     };
 
     let small_preview_base = if small_valid {
@@ -420,16 +429,7 @@ fn process_preview_job(
 
     let (preview_width, preview_height) = processing_image.dimensions();
 
-    let pixel_roi = if is_interactive {
-        roi.map(|(nx, ny, nw, nh)| crate::gpu_processing::Roi {
-            x: (nx * preview_width as f32).round() as u32,
-            y: (ny * preview_height as f32).round() as u32,
-            width: (nw * preview_width as f32).round() as u32,
-            height: (nh * preview_height as f32).round() as u32,
-        })
-    } else {
-        None
-    };
+    let pixel_roi = normalized_roi_to_pixels(roi, preview_width, preview_height);
 
     let mask_definitions: Vec<MaskDefinition> = adjustments_clone
         .get("masks")
@@ -462,7 +462,9 @@ fn process_preview_job(
     let lut_path = adjustments_clone["lutPath"].as_str();
     let lut = lut_path.and_then(|p| lut_processing::get_or_load_lut(&state, p).ok());
 
-    let wants_analytics = !(is_interactive && pixel_roi.is_some());
+    // A viewport patch is not representative of the whole image. Keep the
+    // histogram/waveform from the most recent complete preview instead.
+    let wants_analytics = pixel_roi.is_none();
     let channel_filter = if is_interactive {
         active_waveform_channel.map(|s| s.to_string())
     } else {
@@ -539,7 +541,7 @@ fn process_preview_job(
 
         match encode_result {
             Ok(jpeg_bytes) => {
-                if is_interactive {
+                if is_interactive || pixel_roi.is_some() {
                     let (roi_w, roi_h) = final_rgba_image.dimensions();
                     let (rx, ry) = if let Some(r) = pixel_roi {
                         (r.x, r.y)
@@ -547,17 +549,20 @@ fn process_preview_job(
                         (0, 0)
                     };
 
-                    let mut response = Vec::with_capacity(24 + jpeg_bytes.len());
-                    response.extend_from_slice(&rx.to_le_bytes());
-                    response.extend_from_slice(&ry.to_le_bytes());
-                    response.extend_from_slice(&roi_w.to_le_bytes());
-                    response.extend_from_slice(&roi_h.to_le_bytes());
-                    response.extend_from_slice(&preview_width.to_le_bytes());
-                    response.extend_from_slice(&preview_height.to_le_bytes());
-                    response.extend_from_slice(&jpeg_bytes);
+                    let response = encode_preview_patch(
+                        &jpeg_bytes,
+                        crate::gpu_processing::Roi {
+                            x: rx,
+                            y: ry,
+                            width: roi_w,
+                            height: roi_h,
+                        },
+                        preview_width,
+                        preview_height,
+                    );
 
                     log::info!(
-                        "[process_preview_job] interactive ROI {}x{} encode in {:.2?}, total {:.2?}",
+                        "[process_preview_job] viewport ROI {}x{} encode in {:.2?}, total {:.2?}",
                         roi_w,
                         roi_h,
                         step_start.elapsed(),
@@ -985,10 +990,11 @@ async fn preview_geometry_transform(
             )?;
 
             let mut cache = state.geometry_cache.lock().unwrap();
-            if cache.len() > 5 {
-                cache.clear();
-            }
-            cache.insert(visual_hash, processed_base.clone());
+            cache.insert(
+                visual_hash,
+                processed_base.clone(),
+                dynamic_image_weight(&processed_base),
+            );
 
             processed_base
         }
@@ -2052,22 +2058,37 @@ pub fn run() {
             panorama_result: Arc::new(Mutex::new(None)),
             denoise_result: Arc::new(Mutex::new(None)),
             indexing_task_handle: Mutex::new(None),
-            lut_cache: Mutex::new(HashMap::new()),
+            lut_cache: Mutex::new(BudgetedCache::new(
+                LUT_CACHE_MAX_ENTRIES,
+                LUT_CACHE_MAX_BYTES,
+            )),
             initial_file_path: Mutex::new(None),
             pending_edit_session: Mutex::new(None),
             thumbnail_cancellation_token: Arc::new(AtomicBool::new(false)),
             thumbnail_progress: Mutex::new(ThumbnailProgressTracker { total: 0, completed: 0 }),
             preview_worker_tx: Mutex::new(None),
             analytics_worker_tx: Mutex::new(None),
-            mask_cache: Mutex::new(HashMap::new()),
+            mask_cache: Mutex::new(BudgetedCache::new(
+                MASK_CACHE_MAX_ENTRIES,
+                MASK_CACHE_MAX_BYTES,
+            )),
             patch_cache: Mutex::new(HashMap::new()),
-            geometry_cache: Mutex::new(HashMap::new()),
-            thumbnail_geometry_cache: Mutex::new(HashMap::new()),
+            geometry_cache: Mutex::new(BudgetedCache::new(
+                GEOMETRY_CACHE_MAX_ENTRIES,
+                GEOMETRY_CACHE_MAX_BYTES,
+            )),
+            thumbnail_geometry_cache: Mutex::new(BudgetedCache::new(
+                THUMBNAIL_GEOMETRY_CACHE_MAX_ENTRIES,
+                THUMBNAIL_GEOMETRY_CACHE_MAX_BYTES,
+            )),
             lens_db: Mutex::new(None),
             load_image_generation: Arc::new(AtomicUsize::new(0)),
             full_warped_cache: Mutex::new(None),
             full_transformed_cache: Mutex::new(None),
-            decoded_image_cache: Mutex::new(DecodedImageCache::new(5)),
+            decoded_image_cache: Mutex::new(DecodedImageCache::new(
+                5,
+                DECODED_IMAGE_CACHE_MAX_BYTES,
+            )),
             thumbnail_manager: ThumbnailManager::new(),
             metadata_manager: MetadataManager::new(),
             disks_cache: Mutex::new(None),

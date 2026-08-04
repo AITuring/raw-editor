@@ -1635,7 +1635,7 @@
       "highDpiDesc": "Render previews at your screen's native {{dpr}}x physical pixel resolution. Produces the sharpest possible preview but uses significantly more memory.",
       "highDpiDescStandard": "This setting only affects high-DPI displays. Your current display is standard resolution.",
       "imageCache": "Decoded Image Cache",
-      "imageCacheDesc": "Maximum number of full-resolution images kept in RAM. Higher values make switching between recently edited images instant, but use significantly more memory.",
+      "imageCacheDesc": "Maximum number of decoded full-resolution images kept in RAM. A safety budget may evict very large images sooner to prevent runaway memory use.",
       "images": "Images",
       "linuxCompat": "Linux Compatibility Mode",
       "linuxCompatDesc": "Force software compositing to work around GPU driver crashes. Nvidia GPUs already get a lighter, non-software-fallback workaround automatically, so only enable this if you still experience crashes on launch or when opening images.",

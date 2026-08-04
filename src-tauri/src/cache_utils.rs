@@ -1,9 +1,111 @@
 use crate::AppState;
 use image::DynamicImage;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+
+const MIB: usize = 1024 * 1024;
+
+#[cfg(target_os = "android")]
+pub const DECODED_IMAGE_CACHE_MAX_BYTES: usize = 384 * MIB;
+#[cfg(not(target_os = "android"))]
+pub const DECODED_IMAGE_CACHE_MAX_BYTES: usize = 1024 * MIB;
+
+pub const LUT_CACHE_MAX_ENTRIES: usize = 8;
+pub const LUT_CACHE_MAX_BYTES: usize = 64 * MIB;
+pub const MASK_CACHE_MAX_ENTRIES: usize = 32;
+pub const MASK_CACHE_MAX_BYTES: usize = 128 * MIB;
+pub const GEOMETRY_CACHE_MAX_ENTRIES: usize = 6;
+pub const GEOMETRY_CACHE_MAX_BYTES: usize = 96 * MIB;
+pub const THUMBNAIL_GEOMETRY_CACHE_MAX_ENTRIES: usize = 30;
+pub const THUMBNAIL_GEOMETRY_CACHE_MAX_BYTES: usize = 128 * MIB;
+
+/// A small, dependency-free LRU cache with both entry-count and memory budgets.
+///
+/// Image editing entries can differ by hundreds of megabytes, so a count-only
+/// limit is not sufficient for predictable memory use. Values larger than the
+/// byte budget are deliberately not cached; callers still retain and use the
+/// value they just produced.
+pub struct BudgetedCache<K, V> {
+    max_entries: usize,
+    max_bytes: usize,
+    current_bytes: usize,
+    items: Vec<(K, V, usize)>,
+}
+
+impl<K: Eq, V> BudgetedCache<K, V> {
+    pub fn new(max_entries: usize, max_bytes: usize) -> Self {
+        Self {
+            max_entries,
+            max_bytes,
+            current_bytes: 0,
+            items: Vec::with_capacity(max_entries),
+        }
+    }
+
+    pub fn get<Q>(&mut self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + ?Sized,
+    {
+        let position = self
+            .items
+            .iter()
+            .position(|(stored_key, _, _)| stored_key.borrow() == key)?;
+        let item = self.items.remove(position);
+        self.items.push(item);
+        self.items.last().map(|(_, value, _)| value)
+    }
+
+    pub fn insert(&mut self, key: K, value: V, weight_bytes: usize) -> bool {
+        if let Some(position) = self
+            .items
+            .iter()
+            .position(|(stored_key, _, _)| stored_key == &key)
+        {
+            let (_, _, old_weight) = self.items.remove(position);
+            self.current_bytes = self.current_bytes.saturating_sub(old_weight);
+        }
+
+        let weight_bytes = weight_bytes.max(1);
+        if self.max_entries == 0 || weight_bytes > self.max_bytes {
+            return false;
+        }
+
+        while !self.items.is_empty()
+            && (self.items.len() >= self.max_entries
+                || self.current_bytes.saturating_add(weight_bytes) > self.max_bytes)
+        {
+            let (_, _, evicted_weight) = self.items.remove(0);
+            self.current_bytes = self.current_bytes.saturating_sub(evicted_weight);
+        }
+
+        self.current_bytes = self.current_bytes.saturating_add(weight_bytes);
+        self.items.push((key, value, weight_bytes));
+        true
+    }
+
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.current_bytes = 0;
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    #[cfg(test)]
+    fn current_bytes(&self) -> usize {
+        self.current_bytes
+    }
+}
+
+pub fn dynamic_image_weight(image: &DynamicImage) -> usize {
+    image.as_bytes().len().max(1)
+}
 
 pub const GEOMETRY_KEYS: &[&str] = &[
     "transformDistortion",
@@ -228,15 +330,26 @@ pub fn calculate_full_job_hash(path: &str, adjustments: &serde_json::Value) -> u
     hasher.finish()
 }
 
+struct DecodedImageCacheEntry {
+    path: String,
+    image: Arc<DynamicImage>,
+    exif: HashMap<String, String>,
+    weight: usize,
+}
+
 pub struct DecodedImageCache {
     capacity: usize,
-    items: Vec<(String, Arc<DynamicImage>, HashMap<String, String>)>,
+    max_bytes: usize,
+    current_bytes: usize,
+    items: Vec<DecodedImageCacheEntry>,
 }
 
 impl DecodedImageCache {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize, max_bytes: usize) -> Self {
         Self {
             capacity,
+            max_bytes,
+            current_bytes: 0,
             items: Vec::with_capacity(capacity),
         }
     }
@@ -244,15 +357,16 @@ impl DecodedImageCache {
     pub fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity;
         while self.items.len() > self.capacity {
-            self.items.remove(0);
+            let entry = self.items.remove(0);
+            self.current_bytes = self.current_bytes.saturating_sub(entry.weight);
         }
     }
 
     pub fn get(&mut self, path: &str) -> Option<(Arc<DynamicImage>, HashMap<String, String>)> {
-        if let Some(pos) = self.items.iter().position(|(p, _, _)| p == path) {
-            let item = self.items.remove(pos);
-            let result = (item.1.clone(), item.2.clone());
-            self.items.push(item);
+        if let Some(pos) = self.items.iter().position(|entry| entry.path == path) {
+            let entry = self.items.remove(pos);
+            let result = (entry.image.clone(), entry.exif.clone());
+            self.items.push(entry);
             Some(result)
         } else {
             None
@@ -261,6 +375,7 @@ impl DecodedImageCache {
 
     pub fn clear(&mut self) {
         self.items.clear();
+        self.current_bytes = 0;
     }
 
     pub fn insert(
@@ -269,12 +384,102 @@ impl DecodedImageCache {
         image: Arc<DynamicImage>,
         exif: HashMap<String, String>,
     ) {
-        if let Some(pos) = self.items.iter().position(|(p, _, _)| *p == path) {
-            self.items.remove(pos);
-        } else if self.items.len() >= self.capacity {
-            self.items.remove(0);
+        if let Some(pos) = self.items.iter().position(|entry| entry.path == path) {
+            let entry = self.items.remove(pos);
+            self.current_bytes = self.current_bytes.saturating_sub(entry.weight);
         }
-        self.items.push((path, image, exif));
+
+        let exif_weight = exif.iter().fold(0usize, |total, (key, value)| {
+            total.saturating_add(key.len()).saturating_add(value.len())
+        });
+        let weight = dynamic_image_weight(&image).saturating_add(exif_weight);
+
+        if self.capacity == 0 || weight > self.max_bytes {
+            return;
+        }
+
+        while !self.items.is_empty()
+            && (self.items.len() >= self.capacity
+                || self.current_bytes.saturating_add(weight) > self.max_bytes)
+        {
+            let entry = self.items.remove(0);
+            self.current_bytes = self.current_bytes.saturating_sub(entry.weight);
+        }
+
+        self.current_bytes = self.current_bytes.saturating_add(weight);
+        self.items.push(DecodedImageCacheEntry {
+            path,
+            image,
+            exif,
+            weight,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BudgetedCache, DecodedImageCache};
+    use image::DynamicImage;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    #[test]
+    fn budgeted_cache_evicts_least_recently_used_entry() {
+        let mut cache = BudgetedCache::new(2, 100);
+        assert!(cache.insert("first", 1, 10));
+        assert!(cache.insert("second", 2, 10));
+        assert_eq!(cache.get(&"first"), Some(&1));
+
+        assert!(cache.insert("third", 3, 10));
+
+        assert!(cache.get(&"second").is_none());
+        assert_eq!(cache.get(&"first"), Some(&1));
+        assert_eq!(cache.get(&"third"), Some(&3));
+    }
+
+    #[test]
+    fn budgeted_cache_enforces_byte_budget_and_replacement_weight() {
+        let mut cache = BudgetedCache::new(4, 10);
+        assert!(cache.insert("first", 1, 6));
+        assert!(cache.insert("second", 2, 4));
+        assert_eq!(cache.current_bytes(), 10);
+
+        assert!(cache.insert("second", 20, 7));
+
+        assert!(cache.get(&"first").is_none());
+        assert_eq!(cache.get(&"second"), Some(&20));
+        assert_eq!(cache.current_bytes(), 7);
+    }
+
+    #[test]
+    fn budgeted_cache_does_not_retain_oversized_entries() {
+        let mut cache = BudgetedCache::new(4, 10);
+        assert!(!cache.insert("oversized", 1, 11));
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.current_bytes(), 0);
+    }
+
+    #[test]
+    fn decoded_image_cache_uses_memory_budget_in_addition_to_count() {
+        let image = Arc::new(DynamicImage::new_rgb8(4, 4));
+        let image_bytes = image.as_bytes().len();
+        let mut cache = DecodedImageCache::new(3, image_bytes + 1);
+
+        cache.insert("first".to_string(), image.clone(), HashMap::new());
+        cache.insert("second".to_string(), image, HashMap::new());
+
+        assert!(cache.get("first").is_none());
+        assert!(cache.get("second").is_some());
+    }
+
+    #[test]
+    fn decoded_image_cache_skips_an_image_larger_than_its_budget() {
+        let image = Arc::new(DynamicImage::new_rgb8(4, 4));
+        let mut cache = DecodedImageCache::new(3, image.as_bytes().len() - 1);
+
+        cache.insert("oversized".to_string(), image, HashMap::new());
+
+        assert!(cache.get("oversized").is_none());
     }
 }
 

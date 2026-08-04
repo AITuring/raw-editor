@@ -448,7 +448,11 @@ pub fn get_or_load_lut(state: &State<AppState>, path: &str) -> Result<Arc<Lut>, 
 
     let lut = parse_lut_file(path).map_err(|e| e.to_string())?;
     let arc_lut = Arc::new(lut);
-    cache.insert(path.to_string(), arc_lut.clone());
+    let cache_weight = arc_lut
+        .data
+        .len()
+        .saturating_mul(std::mem::size_of::<f32>());
+    cache.insert(path.to_string(), arc_lut.clone(), cache_weight);
     Ok(arc_lut)
 }
 
@@ -672,7 +676,8 @@ pub fn load_and_parse_lut(path: String, state: State<AppState>) -> Result<LutPar
     let lut_size = lut.size;
 
     let mut cache = state.lut_cache.lock().unwrap();
-    cache.insert(path, Arc::new(lut));
+    let cache_weight = lut.data.len().saturating_mul(std::mem::size_of::<f32>());
+    cache.insert(path, Arc::new(lut), cache_weight);
 
     Ok(LutParseResult { size: lut_size })
 }
