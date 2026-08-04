@@ -24,17 +24,19 @@ import { useEditorStore } from '../../../store/useEditorStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
+import { useAutoLensProfile } from '../../../hooks/useAutoLensProfile';
 import { BASIC_MODE } from '../../../basic/runtime';
 
 const CAMERA_RAW_SECTIONS = [
   { name: 'basic', titleKey: 'editor.adjustments.sections.basic' },
+  { name: 'effects', titleKey: 'editor.adjustments.sections.effects' },
   { name: 'curves', titleKey: 'editor.adjustments.sections.curves' },
-  { name: 'details', titleKey: 'editor.adjustments.sections.details' },
   { name: 'colorMixer', titleKey: 'editor.adjustments.sections.colorMixer' },
   { name: 'colorGrading', titleKey: 'editor.adjustments.sections.colorGrading' },
+  { name: 'details', titleKey: 'editor.adjustments.sections.details' },
   { name: 'optics', titleKey: 'editor.adjustments.sections.optics' },
+  { name: 'lensBlur', titleKey: 'adjustments.effects.lensBlur' },
   { name: 'geometry', titleKey: 'editor.adjustments.sections.geometry' },
-  { name: 'effects', titleKey: 'editor.adjustments.sections.effects' },
   { name: 'calibration', titleKey: 'editor.adjustments.sections.calibration' },
 ] as const;
 
@@ -85,6 +87,7 @@ export default function Controls() {
     (isDragging: boolean) => setEditor({ isSliderDragging: isDragging }),
     [setEditor],
   );
+  const lensProfileStatus = useAutoLensProfile({ adjustments, selectedImage, setAdjustments });
 
   const setCollapsibleState = useCallback(
     (updater: any) =>
@@ -101,7 +104,7 @@ export default function Controls() {
         ...prev,
         sectionVisibility: {
           ...currentVisibility,
-          [sectionName]: !currentVisibility[sectionName],
+          [sectionName]: !(currentVisibility[sectionName] ?? true),
         },
       };
     });
@@ -228,11 +231,27 @@ export default function Controls() {
       case 'colorGrading':
         return <ColorPanel {...commonProps} variant="grading" />;
       case 'optics':
-        return <OpticsPanel {...commonProps} />;
+        return <OpticsPanel {...commonProps} lensProfileStatus={lensProfileStatus} />;
       case 'geometry':
         return <GeometryPanel {...commonProps} />;
       case 'effects':
-        return <EffectsPanel {...commonProps} handleLutSelect={handleLutSelect} onLutHover={setLutPreviewOverride} />;
+        return (
+          <EffectsPanel
+            {...commonProps}
+            handleLutSelect={handleLutSelect}
+            onLutHover={setLutPreviewOverride}
+            variant="effects"
+          />
+        );
+      case 'lensBlur':
+        return (
+          <EffectsPanel
+            {...commonProps}
+            handleLutSelect={handleLutSelect}
+            onLutHover={setLutPreviewOverride}
+            variant="lensBlur"
+          />
+        );
       case 'calibration':
         return <ColorPanel {...commonProps} variant="calibration" />;
     }
@@ -254,8 +273,9 @@ export default function Controls() {
             disabled={!selectedImage}
             onClick={handleAutoAdjustments}
             data-tooltip={t('editor.adjustments.tooltips.autoAdjust')}
+            type="button"
           >
-            <Aperture size={16} strokeWidth={1.8} />
+            <Aperture aria-hidden="true" size={16} strokeWidth={1.8} />
           </button>
           <button
             aria-label={t('editor.adjustments.tooltips.resetAdjustments')}
@@ -263,8 +283,9 @@ export default function Controls() {
             disabled={!selectedImage}
             onClick={handleResetAdjustments}
             data-tooltip={t('editor.adjustments.tooltips.resetAdjustments')}
+            type="button"
           >
-            <RotateCcw size={16} strokeWidth={1.8} />
+            <RotateCcw aria-hidden="true" size={16} strokeWidth={1.8} />
           </button>
         </div>
       </div>
@@ -278,8 +299,8 @@ export default function Controls() {
             return (
               <div className="shrink-0 group" key={sectionName}>
                 <CollapsibleSection
-                  isContentVisible={sectionVisibility[sectionName as keyof SectionVisibility]}
-                  isOpen={collapsibleSectionsState[sectionName as keyof typeof collapsibleSectionsState]}
+                  isContentVisible={sectionVisibility[sectionName as keyof SectionVisibility] ?? true}
+                  isOpen={collapsibleSectionsState[sectionName as keyof typeof collapsibleSectionsState] ?? false}
                   onContextMenu={(e: any) => handleSectionContextMenu(e, sectionName, titleKey)}
                   onToggle={() => handleToggleSection(sectionName)}
                   onToggleVisibility={() => handleToggleVisibility(sectionName)}

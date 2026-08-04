@@ -512,23 +512,27 @@ const Slider = ({
 
   return (
     <div className={`develop-slider group ${disabled ? 'opacity-45 cursor-not-allowed' : ''}`} ref={containerRef}>
-      <div className="flex justify-between items-center gap-3">
-        <div
-          className={`grid ${typeof label === 'string' && !disabled ? 'cursor-pointer' : ''}`}
-          onClick={typeof label === 'string' && !disabled ? handleReset : undefined}
-          onDoubleClick={typeof label === 'string' && !disabled ? handleReset : undefined}
-          onMouseEnter={typeof label === 'string' && !disabled ? () => setIsLabelHovered(true) : undefined}
-          onMouseLeave={typeof label === 'string' && !disabled ? () => setIsLabelHovered(false) : undefined}
-        >
-          <span
-            aria-hidden={isLabelHovered && typeof label === 'string'}
-            className={`col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-secondary select-none transition-opacity duration-150 ease-out ${
-              isLabelHovered && typeof label === 'string' ? 'opacity-0' : 'opacity-100'
+      <div className="camera-raw-slider-header flex justify-between items-center gap-3">
+        {typeof label === 'string' ? (
+          <button
+            aria-label={`${label}: ${t('ui.slider.reset')}`}
+            className={`camera-raw-slider-label grid min-h-6 items-center text-left ${
+              disabled ? '' : 'cursor-pointer'
             }`}
+            disabled={disabled}
+            onClick={handleReset}
+            onMouseEnter={() => setIsLabelHovered(true)}
+            onMouseLeave={() => setIsLabelHovered(false)}
+            type="button"
           >
-            {label}
-          </span>
-          {typeof label === 'string' && (
+            <span
+              aria-hidden={isLabelHovered}
+              className={`col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-secondary select-none transition-opacity duration-150 ease-out ${
+                isLabelHovered ? 'opacity-0' : 'opacity-100'
+              }`}
+            >
+              {label}
+            </span>
             <span
               aria-hidden={!isLabelHovered}
               className={`col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-primary select-none transition-opacity duration-150 ease-out pointer-events-none ${
@@ -537,13 +541,19 @@ const Slider = ({
             >
               {t('ui.slider.reset')}
             </span>
-          )}
-        </div>
-        <div className="w-12 shrink-0 text-right tabular-nums">
+          </button>
+        ) : (
+          <div className="camera-raw-slider-label grid">
+            <span className="col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-secondary">
+              {label}
+            </span>
+          </div>
+        )}
+        <div className="camera-raw-slider-value w-12 shrink-0 text-right tabular-nums">
           {isEditing ? (
             <input
               aria-label={typeof label === 'string' ? label : undefined}
-              className="h-5 w-full rounded-[2px] border border-border-color bg-card-active px-1 py-0 text-right text-[12px] text-text-primary focus-visible:border-accent"
+              className="camera-raw-slider-number h-5 w-full rounded-[2px] border border-border-color bg-card-active px-1 py-0 text-right text-[12px] text-text-primary focus-visible:border-accent"
               disabled={disabled}
               max={max}
               min={min}
@@ -556,20 +566,25 @@ const Slider = ({
               value={inputValue}
             />
           ) : (
-            <span
-              className={`block w-full text-right text-[12px] leading-5 text-text-primary select-none ${disabled ? '' : 'cursor-text'}`}
+            <button
+              aria-label={typeof label === 'string' ? `${label}: ${numericValue}` : undefined}
+              className={`camera-raw-slider-number block min-h-6 w-full text-right text-[12px] leading-5 text-text-primary select-none ${
+                disabled ? '' : 'cursor-text'
+              }`}
+              disabled={disabled}
               onClick={disabled ? undefined : handleValueClick}
               onDoubleClick={disabled ? undefined : handleReset}
               data-tooltip={disabled ? undefined : t('ui.slider.clickToEdit')}
+              type="button"
             >
               {decimalPlaces > 0 && numericValue === 0 ? '0' : numericValue.toFixed(decimalPlaces)}
               {suffix && <span className="text-[10px] align-top inline-block mt-0.5 ml-0.5">{suffix}</span>}
-            </span>
+            </button>
           )}
         </div>
       </div>
 
-      <div className="relative h-3.5 w-full">
+      <div className="camera-raw-slider-track relative h-3.5 w-full">
         <div
           className={`absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full pointer-events-none ${
             trackClassName || 'bg-card-active'
@@ -585,9 +600,10 @@ const Slider = ({
         <input
           aria-label={typeof label === 'string' ? label : undefined}
           ref={rangeInputRef}
-          className={`absolute left-0 top-1/2 z-10 m-0 h-5 w-full -translate-y-1/2 appearance-none bg-transparent p-0 slider-input ${
+          className={`camera-raw-slider-input absolute left-0 top-1/2 z-10 m-0 h-5 w-full -translate-y-1/2 appearance-none bg-transparent p-0 slider-input ${
             isDragging ? 'slider-thumb-active' : ''
           } ${disabled ? 'cursor-not-allowed' : ''}`}
+          disabled={disabled}
           style={{ margin: 0, touchAction: isDragging ? 'none' : 'pan-y' }}
           max={String(max)}
           min={String(min)}

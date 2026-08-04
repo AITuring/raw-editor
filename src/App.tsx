@@ -1,9 +1,11 @@
 import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { ToastContainer, toast, Slide } from 'react-toastify';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import clsx from 'clsx';
+import { Images } from 'lucide-react';
 
 import TitleBar from './window/TitleBar';
 import FolderTree from './components/panel/right/FolderTree';
@@ -51,7 +53,7 @@ import { useProductivityActions } from './hooks/useProductivityActions';
 
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAndroidBackHandler } from './hooks/useAndroidBackHandler';
-import './i18n';
+import i18n from './i18n';
 
 import {
   Invokes,
@@ -142,15 +144,17 @@ function App() {
     })),
   );
 
-  const { rootPaths, currentFolderPath, expandedFolders, multiSelectedPaths, setLibrary } = useLibraryStore(
-    useShallow((state) => ({
-      rootPaths: state.rootPaths,
-      currentFolderPath: state.currentFolderPath,
-      expandedFolders: state.expandedFolders,
-      multiSelectedPaths: state.multiSelectedPaths,
-      setLibrary: state.setLibrary,
-    })),
-  );
+  const { rootPaths, currentFolderPath, expandedFolders, multiSelectedPaths, libraryImageCount, setLibrary } =
+    useLibraryStore(
+      useShallow((state) => ({
+        rootPaths: state.rootPaths,
+        currentFolderPath: state.currentFolderPath,
+        expandedFolders: state.expandedFolders,
+        multiSelectedPaths: state.multiSelectedPaths,
+        libraryImageCount: state.imageList.length,
+        setLibrary: state.setLibrary,
+      })),
+    );
 
   const { selectedImage, activeMaskContainerId, activeAiPatchContainerId, hasRenderedFirstFrame, setEditor } =
     useEditorStore(
@@ -198,6 +202,7 @@ function App() {
   const cachedEditStateRef = useRef<any | null>(null);
 
   const [libraryViewMode, setLibraryViewMode] = useState<LibraryViewMode>(defaultLibraryViewMode);
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState(defaultThumbnailSize);
   const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(ThumbnailAspectRatio.Cover);
@@ -283,6 +288,8 @@ function App() {
     handleImageSelect,
     handleSelectSubfolder,
     handleSelectAlbum,
+    handleOpenImage,
+    handleOpenImagePaths,
     handleOpenFolder,
     handleContinueSession,
   } = useAppNavigation({
@@ -554,6 +561,35 @@ function App() {
     };
   }, [setUI]);
 
+  useEffect(() => {
+    if (!isTauri() || isAndroid) return;
+
+    let isEffectActive = true;
+    const listeners = [
+      listen<{ paths: string[] }>(TauriEvent.DRAG_ENTER, () => {
+        if (isEffectActive) setIsImageDragActive(true);
+      }),
+      listen(TauriEvent.DRAG_OVER, () => {
+        if (isEffectActive) setIsImageDragActive(true);
+      }),
+      listen<{ paths: string[] }>(TauriEvent.DRAG_DROP, (event) => {
+        if (!isEffectActive) return;
+        setIsImageDragActive(false);
+        void handleOpenImagePaths(event.payload.paths);
+      }),
+      listen(TauriEvent.DRAG_LEAVE, () => {
+        if (isEffectActive) setIsImageDragActive(false);
+      }),
+    ];
+
+    return () => {
+      isEffectActive = false;
+      listeners.forEach((listener) => {
+        void listener.then((unlisten) => unlisten()).catch(console.error);
+      });
+    };
+  }, [handleOpenImagePaths, isAndroid]);
+
   const handleRightPanelSelect = useCallback(
     (panelId: Panel) => {
       setRightPanel(panelId);
@@ -665,7 +701,7 @@ function App() {
   );
 
   const hasRoots = rootPaths && rootPaths.length > 0;
-  const hasMainContent = hasRoots || (activeView === 'editor' && !!selectedImage);
+  const hasMainContent = hasRoots || libraryImageCount > 0 || (activeView === 'editor' && !!selectedImage);
   const isDevelopWorkspace = activeView === 'editor' && !!selectedImage;
 
   const shouldHideFolderTree = isAndroid;
@@ -703,16 +739,25 @@ function App() {
       <ImageLoaderManager cachedEditStateRef={cachedEditStateRef} />
       <div
         className={clsx(
-          'flex flex-col h-screen font-sans text-text-primary overflow-hidden select-none',
+          'relative flex flex-col h-screen font-sans text-text-primary overflow-hidden select-none',
           isDevelopWorkspace && 'develop-workspace-root',
           useMacWindowShell && 'macos-window-shell',
           isWgpuActive ? 'bg-transparent' : 'bg-bg-primary',
         )}
       >
+        {isImageDragActive && (
+          <div aria-live="polite" className="image-drop-overlay" role="status">
+            <div className="image-drop-overlay-card">
+              <Images aria-hidden="true" size={34} strokeWidth={1.5} />
+              <strong>{i18n.t('library.splash.dropImages')}</strong>
+              <span>{i18n.t('library.splash.dropImagesHint')}</span>
+            </div>
+          </div>
+        )}
         <div
           className={clsx(
             'shrink-0 overflow-hidden z-50',
-            !isInstantTransition && 'transition-all duration-300 ease-in-out',
+            !isInstantTransition && 'transition-[max-height,opacity] duration-300 ease-in-out',
             isFullScreen ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-[60px] opacity-100',
           )}
         >
@@ -721,7 +766,10 @@ function App() {
         <div
           className={clsx(
             'flex-1 flex flex-col min-h-0',
-            isLayoutReady && hasMainContent && !isInstantTransition && 'transition-all duration-300 ease-in-out',
+            isLayoutReady &&
+              hasMainContent &&
+              !isInstantTransition &&
+              'transition-[padding,gap] duration-300 ease-in-out',
             [hasMainContent && (isFullScreen || isDevelopWorkspace ? 'p-0 gap-0' : 'p-2 gap-2')],
           )}
         >
@@ -733,7 +781,7 @@ function App() {
                 isDevelopWorkspace && isWgpuActive && 'is-wgpu-active',
               )}
             >
-              {!shouldHideFolderTree && hasMainContent && !isDevelopWorkspace && (
+              {!shouldHideFolderTree && hasRoots && hasMainContent && !isDevelopWorkspace && (
                 <SidePanelArea
                   side="left"
                   width={leftPanelWidth}
@@ -809,6 +857,7 @@ function App() {
                     handleMainLibraryContextMenu={handleMainLibraryContextMenu}
                     handleContinueSession={handleContinueSession}
                     handleGoHome={handleGoHome}
+                    handleOpenImage={handleOpenImage}
                     handleOpenFolder={handleOpenFolder}
                     handleImportClick={handleImportClick}
                     handleLibraryRefresh={handleLibraryRefresh}

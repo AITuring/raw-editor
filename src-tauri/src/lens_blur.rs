@@ -1,3 +1,4 @@
+use crate::cache_utils::is_section_visible_with_legacy;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use image::{DynamicImage, GenericImageView, Rgb32FImage};
 use rayon::prelude::*;
@@ -16,13 +17,9 @@ pub fn apply_lens_blur<'a>(
     image: Cow<'a, DynamicImage>,
     adjustments: &serde_json::Value,
 ) -> Cow<'a, DynamicImage> {
-    let effects_visible = adjustments
-        .get("sectionVisibility")
-        .and_then(|v| v.get("effects"))
-        .and_then(|s| s.as_bool())
-        .unwrap_or(true);
+    let lens_blur_visible = is_section_visible_with_legacy(adjustments, "lensBlur", "effects");
 
-    if !adjustments["lensBlurEnabled"].as_bool().unwrap_or(false) || !effects_visible {
+    if !adjustments["lensBlurEnabled"].as_bool().unwrap_or(false) || !lens_blur_visible {
         return image;
     }
 

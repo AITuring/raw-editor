@@ -148,7 +148,7 @@ pub struct MultiName {
     value: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct LensDistortionParams {
     k1: f64,
     k2: f64,
@@ -159,6 +159,14 @@ pub struct LensDistortionParams {
     vig_k1: f64,
     vig_k2: f64,
     vig_k3: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedLensProfile {
+    maker: String,
+    model: String,
+    params: Option<LensDistortionParams>,
 }
 
 fn strip_maker_prefix(name: &str, maker: &str) -> String {
@@ -647,54 +655,15 @@ pub fn find_best_lens_match(
 ) -> Option<(String, String)> {
     let clean_maker = maker.trim().trim_matches('"').to_string();
     let clean_model = model.trim().trim_matches('"').to_string();
-    let matcher = fuzzy_matcher::skim::SkimMatcherV2::default().ignore_case();
-
-    let lenses_from_maker: Vec<&Lens> = db
-        .lenses
-        .iter()
-        .filter(|lens| lens.get_maker().eq_ignore_ascii_case(&clean_maker))
-        .collect();
-
-    if !lenses_from_maker.is_empty() {
-        let best_match = lenses_from_maker
-            .iter()
-            .filter_map(|lens| {
-                let english_name = lens.get_full_model_name();
-                let canonical_name = lens.get_canonical_model_name();
-
-                let score_english = matcher
-                    .fuzzy_match(&english_name, &clean_model)
-                    .unwrap_or(0);
-                let score_canonical = matcher
-                    .fuzzy_match(&canonical_name, &clean_model)
-                    .unwrap_or(0);
-                let score = score_english.max(score_canonical);
-
-                if score > 0 {
-                    let best_name = if score_canonical > score_english {
-                        &canonical_name
-                    } else {
-                        &english_name
-                    };
-                    let length_penalty =
-                        (best_name.len() as i64 - clean_model.len() as i64).max(0) / 2;
-                    let adjusted_score = score - length_penalty;
-                    Some((adjusted_score, *lens))
-                } else {
-                    None
-                }
-            })
-            .max_by_key(|(score, _)| *score);
-
-        if let Some((_, best_lens)) = best_match {
-            return Some((
-                best_lens.get_maker(),
-                best_lens.get_display_name(&lenses_from_maker),
-            ));
-        }
+    if clean_model.len() < 3 {
+        return None;
     }
 
-    let best_match_fallback = db
+    let matcher = fuzzy_matcher::skim::SkimMatcherV2::default().ignore_case();
+    let normalized_query = normalize_search_text(&clean_model);
+    let query_tokens = search_tokens(&normalized_query);
+
+    let best_match = db
         .lenses
         .iter()
         .filter_map(|lens| {
@@ -707,19 +676,83 @@ pub fn find_best_lens_match(
             let score_canonical = matcher
                 .fuzzy_match(&canonical_name, &clean_model)
                 .unwrap_or(0);
-            let score = score_english.max(score_canonical);
+            let (score, best_name) = if score_canonical > score_english {
+                (score_canonical, canonical_name)
+            } else {
+                (score_english, english_name)
+            };
+            let normalized_candidate = normalize_search_text(&best_name);
+            let candidate_tokens = search_tokens(&normalized_candidate);
+            let token_overlap = query_tokens
+                .iter()
+                .filter(|token| candidate_tokens.contains(token))
+                .count() as i64;
+            let distinctive_token_overlap = query_tokens
+                .iter()
+                .filter(|token| token.len() >= 4 && candidate_tokens.contains(token))
+                .count() as i64;
+            let contains_model = normalized_candidate.contains(&normalized_query)
+                || normalized_query.contains(&normalized_candidate);
+            let maker_match = makers_match(&clean_maker, &lens.get_maker());
+            let length_penalty =
+                (normalized_candidate.len() as i64 - normalized_query.len() as i64).abs() / 3;
+            let adjusted_score = score - length_penalty
+                + token_overlap * 12
+                + distinctive_token_overlap * 40
+                + if contains_model { 25 } else { 0 }
+                + if maker_match { 14 } else { 0 };
 
-            if score > 0 { Some((score, lens)) } else { None }
+            let has_model_evidence =
+                token_overlap >= 2 || contains_model || (score > 0 && token_overlap > 0);
+
+            if adjusted_score >= 24 && has_model_evidence {
+                Some((adjusted_score, lens))
+            } else {
+                None
+            }
         })
         .max_by_key(|(score, _): &(i64, _)| *score);
 
-    if let Some((_, best_lens)) = best_match_fallback {
+    if let Some((_, best_lens)) = best_match {
         let lens_maker = best_lens.get_maker();
         let maker_lenses = lenses_for_maker(db, &lens_maker);
         return Some((lens_maker, best_lens.get_display_name(&maker_lenses)));
     }
 
     None
+}
+
+fn normalize_search_text(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn search_tokens(value: &str) -> Vec<&str> {
+    value
+        .split_whitespace()
+        .filter(|token| token.len() >= 2)
+        .collect()
+}
+
+fn makers_match(left: &str, right: &str) -> bool {
+    let normalized_left = normalize_search_text(left);
+    let normalized_right = normalize_search_text(right);
+    !normalized_left.is_empty()
+        && !normalized_right.is_empty()
+        && (normalized_left == normalized_right
+            || normalized_left.contains(&normalized_right)
+            || normalized_right.contains(&normalized_left))
 }
 
 #[cfg(test)]
@@ -748,6 +781,68 @@ mod tests {
                     .is_some_and(|calibration| !calibration.elements.is_empty())
         }));
     }
+
+    #[test]
+    fn matches_profiles_for_the_bundled_real_raw_fixtures() {
+        let mut sony: LensDatabase =
+            quick_xml::de::from_str(include_str!("../lensfun_db/mil-sony.xml"))
+                .expect("parse bundled Sony Lensfun database");
+        let mut nikon: LensDatabase =
+            quick_xml::de::from_str(include_str!("../lensfun_db/mil-nikon.xml"))
+                .expect("parse bundled Nikon Lensfun database");
+        let mut tamron: LensDatabase =
+            quick_xml::de::from_str(include_str!("../lensfun_db/mil-tamron.xml"))
+                .expect("parse bundled Tamron Lensfun database");
+
+        sony.lenses.append(&mut nikon.lenses);
+        sony.lenses.append(&mut tamron.lenses);
+
+        let sony_match = find_best_lens_match(&sony, "SONY", "FE 20mm F1.8 G")
+            .expect("match the Sony a7R V sample lens");
+        assert_eq!(sony_match.0, "Sony");
+        assert!(sony_match.1.contains("20mm"));
+        assert!(
+            resolve_lens_params(&sony, &sony_match.0, &sony_match.1, 20.0, Some(8.0), None)
+                .is_some()
+        );
+
+        let nikon_match = find_best_lens_match(&sony, "NIKON", "NIKKOR Z MC 105mm f/2.8 VR S")
+            .expect("match the Nikon Z sample lens");
+        assert_eq!(nikon_match.0, "Nikon");
+        assert!(nikon_match.1.contains("105mm"));
+        assert!(
+            resolve_lens_params(
+                &sony,
+                &nikon_match.0,
+                &nikon_match.1,
+                105.0,
+                Some(4.5),
+                None
+            )
+            .is_some()
+        );
+
+        let tamron_match = find_best_lens_match(&sony, "SONY", "E 35-150mm F2.0-F2.8 A058")
+            .expect("match the third-party Sony E sample lens");
+        assert_eq!(tamron_match.0, "Tamron");
+        assert!(
+            tamron_match.1.contains("35-150mm"),
+            "unexpected Tamron match: {tamron_match:?}"
+        );
+        assert!(
+            resolve_lens_params(
+                &sony,
+                &tamron_match.0,
+                &tamron_match.1,
+                45.0,
+                Some(4.0),
+                None
+            )
+            .is_some()
+        );
+
+        assert!(find_best_lens_match(&sony, "SONY", "Unknown Lens XYZ 999").is_none());
+    }
 }
 
 #[tauri::command]
@@ -765,6 +860,42 @@ pub fn autodetect_lens(
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+pub fn autodetect_lens_profile(
+    maker: String,
+    model: String,
+    focal_length: f32,
+    aperture: Option<f32>,
+    distance: Option<f32>,
+    state: tauri::State<AppState>,
+) -> Result<Option<DetectedLensProfile>, String> {
+    let db_guard = state
+        .lens_db
+        .lock()
+        .map_err(|e| format!("Lock poisoned: {}", e))?;
+    let Some(db) = &*db_guard else {
+        return Ok(None);
+    };
+    let Some((detected_maker, detected_model)) = find_best_lens_match(db, &maker, &model) else {
+        return Ok(None);
+    };
+
+    let params = resolve_lens_params(
+        db,
+        &detected_maker,
+        &detected_model,
+        focal_length,
+        aperture,
+        distance,
+    );
+
+    Ok(Some(DetectedLensProfile {
+        maker: detected_maker,
+        model: detected_model,
+        params,
+    }))
 }
 
 #[tauri::command]

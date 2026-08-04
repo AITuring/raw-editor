@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "Schwarz",
+      "brightness": "Helligkeit",
       "contrast": "Kontrast",
       "evShift": "EV-Korrektur",
       "exposure": "Belichtung",
@@ -19,6 +20,7 @@
       "whites": "Weiß"
     },
     "color": {
+      "all": "Alle",
       "ariaSelectColor": "{{name}}-Farbe auswählen",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "Global",
         "highlights": "Lichter",
         "midtones": "Mitteltöne",
-        "shadows": "Tiefen"
+        "shadows": "Tiefen",
+        "threeWay": "Dreiwege"
       },
       "hue": "Farbton",
       "localHue": "Lokaler Farbton",
@@ -103,14 +106,23 @@
       "color": "Farbe",
       "dehaze": "Dunst entfernen",
       "luminance": "Luminanz",
+      "masking": "Maskierung",
       "noiseReduction": "Rauschreduzierung",
       "presence": "Präsenz",
+      "previewAt100": "Beurteilen Sie Schärfung und Rauschreduzierung bei 100 % Zoom oder höher.",
+      "rawDetails": "RAW-Dekodierung & Demosaicing",
+      "rawDetailsActive": "Für RAW aktiv",
+      "rawOnly": "Nur RAW",
+      "rawProcessing": "RAW-Verarbeitung",
       "redCyan": "Rot/Cyan",
       "sharpening": "Schärfen",
+      "sharpeningPipelineNote": "Betrag und Maskierung sind mit der aktuellen Schärfung verbunden; Radius und Details sind noch nicht verfügbar.",
       "sharpness": "Schärfe",
       "structure": "Struktur",
+      "superResolution": "Superauflösung",
       "texture": "Struktur",
-      "threshold": "Schwellenwert"
+      "threshold": "Schwellenwert",
+      "unavailable": "Nicht verfügbar"
     },
     "effects": {
       "amount": "Stärke",
@@ -133,6 +145,13 @@
       "roundness": "Rundheit",
       "size": "Größe",
       "vignette": "Vignettierung"
+    },
+    "optics": {
+      "chooseProfile": "Objektivprofil auswählen",
+      "lensProfile": "Objektivprofil",
+      "profile": "Profil",
+      "removeChromaticAberration": "Chromatische Aberration entfernen",
+      "useProfileCorrections": "Profilkorrekturen verwenden"
     }
   },
   "contextMenus": {
@@ -956,6 +975,7 @@
         "tooltipClearSearch": "Suche löschen",
         "tooltipSearchFilter": "Suchen oder Filtern"
       },
+      "selectedFiles": "Ausgewählte Dateien · {{total}}",
       "title": "Bibliothek",
       "viewOptions": {
         "currentFolder": "Aktueller Ordner",
@@ -986,9 +1006,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "Alle unterstützten Bilder",
       "complete": "Import abgeschlossen!",
       "failed": "Import fehlgeschlagen!",
-      "progress": "Wird importiert... ({{current}}/{{total}})"
+      "noSupportedFiles": "Keine unterstützten Bilddateien gefunden.",
+      "openFailed": "Die ausgewählten Bilder konnten nicht geöffnet werden.",
+      "progress": "Wird importiert... ({{current}}/{{total}})",
+      "skippedUnsupported": "{{skipped}} nicht unterstützte Datei(en) übersprungen."
     },
     "items": {
       "cloudPlaceholder": "In iCloud gespeichert — nicht heruntergeladen",
@@ -1028,10 +1052,13 @@
       "descriptionDesktop": "Ein blitzschneller, GPU-beschleunigter RAW-Bildeditor. Öffnen Sie einen Ordner, um zu beginnen.",
       "donate": "Spenden auf Ko-Fi",
       "downloadVersion": "Klicken, um Version {{version}} herunterzuladen",
+      "dropImages": "Bilder zum Öffnen ablegen",
+      "dropImagesHint": "Einzelne oder mehrere RAW-, JPEG-, PNG- und TIFF-Dateien",
       "goToSettings": "Zu den Einstellungen",
       "latestVersion": "Sie haben die neueste Version",
       "newVersionAvailable": "Neue Version verfügbar!",
       "openFolder": "Ordner öffnen",
+      "openImage": "Bild öffnen",
       "openLibrary": "Bibliothek öffnen",
       "or": "oder",
       "version": "Version {{version}}",

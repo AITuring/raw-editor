@@ -28,6 +28,7 @@ import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
 import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
 import { createImageObjectUrl } from '../../utils/imageObjectUrl';
+import { detectLensProfileFromExif, parseExifNumber } from '../../utils/lensProfiles';
 
 interface GeometryParams {
   distortion: number;
@@ -92,7 +93,7 @@ interface LensCorrectionModalProps {
 }
 
 const DEFAULT_PARAMS: LensParams = {
-  lensCorrectionMode: 'manual',
+  lensCorrectionMode: 'auto',
   lensMaker: null,
   lensModel: null,
   lensDistortionAmount: 100,
@@ -102,24 +103,6 @@ const DEFAULT_PARAMS: LensParams = {
   lensTcaEnabled: true,
   lensVignetteEnabled: true,
   lensDistortionParams: null,
-};
-
-const parseFocalLength = (exif: any): number | null => {
-  if (!exif || !exif.FocalLength) return null;
-  const val = parseFloat(exif.FocalLength);
-  return isNaN(val) ? null : val;
-};
-
-const parseAperture = (exif: any): number | null => {
-  if (!exif || !exif.FNumber) return null;
-  const val = parseFloat(exif.FNumber);
-  return isNaN(val) ? null : val;
-};
-
-const parseDistance = (exif: any): number | null => {
-  if (!exif || !exif.SubjectDistance) return null;
-  const val = parseFloat(exif.SubjectDistance);
-  return isNaN(val) ? null : val;
 };
 
 const SLIDER_DIVISOR = 100.0;
@@ -153,9 +136,9 @@ export default function LensCorrectionModal({
   const [modeBubbleStyle, setModeBubbleStyle] = useState({});
   const isModeInitialAnimation = useRef(true);
 
-  const focalLength = useMemo(() => parseFocalLength(selectedImage?.exif), [selectedImage?.exif]);
-  const aperture = useMemo(() => parseAperture(selectedImage?.exif), [selectedImage?.exif]);
-  const distance = useMemo(() => parseDistance(selectedImage?.exif), [selectedImage?.exif]);
+  const focalLength = useMemo(() => parseExifNumber(selectedImage?.exif?.FocalLength), [selectedImage?.exif]);
+  const aperture = useMemo(() => parseExifNumber(selectedImage?.exif?.FNumber), [selectedImage?.exif]);
+  const distance = useMemo(() => parseExifNumber(selectedImage?.exif?.SubjectDistance), [selectedImage?.exif]);
 
   const availability = useMemo(() => {
     if (!params.lensDistortionParams) return { distortion: false, tca: false, vignetting: false };
@@ -321,7 +304,7 @@ export default function LensCorrectionModal({
       });
 
       const initParams: LensParams = {
-        lensCorrectionMode: currentAdjustments.lensCorrectionMode || 'manual',
+        lensCorrectionMode: currentAdjustments.lensCorrectionMode || 'auto',
         lensMaker: currentAdjustments.lensMaker,
         lensModel: currentAdjustments.lensModel,
         lensDistortionAmount: currentAdjustments.lensDistortionAmount ?? 100,
@@ -425,15 +408,8 @@ export default function LensCorrectionModal({
     updatePreview(newParams);
   };
 
-  const handleAutoDetect = async () => {
+  const handleAutoDetect = useCallback(async () => {
     if (!selectedImage?.exif) {
-      setDetectionStatus('not_found');
-      return;
-    }
-    const exifMaker = selectedImage.exif.Make || '';
-    const exifModel = selectedImage.exif.LensModel || '';
-
-    if (!exifModel) {
       setDetectionStatus('not_found');
       return;
     }
@@ -441,20 +417,19 @@ export default function LensCorrectionModal({
     setDetectionStatus('detecting');
 
     try {
-      const result: [string, string] | null = await invoke('autodetect_lens', { maker: exifMaker, model: exifModel });
+      const result = await detectLensProfileFromExif(selectedImage.exif);
 
       if (result) {
-        const [detectedMaker, detectedModel] = result;
+        const { maker: detectedMaker, model: detectedModel, params: distortionParams } = result;
 
         invoke('get_lensfun_lenses_for_maker', { maker: detectedMaker })
           .then((l: any) => setLenses(l))
           .catch(console.error);
 
-        const distortionParams = await fetchDistortionParams(detectedMaker, detectedModel);
-
         setParams((prev) => {
           const newParams = {
             ...prev,
+            lensCorrectionMode: 'auto' as const,
             lensMaker: detectedMaker,
             lensModel: detectedModel,
             lensDistortionParams: distortionParams,
@@ -463,11 +438,7 @@ export default function LensCorrectionModal({
           return newParams;
         });
 
-        setDetectionStatus('success');
-
-        setTimeout(() => {
-          setDetectionStatus('idle');
-        }, 2000);
+        setDetectionStatus(distortionParams ? 'success' : 'not_found');
       } else {
         setParams((prev) => {
           const clearedParams = {
@@ -485,7 +456,19 @@ export default function LensCorrectionModal({
       console.error('Autodetection failed with error:', error);
       setDetectionStatus('not_found');
     }
-  };
+  }, [selectedImage?.exif, updatePreview]);
+
+  useEffect(() => {
+    if (!isOpen || (currentAdjustments.lensCorrectionMode || 'auto') !== 'auto') return;
+    if (currentAdjustments.lensDistortionParams) return;
+    void handleAutoDetect();
+  }, [
+    currentAdjustments.lensCorrectionMode,
+    currentAdjustments.lensDistortionParams,
+    handleAutoDetect,
+    isOpen,
+    selectedImage?.path,
+  ]);
 
   const handleApply = () => {
     setIsApplying(true);

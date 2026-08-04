@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "Blacks",
+      "brightness": "Brightness",
       "contrast": "Contrast",
       "evShift": "EV Shift",
       "exposure": "Exposure",
@@ -19,6 +20,7 @@
       "whites": "Whites"
     },
     "color": {
+      "all": "All",
       "ariaSelectColor": "Select {{name}} color",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "Global",
         "highlights": "Highlights",
         "midtones": "Midtones",
-        "shadows": "Shadows"
+        "shadows": "Shadows",
+        "threeWay": "Three-way"
       },
       "hue": "Hue",
       "localHue": "Local Hue",
@@ -103,14 +106,23 @@
       "color": "Color",
       "dehaze": "Dehaze",
       "luminance": "Luminance",
+      "masking": "Masking",
       "noiseReduction": "Noise Reduction",
       "presence": "Presence",
+      "previewAt100": "Judge sharpening and noise reduction at 100% zoom or higher.",
+      "rawDetails": "RAW decode & demosaic",
+      "rawDetailsActive": "Active for RAW",
+      "rawOnly": "RAW only",
+      "rawProcessing": "RAW Processing",
       "redCyan": "Red/Cyan",
       "sharpening": "Sharpening",
+      "sharpeningPipelineNote": "Amount and masking are connected to the current sharpening pipeline; radius and detail are not yet available.",
       "sharpness": "Sharpness",
       "structure": "Structure",
+      "superResolution": "Super Resolution",
       "texture": "Texture",
-      "threshold": "Threshold"
+      "threshold": "Threshold",
+      "unavailable": "Unavailable"
     },
     "effects": {
       "amount": "Amount",
@@ -133,6 +145,13 @@
       "roundness": "Roundness",
       "size": "Size",
       "vignette": "Vignette"
+    },
+    "optics": {
+      "chooseProfile": "Choose lens profile",
+      "lensProfile": "Lens Profile",
+      "profile": "Profile",
+      "removeChromaticAberration": "Remove chromatic aberration",
+      "useProfileCorrections": "Use profile corrections"
     }
   },
   "contextMenus": {
@@ -956,6 +975,7 @@
         "tooltipClearSearch": "Clear search",
         "tooltipSearchFilter": "Search or Filter"
       },
+      "selectedFiles": "Selected files · {{total}}",
       "title": "Library",
       "viewOptions": {
         "currentFolder": "Current Folder",
@@ -986,9 +1006,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "All Supported Images",
       "complete": "Import Complete!",
       "failed": "Import Failed!",
-      "progress": "Importing... ({{current}}/{{total}})"
+      "noSupportedFiles": "No supported image files were found.",
+      "openFailed": "Could not open the selected image files.",
+      "progress": "Importing... ({{current}}/{{total}})",
+      "skippedUnsupported": "Skipped {{skipped}} unsupported file(s)."
     },
     "items": {
       "cloudPlaceholder": "Stored in iCloud — not downloaded",
@@ -1028,10 +1052,13 @@
       "descriptionDesktop": "A blazingly fast, GPU-accelerated RAW image editor. Open a folder to begin.",
       "donate": "Donate on Ko-Fi",
       "downloadVersion": "Click to download version {{version}}",
+      "dropImages": "Drop images to open",
+      "dropImagesHint": "Single or multiple RAW, JPEG, PNG, and TIFF files",
       "goToSettings": "Go to Settings",
       "latestVersion": "You are on the latest version",
       "newVersionAvailable": "New version available!",
       "openFolder": "Open Folder",
+      "openImage": "Open Image",
       "openLibrary": "Open Library",
       "or": "or",
       "version": "Version {{version}}",

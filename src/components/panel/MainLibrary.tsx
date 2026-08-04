@@ -6,6 +6,7 @@ import {
   Folder,
   FolderInput,
   Home,
+  ImagePlus,
   Loader2,
   RefreshCw,
   Settings,
@@ -75,6 +76,7 @@ interface MainLibraryProps {
   onImageDoubleClick(path: string): void;
   onImportClick(): void;
   onLibraryRefresh(): void;
+  onOpenImage(): void;
   onOpenFolder(): void;
   onSettingsChange(settings: AppSettings): Promise<void>;
   onThumbnailAspectRatioChange(aspectRatio: ThumbnailAspectRatio): void;
@@ -106,6 +108,7 @@ interface DisplayModeSwitchProps {
 }
 
 function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitchProps) {
+  const prefersReducedMotion = useReducedMotion();
   const options = useMemo(
     () => [
       {
@@ -140,22 +143,25 @@ function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitch
             x: `${safeIndex * 100}%`,
             width: `${100 / options.length}%`,
           }}
-          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0.2, duration: 0.6 }}
         />
         {options.map((opt) => {
           const Icon = opt.Icon;
           const isActive = displayMode === opt.id;
           return (
             <button
+              aria-label={opt.tooltip}
+              aria-pressed={isActive}
               key={opt.id}
               onClick={() => setDisplayMode(opt.id)}
-              className={`relative z-10 flex-1 h-full flex items-center justify-center rounded-md transition-colors duration-200 outline-none focus:outline-none ${
+              className={`relative z-10 flex-1 h-full flex items-center justify-center rounded-md transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-1 ${
                 isActive ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
               }`}
               data-tooltip={opt.tooltip}
               style={{ WebkitTapHighlightColor: 'transparent' }}
+              type="button"
             >
-              <Icon className="w-5 h-5" />
+              <Icon aria-hidden="true" className="w-5 h-5" />
             </button>
           );
         })}
@@ -277,10 +283,12 @@ export default function MainLibrary(props: MainLibraryProps) {
   }, [isBusyDelayed]);
 
   useEffect(() => {
-    getVersion().then(setAppVersion).catch(() => setAppVersion(''));
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion(''));
   }, []);
 
-  const isCoverVisible = !props.rootPaths || props.rootPaths.length === 0;
+  const isCoverVisible = (!props.rootPaths || props.rootPaths.length === 0) && props.imageList.length === 0;
   useEffect(() => {
     if (!isCoverVisible || prefersReducedMotion || COVER_IMAGES.length < 2) return;
 
@@ -301,7 +309,7 @@ export default function MainLibrary(props: MainLibraryProps) {
     nextImage.src = nextCoverImage;
   }, [coverImageIndex, isCoverVisible]);
 
-  if (!props.rootPaths || props.rootPaths.length === 0) {
+  if ((!props.rootPaths || props.rootPaths.length === 0) && props.imageList.length === 0) {
     if (!props.appSettings) {
       return null;
     }
@@ -420,14 +428,26 @@ export default function MainLibrary(props: MainLibraryProps) {
                               ? t('library.splash.addFolder')
                               : t('library.splash.openFolder')}
                         </Button>
+                        {!props.isAndroid && (
+                          <Button
+                            className="rounded-md grow flex justify-center items-center bg-surface text-text-primary shadow-md h-11 transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                            onClick={props.onOpenImage}
+                            size="lg"
+                          >
+                            <ImagePlus aria-hidden="true" size={20} className="mr-2" />
+                            {t('library.splash.openImage')}
+                          </Button>
+                        )}
                         <Button
+                          aria-label={t('settings.general.title')}
                           className="px-3 bg-surface text-text-primary shadow-md h-11 transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
                           onClick={() => setUI({ isSettingsOpen: true })}
                           size="lg"
                           data-tooltip={t('settings.general.title')}
+                          type="button"
                           variant="ghost"
                         >
-                          <Settings size={20} />
+                          <Settings aria-hidden="true" size={20} />
                         </Button>
                       </div>
                     </div>
@@ -470,11 +490,13 @@ export default function MainLibrary(props: MainLibraryProps) {
             <div className="flex items-center gap-2">
               {props.currentFolderPath ? (
                 <Text className="truncate">{props.currentFolderPath}</Text>
+              ) : props.imageList.length > 0 ? (
+                <Text className="truncate">{t('library.header.selectedFiles', { total: props.imageList.length })}</Text>
               ) : (
                 <p className="text-sm invisible select-none pointer-events-none h-5 overflow-hidden"></p>
               )}
               <div
-                className={`flex items-center gap-2 overflow-hidden transition-all duration-300 whitespace-nowrap ${
+                className={`flex items-center gap-2 overflow-hidden transition-[max-width,opacity] duration-300 whitespace-nowrap ${
                   isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'
                 }`}
                 onTransitionEnd={(e) => {
@@ -485,7 +507,7 @@ export default function MainLibrary(props: MainLibraryProps) {
               >
                 {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-text-secondary shrink-0" />}
                 <div
-                  className={`flex items-center transition-all duration-300 ease-out overflow-hidden ${
+                  className={`flex items-center transition-[max-width,opacity] duration-300 ease-out overflow-hidden ${
                     isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
                       ? 'max-w-xs opacity-100'
                       : 'max-w-0 opacity-0'
@@ -542,12 +564,25 @@ export default function MainLibrary(props: MainLibraryProps) {
               editedStatusOptions={translatedEditedStatusOptions}
               sortOptions={translatedSortOptions}
             />
+            {!props.isAndroid && (
+              <Button
+                aria-label={t('library.splash.openImage')}
+                className="h-12 w-12 bg-transparent text-text-primary shadow-none p-0 flex items-center justify-center"
+                data-tooltip={t('library.splash.openImage')}
+                onClick={props.onOpenImage}
+                type="button"
+              >
+                <ImagePlus aria-hidden="true" className="w-5 h-5" />
+              </Button>
+            )}
             <Button
+              aria-label={t('library.tooltips.goHome')}
               className="h-12 w-12 bg-transparent text-text-primary shadow-none p-0 flex items-center justify-center"
               onClick={props.onGoHome}
               data-tooltip={t('library.tooltips.goHome')}
+              type="button"
             >
-              <Home className="w-5 h-5" />
+              <Home aria-hidden="true" className="w-5 h-5" />
             </Button>
           </div>
         </div>
@@ -607,14 +642,16 @@ export default function MainLibrary(props: MainLibraryProps) {
       )}
       {props.isAndroid && (
         <Button
+          aria-label={t('library.tooltips.importImages')}
           className="absolute bottom-18 right-8 h-12 w-12 bg-accent text-button-text shadow-lg p-0 flex items-center justify-center z-50 border border-border-color/50"
           onClick={(e) => {
             e.stopPropagation();
             props.onImportClick();
           }}
           data-tooltip={t('library.tooltips.importImages')}
+          type="button"
         >
-          <FolderInput className="w-6 h-6" />
+          <FolderInput aria-hidden="true" className="w-6 h-6" />
         </Button>
       )}
     </div>

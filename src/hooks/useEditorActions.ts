@@ -38,6 +38,7 @@ export function useEditorActions() {
       setEditor((state) => {
         const prev = state.adjustments;
         const newAdjustments = typeof value === 'function' ? value(prev) : { ...prev, ...value };
+        if (newAdjustments === prev) return state;
         debouncedSetHistory(newAdjustments);
         return { adjustments: newAdjustments };
       });
@@ -88,9 +89,10 @@ export function useEditorActions() {
       const isAndroid = useSettingsStore.getState().osPlatform === 'android';
       try {
         const result: { size: number } = await invoke('load_and_parse_lut', { path });
-        const name = isAndroid && path.startsWith('content://')
-          ? await invoke<string>('resolve_android_content_uri_name', { uriStr: path })
-          : path.split(/[\\/]/).pop() || 'LUT';
+        const name =
+          isAndroid && path.startsWith('content://')
+            ? await invoke<string>('resolve_android_content_uri_name', { uriStr: path })
+            : path.split(/[\\/]/).pop() || 'LUT';
         setAdjustments((prev: Adjustments) => ({
           ...prev,
           lutPath: path,

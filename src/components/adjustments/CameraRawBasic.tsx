@@ -1,11 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Adjustments } from '../../utils/adjustments';
 import { AppSettings } from '../ui/AppProperties';
-import Text from '../ui/Text';
-import { TextVariants } from '../../types/typography';
 import BasicAdjustments from './Basic';
 import ColorPanel from './Color';
-import DetailsPanel from './Details';
+import { AdjustmentSubsection } from '../ui/AdjustmentSubsection';
 
 interface CameraRawBasicProps {
   adjustments: Adjustments;
@@ -28,32 +26,29 @@ export default function CameraRawBasic({
   const sharedProps = { adjustments, setAdjustments, appSettings, onDragStateChange };
 
   return (
-    <div className="space-y-4">
-      <div className="p-2 bg-bg-tertiary rounded-md">
-        <BasicAdjustments {...sharedProps} variant="toneMapping" />
-      </div>
+    <div className="camera-raw-section-body">
+      {!appSettings?.tonemapperOverrideEnabled && (
+        <AdjustmentSubsection>
+          <BasicAdjustments {...sharedProps} variant="toneMapping" />
+        </AdjustmentSubsection>
+      )}
 
-      <ColorPanel
-        {...sharedProps}
-        variant="whiteBalance"
-        isWbPickerActive={isWbPickerActive}
-        toggleWbPicker={toggleWbPicker}
-      />
-
-      <div className="p-2 bg-bg-tertiary rounded-md">
-        <Text variant={TextVariants.heading} className="mb-2">
-          {t('adjustments.basic.light')}
-        </Text>
+      <AdjustmentSubsection title={t('adjustments.basic.light')}>
         <BasicAdjustments {...sharedProps} variant="light" />
-      </div>
+      </AdjustmentSubsection>
 
-      <div className="p-2 bg-bg-tertiary rounded-md">
-        <Text variant={TextVariants.heading} className="mb-2">
-          {t('adjustments.details.presence')}
-        </Text>
-        <DetailsPanel {...sharedProps} variant="presenceBare" />
+      <AdjustmentSubsection>
+        <ColorPanel
+          {...sharedProps}
+          variant="whiteBalance"
+          isWbPickerActive={isWbPickerActive}
+          toggleWbPicker={toggleWbPicker}
+        />
+      </AdjustmentSubsection>
+
+      <AdjustmentSubsection title={t('adjustments.color.presence')}>
         <ColorPanel {...sharedProps} variant="presenceBare" />
-      </div>
+      </AdjustmentSubsection>
     </div>
   );
 }

@@ -1,9 +1,13 @@
 import { useTranslation } from 'react-i18next';
+import { Info, Sparkles } from 'lucide-react';
 import Slider from '../ui/Slider';
 import { Adjustments, DetailsAdjustment } from '../../utils/adjustments';
 import { AppSettings } from '../ui/AppProperties';
 import Text from '../ui/Text';
 import { TextVariants } from '../../types/typography';
+import { useEditorStore } from '../../store/useEditorStore';
+import { useUIStore } from '../../store/useUIStore';
+import { AdjustmentSubsection } from '../ui/AdjustmentSubsection';
 
 interface DetailsPanelProps {
   adjustments: Adjustments;
@@ -23,6 +27,8 @@ export default function DetailsPanel({
   variant = 'all',
 }: DetailsPanelProps) {
   const { t } = useTranslation();
+  const selectedImage = useEditorStore((state) => state.selectedImage);
+  const setUI = useUIStore((state) => state.setUI);
 
   const handleAdjustmentChange = (key: string, value: string) => {
     const numericValue = parseInt(value, 10);
@@ -35,24 +41,70 @@ export default function DetailsPanel({
   const showNoiseReduction = variant === 'all' || variant === 'detail';
   const showChromaticAberration = variant === 'all' || variant === 'optics';
 
+  const openDenoise = () => {
+    if (!selectedImage) return;
+    setUI({
+      denoiseModalState: {
+        isOpen: true,
+        isProcessing: false,
+        previewBase64: null,
+        error: null,
+        targetPaths: [selectedImage.path],
+        progressMessage: null,
+        isRaw: selectedImage.isRaw,
+      },
+    });
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="camera-raw-section-body">
+      {!isForMask && showSharpening && adjustmentVisibility.sharpening !== false && (
+        <AdjustmentSubsection title={t('adjustments.details.rawProcessing')}>
+          <button className="camera-raw-action-row" disabled={!selectedImage} onClick={openDenoise} type="button">
+            <Sparkles aria-hidden="true" size={15} strokeWidth={1.8} />
+            <span className="min-w-0 grow">
+              <span className="camera-raw-action-title">{t('modals.denoise.titleSingle')}</span>
+              <span className="camera-raw-action-description">{t('modals.denoise.description')}</span>
+            </span>
+          </button>
+          <div className="camera-raw-capability-list">
+            <div className="camera-raw-capability">
+              <span>{t('adjustments.details.rawDetails')}</span>
+              <span className={selectedImage?.isRaw ? 'is-available' : ''}>
+                {selectedImage?.isRaw ? t('adjustments.details.rawDetailsActive') : t('adjustments.details.rawOnly')}
+              </span>
+            </div>
+            <div className="camera-raw-capability is-disabled" aria-disabled="true">
+              <span>{t('adjustments.details.superResolution')}</span>
+              <span>{t('adjustments.details.unavailable')}</span>
+            </div>
+          </div>
+        </AdjustmentSubsection>
+      )}
+
       {showSharpening && adjustmentVisibility.sharpening !== false && (
-        <div className="p-2 bg-bg-tertiary rounded-md">
-          <Text variant={TextVariants.heading} className="mb-2">
-            {t('adjustments.details.sharpening')}
-          </Text>
+        <AdjustmentSubsection
+          title={t('adjustments.details.sharpening')}
+          description={
+            !isForMask ? (
+              <span className="inline-flex items-start gap-1">
+                <Info aria-hidden="true" className="mt-0.5 shrink-0" size={12} />
+                {t('adjustments.details.sharpeningPipelineNote')}
+              </span>
+            ) : undefined
+          }
+        >
           <Slider
-            label={t('adjustments.details.sharpness')}
+            label={t('adjustments.effects.amount')}
             max={100}
-            min={-100}
+            min={isForMask ? -100 : 0}
             onChange={(e: any) => handleAdjustmentChange(DetailsAdjustment.Sharpness, e.target.value)}
             step={1}
             value={adjustments.sharpness}
             onDragStateChange={onDragStateChange}
           />
           <Slider
-            label={t('adjustments.details.threshold')}
+            label={t('adjustments.details.masking')}
             max={80}
             min={0}
             onChange={(e: any) => handleAdjustmentChange(DetailsAdjustment.SharpnessThreshold, e.target.value)}
@@ -62,11 +114,11 @@ export default function DetailsPanel({
             defaultValue={15}
             fillOrigin="min"
           />
-        </div>
+        </AdjustmentSubsection>
       )}
 
       {showPresence && adjustmentVisibility.presence !== false && (
-        <div className={variant === 'presenceBare' ? '' : 'p-2 bg-bg-tertiary rounded-md'}>
+        <AdjustmentSubsection className={variant === 'presenceBare' ? 'is-bare' : undefined}>
           {variant !== 'presenceBare' && (
             <Text variant={TextVariants.heading} className="mb-2">
               {t('adjustments.details.presence')}
@@ -110,14 +162,14 @@ export default function DetailsPanel({
               onDragStateChange={onDragStateChange}
             />
           )}
-        </div>
+        </AdjustmentSubsection>
       )}
 
       {showNoiseReduction && adjustmentVisibility.noiseReduction !== false && (
-        <div className="p-2 bg-bg-tertiary rounded-md">
-          <Text variant={TextVariants.heading} className="mb-2">
-            {t('adjustments.details.noiseReduction')}
-          </Text>
+        <AdjustmentSubsection
+          title={t('adjustments.details.noiseReduction')}
+          description={!isForMask ? t('adjustments.details.previewAt100') : undefined}
+        >
           <Slider
             label={t('adjustments.details.luminance')}
             max={100}
@@ -136,14 +188,11 @@ export default function DetailsPanel({
             value={adjustments.colorNoiseReduction}
             onDragStateChange={onDragStateChange}
           />
-        </div>
+        </AdjustmentSubsection>
       )}
 
       {!isForMask && showChromaticAberration && adjustmentVisibility.chromaticAberration !== false && (
-        <div className="p-2 bg-bg-tertiary rounded-md">
-          <Text variant={TextVariants.heading} className="mb-2">
-            {t('adjustments.details.chromaticAberration')}
-          </Text>
+        <AdjustmentSubsection title={t('adjustments.details.chromaticAberration')}>
           <Slider
             label={t('adjustments.details.redCyan')}
             max={100}
@@ -164,7 +213,7 @@ export default function DetailsPanel({
             value={adjustments.chromaticAberrationBlueYellow}
             onDragStateChange={onDragStateChange}
           />
-        </div>
+        </AdjustmentSubsection>
       )}
     </div>
   );

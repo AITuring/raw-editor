@@ -14,6 +14,7 @@ export interface CollapsibleSectionsState {
   details: boolean;
   effects: boolean;
   geometry: boolean;
+  lensBlur: boolean;
   optics: boolean;
 }
 
@@ -192,6 +193,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     details: false,
     effects: false,
     geometry: false,
+    lensBlur: false,
     optics: false,
   },
 

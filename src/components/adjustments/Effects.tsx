@@ -14,6 +14,8 @@ import Text from '../ui/Text';
 import { TextVariants } from '../../types/typography';
 import { DepthRangePicker } from '../ui/DepthRangePicker';
 import { useProcessStore } from '../../store/useProcessStore';
+import DetailsPanel from './Details';
+import { AdjustmentSubsection } from '../ui/AdjustmentSubsection';
 
 interface EffectsPanelProps {
   adjustments: Adjustments;
@@ -23,6 +25,7 @@ interface EffectsPanelProps {
   onLutHover?: (path: string | null) => void;
   appSettings: AppSettings | null;
   onDragStateChange?: (isDragging: boolean) => void;
+  variant?: 'all' | 'effects' | 'lensBlur';
 }
 
 interface BokehShapeSwitchProps {
@@ -74,11 +77,13 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
 
   return (
     <div className="flex flex-col gap-2 mt-3">
-      <div
-        className="grid w-fit cursor-pointer"
+      <button
+        aria-label={`${t('adjustments.effects.bokehShape')}: ${t('ui.slider.reset')}`}
+        className="grid min-h-6 w-fit cursor-pointer items-center"
         onClick={handleReset}
         onMouseEnter={() => setIsLabelHovered(true)}
         onMouseLeave={() => setIsLabelHovered(false)}
+        type="button"
       >
         <Text
           variant={TextVariants.label}
@@ -98,7 +103,7 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
         >
           {t('ui.slider.reset')}
         </Text>
-      </div>
+      </button>
 
       <div className="w-full p-1 bg-bg-primary rounded-md">
         <div className="relative flex w-full">
@@ -112,6 +117,8 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
             const Icon = shape.icon;
             return (
               <button
+                aria-label={shape.title}
+                aria-pressed={selectedShape === shape.id}
                 key={shape.id}
                 data-tooltip={shape.title}
                 onClick={() => onShapeChange(shape.id)}
@@ -123,6 +130,7 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
                   },
                 )}
                 style={{ WebkitTapHighlightColor: 'transparent' }}
+                type="button"
               >
                 <span className="relative z-10 flex items-center">
                   <Icon size={16} strokeWidth={2} />
@@ -144,6 +152,7 @@ export default function EffectsPanel({
   onLutHover,
   appSettings,
   onDragStateChange,
+  variant = 'all',
 }: EffectsPanelProps) {
   const { t } = useTranslation();
   const [isGeneratingDepth, setIsGeneratingDepth] = useState(false);
@@ -193,261 +202,248 @@ export default function EffectsPanel({
   };
 
   const adjustmentVisibility = appSettings?.adjustmentVisibility || {};
+  const showEffects = variant === 'all' || variant === 'effects';
+  const showLensBlur = variant === 'all' || variant === 'lensBlur';
 
   return (
-    <div className="space-y-4">
-      <div className="p-2 bg-bg-tertiary rounded-md">
-        <Text variant={TextVariants.heading} className="mb-2">
-          {t('adjustments.effects.creative')}
-        </Text>
+    <div className="camera-raw-section-body">
+      {showEffects && (
+        <>
+          <AdjustmentSubsection title={t('adjustments.details.presence')}>
+            <DetailsPanel
+              adjustments={adjustments}
+              setAdjustments={setAdjustments}
+              appSettings={appSettings}
+              isForMask={isForMask}
+              onDragStateChange={onDragStateChange}
+              variant="presenceBare"
+            />
+          </AdjustmentSubsection>
 
-        <Slider
-          label={t('adjustments.effects.glow')}
-          max={100}
-          min={0}
-          onChange={(e: any) => handleAdjustmentChange(CreativeAdjustment.GlowAmount, e.target.value)}
-          step={1}
-          value={adjustments.glowAmount}
-          onDragStateChange={onDragStateChange}
-        />
-
-        <Slider
-          label={t('adjustments.effects.halation')}
-          max={100}
-          min={0}
-          onChange={(e: any) => handleAdjustmentChange(CreativeAdjustment.HalationAmount, e.target.value)}
-          step={1}
-          value={adjustments.halationAmount}
-          onDragStateChange={onDragStateChange}
-        />
-
-        {!isForMask && (
-          <>
+          <AdjustmentSubsection title={t('adjustments.effects.creative')}>
             <Slider
-              label={t('adjustments.effects.lightFlares')}
+              label={t('adjustments.effects.glow')}
               max={100}
               min={0}
-              onChange={(e: any) => handleAdjustmentChange(CreativeAdjustment.FlareAmount, e.target.value)}
+              onChange={(event) => handleAdjustmentChange(CreativeAdjustment.GlowAmount, event.target.value)}
               step={1}
-              value={adjustments.flareAmount}
+              value={adjustments.glowAmount}
               onDragStateChange={onDragStateChange}
             />
             <Slider
-              label={t('adjustments.details.centre')}
+              label={t('adjustments.effects.halation')}
               max={100}
-              min={-100}
-              onChange={(e: any) => handleAdjustmentChange(DetailsAdjustment.Centré, e.target.value)}
+              min={0}
+              onChange={(event) => handleAdjustmentChange(CreativeAdjustment.HalationAmount, event.target.value)}
               step={1}
-              value={adjustments.centré}
+              value={adjustments.halationAmount}
               onDragStateChange={onDragStateChange}
             />
-          </>
-        )}
-      </div>
+            {!isForMask && (
+              <>
+                <Slider
+                  label={t('adjustments.effects.lightFlares')}
+                  max={100}
+                  min={0}
+                  onChange={(event) => handleAdjustmentChange(CreativeAdjustment.FlareAmount, event.target.value)}
+                  step={1}
+                  value={adjustments.flareAmount}
+                  onDragStateChange={onDragStateChange}
+                />
+                <Slider
+                  label={t('adjustments.details.centre')}
+                  max={100}
+                  min={-100}
+                  onChange={(event) => handleAdjustmentChange(DetailsAdjustment.Centré, event.target.value)}
+                  step={1}
+                  value={adjustments.centré}
+                  onDragStateChange={onDragStateChange}
+                />
+              </>
+            )}
+          </AdjustmentSubsection>
 
-      {!isForMask && (
-        <div className="space-y-4">
-          <div className="p-2 bg-bg-tertiary rounded-md">
-            <Text variant={TextVariants.heading} className="mb-2">
-              {t('adjustments.effects.lensBlur')}
-            </Text>
+          {!isForMask && (
+            <>
+              <AdjustmentSubsection title={t('adjustments.effects.lut')}>
+                <LUTControl
+                  lutPath={adjustments.lutPath || null}
+                  lutName={adjustments.lutName || null}
+                  lutIntensity={adjustments.lutIntensity ?? 100}
+                  onLutSelect={handleLutSelect}
+                  onLutHover={onLutHover}
+                  onIntensityChange={handleLutIntensityChange}
+                  onClear={handleLutClear}
+                  onDragStateChange={onDragStateChange}
+                />
+              </AdjustmentSubsection>
 
-            <Switch
-              label={t('adjustments.effects.lensBlur')}
-              checked={!!adjustments.lensBlurEnabled}
-              onChange={handleLensBlurToggle}
-            />
+              {adjustmentVisibility.vignette !== false && (
+                <AdjustmentSubsection title={t('adjustments.effects.vignette')}>
+                  <Slider
+                    label={t('adjustments.effects.amount')}
+                    max={100}
+                    min={-100}
+                    onChange={(event) => handleAdjustmentChange(Effect.VignetteAmount, event.target.value)}
+                    step={1}
+                    value={adjustments.vignetteAmount}
+                    onDragStateChange={onDragStateChange}
+                  />
+                  <Slider
+                    defaultValue={50}
+                    label={t('adjustments.effects.midpoint')}
+                    max={100}
+                    min={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.VignetteMidpoint, event.target.value)}
+                    step={1}
+                    value={adjustments.vignetteMidpoint}
+                    onDragStateChange={onDragStateChange}
+                    fillOrigin="min"
+                  />
+                  <Slider
+                    label={t('adjustments.effects.roundness')}
+                    max={100}
+                    min={-100}
+                    onChange={(event) => handleAdjustmentChange(Effect.VignetteRoundness, event.target.value)}
+                    step={1}
+                    value={adjustments.vignetteRoundness}
+                    onDragStateChange={onDragStateChange}
+                  />
+                  <Slider
+                    defaultValue={50}
+                    label={t('adjustments.effects.feather')}
+                    max={100}
+                    min={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.VignetteFeather, event.target.value)}
+                    step={1}
+                    value={adjustments.vignetteFeather}
+                    onDragStateChange={onDragStateChange}
+                    fillOrigin="min"
+                  />
+                </AdjustmentSubsection>
+              )}
 
-            <div
-              className={`grid transition-all duration-300 ease-in-out ${
-                adjustments.lensBlurEnabled ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-              }`}
-            >
-              <div className="overflow-hidden">
-                <div className="space-y-4 pt-4 pb-1">
-                  {isGeneratingDepth ? (
-                    <div className="flex flex-col items-center justify-center gap-1 p-4 text-text-secondary text-center">
-                      <div className="flex items-center gap-2">
-                        <Loader2 size={16} className="animate-spin shrink-0" />
-                        <Text variant={TextVariants.label}>
-                          {aiModelDownloadStatus
-                            ? t('editor.masks.settings.aiModelDownloading')
-                            : t('editor.ai.generatingDepthMap')}
-                        </Text>
-                      </div>
-                      {aiModelDownloadStatus && (
-                        <Text variant={TextVariants.small} className="text-accent">
-                          {aiModelDownloadStatus}
-                        </Text>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <Slider
-                        label={t('adjustments.effects.amount')}
-                        max={100}
-                        min={0}
-                        defaultValue={40}
-                        onChange={(e: any) => handleAdjustmentChange(Effect.LensBlurAmount, e.target.value)}
-                        step={1}
-                        value={adjustments.lensBlurAmount ?? 50}
-                        onDragStateChange={onDragStateChange}
-                        fillOrigin="min"
-                      />
+              {adjustmentVisibility.grain !== false && (
+                <AdjustmentSubsection title={t('adjustments.effects.grain')}>
+                  <Slider
+                    label={t('adjustments.effects.amount')}
+                    max={100}
+                    min={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.GrainAmount, event.target.value)}
+                    step={1}
+                    value={adjustments.grainAmount}
+                    onDragStateChange={onDragStateChange}
+                  />
+                  <Slider
+                    defaultValue={25}
+                    label={t('adjustments.effects.size')}
+                    max={100}
+                    min={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.GrainSize, event.target.value)}
+                    step={1}
+                    value={adjustments.grainSize}
+                    onDragStateChange={onDragStateChange}
+                    fillOrigin="min"
+                  />
+                  <Slider
+                    defaultValue={50}
+                    label={t('adjustments.effects.roughness')}
+                    max={100}
+                    min={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.GrainRoughness, event.target.value)}
+                    step={1}
+                    value={adjustments.grainRoughness}
+                    onDragStateChange={onDragStateChange}
+                    fillOrigin="min"
+                  />
+                </AdjustmentSubsection>
+              )}
+            </>
+          )}
+        </>
+      )}
 
-                      <Slider
-                        label={t('adjustments.effects.lensDiffusion')}
-                        max={100}
-                        min={0}
-                        defaultValue={0}
-                        onChange={(e: any) => handleAdjustmentChange(Effect.lensBlurDiffusion, e.target.value)}
-                        step={1}
-                        value={adjustments.lensBlurDiffusion ?? 0}
-                        onDragStateChange={onDragStateChange}
-                      />
+      {showLensBlur && !isForMask && (
+        <AdjustmentSubsection>
+          <Switch
+            label={t('adjustments.effects.lensBlur')}
+            checked={!!adjustments.lensBlurEnabled}
+            onChange={handleLensBlurToggle}
+          />
 
-                      <BokehShapeSwitch
-                        selectedShape={adjustments.lensBlurShape || 'circle'}
-                        onShapeChange={(shapeId) =>
-                          setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, [Effect.LensBlurShape]: shapeId }))
-                        }
-                      />
-
-                      <DepthRangePicker
-                        minDepth={100 - (adjustments.lensBlurMaxDepth ?? 100)}
-                        maxDepth={100 - (adjustments.lensBlurMinDepth ?? 20)}
-                        minFade={adjustments.lensBlurMaxFade ?? 20}
-                        maxFade={adjustments.lensBlurMinFade ?? 20}
-                        defaultMinDepth={0}
-                        defaultMaxDepth={80}
-                        defaultMinFade={20}
-                        defaultMaxFade={20}
-                        onChange={(values: {
-                          minDepth: number;
-                          maxDepth: number;
-                          minFade: number;
-                          maxFade: number;
-                        }) => {
-                          setAdjustments((prev: Partial<Adjustments>) => ({
-                            ...prev,
-                            lensBlurMinDepth: 100 - values.maxDepth,
-                            lensBlurMaxDepth: 100 - values.minDepth,
-                            lensBlurMinFade: values.maxFade,
-                            lensBlurMaxFade: values.minFade,
-                          }));
-                        }}
-                        onDragStateChange={onDragStateChange}
-                      />
-                    </>
+          {adjustments.lensBlurEnabled && (
+            <div className="space-y-4 pt-3 pb-1">
+              {isGeneratingDepth ? (
+                <div className="camera-raw-status" role="status">
+                  <Loader2 aria-hidden="true" size={16} className="animate-spin shrink-0" />
+                  <Text variant={TextVariants.label}>
+                    {aiModelDownloadStatus
+                      ? t('editor.masks.settings.aiModelDownloading')
+                      : t('editor.ai.generatingDepthMap')}
+                  </Text>
+                  {aiModelDownloadStatus && (
+                    <Text variant={TextVariants.small} className="text-accent">
+                      {aiModelDownloadStatus}
+                    </Text>
                   )}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-2 bg-bg-tertiary rounded-md">
-            <Text variant={TextVariants.heading} className="mb-2">
-              {t('adjustments.effects.lut')}
-            </Text>
-            <LUTControl
-              lutPath={adjustments.lutPath || null}
-              lutName={adjustments.lutName || null}
-              lutIntensity={adjustments.lutIntensity || 100}
-              onLutSelect={handleLutSelect}
-              onLutHover={onLutHover}
-              onIntensityChange={handleLutIntensityChange}
-              onClear={handleLutClear}
-              onDragStateChange={onDragStateChange}
-            />
-          </div>
-
-          {adjustmentVisibility.vignette !== false && (
-            <div className="p-2 bg-bg-tertiary rounded-md">
-              <Text variant={TextVariants.heading} className="mb-2">
-                {t('adjustments.effects.vignette')}
-              </Text>
-              <Slider
-                label={t('adjustments.effects.amount')}
-                max={100}
-                min={-100}
-                onChange={(e: any) => handleAdjustmentChange(Effect.VignetteAmount, e.target.value)}
-                step={1}
-                value={adjustments.vignetteAmount}
-                onDragStateChange={onDragStateChange}
-              />
-              <Slider
-                defaultValue={50}
-                label={t('adjustments.effects.midpoint')}
-                max={100}
-                min={0}
-                onChange={(e: any) => handleAdjustmentChange(Effect.VignetteMidpoint, e.target.value)}
-                step={1}
-                value={adjustments.vignetteMidpoint}
-                onDragStateChange={onDragStateChange}
-                fillOrigin="min"
-              />
-              <Slider
-                label={t('adjustments.effects.roundness')}
-                max={100}
-                min={-100}
-                onChange={(e: any) => handleAdjustmentChange(Effect.VignetteRoundness, e.target.value)}
-                step={1}
-                value={adjustments.vignetteRoundness}
-                onDragStateChange={onDragStateChange}
-              />
-              <Slider
-                defaultValue={50}
-                label={t('adjustments.effects.feather')}
-                max={100}
-                min={0}
-                onChange={(e: any) => handleAdjustmentChange(Effect.VignetteFeather, e.target.value)}
-                step={1}
-                value={adjustments.vignetteFeather}
-                onDragStateChange={onDragStateChange}
-                fillOrigin="min"
-              />
+              ) : (
+                <>
+                  <Slider
+                    label={t('adjustments.effects.amount')}
+                    max={100}
+                    min={0}
+                    defaultValue={40}
+                    onChange={(event) => handleAdjustmentChange(Effect.LensBlurAmount, event.target.value)}
+                    step={1}
+                    value={adjustments.lensBlurAmount ?? 40}
+                    onDragStateChange={onDragStateChange}
+                    fillOrigin="min"
+                  />
+                  <Slider
+                    label={t('adjustments.effects.lensDiffusion')}
+                    max={100}
+                    min={0}
+                    defaultValue={0}
+                    onChange={(event) => handleAdjustmentChange(Effect.lensBlurDiffusion, event.target.value)}
+                    step={1}
+                    value={adjustments.lensBlurDiffusion ?? 0}
+                    onDragStateChange={onDragStateChange}
+                  />
+                  <BokehShapeSwitch
+                    selectedShape={adjustments.lensBlurShape || 'circle'}
+                    onShapeChange={(shapeId) =>
+                      setAdjustments((prev: Partial<Adjustments>) => ({
+                        ...prev,
+                        [Effect.LensBlurShape]: shapeId,
+                      }))
+                    }
+                  />
+                  <DepthRangePicker
+                    minDepth={100 - (adjustments.lensBlurMaxDepth ?? 100)}
+                    maxDepth={100 - (adjustments.lensBlurMinDepth ?? 20)}
+                    minFade={adjustments.lensBlurMaxFade ?? 20}
+                    maxFade={adjustments.lensBlurMinFade ?? 20}
+                    defaultMinDepth={0}
+                    defaultMaxDepth={80}
+                    defaultMinFade={20}
+                    defaultMaxFade={20}
+                    onChange={(values: { minDepth: number; maxDepth: number; minFade: number; maxFade: number }) => {
+                      setAdjustments((prev: Partial<Adjustments>) => ({
+                        ...prev,
+                        lensBlurMinDepth: 100 - values.maxDepth,
+                        lensBlurMaxDepth: 100 - values.minDepth,
+                        lensBlurMinFade: values.maxFade,
+                        lensBlurMaxFade: values.minFade,
+                      }));
+                    }}
+                    onDragStateChange={onDragStateChange}
+                  />
+                </>
+              )}
             </div>
           )}
-
-          {adjustmentVisibility.grain !== false && (
-            <div className="p-2 bg-bg-tertiary rounded-md">
-              <Text variant={TextVariants.heading} className="mb-2">
-                {t('adjustments.effects.grain')}
-              </Text>
-              <Slider
-                label={t('adjustments.effects.amount')}
-                max={100}
-                min={0}
-                onChange={(e: any) => handleAdjustmentChange(Effect.GrainAmount, e.target.value)}
-                step={1}
-                value={adjustments.grainAmount}
-                onDragStateChange={onDragStateChange}
-              />
-              <Slider
-                defaultValue={25}
-                label={t('adjustments.effects.size')}
-                max={100}
-                min={0}
-                onChange={(e: any) => handleAdjustmentChange(Effect.GrainSize, e.target.value)}
-                step={1}
-                value={adjustments.grainSize}
-                onDragStateChange={onDragStateChange}
-                fillOrigin="min"
-              />
-              <Slider
-                defaultValue={50}
-                label={t('adjustments.effects.roughness')}
-                max={100}
-                min={0}
-                onChange={(e: any) => handleAdjustmentChange(Effect.GrainRoughness, e.target.value)}
-                step={1}
-                value={adjustments.grainRoughness}
-                onDragStateChange={onDragStateChange}
-                fillOrigin="min"
-              />
-            </div>
-          )}
-        </div>
+        </AdjustmentSubsection>
       )}
     </div>
   );

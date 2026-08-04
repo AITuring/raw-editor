@@ -2298,17 +2298,17 @@ fn get_global_adjustments_from_json(
             None,
         ),
 
-        clarity: if is_reorganized_visible("basic", "details") {
+        clarity: if is_reorganized_visible("effects", "details") {
             js_adjustments["clarity"].as_f64().unwrap_or(0.0) as f32 / SCALES.clarity
         } else {
             0.0
         },
-        dehaze: if is_reorganized_visible("basic", "details") {
+        dehaze: if is_reorganized_visible("effects", "details") {
             js_adjustments["dehaze"].as_f64().unwrap_or(0.0) as f32 / SCALES.dehaze
         } else {
             0.0
         },
-        structure: if is_reorganized_visible("basic", "details") {
+        structure: if is_reorganized_visible("effects", "details") {
             js_adjustments["structure"].as_f64().unwrap_or(0.0) as f32 / SCALES.structure
         } else {
             0.0

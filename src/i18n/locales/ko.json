@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "블랙",
+      "brightness": "밝기",
       "contrast": "대비",
       "evShift": "EV 시프트",
       "exposure": "노출",
@@ -19,6 +20,7 @@
       "whites": "화이트"
     },
     "color": {
+      "all": "모두",
       "ariaSelectColor": "{{name}} 색상 선택",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "전체",
         "highlights": "하이라이트",
         "midtones": "중간톤",
-        "shadows": "섀도우"
+        "shadows": "섀도우",
+        "threeWay": "3방향"
       },
       "hue": "색조",
       "localHue": "지역 색조",
@@ -103,14 +106,23 @@
       "color": "색상",
       "dehaze": "디헤이즈",
       "luminance": "휘도",
+      "masking": "마스킹",
       "noiseReduction": "노이즈 감소",
       "presence": "외관",
+      "previewAt100": "선명 효과와 노이즈 감소는 100% 이상의 확대에서 확인하세요.",
+      "rawDetails": "RAW 디코딩 및 디모자이킹",
+      "rawDetailsActive": "RAW에서 활성",
+      "rawOnly": "RAW 전용",
+      "rawProcessing": "RAW 처리",
       "redCyan": "빨강/시안",
       "sharpening": "선명도 향상",
+      "sharpeningPipelineNote": "양과 마스킹은 현재 선명 처리에 연결되어 있으며 반경과 세부 정보는 아직 사용할 수 없습니다.",
       "sharpness": "선명도",
       "structure": "구조",
+      "superResolution": "초해상도",
       "texture": "텍스처",
-      "threshold": "임계값"
+      "threshold": "임계값",
+      "unavailable": "사용할 수 없음"
     },
     "effects": {
       "amount": "양",
@@ -133,6 +145,13 @@
       "roundness": "둥글기",
       "size": "크기",
       "vignette": "비네트"
+    },
+    "optics": {
+      "chooseProfile": "렌즈 프로필 선택",
+      "lensProfile": "렌즈 프로필",
+      "profile": "프로필",
+      "removeChromaticAberration": "색수차 제거",
+      "useProfileCorrections": "프로필 보정 사용"
     }
   },
   "contextMenus": {
@@ -954,6 +973,7 @@
         "tooltipClearSearch": "검색 지우기",
         "tooltipSearchFilter": "검색 또는 필터"
       },
+      "selectedFiles": "선택한 파일 · {{total}}",
       "title": "라이브러리",
       "viewOptions": {
         "currentFolder": "현재 폴더",
@@ -984,9 +1004,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "지원되는 모든 이미지",
       "complete": "가져오기 완료!",
       "failed": "가져오기 실패!",
-      "progress": "가져오는 중... ({{current}}/{{total}})"
+      "noSupportedFiles": "지원되는 이미지 파일을 찾을 수 없습니다.",
+      "openFailed": "선택한 이미지를 열 수 없습니다.",
+      "progress": "가져오는 중... ({{current}}/{{total}})",
+      "skippedUnsupported": "지원되지 않는 파일 {{skipped}}개를 건너뛰었습니다."
     },
     "items": {
       "cloudPlaceholder": "iCloud에 저장됨 — 다운로드되지 않음",
@@ -1026,10 +1050,13 @@
       "descriptionDesktop": "매우 빠른 GPU 가속 RAW 이미지 편집기입니다. 폴더를 열어 시작하세요.",
       "donate": "Ko-Fi에서 후원하기",
       "downloadVersion": "클릭하여 {{version}} 버전 다운로드",
+      "dropImages": "이미지를 놓아 열기",
+      "dropImagesHint": "단일 또는 여러 RAW, JPEG, PNG, TIFF 파일",
       "goToSettings": "설정으로 이동",
       "latestVersion": "최신 버전을 사용 중입니다",
       "newVersionAvailable": "새 버전이 있습니다!",
       "openFolder": "폴더 열기",
+      "openImage": "이미지 열기",
       "openLibrary": "라이브러리 열기",
       "or": "또는",
       "version": "버전 {{version}}",

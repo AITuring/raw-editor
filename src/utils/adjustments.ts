@@ -373,6 +373,7 @@ export interface SectionVisibility {
   details: boolean;
   effects: boolean;
   geometry: boolean;
+  lensBlur: boolean;
   optics: boolean;
 }
 
@@ -483,6 +484,7 @@ export const INITIAL_MASK_ADJUSTMENTS: MaskAdjustments = {
     details: true,
     effects: true,
     geometry: true,
+    lensBlur: true,
     optics: true,
   },
   shadows: 0,
@@ -553,7 +555,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   lensBlurMaxFade: 20,
   lensBlurMinDepth: 20,
   lensBlurMinFade: 20,
-  lensCorrectionMode: 'manual',
+  lensCorrectionMode: 'auto',
   lensDistortionAmount: 100,
   lensVignetteAmount: 100,
   lensTcaAmount: 100,
@@ -583,6 +585,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
     details: true,
     effects: true,
     geometry: true,
+    lensBlur: true,
     optics: true,
   },
   shadows: 0,
@@ -699,6 +702,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     colorGrading: loadedSectionVisibility.colorGrading ?? loadedSectionVisibility.color ?? true,
     colorMixer: loadedSectionVisibility.colorMixer ?? loadedSectionVisibility.color ?? true,
     geometry: loadedSectionVisibility.geometry ?? true,
+    lensBlur: loadedSectionVisibility.lensBlur ?? loadedSectionVisibility.effects ?? true,
     optics: loadedSectionVisibility.optics ?? loadedSectionVisibility.details ?? true,
   };
 
@@ -717,7 +721,9 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     lensBlurMaxFade: loadedAdjustments.lensBlurMaxFade ?? INITIAL_ADJUSTMENTS.lensBlurMaxFade,
     lensBlurMinDepth: loadedAdjustments.lensBlurMinDepth ?? INITIAL_ADJUSTMENTS.lensBlurMinDepth,
     lensBlurMinFade: loadedAdjustments.lensBlurMinFade ?? INITIAL_ADJUSTMENTS.lensBlurMinFade,
-    lensCorrectionMode: loadedAdjustments.lensCorrectionMode || 'manual',
+    lensCorrectionMode:
+      loadedAdjustments.lensCorrectionMode ||
+      (loadedAdjustments.lensMaker && loadedAdjustments.lensModel ? 'manual' : 'auto'),
     lensMaker: loadedAdjustments.lensMaker ?? INITIAL_ADJUSTMENTS.lensMaker,
     lensModel: loadedAdjustments.lensModel ?? INITIAL_ADJUSTMENTS.lensModel,
     lensDistortionAmount: loadedAdjustments.lensDistortionAmount ?? INITIAL_ADJUSTMENTS.lensDistortionAmount,
@@ -944,10 +950,6 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
     ColorAdjustment.Tint,
     ColorAdjustment.Vibrance,
     ColorAdjustment.Saturation,
-    DetailsAdjustment.Clarity,
-    DetailsAdjustment.Dehaze,
-    DetailsAdjustment.Structure,
-    DetailsAdjustment.Centré,
   ],
   curves: ['curves', 'pointCurves', 'parametricCurve', 'curveMode'],
   details: [
@@ -982,6 +984,37 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
     TransformAdjustment.TransformXOffset,
     TransformAdjustment.TransformYOffset,
   ],
-  effects: [...ADJUSTMENT_SECTIONS.effects, Effect.LutData, DetailsAdjustment.Centré],
+  effects: [
+    CreativeAdjustment.GlowAmount,
+    CreativeAdjustment.HalationAmount,
+    CreativeAdjustment.FlareAmount,
+    Effect.VignetteAmount,
+    Effect.VignetteMidpoint,
+    Effect.VignetteFeather,
+    Effect.VignetteRoundness,
+    Effect.GrainAmount,
+    Effect.GrainSize,
+    Effect.GrainRoughness,
+    Effect.LutPath,
+    Effect.LutName,
+    Effect.LutData,
+    Effect.LutSize,
+    Effect.LutIntensity,
+    DetailsAdjustment.Clarity,
+    DetailsAdjustment.Dehaze,
+    DetailsAdjustment.Structure,
+    DetailsAdjustment.Centré,
+  ],
+  lensBlur: [
+    Effect.LensBlurEnabled,
+    Effect.LensBlurAmount,
+    Effect.lensBlurDiffusion,
+    Effect.LensBlurShape,
+    Effect.LensBlurDepthMap,
+    Effect.LensBlurMinDepth,
+    Effect.LensBlurMaxDepth,
+    Effect.LensBlurMinFade,
+    Effect.LensBlurMaxFade,
+  ],
   calibration: ['colorCalibration'],
 };

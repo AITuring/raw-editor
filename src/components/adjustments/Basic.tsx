@@ -1,9 +1,6 @@
-import { motion } from 'framer-motion';
-import clsx from 'clsx';
-import Slider from '../ui/Slider';
-import { Adjustments, BasicAdjustment } from '../../utils/adjustments';
-import { useEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Adjustments, BasicAdjustment } from '../../utils/adjustments';
+import Slider from '../ui/Slider';
 
 interface BasicAdjustmentsProps {
   adjustments: Adjustments;
@@ -13,146 +10,6 @@ interface BasicAdjustmentsProps {
   appSettings?: any;
   variant?: 'all' | 'toneMapping' | 'light';
 }
-
-interface ToneMapperSwitchProps {
-  selectedMapper: string;
-  onMapperChange: (mapper: string) => void;
-  evShiftValue: number;
-  onEvShiftChange: (value: number) => void;
-  onDragStateChange?: (isDragging: boolean) => void;
-}
-
-const ToneMapperSwitch = ({
-  selectedMapper,
-  onMapperChange,
-  evShiftValue,
-  onEvShiftChange,
-  onDragStateChange,
-}: ToneMapperSwitchProps) => {
-  const { t } = useTranslation();
-  const [bubbleStyle, setBubbleStyle] = useState({});
-  const isInitialAnimation = useRef(true);
-  const [isLabelHovered, setIsLabelHovered] = useState(false);
-
-  const toneMapperOptions = useMemo(
-    () => [
-      {
-        id: 'basic',
-        label: t('adjustments.basic.mappers.basic'),
-        title: t('adjustments.basic.mappers.basicDesc'),
-      },
-      {
-        id: 'agx',
-        label: t('adjustments.basic.mappers.agx'),
-        title: t('adjustments.basic.mappers.agxDesc'),
-      },
-    ],
-    [t],
-  );
-
-  const handleReset = () => {
-    onMapperChange('basic');
-    onEvShiftChange(0);
-  };
-
-  useEffect(() => {
-    const selectedIndex = toneMapperOptions.findIndex((m) => m.id === selectedMapper);
-    const safeIndex = selectedIndex >= 0 ? selectedIndex : 0;
-
-    const widthPercent = 100 / toneMapperOptions.length;
-    const targetX = `${safeIndex * 100}%`;
-    const targetWidth = `${widthPercent}%`;
-
-    if (isInitialAnimation.current) {
-      let initialX;
-      if (selectedMapper === 'agx') {
-        initialX = `${toneMapperOptions.length * 100}%`;
-      } else {
-        initialX = '-25%';
-      }
-
-      setBubbleStyle({
-        x: [initialX, targetX],
-        width: targetWidth,
-      });
-      isInitialAnimation.current = false;
-    } else {
-      setBubbleStyle({
-        x: targetX,
-        width: targetWidth,
-      });
-    }
-  }, [selectedMapper, toneMapperOptions]);
-
-  return (
-    <div className="group mb-3">
-      <div className="flex justify-between items-center mb-2">
-        <div
-          className="grid cursor-pointer"
-          onClick={handleReset}
-          onDoubleClick={handleReset}
-          onMouseEnter={() => setIsLabelHovered(true)}
-          onMouseLeave={() => setIsLabelHovered(false)}
-        >
-          <span
-            aria-hidden={isLabelHovered}
-            className={`col-start-1 row-start-1 text-sm font-medium text-text-secondary select-none transition-opacity duration-200 ease-in-out ${
-              isLabelHovered ? 'opacity-0' : 'opacity-100'
-            }`}
-          >
-            {t('adjustments.basic.toneMapper')}
-          </span>
-          <span
-            aria-hidden={!isLabelHovered}
-            className={`col-start-1 row-start-1 text-sm font-medium text-text-primary select-none transition-opacity duration-200 ease-in-out pointer-events-none ${
-              isLabelHovered ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            {t('adjustments.basic.reset')}
-          </span>
-        </div>
-      </div>
-      <div className="w-full pb-1">
-        <div className="relative flex w-full overflow-hidden rounded-[3px] border border-border-color bg-surface">
-          <motion.div
-            className="absolute top-0 bottom-0 z-0 bg-accent"
-            style={{ borderRadius: 2 }}
-            animate={bubbleStyle}
-            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-          />
-          {toneMapperOptions.map((mapper) => (
-            <button
-              key={mapper.id}
-              data-tooltip={mapper.title}
-              onClick={() => onMapperChange(mapper.id)}
-              className={clsx(
-                'relative flex-1 flex items-center justify-center gap-2 px-3 py-1 text-xs font-medium transition-colors',
-                {
-                  'text-text-primary hover:bg-surface': selectedMapper !== mapper.id,
-                  'text-button-text': selectedMapper === mapper.id,
-                },
-              )}
-              style={{ WebkitTapHighlightColor: 'transparent' }}
-            >
-              <span className="relative z-10 flex items-center">{mapper.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-2.5 px-1">
-          <Slider
-            label={t('adjustments.basic.evShift')}
-            max={5}
-            min={-5}
-            onChange={(e: any) => onEvShiftChange(parseFloat(e.target.value))}
-            step={0.01}
-            value={evShiftValue}
-            onDragStateChange={onDragStateChange}
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default function BasicAdjustments({
   adjustments,
@@ -164,51 +21,53 @@ export default function BasicAdjustments({
 }: BasicAdjustmentsProps) {
   const { t } = useTranslation();
 
-  const handleAdjustmentChange = (key: BasicAdjustment, value: any) => {
-    const numericValue = parseFloat(value);
+  const handleAdjustmentChange = (key: BasicAdjustment, value: string | number) => {
+    const numericValue = Number.parseFloat(String(value));
     setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, [key]: numericValue }));
   };
 
-  const handleToneMapperChange = (mapper: string) => {
-    setAdjustments((prev: Partial<Adjustments>) => ({
-      ...prev,
-      toneMapper: mapper as 'basic' | 'agx',
-    }));
-  };
-
-  const hideTonemapper = isForMask || appSettings?.tonemapperOverrideEnabled;
+  const hideToneMapper = isForMask || appSettings?.tonemapperOverrideEnabled;
   const showToneMapping = variant === 'all' || variant === 'toneMapping';
   const showLight = variant === 'all' || variant === 'light';
 
   return (
     <div>
-      {showToneMapping &&
-        (hideTonemapper ? (
-          <Slider
-            label={t('adjustments.basic.evShift')}
-            max={5}
-            min={-5}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Exposure, e.target.value)}
-            step={0.01}
-            value={adjustments.exposure}
-            onDragStateChange={onDragStateChange}
-          />
-        ) : (
-          <ToneMapperSwitch
-            selectedMapper={adjustments.toneMapper || 'agx'}
-            onMapperChange={handleToneMapperChange}
-            evShiftValue={adjustments.exposure}
-            onEvShiftChange={(value) => handleAdjustmentChange(BasicAdjustment.Exposure, value)}
-            onDragStateChange={onDragStateChange}
-          />
-        ))}
+      {showToneMapping && !hideToneMapper && (
+        <label className="camera-raw-field">
+          <span className="camera-raw-field-label">{t('adjustments.basic.toneMapper')}</span>
+          <select
+            aria-label={t('adjustments.basic.toneMapper')}
+            className="camera-raw-select"
+            onChange={(event) =>
+              setAdjustments((prev: Partial<Adjustments>) => ({
+                ...prev,
+                toneMapper: event.target.value as 'basic' | 'agx',
+              }))
+            }
+            value={adjustments.toneMapper || 'basic'}
+          >
+            <option value="basic">{t('adjustments.basic.mappers.basic')}</option>
+            <option value="agx">{t('adjustments.basic.mappers.agx')}</option>
+          </select>
+        </label>
+      )}
+
       {showLight && (
         <>
           <Slider
             label={t('adjustments.basic.exposure')}
             max={5}
             min={-5}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Brightness, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Exposure, event.target.value)}
+            step={0.01}
+            value={adjustments.exposure}
+            onDragStateChange={onDragStateChange}
+          />
+          <Slider
+            label={t('adjustments.basic.brightness')}
+            max={5}
+            min={-5}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Brightness, event.target.value)}
             step={0.01}
             value={adjustments.brightness}
             onDragStateChange={onDragStateChange}
@@ -217,7 +76,7 @@ export default function BasicAdjustments({
             label={t('adjustments.basic.contrast')}
             max={100}
             min={-100}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Contrast, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Contrast, event.target.value)}
             step={1}
             value={adjustments.contrast}
             onDragStateChange={onDragStateChange}
@@ -226,7 +85,7 @@ export default function BasicAdjustments({
             label={t('adjustments.basic.highlights')}
             max={100}
             min={-100}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Highlights, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Highlights, event.target.value)}
             step={1}
             value={adjustments.highlights}
             onDragStateChange={onDragStateChange}
@@ -235,7 +94,7 @@ export default function BasicAdjustments({
             label={t('adjustments.basic.shadows')}
             max={100}
             min={-100}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Shadows, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Shadows, event.target.value)}
             step={1}
             value={adjustments.shadows}
             onDragStateChange={onDragStateChange}
@@ -244,7 +103,7 @@ export default function BasicAdjustments({
             label={t('adjustments.basic.whites')}
             max={100}
             min={-100}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Whites, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Whites, event.target.value)}
             step={1}
             value={adjustments.whites}
             onDragStateChange={onDragStateChange}
@@ -253,7 +112,7 @@ export default function BasicAdjustments({
             label={t('adjustments.basic.blacks')}
             max={100}
             min={-100}
-            onChange={(e: any) => handleAdjustmentChange(BasicAdjustment.Blacks, e.target.value)}
+            onChange={(event) => handleAdjustmentChange(BasicAdjustment.Blacks, event.target.value)}
             step={1}
             value={adjustments.blacks}
             onDragStateChange={onDragStateChange}

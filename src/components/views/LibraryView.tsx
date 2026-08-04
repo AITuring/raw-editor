@@ -30,6 +30,7 @@ interface LibraryViewProps {
   handleMainLibraryContextMenu: (...args: any) => void;
   handleContinueSession: (...args: any) => void;
   handleGoHome: (...args: any) => void;
+  handleOpenImage: (...args: any) => void;
   handleOpenFolder: (...args: any) => void;
   handleImportClick: (path: string) => void;
   handleLibraryRefresh: () => Promise<void>;
@@ -57,6 +58,7 @@ export default function LibraryView({
   handleMainLibraryContextMenu,
   handleContinueSession,
   handleGoHome,
+  handleOpenImage,
   handleOpenFolder,
   handleImportClick,
   handleLibraryRefresh,
@@ -113,42 +115,43 @@ export default function LibraryView({
     <div className="flex flex-row grow h-full min-h-0">
       <div className="flex-1 flex flex-col min-w-0 gap-2">
         <MainLibrary
-            activePath={libraryActivePath}
-            aiModelDownloadStatus={aiModelDownloadStatus}
-            appSettings={appSettings}
-            currentFolderPath={currentFolderPath}
-            groupBadgeInfo={groupBadgeInfo}
-            imageList={sortedImageList}
-            imageRatings={imageRatings}
-            importState={importState}
-            indexingProgress={indexingProgress}
-            isIndexing={isIndexing}
-            isLoading={isViewLoading}
-            isTreeLoading={isTreeLoading}
-            isAndroid={isAndroid}
-            libraryViewMode={libraryViewMode}
-            multiSelectedPaths={multiSelectedPaths}
-            onClearSelection={handleClearSelection}
-            onContextMenu={handleThumbnailContextMenu}
-            onContinueSession={handleContinueSession}
-            onEmptyAreaContextMenu={handleMainLibraryContextMenu}
-            onGoHome={handleGoHome}
-            onImageClick={handleLibraryImageSingleClick}
-            onImageDoubleClick={handleImageSelect}
-            onImportClick={() => handleImportClick(currentFolderPath as string)}
-            onLibraryRefresh={handleLibraryRefresh}
-            onOpenFolder={handleOpenFolder}
-            onSettingsChange={handleSettingsChange}
-            onThumbnailAspectRatioChange={setThumbnailAspectRatio}
-            onThumbnailSizeChange={setThumbnailSize}
-            onRequestThumbnails={requestThumbnails}
-            rootPaths={rootPaths}
-            setLibraryViewMode={setLibraryViewMode}
-            thumbnailAspectRatio={thumbnailAspectRatio}
-            thumbnailProgress={thumbnailProgress}
-            thumbnailSize={thumbnailSize}
-          />
-        {rootPaths && rootPaths.length > 0 && (
+          activePath={libraryActivePath}
+          aiModelDownloadStatus={aiModelDownloadStatus}
+          appSettings={appSettings}
+          currentFolderPath={currentFolderPath}
+          groupBadgeInfo={groupBadgeInfo}
+          imageList={sortedImageList}
+          imageRatings={imageRatings}
+          importState={importState}
+          indexingProgress={indexingProgress}
+          isIndexing={isIndexing}
+          isLoading={isViewLoading}
+          isTreeLoading={isTreeLoading}
+          isAndroid={isAndroid}
+          libraryViewMode={libraryViewMode}
+          multiSelectedPaths={multiSelectedPaths}
+          onClearSelection={handleClearSelection}
+          onContextMenu={handleThumbnailContextMenu}
+          onContinueSession={handleContinueSession}
+          onEmptyAreaContextMenu={handleMainLibraryContextMenu}
+          onGoHome={handleGoHome}
+          onImageClick={handleLibraryImageSingleClick}
+          onImageDoubleClick={handleImageSelect}
+          onImportClick={() => handleImportClick(currentFolderPath as string)}
+          onLibraryRefresh={handleLibraryRefresh}
+          onOpenImage={handleOpenImage}
+          onOpenFolder={handleOpenFolder}
+          onSettingsChange={handleSettingsChange}
+          onThumbnailAspectRatioChange={setThumbnailAspectRatio}
+          onThumbnailSizeChange={setThumbnailSize}
+          onRequestThumbnails={requestThumbnails}
+          rootPaths={rootPaths}
+          setLibraryViewMode={setLibraryViewMode}
+          thumbnailAspectRatio={thumbnailAspectRatio}
+          thumbnailProgress={thumbnailProgress}
+          thumbnailSize={thumbnailSize}
+        />
+        {((rootPaths && rootPaths.length > 0) || imageList.length > 0) && (
           <BottomBar
             isCopied={isCopied}
             isCopyDisabled={multiSelectedPaths.length !== 1}

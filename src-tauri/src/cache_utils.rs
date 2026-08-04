@@ -22,6 +22,23 @@ pub const GEOMETRY_CACHE_MAX_BYTES: usize = 96 * MIB;
 pub const THUMBNAIL_GEOMETRY_CACHE_MAX_ENTRIES: usize = 30;
 pub const THUMBNAIL_GEOMETRY_CACHE_MAX_BYTES: usize = 128 * MIB;
 
+pub fn is_section_visible_with_legacy(
+    adjustments: &serde_json::Value,
+    section: &str,
+    legacy_section: &str,
+) -> bool {
+    let visibility = adjustments.get("sectionVisibility");
+    visibility
+        .and_then(|value| value.get(section))
+        .and_then(|value| value.as_bool())
+        .unwrap_or_else(|| {
+            visibility
+                .and_then(|value| value.get(legacy_section))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(true)
+        })
+}
+
 /// A small, dependency-free LRU cache with both entry-count and memory budgets.
 ///
 /// Image editing entries can differ by hundreds of megabytes, so a count-only
@@ -132,13 +149,9 @@ pub fn calculate_thumbnail_base_hash(adjustments: &serde_json::Value) -> u64 {
 
     calculate_geometry_hash(adjustments).hash(&mut hasher);
 
-    let effects_visible = adjustments
-        .get("sectionVisibility")
-        .and_then(|v| v.get("effects"))
-        .and_then(|s| s.as_bool())
-        .unwrap_or(true);
-
-    let blur_enabled = effects_visible && adjustments["lensBlurEnabled"].as_bool().unwrap_or(false);
+    let lens_blur_visible = is_section_visible_with_legacy(adjustments, "lensBlur", "effects");
+    let blur_enabled =
+        lens_blur_visible && adjustments["lensBlurEnabled"].as_bool().unwrap_or(false);
     blur_enabled.hash(&mut hasher);
 
     if blur_enabled {
@@ -230,13 +243,9 @@ pub fn calculate_transform_hash(adjustments: &serde_json::Value) -> u64 {
     let flip_v = adjustments["flipVertical"].as_bool().unwrap_or(false);
     flip_v.hash(&mut hasher);
 
-    let effects_visible = adjustments
-        .get("sectionVisibility")
-        .and_then(|v| v.get("effects"))
-        .and_then(|s| s.as_bool())
-        .unwrap_or(true);
-
-    let blur_enabled = effects_visible && adjustments["lensBlurEnabled"].as_bool().unwrap_or(false);
+    let lens_blur_visible = is_section_visible_with_legacy(adjustments, "lensBlur", "effects");
+    let blur_enabled =
+        lens_blur_visible && adjustments["lensBlurEnabled"].as_bool().unwrap_or(false);
     blur_enabled.hash(&mut hasher);
     if blur_enabled {
         if let Some(val) = adjustments.get("lensBlurAmount") {
@@ -427,10 +436,48 @@ impl DecodedImageCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{BudgetedCache, DecodedImageCache};
+    use super::{BudgetedCache, DecodedImageCache, is_section_visible_with_legacy};
     use image::DynamicImage;
+    use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;
+
+    #[test]
+    fn section_visibility_prefers_the_new_section_key() {
+        let adjustments = json!({
+            "sectionVisibility": {
+                "effects": true,
+                "lensBlur": false
+            }
+        });
+
+        assert!(!is_section_visible_with_legacy(
+            &adjustments,
+            "lensBlur",
+            "effects"
+        ));
+    }
+
+    #[test]
+    fn section_visibility_falls_back_to_legacy_and_then_visible() {
+        let legacy_adjustments = json!({
+            "sectionVisibility": {
+                "effects": false
+            }
+        });
+        let default_adjustments = json!({});
+
+        assert!(!is_section_visible_with_legacy(
+            &legacy_adjustments,
+            "lensBlur",
+            "effects"
+        ));
+        assert!(is_section_visible_with_legacy(
+            &default_adjustments,
+            "lensBlur",
+            "effects"
+        ));
+    }
 
     #[test]
     fn budgeted_cache_evicts_least_recently_used_entry() {

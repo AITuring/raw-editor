@@ -8,10 +8,23 @@ import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
 import { useProcessStore } from '../store/useProcessStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { Invokes, LibraryViewMode, ImageFile } from '../components/ui/AppProperties';
+import { Invokes, LibraryViewMode, type ImageFile, type SupportedTypes } from '../components/ui/AppProperties';
 import { INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjustments';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { debouncedSave, debouncedSetHistory } from './useEditorActions';
+import i18n from '../i18n';
+
+const normalizeExtensions = (extensions: string[]) =>
+  Array.from(new Set(extensions.map((extension) => extension.trim().replace(/^\./, '').toLowerCase()).filter(Boolean)));
+
+const loadSupportedImageTypes = async (): Promise<SupportedTypes> => {
+  const settingsStore = useSettingsStore.getState();
+  if (settingsStore.supportedTypes) return settingsStore.supportedTypes;
+
+  const supportedTypes = await invoke<SupportedTypes>(Invokes.GetSupportedFileTypes);
+  settingsStore.setSupportedTypes(supportedTypes);
+  return supportedTypes;
+};
 
 export interface AppNavigationProps {
   clearThumbnailQueue: () => void;
@@ -439,6 +452,94 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     [clearThumbnailQueue],
   );
 
+  const handleOpenImagePaths = useCallback(
+    async (paths: string[]) => {
+      const uniquePaths = Array.from(new Set(paths.filter((path) => typeof path === 'string' && path.trim())));
+      if (uniquePaths.length === 0) return;
+
+      try {
+        const supportedTypes = await loadSupportedImageTypes();
+        const allowedExtensions = new Set(normalizeExtensions([...supportedTypes.raw, ...supportedTypes.nonRaw]));
+        const validPaths = uniquePaths.filter((path) => {
+          const physicalPath = path.split('?vc=')[0];
+          const extension = physicalPath.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() ?? '';
+          return allowedExtensions.has(extension);
+        });
+
+        if (validPaths.length === 0) {
+          toast.error(i18n.t('library.import.noSupportedFiles'));
+          return;
+        }
+        if (validPaths.length !== uniquePaths.length) {
+          toast.info(
+            i18n.t('library.import.skippedUnsupported', {
+              skipped: uniquePaths.length - validPaths.length,
+            }),
+          );
+        }
+
+        await invoke('cancel_thumbnail_generation');
+        clearThumbnailQueue();
+        useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
+        useLibraryStore.getState().setLibrary({ isViewLoading: true });
+        useUIStore.getState().setUI({ activeView: 'library', isLibraryExportPanelVisible: false });
+
+        const files = await invoke<ImageFile[]>(Invokes.GetAlbumImages, { paths: validPaths });
+        if (files.length === 0) {
+          toast.error(i18n.t('library.import.noSupportedFiles'));
+          return;
+        }
+
+        const imageRatings = Object.fromEntries(files.map((file) => [file.path, file.rating ?? 0]));
+        const firstPath = files[0].path;
+        useLibraryStore.getState().setLibrary({
+          activeAlbumId: null,
+          currentFolderPath: null,
+          imageList: files,
+          imageRatings,
+          libraryActivePath: firstPath,
+          libraryScrollTop: 0,
+          multiSelectedPaths: [firstPath],
+          selectionAnchorPath: firstPath,
+        });
+
+        await handleImageSelect(firstPath);
+      } catch (error) {
+        console.error('Failed to open selected image files:', error);
+        toast.error(i18n.t('library.import.openFailed'));
+      } finally {
+        useLibraryStore.getState().setLibrary({ isViewLoading: false });
+      }
+    },
+    [clearThumbnailQueue, handleImageSelect],
+  );
+
+  const handleOpenImage = useCallback(async () => {
+    try {
+      const supportedTypes = await loadSupportedImageTypes();
+      const rawExtensions = normalizeExtensions(supportedTypes.raw);
+      const nonRawExtensions = normalizeExtensions(supportedTypes.nonRaw);
+      const allExtensions = Array.from(new Set([...rawExtensions, ...nonRawExtensions]));
+      const selected = await open({
+        defaultPath: await homeDir(),
+        filters: [
+          { name: i18n.t('library.import.allSupportedImages'), extensions: allExtensions },
+          { name: 'RAW', extensions: rawExtensions },
+          { name: 'JPEG / PNG / TIFF', extensions: nonRawExtensions },
+        ],
+        multiple: false,
+        title: i18n.t('library.splash.openImage'),
+      });
+
+      if (typeof selected === 'string') {
+        await handleOpenImagePaths([selected]);
+      }
+    } catch (error) {
+      console.error('Failed to open image dialog:', error);
+      toast.error(i18n.t('library.import.openFailed'));
+    }
+  }, [handleOpenImagePaths]);
+
   const handleOpenFolder = async () => {
     const { osPlatform, appSettings, handleSettingsChange } = useSettingsStore.getState();
     const { rootPaths, folderTrees, setLibrary } = useLibraryStore.getState();
@@ -595,6 +696,8 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     handleImageSelect,
     handleSelectSubfolder,
     handleSelectAlbum,
+    handleOpenImage,
+    handleOpenImagePaths,
     handleOpenFolder,
     handleContinueSession,
   };

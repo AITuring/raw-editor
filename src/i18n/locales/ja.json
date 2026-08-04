@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "黒レベル",
+      "brightness": "明るさ",
       "contrast": "コントラスト",
       "evShift": "露出補正",
       "exposure": "露光量",
@@ -19,6 +20,7 @@
       "whites": "白レベル"
     },
     "color": {
+      "all": "すべて",
       "ariaSelectColor": "{{name}}色を選択",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "グローバル",
         "highlights": "ハイライト",
         "midtones": "中間調",
-        "shadows": "シャドウ"
+        "shadows": "シャドウ",
+        "threeWay": "3ウェイ"
       },
       "hue": "色相",
       "localHue": "ローカル色相",
@@ -103,14 +106,23 @@
       "color": "カラー",
       "dehaze": "かすみの除去",
       "luminance": "輝度",
+      "masking": "マスキング",
       "noiseReduction": "ノイズ低減",
       "presence": "外観",
+      "previewAt100": "シャープとノイズ軽減は100%以上のズームで確認してください。",
+      "rawDetails": "RAW デコードとデモザイク",
+      "rawDetailsActive": "RAW で有効",
+      "rawOnly": "RAW のみ",
+      "rawProcessing": "RAW 処理",
       "redCyan": "レッド/シアン",
       "sharpening": "シャープ",
+      "sharpeningPipelineNote": "適用量とマスキングは現在のシャープ処理に接続されています。半径とディテールはまだ利用できません。",
       "sharpness": "シャープネス",
       "structure": "構造",
+      "superResolution": "スーパー解像度",
       "texture": "テクスチャ",
-      "threshold": "しきい値"
+      "threshold": "しきい値",
+      "unavailable": "利用不可"
     },
     "effects": {
       "amount": "適用量",
@@ -133,6 +145,13 @@
       "roundness": "丸み",
       "size": "サイズ",
       "vignette": "周辺光量補正"
+    },
+    "optics": {
+      "chooseProfile": "レンズプロファイルを選択",
+      "lensProfile": "レンズプロファイル",
+      "profile": "プロファイル",
+      "removeChromaticAberration": "色収差を除去",
+      "useProfileCorrections": "プロファイル補正を使用"
     }
   },
   "contextMenus": {
@@ -954,6 +973,7 @@
         "tooltipClearSearch": "検索をクリア",
         "tooltipSearchFilter": "検索またはフィルター"
       },
+      "selectedFiles": "選択したファイル · {{total}}",
       "title": "ライブラリ",
       "viewOptions": {
         "currentFolder": "現在のフォルダ",
@@ -984,9 +1004,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "対応しているすべての画像",
       "complete": "インポート完了！",
       "failed": "インポートに失敗しました！",
-      "progress": "インポート中... ({{current}}/{{total}})"
+      "noSupportedFiles": "対応している画像ファイルが見つかりません。",
+      "openFailed": "選択した画像を開けませんでした。",
+      "progress": "インポート中... ({{current}}/{{total}})",
+      "skippedUnsupported": "未対応のファイル {{skipped}} 件をスキップしました。"
     },
     "items": {
       "cloudPlaceholder": "iCloudに保存されています — 未ダウンロード",
@@ -1026,10 +1050,13 @@
       "descriptionDesktop": "圧倒的に高速な、GPUアクセラレーション対応RAW画像エディタ。フォルダを開いて始めましょう。",
       "donate": "Ko-fiで寄付する",
       "downloadVersion": "クリックしてバージョン {{version}} をダウンロード",
+      "dropImages": "画像をドロップして開く",
+      "dropImagesHint": "単一または複数の RAW、JPEG、PNG、TIFF ファイル",
       "goToSettings": "設定へ移動",
       "latestVersion": "最新バージョンを使用しています",
       "newVersionAvailable": "新しいバージョンが利用可能です！",
       "openFolder": "フォルダを開く",
+      "openImage": "画像を開く",
       "openLibrary": "ライブラリを開く",
       "or": "または",
       "version": "バージョン {{version}}",

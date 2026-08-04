@@ -948,7 +948,9 @@ pub fn get_album_images(
         .into_par_iter()
         .filter_map(|virtual_path| {
             let (source_path, sidecar_path) = parse_virtual_path(&virtual_path);
-            if !source_path.exists() {
+            if !source_path.is_file()
+                || !is_supported_image_file(source_path.to_string_lossy().as_ref())
+            {
                 return None;
             }
 
@@ -1958,7 +1960,21 @@ pub fn resolve_lens_params_in_adjustments(
         let mode = map
             .get("lensCorrectionMode")
             .and_then(|v| v.as_str())
-            .unwrap_or("manual");
+            .unwrap_or_else(|| {
+                if map
+                    .get("lensMaker")
+                    .and_then(|value| value.as_str())
+                    .is_some()
+                    && map
+                        .get("lensModel")
+                        .and_then(|value| value.as_str())
+                        .is_some()
+                {
+                    "manual"
+                } else {
+                    "auto"
+                }
+            });
 
         if mode == "auto" {
             if let Some(exif) = exif_data {

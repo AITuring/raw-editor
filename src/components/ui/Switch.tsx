@@ -39,7 +39,7 @@ const Switch = ({
   return (
     <label
       className={clsx(
-        'flex items-center justify-between',
+        'camera-raw-switch flex items-center justify-between',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         className,
       )}

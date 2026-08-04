@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "黑色",
+      "brightness": "亮度",
       "contrast": "對比",
       "evShift": "EV 偏移",
       "exposure": "曝光",
@@ -19,6 +20,7 @@
       "whites": "白色"
     },
     "color": {
+      "all": "全部",
       "ariaSelectColor": "選擇 {{name}} 顏色",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "全域",
         "highlights": "亮部",
         "midtones": "中間調",
-        "shadows": "陰影"
+        "shadows": "陰影",
+        "threeWay": "三向"
       },
       "hue": "色相",
       "localHue": "局部色調",
@@ -103,14 +106,23 @@
       "color": "顏色",
       "dehaze": "去朦朧",
       "luminance": "亮度",
+      "masking": "遮色片",
       "noiseReduction": "降噪",
       "presence": "質感",
+      "previewAt100": "調整銳化與降噪時，請將預覽縮放至 100% 或更高。",
+      "rawDetails": "RAW 解包與去馬賽克",
+      "rawDetailsActive": "RAW 檔案已啟用",
+      "rawOnly": "僅 RAW",
+      "rawProcessing": "RAW 處理",
       "redCyan": "紅/青",
       "sharpening": "銳化",
+      "sharpeningPipelineNote": "數量與遮色片已接入目前銳化管線；半徑與細節暫不可用。",
       "sharpness": "銳度",
       "structure": "結構",
+      "superResolution": "超解析度",
       "texture": "紋理",
-      "threshold": "臨界值"
+      "threshold": "臨界值",
+      "unavailable": "暫不可用"
     },
     "effects": {
       "amount": "數量",
@@ -133,6 +145,13 @@
       "roundness": "圓度",
       "size": "大小",
       "vignette": "暗角"
+    },
+    "optics": {
+      "chooseProfile": "選擇鏡頭描述檔",
+      "lensProfile": "鏡頭描述檔",
+      "profile": "描述檔",
+      "removeChromaticAberration": "移除色差",
+      "useProfileCorrections": "使用描述檔校正"
     }
   },
   "contextMenus": {
@@ -954,6 +973,7 @@
         "tooltipClearSearch": "清除搜尋",
         "tooltipSearchFilter": "搜尋或過濾"
       },
+      "selectedFiles": "已選檔案 · {{total}} 張",
       "title": "相簿",
       "viewOptions": {
         "currentFolder": "當前資料夾",
@@ -984,9 +1004,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "所有支援的影像",
       "complete": "匯入完成！",
       "failed": "匯入失敗！",
-      "progress": "匯入中...（{{current}}/{{total}}）"
+      "noSupportedFiles": "找不到支援的影像檔案。",
+      "openFailed": "無法開啟所選影像。",
+      "progress": "匯入中...（{{current}}/{{total}}）",
+      "skippedUnsupported": "已略過 {{skipped}} 個不支援的檔案。"
     },
     "items": {
       "cloudPlaceholder": "儲存在 iCloud 中 — 未下載",
@@ -1026,10 +1050,13 @@
       "descriptionDesktop": "一款極速、GPU 加速的 RAW 影像編輯器。開啟資料夾以開始。",
       "donate": "在 Ko-Fi 上捐贈",
       "downloadVersion": "點選下載版本 {{version}}",
+      "dropImages": "放開即可開啟影像",
+      "dropImagesHint": "支援單張或批次 RAW、JPEG、PNG 與 TIFF",
       "goToSettings": "前往設定",
       "latestVersion": "您已是最新版本",
       "newVersionAvailable": "新版本可用！",
       "openFolder": "開啟資料夾",
+      "openImage": "開啟單張影像",
       "openLibrary": "開啟相簿",
       "or": "或",
       "version": "版本 {{version}}",

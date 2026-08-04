@@ -2235,6 +2235,7 @@ pub fn run() {
             lens_correction::get_lensfun_makers,
             lens_correction::get_lensfun_lenses_for_maker,
             lens_correction::autodetect_lens,
+            lens_correction::autodetect_lens_profile,
             lens_correction::get_lens_distortion_params,
             negative_conversion::preview_negative_conversion,
             negative_conversion::convert_negatives,

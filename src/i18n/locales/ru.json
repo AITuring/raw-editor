@@ -2,6 +2,7 @@
   "adjustments": {
     "basic": {
       "blacks": "Затемнение",
+      "brightness": "Яркость",
       "contrast": "Контрастность",
       "evShift": "Сдвиг экспозиции",
       "exposure": "Экспозиция",
@@ -19,6 +20,7 @@
       "whites": "Светлые тона"
     },
     "color": {
+      "all": "Все",
       "ariaSelectColor": "Выбрать цвет: {{name}}",
       "calibration": {
         "colors": {
@@ -41,7 +43,8 @@
         "global": "Глобально",
         "highlights": "Света",
         "midtones": "Средние тона",
-        "shadows": "Тени"
+        "shadows": "Тени",
+        "threeWay": "Трёхканальная"
       },
       "hue": "Цветовой тон",
       "localHue": "Локальный оттенок",
@@ -103,14 +106,23 @@
       "color": "Цвет",
       "dehaze": "Удаление дымки",
       "luminance": "Яркость",
+      "masking": "Маскирование",
       "noiseReduction": "Подавление шума",
       "presence": "Присутствие",
+      "previewAt100": "Оценивайте резкость и шумоподавление при масштабе 100% или выше.",
+      "rawDetails": "Декодирование и демозаика RAW",
+      "rawDetailsActive": "Активно для RAW",
+      "rawOnly": "Только RAW",
+      "rawProcessing": "Обработка RAW",
       "redCyan": "Красный/Голубой",
       "sharpening": "Резкость",
+      "sharpeningPipelineNote": "Величина и маскирование подключены к текущему повышению резкости; радиус и детализация пока недоступны.",
       "sharpness": "Резкость",
       "structure": "Структура",
+      "superResolution": "Сверхвысокое разрешение",
       "texture": "Текстура",
-      "threshold": "Порог"
+      "threshold": "Порог",
+      "unavailable": "Недоступно"
     },
     "effects": {
       "amount": "Величина",
@@ -133,6 +145,13 @@
       "roundness": "Округлость",
       "size": "Размер",
       "vignette": "Виньетирование"
+    },
+    "optics": {
+      "chooseProfile": "Выбрать профиль объектива",
+      "lensProfile": "Профиль объектива",
+      "profile": "Профиль",
+      "removeChromaticAberration": "Удалить хроматическую аберрацию",
+      "useProfileCorrections": "Использовать коррекции профиля"
     }
   },
   "contextMenus": {
@@ -1002,6 +1021,7 @@
         "tooltipClearSearch": "Очистить поиск",
         "tooltipSearchFilter": "Поиск или фильтрация"
       },
+      "selectedFiles": "Выбранные файлы · {{total}}",
       "title": "Библиотека",
       "viewOptions": {
         "currentFolder": "Текущая папка",
@@ -1032,9 +1052,13 @@
       }
     },
     "import": {
+      "allSupportedImages": "Все поддерживаемые изображения",
       "complete": "Импорт завершен!",
       "failed": "Импорт не удался!",
-      "progress": "Импорт... ({{current}}/{{total}})"
+      "noSupportedFiles": "Поддерживаемые файлы изображений не найдены.",
+      "openFailed": "Не удалось открыть выбранные изображения.",
+      "progress": "Импорт... ({{current}}/{{total}})",
+      "skippedUnsupported": "Пропущено неподдерживаемых файлов: {{skipped}}."
     },
     "items": {
       "cloudPlaceholder": "Хранится в iCloud — не загружено",
@@ -1076,10 +1100,13 @@
       "descriptionDesktop": "Невероятно быстрый редактор RAW-файлов с GPU-ускорением. Откройте папку, чтобы начать.",
       "donate": "Поддержать на Ko-Fi",
       "downloadVersion": "Нажмите, чтобы загрузить версию {{version}}",
+      "dropImages": "Перетащите изображения, чтобы открыть",
+      "dropImagesHint": "Один или несколько файлов RAW, JPEG, PNG и TIFF",
       "goToSettings": "Перейти в настройки",
       "latestVersion": "У вас установлена последняя версия",
       "newVersionAvailable": "Доступна новая версия!",
       "openFolder": "Открыть папку",
+      "openImage": "Открыть изображение",
       "openLibrary": "Открыть библиотеку",
       "or": "или",
       "version": "Версия {{version}}",

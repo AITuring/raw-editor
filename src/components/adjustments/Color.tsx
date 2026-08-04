@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, type CSSProperties } from 'react';
 import { Pipette, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -8,10 +8,11 @@ import { ColorAdjustment, ColorCalibration, HueSatLum, INITIAL_ADJUSTMENTS } fro
 import { Adjustments, ColorGrading } from '../../utils/adjustments';
 import { AppSettings } from '../ui/AppProperties';
 import Text from '../ui/Text';
-import { TextColors, TextVariants, TextWeights } from '../../types/typography';
+import { TextVariants } from '../../types/typography';
+import { AdjustmentSubsection, AdjustmentTabs } from '../ui/AdjustmentSubsection';
 
 interface ColorProps {
-  color: string;
+  baseHue: number;
   name: string;
   label: string;
 }
@@ -26,86 +27,6 @@ interface ColorPanelProps {
   onDragStateChange?: (isDragging: boolean) => void;
   variant?: 'all' | 'whiteBalance' | 'presence' | 'presenceBare' | 'mixer' | 'grading' | 'calibration';
 }
-
-interface ColorSwatchProps {
-  color: string;
-  isActive: boolean;
-  name: string;
-  ariaLabel: string;
-  onClick: (name: string) => void;
-}
-
-const ColorSwatch = ({ color, name, isActive, ariaLabel, onClick }: ColorSwatchProps) => {
-  const [isPressed, setIsPressed] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleMouseDown = () => {
-    setIsPressed(true);
-  };
-
-  const handleMouseUp = () => {
-    setIsPressed(false);
-  };
-
-  const handleMouseLeave = () => {
-    setIsPressed(false);
-    setIsHovered(false);
-  };
-
-  const handleMouseEnter = () => {
-    setIsHovered(true);
-  };
-
-  const handleClick = () => {
-    onClick(name);
-  };
-
-  const getTransform = () => {
-    if (isPressed) return 'scale(0.95)';
-    if (isActive) return 'scale(1.1)';
-    if (isHovered) return 'scale(1.08)';
-    return 'scale(1)';
-  };
-
-  return (
-    <button
-      aria-label={ariaLabel}
-      className="relative w-6 h-6 group"
-      onClick={handleClick}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onMouseEnter={handleMouseEnter}
-      onTouchStart={handleMouseDown}
-      onTouchEnd={handleMouseUp}
-    >
-      <div
-        className={`absolute inset-0 rounded-full border-2 transition-all duration-200 ease-out ${
-          isActive ? 'border-white opacity-100' : 'scale-100 border-transparent opacity-0'
-        }`}
-        style={{
-          transform: isActive ? (isPressed ? 'scale(1.1)' : 'scale(1.25)') : undefined,
-          transition: isPressed
-            ? 'transform 100ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out'
-            : 'transform 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms ease-out',
-        }}
-      />
-
-      <div
-        className={`absolute inset-0 rounded-full transition-all duration-150 ease-out ${
-          isActive ? 'shadow-lg' : 'shadow-md'
-        }`}
-        style={{
-          backgroundColor: color,
-          transform: getTransform(),
-          transition: isPressed
-            ? 'transform 100ms cubic-bezier(0.4, 0, 0.2, 1)'
-            : 'transform 150ms cubic-bezier(0.22, 1, 0.36, 1)',
-        }}
-      />
-    </button>
-  );
-};
 
 const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: ColorPanelProps) => {
   const { t } = useTranslation();
@@ -137,8 +58,9 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
     () => [
       {
         id: '3way',
+        label: t('adjustments.color.grading.threeWay'),
         icon: (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="6" r="4.5" />
             <circle cx="5" cy="18" r="4.5" />
             <circle cx="19" cy="18" r="4.5" />
@@ -147,8 +69,13 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
       },
       {
         id: 'global',
+        label: t('adjustments.color.grading.global'),
         icon: (
-          <div className="w-3.5 h-3.5 rounded-full" style={{ background: 'linear-gradient(to top, #666, #fff)' }} />
+          <div
+            aria-hidden="true"
+            className="w-3.5 h-3.5 rounded-full"
+            style={{ background: 'linear-gradient(to top, #666, #fff)' }}
+          />
         ),
       },
     ],
@@ -162,7 +89,10 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
           const isActive = activeTab === tab.id;
           return (
             <button
+              aria-label={tab.label}
+              aria-pressed={isActive}
               key={tab.id}
+              data-tooltip={tab.label}
               onClick={() => setActiveTab(tab.id as '3way' | 'global')}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors
                 ${
@@ -170,6 +100,7 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
                     ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent text-text-primary'
                     : 'bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-secondary/80'
                 }`}
+              type="button"
             >
               {tab.icon}
             </button>
@@ -179,6 +110,8 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
         <div className="w-px h-5 bg-text-secondary/20 mx-1" />
 
         <button
+          aria-label={t('adjustments.color.toggleSliders')}
+          aria-pressed={isExpanded}
           onClick={() => setIsExpanded(!isExpanded)}
           className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors
             ${
@@ -187,8 +120,9 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
                 : 'bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-secondary/80'
             }`}
           data-tooltip={t('adjustments.color.toggleSliders')}
+          type="button"
         >
-          <Sliders size={14} />
+          <Sliders aria-hidden="true" size={14} />
         </button>
       </div>
 
@@ -288,22 +222,17 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
   );
 };
 
-const ColorCalibrationPanel = ({
-  adjustments,
-  setAdjustments,
-  onDragStateChange,
-  variant = 'all',
-}: ColorPanelProps) => {
+const ColorCalibrationPanel = ({ adjustments, setAdjustments, onDragStateChange }: ColorPanelProps) => {
   const { t } = useTranslation();
-  const [activePrimary, setActivePrimary] = useState('red');
   const colorCalibration = adjustments.colorCalibration || INITIAL_ADJUSTMENTS.colorCalibration;
 
-  const PRIMARY_COLORS = useMemo(
-    () => [
-      { name: 'red', color: '#f87171', label: t('adjustments.color.calibration.colors.red') },
-      { name: 'green', color: '#4ade80', label: t('adjustments.color.calibration.colors.green') },
-      { name: 'blue', color: '#60a5fa', label: t('adjustments.color.calibration.colors.blue') },
-    ],
+  const primaryColors = useMemo(
+    () =>
+      [
+        { name: 'red' as const, label: t('adjustments.color.calibration.colors.red') },
+        { name: 'green' as const, label: t('adjustments.color.calibration.colors.green') },
+        { name: 'blue' as const, label: t('adjustments.color.calibration.colors.blue') },
+      ] as const,
     [t],
   );
 
@@ -317,8 +246,8 @@ const ColorCalibrationPanel = ({
     }));
   };
 
-  const handlePrimaryChange = (key: 'Hue' | 'Saturation', value: string) => {
-    const fullKey = `${activePrimary}${key}` as keyof ColorCalibration;
+  const handlePrimaryChange = (primary: 'red' | 'green' | 'blue', key: 'Hue' | 'Saturation', value: string) => {
+    const fullKey = `${primary}${key}` as keyof ColorCalibration;
     setAdjustments((prev: Partial<Adjustments>) => ({
       ...prev,
       colorCalibration: {
@@ -328,24 +257,9 @@ const ColorCalibrationPanel = ({
     }));
   };
 
-  const currentValues = {
-    hue: colorCalibration[`${activePrimary}Hue` as keyof ColorCalibration] || 0,
-    saturation: colorCalibration[`${activePrimary}Saturation` as keyof ColorCalibration] || 0,
-  };
-
-  const trackSuffix = `${activePrimary}s`;
-
   return (
-    <div className={variant === 'calibration' ? '' : 'p-2 bg-bg-tertiary rounded-md mt-4'}>
-      {variant !== 'calibration' && (
-        <Text variant={TextVariants.heading} className="mb-2">
-          {t('adjustments.color.calibration.title')}
-        </Text>
-      )}
-      <div>
-        <Text color={TextColors.primary} weight={TextWeights.medium} className="mb-1">
-          {t('adjustments.color.calibration.shadows')}
-        </Text>
+    <div className="camera-raw-section-body">
+      <AdjustmentSubsection title={t('adjustments.color.calibration.shadows')}>
         <Slider
           label={t('adjustments.color.calibration.tint')}
           min={-100}
@@ -357,46 +271,34 @@ const ColorCalibrationPanel = ({
           onDragStateChange={onDragStateChange}
           trackClassName="tint-gradient-track"
         />
-      </div>
-      <div className="mt-3">
-        <Text color={TextColors.primary} weight={TextWeights.medium} className="mb-3">
-          {t('adjustments.color.calibration.primaries')}
-        </Text>
-        <div className="flex justify-center gap-6 mb-4 px-1">
-          {PRIMARY_COLORS.map(({ name, color, label }) => (
-            <ColorSwatch
-              color={color}
-              isActive={activePrimary === name}
-              key={name}
-              name={name}
-              onClick={setActivePrimary}
-              ariaLabel={t('adjustments.color.ariaSelectColor', { name: label })}
-            />
-          ))}
-        </div>
-        <Slider
-          label={t('adjustments.color.calibration.hue')}
-          min={-100}
-          max={100}
-          step={1}
-          defaultValue={0}
-          value={currentValues.hue}
-          onChange={(e: any) => handlePrimaryChange('Hue', e.target.value)}
-          onDragStateChange={onDragStateChange}
-          trackClassName={`hue-slider-${trackSuffix}`}
-        />
-        <Slider
-          label={t('adjustments.color.calibration.saturation')}
-          min={-100}
-          max={100}
-          step={1}
-          defaultValue={0}
-          value={currentValues.saturation}
-          onChange={(e: any) => handlePrimaryChange('Saturation', e.target.value)}
-          onDragStateChange={onDragStateChange}
-          trackClassName={`sat-slider-${trackSuffix}`}
-        />
-      </div>
+      </AdjustmentSubsection>
+
+      {primaryColors.map(({ name, label }) => (
+        <AdjustmentSubsection key={name} title={label}>
+          <Slider
+            label={t('adjustments.color.calibration.hue')}
+            min={-100}
+            max={100}
+            step={1}
+            defaultValue={0}
+            value={colorCalibration[`${name}Hue` as keyof ColorCalibration]}
+            onChange={(event) => handlePrimaryChange(name, 'Hue', String(event.target.value))}
+            onDragStateChange={onDragStateChange}
+            trackClassName={`hue-slider-${name}s`}
+          />
+          <Slider
+            label={t('adjustments.color.calibration.saturation')}
+            min={-100}
+            max={100}
+            step={1}
+            defaultValue={0}
+            value={colorCalibration[`${name}Saturation` as keyof ColorCalibration]}
+            onChange={(event) => handlePrimaryChange(name, 'Saturation', String(event.target.value))}
+            onDragStateChange={onDragStateChange}
+            trackClassName={`sat-slider-${name}s`}
+          />
+        </AdjustmentSubsection>
+      ))}
     </div>
   );
 };
@@ -412,68 +314,50 @@ export default function ColorPanel({
   variant = 'all',
 }: ColorPanelProps) {
   const { t } = useTranslation();
-  const [activeColor, setActiveColor] = useState('reds');
+  const [mixerChannel, setMixerChannel] = useState<'hue' | 'saturation' | 'luminance' | 'all'>('hue');
   const adjustmentVisibility = appSettings?.adjustmentVisibility || {};
   const HSL_COLORS = useMemo<Array<ColorProps>>(
     () => [
-      { name: 'reds', color: '#f87171', label: t('adjustments.color.mixerColors.reds') },
-      { name: 'oranges', color: '#fb923c', label: t('adjustments.color.mixerColors.oranges') },
-      { name: 'yellows', color: '#facc15', label: t('adjustments.color.mixerColors.yellows') },
-      { name: 'greens', color: '#4ade80', label: t('adjustments.color.mixerColors.greens') },
-      { name: 'aquas', color: '#2dd4bf', label: t('adjustments.color.mixerColors.aquas') },
-      { name: 'blues', color: '#60a5fa', label: t('adjustments.color.mixerColors.blues') },
-      { name: 'purples', color: '#a78bfa', label: t('adjustments.color.mixerColors.purples') },
-      { name: 'magentas', color: '#f472b6', label: t('adjustments.color.mixerColors.magentas') },
+      { name: 'reds', baseHue: 0, label: t('adjustments.color.mixerColors.reds') },
+      { name: 'oranges', baseHue: 30, label: t('adjustments.color.mixerColors.oranges') },
+      { name: 'yellows', baseHue: 60, label: t('adjustments.color.mixerColors.yellows') },
+      { name: 'greens', baseHue: 120, label: t('adjustments.color.mixerColors.greens') },
+      { name: 'aquas', baseHue: 180, label: t('adjustments.color.mixerColors.aquas') },
+      { name: 'blues', baseHue: 240, label: t('adjustments.color.mixerColors.blues') },
+      { name: 'purples', baseHue: 300, label: t('adjustments.color.mixerColors.purples') },
+      { name: 'magentas', baseHue: 340, label: t('adjustments.color.mixerColors.magentas') },
     ],
     [t],
   );
-
-  const colorHueMap = useMemo<Record<string, number>>(
-    () => ({
-      reds: 0,
-      oranges: 30,
-      yellows: 60,
-      greens: 120,
-      aquas: 180,
-      blues: 240,
-      purples: 300,
-      magentas: 340,
-    }),
-    [],
-  );
-
-  const currentHsl = adjustments?.hsl?.[activeColor] || { hue: 0, saturation: 0, luminance: 0 };
-  const baseHue = colorHueMap[activeColor] || 0;
-  const effectiveHue = baseHue + (currentHsl.hue || 0);
-
-  useEffect(() => {
-    const normalizedHue = ((effectiveHue % 360) + 360) % 360;
-    const effectiveSaturation = (currentHsl.saturation + 100) / 2;
-
-    document.documentElement.style.setProperty(`--hsl-mixer-hue-${activeColor}`, normalizedHue.toString());
-    document.documentElement.style.setProperty(`--hsl-mixer-sat-${activeColor}`, `${effectiveSaturation}%`);
-  }, [effectiveHue, currentHsl.saturation, activeColor]);
 
   const handleAdjustmentChange = (key: ColorAdjustment, value: string) => {
     setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, [key]: parseFloat(value) }));
   };
 
-  const handleHslChange = (key: ColorAdjustment, value: string) => {
+  const handleHslChange = (colorName: string, key: 'hue' | 'saturation' | 'luminance', value: string) => {
     setAdjustments((prev: Partial<Adjustments>) => ({
       ...prev,
       hsl: {
         ...(prev.hsl || {}),
-        [activeColor]: {
-          ...(prev.hsl?.[activeColor] || {}),
+        [colorName]: {
+          ...(prev.hsl?.[colorName] || INITIAL_ADJUSTMENTS.hsl[colorName]),
           [key]: parseFloat(value),
         },
       },
     }));
   };
 
-  const hue_slider = `hue-slider-${activeColor}`;
-  const saturation_slider = `sat-slider-${activeColor}`;
-  const luminance_slider = `lum-slider-${activeColor}`;
+  const mixerTabs = useMemo(
+    () => [
+      { id: 'hue' as const, label: t('adjustments.color.hue') },
+      { id: 'saturation' as const, label: t('adjustments.color.saturation') },
+      { id: 'luminance' as const, label: t('adjustments.color.luminance') },
+      { id: 'all' as const, label: t('adjustments.color.all') },
+    ],
+    [t],
+  );
+  const visibleMixerChannels =
+    mixerChannel === 'all' ? (['hue', 'saturation', 'luminance'] as const) : ([mixerChannel] as const);
   const showWhiteBalance = variant === 'all' || variant === 'whiteBalance';
   const showPresence = variant === 'all' || variant === 'presence' || variant === 'presenceBare';
   const showMixer = variant === 'all' || variant === 'mixer';
@@ -488,13 +372,16 @@ export default function ColorPanel({
             <Text variant={TextVariants.heading}>{t('adjustments.color.whiteBalance')}</Text>
             {!isForMask && toggleWbPicker && (
               <button
+                aria-label={t('adjustments.color.wbPickerTooltip')}
+                aria-pressed={isWbPickerActive}
                 onClick={toggleWbPicker}
                 className={`p-1.5 rounded-md transition-colors ${
                   isWbPickerActive ? 'bg-accent text-button-text' : 'hover:bg-bg-secondary text-text-secondary'
                 }`}
                 data-tooltip={t('adjustments.color.wbPickerTooltip')}
+                type="button"
               >
-                <Pipette size={16} />
+                <Pipette aria-hidden="true" size={16} />
               </button>
             )}
           </div>
@@ -550,11 +437,8 @@ export default function ColorPanel({
       )}
 
       {showMixer && (
-        <>
-          <div className="p-2 bg-bg-tertiary rounded-md">
-            <Text variant={TextVariants.heading} className="mb-2">
-              {isForMask ? t('adjustments.color.localHue') : t('adjustments.color.hue')}
-            </Text>
+        <div className="camera-raw-section-body">
+          <AdjustmentSubsection title={isForMask ? t('adjustments.color.localHue') : t('adjustments.color.hue')}>
             <Slider
               label={t('adjustments.color.hue')}
               max={180}
@@ -565,58 +449,54 @@ export default function ColorPanel({
               trackClassName="hue-range-track"
               onDragStateChange={onDragStateChange}
             />
-          </div>
+          </AdjustmentSubsection>
 
-          <div className="p-2 bg-bg-tertiary rounded-md">
-            {variant === 'all' && (
-              <Text variant={TextVariants.heading} className="mb-3">
-                {t('adjustments.color.colorMixer')}
-              </Text>
-            )}
-            <div className="flex justify-between mb-4 px-1">
-              {HSL_COLORS.map(({ name, color, label }) => (
-                <ColorSwatch
-                  color={color}
-                  isActive={activeColor === name}
-                  key={name}
-                  name={name}
-                  onClick={setActiveColor}
-                  ariaLabel={t('adjustments.color.ariaSelectColor', { name: label })}
-                />
+          <AdjustmentSubsection>
+            <AdjustmentTabs
+              ariaLabel={t('adjustments.color.colorMixer')}
+              onChange={setMixerChannel}
+              tabs={mixerTabs}
+              value={mixerChannel}
+            />
+
+            <div className="camera-raw-mixer-channels">
+              {visibleMixerChannels.map((channel) => (
+                <div className="camera-raw-mixer-channel" key={channel}>
+                  {mixerChannel === 'all' && (
+                    <div className="camera-raw-mixer-channel-title">
+                      {mixerTabs.find((tab) => tab.id === channel)?.label}
+                    </div>
+                  )}
+                  {HSL_COLORS.map(({ baseHue, name, label }) => {
+                    const colorValues = adjustments.hsl?.[name] || INITIAL_ADJUSTMENTS.hsl[name];
+                    const effectiveHue = (((baseHue + colorValues.hue) % 360) + 360) % 360;
+                    const effectiveSaturation = (colorValues.saturation + 100) / 2;
+                    const trackPrefix = channel === 'luminance' ? 'lum' : channel === 'saturation' ? 'sat' : 'hue';
+                    const customProperties = {
+                      [`--hsl-mixer-hue-${name}`]: effectiveHue,
+                      [`--hsl-mixer-sat-${name}`]: `${effectiveSaturation}%`,
+                    } as CSSProperties;
+
+                    return (
+                      <div key={`${channel}-${name}`} style={customProperties}>
+                        <Slider
+                          label={label}
+                          max={100}
+                          min={-100}
+                          onChange={(event) => handleHslChange(name, channel, String(event.target.value))}
+                          step={1}
+                          value={colorValues[channel]}
+                          trackClassName={`${trackPrefix}-slider-${name}`}
+                          onDragStateChange={onDragStateChange}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               ))}
             </div>
-            <Slider
-              label={t('adjustments.color.hue')}
-              max={100}
-              min={-100}
-              onChange={(e: any) => handleHslChange(ColorAdjustment.Hue, e.target.value)}
-              step={1}
-              value={currentHsl.hue}
-              trackClassName={hue_slider}
-              onDragStateChange={onDragStateChange}
-            />
-            <Slider
-              label={t('adjustments.color.saturation')}
-              max={100}
-              min={-100}
-              onChange={(e: any) => handleHslChange(ColorAdjustment.Saturation, e.target.value)}
-              step={1}
-              value={currentHsl.saturation}
-              trackClassName={saturation_slider}
-              onDragStateChange={onDragStateChange}
-            />
-            <Slider
-              label={t('adjustments.color.luminance')}
-              max={100}
-              min={-100}
-              onChange={(e: any) => handleHslChange(ColorAdjustment.Luminance, e.target.value)}
-              step={1}
-              value={currentHsl.luminance}
-              trackClassName={luminance_slider}
-              onDragStateChange={onDragStateChange}
-            />
-          </div>
-        </>
+          </AdjustmentSubsection>
+        </div>
       )}
 
       {showGrading && (
