@@ -6,6 +6,7 @@
       "evShift": "EV 시프트",
       "exposure": "노출",
       "highlights": "하이라이트",
+      "light": "빛",
       "mappers": {
         "agx": "AgX",
         "agxDesc": "필름 같은 톤 매핑",
@@ -108,6 +109,7 @@
       "sharpening": "선명도 향상",
       "sharpness": "선명도",
       "structure": "구조",
+      "texture": "텍스처",
       "threshold": "임계값"
     },
     "effects": {
@@ -296,10 +298,15 @@
       "basicMode": "Daily RAW · Basic non-AI mode",
       "sections": {
         "basic": "기본",
+        "calibration": "보정",
         "color": "색상",
+        "colorGrading": "색상 그레이딩",
+        "colorMixer": "색상 혼합",
         "curves": "커브",
         "details": "디테일",
-        "effects": "효과"
+        "effects": "효과",
+        "geometry": "기하학",
+        "optics": "광학"
       },
       "title": "조정",
       "tooltips": {

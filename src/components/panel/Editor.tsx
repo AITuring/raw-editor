@@ -19,6 +19,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
 import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
 import { createImageObjectUrl } from '../../utils/imageObjectUrl';
+import { BASIC_MODE } from '../../basic/runtime';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
   const match = rgbStr.match(/[\d.]+/g);
@@ -1197,6 +1198,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       const irs = imageRenderSizeRef.current;
 
       if (
+        BASIC_MODE ||
         state.useWgpuRenderer === false ||
         !state.isReady ||
         !state.hasRenderedFirstFrame ||
@@ -1982,8 +1984,9 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     }
   }
 
-  const isWgpuActive = appSettings?.useWgpuRenderer !== false && hasRenderedFirstFrame;
-  const hasRenderedAnyPreview = hasRenderedFirstFrame || !!finalPreviewUrl;
+  const nativeDisplayEnabled = !BASIC_MODE && appSettings?.useWgpuRenderer !== false;
+  const isWgpuActive = nativeDisplayEnabled && hasRenderedFirstFrame;
+  const hasRenderedAnyPreview = isWgpuActive || !!finalPreviewUrl;
 
   return (
     <div
@@ -1992,7 +1995,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         !isInstantTransition && 'transition-[opacity] duration-150 ease-out',
         isFullScreen
           ? 'rounded-none p-0 gap-0'
-          : clsx('p-0 gap-0', appSettings?.useWgpuRenderer !== false ? 'bg-transparent' : 'bg-bg-secondary'),
+          : clsx('p-0 gap-0', nativeDisplayEnabled ? 'bg-transparent' : 'bg-bg-secondary'),
       )}
     >
       {hasRenderedAnyPreview && <div className="hidden" data-bench-id="editor-first-frame" />}
@@ -2027,7 +2030,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         className={clsx(
           'flex-1 relative overflow-hidden touch-none',
           'editor-preview-surface rounded-none',
-          appSettings?.useWgpuRenderer !== false && !isFullScreen && 'ring-[9999px] ring-bg-secondary',
+          nativeDisplayEnabled && !isFullScreen && 'ring-[9999px] ring-bg-secondary',
           !isWgpuActive && 'bg-bg-secondary',
         )}
         style={{ cursor: cursorStyle }}

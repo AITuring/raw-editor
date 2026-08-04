@@ -10,6 +10,7 @@ interface WaveformProps {
   histogram?: any;
   displayMode: string;
   setDisplayMode: (mode: string) => void;
+  histogramOnly?: boolean;
   showClipping?: boolean;
   onToggleClipping?: () => void;
   theme?: string;
@@ -53,48 +54,71 @@ const modeButtons = [
   },
 ];
 
-const HistogramView = ({ histogram }: { histogram: any }) => {
+const HISTOGRAM_WIDTH = 256;
+const HISTOGRAM_HEIGHT = 96;
+const HISTOGRAM_TOP = 5;
+const HISTOGRAM_BASELINE = 92;
+
+const HistogramView = ({ histogram, label }: { histogram: any; label: string }) => {
   if (!histogram || !histogram.red || !histogram.green || !histogram.blue) return null;
 
-  const redMax = Math.max(...(histogram.red || [0]));
-  const greenMax = Math.max(...(histogram.green || [0]));
-  const blueMax = Math.max(...(histogram.blue || [0]));
-  const globalMax = Math.max(redMax, greenMax, blueMax, 1);
+  const getPath = (data: number[], closePath: boolean) => {
+    const values = Array.isArray(data) ? data : [];
+    if (values.length === 0) return '';
 
-  const getFill = (data: number[]) => {
-    const pathData = data.map((val, i) => `${(i / 255) * 255},${255 - (val / globalMax) * 255}`).join(' L');
-    return `M0,255 L${pathData} L255,255 Z`;
-  };
+    const points = values
+      .map((value, index) => {
+        const normalizedX = values.length === 1 ? 0 : index / (values.length - 1);
+        const normalizedValue = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+        const x = normalizedX * HISTOGRAM_WIDTH;
+        const y = HISTOGRAM_BASELINE - normalizedValue * (HISTOGRAM_BASELINE - HISTOGRAM_TOP);
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(' L');
 
-  const getLine = (data: number[]) => {
-    return 'M' + data.map((val, i) => `${(i / 255) * 255},${255 - (val / globalMax) * 255}`).join(' L');
+    return closePath ? `M0,${HISTOGRAM_BASELINE} L${points} L${HISTOGRAM_WIDTH},${HISTOGRAM_BASELINE} Z` : `M${points}`;
   };
 
   const channels = [
-    { key: 'red', color: '#FF6B6B', data: histogram.red },
-    { key: 'green', color: '#6BCB77', data: histogram.green },
-    { key: 'blue', color: '#4D96FF', data: histogram.blue },
+    { key: 'red', color: '#ff4f58', data: histogram.red },
+    { key: 'green', color: '#42d474', data: histogram.green },
+    { key: 'blue', color: '#4f8cff', data: histogram.blue },
   ];
 
   return (
     <svg
-      viewBox="0 0 255 255"
-      className="w-full h-full overflow-visible pointer-events-none"
+      aria-label={label}
+      className="histogram-chart pointer-events-none"
       preserveAspectRatio="none"
+      role="img"
+      viewBox={`0 0 ${HISTOGRAM_WIDTH} ${HISTOGRAM_HEIGHT}`}
     >
+      <g aria-hidden="true" className="histogram-grid">
+        {[64, 128, 192].map((x) => (
+          <line key={`vertical-${x}`} x1={x} x2={x} y1={HISTOGRAM_TOP} y2={HISTOGRAM_BASELINE} />
+        ))}
+        <line x1="0" x2={HISTOGRAM_WIDTH} y1="48" y2="48" />
+        <line
+          className="histogram-baseline"
+          x1="0"
+          x2={HISTOGRAM_WIDTH}
+          y1={HISTOGRAM_BASELINE}
+          y2={HISTOGRAM_BASELINE}
+        />
+      </g>
       {channels.map((ch) => {
         if (!ch.data || ch.data.length === 0) return null;
         return (
-          <g key={ch.key} style={{ mixBlendMode: 'lighten' }}>
-            <path d={getFill(ch.data)} fill={ch.color} fillOpacity={0.4} />
+          <g key={ch.key} className="histogram-channel">
+            <path d={getPath(ch.data, true)} fill={ch.color} fillOpacity={0.52} />
             <path
-              d={getLine(ch.data)}
+              d={getPath(ch.data, false)}
               fill="none"
               stroke={ch.color}
-              strokeWidth={1.5}
-              strokeOpacity={1.8}
-              vectorEffect="non-scaling-stroke"
+              strokeOpacity={0.92}
+              strokeWidth={1.1}
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
           </g>
         );
@@ -103,73 +127,11 @@ const HistogramView = ({ histogram }: { histogram: any }) => {
   );
 };
 
-const FakeHistogramLoader = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationFrameId: number;
-    let time = 0;
-    let lastTime = 0;
-
-    const ANIMATION_SPEED = 1.0;
-
-    const render = (currentTime: number) => {
-      if (lastTime === 0) lastTime = currentTime;
-
-      let dt = (currentTime - lastTime) / 1000;
-      lastTime = currentTime;
-
-      if (dt > 0.05) dt = 0.05;
-
-      time += dt * ANIMATION_SPEED;
-
-      ctx.clearRect(0, 0, 256, 256);
-      ctx.globalCompositeOperation = 'screen';
-
-      const drawChannel = (
-        color: string,
-        strokeColor: string,
-        offset: number,
-        amplitude: number,
-        phaseSpeed: number,
-      ) => {
-        ctx.beginPath();
-        ctx.moveTo(0, 256);
-        for (let x = 0; x <= 256; x += 4) {
-          const noise = Math.sin(x * 0.2 + time * phaseSpeed * 2) * 0.5;
-          const wave = Math.sin(x * 0.03 + time * phaseSpeed + offset) * amplitude;
-
-          const baseHeight = 1;
-
-          const y = 256 - baseHeight - Math.max(0, wave + noise);
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(256, 256);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      };
-
-      drawChannel('rgba(255, 107, 107, 0.55)', 'rgba(255, 107, 107, 0.3)', 0, 5, 0.8);
-      drawChannel('rgba(107, 203, 119, 0.55)', 'rgba(107, 203, 119, 0.3)', 2, 4, -1.0);
-      drawChannel('rgba(77, 150, 255, 0.55)', 'rgba(77, 150, 255, 0.3)', 4, 6, 0.6);
-
-      animationFrameId = requestAnimationFrame(render);
-    };
-
-    animationFrameId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
-
-  return <canvas ref={canvasRef} width={256} height={256} className="w-full h-full opacity-60" />;
-};
+const HistogramLoader = () => (
+  <div aria-hidden="true" className="histogram-loader">
+    <span className="histogram-loader-sweep" />
+  </div>
+);
 
 const useRawRgbaCanvas = (
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -453,6 +415,7 @@ export default function Waveform({
   histogram,
   displayMode,
   setDisplayMode,
+  histogramOnly = false,
   showClipping,
   onToggleClipping,
   theme,
@@ -461,9 +424,10 @@ export default function Waveform({
   const [isHovered, setIsHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const effectiveDisplayMode = histogramOnly ? DisplayMode.Histogram : displayMode;
   const isLightTheme = theme ? ['light', 'snow', 'arctic'].includes(theme) : false;
-  const isHistogram = displayMode === DisplayMode.Histogram;
-  const isVectorscope = displayMode === DisplayMode.Vectorscope;
+  const isHistogram = effectiveDisplayMode === DisplayMode.Histogram;
+  const isVectorscope = effectiveDisplayMode === DisplayMode.Vectorscope;
   const isReady = isHistogram ? !!(histogram && histogram.red) : !!waveformData;
   const hadDataOnMount = useRef(isReady);
   const width = waveformData?.width || 256;
@@ -476,7 +440,7 @@ export default function Waveform({
         [DisplayMode.Parade]: waveformData.parade,
         [DisplayMode.Vectorscope]: waveformData.vectorscope,
         [DisplayMode.Histogram]: undefined,
-      }[displayMode as DisplayMode]
+      }[effectiveDisplayMode as DisplayMode]
     : '';
 
   const handleMouseEnter = () => {
@@ -511,11 +475,16 @@ export default function Waveform({
     DisplayMode.Parade,
     DisplayMode.Vectorscope,
     DisplayMode.Histogram,
-  ].includes(displayMode as DisplayMode);
+  ].includes(effectiveDisplayMode as DisplayMode);
+
+  const clippingLabel = showClipping ? t('ui.waveform.tooltips.hideClipping') : t('ui.waveform.tooltips.showClipping');
+  const histogramLabel = t('ui.waveform.tooltips.histogram');
 
   return (
     <div
-      className="relative w-full h-full bg-surface rounded-[2px] overflow-hidden border border-border-color"
+      className={`relative w-full h-full overflow-hidden border ${
+        isHistogram ? 'histogram-surface' : 'bg-surface rounded-[2px] border-border-color'
+      }`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -523,7 +492,7 @@ export default function Waveform({
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
           isolation: 'isolate',
-          filter: isLightTheme ? 'invert(1) hue-rotate(180deg)' : 'none',
+          filter: !isHistogram && isLightTheme ? 'invert(1) hue-rotate(180deg)' : 'none',
           transition: 'filter 0.3s ease',
         }}
       >
@@ -541,13 +510,13 @@ export default function Waveform({
                   opacity: { duration: 0.15 },
                 }}
                 style={{ transformOrigin: 'bottom' }}
-                className="absolute inset-0 z-10"
+                className="waveform-histogram-layer absolute z-10"
               >
-                <HistogramView histogram={histogram} />
+                <HistogramView histogram={histogram} label={histogramLabel} />
               </motion.div>
             ) : (
               <motion.div
-                key={`waveform-canvas-${displayMode}`}
+                key={`waveform-canvas-${effectiveDisplayMode}`}
                 initial={{ opacity: 0, ...(isVectorscope ? {} : { scaleY: 0 }) }}
                 animate={{ opacity: 1, ...(isVectorscope ? {} : { scaleY: 1 }) }}
                 exit={{ opacity: 0, ...(isVectorscope ? {} : { scaleY: 0 }) }}
@@ -569,7 +538,7 @@ export default function Waveform({
             )
           ) : isLoaderMode ? (
             <motion.div
-              key={`waveform-loader-${displayMode}`}
+              key={`waveform-loader-${effectiveDisplayMode}`}
               initial={{ opacity: 0 }}
               animate={{
                 opacity: 1,
@@ -581,14 +550,51 @@ export default function Waveform({
               }}
               className="absolute inset-0 pointer-events-none z-0"
             >
-              {isHistogram ? <FakeHistogramLoader /> : <FakeWaveformLoader mode={displayMode} />}
+              {isHistogram ? <HistogramLoader /> : <FakeWaveformLoader mode={effectiveDisplayMode} />}
             </motion.div>
           ) : null}
         </AnimatePresence>
       </div>
 
+      {isHistogram && (
+        <div aria-hidden="true" className="histogram-tonal-axis">
+          <span>{t('adjustments.basic.shadows')}</span>
+          <span>{t('adjustments.color.grading.midtones')}</span>
+          <span>{t('adjustments.basic.highlights')}</span>
+        </div>
+      )}
+
+      {isHistogram && onToggleClipping && (
+        <>
+          <button
+            aria-label={`${t('adjustments.basic.shadows')} · ${clippingLabel}`}
+            aria-pressed={showClipping}
+            className={`histogram-clipping-toggle is-shadow ${showClipping ? 'is-active' : ''}`}
+            data-tooltip={`${t('adjustments.basic.shadows')} · ${clippingLabel}`}
+            onClick={onToggleClipping}
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 14">
+              <path d="M1.5 12.5 8 1.5l6.5 11Z" />
+            </svg>
+          </button>
+          <button
+            aria-label={`${t('adjustments.basic.highlights')} · ${clippingLabel}`}
+            aria-pressed={showClipping}
+            className={`histogram-clipping-toggle is-highlight ${showClipping ? 'is-active' : ''}`}
+            data-tooltip={`${t('adjustments.basic.highlights')} · ${clippingLabel}`}
+            onClick={onToggleClipping}
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 14">
+              <path d="M1.5 12.5 8 1.5l6.5 11Z" />
+            </svg>
+          </button>
+        </>
+      )}
+
       <AnimatePresence>
-        {isHovered && (
+        {isHovered && !histogramOnly && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -603,13 +609,11 @@ export default function Waveform({
               transition={{ duration: 0.1, ease: 'easeOut', delay: 0.05 }}
               className="flex items-center justify-center gap-0.5 p-0.5 bg-surface/96 rounded-[3px] w-full border border-border-color"
             >
-              {onToggleClipping && (
+              {onToggleClipping && !isHistogram && (
                 <>
                   <button
                     onClick={onToggleClipping}
-                    data-tooltip={
-                      showClipping ? t('ui.waveform.tooltips.hideClipping') : t('ui.waveform.tooltips.showClipping')
-                    }
+                    data-tooltip={clippingLabel}
                     className={`relative flex items-center justify-center w-6 h-6 shrink-0 rounded-[2px] transition-colors duration-100 ${
                       showClipping ? 'bg-accent text-button-text' : 'text-text-primary hover:bg-bg-tertiary'
                     }`}
@@ -626,9 +630,9 @@ export default function Waveform({
                     key={mode}
                     onClick={() => setDisplayMode(mode)}
                     data-tooltip={t(tooltip as never) as string}
-                    className={`${baseButtonClass} ${displayMode === mode ? textActiveClass : inactiveButtonClass}`}
+                    className={`${baseButtonClass} ${effectiveDisplayMode === mode ? textActiveClass : inactiveButtonClass}`}
                   >
-                    {displayMode === mode && (
+                    {effectiveDisplayMode === mode && (
                       <motion.div
                         layoutId="waveform-mode-indicator"
                         className={`absolute inset-0 ${bgClass} rounded-[2px]`}

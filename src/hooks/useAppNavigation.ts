@@ -100,18 +100,10 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
       const cached = globalImageCache.get(path);
       const isFrontendCached = Boolean(cached && cached.selectedImage?.isReady);
-      const isCachedInBackend = isFrontendCached
-        ? await invoke<boolean>('is_image_cached', { path }).catch(() => false)
-        : false;
-
-      const hasDifferentResolution =
-        cached &&
-        (useEditorStore.getState().originalSize.width !== cached.originalSize.width ||
-          useEditorStore.getState().originalSize.height !== cached.originalSize.height);
-
-      if (!isCachedInBackend || hasDifferentResolution) {
-        setEditor({ hasRenderedFirstFrame: false });
-      }
+      // A ready flag belongs to the currently displayed native texture, not to
+      // the next selected path. Keep the target thumbnail/cached JPEG visible;
+      // full mode may replace it only after WGPU confirms that exact image.
+      setEditor({ hasRenderedFirstFrame: false });
 
       selectedImagePathRef.current = path;
 

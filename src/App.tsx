@@ -671,6 +671,7 @@ function App() {
   const shouldHideFolderTree = isAndroid;
   const isWgpuActive =
     activeView === 'editor' &&
+    !BASIC_MODE &&
     appSettings?.useWgpuRenderer !== false &&
     selectedImage?.isReady &&
     hasRenderedFirstFrame;
@@ -725,7 +726,13 @@ function App() {
           )}
         >
           <DndContext sensors={layoutSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className={clsx('flex flex-row grow h-full min-h-0', isDevelopWorkspace && 'develop-workspace')}>
+            <div
+              className={clsx(
+                'flex flex-row grow h-full min-h-0',
+                isDevelopWorkspace && 'develop-workspace',
+                isDevelopWorkspace && isWgpuActive && 'is-wgpu-active',
+              )}
+            >
               {!shouldHideFolderTree && hasMainContent && !isDevelopWorkspace && (
                 <SidePanelArea
                   side="left"

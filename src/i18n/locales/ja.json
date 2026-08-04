@@ -6,6 +6,7 @@
       "evShift": "露出補正",
       "exposure": "露光量",
       "highlights": "ハイライト",
+      "light": "ライト",
       "mappers": {
         "agx": "AgX",
         "agxDesc": "フィルム調トーンマッピング",
@@ -108,6 +109,7 @@
       "sharpening": "シャープ",
       "sharpness": "シャープネス",
       "structure": "構造",
+      "texture": "テクスチャ",
       "threshold": "しきい値"
     },
     "effects": {
@@ -296,10 +298,15 @@
       "basicMode": "Daily RAW · Basic non-AI mode",
       "sections": {
         "basic": "基本",
+        "calibration": "キャリブレーション",
         "color": "カラー",
+        "colorGrading": "カラーグレーディング",
+        "colorMixer": "カラーミキサー",
         "curves": "トーンカーブ",
         "details": "ディテール",
-        "effects": "効果"
+        "effects": "効果",
+        "geometry": "ジオメトリ",
+        "optics": "光学補正"
       },
       "title": "補正",
       "tooltips": {

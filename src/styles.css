@@ -448,6 +448,10 @@
     background: color-mix(in srgb, var(--app-bg-primary) 88%, black);
   }
 
+  .develop-workspace.is-wgpu-active {
+    background: transparent;
+  }
+
   .develop-panel-shell {
     position: relative;
     display: flex;
@@ -622,7 +626,7 @@
   .develop-histogram-collapse {
     position: absolute;
     top: 9px;
-    right: 11px;
+    right: 35px;
     z-index: 25;
     display: grid;
     width: 22px;
@@ -662,6 +666,152 @@
   .develop-histogram-collapsed:hover {
     background: var(--app-card-active);
     color: var(--app-text-primary);
+  }
+
+  .histogram-surface {
+    border-color: rgb(255 255 255 / 9%);
+    border-radius: 2px;
+    background: rgb(20 22 25);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  }
+
+  .waveform-histogram-layer {
+    inset: 5px 5px 18px;
+  }
+
+  .histogram-chart {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .histogram-grid line {
+    stroke: rgb(226 232 240 / 9%);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .histogram-grid .histogram-baseline {
+    stroke: rgb(226 232 240 / 18%);
+  }
+
+  .histogram-channel {
+    mix-blend-mode: screen;
+  }
+
+  .histogram-tonal-axis {
+    position: absolute;
+    right: 7px;
+    bottom: 3px;
+    left: 7px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgb(226 232 240 / 50%);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 12px;
+    pointer-events: none;
+  }
+
+  .histogram-clipping-toggle {
+    position: absolute;
+    top: 4px;
+    z-index: 24;
+    display: grid;
+    width: 21px;
+    height: 20px;
+    place-items: center;
+    border-radius: 2px;
+    color: rgb(226 232 240 / 52%);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .histogram-clipping-toggle.is-shadow {
+    left: 4px;
+  }
+
+  .histogram-clipping-toggle.is-highlight {
+    right: 4px;
+  }
+
+  .histogram-clipping-toggle:hover,
+  .histogram-clipping-toggle:focus-visible {
+    background: rgb(255 255 255 / 8%);
+    color: rgb(241 245 249 / 88%);
+  }
+
+  .histogram-clipping-toggle svg {
+    width: 14px;
+    height: 13px;
+    overflow: visible;
+    fill: transparent;
+    stroke: currentColor;
+    stroke-linejoin: round;
+    stroke-width: 1.25;
+  }
+
+  .histogram-clipping-toggle.is-shadow.is-active {
+    background: rgb(78 140 255 / 13%);
+    color: rgb(104 159 255);
+  }
+
+  .histogram-clipping-toggle.is-highlight.is-active {
+    background: rgb(255 79 88 / 13%);
+    color: rgb(255 105 112);
+  }
+
+  .histogram-clipping-toggle.is-active svg {
+    fill: currentColor;
+    stroke: rgb(248 250 252 / 88%);
+  }
+
+  .histogram-loader {
+    position: absolute;
+    inset: 5px 5px 18px;
+    overflow: hidden;
+    border-bottom: 1px solid rgb(226 232 240 / 16%);
+    background-image:
+      linear-gradient(
+        to right,
+        transparent calc(25% - 0.5px),
+        rgb(226 232 240 / 8%) 25%,
+        transparent calc(25% + 0.5px)
+      ),
+      linear-gradient(
+        to right,
+        transparent calc(50% - 0.5px),
+        rgb(226 232 240 / 8%) 50%,
+        transparent calc(50% + 0.5px)
+      ),
+      linear-gradient(to right, transparent calc(75% - 0.5px), rgb(226 232 240 / 8%) 75%, transparent calc(75% + 0.5px));
+  }
+
+  .histogram-loader-sweep {
+    position: absolute;
+    inset-block: 0;
+    left: -38%;
+    width: 38%;
+    background: linear-gradient(to right, transparent, rgb(226 232 240 / 8%), transparent);
+    animation: histogram-loading-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes histogram-loading-sweep {
+    to {
+      transform: translateX(365%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .histogram-loader-sweep {
+      animation: none;
+      transform: translateX(180%);
+    }
   }
 
   .develop-adjustment-stack {

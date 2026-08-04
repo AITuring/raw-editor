@@ -6,6 +6,7 @@
       "evShift": "Сдвиг экспозиции",
       "exposure": "Экспозиция",
       "highlights": "Света",
+      "light": "Свет",
       "mappers": {
         "agx": "AgX",
         "agxDesc": "Кинематографическое тональное отображение",
@@ -108,6 +109,7 @@
       "sharpening": "Резкость",
       "sharpness": "Резкость",
       "structure": "Структура",
+      "texture": "Текстура",
       "threshold": "Порог"
     },
     "effects": {
@@ -328,10 +330,15 @@
       "basicMode": "Daily RAW · Basic non-AI mode",
       "sections": {
         "basic": "Основные",
+        "calibration": "Калибровка",
         "color": "Цвет",
+        "colorGrading": "Цветокоррекция",
+        "colorMixer": "Микшер цветов",
         "curves": "Кривые",
         "details": "Детали",
-        "effects": "Эффекты"
+        "effects": "Эффекты",
+        "geometry": "Геометрия",
+        "optics": "Оптика"
       },
       "title": "Настройки",
       "tooltips": {

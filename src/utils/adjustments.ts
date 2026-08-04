@@ -365,10 +365,15 @@ export interface Sections {
 export interface SectionVisibility {
   [index: string]: boolean;
   basic: boolean;
+  calibration: boolean;
+  colorGrading: boolean;
+  colorMixer: boolean;
   curves: boolean;
   color: boolean;
   details: boolean;
   effects: boolean;
+  geometry: boolean;
+  optics: boolean;
 }
 
 export const COLOR_LABELS: Array<Color> = [
@@ -470,10 +475,15 @@ export const INITIAL_MASK_ADJUSTMENTS: MaskAdjustments = {
   saturation: 0,
   sectionVisibility: {
     basic: true,
+    calibration: true,
+    colorGrading: true,
+    colorMixer: true,
     curves: true,
     color: true,
     details: true,
     effects: true,
+    geometry: true,
+    optics: true,
   },
   shadows: 0,
   sharpness: 0,
@@ -565,10 +575,15 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   saturation: 0,
   sectionVisibility: {
     basic: true,
+    calibration: true,
+    colorGrading: true,
+    colorMixer: true,
     curves: true,
     color: true,
     details: true,
     effects: true,
+    geometry: true,
+    optics: true,
   },
   shadows: 0,
   sharpness: 0,
@@ -676,6 +691,17 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     subMasks: normalizeSubMasks(patch.subMasks),
   }));
 
+  const loadedSectionVisibility = loadedAdjustments.sectionVisibility || ({} as SectionVisibility);
+  const normalizedSectionVisibility: SectionVisibility = {
+    ...INITIAL_ADJUSTMENTS.sectionVisibility,
+    ...loadedSectionVisibility,
+    calibration: loadedSectionVisibility.calibration ?? loadedSectionVisibility.color ?? true,
+    colorGrading: loadedSectionVisibility.colorGrading ?? loadedSectionVisibility.color ?? true,
+    colorMixer: loadedSectionVisibility.colorMixer ?? loadedSectionVisibility.color ?? true,
+    geometry: loadedSectionVisibility.geometry ?? true,
+    optics: loadedSectionVisibility.optics ?? loadedSectionVisibility.details ?? true,
+  };
+
   return {
     ...INITIAL_ADJUSTMENTS,
     ...loadedAdjustments,
@@ -721,8 +747,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     masks: normalizedMasks,
     aiPatches: normalizedAiPatches,
     sectionVisibility: {
-      ...INITIAL_ADJUSTMENTS.sectionVisibility,
-      ...(loadedAdjustments.sectionVisibility || {}),
+      ...normalizedSectionVisibility,
     },
     sharpnessThreshold: loadedAdjustments.sharpnessThreshold ?? INITIAL_ADJUSTMENTS.sharpnessThreshold,
   };
@@ -871,7 +896,6 @@ export const ADJUSTMENT_SECTIONS: Sections = {
     DetailsAdjustment.Clarity,
     DetailsAdjustment.Dehaze,
     DetailsAdjustment.Structure,
-    DetailsAdjustment.Centré,
     DetailsAdjustment.Sharpness,
     DetailsAdjustment.SharpnessThreshold,
     DetailsAdjustment.LumaNoiseReduction,
@@ -904,4 +928,60 @@ export const ADJUSTMENT_SECTIONS: Sections = {
     Effect.LensBlurMinFade,
     Effect.LensBlurMaxFade,
   ],
+};
+
+export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
+  basic: [
+    BasicAdjustment.Brightness,
+    BasicAdjustment.Contrast,
+    BasicAdjustment.Highlights,
+    BasicAdjustment.Shadows,
+    BasicAdjustment.Whites,
+    BasicAdjustment.Blacks,
+    BasicAdjustment.Exposure,
+    'toneMapper',
+    ColorAdjustment.Temperature,
+    ColorAdjustment.Tint,
+    ColorAdjustment.Vibrance,
+    ColorAdjustment.Saturation,
+    DetailsAdjustment.Clarity,
+    DetailsAdjustment.Dehaze,
+    DetailsAdjustment.Structure,
+    DetailsAdjustment.Centré,
+  ],
+  curves: ['curves', 'pointCurves', 'parametricCurve', 'curveMode'],
+  details: [
+    DetailsAdjustment.Sharpness,
+    DetailsAdjustment.SharpnessThreshold,
+    DetailsAdjustment.LumaNoiseReduction,
+    DetailsAdjustment.ColorNoiseReduction,
+  ],
+  colorMixer: [ColorAdjustment.Hue, ColorAdjustment.Hsl],
+  colorGrading: [ColorAdjustment.ColorGrading],
+  optics: [
+    DetailsAdjustment.ChromaticAberrationRedCyan,
+    DetailsAdjustment.ChromaticAberrationBlueYellow,
+    LensAdjustment.LensCorrectionMode,
+    LensAdjustment.LensMaker,
+    LensAdjustment.LensModel,
+    LensAdjustment.LensDistortionAmount,
+    LensAdjustment.LensVignetteAmount,
+    LensAdjustment.LensTcaAmount,
+    LensAdjustment.LensDistortionParams,
+    LensAdjustment.LensDistortionEnabled,
+    LensAdjustment.LensTcaEnabled,
+    LensAdjustment.LensVignetteEnabled,
+  ],
+  geometry: [
+    TransformAdjustment.TransformDistortion,
+    TransformAdjustment.TransformVertical,
+    TransformAdjustment.TransformHorizontal,
+    TransformAdjustment.TransformRotate,
+    TransformAdjustment.TransformAspect,
+    TransformAdjustment.TransformScale,
+    TransformAdjustment.TransformXOffset,
+    TransformAdjustment.TransformYOffset,
+  ],
+  effects: [...ADJUSTMENT_SECTIONS.effects, Effect.LutData, DetailsAdjustment.Centré],
+  calibration: ['colorCalibration'],
 };

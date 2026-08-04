@@ -11,6 +11,7 @@ import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { parsePreviewResponse } from '../utils/previewProtocol';
 import { createImageObjectUrl } from '../utils/imageObjectUrl';
+import { BASIC_MODE } from '../basic/runtime';
 
 export function useImageProcessing(
   transformWrapperRef: any,
@@ -181,8 +182,12 @@ export function useImageProcessing(
           isInteractive: dragging,
           targetResolution: targetRes || null,
           roi: roi || null,
-          computeWaveform: !!isWaveformVisible,
-          activeWaveformChannel: activeWaveformChannelRef.current || null,
+          computeWaveform: !!isWaveformVisible && !BASIC_MODE,
+          activeWaveformChannel: BASIC_MODE ? null : activeWaveformChannelRef.current || null,
+          // The native display surface is still available in full/debug mode.
+          // Basic mode keeps the processed JPEG in the WebView so a failed
+          // native-surface handoff can never leave the editor blank.
+          preferNativeDisplay: !BASIC_MODE,
         });
 
         if (newlySentPatches.size > 0) {

@@ -6,6 +6,7 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { Invokes } from '../components/ui/AppProperties';
 import { INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjustments';
+import { BASIC_MODE } from '../basic/runtime';
 
 export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   const selectedImage = useEditorStore((s) => s.selectedImage);
@@ -23,7 +24,8 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   const setLibrary = useLibraryStore((s) => s.setLibrary);
   const appSettings = useSettingsStore((s) => s.appSettings);
 
-  const isWgpuActive = appSettings?.useWgpuRenderer !== false && selectedImage?.isReady && hasRenderedFirstFrame;
+  const isWgpuActive =
+    !BASIC_MODE && appSettings?.useWgpuRenderer !== false && selectedImage?.isReady && hasRenderedFirstFrame;
 
   useEffect(() => {
     if (selectedImage && !selectedImage.isReady && selectedImage.path) {

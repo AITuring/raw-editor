@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import Slider from '../ui/Slider';
 import Switch from '../ui/Switch';
-import { Adjustments, Effect, CreativeAdjustment } from '../../utils/adjustments';
+import { Adjustments, Effect, CreativeAdjustment, DetailsAdjustment } from '../../utils/adjustments';
 import LUTControl from '../ui/LUTControl';
 import { AppSettings } from '../ui/AppProperties';
 import Text from '../ui/Text';
@@ -222,15 +222,26 @@ export default function EffectsPanel({
         />
 
         {!isForMask && (
-          <Slider
-            label={t('adjustments.effects.lightFlares')}
-            max={100}
-            min={0}
-            onChange={(e: any) => handleAdjustmentChange(CreativeAdjustment.FlareAmount, e.target.value)}
-            step={1}
-            value={adjustments.flareAmount}
-            onDragStateChange={onDragStateChange}
-          />
+          <>
+            <Slider
+              label={t('adjustments.effects.lightFlares')}
+              max={100}
+              min={0}
+              onChange={(e: any) => handleAdjustmentChange(CreativeAdjustment.FlareAmount, e.target.value)}
+              step={1}
+              value={adjustments.flareAmount}
+              onDragStateChange={onDragStateChange}
+            />
+            <Slider
+              label={t('adjustments.details.centre')}
+              max={100}
+              min={-100}
+              onChange={(e: any) => handleAdjustmentChange(DetailsAdjustment.Centré, e.target.value)}
+              step={1}
+              value={adjustments.centré}
+              onDragStateChange={onDragStateChange}
+            />
+          </>
         )}
       </div>
 

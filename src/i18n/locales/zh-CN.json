@@ -6,6 +6,7 @@
       "evShift": "EV 偏移",
       "exposure": "曝光",
       "highlights": "高光",
+      "light": "光线",
       "mappers": {
         "agx": "AgX",
         "agxDesc": "电影感色调映射",
@@ -108,6 +109,7 @@
       "sharpening": "锐化",
       "sharpness": "锐度",
       "structure": "结构",
+      "texture": "纹理",
       "threshold": "阈值"
     },
     "effects": {
@@ -295,11 +297,16 @@
       },
       "basicMode": "Daily RAW · 非 AI 基础模式",
       "sections": {
-        "basic": "基础",
+        "basic": "基本",
+        "calibration": "校准",
         "color": "颜色",
+        "colorGrading": "颜色分级",
+        "colorMixer": "颜色混合器",
         "curves": "曲线",
         "details": "细节",
-        "effects": "效果"
+        "effects": "效果",
+        "geometry": "几何",
+        "optics": "光学"
       },
       "title": "调整",
       "tooltips": {

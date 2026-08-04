@@ -6,6 +6,7 @@
       "evShift": "Compensación EV",
       "exposure": "Exposición",
       "highlights": "Iluminaciones",
+      "light": "Luz",
       "mappers": {
         "agx": "AgX",
         "agxDesc": "Mapeo de tonos estilo película",
@@ -108,6 +109,7 @@
       "sharpening": "Enfoque",
       "sharpness": "Nitidez",
       "structure": "Estructura",
+      "texture": "Textura",
       "threshold": "Umbral"
     },
     "effects": {
@@ -312,10 +314,15 @@
       "basicMode": "Daily RAW · Basic non-AI mode",
       "sections": {
         "basic": "Básico",
+        "calibration": "Calibración",
         "color": "Color",
+        "colorGrading": "Gradación de color",
+        "colorMixer": "Mezclador de colores",
         "curves": "Curvas",
         "details": "Detalles",
-        "effects": "Efectos"
+        "effects": "Efectos",
+        "geometry": "Geometría",
+        "optics": "Óptica"
       },
       "title": "Ajustes",
       "tooltips": {

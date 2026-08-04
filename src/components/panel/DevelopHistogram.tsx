@@ -2,11 +2,12 @@ import { ChartArea, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 
+import { BASIC_MODE } from '../../basic/runtime';
 import { useEditorActions } from '../../hooks/useEditorActions';
 import { useWaveformControls } from '../../hooks/useWaveformControls';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { Adjustments } from '../../utils/adjustments';
+import { Adjustments, DisplayMode } from '../../utils/adjustments';
 import Waveform from './editor/Waveform';
 
 export default function DevelopHistogram() {
@@ -44,8 +45,9 @@ export default function DevelopHistogram() {
   return (
     <div className="develop-histogram">
       <Waveform
-        displayMode={activeWaveformChannel || 'histogram'}
+        displayMode={BASIC_MODE ? DisplayMode.Histogram : activeWaveformChannel || DisplayMode.Histogram}
         histogram={histogram}
+        histogramOnly={BASIC_MODE}
         onToggleClipping={() => {
           setAdjustments((previous: Adjustments) => ({
             ...previous,

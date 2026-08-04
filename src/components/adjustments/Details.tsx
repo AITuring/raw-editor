@@ -11,6 +11,7 @@ interface DetailsPanelProps {
   appSettings: AppSettings | null;
   isForMask?: boolean;
   onDragStateChange?: (isDragging: boolean) => void;
+  variant?: 'all' | 'presence' | 'presenceBare' | 'detail' | 'optics';
 }
 
 export default function DetailsPanel({
@@ -19,6 +20,7 @@ export default function DetailsPanel({
   appSettings,
   isForMask = false,
   onDragStateChange,
+  variant = 'all',
 }: DetailsPanelProps) {
   const { t } = useTranslation();
 
@@ -28,10 +30,14 @@ export default function DetailsPanel({
   };
 
   const adjustmentVisibility = appSettings?.adjustmentVisibility || {};
+  const showSharpening = variant === 'all' || variant === 'detail';
+  const showPresence = variant === 'all' || variant === 'presence' || variant === 'presenceBare';
+  const showNoiseReduction = variant === 'all' || variant === 'detail';
+  const showChromaticAberration = variant === 'all' || variant === 'optics';
 
   return (
     <div className="space-y-4">
-      {adjustmentVisibility.sharpening !== false && (
+      {showSharpening && adjustmentVisibility.sharpening !== false && (
         <div className="p-2 bg-bg-tertiary rounded-md">
           <Text variant={TextVariants.heading} className="mb-2">
             {t('adjustments.details.sharpening')}
@@ -59,11 +65,13 @@ export default function DetailsPanel({
         </div>
       )}
 
-      {adjustmentVisibility.presence !== false && (
-        <div className="p-2 bg-bg-tertiary rounded-md">
-          <Text variant={TextVariants.heading} className="mb-2">
-            {t('adjustments.details.presence')}
-          </Text>
+      {showPresence && adjustmentVisibility.presence !== false && (
+        <div className={variant === 'presenceBare' ? '' : 'p-2 bg-bg-tertiary rounded-md'}>
+          {variant !== 'presenceBare' && (
+            <Text variant={TextVariants.heading} className="mb-2">
+              {t('adjustments.details.presence')}
+            </Text>
+          )}
           <Slider
             label={t('adjustments.details.clarity')}
             max={100}
@@ -83,7 +91,7 @@ export default function DetailsPanel({
             onDragStateChange={onDragStateChange}
           />
           <Slider
-            label={t('adjustments.details.structure')}
+            label={variant === 'presenceBare' ? t('adjustments.details.texture') : t('adjustments.details.structure')}
             max={100}
             min={-100}
             onChange={(e: any) => handleAdjustmentChange(DetailsAdjustment.Structure, e.target.value)}
@@ -91,7 +99,7 @@ export default function DetailsPanel({
             value={adjustments.structure}
             onDragStateChange={onDragStateChange}
           />
-          {!isForMask && (
+          {!isForMask && variant !== 'presenceBare' && (
             <Slider
               label={t('adjustments.details.centre')}
               max={100}
@@ -105,7 +113,7 @@ export default function DetailsPanel({
         </div>
       )}
 
-      {adjustmentVisibility.noiseReduction !== false && (
+      {showNoiseReduction && adjustmentVisibility.noiseReduction !== false && (
         <div className="p-2 bg-bg-tertiary rounded-md">
           <Text variant={TextVariants.heading} className="mb-2">
             {t('adjustments.details.noiseReduction')}
@@ -131,7 +139,7 @@ export default function DetailsPanel({
         </div>
       )}
 
-      {!isForMask && adjustmentVisibility.chromaticAberration !== false && (
+      {!isForMask && showChromaticAberration && adjustmentVisibility.chromaticAberration !== false && (
         <div className="p-2 bg-bg-tertiary rounded-md">
           <Text variant={TextVariants.heading} className="mb-2">
             {t('adjustments.details.chromaticAberration')}

@@ -143,32 +143,97 @@ impl Default for GeometryParams {
 }
 
 pub fn get_geometry_params_from_json(adjustments: &serde_json::Value) -> GeometryParams {
-    let lens_params = adjustments
-        .get("lensDistortionParams")
-        .and_then(|v| v.as_object());
+    let visibility = adjustments.get("sectionVisibility");
+    let section_visible = |section: &str, legacy: Option<&str>| -> bool {
+        visibility
+            .and_then(|v| v.get(section))
+            .and_then(|s| s.as_bool())
+            .or_else(|| {
+                legacy.and_then(|legacy_section| {
+                    visibility
+                        .and_then(|v| v.get(legacy_section))
+                        .and_then(|s| s.as_bool())
+                })
+            })
+            .unwrap_or(true)
+    };
+    let geometry_visible = section_visible("geometry", None);
+    let optics_visible = section_visible("optics", Some("details"));
+    let lens_params = optics_visible
+        .then(|| {
+            adjustments
+                .get("lensDistortionParams")
+                .and_then(|v| v.as_object())
+        })
+        .flatten();
 
     GeometryParams {
-        distortion: adjustments["transformDistortion"].as_f64().unwrap_or(0.0) as f32,
-        vertical: adjustments["transformVertical"].as_f64().unwrap_or(0.0) as f32,
-        horizontal: adjustments["transformHorizontal"].as_f64().unwrap_or(0.0) as f32,
-        rotate: adjustments["transformRotate"].as_f64().unwrap_or(0.0) as f32,
-        aspect: adjustments["transformAspect"].as_f64().unwrap_or(0.0) as f32,
-        scale: adjustments["transformScale"].as_f64().unwrap_or(100.0) as f32,
-        x_offset: adjustments["transformXOffset"].as_f64().unwrap_or(0.0) as f32,
-        y_offset: adjustments["transformYOffset"].as_f64().unwrap_or(0.0) as f32,
+        distortion: if geometry_visible {
+            adjustments["transformDistortion"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        vertical: if geometry_visible {
+            adjustments["transformVertical"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        horizontal: if geometry_visible {
+            adjustments["transformHorizontal"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        rotate: if geometry_visible {
+            adjustments["transformRotate"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        aspect: if geometry_visible {
+            adjustments["transformAspect"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        scale: if geometry_visible {
+            adjustments["transformScale"].as_f64().unwrap_or(100.0) as f32
+        } else {
+            100.0
+        },
+        x_offset: if geometry_visible {
+            adjustments["transformXOffset"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        y_offset: if geometry_visible {
+            adjustments["transformYOffset"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
 
-        lens_distortion_amount: adjustments["lensDistortionAmount"]
-            .as_f64()
-            .unwrap_or(100.0) as f32
-            / 100.0,
-        lens_vignette_amount: adjustments["lensVignetteAmount"].as_f64().unwrap_or(100.0) as f32
-            / 100.0,
-        lens_tca_amount: adjustments["lensTcaAmount"].as_f64().unwrap_or(100.0) as f32 / 100.0,
-        lens_distortion_enabled: adjustments["lensDistortionEnabled"]
-            .as_bool()
-            .unwrap_or(true),
-        lens_tca_enabled: adjustments["lensTcaEnabled"].as_bool().unwrap_or(true),
-        lens_vignette_enabled: adjustments["lensVignetteEnabled"].as_bool().unwrap_or(true),
+        lens_distortion_amount: if optics_visible {
+            adjustments["lensDistortionAmount"]
+                .as_f64()
+                .unwrap_or(100.0) as f32
+                / 100.0
+        } else {
+            1.0
+        },
+        lens_vignette_amount: if optics_visible {
+            adjustments["lensVignetteAmount"].as_f64().unwrap_or(100.0) as f32 / 100.0
+        } else {
+            1.0
+        },
+        lens_tca_amount: if optics_visible {
+            adjustments["lensTcaAmount"].as_f64().unwrap_or(100.0) as f32 / 100.0
+        } else {
+            1.0
+        },
+        lens_distortion_enabled: optics_visible
+            && adjustments["lensDistortionEnabled"]
+                .as_bool()
+                .unwrap_or(true),
+        lens_tca_enabled: optics_visible && adjustments["lensTcaEnabled"].as_bool().unwrap_or(true),
+        lens_vignette_enabled: optics_visible
+            && adjustments["lensVignetteEnabled"].as_bool().unwrap_or(true),
 
         lens_dist_k1: lens_params
             .and_then(|p| p.get("k1").and_then(|k| k.as_f64()))
@@ -2052,6 +2117,23 @@ fn get_global_adjustments_from_json(
             .and_then(|s| s.as_bool())
             .unwrap_or(true)
     };
+    let is_visible_with_legacy = |section: &str, legacy: &str| -> bool {
+        visibility
+            .and_then(|v| v.get(section))
+            .and_then(|s| s.as_bool())
+            .unwrap_or_else(|| is_visible(legacy))
+    };
+    let uses_camera_raw_sections = visibility
+        .and_then(|v| v.get("colorMixer"))
+        .and_then(|s| s.as_bool())
+        .is_some();
+    let is_reorganized_visible = |section: &str, legacy: &str| -> bool {
+        if uses_camera_raw_sections {
+            is_visible(section)
+        } else {
+            is_visible(legacy)
+        }
+    };
 
     let get_val = |section: &str, key: &str, scale: f32, default: Option<f64>| -> f32 {
         if is_visible(section) {
@@ -2122,7 +2204,7 @@ fn get_global_adjustments_from_json(
         .cloned()
         .unwrap_or_default();
 
-    let color_cal_settings = if is_visible("color") {
+    let color_cal_settings = if is_visible_with_legacy("calibration", "color") {
         ColorCalibrationSettings {
             shadows_tint: cal_obj["shadowsTint"].as_f64().unwrap_or(0.0) as f32
                 / SCALES.color_calibration_hue,
@@ -2144,7 +2226,11 @@ fn get_global_adjustments_from_json(
         ColorCalibrationSettings::default()
     };
 
-    let tone_mapper = js_adjustments["toneMapper"].as_str().unwrap_or("basic");
+    let tone_mapper = if is_visible("basic") {
+        js_adjustments["toneMapper"].as_str().unwrap_or("basic")
+    } else {
+        "basic"
+    };
     let (pipe_to_rendering, rendering_to_pipe) = calculate_agx_matrices();
 
     let (has_lut, lut_intensity) = if is_visible("effects") {
@@ -2169,11 +2255,31 @@ fn get_global_adjustments_from_json(
         whites: get_val("basic", "whites", SCALES.whites, None),
         blacks: get_val("basic", "blacks", SCALES.blacks, None),
 
-        saturation: get_val("color", "saturation", SCALES.saturation, None),
-        temperature: get_val("color", "temperature", SCALES.temperature, None),
-        tint: get_val("color", "tint", SCALES.tint, None),
-        vibrance: get_val("color", "vibrance", SCALES.vibrance, None),
-        hue: get_val("color", "hue", 1.0, None),
+        saturation: if is_reorganized_visible("basic", "color") {
+            js_adjustments["saturation"].as_f64().unwrap_or(0.0) as f32 / SCALES.saturation
+        } else {
+            0.0
+        },
+        temperature: if is_reorganized_visible("basic", "color") {
+            js_adjustments["temperature"].as_f64().unwrap_or(0.0) as f32 / SCALES.temperature
+        } else {
+            0.0
+        },
+        tint: if is_reorganized_visible("basic", "color") {
+            js_adjustments["tint"].as_f64().unwrap_or(0.0) as f32 / SCALES.tint
+        } else {
+            0.0
+        },
+        vibrance: if is_reorganized_visible("basic", "color") {
+            js_adjustments["vibrance"].as_f64().unwrap_or(0.0) as f32 / SCALES.vibrance
+        } else {
+            0.0
+        },
+        hue: if is_visible_with_legacy("colorMixer", "color") {
+            js_adjustments["hue"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
         _pad_color1: 0.0,
         _pad_color2: 0.0,
         _pad_color3: 0.0,
@@ -2192,10 +2298,26 @@ fn get_global_adjustments_from_json(
             None,
         ),
 
-        clarity: get_val("details", "clarity", SCALES.clarity, None),
-        dehaze: get_val("details", "dehaze", SCALES.dehaze, None),
-        structure: get_val("details", "structure", SCALES.structure, None),
-        centré: get_val("details", "centré", SCALES.centré, None),
+        clarity: if is_reorganized_visible("basic", "details") {
+            js_adjustments["clarity"].as_f64().unwrap_or(0.0) as f32 / SCALES.clarity
+        } else {
+            0.0
+        },
+        dehaze: if is_reorganized_visible("basic", "details") {
+            js_adjustments["dehaze"].as_f64().unwrap_or(0.0) as f32 / SCALES.dehaze
+        } else {
+            0.0
+        },
+        structure: if is_reorganized_visible("basic", "details") {
+            js_adjustments["structure"].as_f64().unwrap_or(0.0) as f32 / SCALES.structure
+        } else {
+            0.0
+        },
+        centré: if is_reorganized_visible("effects", "details") {
+            js_adjustments["centré"].as_f64().unwrap_or(0.0) as f32 / SCALES.centré
+        } else {
+            0.0
+        },
         vignette_amount: get_val("effects", "vignetteAmount", SCALES.vignette_amount, None),
         vignette_midpoint: get_val(
             "effects",
@@ -2224,18 +2346,22 @@ fn get_global_adjustments_from_json(
             Some(50.0),
         ),
 
-        chromatic_aberration_red_cyan: get_val(
-            "details",
-            "chromaticAberrationRedCyan",
-            SCALES.chromatic_aberration,
-            None,
-        ),
-        chromatic_aberration_blue_yellow: get_val(
-            "details",
-            "chromaticAberrationBlueYellow",
-            SCALES.chromatic_aberration,
-            None,
-        ),
+        chromatic_aberration_red_cyan: if is_visible_with_legacy("optics", "details") {
+            js_adjustments["chromaticAberrationRedCyan"]
+                .as_f64()
+                .unwrap_or(0.0) as f32
+                / SCALES.chromatic_aberration
+        } else {
+            0.0
+        },
+        chromatic_aberration_blue_yellow: if is_visible_with_legacy("optics", "details") {
+            js_adjustments["chromaticAberrationBlueYellow"]
+                .as_f64()
+                .unwrap_or(0.0) as f32
+                / SCALES.chromatic_aberration
+        } else {
+            0.0
+        },
         show_clipping: if js_adjustments["showClipping"].as_bool().unwrap_or(false) {
             1
         } else {
@@ -2264,32 +2390,32 @@ fn get_global_adjustments_from_json(
         _pad_cg2: 0.0,
         _pad_cg3: 0.0,
         _pad_cg4: 0.0,
-        color_grading_shadows: if is_visible("color") {
+        color_grading_shadows: if is_visible_with_legacy("colorGrading", "color") {
             parse_color_grade_settings(&cg_obj["shadows"])
         } else {
             ColorGradeSettings::default()
         },
-        color_grading_midtones: if is_visible("color") {
+        color_grading_midtones: if is_visible_with_legacy("colorGrading", "color") {
             parse_color_grade_settings(&cg_obj["midtones"])
         } else {
             ColorGradeSettings::default()
         },
-        color_grading_highlights: if is_visible("color") {
+        color_grading_highlights: if is_visible_with_legacy("colorGrading", "color") {
             parse_color_grade_settings(&cg_obj["highlights"])
         } else {
             ColorGradeSettings::default()
         },
-        color_grading_global: if is_visible("color") {
+        color_grading_global: if is_visible_with_legacy("colorGrading", "color") {
             parse_color_grade_settings(&cg_obj["global"])
         } else {
             ColorGradeSettings::default()
         },
-        color_grading_blending: if is_visible("color") {
+        color_grading_blending: if is_visible_with_legacy("colorGrading", "color") {
             cg_obj["blending"].as_f64().unwrap_or(50.0) as f32 / SCALES.color_grading_blending
         } else {
             0.5
         },
-        color_grading_balance: if is_visible("color") {
+        color_grading_balance: if is_visible_with_legacy("colorGrading", "color") {
             cg_obj["balance"].as_f64().unwrap_or(0.0) as f32 / SCALES.color_grading_balance
         } else {
             0.0
@@ -2299,7 +2425,7 @@ fn get_global_adjustments_from_json(
 
         color_calibration: color_cal_settings,
 
-        hsl: if is_visible("color") {
+        hsl: if is_visible_with_legacy("colorMixer", "color") {
             parse_hsl_adjustments(&js_adjustments.get("hsl").cloned().unwrap_or_default())
         } else {
             [HslColor::default(); 8]

@@ -6,6 +6,7 @@ import { useProcessStore } from '../store/useProcessStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
+import { BASIC_MODE } from '../basic/runtime';
 
 interface TauriListenerProps {
   refreshAllFolderTrees: () => void;
@@ -234,7 +235,7 @@ export function useTauriListeners({
         }
       }),
       listen('wgpu-frame-ready', (event: any) => {
-        if (isEffectActive && event.payload?.path === useEditorStore.getState().selectedImage?.path) {
+        if (!BASIC_MODE && isEffectActive && event.payload?.path === useEditorStore.getState().selectedImage?.path) {
           useEditorStore.getState().setEditor({ hasRenderedFirstFrame: true });
         }
       }),

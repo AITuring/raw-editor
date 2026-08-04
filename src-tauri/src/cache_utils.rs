@@ -173,6 +173,15 @@ pub fn calculate_geometry_hash(adjustments: &serde_json::Value) -> u64 {
 
     adjustments["orientationSteps"].as_u64().hash(&mut hasher);
 
+    for section in ["geometry", "optics"] {
+        adjustments
+            .get("sectionVisibility")
+            .and_then(|visibility| visibility.get(section))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(true)
+            .hash(&mut hasher);
+    }
+
     for key in GEOMETRY_KEYS {
         if let Some(val) = adjustments.get(key) {
             key.hash(&mut hasher);

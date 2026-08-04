@@ -1,13 +1,20 @@
 import React, { useCallback } from 'react';
 import { RotateCcw, Copy, ClipboardPaste, Aperture } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import BasicAdjustments from '../../adjustments/Basic';
+import CameraRawBasic from '../../adjustments/CameraRawBasic';
 import CurveGraph from '../../adjustments/Curves';
 import ColorPanel from '../../adjustments/Color';
 import DetailsPanel from '../../adjustments/Details';
 import EffectsPanel from '../../adjustments/Effects';
+import GeometryPanel from '../../adjustments/Geometry';
+import OpticsPanel from '../../adjustments/Optics';
 import CollapsibleSection from '../../ui/CollapsibleSection';
-import { Adjustments, SectionVisibility, INITIAL_ADJUSTMENTS, ADJUSTMENT_SECTIONS } from '../../../utils/adjustments';
+import {
+  Adjustments,
+  SectionVisibility,
+  INITIAL_ADJUSTMENTS,
+  CAMERA_RAW_ADJUSTMENT_SECTIONS,
+} from '../../../utils/adjustments';
 import { useContextMenu } from '../../../context/ContextMenuContext';
 import { OPTION_SEPARATOR } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
@@ -18,6 +25,20 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
 import { BASIC_MODE } from '../../../basic/runtime';
+
+const CAMERA_RAW_SECTIONS = [
+  { name: 'basic', titleKey: 'editor.adjustments.sections.basic' },
+  { name: 'curves', titleKey: 'editor.adjustments.sections.curves' },
+  { name: 'details', titleKey: 'editor.adjustments.sections.details' },
+  { name: 'colorMixer', titleKey: 'editor.adjustments.sections.colorMixer' },
+  { name: 'colorGrading', titleKey: 'editor.adjustments.sections.colorGrading' },
+  { name: 'optics', titleKey: 'editor.adjustments.sections.optics' },
+  { name: 'geometry', titleKey: 'editor.adjustments.sections.geometry' },
+  { name: 'effects', titleKey: 'editor.adjustments.sections.effects' },
+  { name: 'calibration', titleKey: 'editor.adjustments.sections.calibration' },
+] as const;
+
+type CameraRawSectionName = (typeof CAMERA_RAW_SECTIONS)[number]['name'];
 
 export default function Controls() {
   const { t } = useTranslation();
@@ -89,8 +110,8 @@ export default function Controls() {
   const handleResetAdjustments = () => {
     setAdjustments((prev: Adjustments) => ({
       ...prev,
-      ...Object.keys(ADJUSTMENT_SECTIONS)
-        .flatMap((s) => ADJUSTMENT_SECTIONS[s])
+      ...Object.keys(CAMERA_RAW_ADJUSTMENT_SECTIONS)
+        .flatMap((s) => CAMERA_RAW_ADJUSTMENT_SECTIONS[s])
         .reduce((acc: any, key: string) => {
           acc[key] = INITIAL_ADJUSTMENTS[key as keyof Adjustments];
           return acc;
@@ -114,11 +135,11 @@ export default function Controls() {
     });
   };
 
-  const handleSectionContextMenu = (event: any, sectionName: string) => {
+  const handleSectionContextMenu = (event: any, sectionName: CameraRawSectionName, titleKey: string) => {
     event.preventDefault();
     event.stopPropagation();
 
-    const sectionKeys = ADJUSTMENT_SECTIONS[sectionName];
+    const sectionKeys = CAMERA_RAW_ADJUSTMENT_SECTIONS[sectionName];
     if (!sectionKeys) {
       return;
     }
@@ -163,7 +184,7 @@ export default function Controls() {
     };
 
     const isPasteAllowed = copiedSectionAdjustments && copiedSectionAdjustments.section === sectionName;
-    const translatedSection = t(`editor.adjustments.sections.${sectionName}` as never) as string;
+    const translatedSection = t(titleKey as never) as string;
 
     const pasteLabel = copiedSectionAdjustments
       ? t('editor.adjustments.actions.pasteLabel', { section: translatedSection })
@@ -185,6 +206,36 @@ export default function Controls() {
     ];
 
     showContextMenu(event.clientX, event.clientY, options);
+  };
+
+  const renderSection = (sectionName: CameraRawSectionName) => {
+    const commonProps = {
+      adjustments,
+      setAdjustments,
+      appSettings,
+      onDragStateChange,
+    };
+
+    switch (sectionName) {
+      case 'basic':
+        return <CameraRawBasic {...commonProps} isWbPickerActive={isWbPickerActive} toggleWbPicker={toggleWbPicker} />;
+      case 'curves':
+        return <CurveGraph {...commonProps} histogram={histogram} theme={theme} />;
+      case 'details':
+        return <DetailsPanel {...commonProps} variant="detail" />;
+      case 'colorMixer':
+        return <ColorPanel {...commonProps} variant="mixer" />;
+      case 'colorGrading':
+        return <ColorPanel {...commonProps} variant="grading" />;
+      case 'optics':
+        return <OpticsPanel {...commonProps} />;
+      case 'geometry':
+        return <GeometryPanel {...commonProps} />;
+      case 'effects':
+        return <EffectsPanel {...commonProps} handleLutSelect={handleLutSelect} onLutHover={setLutPreviewOverride} />;
+      case 'calibration':
+        return <ColorPanel {...commonProps} variant="calibration" />;
+    }
   };
 
   return (
@@ -220,16 +271,8 @@ export default function Controls() {
 
       <div className="develop-adjustment-stack custom-scrollbar">
         {selectedImage ? (
-          Object.keys(ADJUSTMENT_SECTIONS).map((sectionName: string) => {
-            const SectionComponent: any = {
-              basic: BasicAdjustments,
-              curves: CurveGraph,
-              color: ColorPanel,
-              details: DetailsPanel,
-              effects: EffectsPanel,
-            }[sectionName];
-
-            const title = t(`editor.adjustments.sections.${sectionName}` as never) as string;
+          CAMERA_RAW_SECTIONS.map(({ name: sectionName, titleKey }) => {
+            const title = t(titleKey as never) as string;
             const sectionVisibility = adjustments.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
 
             return (
@@ -237,23 +280,12 @@ export default function Controls() {
                 <CollapsibleSection
                   isContentVisible={sectionVisibility[sectionName as keyof SectionVisibility]}
                   isOpen={collapsibleSectionsState[sectionName as keyof typeof collapsibleSectionsState]}
-                  onContextMenu={(e: any) => handleSectionContextMenu(e, sectionName)}
+                  onContextMenu={(e: any) => handleSectionContextMenu(e, sectionName, titleKey)}
                   onToggle={() => handleToggleSection(sectionName)}
                   onToggleVisibility={() => handleToggleVisibility(sectionName)}
                   title={title}
                 >
-                  <SectionComponent
-                    adjustments={adjustments}
-                    setAdjustments={setAdjustments}
-                    histogram={histogram}
-                    theme={theme}
-                    handleLutSelect={handleLutSelect}
-                    onLutHover={setLutPreviewOverride}
-                    appSettings={appSettings}
-                    isWbPickerActive={isWbPickerActive}
-                    toggleWbPicker={toggleWbPicker}
-                    onDragStateChange={onDragStateChange}
-                  />
+                  {renderSection(sectionName)}
                 </CollapsibleSection>
               </div>
             );

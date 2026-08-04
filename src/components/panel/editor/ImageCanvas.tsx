@@ -12,6 +12,7 @@ import { useOsPlatform } from '../../../hooks/useOsPlatform';
 import { useTranslation } from 'react-i18next';
 import type { OverlayMode } from '../right/CropPanel';
 import CompositionOverlays from './overlays/CompositionOverlays';
+import { BASIC_MODE } from '../../../basic/runtime';
 
 interface CursorPreview {
   visible: boolean;
@@ -1217,7 +1218,8 @@ const ImageCanvas = memo(
     const [isCtrlPressed, setIsCtrlPressed] = useState(false);
     const retainedPatchRef = useRef<typeof interactivePatch>(null);
 
-    const isWgpuActive = appSettings?.useWgpuRenderer !== false && selectedImage?.isReady && hasRenderedFirstFrame;
+    const isWgpuActive =
+      !BASIC_MODE && appSettings?.useWgpuRenderer !== false && selectedImage?.isReady && hasRenderedFirstFrame;
     const { t } = useTranslation();
     const osPlatform = useOsPlatform();
     const modifierKey = osPlatform === 'macos' ? 'Cmd' : 'Ctrl';

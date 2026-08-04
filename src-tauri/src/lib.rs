@@ -311,6 +311,43 @@ async fn update_wgpu_transform(
     Ok(())
 }
 
+fn should_output_to_native_display(
+    native_display_enabled: bool,
+    has_native_display: bool,
+    width: u32,
+    height: u32,
+    max_texture_dimension: u32,
+) -> bool {
+    native_display_enabled
+        && has_native_display
+        && width <= max_texture_dimension
+        && height <= max_texture_dimension
+}
+
+#[cfg(test)]
+mod native_preview_display_tests {
+    use super::should_output_to_native_display;
+
+    #[test]
+    fn requires_an_enabled_native_display_and_supported_dimensions() {
+        assert!(should_output_to_native_display(
+            true, true, 3840, 2160, 16_384
+        ));
+        assert!(!should_output_to_native_display(
+            false, true, 3840, 2160, 16_384
+        ));
+        assert!(!should_output_to_native_display(
+            true, false, 3840, 2160, 16_384
+        ));
+        assert!(!should_output_to_native_display(
+            true, true, 17_598, 2735, 16_384
+        ));
+        assert!(!should_output_to_native_display(
+            true, true, 2735, 17_598, 16_384
+        ));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn process_preview_job(
     app_handle: &tauri::AppHandle,
@@ -321,6 +358,7 @@ fn process_preview_job(
     roi: Option<(f32, f32, f32, f32)>,
     compute_waveform: bool,
     active_waveform_channel: Option<&str>,
+    prefer_native_display: bool,
 ) -> Result<Vec<u8>, String> {
     let fn_start = std::time::Instant::now();
     let context = get_or_init_gpu_context(&state, app_handle)?;
@@ -341,9 +379,10 @@ fn process_preview_job(
     let default_preview_dim = settings.editor_preview_resolution.unwrap_or(1920);
     let preview_dim = target_resolution.unwrap_or(default_preview_dim);
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    let use_wgpu_renderer = settings.use_wgpu_renderer.unwrap_or(true);
+    let native_display_enabled =
+        prefer_native_display && settings.use_wgpu_renderer.unwrap_or(true);
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let use_wgpu_renderer = false;
+    let native_display_enabled = false;
 
     let has_roi = roi.is_some();
     let (interactive_divisor, interactive_quality) = match live_quality {
@@ -428,6 +467,19 @@ fn process_preview_job(
 
     let (preview_width, preview_height) = processing_image.dimensions();
 
+    let has_native_display = context
+        .display
+        .lock()
+        .map(|display| display.is_some())
+        .unwrap_or(false);
+    let output_to_native_display = should_output_to_native_display(
+        native_display_enabled,
+        has_native_display,
+        preview_width,
+        preview_height,
+        context.limits.max_texture_dimension_2d,
+    );
+
     let pixel_roi = normalized_roi_to_pixels(roi, preview_width, preview_height);
 
     let mask_definitions: Vec<MaskDefinition> = adjustments_clone
@@ -499,12 +551,12 @@ fn process_preview_job(
                 roi: pixel_roi,
             },
             "apply_adjustments",
-            use_wgpu_renderer,
+            output_to_native_display,
             analytics_config,
         );
 
     if let Ok(final_processed_image) = final_processed_image_result {
-        if use_wgpu_renderer {
+        if output_to_native_display {
             let _ = context.device.poll(wgpu::PollType::Wait {
                 submission_index: None,
                 timeout: Some(std::time::Duration::from_millis(500)),
@@ -652,6 +704,7 @@ fn start_preview_worker(app_handle: tauri::AppHandle) {
                 job.roi,
                 job.compute_waveform,
                 job.active_waveform_channel.as_deref(),
+                job.prefer_native_display,
             ) {
                 Ok(bytes) => {
                     let _ = responder.send(bytes);
@@ -672,6 +725,7 @@ async fn apply_adjustments(
     roi: Option<(f32, f32, f32, f32)>,
     compute_waveform: bool,
     active_waveform_channel: Option<String>,
+    prefer_native_display: Option<bool>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Response, String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -686,6 +740,7 @@ async fn apply_adjustments(
                 roi,
                 compute_waveform,
                 active_waveform_channel,
+                prefer_native_display: prefer_native_display.unwrap_or(true),
                 responder: tx,
             };
             worker_tx
