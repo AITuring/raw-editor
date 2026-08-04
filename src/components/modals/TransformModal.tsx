@@ -10,6 +10,9 @@ import { Adjustments } from '../../utils/adjustments';
 import clsx from 'clsx';
 import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
+import { Invokes } from '../ui/AppProperties';
+import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
+import { createImageObjectUrl } from '../../utils/imageObjectUrl';
 
 interface GeometryParams {
   distortion: number;
@@ -117,7 +120,8 @@ const CustomGrid = ({ denseVisible, ruleOfThirdsVisible }: { denseVisible: boole
 export default function TransformModal({ isOpen, onClose, onApply, currentAdjustments }: TransformModalProps) {
   const { t } = useTranslation();
   const [params, setParams] = useState<TransformParams>(DEFAULT_PARAMS);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { url: previewUrl, replace: replacePreviewUrl, clear: clearPreviewUrl } = useImageObjectUrl();
+  const previewRequestIdRef = useRef(0);
   const [isApplying, setIsApplying] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [showLines, setShowLines] = useState(false);
@@ -222,17 +226,30 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
           lens_vignette_enabled: currentAdjustments.lensVignetteEnabled ?? true,
         };
 
-        const result: string = await invoke('preview_geometry_transform', {
+        const requestId = ++previewRequestIdRef.current;
+        const buffer: ArrayBuffer = await invoke(Invokes.PreviewGeometryTransform, {
           params: fullParams,
           jsAdjustments: currentAdjustments,
           showLines: linesEnabled,
         });
-        setPreviewUrl(result);
+        if (requestId !== previewRequestIdRef.current) return;
+
+        const nextUrl = createImageObjectUrl(buffer, 'image/jpeg');
+        if (!nextUrl) throw new Error('Geometry preview returned no image data');
+        replacePreviewUrl(nextUrl);
       } catch (e) {
         console.error('Preview transform failed', e);
       }
     }, 30),
-    [currentAdjustments],
+    [currentAdjustments, replacePreviewUrl],
+  );
+
+  useEffect(
+    () => () => {
+      previewRequestIdRef.current += 1;
+      updatePreview.cancel();
+    },
+    [updatePreview],
   );
 
   useEffect(() => {
@@ -255,10 +272,12 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
       updatePreview(initParams, false);
       return () => clearTimeout(timer);
     } else {
+      previewRequestIdRef.current += 1;
+      updatePreview.cancel();
       setShow(false);
       const timer = setTimeout(() => {
         setIsMounted(false);
-        setPreviewUrl(null);
+        clearPreviewUrl();
         setIsApplying(false);
       }, 300);
       return () => clearTimeout(timer);
@@ -314,13 +333,19 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
         lens_tca_enabled: currentAdjustments.lensTcaEnabled ?? true,
         lens_vignette_enabled: currentAdjustments.lensVignetteEnabled ?? true,
       };
-      const result: string = await invoke('preview_geometry_transform', {
+      const requestId = ++previewRequestIdRef.current;
+      const buffer: ArrayBuffer = await invoke(Invokes.PreviewGeometryTransform, {
         params: fullParams,
         jsAdjustments: currentAdjustments,
         showLines: false,
       });
-      setPreviewUrl(result);
+      if (requestId !== previewRequestIdRef.current) return;
+
+      const nextUrl = createImageObjectUrl(buffer, 'image/jpeg');
+      if (!nextUrl) throw new Error('Geometry comparison returned no image data');
+      replacePreviewUrl(nextUrl);
     } else {
+      previewRequestIdRef.current += 1;
       updatePreview(params, showLines);
     }
   };

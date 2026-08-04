@@ -6,6 +6,7 @@ import { ImageDimensions } from '../hooks/useImageRenderSize';
 import { ToolType } from '../components/panel/right/Masks';
 import { OverlayMode } from '../components/panel/right/CropPanel';
 import { LEGACY_DEFAULT_IMAGE_STATE, legacyStateToAdjustments } from '../basic/legacyAdjustmentAdapter';
+import { revokeImageObjectUrlLater } from '../utils/imageObjectUrl';
 
 export interface InteractivePatch {
   url: string;
@@ -140,7 +141,19 @@ export const useEditorStore = create<EditorState>((set) => ({
   hasRenderedFirstFrame: false,
   patchesSentToBackend: new Set<string>(),
 
-  setEditor: (updater) => set((state) => (typeof updater === 'function' ? updater(state) : updater)),
+  setEditor: (updater) =>
+    set((state) => {
+      const update = typeof updater === 'function' ? updater(state) : updater;
+      const previewKeys = ['uncroppedAdjustedPreviewUrl', 'transformedOriginalUrl'] as const;
+
+      for (const key of previewKeys) {
+        if (Object.prototype.hasOwnProperty.call(update, key) && update[key] !== state[key]) {
+          revokeImageObjectUrlLater(state[key]);
+        }
+      }
+
+      return update;
+    }),
 
   pushHistory: (newAdj) =>
     set((state) => {

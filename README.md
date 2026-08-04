@@ -95,6 +95,8 @@ npm run start            # Tauri 2 开发窗口
   估算内存预算；超预算条目继续参与当前处理但不驻留缓存，避免 60MP 工作流持续累积内存。
 - ✅ 高倍率缩放和平移停稳后只渲染带 overscan 的可见 ROI，CPU 回退通过版本化二进制区块
   协议更新画面，原生 WGPU 直接更新对应纹理区域；全分辨率变换底图使用 `Arc` 共享，避免深拷贝。
+- ✅ 原图对比、未裁切预览、几何/镜头预览和蒙版覆盖统一改为原生二进制 IPC；WebView 只在展示
+  边界创建并回收 Blob URL，并通过 `npm run preview-transport:check` 阻止核心编辑链路退回整图 Base64。
 
 当前唯一明确延期项是 Sony α7R V 60MP ARW 的真实画质、性能和导出基线。下一步在取得可合法
 使用的样片后，按照 `tests/acceptance/raw-manifest.json` 记录原文件哈希、授权和传感器尺寸，
@@ -102,8 +104,9 @@ npm run start            # Tauri 2 开发窗口
 不会用合成样片冒充真实相机画质结论。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
-`npm run local-only:check`、`npm run build`、`cargo fmt --all -- --check`、
-`cargo check --lib`、15 项 Rust 单元/回归测试、严格 Clippy 和 `git diff --check`。
+`npm run local-only:check`、`npm run preview-transport:check`、`npm run build`、
+`cargo fmt --all -- --check`、`cargo check --lib`、23 项 Rust 单元/回归测试、严格 Clippy 和
+`git diff --check`。
 
 ## 1.0 范围
 

@@ -11,6 +11,7 @@ use std::f32::consts::PI;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::sync::Arc; // Required for parallel rasterization
+use tauri::ipc::Response;
 
 use crate::app_state::AppState;
 use crate::get_cached_full_warped_image;
@@ -1396,7 +1397,7 @@ pub fn generate_mask_overlay(
     crop_offset: (f32, f32),
     mut js_adjustments: Option<serde_json::Value>,
     state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<Response, String> {
     if let Some(ref mut adj) = js_adjustments {
         crate::adjustment_utils::hydrate_adjustments(&state, adj);
     }
@@ -1435,12 +1436,9 @@ pub fn generate_mask_overlay(
             .write_to(&mut buf, ImageFormat::Png)
             .map_err(|e| e.to_string())?;
 
-        let base64_str = general_purpose::STANDARD.encode(buf.get_ref());
-        let data_url = format!("data:image/png;base64,{}", base64_str);
-
-        Ok(data_url)
+        Ok(Response::new(buf.into_inner()))
     } else {
-        Ok("".to_string())
+        Ok(Response::new(Vec::new()))
     }
 }
 

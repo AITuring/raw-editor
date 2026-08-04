@@ -22,10 +22,12 @@ import Dropdown from '../ui/Dropdown';
 import Switch from '../ui/Switch';
 import throttle from 'lodash.throttle';
 import { Adjustments } from '../../utils/adjustments';
-import { SelectedImage } from '../ui/AppProperties';
+import { Invokes, SelectedImage } from '../ui/AppProperties';
 import clsx from 'clsx';
 import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
+import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
+import { createImageObjectUrl } from '../../utils/imageObjectUrl';
 
 interface GeometryParams {
   distortion: number;
@@ -131,7 +133,8 @@ export default function LensCorrectionModal({
 }: LensCorrectionModalProps) {
   const { t } = useTranslation();
   const [params, setParams] = useState<LensParams>(DEFAULT_PARAMS);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { url: previewUrl, replace: replacePreviewUrl, clear: clearPreviewUrl } = useImageObjectUrl();
+  const previewRequestIdRef = useRef(0);
   const [isApplying, setIsApplying] = useState(false);
   const [makers, setMakers] = useState<string[]>([]);
   const [lenses, setLenses] = useState<string[]>([]);
@@ -280,17 +283,30 @@ export default function LensCorrectionModal({
           vig_k3: currentParams.lensDistortionParams?.vig_k3 ?? 0,
         };
 
-        const result: string = await invoke('preview_geometry_transform', {
+        const requestId = ++previewRequestIdRef.current;
+        const buffer: ArrayBuffer = await invoke(Invokes.PreviewGeometryTransform, {
           params: fullParams,
           jsAdjustments: currentAdjustments,
           showLines: false,
         });
-        setPreviewUrl(result);
+        if (requestId !== previewRequestIdRef.current) return;
+
+        const nextUrl = createImageObjectUrl(buffer, 'image/jpeg');
+        if (!nextUrl) throw new Error('Lens correction preview returned no image data');
+        replacePreviewUrl(nextUrl);
       } catch (e) {
         console.error('Lens correction preview failed', e);
       }
     }, 50),
-    [currentAdjustments],
+    [currentAdjustments, replacePreviewUrl],
+  );
+
+  useEffect(
+    () => () => {
+      previewRequestIdRef.current += 1;
+      updatePreview.cancel();
+    },
+    [updatePreview],
   );
 
   useEffect(() => {
@@ -334,10 +350,12 @@ export default function LensCorrectionModal({
 
       return () => clearTimeout(timer);
     } else {
+      previewRequestIdRef.current += 1;
+      updatePreview.cancel();
       setShow(false);
       const timer = setTimeout(() => {
         setIsMounted(false);
-        setPreviewUrl(null);
+        clearPreviewUrl();
         setIsApplying(false);
       }, 300);
       return () => clearTimeout(timer);
@@ -488,7 +506,7 @@ export default function LensCorrectionModal({
     updatePreview(resetParams);
   };
 
-  const toggleCompare = (active: boolean) => {
+  const toggleCompare = async (active: boolean) => {
     setIsCompareActive(active);
     if (active) {
       const fullParams: GeometryParams = {
@@ -520,12 +538,23 @@ export default function LensCorrectionModal({
         vig_k3: currentAdjustments.lensDistortionParams?.vig_k3 ?? 0,
       };
 
-      invoke('preview_geometry_transform', {
-        params: fullParams,
-        jsAdjustments: currentAdjustments,
-        showLines: false,
-      }).then((result: any) => setPreviewUrl(result));
+      try {
+        const requestId = ++previewRequestIdRef.current;
+        const buffer: ArrayBuffer = await invoke(Invokes.PreviewGeometryTransform, {
+          params: fullParams,
+          jsAdjustments: currentAdjustments,
+          showLines: false,
+        });
+        if (requestId !== previewRequestIdRef.current) return;
+
+        const nextUrl = createImageObjectUrl(buffer, 'image/jpeg');
+        if (!nextUrl) throw new Error('Lens comparison returned no image data');
+        replacePreviewUrl(nextUrl);
+      } catch (e) {
+        console.error('Lens comparison preview failed', e);
+      }
     } else {
+      previewRequestIdRef.current += 1;
       updatePreview(params);
     }
   };
@@ -817,16 +846,7 @@ export default function LensCorrectionModal({
             <div className="leading-tight space-y-1">
               <Trans
                 i18nKey="modals.lensCorrection.databaseNotice"
-                components={[
-                  <span
-                    key="0"
-                    className="font-medium"
-                  />,
-                  <span
-                    key="1"
-                    className="font-medium"
-                  />,
-                ]}
+                components={[<span key="0" className="font-medium" />, <span key="1" className="font-medium" />]}
               />
             </div>
           </Text>

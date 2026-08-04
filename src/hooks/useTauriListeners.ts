@@ -71,9 +71,6 @@ export function useTauriListeners({
     };
 
     const listeners = [
-      listen('preview-update-uncropped', (event: any) => {
-        if (isEffectActive) useEditorStore.getState().setEditor({ uncroppedAdjustedPreviewUrl: event.payload });
-      }),
       listen('analytics-update', (event: any) => {
         if (isEffectActive && event.payload.path === useEditorStore.getState().selectedImage?.path) {
           const update: { histogram?: any; waveform?: any } = {};
