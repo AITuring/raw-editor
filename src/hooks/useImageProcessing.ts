@@ -9,6 +9,7 @@ import { Adjustments, COPYABLE_ADJUSTMENT_KEYS } from '../utils/adjustments';
 import { Invokes, Panel } from '../components/ui/AppProperties';
 import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { parsePreviewResponse } from '../utils/previewProtocol';
 
 export function useImageProcessing(
   transformWrapperRef: any,
@@ -27,6 +28,7 @@ export function useImageProcessing(
   const isWaveformVisible = useEditorStore((state) => state.isWaveformVisible);
   const activeWaveformChannel = useEditorStore((state) => state.activeWaveformChannel);
   const displaySize = useEditorStore((state) => state.displaySize);
+  const viewportRevision = useEditorStore((state) => state.viewportRevision);
   const baseRenderSize = useEditorStore((state) => state.baseRenderSize);
   const originalSize = useEditorStore((state) => state.originalSize);
   const showOriginal = useEditorStore((state) => state.showOriginal);
@@ -42,6 +44,7 @@ export function useImageProcessing(
   const inFlightCountRef = useRef(0);
   const pendingApplyRef = useRef<{ adjustments: Adjustments; targetRes?: number } | null>(null);
   const currentOriginalResRef = useRef<number>(0);
+  const lastViewportRequestKeyRef = useRef<string | null>(null);
   const dragIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeWaveformChannelRef = useRef(activeWaveformChannel);
   activeWaveformChannelRef.current = activeWaveformChannel;
@@ -76,9 +79,9 @@ export function useImageProcessing(
     if (!baseW || !baseH || !containerWidth || !containerHeight) return null;
     if (scale <= 1.01) return null;
 
-    const paddingPixels = 2.0;
-    const paddingX = paddingPixels / baseW;
-    const paddingY = paddingPixels / baseH;
+    const overscanScreenPixels = 96;
+    const paddingX = overscanScreenPixels / (baseW * scale);
+    const paddingY = overscanScreenPixels / (baseH * scale);
 
     const visibleLeft = -positionX / scale;
     const visibleTop = -positionY / scale;
@@ -104,15 +107,12 @@ export function useImageProcessing(
     const roiW = (intersectRight - intersectLeft) / baseW;
     const roiH = (intersectBottom - intersectTop) / baseH;
 
-    const newRoiX = roiX - paddingX;
-    const newRoiY = roiY - paddingY;
-    const newRoiW = roiW + paddingX * 2;
-    const newRoiH = roiH + paddingY * 2;
-
-    const clampedX = Math.max(0, newRoiX);
-    const clampedY = Math.max(0, newRoiY);
-    const clampedW = Math.min(1 - clampedX, newRoiW);
-    const clampedH = Math.min(1 - clampedY, newRoiH);
+    const clampedX = Math.max(0, roiX - paddingX);
+    const clampedY = Math.max(0, roiY - paddingY);
+    const clampedRight = Math.min(1, roiX + roiW + paddingX);
+    const clampedBottom = Math.min(1, roiY + roiH + paddingY);
+    const clampedW = clampedRight - clampedX;
+    const clampedH = clampedBottom - clampedY;
 
     if (clampedW > 0.999 && clampedH > 0.999) return null;
 
@@ -191,9 +191,8 @@ export function useImageProcessing(
         if (buffer && buffer.byteLength > 0 && jobId >= latestRenderedJobIdRef.current) {
           latestRenderedJobIdRef.current = jobId;
 
-          const textDecoder = new TextDecoder();
-          const prefix = textDecoder.decode(buffer.slice(0, 11));
-          if (prefix === 'WGPU_RENDER') {
+          const response = parsePreviewResponse(buffer);
+          if (response.kind === 'wgpu') {
             setEditor((state) => {
               if (state.interactivePatch && state.interactivePatch.url) URL.revokeObjectURL(state.interactivePatch.url);
               return { interactivePatch: null };
@@ -201,17 +200,8 @@ export function useImageProcessing(
             return;
           }
 
-          if (dragging) {
-            const view = new DataView(buffer);
-            const patchX = view.getUint32(0, true);
-            const patchY = view.getUint32(4, true);
-            const patchW = view.getUint32(8, true);
-            const patchH = view.getUint32(12, true);
-            const fullW = view.getUint32(16, true);
-            const fullH = view.getUint32(20, true);
-
-            const imageBuffer = buffer.slice(24);
-            const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
+          if (response.kind === 'patch') {
+            const blob = new Blob([response.imageBuffer], { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
 
             setEditor((state) => {
@@ -220,15 +210,15 @@ export function useImageProcessing(
               return {
                 interactivePatch: {
                   url,
-                  normX: patchX / fullW,
-                  normY: patchY / fullH,
-                  normW: patchW / fullW,
-                  normH: patchH / fullH,
+                  normX: response.normX,
+                  normY: response.normY,
+                  normW: response.normW,
+                  normH: response.normH,
                 },
               };
             });
           } else {
-            const blob = new Blob([buffer], { type: 'image/jpeg' });
+            const blob = new Blob([response.imageBuffer], { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
 
             if (currentPath !== selectedImagePathRef.current || jobId < latestRenderedJobIdRef.current) {
@@ -352,10 +342,8 @@ export function useImageProcessing(
   const requestHiFiZoom = useMemo(
     () =>
       debounce((currentAdjustments: Adjustments, targetRes: number) => {
-        if (targetRes > currentResRef.current) {
-          currentResRef.current = targetRes;
-          applyAdjustments(currentAdjustments, false, targetRes);
-        }
+        currentResRef.current = targetRes;
+        applyAdjustments(currentAdjustments, false, targetRes);
       }, 50),
     [applyAdjustments, currentResRef],
   );
@@ -394,7 +382,11 @@ export function useImageProcessing(
       }
       const finalRes = Math.round(baseRes);
 
-      if (finalRes > currentResRef.current) {
+      const roi = calculateROI();
+      const roiKey = roi ? roi.map((value) => value.toFixed(5)).join(':') : 'full';
+      const requestKey = `${selectedImage.path}:${finalRes}:${roiKey}`;
+      if (requestKey !== lastViewportRequestKeyRef.current) {
+        lastViewportRequestKeyRef.current = requestKey;
         requestHiFiZoom(adjustments, finalRes);
       }
     }
@@ -405,8 +397,11 @@ export function useImageProcessing(
     activeView,
     displaySize.width,
     displaySize.height,
+    viewportRevision,
     calculateTargetRes,
+    calculateROI,
     selectedImage?.isReady,
+    selectedImage?.path,
     isSliderDragging,
     requestHiFiZoom,
     originalSize,

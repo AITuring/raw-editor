@@ -51,6 +51,7 @@ interface EditorState {
   // Interaction State
   isSliderDragging: boolean;
   zoom: number;
+  viewportRevision: number;
   displaySize: ImageDimensions;
   previewSize: ImageDimensions;
   baseRenderSize: BaseRenderSize;
@@ -114,6 +115,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   activeAiSubMaskId: null,
 
   zoom: 1,
+  viewportRevision: 0,
   displaySize: { width: 0, height: 0 },
   previewSize: { width: 0, height: 0 },
   baseRenderSize: { width: 0, height: 0, offsetX: 0, offsetY: 0, containerWidth: 0, containerHeight: 0 },

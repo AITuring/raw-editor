@@ -1413,7 +1413,7 @@ pub fn generate_thumbnail_data(
         let crop_data: Option<Crop> = serde_json::from_value(meta.adjustments["crop"].clone()).ok();
 
         let cached_base: Option<(DynamicImage, f32)> = {
-            let cache = state.thumbnail_geometry_cache.lock().unwrap();
+            let mut cache = state.thumbnail_geometry_cache.lock().unwrap();
             if let Some((cached_hash, img, scale)) = cache.get(path_str) {
                 let mut sufficient_resolution = true;
                 if let Some(c) = &crop_data
@@ -1532,12 +1532,11 @@ pub fn generate_thumbnail_data(
             let total_scale = gpu_scale * raw_scale_factor;
 
             let mut cache = state.thumbnail_geometry_cache.lock().unwrap();
-            if cache.len() > 30 {
-                cache.clear();
-            }
+            let cache_weight = crate::cache_utils::dynamic_image_weight(&base);
             cache.insert(
                 path_str.to_string(),
                 (base_cache_hash, base.clone(), total_scale),
+                cache_weight,
             );
 
             (base, total_scale)
@@ -1602,7 +1601,11 @@ pub fn generate_thumbnail_data(
             }
             if let Ok(loaded_lut) = crate::lut_processing::parse_lut_file(p) {
                 let arc_lut = Arc::new(loaded_lut);
-                cache.insert(p.to_string(), arc_lut.clone());
+                let cache_weight = arc_lut
+                    .data
+                    .len()
+                    .saturating_mul(std::mem::size_of::<f32>());
+                cache.insert(p.to_string(), arc_lut.clone(), cache_weight);
                 return Some(arc_lut);
             }
             None

@@ -1481,7 +1481,7 @@ pub fn get_cached_or_generate_mask(
     let key = hasher.finish();
 
     {
-        let cache = state.mask_cache.lock().unwrap();
+        let mut cache = state.mask_cache.lock().unwrap();
         if let Some(img) = cache.get(&key) {
             return Some(img.clone());
         }
@@ -1501,10 +1501,7 @@ pub fn get_cached_or_generate_mask(
 
     if let Some(img) = &generated {
         let mut cache = state.mask_cache.lock().unwrap();
-        if cache.len() > 50 {
-            cache.clear();
-        }
-        cache.insert(key, img.clone());
+        cache.insert(key, img.clone(), img.as_raw().len());
     }
 
     generated

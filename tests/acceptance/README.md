@@ -19,6 +19,7 @@ Regular CI covers:
 - the bundled Lensfun database and α7R V camera entry;
 - deterministic local denoise behavior;
 - full-dimension export and embedded ICC round trips;
+- versioned preview ROI framing, bounds clamping and memory-budgeted image caches;
 - sidecar v0-to-v1 migration, unknown-field preservation and crash recovery;
 - batch-export result aggregation where one failed item does not discard later results.
 

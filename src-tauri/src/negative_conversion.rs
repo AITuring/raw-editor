@@ -263,7 +263,11 @@ pub async fn preview_negative_conversion(
 
             let downscaled = downscale_f32_image(&image_to_downscale, 1080, 1080);
 
-            cache.insert(cache_key, downscaled.clone());
+            cache.insert(
+                cache_key,
+                downscaled.clone(),
+                crate::cache_utils::dynamic_image_weight(&downscaled),
+            );
             downscaled
         }
     };

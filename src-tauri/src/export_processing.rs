@@ -1602,8 +1602,7 @@ pub async fn estimate_export_sizes(
                 let s = cached.scale;
                 let offset = cached.unscaled_crop_offset;
                 drop(cached_preview_lock);
-                let owned_img = Arc::try_unwrap(img).unwrap_or_else(|arc| (*arc).clone());
-                (owned_img, s, offset)
+                (img, s, offset)
             } else {
                 drop(cached_preview_lock);
                 generate_transformed_preview(

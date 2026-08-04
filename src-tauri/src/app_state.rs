@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use wgpu::{Texture, TextureView};
 
 use crate::ai_processing::AiState;
-use crate::cache_utils::DecodedImageCache;
+use crate::cache_utils::{BudgetedCache, DecodedImageCache};
 use crate::gpu_processing::GpuProcessor;
 use crate::image_processing::GpuContext;
 use crate::launch_request::ExternalEditSession;
@@ -149,17 +149,17 @@ pub struct AppState {
     pub panorama_result: Arc<Mutex<Option<DynamicImage>>>,
     pub denoise_result: Arc<Mutex<Option<DynamicImage>>>,
     pub indexing_task_handle: Mutex<Option<JoinHandle<()>>>,
-    pub lut_cache: Mutex<HashMap<String, Arc<Lut>>>,
+    pub lut_cache: Mutex<BudgetedCache<String, Arc<Lut>>>,
     pub initial_file_path: Mutex<Option<String>>,
     pub pending_edit_session: Mutex<Option<ExternalEditSession>>,
     pub thumbnail_cancellation_token: Arc<AtomicBool>,
     pub thumbnail_progress: Mutex<ThumbnailProgressTracker>,
     pub preview_worker_tx: Mutex<Option<Sender<PreviewJob>>>,
     pub analytics_worker_tx: Mutex<Option<Sender<AnalyticsJob>>>,
-    pub mask_cache: Mutex<HashMap<u64, GrayImage>>,
+    pub mask_cache: Mutex<BudgetedCache<u64, GrayImage>>,
     pub patch_cache: Mutex<HashMap<String, serde_json::Value>>,
-    pub geometry_cache: Mutex<HashMap<u64, DynamicImage>>,
-    pub thumbnail_geometry_cache: Mutex<HashMap<String, (u64, DynamicImage, f32)>>,
+    pub geometry_cache: Mutex<BudgetedCache<u64, DynamicImage>>,
+    pub thumbnail_geometry_cache: Mutex<BudgetedCache<String, (u64, DynamicImage, f32)>>,
     pub lens_db: Mutex<Option<Arc<LensDatabase>>>,
     pub load_image_generation: Arc<AtomicUsize>,
     pub full_warped_cache: Mutex<Option<(u64, Arc<DynamicImage>)>>,
