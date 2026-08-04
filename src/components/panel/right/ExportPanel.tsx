@@ -577,8 +577,8 @@ export default function ExportPanel({
 
   return (
     <div className={onClose ? 'h-full bg-bg-secondary rounded-lg flex flex-col' : 'flex flex-col h-full'}>
-      <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-        <Text variant={TextVariants.title}>{t('export.title')}</Text>
+      <div className="develop-panel-header">
+        <Text variant={TextVariants.heading}>{t('export.title')}</Text>
       </div>
       <div className="grow overflow-y-auto p-3 space-y-8">
         {canExport ? (

@@ -69,7 +69,7 @@ const ColorSwatch = ({ color, name, isActive, ariaLabel, onClick }: ColorSwatchP
   return (
     <button
       aria-label={ariaLabel}
-      className="relative w-6 h-6 focus:outline-hidden group"
+      className="relative w-6 h-6 group"
       onClick={handleClick}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
@@ -86,7 +86,7 @@ const ColorSwatch = ({ color, name, isActive, ariaLabel, onClick }: ColorSwatchP
           transform: isActive ? (isPressed ? 'scale(1.1)' : 'scale(1.25)') : undefined,
           transition: isPressed
             ? 'transform 100ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out'
-            : 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease-out',
+            : 'transform 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms ease-out',
         }}
       />
 
@@ -99,7 +99,7 @@ const ColorSwatch = ({ color, name, isActive, ariaLabel, onClick }: ColorSwatchP
           transform: getTransform(),
           transition: isPressed
             ? 'transform 100ms cubic-bezier(0.4, 0, 0.2, 1)'
-            : 'transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            : 'transform 150ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       />
     </button>
@@ -163,7 +163,7 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as '3way' | 'global')}
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all focus:outline-none
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors
                 ${
                   isActive
                     ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent text-text-primary'
@@ -179,7 +179,7 @@ const ColorGradingPanel = ({ adjustments, setAdjustments, onDragStateChange }: C
 
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all focus:outline-none
+          className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors
             ${
               isExpanded
                 ? 'bg-accent text-button-text'
@@ -475,9 +475,7 @@ export default function ColorPanel({
             <button
               onClick={toggleWbPicker}
               className={`p-1.5 rounded-md transition-colors ${
-                isWbPickerActive
-                  ? 'bg-accent text-button-text'
-                  : 'hover:bg-bg-secondary text-text-secondary'
+                isWbPickerActive ? 'bg-accent text-button-text' : 'hover:bg-bg-secondary text-text-secondary'
               }`}
               data-tooltip={t('adjustments.color.wbPickerTooltip')}
             >

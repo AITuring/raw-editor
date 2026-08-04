@@ -33,6 +33,7 @@ interface BottomBarProps {
   onContextMenu?(event: any, path: string): void;
   onEmptyAreaContextMenu?(event: any): void;
   onCopy(): void;
+  onDone?(): void;
   onExportClick?(): void;
   onImageSelect?(path: string, event: any): void;
   onOpenCopyPasteSettings?(): void;
@@ -60,11 +61,16 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => {
   const { t } = useTranslation();
 
   return (
-    <div className={clsx('flex items-center gap-1', disabled && 'cursor-not-allowed')}>
+    <div className={clsx('flex items-center gap-0.5', disabled && 'cursor-not-allowed')}>
       {[...Array(5)].map((_, index: number) => {
         const starValue = index + 1;
         return (
           <button
+            aria-label={
+              disabled
+                ? t('ui.bottomBar.tooltips.selectToRate')
+                : t('ui.bottomBar.tooltips.rateStars', { count: starValue })
+            }
             className="disabled:cursor-not-allowed"
             disabled={disabled}
             key={starValue}
@@ -76,7 +82,7 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => {
             }
           >
             <Star
-              size={18}
+              size={15}
               className={clsx(
                 'transition-colors duration-150',
                 disabled
@@ -99,6 +105,7 @@ export default function BottomBar({
   imageRatings,
   isCopied,
   isCopyDisabled,
+  isExportDisabled = false,
   isFilmstripVisible,
   isLibraryView = false,
   isLoading = false,
@@ -111,6 +118,8 @@ export default function BottomBar({
   onContextMenu,
   onEmptyAreaContextMenu,
   onCopy,
+  onDone,
+  onExportClick,
   onImageSelect,
   onOpenCopyPasteSettings,
   onRequestThumbnails,
@@ -168,6 +177,10 @@ export default function BottomBar({
   const isCollapsed = !isFilmstripVisible;
   const effectiveHeight = isFilmstripVisible ? currentHeight : 0;
   const shouldAnimate = !isInstantTransition && (!isResizing || isCollapsed);
+  const sourceExtension = selectedImage?.path.split('?')[0].split('.').pop()?.toUpperCase();
+  const outputSummary = selectedImage
+    ? `${sourceExtension || 'RAW'} · ${selectedImage.width} × ${selectedImage.height}`
+    : '';
 
   useEffect(() => {
     if (isZoomReady && !isDraggingSlider.current) {
@@ -263,7 +276,7 @@ export default function BottomBar({
   };
 
   return (
-    <div className="shrink-0 bg-bg-secondary rounded-lg flex flex-col">
+    <div className="editor-bottom-dock shrink-0 bg-bg-secondary flex flex-col">
       {!isLibraryView && showFilmstrip && (
         <div
           className={clsx(
@@ -274,7 +287,7 @@ export default function BottomBar({
         >
           <div
             className={clsx(
-              'w-full p-2 transition-opacity duration-300 ease-in-out',
+              'w-full px-1.5 py-1.5 transition-opacity duration-150 ease-out',
               isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto',
             )}
             style={{ height: `${currentHeight}px` }}
@@ -298,17 +311,18 @@ export default function BottomBar({
 
       <div
         className={clsx(
-          'shrink-0 h-12 flex items-center justify-between px-3',
+          'editor-status-bar shrink-0 h-11 flex items-center justify-between gap-3 px-2.5',
           !isLibraryView && 'border-t transition-colors duration-300',
           !isLibraryView && showFilmstrip && isFilmstripVisible ? 'border-surface' : 'border-transparent',
         )}
       >
-        <div className="flex items-center gap-4">
+        <div className="editor-status-primary flex min-w-0 items-center gap-3">
           <StarRating rating={rating} onRate={onRate} disabled={isRatingDisabled} />
           <div className="h-5 w-px bg-surface"></div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
             <button
-              className="relative w-8 h-8 flex items-center justify-center rounded-md text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+              aria-label={t('ui.bottomBar.tooltips.copySettings')}
+              className="relative w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
               disabled={isCopyDisabled}
               onClick={onCopy}
               data-tooltip={t('ui.bottomBar.tooltips.copySettings')}
@@ -323,7 +337,7 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <Check size={18} className="text-green-500" />
+                    <Check size={16} className="text-green-500" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -334,14 +348,15 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <Copy size={18} />
+                    <Copy size={16} />
                   </motion.div>
                 )}
               </AnimatePresence>
             </button>
 
             <button
-              className="relative w-8 h-8 flex items-center justify-center rounded-md text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+              aria-label={t('ui.bottomBar.tooltips.pasteSettings')}
+              className="relative w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
               disabled={isPasteDisabled}
               onClick={onPaste}
               data-tooltip={t('ui.bottomBar.tooltips.pasteSettings')}
@@ -356,7 +371,7 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <Check size={18} className="text-green-500" />
+                    <Check size={16} className="text-green-500" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -367,18 +382,19 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <ClipboardPaste size={18} />
+                    <ClipboardPaste size={16} />
                   </motion.div>
                 )}
               </AnimatePresence>
             </button>
 
             <button
-              className="w-8 h-8 flex items-center justify-center rounded-md text-text-secondary hover:bg-surface hover:text-text-primary transition-colors"
+              aria-label={t('ui.bottomBar.tooltips.copyPasteSettings')}
+              className="w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors"
               onClick={onOpenCopyPasteSettings}
               data-tooltip={t('ui.bottomBar.tooltips.copyPasteSettings')}
             >
-              <Settings size={18} />
+              <Settings size={16} />
             </button>
           </div>
 
@@ -386,24 +402,25 @@ export default function BottomBar({
 
           <div
             className={clsx(
-              'flex items-center transition-all duration-300',
+              'flex items-center transition-[background-color] duration-150',
               isFilterExpanded ? 'bg-surface rounded-md' : 'bg-transparent',
             )}
           >
             <button
+              aria-label={t('ui.bottomBar.tooltips.quickFilter')}
               className={clsx(
-                'relative w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0',
+                'relative w-7 h-7 flex items-center justify-center rounded-[3px] transition-colors shrink-0',
                 isFilterExpanded ? 'text-text-primary' : 'text-text-secondary hover:bg-surface hover:text-text-primary',
               )}
               onClick={() => setIsFilterExpanded(!isFilterExpanded)}
               data-tooltip={t('ui.bottomBar.tooltips.quickFilter', 'Quick Filter')}
             >
-              <Filter size={18} />
+              <Filter size={16} />
             </button>
 
             <div
               className={clsx(
-                'flex items-center transition-all duration-300 ease-in-out overflow-hidden',
+                'flex items-center transition-[max-width,opacity] duration-150 ease-out overflow-hidden',
                 isFilterExpanded ? 'max-w-100 opacity-100 pr-2 ml-1' : 'max-w-0 opacity-0 pr-0 ml-0',
               )}
             >
@@ -413,6 +430,7 @@ export default function BottomBar({
                     const isFilled = filterCriteria.rating > 0 && starValue <= filterCriteria.rating;
                     return (
                       <button
+                        aria-label={t('ui.bottomBar.tooltips.rateStars', { count: starValue })}
                         key={`qf-star-${starValue}`}
                         onClick={() =>
                           setFilterCriteria((prev) => ({
@@ -420,7 +438,7 @@ export default function BottomBar({
                             rating: prev.rating === starValue ? 0 : starValue,
                           }))
                         }
-                        className="p-0.5 focus:outline-none"
+                        className="p-0.5"
                       >
                         <Star
                           size={16}
@@ -449,6 +467,7 @@ export default function BottomBar({
 
                     return (
                       <button
+                        aria-label={tooltipTitle}
                         key={`qf-color-${color.name}`}
                         onClick={() => {
                           const currentColors = filterCriteria.colors || [];
@@ -458,7 +477,7 @@ export default function BottomBar({
                           setFilterCriteria((prev) => ({ ...prev, colors: newColors }));
                         }}
                         className={clsx(
-                          'w-4 h-4 rounded-full transition-transform hover:scale-105 flex items-center justify-center focus:outline-none',
+                          'w-4 h-4 rounded-full transition-transform hover:scale-105 flex items-center justify-center',
                           isSelected ? 'ring-2 ring-accent ring-offset-1 ring-offset-bg-primary' : '',
                         )}
                         style={{ backgroundColor: color.color }}
@@ -486,70 +505,77 @@ export default function BottomBar({
           </div>
         </div>
         <div className="grow" />
-        {!isLibraryView && showZoomControls && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 w-56">
-              <div
-                className="relative w-12 h-full flex items-center justify-end cursor-pointer"
-                onClick={handleResetZoom}
-                onMouseEnter={() => setIsZoomLabelHovered(true)}
-                onMouseLeave={() => setIsZoomLabelHovered(false)}
-                data-tooltip={t('ui.bottomBar.tooltips.resetZoom')}
-              >
-                <span className="absolute right-0 text-xs text-text-secondary select-none text-right w-max transition-colors hover:text-text-primary">
-                  {isZoomLabelHovered ? t('ui.bottomBar.zoomLabelReset') : t('ui.bottomBar.zoomLabel')}
-                </span>
-              </div>
-
-              <div className="relative flex-1 h-5">
-                <div className="absolute top-1/2 left-0 w-full h-1.5 -translate-y-1/2 bg-surface rounded-full pointer-events-none" />
-                <input
-                  type="range"
-                  min={0.1}
-                  max={2.0}
-                  step="0.05"
-                  value={latchedSliderValue}
-                  onChange={handleSliderChange}
-                  onKeyDown={handleZoomKeyDown}
-                  onMouseDown={handleMouseDown}
-                  onMouseUp={handleMouseUp}
-                  onTouchStart={handleMouseDown}
-                  onTouchEnd={handleMouseUp}
-                  onDoubleClick={handleResetZoom}
-                  className={`absolute top-1/2 left-0 w-full h-1.5 mt-[-1.5px] appearance-none bg-transparent cursor-pointer p-0 slider-input z-10 ${
-                    isZoomActive ? 'slider-thumb-active' : ''
-                  }`}
-                />
-              </div>
-
-              <div className="relative text-xs text-text-secondary w-6 text-right flex items-center justify-end h-5 gap-1">
-                {isEditingPercent ? (
-                  <input
-                    ref={percentInputRef}
-                    type="text"
-                    value={percentInputValue}
-                    onChange={(e) => setPercentInputValue(e.target.value)}
-                    onKeyDown={handlePercentKeyDown}
-                    onBlur={handlePercentSubmit}
-                    className="w-full text-xs text-text-primary bg-bg-primary border border-border-color rounded-sm px-1 text-right"
-                    style={{ fontSize: '12px', height: '18px' }}
-                  />
-                ) : (
-                  <span
-                    onClick={handlePercentClick}
-                    className="cursor-pointer hover:text-text-primary transition-colors select-none"
-                    data-tooltip={t('ui.bottomBar.tooltips.customZoom')}
-                  >
-                    {latchedDisplayPercent}%
+        {!isLibraryView && (
+          <div className="editor-status-actions flex items-center gap-3">
+            {showZoomControls && (
+              <div className="editor-zoom-control flex w-48 items-center gap-2">
+                <div
+                  className="relative flex h-full w-9 cursor-pointer items-center justify-end"
+                  onClick={handleResetZoom}
+                  onMouseEnter={() => setIsZoomLabelHovered(true)}
+                  onMouseLeave={() => setIsZoomLabelHovered(false)}
+                  data-tooltip={t('ui.bottomBar.tooltips.resetZoom')}
+                >
+                  <span className="absolute right-0 text-xs text-text-secondary select-none text-right w-max transition-colors hover:text-text-primary">
+                    {isZoomLabelHovered ? t('ui.bottomBar.zoomLabelReset') : t('ui.bottomBar.zoomLabel')}
                   </span>
-                )}
+                </div>
+
+                <div className="relative h-5 flex-1">
+                  <div className="absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-surface pointer-events-none" />
+                  <input
+                    aria-label={t('ui.bottomBar.zoomLabel')}
+                    type="range"
+                    min={0.1}
+                    max={2.0}
+                    step="0.05"
+                    value={latchedSliderValue}
+                    onChange={handleSliderChange}
+                    onKeyDown={handleZoomKeyDown}
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onTouchStart={handleMouseDown}
+                    onTouchEnd={handleMouseUp}
+                    onDoubleClick={handleResetZoom}
+                    className={`absolute left-0 top-1/2 z-10 h-5 w-full -translate-y-1/2 appearance-none bg-transparent p-0 slider-input ${
+                      isZoomActive ? 'slider-thumb-active' : ''
+                    }`}
+                  />
+                </div>
+
+                <div className="relative text-xs text-text-secondary w-6 text-right flex items-center justify-end h-5 gap-1">
+                  {isEditingPercent ? (
+                    <input
+                      ref={percentInputRef}
+                      type="text"
+                      value={percentInputValue}
+                      onChange={(e) => setPercentInputValue(e.target.value)}
+                      onKeyDown={handlePercentKeyDown}
+                      onBlur={handlePercentSubmit}
+                      className="w-full text-xs text-text-primary bg-bg-primary border border-border-color rounded-sm px-1 text-right"
+                      style={{ fontSize: '12px', height: '18px' }}
+                    />
+                  ) : (
+                    <span
+                      onClick={handlePercentClick}
+                      className="cursor-pointer hover:text-text-primary transition-colors select-none"
+                      data-tooltip={t('ui.bottomBar.tooltips.customZoom')}
+                    >
+                      {latchedDisplayPercent}%
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             {showFilmstrip && (
               <>
-                <div className="h-5 w-px bg-surface"></div>
                 <button
-                  className="p-1.5 rounded-md text-text-secondary hover:bg-surface hover:text-text-primary transition-colors"
+                  aria-label={
+                    isFilmstripVisible
+                      ? t('ui.bottomBar.tooltips.collapseFilmstrip')
+                      : t('ui.bottomBar.tooltips.expandFilmstrip')
+                  }
+                  className="editor-status-icon-button"
                   onClick={() => setIsFilmstripVisible?.(!isFilmstripVisible)}
                   data-tooltip={
                     isFilmstripVisible
@@ -557,10 +583,33 @@ export default function BottomBar({
                       : t('ui.bottomBar.tooltips.expandFilmstrip')
                   }
                 >
-                  {isFilmstripVisible ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                  {isFilmstripVisible ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                 </button>
               </>
             )}
+
+            <span aria-hidden="true" className="editor-command-divider" />
+
+            <button
+              className="editor-workflow-summary"
+              data-tooltip={t('ui.bottomBar.tooltips.export')}
+              disabled={isExportDisabled}
+              onClick={onExportClick}
+              type="button"
+            >
+              {outputSummary}
+            </button>
+            <button
+              className="editor-footer-button is-secondary"
+              disabled={isExportDisabled}
+              onClick={onExportClick}
+              type="button"
+            >
+              {t('ui.bottomBar.tooltips.export')}
+            </button>
+            <button className="editor-footer-button is-primary" onClick={onDone} type="button">
+              {t('editor.externalEdit.done')}
+            </button>
           </div>
         )}
       </div>

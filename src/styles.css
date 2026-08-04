@@ -15,10 +15,10 @@
 
   --font-sans: var(--font-family);
 
-  --shadow-shiny: 0 0 24px rgba(255, 255, 255, 0.12);
+  --shadow-shiny: none;
 
-  --radius-md: 8px;
-  --radius-lg: 15px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
 }
 
 @layer base {
@@ -33,14 +33,14 @@
 
 @utility slider-input {
   &::-webkit-slider-thumb {
-    @apply h-4 w-4 appearance-none rounded-full bg-accent;
+    @apply h-2.5 w-2.5 appearance-none rounded-full bg-accent;
     transition:
       transform 150ms ease-in-out,
       background-color 400ms ease-in-out;
   }
 
   &::-moz-range-thumb {
-    @apply h-4 w-4 rounded-full bg-accent border-none;
+    @apply h-2.5 w-2.5 rounded-full bg-accent border-none;
     transition:
       transform 150ms ease-in-out,
       background-color 400ms ease-in-out;
@@ -93,7 +93,7 @@
 }
 
 @utility text-shadow-shiny {
-  text-shadow: 0 0 18px rgba(255, 255, 255, 0.35);
+  text-shadow: none;
 }
 
 @layer base {
@@ -116,8 +116,9 @@
     @apply text-text-primary font-sans;
   }
 
-  *:focus {
-    outline: none !important;
+  :where(button, input, select, textarea, [role='button'], [tabindex]):focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: 2px;
   }
 
   .enable-color-transitions *,
@@ -129,15 +130,15 @@
   }
 
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
     background-color: var(--color-text-secondary);
-    border-radius: 10px;
+    border-radius: 4px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
@@ -153,14 +154,14 @@
 
 @layer components {
   .slider-input::-webkit-slider-thumb {
-    @apply h-4 w-4 appearance-none rounded-full bg-accent;
+    @apply h-2.5 w-2.5 appearance-none rounded-full bg-accent;
     transition:
       transform 150ms ease-in-out,
       background-color 400ms ease-in-out;
   }
 
   .slider-input::-moz-range-thumb {
-    @apply h-4 w-4 rounded-full bg-accent border-none;
+    @apply h-2.5 w-2.5 rounded-full bg-accent border-none;
     transition:
       transform 150ms ease-in-out,
       background-color 400ms ease-in-out;
@@ -434,6 +435,567 @@
 
 @layer utilities {
   .text-shadow-shiny {
-    text-shadow: 0 0 18px rgba(255, 255, 255, 0.3);
+    text-shadow: none;
+  }
+}
+
+@layer components {
+  .develop-workspace-root {
+    letter-spacing: -0.006em;
+  }
+
+  .develop-workspace {
+    background: color-mix(in srgb, var(--app-bg-primary) 88%, black);
+  }
+
+  .develop-panel-shell {
+    position: relative;
+    display: flex;
+    height: 100%;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--app-border-color);
+    background: var(--app-bg-secondary);
+    opacity: 1;
+  }
+
+  .develop-panel-shell.is-animated {
+    transition:
+      width 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 120ms ease-out;
+  }
+
+  .develop-panel-shell.is-hidden {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .develop-panel-resizer {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 30;
+    width: 4px;
+    cursor: col-resize;
+  }
+
+  .develop-panel-resizer:hover {
+    background: color-mix(in srgb, var(--app-accent) 45%, transparent);
+  }
+
+  .develop-panel-content {
+    position: relative;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    background: var(--app-bg-secondary);
+  }
+
+  .develop-panel-shell.is-collapsed .develop-panel-content {
+    display: none;
+  }
+
+  .develop-tool-rail {
+    display: flex;
+    width: 43px;
+    flex-shrink: 0;
+    flex-direction: column;
+    justify-content: space-between;
+    border-left: 1px solid var(--app-border-color);
+    background: color-mix(in srgb, var(--app-bg-secondary) 88%, black);
+    padding: 5px 3px;
+  }
+
+  .develop-panel-shell.is-collapsed .develop-tool-rail {
+    width: 44px;
+    border-left: 0;
+  }
+
+  .develop-tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .develop-tool-group-secondary {
+    border-top: 1px solid var(--app-border-color);
+    padding-top: 5px;
+  }
+
+  .develop-tool-button {
+    position: relative;
+    display: grid;
+    width: 36px;
+    height: 34px;
+    place-items: center;
+    border-radius: 3px;
+    color: var(--app-text-secondary);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .develop-tool-button:hover {
+    background: color-mix(in srgb, var(--app-card-active) 76%, transparent);
+    color: var(--app-text-primary);
+  }
+
+  .develop-tool-button.is-active {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-tool-indicator {
+    position: absolute;
+    inset-block: 7px;
+    left: -3px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+    opacity: 0;
+    transform: scaleY(0.5);
+    transition:
+      opacity 120ms ease-out,
+      transform 120ms ease-out;
+  }
+
+  .develop-tool-button.is-active .develop-tool-indicator {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+
+  .develop-panel-header {
+    display: flex;
+    min-height: 40px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--app-border-color);
+    padding: 6px 10px 6px 12px;
+  }
+
+  .develop-panel-action,
+  .editor-command-button,
+  .editor-status-icon-button {
+    display: inline-grid;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 3px;
+    color: var(--app-text-secondary);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .develop-panel-action:hover,
+  .editor-command-button:hover,
+  .editor-status-icon-button:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-panel-action:disabled,
+  .editor-command-button:disabled,
+  .editor-status-icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.32;
+  }
+
+  .editor-command-button.is-active {
+    background: color-mix(in srgb, var(--app-accent) 16%, var(--app-card-active));
+    color: var(--app-accent);
+  }
+
+  .develop-histogram {
+    position: relative;
+    height: 132px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-bottom: 1px solid var(--app-border-color);
+    background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
+    padding: 7px 9px 5px;
+  }
+
+  .develop-histogram-collapse {
+    position: absolute;
+    top: 9px;
+    right: 11px;
+    z-index: 25;
+    display: grid;
+    width: 22px;
+    height: 20px;
+    place-items: center;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 78%, transparent);
+    color: var(--app-text-secondary);
+    opacity: 0;
+    transition:
+      opacity 120ms ease-out,
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .develop-histogram:hover .develop-histogram-collapse,
+  .develop-histogram-collapse:focus-visible {
+    opacity: 1;
+  }
+
+  .develop-histogram-collapse:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-histogram-collapsed {
+    display: grid;
+    width: 100%;
+    height: 30px;
+    flex-shrink: 0;
+    place-items: center;
+    border-bottom: 1px solid var(--app-border-color);
+    background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
+    color: var(--app-text-secondary);
+  }
+
+  .develop-histogram-collapsed:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-adjustment-stack {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .develop-collapsible {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--app-border-color);
+    background: transparent;
+  }
+
+  .develop-collapsible-header {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    padding: 0 7px 0 12px;
+  }
+
+  .develop-collapsible-toggle {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    align-self: stretch;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--app-text-primary);
+  }
+
+  .develop-collapsible-toggle:hover {
+    color: color-mix(in srgb, var(--app-text-primary) 88%, var(--app-accent));
+  }
+
+  .develop-collapsible.is-disabled .develop-collapsible-toggle {
+    color: var(--app-text-secondary);
+  }
+
+  .develop-collapsible-chevron {
+    flex-shrink: 0;
+    color: var(--app-text-secondary);
+    transform: rotate(0deg);
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .develop-collapsible-chevron.is-open {
+    transform: rotate(180deg);
+  }
+
+  .develop-collapsible-visibility {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 2px;
+    color: var(--app-text-secondary);
+    opacity: 0;
+    transition:
+      opacity 120ms ease-out,
+      background-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .develop-collapsible:hover .develop-collapsible-visibility,
+  .develop-collapsible.is-disabled .develop-collapsible-visibility,
+  .develop-collapsible-visibility:focus-visible {
+    opacity: 1;
+  }
+
+  .develop-collapsible-visibility:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-collapsible-content {
+    padding: 3px 12px 10px;
+  }
+
+  .develop-slider {
+    margin-bottom: 5px;
+  }
+
+  .develop-panel-content .bg-bg-tertiary {
+    border-radius: 0;
+    background: transparent;
+    padding: 7px 0;
+  }
+
+  .develop-panel-content .space-y-4 > :not(:last-child) {
+    margin-block-end: 6px;
+  }
+
+  .develop-panel-content .text-base {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .develop-panel-content .text-sm {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .editor-stage {
+    background: color-mix(in srgb, var(--app-bg-primary) 90%, black);
+  }
+
+  .editor-command-bar {
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--app-border-color);
+    background: color-mix(in srgb, var(--app-bg-secondary) 94%, black);
+    padding: 5px 8px;
+  }
+
+  .editor-command-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .editor-command-divider {
+    display: block;
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    background: var(--app-border-color);
+    margin-inline: 4px;
+  }
+
+  .editor-file-badge {
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--app-accent) 45%, transparent);
+    border-radius: 2px;
+    padding: 0 3px;
+    color: var(--app-accent);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 14px;
+  }
+
+  .editor-variant-switcher {
+    position: absolute;
+    left: 50%;
+    display: flex;
+    max-width: 38%;
+    transform: translateX(-50%);
+    overflow: hidden;
+    border: 1px solid var(--app-border-color);
+    border-radius: 3px;
+    background: var(--app-surface);
+  }
+
+  .editor-variant-button {
+    min-width: 42px;
+    padding: 3px 8px;
+    overflow: hidden;
+    color: var(--app-text-secondary);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .editor-variant-button + .editor-variant-button {
+    border-left: 1px solid var(--app-border-color);
+  }
+
+  .editor-variant-button:hover,
+  .editor-variant-button.is-active {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .editor-history-popover {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 80;
+    display: flex;
+    width: 210px;
+    max-height: 320px;
+    flex-direction: column;
+    overflow-y: auto;
+    border: 1px solid var(--app-border-color);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 96%, black);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+    padding: 4px;
+  }
+
+  .editor-history-item {
+    display: flex;
+    min-height: 28px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 2px;
+    padding: 4px 7px;
+    color: var(--app-text-primary);
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .editor-history-item:hover {
+    background: var(--app-card-active);
+  }
+
+  .editor-history-item.is-current {
+    background: color-mix(in srgb, var(--app-accent) 18%, var(--app-card-active));
+    color: var(--app-accent);
+  }
+
+  .editor-history-item.is-future {
+    opacity: 0.48;
+  }
+
+  .editor-preview-surface {
+    background: color-mix(in srgb, var(--app-bg-primary) 92%, black);
+  }
+
+  .editor-bottom-dock {
+    border-top: 1px solid var(--app-border-color);
+    border-radius: 0;
+  }
+
+  .editor-status-bar {
+    background: color-mix(in srgb, var(--app-bg-secondary) 95%, black);
+  }
+
+  .editor-status-icon-button {
+    width: 26px;
+    height: 26px;
+  }
+
+  .editor-workflow-summary {
+    max-width: 185px;
+    overflow: hidden;
+    color: var(--app-accent);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .editor-workflow-summary:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .editor-footer-button {
+    min-width: 58px;
+    height: 27px;
+    border-radius: 3px;
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 500;
+    transition:
+      background-color 120ms ease-out,
+      border-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .editor-footer-button.is-secondary {
+    border: 1px solid var(--app-border-color);
+    background: var(--app-surface);
+    color: var(--app-text-primary);
+  }
+
+  .editor-footer-button.is-secondary:hover {
+    border-color: color-mix(in srgb, var(--app-text-secondary) 70%, transparent);
+    background: var(--app-card-active);
+  }
+
+  .editor-footer-button.is-primary {
+    border: 1px solid color-mix(in srgb, var(--app-accent) 72%, black);
+    background: var(--app-accent);
+    color: var(--app-button-text);
+  }
+
+  .editor-footer-button.is-primary:hover {
+    background: color-mix(in srgb, var(--app-accent) 88%, white);
+  }
+
+  .editor-footer-button:disabled,
+  .editor-workflow-summary:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+}
+
+@media (max-width: 1120px) {
+  .editor-workflow-summary,
+  .editor-zoom-control > :first-child {
+    display: none;
+  }
+
+  .editor-zoom-control {
+    width: 128px;
+  }
+}
+
+@media (max-width: 920px) {
+  .editor-status-primary > :first-child,
+  .editor-status-primary > :nth-child(2),
+  .editor-status-primary > :nth-child(4),
+  .editor-status-primary > :nth-child(5),
+  .editor-zoom-control {
+    display: none;
+  }
+
+  .editor-status-actions {
+    gap: 5px;
+  }
+
+  .editor-variant-switcher {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

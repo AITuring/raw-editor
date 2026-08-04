@@ -1,6 +1,5 @@
 import React from 'react';
 import clsx from 'clsx';
-import { motion } from 'framer-motion';
 import Text from './Text';
 import { TextVariants } from '../../types/typography';
 
@@ -29,18 +28,13 @@ const Switch = ({
   checked,
   className = '',
   disabled = false,
+  id,
   label,
   onChange,
   tooltip,
   trackClassName,
 }: SwitchProps) => {
-  const uniqueId = `switch-${label.replace(/\s+/g, '-').toLowerCase()}`;
-
-  const spring = {
-    type: 'spring',
-    stiffness: 700,
-    damping: 30,
-  } as const;
+  const uniqueId = id || `switch-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
   return (
     <label
@@ -55,24 +49,28 @@ const Switch = ({
       <Text variant={TextVariants.label} className="select-none">
         {label}
       </Text>
-      <div className="relative w-10 h-5">
+      <div className="relative h-4 w-8 shrink-0">
         <input
           checked={checked}
-          className="sr-only"
+          className="peer sr-only"
           disabled={disabled}
           id={uniqueId}
           onChange={(e: any) => !disabled && onChange(e.target.checked)}
           type="checkbox"
         />
-        <div className={clsx('w-full h-full bg-card-active/50 rounded-full shadow-inner', trackClassName)}></div>
-        <motion.div
-          className={clsx('absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-colors', {
+        <div
+          className={clsx(
+            'h-full w-full rounded-full border border-border-color transition-colors duration-150 peer-focus-visible:ring-1 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-secondary',
+            checked ? 'bg-accent/35' : 'bg-card-active/60',
+            trackClassName,
+          )}
+        />
+        <div
+          className={clsx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full transition-transform duration-150 ease-out', {
             'bg-accent': checked,
             'bg-text-secondary/80': !checked,
           })}
-          transition={spring}
-          initial={false}
-          animate={{ x: checked ? 20 : 0 }}
+          style={{ transform: `translateX(${checked ? 16 : 0}px)` }}
         />
       </div>
     </label>

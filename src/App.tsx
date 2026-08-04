@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ToastContainer, toast, Slide } from 'react-toastify';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -13,6 +13,7 @@ import GlobalTooltip from './components/ui/GlobalTooltip';
 import AppModals from './components/modals/AppModals';
 
 import SidePanelArea from './components/panel/SidePanelArea';
+import DevelopPanel from './components/panel/DevelopPanel';
 import { PANEL_ICONS } from './components/panel/PanelSwitcher';
 import Controls from './components/panel/right/ControlsPanel';
 import MetadataPanel from './components/panel/right/MetadataPanel';
@@ -540,6 +541,8 @@ function App() {
   };
 
   useEffect(() => {
+    if (!isTauri()) return;
+
     const appWindow = getCurrentWindow();
     const checkFullscreen = async () => {
       setUI({ isWindowFullScreen: await appWindow.isFullscreen() });
@@ -554,9 +557,12 @@ function App() {
   const handleRightPanelSelect = useCallback(
     (panelId: Panel) => {
       setRightPanel(panelId);
+      if (rightPanelWidth < 200) {
+        setUI({ rightPanelWidth: 368 });
+      }
       setEditor({ activeMaskId: null, activeAiSubMaskId: null, isWbPickerActive: false });
     },
-    [setRightPanel, setEditor],
+    [rightPanelWidth, setRightPanel, setEditor, setUI],
   );
 
   const handleToggleFolder = useCallback(
@@ -660,6 +666,7 @@ function App() {
 
   const hasRoots = rootPaths && rootPaths.length > 0;
   const hasMainContent = hasRoots || (activeView === 'editor' && !!selectedImage);
+  const isDevelopWorkspace = activeView === 'editor' && !!selectedImage;
 
   const shouldHideFolderTree = isAndroid;
   const isWgpuActive =
@@ -696,6 +703,7 @@ function App() {
       <div
         className={clsx(
           'flex flex-col h-screen font-sans text-text-primary overflow-hidden select-none',
+          isDevelopWorkspace && 'develop-workspace-root',
           useMacWindowShell && 'macos-window-shell',
           isWgpuActive ? 'bg-transparent' : 'bg-bg-primary',
         )}
@@ -713,12 +721,12 @@ function App() {
           className={clsx(
             'flex-1 flex flex-col min-h-0',
             isLayoutReady && hasMainContent && !isInstantTransition && 'transition-all duration-300 ease-in-out',
-            [hasMainContent && (isFullScreen ? 'p-0 gap-0' : 'p-2 gap-2')],
+            [hasMainContent && (isFullScreen || isDevelopWorkspace ? 'p-0 gap-0' : 'p-2 gap-2')],
           )}
         >
           <DndContext sensors={layoutSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex flex-row grow h-full min-h-0">
-              {!shouldHideFolderTree && hasMainContent && (
+            <div className={clsx('flex flex-row grow h-full min-h-0', isDevelopWorkspace && 'develop-workspace')}>
+              {!shouldHideFolderTree && hasMainContent && !isDevelopWorkspace && (
                 <SidePanelArea
                   side="left"
                   width={leftPanelWidth}
@@ -817,20 +825,31 @@ function App() {
                   </div>
                 )}
               </div>
-              {!isAndroid && hasMainContent && (
-                <SidePanelArea
-                  side="right"
-                  width={rightPanelWidth}
-                  topRegion="rightTop"
-                  bottomRegion="rightBottom"
-                  renderPanel={renderAppPanel}
-                  onWidthChange={createResizeHandler('right', rightPanelWidth)}
-                  isResizing={isResizing}
-                />
-              )}
+              {!isAndroid &&
+                hasMainContent &&
+                (isDevelopWorkspace ? (
+                  <DevelopPanel
+                    activePanel={activeRightPanel}
+                    isResizing={isResizing}
+                    onPanelSelect={handleRightPanelSelect}
+                    onWidthChange={createResizeHandler('right', rightPanelWidth)}
+                    renderPanel={renderAppPanel}
+                    width={rightPanelWidth}
+                  />
+                ) : (
+                  <SidePanelArea
+                    side="right"
+                    width={rightPanelWidth}
+                    topRegion="rightTop"
+                    bottomRegion="rightBottom"
+                    renderPanel={renderAppPanel}
+                    onWidthChange={createResizeHandler('right', rightPanelWidth)}
+                    isResizing={isResizing}
+                  />
+                ))}
             </div>
-            <DragOverlay dropAnimation={{ duration: 150, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
-              {activeLayoutDragItem && ActiveOverlayIcon ? (
+            <DragOverlay dropAnimation={{ duration: 120, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+              {!isDevelopWorkspace && activeLayoutDragItem && ActiveOverlayIcon ? (
                 <div className="w-10 h-10 bg-surface shadow-2xl rounded-md flex items-center justify-center text-text-primary ring-1 ring-border-color">
                   <ActiveOverlayIcon size={20} />
                 </div>

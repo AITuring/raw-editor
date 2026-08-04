@@ -477,8 +477,8 @@ export default function CropPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-        <Text variant={TextVariants.title}>{t('editor.crop.title')}</Text>
+      <div className="develop-panel-header">
+        <Text variant={TextVariants.heading}>{t('editor.crop.title')}</Text>
         <button
           className="p-2 rounded-full hover:bg-surface transition-colors"
           onClick={handleReset}

@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect } from 'react';
 import { platform } from '@tauri-apps/plugin-os';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '@tauri-apps/api/core';
 import { Minus, Square, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { APP_NAME } from '../config/app';
@@ -27,10 +28,15 @@ export default function TitleBar() {
   const [osPlatform, setOsPlatform] = useState('');
   const [isMaximized, setIsMaximized] = useState(false);
 
-  const appWindow = getCurrentWindow();
+  const tauriRuntime = isTauri();
+  const appWindow = tauriRuntime ? getCurrentWindow() : null;
 
   useEffect(() => {
     const getPlatform = async () => {
+      if (!tauriRuntime) {
+        setOsPlatform(navigator.userAgent.includes('Mac') ? 'macos' : 'windows');
+        return;
+      }
       try {
         const p = platform();
         setOsPlatform(p);
@@ -40,9 +46,11 @@ export default function TitleBar() {
       }
     };
     getPlatform();
-  }, []);
+  }, [tauriRuntime]);
 
   useEffect(() => {
+    if (!appWindow) return;
+
     const updateMaximizedState = async () => {
       try {
         const max = await appWindow.isMaximized();
@@ -66,11 +74,12 @@ export default function TitleBar() {
     };
   }, [appWindow]);
 
-  const handleMinimize = () => appWindow.minimize();
-  const handleClose = () => appWindow.close();
+  const handleMinimize = () => appWindow?.minimize();
+  const handleClose = () => appWindow?.close();
 
   const handleMaximize = useCallback(async () => {
     try {
+      if (!appWindow) return;
       if (osPlatform === 'macos') {
         const isFullscreen = await appWindow.isFullscreen();
         appWindow.setFullscreen(!isFullscreen);
@@ -92,9 +101,9 @@ export default function TitleBar() {
   const outerDragProps = isLinux ? {} : { 'data-tauri-drag-region': 'true' };
 
   return (
-    <div className="relative pt-2 px-2 w-full z-50 bg-transparent" {...outerDragProps}>
+    <div className="relative z-50 w-full border-b border-border-color bg-bg-secondary" {...outerDragProps}>
       <div
-        className="h-10 bg-bg-secondary flex justify-between items-center select-none rounded-lg overflow-hidden"
+        className="h-9 bg-bg-secondary flex justify-between items-center select-none overflow-hidden"
         {...outerDragProps}
       >
         <div className="flex items-center h-full">
@@ -118,7 +127,9 @@ export default function TitleBar() {
             </div>
           )}
           <div data-tauri-drag-region className={`flex items-center h-full ${isMac ? '' : 'px-4'}`}>
-            <p className="text-sm font-semibold text-text-secondary pointer-events-none">{APP_NAME}</p>
+            <p className="text-[11px] font-medium tracking-[0.01em] text-text-secondary pointer-events-none">
+              {APP_NAME}
+            </p>
           </div>
         </div>
         <div data-tauri-drag-region className="flex-1 h-full" />
@@ -158,23 +169,19 @@ export default function TitleBar() {
       </div>
 
       {isWindows && (
-        <div className="absolute top-0 right-0 flex h-12 z-20">
-          <button
-            aria-label={t('ui.windowControls.minimize')}
-            className="relative w-12 group outline-none"
-            onClick={handleMinimize}
-          >
-            <div className="absolute bottom-0 left-0 w-12 h-10 flex justify-center items-center group-hover:bg-white/10 group-active:bg-white/20 transition-colors duration-150">
+        <div className="absolute top-0 right-0 flex h-9 z-20">
+          <button aria-label={t('ui.windowControls.minimize')} className="relative w-12 group" onClick={handleMinimize}>
+            <div className="absolute inset-0 flex justify-center items-center group-hover:bg-white/10 group-active:bg-white/20 transition-colors duration-150">
               <Minus size={16} className="text-text-secondary" />
             </div>
           </button>
 
           <button
             aria-label={t(isMaximized ? 'ui.windowControls.restore' : 'ui.windowControls.maximize')}
-            className="relative w-12 group outline-none"
+            className="relative w-12 group"
             onClick={handleMaximize}
           >
-            <div className="absolute bottom-0 left-0 w-12 h-10 flex justify-center items-center group-hover:bg-white/10 group-active:bg-white/20 transition-colors duration-150">
+            <div className="absolute inset-0 flex justify-center items-center group-hover:bg-white/10 group-active:bg-white/20 transition-colors duration-150">
               {isMaximized ? (
                 <RestoreDownIcon size={12} className="text-text-secondary" />
               ) : (
@@ -183,12 +190,8 @@ export default function TitleBar() {
             </div>
           </button>
 
-          <button
-            aria-label={t('ui.windowControls.close')}
-            className="relative w-14 group outline-none"
-            onClick={handleClose}
-          >
-            <div className="absolute bottom-0 left-0 w-12 h-10 flex justify-center items-center group-hover:bg-red-500 group-active:bg-red-600 transition-colors duration-150 rounded-r-lg">
+          <button aria-label={t('ui.windowControls.close')} className="relative w-14 group" onClick={handleClose}>
+            <div className="absolute inset-0 flex justify-center items-center group-hover:bg-red-500 group-active:bg-red-600 transition-colors duration-150">
               <X size={16} className="text-text-secondary group-hover:text-white transition-colors duration-150" />
             </div>
           </button>

@@ -11,7 +11,7 @@ import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useProcessStore } from '../../store/useProcessStore';
 
-import { ImageFile, Orientation, ThumbnailAspectRatio } from '../ui/AppProperties';
+import { ImageFile, Orientation, Panel, ThumbnailAspectRatio } from '../ui/AppProperties';
 
 interface EditorViewProps {
   transformWrapperRef: RefObject<any>;
@@ -54,6 +54,7 @@ export default function EditorView({
   handleCopyAdjustments,
   handlePasteAdjustments,
   handleRate,
+  handleRightPanelSelect,
   handleZoomChange,
   requestThumbnails,
 }: EditorViewProps) {
@@ -115,6 +116,8 @@ export default function EditorView({
       onContextMenu={handleThumbnailContextMenu}
       onEmptyAreaContextMenu={handleMainLibraryContextMenu}
       onCopy={handleCopyAdjustments}
+      onDone={handleBackToLibrary}
+      onExportClick={() => handleRightPanelSelect(Panel.Export)}
       onOpenCopyPasteSettings={() => setUI({ isCopyPasteSettingsModalOpen: true })}
       onImageSelect={handleImageClick}
       onPaste={() => handlePasteAdjustments()}

@@ -106,7 +106,7 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
             className="absolute top-0 bottom-0 z-0 bg-accent"
             style={{ borderRadius: 6 }}
             animate={bubbleStyle}
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           />
           {shapeOptions.map((shape) => {
             const Icon = shape.icon;

@@ -904,8 +904,8 @@ export default function AIPanel() {
       collisionDetection={pointerWithin}
     >
       <div className="flex flex-col h-full select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
-        <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-          <Text variant={TextVariants.title}>{t('editor.ai.inpaintingTitle')}</Text>
+        <div className="develop-panel-header">
+          <Text variant={TextVariants.heading}>{t('editor.ai.inpaintingTitle')}</Text>
           <button
             className="p-2 rounded-full hover:bg-surface transition-colors"
             onClick={handleResetAllAiEdits}
@@ -955,7 +955,6 @@ export default function AIPanel() {
                         />
                       ))}
                     </div>
-
                   </motion.div>
                 ) : (
                   <AiListRoot

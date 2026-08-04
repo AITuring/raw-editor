@@ -511,8 +511,8 @@ const Slider = ({
   const numericValue = isNaN(Number(value)) ? 0 : Number(value);
 
   return (
-    <div className={`mb-2 group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`} ref={containerRef}>
-      <div className="flex justify-between items-center mb-1">
+    <div className={`develop-slider group ${disabled ? 'opacity-45 cursor-not-allowed' : ''}`} ref={containerRef}>
+      <div className="flex justify-between items-center gap-3">
         <div
           className={`grid ${typeof label === 'string' && !disabled ? 'cursor-pointer' : ''}`}
           onClick={typeof label === 'string' && !disabled ? handleReset : undefined}
@@ -522,7 +522,7 @@ const Slider = ({
         >
           <span
             aria-hidden={isLabelHovered && typeof label === 'string'}
-            className={`col-start-1 row-start-1 text-sm font-medium text-text-secondary select-none transition-opacity duration-200 ease-in-out ${
+            className={`col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-secondary select-none transition-opacity duration-150 ease-out ${
               isLabelHovered && typeof label === 'string' ? 'opacity-0' : 'opacity-100'
             }`}
           >
@@ -531,7 +531,7 @@ const Slider = ({
           {typeof label === 'string' && (
             <span
               aria-hidden={!isLabelHovered}
-              className={`col-start-1 row-start-1 text-sm font-medium text-text-primary select-none transition-opacity duration-200 ease-in-out pointer-events-none ${
+              className={`col-start-1 row-start-1 text-[12px] font-normal leading-5 text-text-primary select-none transition-opacity duration-150 ease-out pointer-events-none ${
                 isLabelHovered ? 'opacity-100' : 'opacity-0'
               }`}
             >
@@ -539,10 +539,11 @@ const Slider = ({
             </span>
           )}
         </div>
-        <div className="w-12 text-right">
+        <div className="w-12 shrink-0 text-right tabular-nums">
           {isEditing ? (
             <input
-              className="w-full text-sm text-right bg-card-active border border-gray-500 rounded-sm px-1 py-0 outline-none focus:ring-1 focus:ring-blue-500 text-text-primary"
+              aria-label={typeof label === 'string' ? label : undefined}
+              className="h-5 w-full rounded-[2px] border border-border-color bg-card-active px-1 py-0 text-right text-[12px] text-text-primary focus-visible:border-accent"
               disabled={disabled}
               max={max}
               min={min}
@@ -556,7 +557,7 @@ const Slider = ({
             />
           ) : (
             <span
-              className={`text-sm text-text-primary w-full text-right select-none ${disabled ? '' : 'cursor-text'}`}
+              className={`block w-full text-right text-[12px] leading-5 text-text-primary select-none ${disabled ? '' : 'cursor-text'}`}
               onClick={disabled ? undefined : handleValueClick}
               onDoubleClick={disabled ? undefined : handleReset}
               data-tooltip={disabled ? undefined : t('ui.slider.clickToEdit')}
@@ -568,22 +569,23 @@ const Slider = ({
         </div>
       </div>
 
-      <div className="relative w-full h-5">
+      <div className="relative h-3.5 w-full">
         <div
-          className={`absolute top-1/2 left-0 w-full h-1.5 -translate-y-1/2 rounded-full pointer-events-none ${
+          className={`absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full pointer-events-none ${
             trackClassName || 'bg-card-active'
           }`}
         />
         <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full pointer-events-none bg-accent/25"
+          className="absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full pointer-events-none bg-accent/45"
           style={{
             left: `${Math.min(fillPercentage, originPercentage)}%`,
             width: `${Math.abs(fillPercentage - originPercentage)}%`,
           }}
         />
         <input
+          aria-label={typeof label === 'string' ? label : undefined}
           ref={rangeInputRef}
-          className={`absolute top-1/2 left-0 w-full h-7 -translate-y-1/2 appearance-none bg-transparent cursor-pointer m-0 p-0 slider-input z-10 ${
+          className={`absolute left-0 top-1/2 z-10 m-0 h-5 w-full -translate-y-1/2 appearance-none bg-transparent p-0 slider-input ${
             isDragging ? 'slider-thumb-active' : ''
           } ${disabled ? 'cursor-not-allowed' : ''}`}
           style={{ margin: 0, touchAction: isDragging ? 'none' : 'pan-y' }}

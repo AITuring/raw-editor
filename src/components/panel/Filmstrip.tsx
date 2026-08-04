@@ -12,7 +12,7 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 
 const HORIZONTAL_PADDING = 4;
-const ITEM_GAP = 8;
+const ITEM_GAP = 5;
 
 interface ImageLayer {
   id: string;
@@ -154,17 +154,17 @@ const FilmstripThumbnail = memo(
     }, []);
 
     const ringClass = isActive
-      ? 'ring-2 ring-accent shadow-md'
+      ? 'ring-1 ring-accent'
       : isSelected
-        ? 'ring-2 ring-gray-400'
-        : 'hover:ring-2 hover:ring-hover-color';
+        ? 'ring-1 ring-text-secondary'
+        : 'hover:ring-1 hover:ring-hover-color';
 
-    const imageClasses = `w-full h-full group-hover:scale-[1.02] transition-transform duration-300`;
+    const imageClasses = 'w-full h-full';
 
     return (
       <div
         className={clsx(
-          'h-full w-full rounded-md overflow-hidden cursor-pointer shrink-0 group relative transition-all duration-150 bg-surface',
+          'h-full w-full rounded-[2px] overflow-hidden cursor-pointer shrink-0 group relative transition-[box-shadow] duration-[120ms] bg-surface',
           ringClass,
         )}
         onClick={(e: any) => {
@@ -225,7 +225,7 @@ const FilmstripThumbnail = memo(
         <div className="absolute top-1 right-1 flex items-center justify-end z-10 pointer-events-none">
           <div
             className={clsx(
-              'rounded-full h-5 px-1.5 flex items-center justify-center gap-0 shadow-md bg-black/30 pointer-events-auto transition-all duration-200 ease-out origin-top-right',
+              'rounded-[2px] h-4 px-1 flex items-center justify-center gap-0 bg-black/45 pointer-events-auto transition-opacity duration-[120ms] ease-out origin-top-right',
               hasAnyOverlay ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none',
             )}
           >
@@ -276,7 +276,7 @@ const FilmstripThumbnail = memo(
                 variant={TextVariants.small}
                 color={TextColors.white}
                 weight={TextWeights.bold}
-                className="shadow-md text-[10px] px-1 py-0.5 rounded-full bg-black/30"
+                className="text-[9px] px-1 py-0.5 rounded-[2px] bg-black/50"
                 data-tooltip={t('ui.filmstrip.tooltips.virtualCopy')}
               >
                 {t('ui.filmstrip.virtualCopyAbbreviation')}

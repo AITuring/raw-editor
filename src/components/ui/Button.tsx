@@ -18,8 +18,9 @@ const Button = ({
 }: ButtonProps) => {
   const baseClasses = `
     flex items-center justify-center gap-2
-    font-semibold py-2 px-4 rounded-md
-    text-button-text text-md
+    min-h-8 font-medium py-1.5 px-3 rounded-[3px]
+    text-button-text text-xs
+    transition-colors duration-150
     disabled:opacity-50 disabled:cursor-not-allowed
   `;
 

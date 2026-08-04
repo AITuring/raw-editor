@@ -465,7 +465,7 @@ export const useAppInitialization = ({
     const fontStack =
       fontFamily === 'system'
         ? '-apple-system, BlinkMacSystemFont, system-ui, sans-serif'
-        : "'Poppins', system-ui, sans-serif";
+        : "'Avenir Next', 'Segoe UI', 'PingFang SC', 'Noto Sans CJK SC', sans-serif";
     root.style.setProperty('--font-family', fontStack);
   }, [theme, appSettings?.fontFamily]);
 };

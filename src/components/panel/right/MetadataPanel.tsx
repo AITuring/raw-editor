@@ -382,8 +382,8 @@ export default function MetadataPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-        <Text variant={TextVariants.title}>{t('editor.metadata.title')}</Text>
+      <div className="develop-panel-header">
+        <Text variant={TextVariants.heading}>{t('editor.metadata.title')}</Text>
       </div>
       <div className="grow overflow-y-auto p-3 custom-scrollbar">
         {selectedImage ? (

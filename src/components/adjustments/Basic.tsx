@@ -111,13 +111,13 @@ const ToneMapperSwitch = ({
           </span>
         </div>
       </div>
-      <div className="w-full p-2 pb-1 bg-card-active rounded-md">
-        <div className="relative flex w-full">
+      <div className="w-full pb-1">
+        <div className="relative flex w-full overflow-hidden rounded-[3px] border border-border-color bg-surface">
           <motion.div
             className="absolute top-0 bottom-0 z-0 bg-accent"
-            style={{ borderRadius: 6 }}
+            style={{ borderRadius: 2 }}
             animate={bubbleStyle}
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           />
           {toneMapperOptions.map((mapper) => (
             <button
@@ -125,7 +125,7 @@ const ToneMapperSwitch = ({
               data-tooltip={mapper.title}
               onClick={() => onMapperChange(mapper.id)}
               className={clsx(
-                'relative flex-1 flex items-center justify-center gap-2 px-3 p-1.5 text-sm font-medium rounded-md transition-colors',
+                'relative flex-1 flex items-center justify-center gap-2 px-3 py-1 text-xs font-medium transition-colors',
                 {
                   'text-text-primary hover:bg-surface': selectedMapper !== mapper.id,
                   'text-button-text': selectedMapper === mapper.id,
@@ -145,7 +145,6 @@ const ToneMapperSwitch = ({
             onChange={(e: any) => onEvShiftChange(parseFloat(e.target.value))}
             step={0.01}
             value={evShiftValue}
-            trackClassName="bg-surface"
             onDragStateChange={onDragStateChange}
           />
         </div>

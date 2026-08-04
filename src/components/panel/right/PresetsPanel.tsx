@@ -1205,8 +1205,8 @@ export default function PresetsPanel() {
   return (
     <DndContext id="presets-panel-dnd" sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex flex-col h-full">
-        <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-          <Text variant={TextVariants.title}>{t('editor.presets.title')}</Text>
+        <div className="develop-panel-header">
+          <Text variant={TextVariants.heading}>{t('editor.presets.title')}</Text>
           <div className="flex items-center gap-1">
             <button
               className="p-2 rounded-full hover:bg-surface transition-colors"

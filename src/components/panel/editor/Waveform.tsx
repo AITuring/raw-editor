@@ -502,7 +502,7 @@ export default function Waveform({
   }, []);
 
   const baseButtonClass =
-    'relative grow text-center px-1.5 py-1 text-xs rounded-lg font-medium transition-colors duration-150';
+    'relative grow text-center px-1 py-0.5 text-[10px] rounded-[2px] font-medium transition-colors duration-100';
   const inactiveButtonClass = 'text-text-primary hover:bg-bg-tertiary';
 
   const isLoaderMode = [
@@ -515,7 +515,7 @@ export default function Waveform({
 
   return (
     <div
-      className="relative w-full h-full bg-surface rounded-lg overflow-hidden border-border-color shadow-inner"
+      className="relative w-full h-full bg-surface rounded-[2px] overflow-hidden border border-border-color"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -536,9 +536,9 @@ export default function Waveform({
                 animate={{ opacity: 1, scaleY: 1 }}
                 exit={{ opacity: 0, scaleY: 0 }}
                 transition={{
-                  duration: 0.5,
+                  duration: 0.18,
                   ease: [0.22, 1, 0.36, 1],
-                  opacity: { duration: 0.4 },
+                  opacity: { duration: 0.15 },
                 }}
                 style={{ transformOrigin: 'bottom' }}
                 className="absolute inset-0 z-10"
@@ -552,9 +552,9 @@ export default function Waveform({
                 animate={{ opacity: 1, ...(isVectorscope ? {} : { scaleY: 1 }) }}
                 exit={{ opacity: 0, ...(isVectorscope ? {} : { scaleY: 0 }) }}
                 transition={{
-                  duration: 0.5,
+                  duration: 0.18,
                   ease: [0.22, 1, 0.36, 1],
-                  opacity: { duration: 0.4 },
+                  opacity: { duration: 0.15 },
                 }}
                 style={{ transformOrigin: 'bottom' }}
                 className="absolute inset-0 z-10"
@@ -573,7 +573,7 @@ export default function Waveform({
               initial={{ opacity: 0 }}
               animate={{
                 opacity: 1,
-                transition: { duration: 0.6, ease: 'easeOut' },
+                transition: { duration: 0.18, ease: 'easeOut' },
               }}
               exit={{
                 opacity: 0,
@@ -594,14 +594,14 @@ export default function Waveform({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute inset-x-0 bottom-0 p-2 pt-6 bg-linear-to-t from-black/80 to-transparent flex justify-center z-20"
+            className="absolute inset-x-0 bottom-0 p-1 pt-5 bg-linear-to-t from-black/80 to-transparent flex justify-center z-20"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.1, ease: 'easeOut', delay: 0.05 }}
-              className="flex items-center justify-center gap-1 p-1 bg-surface/90 backdrop-blur-md rounded-lg w-full shadow-lg border border-white/5"
+              className="flex items-center justify-center gap-0.5 p-0.5 bg-surface/96 rounded-[3px] w-full border border-border-color"
             >
               {onToggleClipping && (
                 <>
@@ -610,7 +610,7 @@ export default function Waveform({
                     data-tooltip={
                       showClipping ? t('ui.waveform.tooltips.hideClipping') : t('ui.waveform.tooltips.showClipping')
                     }
-                    className={`relative flex items-center justify-center w-7 h-7 shrink-0 rounded-lg transition-colors duration-150 ${
+                    className={`relative flex items-center justify-center w-6 h-6 shrink-0 rounded-[2px] transition-colors duration-100 ${
                       showClipping ? 'bg-accent text-button-text' : 'text-text-primary hover:bg-bg-tertiary'
                     }`}
                   >
@@ -631,8 +631,8 @@ export default function Waveform({
                     {displayMode === mode && (
                       <motion.div
                         layoutId="waveform-mode-indicator"
-                        className={`absolute inset-0 ${bgClass} rounded-lg`}
-                        transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+                        className={`absolute inset-0 ${bgClass} rounded-[2px]`}
+                        transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
                       />
                     )}
                     <span className="relative z-10">{label}</span>

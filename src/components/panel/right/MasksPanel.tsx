@@ -1,13 +1,6 @@
-import {
-  type ChangeEvent,
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from 'react';
+import { type ChangeEvent, useState, useEffect, useRef, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { v4 as uuidv4 } from 'uuid';
-import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
@@ -23,7 +16,6 @@ import {
   pointerWithin,
 } from '@dnd-kit/core';
 import {
-  ChartArea,
   Circle,
   ClipboardPaste,
   Copy,
@@ -50,8 +42,6 @@ import CurveGraph from '../../adjustments/Curves';
 import ColorPanel from '../../adjustments/Color';
 import DetailsPanel from '../../adjustments/Details';
 import EffectsPanel from '../../adjustments/Effects';
-import Waveform from '../editor/Waveform';
-import Resizer from '../../ui/Resizer';
 import { DepthRangePicker } from '../../ui/DepthRangePicker';
 
 import {
@@ -75,7 +65,7 @@ import {
   ADJUSTMENT_SECTIONS,
 } from '../../../utils/adjustments';
 import { useContextMenu } from '../../../context/ContextMenuContext';
-import { OPTION_SEPARATOR, Orientation } from '../../ui/AppProperties';
+import { OPTION_SEPARATOR } from '../../ui/AppProperties';
 import { createSubMask } from '../../../utils/maskUtils';
 import { usePresets } from '../../../hooks/usePresets';
 import Text from '../../ui/Text';
@@ -86,7 +76,6 @@ import { useProcessStore } from '../../../store/useProcessStore';
 import { useAiMasking } from '../../../hooks/useAiMasking';
 import { useEditorActions } from '../../../hooks/useEditorActions';
 import { useUIStore } from '../../../store/useUIStore';
-import { useWaveformControls } from '../../../hooks/useWaveformControls';
 
 interface DragData {
   type: 'Container' | 'SubMask' | 'Creation';
@@ -274,10 +263,6 @@ export default function MasksPanel() {
     histogram,
     isGeneratingAiMask,
     selectedImage,
-    isWaveformVisible,
-    waveform,
-    activeWaveformChannel,
-    waveformHeight,
     setEditor,
   } = useEditorStore(
     useShallow((state) => ({
@@ -289,16 +274,9 @@ export default function MasksPanel() {
       histogram: state.histogram,
       isGeneratingAiMask: state.isGeneratingAiMask,
       selectedImage: state.selectedImage,
-      isWaveformVisible: state.isWaveformVisible,
-      waveform: state.waveform,
-      activeWaveformChannel: state.activeWaveformChannel,
-      waveformHeight: state.waveformHeight,
       setEditor: state.setEditor,
     })),
   );
-
-  const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, handleWaveformResize } =
-    useWaveformControls();
 
   const setBrushSettings = useCallback(
     (updater: any) => {
@@ -965,57 +943,19 @@ export default function MasksPanel() {
       collisionDetection={pointerWithin}
     >
       <div className="flex flex-col h-full select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
-        <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-          <Text variant={TextVariants.title}>{t('editor.masks.maskingTitle')}</Text>
-          <div className="flex items-center gap-1">
+        <div className="develop-panel-header">
+          <Text variant={TextVariants.heading}>{t('editor.masks.maskingTitle')}</Text>
+          <div className="flex items-center gap-0.5">
             <button
-              className={clsx(
-                'p-2 rounded-full transition-colors',
-                isWaveformVisible ? 'bg-surface hover:bg-card-active' : 'hover:bg-surface',
-              )}
-              onClick={onToggleWaveform}
-              data-tooltip={t('editor.masks.toggleAnalyticsTooltip')}
-            >
-              <ChartArea size={18} />
-            </button>
-            <button
-              className="p-2 rounded-full hover:bg-surface transition-colors"
+              aria-label={t('editor.masks.resetMaskingTooltip')}
+              className="develop-panel-action"
               onClick={handleResetAllMasks}
               data-tooltip={t('editor.masks.resetMaskingTooltip')}
             >
-              <RotateCcw size={18} />
+              <RotateCcw size={16} strokeWidth={1.8} />
             </button>
           </div>
         </div>
-
-        <AnimatePresence initial={false}>
-          {isWaveformVisible && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: waveformHeight || 256, opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: isResizingWaveform ? 0 : 0.2, ease: 'easeOut' }}
-              className="shrink-0 flex flex-col relative border-b border-surface overflow-hidden"
-            >
-              <div className="grow w-full h-full p-3 pb-2 min-h-0">
-                <Waveform
-                  waveformData={waveform || null}
-                  histogram={histogram}
-                  displayMode={activeWaveformChannel || 'luma'}
-                  setDisplayMode={setActiveWaveformChannel}
-                  showClipping={adjustments.showClipping || false}
-                  onToggleClipping={() => {
-                    setAdjustments((prev: Adjustments) => ({
-                      ...prev,
-                      showClipping: !prev.showClipping,
-                    }));
-                  }}
-                />
-              </div>
-              <Resizer direction={Orientation.Horizontal} onMouseDown={handleWaveformResize} />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0 p-3">
           {selectedImage ? (

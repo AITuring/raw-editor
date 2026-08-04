@@ -1,11 +1,5 @@
 import { create } from 'zustand';
-import {
-  ImageFile,
-  Panel,
-  UiVisibility,
-  CullingSuggestions,
-  PanelRegion,
-} from '../components/ui/AppProperties';
+import { ImageFile, Panel, UiVisibility, CullingSuggestions, PanelRegion } from '../components/ui/AppProperties';
 import { BASIC_MODE } from '../basic/runtime';
 
 export type SwitcherPlacement = 'bottom' | 'right' | 'left' | 'top';
@@ -149,8 +143,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   isSettingsOpen: false,
 
   leftPanelWidth: 320,
-  rightPanelWidth: 320,
-  bottomPanelHeight: 144,
+  rightPanelWidth: 368,
+  bottomPanelHeight: 120,
   leftTopHeight: 450,
   rightTopHeight: 450,
   compactEditorPanelHeightOverride: null,
@@ -183,7 +177,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeRightPanel: Panel.Adjustments,
   renderedRightPanel: Panel.Adjustments,
   slideDirection: 1,
-  collapsibleSectionsState: { basic: true, color: false, curves: true, details: false, effects: false },
+  collapsibleSectionsState: { basic: true, color: false, curves: false, details: false, effects: false },
 
   isCreateFolderModalOpen: false,
   isRenameFolderModalOpen: false,
@@ -243,7 +237,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
       const active = { ...state.activePanels };
 
-      const fromRegion = (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
+      const fromRegion =
+        (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
       if (fromRegion) layout[fromRegion] = layout[fromRegion].filter((candidate) => candidate !== panel);
 
       if (!layout[toRegion].includes(panel)) layout[toRegion].push(panel);
@@ -273,7 +268,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
       const active = { ...state.activePanels };
 
-      const fromRegion = (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
+      const fromRegion =
+        (Object.keys(layout) as PanelRegion[]).find((region) => layout[region].includes(panel)) ?? null;
       if (fromRegion) layout[fromRegion] = layout[fromRegion].filter((candidate) => candidate !== panel);
 
       const clampedIndex = Math.max(0, Math.min(index, layout[toRegion].length));

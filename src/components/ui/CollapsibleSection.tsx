@@ -1,18 +1,15 @@
-import { useRef, useEffect, useState } from 'react';
 import { ChevronDown, Eye, EyeOff } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
-import Text from './Text';
-import { TextVariants, TextWeights } from '../../types/typography';
 
 interface CollapsibleSectionProps {
   canToggleVisibility?: boolean;
-  children: any;
+  children: React.ReactNode;
   isContentVisible: boolean;
   isOpen: boolean;
-  onContextMenu?: any;
-  onToggle: any;
-  onToggleVisibility?: any;
+  onContextMenu?: React.MouseEventHandler<HTMLDivElement>;
+  onToggle(): void;
+  onToggleVisibility?(): void;
   title: string;
 }
 
@@ -27,104 +24,49 @@ export default function CollapsibleSection({
   title,
 }: CollapsibleSectionProps) {
   const { t } = useTranslation();
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [isHovering, setIsHovering] = useState(false);
-  const hoverTimeoutRef = useRef<any>(null);
-
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    const content = contentRef.current;
-    if (!wrapper || !content) {
-      return;
-    }
-
-    const updateMaxHeight = () => {
-      if (isOpen) {
-        const contentHeight = content.scrollHeight;
-        wrapper.style.maxHeight = `${contentHeight}px`;
-      } else {
-        wrapper.style.maxHeight = '0px';
-      }
-    };
-
-    updateMaxHeight();
-
-    const resizeObserver = new ResizeObserver(updateMaxHeight);
-    resizeObserver.observe(content);
-
-    return () => resizeObserver.disconnect();
-  }, [isOpen]);
-
-  const handleMouseEnter = () => {
-    if (!canToggleVisibility) {
-      return;
-    }
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovering(true);
-    }, 250);
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-    setIsHovering(false);
-  };
-
-  const handleVisibilityClick = (e: any) => {
-    e.stopPropagation();
-    onToggleVisibility();
-  };
+  const visibilityLabel = isContentVisible
+    ? t('ui.collapsibleSection.disableSection')
+    : t('ui.collapsibleSection.enableSection');
 
   return (
-    <div className="bg-surface rounded-lg overflow-hidden shrink-0" onContextMenu={onContextMenu}>
-      <div
-        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-card-active transition-colors duration-200"
-        onClick={onToggle}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="flex items-center gap-2">
-          <Text variant={TextVariants.title} weight={TextWeights.normal}>
-            {title}
-          </Text>
-          {canToggleVisibility && (
-            <div className="w-6 h-6 flex items-center justify-center">
-              <button
-                className={clsx(
-                  'p-1 rounded-full text-text-secondary hover:bg-bg-primary z-10 transition-opacity duration-300',
-                  isHovering || !isContentVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
-                )}
-                onClick={handleVisibilityClick}
-                data-tooltip={
-                  isContentVisible
-                    ? t('ui.collapsibleSection.disableSection')
-                    : t('ui.collapsibleSection.enableSection')
-                }
-              >
-                {isContentVisible ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-            </div>
-          )}
-        </div>
-        <ChevronDown
-          className={clsx('text-accent transition-transform duration-300', { 'rotate-180': isOpen })}
-          size={20}
-        />
+    <section
+      className={clsx('develop-collapsible group/section', !isContentVisible && 'is-disabled')}
+      onContextMenu={onContextMenu}
+    >
+      <div className="develop-collapsible-header">
+        <button aria-expanded={isOpen} className="develop-collapsible-toggle" onClick={onToggle} type="button">
+          <span className="truncate">{title}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={clsx('develop-collapsible-chevron', isOpen && 'is-open')}
+            size={15}
+            strokeWidth={1.8}
+          />
+        </button>
+
+        {canToggleVisibility && (
+          <button
+            aria-label={visibilityLabel}
+            aria-pressed={isContentVisible}
+            className="develop-collapsible-visibility"
+            data-tooltip={visibilityLabel}
+            onClick={onToggleVisibility}
+            type="button"
+          >
+            {isContentVisible ? (
+              <Eye aria-hidden="true" size={14} strokeWidth={1.7} />
+            ) : (
+              <EyeOff aria-hidden="true" size={14} strokeWidth={1.7} />
+            )}
+          </button>
+        )}
       </div>
-      <div ref={wrapperRef} className="overflow-hidden transition-all duration-300 ease-in-out">
-        <div
-          className={clsx(
-            'px-4 pb-4 transition-opacity duration-300',
-            !isContentVisible && 'opacity-30 pointer-events-none',
-          )}
-          ref={contentRef}
-        >
+
+      {isOpen && (
+        <div className={clsx('develop-collapsible-content', !isContentVisible && 'pointer-events-none opacity-35')}>
           {children}
         </div>
-      </div>
-    </div>
+      )}
+    </section>
   );
 }
