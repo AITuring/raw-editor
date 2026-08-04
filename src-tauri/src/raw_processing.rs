@@ -288,3 +288,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "raw_processing_acceptance.rs"]
+mod acceptance_tests;

@@ -41,3 +41,7 @@ src-tauri/libs/
 
 # bench/replay.js result dumps
 bench/out/
+
+# User-supplied, local-only RAW acceptance fixtures. Their hashes and permissions
+# are tracked in tests/acceptance/raw-manifest.json; the binaries are not redistributable.
+src/assets/test/

@@ -1,14 +1,124 @@
 {
   "schemaVersion": 1,
   "fixtureRootEnvironment": "RAW_EDITOR_ACCEPTANCE_DIR",
-  "files": [],
+  "files": [
+    {
+      "id": "sony-ilce-7rm5-lossy-compressed-arw",
+      "camera": {
+        "make": "SONY",
+        "model": "ILCE-7RM5"
+      },
+      "capturePurpose": "Real 60 MP Sony α7R V low-ISO, 25-second long-exposure development baseline using lossy-compressed ARW; suitable for pipeline quality inspection and local performance measurement, without claiming ACR parity or absolute color accuracy.",
+      "originalFilename": "DSC05363.ARW",
+      "byteSize": 73781248,
+      "sha256": "b3f3a09477254fe9230fc9bf460e1af27e5b604f8a23ff6adaec5fece4a23351",
+      "source": "Provided directly by the workspace user on 2026-08-04.",
+      "authorization": {
+        "scope": "Local development and acceptance testing in this workspace only.",
+        "permission": "The workspace user explicitly requested that this file be used to establish the α7R V development quality and performance baseline on 2026-08-04.",
+        "redistribution": false
+      },
+      "expectedSensorDimensions": {
+        "width": 9600,
+        "height": 6376
+      },
+      "expectedOutputDimensions": {
+        "width": 6336,
+        "height": 9504
+      },
+      "expectedRawProperties": {
+        "sourceBitsPerSample": 14,
+        "decodedBitsPerSample": 16,
+        "cfa": "RGGB",
+        "compression": "Sony Compressed RAW (lossy)"
+      },
+      "classification": {
+        "realCameraSample": true,
+        "imageQualityBaseline": true,
+        "imageQualityScope": "Single-sample 60 MP low-ISO long-exposure pipeline baseline. It can reveal orientation, unpacking, demosaic, white-balance, color-transform, preview and export defects, but has no color target or paired ACR reference.",
+        "performanceBaseline": "Local machine release observation for a 60 MP Sony ILCE-7RM5 lossy-compressed ARW."
+      },
+      "coveredSonyA7RVScenarios": ["lossy-arw"]
+    },
+    {
+      "id": "sony-ilce-7m4-lossless-compressed-raw-2",
+      "camera": {
+        "make": "SONY",
+        "model": "ILCE-7M4"
+      },
+      "capturePurpose": "Real-camera Sony ARW pipeline development at ISO 2000; correctness and local performance observation only, not an image-quality reference.",
+      "originalFilename": "DSC07146.ARW",
+      "byteSize": 40325120,
+      "sha256": "eae500cde589a92860c4a8e6ee39de3b4f9eeda4228310b2efc4323688fa1ca5",
+      "source": "Provided directly by the workspace user on 2026-08-04.",
+      "authorization": {
+        "scope": "Local development and acceptance testing in this workspace only.",
+        "permission": "The workspace user explicitly requested that this file be used for development testing on 2026-08-04.",
+        "redistribution": false
+      },
+      "expectedSensorDimensions": {
+        "width": 7168,
+        "height": 5120
+      },
+      "expectedOutputDimensions": {
+        "width": 4672,
+        "height": 7008
+      },
+      "expectedRawProperties": {
+        "sourceBitsPerSample": 14,
+        "decodedBitsPerSample": 16,
+        "cfa": "RGGB",
+        "compression": "Sony Lossless Compressed RAW 2"
+      },
+      "classification": {
+        "realCameraSample": true,
+        "imageQualityBaseline": false,
+        "performanceBaseline": "Local machine observation for Sony ILCE-7M4 only."
+      }
+    },
+    {
+      "id": "nikon-z6-lossless-nef",
+      "camera": {
+        "make": "NIKON CORPORATION",
+        "model": "NIKON Z 6"
+      },
+      "capturePurpose": "Real-camera Nikon NEF pipeline development at ISO 1600; correctness and local performance observation only, not an image-quality reference.",
+      "originalFilename": "DSC_1916.NEF",
+      "byteSize": 33608858,
+      "sha256": "87f16eb7a145b7b4999e92154d037a66e06efac4a85e100797e31bd70f8bc270",
+      "source": "Provided directly by the workspace user on 2026-08-04.",
+      "authorization": {
+        "scope": "Local development and acceptance testing in this workspace only.",
+        "permission": "The workspace user explicitly requested that this file be used for development testing on 2026-08-04.",
+        "redistribution": false
+      },
+      "expectedSensorDimensions": {
+        "width": 6064,
+        "height": 4040
+      },
+      "expectedOutputDimensions": {
+        "width": 6048,
+        "height": 4024
+      },
+      "expectedRawProperties": {
+        "sourceBitsPerSample": 14,
+        "decodedBitsPerSample": 16,
+        "cfa": "RGGB",
+        "compression": "Nikon NEF lossless compressed"
+      },
+      "classification": {
+        "realCameraSample": true,
+        "imageQualityBaseline": false,
+        "performanceBaseline": "Local machine observation for Nikon Z 6 only."
+      }
+    }
+  ],
   "deferredSonyA7RVScenarios": [
     "daylight",
     "tungsten",
     "high-iso",
     "underexposed",
     "saturated-light",
-    "lossy-arw",
     "lossless-l-arw",
     "uncompressed-arw"
   ]
