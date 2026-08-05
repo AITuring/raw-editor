@@ -1728,6 +1728,7 @@ const ImageCanvas = memo(
             ...prev,
             temperature: Math.max(-100, Math.min(100, deltaTemp)),
             tint: Math.max(-100, Math.min(100, deltaTint)),
+            whiteBalanceMode: 'custom',
           }));
 
           onWbPicked();

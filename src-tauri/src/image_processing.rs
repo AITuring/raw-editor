@@ -1,7 +1,7 @@
 use crate::gpu_processing::WgpuDisplay;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat3, Vec2, Vec3};
-use image::{DynamicImage, GenericImageView, Rgb32FImage, Rgba};
+use image::{DynamicImage, GenericImageView, Rgb32FImage, RgbImage, Rgba};
 use imageproc::geometric_transformations::{Border, Interpolation, rotate_about_center};
 use nalgebra::{Matrix3 as NaMatrix3, Vector3 as NaVector3};
 use rawler::decoders::Orientation;
@@ -3349,6 +3349,7 @@ pub fn perform_auto_analysis(image: &DynamicImage) -> AutoAdjustmentResults {
 
     let analysis_preview = downscale_f32_image(image, ANALYSIS_MAX_DIM, ANALYSIS_MAX_DIM);
     let rgb_image = analysis_preview.to_rgb8();
+    let (auto_temperature, auto_tint) = estimate_auto_white_balance(&rgb_image);
     let total_pixels = (rgb_image.width() * rgb_image.height()) as f64;
 
     let (width, height) = rgb_image.dimensions();
@@ -3510,8 +3511,8 @@ pub fn perform_auto_analysis(image: &DynamicImage) -> AutoAdjustmentResults {
         shadows: shadows.clamp(-100.0, 100.0),
         vibrancy: vibrancy.clamp(-100.0, 100.0),
         vignette_amount: vignette_amount.clamp(-100.0, 100.0),
-        temperature: 0.0,
-        tint: 0.0,
+        temperature: auto_temperature,
+        tint: auto_tint,
         dehaze: dehaze.clamp(-100.0, 100.0),
         clarity: clarity.clamp(-100.0, 100.0),
         centre: centre.clamp(-100.0, 100.0),
@@ -3529,6 +3530,9 @@ pub fn auto_results_to_json(results: &AutoAdjustmentResults) -> serde_json::Valu
         "shadows": results.shadows,
         "vibrance": results.vibrancy,
         "vignetteAmount": results.vignette_amount,
+        "temperature": results.temperature,
+        "tint": results.tint,
+        "whiteBalanceMode": "auto",
         "clarity": results.clarity,
         "centré": results.centre,
 
@@ -3541,6 +3545,124 @@ pub fn auto_results_to_json(results: &AutoAdjustmentResults) -> serde_json::Valu
         "whites": results.whites,
         "blacks": results.blacks
     })
+}
+
+fn white_balance_multipliers(temperature: f64, tint: f64) -> (f64, f64, f64) {
+    let normalized_temperature = temperature / 25.0;
+    let normalized_tint = tint / 100.0;
+    let temperature_rgb = (
+        1.0 + normalized_temperature * 0.2,
+        1.0 + normalized_temperature * 0.05,
+        1.0 - normalized_temperature * 0.2,
+    );
+    let tint_rgb = (
+        1.0 + normalized_tint * 0.25,
+        1.0 - normalized_tint * 0.25,
+        1.0 + normalized_tint * 0.25,
+    );
+    (
+        temperature_rgb.0 * tint_rgb.0,
+        temperature_rgb.1 * tint_rgb.1,
+        temperature_rgb.2 * tint_rgb.2,
+    )
+}
+
+fn estimate_auto_white_balance(image: &RgbImage) -> (f64, f64) {
+    const SATURATION_BINS: usize = 256;
+    const MIN_LUMA: f64 = 0.08;
+    const MAX_CHANNEL: f64 = 0.98;
+    const MAX_NEUTRAL_SATURATION: f64 = 0.72;
+
+    let mut saturation_histogram = [0usize; SATURATION_BINS];
+    let mut eligible_pixels = 0usize;
+
+    for pixel in image.pixels() {
+        let r = pixel[0] as f64 / 255.0;
+        let g = pixel[1] as f64 / 255.0;
+        let b = pixel[2] as f64 / 255.0;
+        let max_channel = r.max(g).max(b);
+        let min_channel = r.min(g).min(b);
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if luma < MIN_LUMA || max_channel > MAX_CHANNEL || min_channel <= 0.0 {
+            continue;
+        }
+
+        let saturation = (max_channel - min_channel) / max_channel.max(1.0e-6);
+        let bin = (saturation * (SATURATION_BINS - 1) as f64).round() as usize;
+        saturation_histogram[bin.min(SATURATION_BINS - 1)] += 1;
+        eligible_pixels += 1;
+    }
+
+    if eligible_pixels < 16 {
+        return (0.0, 0.0);
+    }
+
+    let neutral_target = (eligible_pixels as f64 * 0.35).ceil() as usize;
+    let mut neutral_count = 0usize;
+    let mut saturation_threshold = MAX_NEUTRAL_SATURATION;
+    for (bin, count) in saturation_histogram.iter().enumerate() {
+        neutral_count += count;
+        if neutral_count >= neutral_target {
+            saturation_threshold =
+                (bin as f64 / (SATURATION_BINS - 1) as f64).clamp(0.08, MAX_NEUTRAL_SATURATION);
+            break;
+        }
+    }
+
+    let mut red_ratio_log = 0.0f64;
+    let mut blue_ratio_log = 0.0f64;
+    let mut total_weight = 0.0f64;
+
+    for pixel in image.pixels() {
+        let r = pixel[0] as f64 / 255.0;
+        let g = pixel[1] as f64 / 255.0;
+        let b = pixel[2] as f64 / 255.0;
+        let max_channel = r.max(g).max(b);
+        let min_channel = r.min(g).min(b);
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if luma < MIN_LUMA || max_channel > MAX_CHANNEL || min_channel <= 0.0 {
+            continue;
+        }
+
+        let saturation = (max_channel - min_channel) / max_channel.max(1.0e-6);
+        if saturation > saturation_threshold {
+            continue;
+        }
+
+        let neutral_weight = (1.0 - saturation).powi(3);
+        let exposure_weight = (luma / 0.6).clamp(0.2, 1.0);
+        let weight = neutral_weight * exposure_weight;
+        red_ratio_log += (g / r.max(1.0 / 255.0)).ln() * weight;
+        blue_ratio_log += (g / b.max(1.0 / 255.0)).ln() * weight;
+        total_weight += weight;
+    }
+
+    if total_weight <= 1.0e-6 {
+        return (0.0, 0.0);
+    }
+
+    let target_red_log = (red_ratio_log / total_weight).clamp(-1.0, 1.0);
+    let target_blue_log = (blue_ratio_log / total_weight).clamp(-1.0, 1.0);
+    let mut best_temperature = 0.0f64;
+    let mut best_tint = 0.0f64;
+    let mut best_score = f64::INFINITY;
+
+    for temperature in -85..=85 {
+        for tint in -85..=85 {
+            let (red_gain, green_gain, blue_gain) =
+                white_balance_multipliers(temperature as f64, tint as f64);
+            let red_log = (red_gain / green_gain).ln();
+            let blue_log = (blue_gain / green_gain).ln();
+            let score = (red_log - target_red_log).powi(2) + (blue_log - target_blue_log).powi(2);
+            if score < best_score {
+                best_score = score;
+                best_temperature = temperature as f64;
+                best_tint = tint as f64;
+            }
+        }
+    }
+
+    (best_temperature, best_tint)
 }
 
 #[tauri::command]
@@ -3559,4 +3681,49 @@ pub fn calculate_auto_adjustments(
     let results = perform_auto_analysis(&original_image);
 
     Ok(auto_results_to_json(&results))
+}
+
+#[cfg(test)]
+mod auto_white_balance_tests {
+    use super::*;
+    use image::Rgb;
+
+    fn corrected_spread(pixel: Rgb<u8>, temperature: f64, tint: f64) -> f64 {
+        let (red_gain, green_gain, blue_gain) = white_balance_multipliers(temperature, tint);
+        let corrected = [
+            pixel[0] as f64 * red_gain,
+            pixel[1] as f64 * green_gain,
+            pixel[2] as f64 * blue_gain,
+        ];
+        corrected.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+            - corrected.iter().copied().fold(f64::INFINITY, f64::min)
+    }
+
+    #[test]
+    fn neutral_image_keeps_neutral_white_balance() {
+        let image = RgbImage::from_pixel(32, 32, Rgb([128, 128, 128]));
+        assert_eq!(estimate_auto_white_balance(&image), (0.0, 0.0));
+    }
+
+    #[test]
+    fn warm_cast_is_cooled_toward_neutral() {
+        let cast = Rgb([190, 135, 85]);
+        let image = RgbImage::from_pixel(32, 32, cast);
+        let (temperature, tint) = estimate_auto_white_balance(&image);
+        let original_spread = (cast[0] - cast[2]) as f64;
+
+        assert!(temperature < -10.0);
+        assert!(corrected_spread(cast, temperature, tint) < original_spread * 0.35);
+    }
+
+    #[test]
+    fn green_cast_adds_magenta_tint() {
+        let cast = Rgb([110, 170, 110]);
+        let image = RgbImage::from_pixel(32, 32, cast);
+        let (temperature, tint) = estimate_auto_white_balance(&image);
+        let original_spread = (cast[1] - cast[0]) as f64;
+
+        assert!(tint > 10.0);
+        assert!(corrected_spread(cast, temperature, tint) < original_spread * 0.35);
+    }
 }

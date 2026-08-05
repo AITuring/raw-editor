@@ -1,15 +1,27 @@
-import { useState, useMemo, type CSSProperties } from 'react';
-import { Pipette, Sliders } from 'lucide-react';
+import { useCallback, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { Loader2, Pipette, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'react-toastify';
 import Slider from '../ui/Slider';
 import ColorWheel from '../ui/ColorWheel';
 import { ColorAdjustment, ColorCalibration, HueSatLum, INITIAL_ADJUSTMENTS } from '../../utils/adjustments';
 import { Adjustments, ColorGrading } from '../../utils/adjustments';
-import { AppSettings } from '../ui/AppProperties';
+import { AppSettings, Invokes, SelectedImage } from '../ui/AppProperties';
 import Text from '../ui/Text';
 import { TextVariants } from '../../types/typography';
 import { AdjustmentSubsection, AdjustmentTabs } from '../ui/AdjustmentSubsection';
+import { useEditorStore } from '../../store/useEditorStore';
+import {
+  WHITE_BALANCE_PRESETS,
+  cameraRawTintToRelative,
+  inferAsShotKelvin,
+  kelvinToRelativeTemperature,
+  relativeTemperatureToKelvin,
+  relativeTintToCameraRaw,
+  type WhiteBalanceMode,
+} from '../../utils/whiteBalance';
 
 interface ColorProps {
   baseHue: number;
@@ -19,8 +31,9 @@ interface ColorProps {
 
 interface ColorPanelProps {
   adjustments: Adjustments;
-  setAdjustments(adjustments: Partial<Adjustments>): any;
+  setAdjustments(adjustments: Partial<Adjustments> | ((previous: Adjustments) => Adjustments)): any;
   appSettings: AppSettings | null;
+  selectedImage?: SelectedImage | null;
   isForMask?: boolean;
   isWbPickerActive?: boolean;
   toggleWbPicker?: () => void;
@@ -307,6 +320,7 @@ export default function ColorPanel({
   adjustments,
   setAdjustments,
   appSettings,
+  selectedImage,
   isForMask = false,
   isWbPickerActive = false,
   toggleWbPicker,
@@ -315,6 +329,9 @@ export default function ColorPanel({
 }: ColorPanelProps) {
   const { t } = useTranslation();
   const [mixerChannel, setMixerChannel] = useState<'hue' | 'saturation' | 'luminance' | 'all'>('hue');
+  const [whiteBalanceRequestPath, setWhiteBalanceRequestPath] = useState<string | null>(null);
+  const whiteBalanceRequestId = useRef(0);
+  const whiteBalanceModeId = useId();
   const adjustmentVisibility = appSettings?.adjustmentVisibility || {};
   const HSL_COLORS = useMemo<Array<ColorProps>>(
     () => [
@@ -331,7 +348,97 @@ export default function ColorPanel({
   );
 
   const handleAdjustmentChange = (key: ColorAdjustment, value: string) => {
-    setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, [key]: parseFloat(value) }));
+    setAdjustments((prev: Adjustments) => ({
+      ...prev,
+      [key]: parseFloat(value),
+      ...(key === ColorAdjustment.Temperature || key === ColorAdjustment.Tint
+        ? { whiteBalanceMode: 'custom' as const }
+        : {}),
+    }));
+  };
+
+  const asShotKelvin = useMemo(() => inferAsShotKelvin(selectedImage?.exif), [selectedImage?.exif]);
+  const temperatureToKelvin = useCallback(
+    (temperature: number) => relativeTemperatureToKelvin(temperature, asShotKelvin),
+    [asShotKelvin],
+  );
+  const kelvinToTemperature = useCallback(
+    (kelvin: number) => kelvinToRelativeTemperature(kelvin, asShotKelvin),
+    [asShotKelvin],
+  );
+  const whiteBalanceMode = (adjustments.whiteBalanceMode ||
+    (adjustments.temperature !== 0 || adjustments.tint !== 0 ? 'custom' : 'asShot')) as WhiteBalanceMode;
+  const isCalculatingWhiteBalance = whiteBalanceRequestPath !== null && whiteBalanceRequestPath === selectedImage?.path;
+  const whiteBalanceOptions = useMemo(
+    () => [
+      { value: 'asShot' as const, label: t('adjustments.color.whiteBalanceModes.asShot') },
+      { value: 'auto' as const, label: t('adjustments.color.whiteBalanceModes.auto') },
+      { value: 'daylight' as const, label: t('adjustments.color.whiteBalanceModes.daylight') },
+      { value: 'cloudy' as const, label: t('adjustments.color.whiteBalanceModes.cloudy') },
+      { value: 'shade' as const, label: t('adjustments.color.whiteBalanceModes.shade') },
+      { value: 'tungsten' as const, label: t('adjustments.color.whiteBalanceModes.tungsten') },
+      { value: 'fluorescent' as const, label: t('adjustments.color.whiteBalanceModes.fluorescent') },
+      { value: 'flash' as const, label: t('adjustments.color.whiteBalanceModes.flash') },
+      { value: 'custom' as const, label: t('adjustments.color.whiteBalanceModes.custom') },
+    ],
+    [t],
+  );
+
+  const handleWhiteBalanceModeChange = async (mode: WhiteBalanceMode) => {
+    if (mode === 'asShot') {
+      setAdjustments((previous: Adjustments) => ({
+        ...previous,
+        temperature: 0,
+        tint: 0,
+        whiteBalanceMode: 'asShot',
+      }));
+      return;
+    }
+
+    if (mode === 'custom') {
+      setAdjustments((previous: Adjustments) => ({ ...previous, whiteBalanceMode: 'custom' }));
+      return;
+    }
+
+    if (mode === 'auto') {
+      const requestedPath = selectedImage?.path;
+      if (!requestedPath || !selectedImage?.isReady) return;
+
+      const previousMode = whiteBalanceMode;
+      const requestId = ++whiteBalanceRequestId.current;
+      setWhiteBalanceRequestPath(requestedPath);
+      setAdjustments((previous: Adjustments) => ({ ...previous, whiteBalanceMode: 'auto' }));
+
+      try {
+        const automatic = await invoke<Pick<Adjustments, 'temperature' | 'tint'>>(Invokes.CalculateAutoAdjustments);
+        const activeImagePath = useEditorStore.getState().selectedImage?.path;
+        if (whiteBalanceRequestId.current !== requestId || activeImagePath !== requestedPath) return;
+
+        setAdjustments((previous: Adjustments) => ({
+          ...previous,
+          temperature: Number(automatic.temperature) || 0,
+          tint: Number(automatic.tint) || 0,
+          whiteBalanceMode: 'auto',
+        }));
+      } catch (error) {
+        const activeImagePath = useEditorStore.getState().selectedImage?.path;
+        if (whiteBalanceRequestId.current === requestId && activeImagePath === requestedPath) {
+          setAdjustments((previous: Adjustments) => ({ ...previous, whiteBalanceMode: previousMode }));
+          toast.error(t('adjustments.color.autoWhiteBalanceFailed', { error: String(error) }));
+        }
+      } finally {
+        if (whiteBalanceRequestId.current === requestId) setWhiteBalanceRequestPath(null);
+      }
+      return;
+    }
+
+    const preset = WHITE_BALANCE_PRESETS[mode];
+    setAdjustments((previous: Adjustments) => ({
+      ...previous,
+      temperature: kelvinToRelativeTemperature(preset.kelvin, asShotKelvin),
+      tint: cameraRawTintToRelative(preset.tint),
+      whiteBalanceMode: mode,
+    }));
   };
 
   const handleHslChange = (colorName: string, key: 'hue' | 'saturation' | 'luminance', value: string) => {
@@ -367,40 +474,74 @@ export default function ColorPanel({
   return (
     <div className="space-y-4">
       {showWhiteBalance && (
-        <div className="p-2 bg-bg-tertiary rounded-md">
-          <div className="flex justify-between items-center mb-2">
-            <Text variant={TextVariants.heading}>{t('adjustments.color.whiteBalance')}</Text>
-            {!isForMask && toggleWbPicker && (
-              <button
-                aria-label={t('adjustments.color.wbPickerTooltip')}
-                aria-pressed={isWbPickerActive}
-                onClick={toggleWbPicker}
-                className={`p-1.5 rounded-md transition-colors ${
-                  isWbPickerActive ? 'bg-accent text-button-text' : 'hover:bg-bg-secondary text-text-secondary'
-                }`}
-                data-tooltip={t('adjustments.color.wbPickerTooltip')}
-                type="button"
+        <div className="camera-raw-white-balance">
+          <div className="camera-raw-field camera-raw-white-balance-field">
+            <label className="camera-raw-field-label" htmlFor={whiteBalanceModeId}>
+              {t('adjustments.color.whiteBalance')}
+            </label>
+            <div className="camera-raw-white-balance-control">
+              <select
+                aria-label={t('adjustments.color.whiteBalance')}
+                className="camera-raw-select"
+                disabled={isCalculatingWhiteBalance}
+                id={whiteBalanceModeId}
+                onChange={(event) => void handleWhiteBalanceModeChange(event.target.value as WhiteBalanceMode)}
+                value={whiteBalanceMode}
               >
-                <Pipette aria-hidden="true" size={16} />
-              </button>
-            )}
+                {whiteBalanceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {!isForMask && toggleWbPicker && (
+                <button
+                  aria-label={t('adjustments.color.wbPickerTooltip')}
+                  aria-pressed={isWbPickerActive}
+                  onClick={toggleWbPicker}
+                  className={`camera-raw-wb-picker ${isWbPickerActive ? 'is-active' : ''}`}
+                  data-tooltip={t('adjustments.color.wbPickerTooltip')}
+                  type="button"
+                >
+                  <Pipette aria-hidden="true" size={16} />
+                </button>
+              )}
+            </div>
           </div>
+          {isCalculatingWhiteBalance && (
+            <div aria-live="polite" className="camera-raw-white-balance-status" role="status">
+              <Loader2 aria-hidden="true" className="animate-spin" size={11} />
+              <span>{t('adjustments.color.calculatingWhiteBalance')}</span>
+            </div>
+          )}
           <Slider
+            disabled={isCalculatingWhiteBalance}
+            displayDecimals={0}
+            displayStep={50}
+            fromDisplayValue={kelvinToTemperature}
             label={t('adjustments.color.temperature')}
             max={100}
             min={-100}
             onChange={(e: any) => handleAdjustmentChange(ColorAdjustment.Temperature, e.target.value)}
+            showPositiveSign={false}
             step={1}
+            suffix="K"
+            toDisplayValue={temperatureToKelvin}
             value={adjustments.temperature || 0}
             trackClassName="temperature-gradient-track"
             onDragStateChange={onDragStateChange}
           />
           <Slider
+            disabled={isCalculatingWhiteBalance}
+            displayDecimals={0}
+            displayStep={1}
+            fromDisplayValue={cameraRawTintToRelative}
             label={t('adjustments.color.tint')}
             max={100}
             min={-100}
             onChange={(e: any) => handleAdjustmentChange(ColorAdjustment.Tint, e.target.value)}
             step={1}
+            toDisplayValue={relativeTintToCameraRaw}
             value={adjustments.tint || 0}
             trackClassName="tint-gradient-track"
             onDragStateChange={onDragStateChange}

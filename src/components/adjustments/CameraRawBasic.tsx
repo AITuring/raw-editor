@@ -1,14 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { Adjustments } from '../../utils/adjustments';
-import { AppSettings } from '../ui/AppProperties';
+import { AppSettings, SelectedImage } from '../ui/AppProperties';
 import BasicAdjustments from './Basic';
 import ColorPanel from './Color';
 import { AdjustmentSubsection } from '../ui/AdjustmentSubsection';
 
 interface CameraRawBasicProps {
   adjustments: Adjustments;
-  setAdjustments(adjustments: Partial<Adjustments>): any;
+  setAdjustments(adjustments: Partial<Adjustments> | ((previous: Adjustments) => Adjustments)): any;
   appSettings: AppSettings | null;
+  selectedImage?: SelectedImage | null;
   isWbPickerActive?: boolean;
   toggleWbPicker?: () => void;
   onDragStateChange?: (isDragging: boolean) => void;
@@ -19,6 +20,7 @@ export default function CameraRawBasic({
   adjustments,
   setAdjustments,
   appSettings,
+  selectedImage,
   isWbPickerActive,
   toggleWbPicker,
   onDragStateChange,
@@ -44,6 +46,7 @@ export default function CameraRawBasic({
               {...sharedProps}
               variant="whiteBalance"
               isWbPickerActive={isWbPickerActive}
+              selectedImage={selectedImage}
               toggleWbPicker={toggleWbPicker}
             />
           </AdjustmentSubsection>

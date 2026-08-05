@@ -1,6 +1,7 @@
 import { Crop } from 'react-image-crop';
 import { v4 as uuidv4 } from 'uuid';
 import { SubMask, SubMaskMode } from '../components/panel/right/Masks';
+import type { WhiteBalanceMode } from './whiteBalance';
 
 export enum ActiveChannel {
   Blue = 'blue',
@@ -48,6 +49,7 @@ export enum ColorAdjustment {
   Temperature = 'temperature',
   Tint = 'tint',
   Vibrance = 'vibrance',
+  WhiteBalanceMode = 'whiteBalanceMode',
 }
 
 export enum ColorGrading {
@@ -235,6 +237,7 @@ export interface Adjustments {
   structure: number;
   temperature: number;
   tint: number;
+  whiteBalanceMode: WhiteBalanceMode;
   toneMapper: 'agx' | 'basic';
   transformDistortion: number;
   transformVertical: number;
@@ -595,6 +598,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   structure: 0,
   temperature: 0,
   tint: 0,
+  whiteBalanceMode: 'asShot',
   toneMapper: 'basic',
   transformDistortion: 0,
   transformVertical: 0,
@@ -695,6 +699,9 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
   }));
 
   const loadedSectionVisibility = loadedAdjustments.sectionVisibility || ({} as SectionVisibility);
+  const normalizedWhiteBalanceMode =
+    loadedAdjustments.whiteBalanceMode ||
+    ((loadedAdjustments.temperature ?? 0) !== 0 || (loadedAdjustments.tint ?? 0) !== 0 ? 'custom' : 'asShot');
   const normalizedSectionVisibility: SectionVisibility = {
     ...INITIAL_ADJUSTMENTS.sectionVisibility,
     ...loadedSectionVisibility,
@@ -709,6 +716,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
   return {
     ...INITIAL_ADJUSTMENTS,
     ...loadedAdjustments,
+    whiteBalanceMode: normalizedWhiteBalanceMode,
     flareAmount: loadedAdjustments.flareAmount ?? INITIAL_ADJUSTMENTS.flareAmount,
     glowAmount: loadedAdjustments.glowAmount ?? INITIAL_ADJUSTMENTS.glowAmount,
     halationAmount: loadedAdjustments.halationAmount ?? INITIAL_ADJUSTMENTS.halationAmount,
@@ -787,7 +795,10 @@ export const ADJUSTMENT_GROUPS: Record<string, AdjustmentGroup[]> = {
     },
   ],
   color: [
-    { label: 'modals.copyPaste.groups.whiteBalance', keys: [ColorAdjustment.Temperature, ColorAdjustment.Tint] },
+    {
+      label: 'modals.copyPaste.groups.whiteBalance',
+      keys: [ColorAdjustment.WhiteBalanceMode, ColorAdjustment.Temperature, ColorAdjustment.Tint],
+    },
     { label: 'modals.copyPaste.groups.presence', keys: [ColorAdjustment.Saturation, ColorAdjustment.Vibrance] },
     {
       label: 'modals.copyPaste.groups.hueShift',
@@ -948,6 +959,7 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
     'toneMapper',
   ],
   color: [
+    ColorAdjustment.WhiteBalanceMode,
     ColorAdjustment.Temperature,
     ColorAdjustment.Tint,
     ColorAdjustment.Vibrance,

@@ -22,6 +22,8 @@
     "color": {
       "all": "모두",
       "ariaSelectColor": "{{name}} 색상 선택",
+      "autoWhiteBalanceFailed": "자동 화이트 밸런스 실패: {{error}}",
+      "calculatingWhiteBalance": "자동 화이트 밸런스 계산 중…",
       "calibration": {
         "colors": {
           "blue": "파랑",
@@ -67,7 +69,18 @@
       "vibrance": "생동감",
       "wbPickerTooltip": "화이트 밸런스 피커",
       "wbPickerWgpuDisabled": "WB 피커: 설정에서 WGPU를 비활성화하세요.",
-      "whiteBalance": "화이트 밸런스"
+      "whiteBalance": "화이트 밸런스",
+      "whiteBalanceModes": {
+        "asShot": "촬영 시 설정",
+        "auto": "자동",
+        "cloudy": "흐림",
+        "custom": "사용자 정의",
+        "daylight": "일광",
+        "flash": "플래시",
+        "fluorescent": "형광등",
+        "shade": "그늘",
+        "tungsten": "텅스텐"
+      }
     },
     "curves": {
       "channels": {

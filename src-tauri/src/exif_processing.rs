@@ -1417,8 +1417,9 @@ pub fn read_rrexif_sidecar(image_path: &Path) -> Option<HashMap<String, String>>
 
 pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<String, String> {
     if is_raw_file(path)
-        && let Some(map) = extract_metadata(file_bytes)
+        && let Some(mut map) = extract_metadata(file_bytes)
     {
+        enrich_raw_white_balance(path, file_bytes, &mut map);
         return map;
     }
 
@@ -1441,12 +1442,35 @@ pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<Strin
             exif_data.insert(field.tag.to_string(), truncate_large_exif(&raw_val));
         }
     }
+    enrich_raw_white_balance(path, file_bytes, &mut exif_data);
     exif_data
+}
+
+fn enrich_raw_white_balance(
+    path: &str,
+    file_bytes: &[u8],
+    exif_data: &mut HashMap<String, String>,
+) -> bool {
+    if !is_raw_file(path) || exif_data.contains_key("AsShotTemperature") {
+        return false;
+    }
+
+    let Some(temperature) = crate::raw_processing::estimate_as_shot_temperature(file_bytes) else {
+        return false;
+    };
+
+    exif_data.insert("AsShotTemperature".to_string(), temperature.to_string());
+    true
 }
 
 pub fn read_exif_data(path: &str, file_bytes: &[u8]) -> HashMap<String, String> {
     let source_path = Path::new(path);
-    if let Some(sidecar_exif) = read_rrexif_sidecar(source_path) {
+    if let Some(mut sidecar_exif) = read_rrexif_sidecar(source_path) {
+        if enrich_raw_white_balance(path, file_bytes, &mut sidecar_exif) {
+            let mut metadata = load_primary_metadata(source_path);
+            metadata.exif = Some(sidecar_exif.clone());
+            let _ = save_primary_metadata(source_path, &metadata);
+        }
         return sidecar_exif;
     }
 

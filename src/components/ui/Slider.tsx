@@ -13,12 +13,17 @@ type SliderChangeEvent =
 interface SliderProps {
   defaultValue?: number;
   disabled?: boolean;
+  displayDecimals?: number;
+  displayStep?: number;
   label: React.ReactNode;
   max: number;
   min: number;
+  fromDisplayValue?(value: number): number;
   onChange(event: SliderChangeEvent): void;
   onDragStateChange?(state: boolean): void;
+  showPositiveSign?: boolean;
   step: number;
+  toDisplayValue?(value: number): number;
   value: number;
   trackClassName?: string;
   fillOrigin?: 'min' | 'default';
@@ -29,6 +34,7 @@ const DOUBLE_CLICK_THRESHOLD_MS = 150;
 const FINE_ADJUSTMENT_MULTIPLIER = 0.2;
 const TOUCH_DRAG_THRESHOLD_PX = 10;
 const TOUCH_THUMB_HIT_RADIUS_PX = 24;
+const identityValue = (value: number) => value;
 
 const hasFineAdjustmentModifier = (event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) =>
   'shiftKey' in event && (event.shiftKey || event.altKey);
@@ -36,12 +42,17 @@ const hasFineAdjustmentModifier = (event: MouseEvent | TouchEvent | React.MouseE
 const Slider = ({
   defaultValue = 0,
   disabled = false,
+  displayDecimals,
   label,
   max,
   min,
+  fromDisplayValue = identityValue,
   onChange,
   onDragStateChange = () => {},
+  showPositiveSign = true,
   step = 1,
+  displayStep = step,
+  toDisplayValue = identityValue,
   value,
   trackClassName,
   fillOrigin = 'default',
@@ -52,7 +63,7 @@ const Slider = ({
   const [isDragging, setIsDragging] = useState(false);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState<string>(String(value));
+  const [inputValue, setInputValue] = useState<string>(String(toDisplayValue(value)));
   const inputRef = useRef<HTMLInputElement | null>(null);
   const rangeInputRef = useRef<HTMLInputElement | null>(null);
   const [isLabelHovered, setIsLabelHovered] = useState(false);
@@ -88,6 +99,31 @@ const Slider = ({
 
   const stepStr = String(step);
   const decimalPlaces = stepStr.includes('.') ? stepStr.split('.')[1].length : 0;
+  const displayStepString = String(displayStep);
+  const resolvedDisplayDecimals =
+    displayDecimals ?? (displayStepString.includes('.') ? displayStepString.split('.')[1].length : 0);
+  const transformedMin = toDisplayValue(min);
+  const transformedMax = toDisplayValue(max);
+  const displayMin = Math.min(transformedMin, transformedMax);
+  const displayMax = Math.max(transformedMin, transformedMax);
+
+  const formatInputValue = useCallback(
+    (internalValue: number) => {
+      const transformedValue = toDisplayValue(internalValue);
+      if (!Number.isFinite(transformedValue)) return '0';
+      return transformedValue.toFixed(resolvedDisplayDecimals);
+    },
+    [resolvedDisplayDecimals, toDisplayValue],
+  );
+
+  const displayToInternal = useCallback(
+    (transformedValue: number) => {
+      const clampedDisplayValue = Math.max(displayMin, Math.min(displayMax, transformedValue));
+      const internalValue = fromDisplayValue(clampedDisplayValue);
+      return Math.max(min, Math.min(max, internalValue));
+    },
+    [displayMax, displayMin, fromDisplayValue, max, min],
+  );
 
   const snapToStep = useCallback(
     (val: number): number => {
@@ -130,8 +166,8 @@ const Slider = ({
     setIsEditing(false);
     setIsLabelHovered(false);
     setDisplayValue(value);
-    setInputValue(String(value));
-  }, [disabled, value]);
+    setInputValue(formatInputValue(value));
+  }, [disabled, formatInputValue, value]);
 
   useEffect(() => {
     const sliderElement = containerRef.current;
@@ -292,9 +328,9 @@ const Slider = ({
 
   useEffect(() => {
     if (!isEditing) {
-      setInputValue(String(value));
+      setInputValue(formatInputValue(value));
     }
-  }, [value, isEditing]);
+  }, [formatInputValue, value, isEditing]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -439,10 +475,9 @@ const Slider = ({
     const parseableText = textVal.replace(',', '.');
     const parsedValue = parseFloat(parseableText);
     if (!isNaN(parsedValue)) {
-      const clampedValue = Math.max(min, Math.min(max, parsedValue));
       onChange({
         target: {
-          value: clampedValue,
+          value: displayToInternal(parsedValue),
         },
       });
     }
@@ -450,17 +485,13 @@ const Slider = ({
 
   const handleInputCommit = () => {
     if (disabled) {
-      setInputValue(String(value));
+      setInputValue(formatInputValue(value));
       setIsEditing(false);
       return;
     }
 
-    let newValue = parseFloat(inputValue.replace(',', '.'));
-    if (isNaN(newValue)) {
-      newValue = value;
-    } else {
-      newValue = Math.max(min, Math.min(max, newValue));
-    }
+    const parsedDisplayValue = parseFloat(inputValue.replace(',', '.'));
+    const newValue = isNaN(parsedDisplayValue) ? value : displayToInternal(parsedDisplayValue);
     const syntheticEvent = {
       target: {
         value: newValue,
@@ -477,22 +508,22 @@ const Slider = ({
       handleInputCommit();
       e.currentTarget.blur();
     } else if (e.key === 'Escape') {
-      setInputValue(String(value));
+      setInputValue(formatInputValue(value));
       setIsEditing(false);
       e.currentTarget.blur();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       let currentNum = parseFloat(inputValue.replace(',', '.'));
       if (isNaN(currentNum)) {
-        currentNum = value;
+        currentNum = toDisplayValue(value);
       }
       const direction = e.key === 'ArrowUp' ? 1 : -1;
-      const newValue = currentNum + direction * step;
-      const snappedNewValue = snapToStep(newValue);
-      setInputValue(String(snappedNewValue));
+      const newDisplayValue = Math.max(displayMin, Math.min(displayMax, currentNum + direction * displayStep));
+      const newValue = displayToInternal(newDisplayValue);
+      setInputValue(newDisplayValue.toFixed(resolvedDisplayDecimals));
       onChange({
         target: {
-          value: snappedNewValue,
+          value: newValue,
         },
       });
     }
@@ -508,9 +539,10 @@ const Slider = ({
     }
   };
 
-  const numericValue = isNaN(Number(value)) ? 0 : Number(value);
-  const formattedValue = `${numericValue > 0 ? '+' : ''}${
-    decimalPlaces > 0 && numericValue === 0 ? '0' : numericValue.toFixed(decimalPlaces)
+  const internalNumericValue = isNaN(Number(value)) ? 0 : Number(value);
+  const numericValue = toDisplayValue(internalNumericValue);
+  const formattedValue = `${showPositiveSign && numericValue > 0 ? '+' : ''}${
+    resolvedDisplayDecimals > 0 && numericValue === 0 ? '0' : numericValue.toFixed(resolvedDisplayDecimals)
   }`;
 
   return (
@@ -558,19 +590,19 @@ const Slider = ({
               aria-label={typeof label === 'string' ? label : undefined}
               className="camera-raw-slider-number h-5 w-full rounded-[2px] border border-border-color bg-card-active px-1 py-0 text-right text-[12px] text-text-primary focus-visible:border-accent"
               disabled={disabled}
-              max={max}
-              min={min}
+              max={displayMax}
+              min={displayMin}
               onBlur={handleInputCommit}
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               ref={inputRef}
-              step={step}
+              step={displayStep}
               type="text"
               value={inputValue}
             />
           ) : (
             <button
-              aria-label={typeof label === 'string' ? `${label}: ${numericValue}` : undefined}
+              aria-label={typeof label === 'string' ? `${label}: ${formattedValue}${suffix}` : undefined}
               className={`camera-raw-slider-number block min-h-6 w-full text-right text-[12px] leading-5 text-text-primary select-none ${
                 disabled ? '' : 'cursor-text'
               }`}

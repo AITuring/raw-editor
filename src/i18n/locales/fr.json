@@ -22,6 +22,8 @@
     "color": {
       "all": "Tout",
       "ariaSelectColor": "Sélectionner la couleur {{name}}",
+      "autoWhiteBalanceFailed": "Échec de la balance des blancs automatique : {{error}}",
+      "calculatingWhiteBalance": "Calcul de la balance des blancs automatique…",
       "calibration": {
         "colors": {
           "blue": "Bleu",
@@ -67,7 +69,18 @@
       "vibrance": "Vibrance",
       "wbPickerTooltip": "Pipette de balance des blancs",
       "wbPickerWgpuDisabled": "Pipette BB : Désactivez WGPU dans les paramètres.",
-      "whiteBalance": "Balance des blancs"
+      "whiteBalance": "Balance des blancs",
+      "whiteBalanceModes": {
+        "asShot": "Réglage de prise de vue",
+        "auto": "Automatique",
+        "cloudy": "Nuageux",
+        "custom": "Personnalisé",
+        "daylight": "Lumière du jour",
+        "flash": "Flash",
+        "fluorescent": "Fluorescent",
+        "shade": "Ombre",
+        "tungsten": "Tungstène"
+      }
     },
     "curves": {
       "channels": {

@@ -22,6 +22,8 @@
     "color": {
       "all": "Все",
       "ariaSelectColor": "Выбрать цвет: {{name}}",
+      "autoWhiteBalanceFailed": "Ошибка автоматического баланса белого: {{error}}",
+      "calculatingWhiteBalance": "Расчёт автоматического баланса белого…",
       "calibration": {
         "colors": {
           "blue": "Синий",
@@ -67,7 +69,18 @@
       "vibrance": "Красочность",
       "wbPickerTooltip": "Пипетка баланса белого",
       "wbPickerWgpuDisabled": "Пипетка ББ: отключите WGPU в настройках.",
-      "whiteBalance": "Баланс белого"
+      "whiteBalance": "Баланс белого",
+      "whiteBalanceModes": {
+        "asShot": "Как снято",
+        "auto": "Авто",
+        "cloudy": "Облачно",
+        "custom": "Пользовательский",
+        "daylight": "Дневной свет",
+        "flash": "Вспышка",
+        "fluorescent": "Флуоресцентный",
+        "shade": "Тень",
+        "tungsten": "Лампа накаливания"
+      }
     },
     "curves": {
       "channels": {

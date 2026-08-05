@@ -22,6 +22,8 @@
     "color": {
       "all": "すべて",
       "ariaSelectColor": "{{name}}色を選択",
+      "autoWhiteBalanceFailed": "自動ホワイトバランスに失敗しました：{{error}}",
+      "calculatingWhiteBalance": "自動ホワイトバランスを計算中…",
       "calibration": {
         "colors": {
           "blue": "ブルー",
@@ -67,7 +69,18 @@
       "vibrance": "自然な彩度",
       "wbPickerTooltip": "ホワイトバランススポイト",
       "wbPickerWgpuDisabled": "WBスポイト: 設定でWGPUを無効にしてください。",
-      "whiteBalance": "ホワイトバランス"
+      "whiteBalance": "ホワイトバランス",
+      "whiteBalanceModes": {
+        "asShot": "撮影時の設定",
+        "auto": "自動",
+        "cloudy": "曇天",
+        "custom": "カスタム",
+        "daylight": "昼光",
+        "flash": "フラッシュ",
+        "fluorescent": "蛍光灯",
+        "shade": "日陰",
+        "tungsten": "タングステン"
+      }
     },
     "curves": {
       "channels": {

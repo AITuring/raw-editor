@@ -22,6 +22,8 @@
     "color": {
       "all": "Wszystkie",
       "ariaSelectColor": "Wybierz kolor {{name}}",
+      "autoWhiteBalanceFailed": "Automatyczny balans bieli nie powiódł się: {{error}}",
+      "calculatingWhiteBalance": "Obliczanie automatycznego balansu bieli…",
       "calibration": {
         "colors": {
           "blue": "Niebieski",
@@ -67,7 +69,18 @@
       "vibrance": "Jaskrawość",
       "wbPickerTooltip": "Próbnik balansu bieli",
       "wbPickerWgpuDisabled": "Próbnik BB: Wyłącz WGPU w Ustawieniach.",
-      "whiteBalance": "Balans bieli"
+      "whiteBalance": "Balans bieli",
+      "whiteBalanceModes": {
+        "asShot": "Jak zrobiono",
+        "auto": "Automatyczny",
+        "cloudy": "Pochmurno",
+        "custom": "Własne",
+        "daylight": "Światło dzienne",
+        "flash": "Lampa błyskowa",
+        "fluorescent": "Fluorescencyjne",
+        "shade": "Cień",
+        "tungsten": "Wolfram"
+      }
     },
     "curves": {
       "channels": {

@@ -234,6 +234,7 @@ export default function Controls() {
           <CameraRawBasic
             {...commonProps}
             isWbPickerActive={isWbPickerActive}
+            selectedImage={selectedImage}
             toggleWbPicker={toggleWbPicker}
             variant="color"
           />

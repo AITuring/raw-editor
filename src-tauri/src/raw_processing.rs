@@ -1,9 +1,11 @@
 use crate::image_processing::apply_orientation;
 use anyhow::{Result, anyhow};
 use image::{DynamicImage, ImageBuffer, Rgba};
+use nalgebra::{Matrix3, Vector3};
 use rawler::{
     decoders::{Orientation, RawDecodeParams},
     imgop::develop::{DemosaicAlgorithm, Intermediate, ProcessingStep, RawDevelop},
+    imgop::xyz::Illuminant,
     rawimage::{RawImage, RawPhotometricInterpretation},
     rawsource::RawSource,
 };
@@ -27,6 +29,54 @@ pub fn develop_raw_image(
         cancel_token,
     )?;
     Ok(apply_orientation(developed_image, orientation))
+}
+
+fn correlated_color_temperature(wb_coeffs: [f32; 4], color_matrix: &[f32]) -> Option<u32> {
+    if color_matrix.len() < 9
+        || wb_coeffs[..3]
+            .iter()
+            .any(|coefficient| !coefficient.is_finite() || *coefficient <= 0.0)
+    {
+        return None;
+    }
+
+    let xyz_to_camera = Matrix3::from_row_slice(&color_matrix[..9]);
+    let camera_white = Vector3::new(1.0 / wb_coeffs[0], 1.0 / wb_coeffs[1], 1.0 / wb_coeffs[2]);
+    let xyz_white = xyz_to_camera.try_inverse()? * camera_white;
+    let sum = xyz_white.x + xyz_white.y + xyz_white.z;
+    if !sum.is_finite() || sum <= 0.0 {
+        return None;
+    }
+
+    let x = xyz_white.x / sum;
+    let y = xyz_white.y / sum;
+    let denominator = y - 0.1858;
+    if !x.is_finite() || !y.is_finite() || denominator.abs() < 1.0e-6 {
+        return None;
+    }
+
+    // McCamy's approximation is sufficiently accurate for the editable 2,000–50,000 K range.
+    let n = (x - 0.3320) / denominator;
+    let temperature = -449.0 * n.powi(3) + 3525.0 * n.powi(2) - 6823.3 * n + 5520.33;
+    if !temperature.is_finite() || !(2_000.0..=50_000.0).contains(&temperature) {
+        return None;
+    }
+
+    Some(temperature.round() as u32)
+}
+
+pub fn estimate_as_shot_temperature(file_bytes: &[u8]) -> Option<u32> {
+    let source = RawSource::new_from_slice(file_bytes);
+    let decoder = rawler::get_decoder(&source).ok()?;
+    let raw_image = decoder
+        .raw_image(&source, &RawDecodeParams::default(), true)
+        .ok()?;
+    let color_matrix = raw_image
+        .color_matrix
+        .get(&Illuminant::D65)
+        .or_else(|| raw_image.color_matrix.values().next())?;
+
+    correlated_color_temperature(raw_image.wb_coeffs, color_matrix)
 }
 
 fn is_linear_raw_format(raw_image: &RawImage) -> bool {
@@ -258,6 +308,8 @@ pub fn get_fast_demosaic_scale_factor(
 
 #[cfg(test)]
 mod tests {
+    use super::correlated_color_temperature;
+
     #[test]
     fn rawler_bundles_sony_a7r_v_camera_profile_and_color_matrices() {
         let loader = rawler::RawLoader::new();
@@ -286,6 +338,36 @@ mod tests {
             base_profile.color_matrix.len() >= 2,
             "α7R V profile must contain at least illuminant A and D65 matrices"
         );
+    }
+
+    #[test]
+    fn estimates_standard_daylight_temperature_from_white_balance() {
+        let identity = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+        let d65_white = [0.95047_f32, 1.0, 1.08883];
+        let white_balance = [
+            1.0 / d65_white[0],
+            1.0 / d65_white[1],
+            1.0 / d65_white[2],
+            f32::NAN,
+        ];
+        let estimated = correlated_color_temperature(white_balance, &identity).unwrap();
+
+        assert!((6_350..=6_650).contains(&estimated));
+    }
+
+    #[test]
+    fn estimates_tungsten_temperature_from_white_balance() {
+        let identity = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+        let illuminant_a_white = [1.09850_f32, 1.0, 0.35585];
+        let white_balance = [
+            1.0 / illuminant_a_white[0],
+            1.0 / illuminant_a_white[1],
+            1.0 / illuminant_a_white[2],
+            f32::NAN,
+        ];
+        let estimated = correlated_color_temperature(white_balance, &identity).unwrap();
+
+        assert!((2_750..=2_950).contains(&estimated));
     }
 }
 

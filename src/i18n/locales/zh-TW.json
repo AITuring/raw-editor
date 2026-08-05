@@ -22,6 +22,8 @@
     "color": {
       "all": "全部",
       "ariaSelectColor": "選擇 {{name}} 顏色",
+      "autoWhiteBalanceFailed": "自動白平衡失敗：{{error}}",
+      "calculatingWhiteBalance": "正在計算自動白平衡…",
       "calibration": {
         "colors": {
           "blue": "藍色",
@@ -67,7 +69,18 @@
       "vibrance": "鮮豔度",
       "wbPickerTooltip": "白平衡選取器",
       "wbPickerWgpuDisabled": "白平衡選取器：請在設定中停用 WGPU。",
-      "whiteBalance": "白平衡"
+      "whiteBalance": "白平衡",
+      "whiteBalanceModes": {
+        "asShot": "拍攝時設定",
+        "auto": "自動",
+        "cloudy": "陰天",
+        "custom": "自訂",
+        "daylight": "日光",
+        "flash": "閃光燈",
+        "fluorescent": "螢光燈",
+        "shade": "陰影",
+        "tungsten": "白熾燈"
+      }
     },
     "curves": {
       "channels": {
