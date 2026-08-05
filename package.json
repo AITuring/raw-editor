@@ -22,6 +22,7 @@
     "lint": "eslint . --max-warnings=0",
     "local-only:check": "node tests/local-only-boundary.mjs",
     "preview-transport:check": "node tests/preview-transport-boundary.mjs",
+    "preview-resolution:check": "node tests/preview-resolution.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

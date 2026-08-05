@@ -11,6 +11,7 @@ import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { parsePreviewResponse } from '../utils/previewProtocol';
 import { createImageObjectUrl } from '../utils/imageObjectUrl';
+import { calculatePreviewTargetResolution } from '../utils/previewResolution';
 import { BASIC_MODE } from '../basic/runtime';
 
 export function useImageProcessing(
@@ -327,32 +328,17 @@ export function useImageProcessing(
   );
 
   const calculateTargetRes = useCallback(() => {
-    const baseTargetRes = appSettings?.editorPreviewResolution || 1920;
-    if (!(appSettings?.enableZoomHifi ?? true) || displaySize.width === 0) {
-      return baseTargetRes;
-    }
-
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const sharpnessFactor = 1.25;
-    const zoomMultiplier = appSettings?.highResZoomMultiplier || 1.0;
-    const effectiveDpr = appSettings?.useFullDpiRendering ? dpr : 1;
-
-    let targetRes = Math.max(displaySize.width, displaySize.height) * effectiveDpr * sharpnessFactor * zoomMultiplier;
-    targetRes = Math.max(targetRes, 512);
-
-    if (originalSize && originalSize.width > 0 && originalSize.height > 0) {
-      const origMax = Math.max(originalSize.width, originalSize.height);
-      targetRes = Math.min(targetRes, origMax);
-      if (targetRes >= origMax * 0.8) {
-        targetRes = origMax;
-      }
-    }
-
-    if (originalSize && targetRes !== Math.max(originalSize.width, originalSize.height)) {
-      targetRes = Math.ceil(targetRes / 256) * 256;
-    }
-
-    return Math.round(targetRes);
+    return calculatePreviewTargetResolution({
+      displaySize,
+      baseRenderSize,
+      originalSize,
+      editorPreviewResolution: appSettings?.editorPreviewResolution,
+      enableZoomHifi: appSettings?.enableZoomHifi,
+      useFullDpiRendering: appSettings?.useFullDpiRendering,
+      highResZoomMultiplier: appSettings?.highResZoomMultiplier,
+      devicePixelRatio: dpr,
+    });
   }, [
     appSettings?.enableZoomHifi,
     appSettings?.editorPreviewResolution,
@@ -360,6 +346,8 @@ export function useImageProcessing(
     appSettings?.useFullDpiRendering,
     displaySize.width,
     displaySize.height,
+    baseRenderSize.width,
+    baseRenderSize.height,
     originalSize,
   ]);
 

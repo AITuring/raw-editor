@@ -20,6 +20,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
 import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
 import { createImageObjectUrl } from '../../utils/imageObjectUrl';
+import { snapImageTranslationToDevicePixels } from '../../utils/previewResolution';
 import { BASIC_MODE } from '../../basic/runtime';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
@@ -436,7 +437,30 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
       if (zoomDebounceTimeoutRef.current) clearTimeout(zoomDebounceTimeoutRef.current);
       zoomDebounceTimeoutRef.current = window.setTimeout(() => {
-        const latest = transformStateRef.current;
+        let latest = transformStateRef.current;
+        const renderSize = imageRenderSizeRef.current;
+        const dpr = window.devicePixelRatio || 1;
+        const physicalSourceScale = renderSize.scale * latest.scale * dpr;
+        const nearestIntegerScale = Math.round(physicalSourceScale);
+
+        if (nearestIntegerScale > 0 && Math.abs(physicalSourceScale - nearestIntegerScale) < 0.002) {
+          const snapped = snapImageTranslationToDevicePixels({
+            positionX: latest.positionX,
+            positionY: latest.positionY,
+            scale: latest.scale,
+            imageOffsetX: renderSize.offsetX,
+            imageOffsetY: renderSize.offsetY,
+            devicePixelRatio: dpr,
+          });
+          const bounded = clampToBounds(snapped.positionX, snapped.positionY, latest.scale);
+          latest = { positionX: bounded.x, positionY: bounded.y, scale: bounded.scale };
+          transformStateRef.current = latest;
+          if (contentRef.current) {
+            contentRef.current.style.transform = `translate3d(${latest.positionX}px, ${latest.positionY}px, 0) scale(${latest.scale})`;
+          }
+          syncWgpuRef.current();
+        }
+
         setTransformState((previous) =>
           previous.scale === latest.scale &&
           previous.positionX === latest.positionX &&
@@ -447,7 +471,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         handleZoomed(latest);
       }, 72);
     },
-    [handleZoomed],
+    [clampToBounds, handleZoomed],
   );
 
   const animateTransform = useCallback(

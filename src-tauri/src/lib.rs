@@ -62,7 +62,7 @@ use imageproc::drawing::draw_line_segment_mut;
 use imageproc::edges::canny;
 use imageproc::hough::{LineDetectionOptions, detect_lines};
 use imgref::ImgRef;
-use mozjpeg_rs::{Encoder, Preset};
+use mozjpeg_rs::{Encoder, Preset, Subsampling};
 use rgb::{FromSlice, RGBA8};
 
 use serde_json::Value;
@@ -585,8 +585,21 @@ fn process_preview_job(
 
         let step_start = std::time::Instant::now();
 
+        let is_settled_viewport_patch = !is_interactive && pixel_roi.is_some();
+        let encode_quality = if is_settled_viewport_patch {
+            100
+        } else {
+            jpeg_quality
+        };
+        let chroma_subsampling = if is_settled_viewport_patch {
+            Subsampling::S444
+        } else {
+            Subsampling::S420
+        };
+
         let encode_result = Encoder::new(Preset::BaselineFastest)
-            .quality(jpeg_quality)
+            .quality(encode_quality)
+            .subsampling(chroma_subsampling)
             .fast_color(true)
             .encode_imgref(img_ref);
 
@@ -626,7 +639,7 @@ fn process_preview_job(
                         "[process_preview_job] full {}x{} q={} encode in {:.2?}, total {:.2?}",
                         width,
                         height,
-                        jpeg_quality,
+                        encode_quality,
                         step_start.elapsed(),
                         fn_start.elapsed()
                     );

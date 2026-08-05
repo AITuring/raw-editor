@@ -1,0 +1,4 @@
+[env]
+# Keep Rust, Cargo build scripts, and native C/C++ dependencies aligned with
+# the minimum macOS version declared in src-tauri/tauri.macos.conf.json.
+MACOSX_DEPLOYMENT_TARGET = { value = "13.0", force = true }
