@@ -1270,7 +1270,7 @@
     "denoise": {
       "batchProgressText": "Reduciendo ruido de {{current}} de {{total}}...",
       "btnBatchDenoise": "Reducir ruido en lote y guardar",
-      "btnRetry": "Reintentar",
+      "btnRetry": "Volver a generar",
       "btnSave": "Guardar",
       "btnStart": "Iniciar",
       "cancel": "Cancelar",
@@ -1287,6 +1287,7 @@
       "openInEditor": "Abrir en el editor",
       "original": "Original",
       "panZoomEnabled": "Desplazamiento y zoom habilitados",
+      "previewNeedsUpdate": "Los ajustes cambiaron; vuelve a generar la vista previa.",
       "processingFailed": "Procesamiento fallido",
       "qualityTileSizeLabel": "Calidad / Tamaño de mosaico",
       "reset": "Restablecer",

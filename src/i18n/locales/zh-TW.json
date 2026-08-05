@@ -1242,7 +1242,7 @@
     "denoise": {
       "batchProgressText": "降噪中 {{current}} / {{total}}...",
       "btnBatchDenoise": "批次降噪並儲存",
-      "btnRetry": "重試",
+      "btnRetry": "重新產生",
       "btnSave": "儲存",
       "btnStart": "開始",
       "cancel": "取消",
@@ -1259,6 +1259,7 @@
       "openInEditor": "在編輯器中開啟",
       "original": "原始",
       "panZoomEnabled": "平移和縮放已啟用",
+      "previewNeedsUpdate": "參數已變更，請重新產生預覽。",
       "processingFailed": "處理失敗",
       "qualityTileSizeLabel": "品質 / 分塊大小",
       "reset": "重置",

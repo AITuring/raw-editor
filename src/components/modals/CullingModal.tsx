@@ -8,6 +8,7 @@ import Button from '../ui/Button';
 import Switch from '../ui/Switch';
 import Slider from '../ui/Slider';
 import Dropdown from '../ui/Dropdown';
+import TaskProgress from '../ui/TaskProgress';
 import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
 
@@ -236,16 +237,15 @@ export default function CullingModal({
 
   const renderProgress = () => (
     <div className="flex flex-col items-center justify-center h-48">
-      <Loader2 className="w-16 h-16 text-accent animate-spin" />
-      <p className="mt-4 text-text-primary">{progress?.stage || t('modals.culling.starting')}</p>
-      {progress && progress.total > 0 && (
-        <div className="w-full bg-surface rounded-full h-2.5 mt-2">
-          <div
-            className="bg-accent h-2.5 rounded-full"
-            style={{ width: `${((progress.current ?? 0) / progress.total) * 100}%` }}
-          />
-        </div>
-      )}
+      <Loader2 className="w-8 h-8 text-accent animate-spin" />
+      <TaskProgress
+        ariaLabel={progress?.stage || t('modals.culling.starting')}
+        className="mt-5 max-w-xl"
+        current={progress?.current}
+        indeterminate={!progress || progress.total <= 0}
+        label={progress?.stage || t('modals.culling.starting')}
+        total={progress?.total}
+      />
     </div>
   );
 

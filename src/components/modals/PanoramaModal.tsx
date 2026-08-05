@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle, Loader2, Save, RefreshCw, Layers } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../ui/Button';
+import TaskProgress from '../ui/TaskProgress';
 import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
+import { getMessageTaskProgress } from '../../utils/taskProgress';
 
 interface PanoramaModalProps {
   error: string | null;
@@ -38,6 +40,7 @@ export default function PanoramaModal({
   const [show, setShow] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
+  const panoramaProgress = useMemo(() => getMessageTaskProgress(progressMessage, 'panorama'), [progressMessage]);
 
   const mouseDownTarget = useRef<EventTarget | null>(null);
 
@@ -156,26 +159,14 @@ export default function PanoramaModal({
               <Text variant={TextVariants.title} className="mb-2 text-center">
                 {t('modals.panorama.stitchingProgress')}
               </Text>
-              <Text className="text-center font-mono h-6 flex justify-center items-center">
-                {progressMessage || t('modals.panorama.initializing')}
-              </Text>
-
-              <div className="mt-8 w-64 relative">
-                <div className="h-1 bg-surface rounded-full overflow-hidden relative w-full shadow-xs">
-                  <motion.div
-                    className="absolute inset-y-0 w-[80%] bg-linear-to-r from-transparent via-accent to-transparent mix-blend-screen"
-                    style={{ filter: 'blur(3px)' }}
-                    animate={{ x: ['-150%', '150%'] }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: [0.4, 0, 0.2, 1] }}
-                  />
-                  <motion.div
-                    className="absolute inset-y-0 w-[40%] bg-linear-to-r from-transparent via-white/90 to-transparent"
-                    style={{ filter: 'blur(1px)' }}
-                    animate={{ x: ['-250%', '250%'] }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: [0.4, 0, 0.2, 1] }}
-                  />
-                </div>
-              </div>
+              <TaskProgress
+                ariaLabel={t('modals.panorama.stitchingProgress')}
+                className="mt-5 max-w-sm"
+                indeterminate={panoramaProgress.value === null}
+                label={progressMessage || t('modals.panorama.initializing')}
+                showPercentage={panoramaProgress.exact}
+                value={panoramaProgress.value}
+              />
 
               <Text variant={TextVariants.small} className="mt-6 text-center max-w-xs opacity-60">
                 {t('modals.panorama.speedNotice')}
@@ -275,6 +266,15 @@ export default function PanoramaModal({
       >
         <div className="flex flex-col">
           {renderContent()}
+          {isSaving && (
+            <TaskProgress
+              ariaLabel={t('modals.panorama.save')}
+              className="mt-4"
+              compact
+              indeterminate
+              label={t('modals.panorama.save')}
+            />
+          )}
           <div className={`mt-4 flex justify-end gap-3 ${savedPath ? '' : 'pt-4 border-t border-surface/50'}`}>
             {renderButtons()}
           </div>

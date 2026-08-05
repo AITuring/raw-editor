@@ -1296,7 +1296,7 @@
     "denoise": {
       "batchProgressText": "Odszumianie {{current}} z {{total}}...",
       "btnBatchDenoise": "Zbiorcze Odszumianie i Zapis",
-      "btnRetry": "Spróbuj ponownie",
+      "btnRetry": "Wygeneruj ponownie",
       "btnSave": "Zapisz",
       "btnStart": "Start",
       "cancel": "Anuluj",
@@ -1313,6 +1313,7 @@
       "openInEditor": "Otwórz w edytorze",
       "original": "Oryginał",
       "panZoomEnabled": "Przesuwanie i przybliżanie jest włączone",
+      "previewNeedsUpdate": "Ustawienia zmieniono — wygeneruj podgląd ponownie.",
       "processingFailed": "Przetwarzanie nie powiodło się",
       "qualityTileSizeLabel": "Jakość / Rozmiar kafelka",
       "reset": "Resetuj",

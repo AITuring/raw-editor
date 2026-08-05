@@ -10,6 +10,7 @@ import Button from '../../ui/Button';
 import Dropdown from '../../ui/Dropdown';
 import Slider from '../../ui/Slider';
 import ImagePicker from '../../ui/ImagePicker';
+import TaskProgress from '../../ui/TaskProgress';
 import {
   ExportPreset,
   ExportSettings,
@@ -873,6 +874,22 @@ export default function ExportPanel({
       </div>
 
       <div className="p-3 border-t border-surface shrink-0 space-y-2">
+        {isExporting && (
+          <TaskProgress
+            ariaLabel={isCancelling ? t('export.status.cancelling') : t('export.status.exporting')}
+            compact
+            current={progress.current}
+            indeterminate={isCancelling || progress.total <= 0 || (progress.total === 1 && progress.current === 0)}
+            label={
+              isCancelling
+                ? t('export.status.cancelling')
+                : progress.total > 1
+                  ? t('export.status.exportingProgress', { current: progress.current, total: progress.total })
+                  : t('export.status.exporting')
+            }
+            total={progress.total}
+          />
+        )}
         <Text as="div" variant={TextVariants.small} color={TextColors.primary} className="text-center">
           {isEstimating ? (
             <span className="italic">{t('export.status.estimatingSize')}</span>

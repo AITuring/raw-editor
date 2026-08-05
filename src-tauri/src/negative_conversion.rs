@@ -294,15 +294,6 @@ pub async fn convert_negatives(
         let mut results = Vec::new();
 
         for (i, path_str) in paths.iter().enumerate() {
-            let _ = app_handle.emit(
-                "negative-batch-progress",
-                serde_json::json!({
-                    "current": i + 1,
-                    "total": paths.len(),
-                    "path": path_str
-                }),
-            );
-
             let (source_path, _) = parse_virtual_path(path_str);
             let real_path = source_path.to_string_lossy().to_string();
 
@@ -342,6 +333,15 @@ pub async fn convert_negatives(
 
             let _ = crate::exif_processing::write_rrexif_sidecar(&real_path, &out_path);
             results.push(out_path.to_string_lossy().to_string());
+
+            let _ = app_handle.emit(
+                "negative-batch-progress",
+                serde_json::json!({
+                    "current": i + 1,
+                    "total": paths.len(),
+                    "path": path_str
+                }),
+            );
         }
 
         Ok(results)

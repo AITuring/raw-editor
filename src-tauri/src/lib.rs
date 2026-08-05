@@ -1260,7 +1260,9 @@ async fn merge_hdr(
         .collect::<Result<Vec<HDRInput>, String>>()?;
 
     log::info!("Starting HDR merge of {} images", images.len());
+    let _ = app_handle.emit("hdr-progress", "Merging exposures...");
     let mut hdr_merged = hdr_merge_images(&mut images.into()).map_err(|e| e.to_string())?;
+    let _ = app_handle.emit("hdr-progress", "Tone mapping...");
     hdr_merged =
         image_hdr::stretch::apply_histogram_stretch(&hdr_merged).map_err(|e| e.to_string())?;
     hdr_merged = apply_linear_to_srgb(hdr_merged);

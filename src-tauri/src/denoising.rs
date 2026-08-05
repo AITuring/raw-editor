@@ -111,14 +111,16 @@ pub async fn batch_denoise_images(
         let mut results = Vec::new();
 
         for (i, path_str) in paths.iter().enumerate() {
-            let _ = app_handle.emit(
-                "denoise-batch-progress",
-                serde_json::json!({
-                    "current": i + 1,
-                    "total": paths.len(),
-                    "path": path_str
-                }),
-            );
+            let emit_batch_progress = || {
+                let _ = app_handle.emit(
+                    "denoise-batch-progress",
+                    serde_json::json!({
+                        "current": i + 1,
+                        "total": paths.len(),
+                        "path": path_str
+                    }),
+                );
+            };
 
             let (source_path, source_sidecar_path) =
                 crate::file_management::parse_virtual_path(path_str);
@@ -157,6 +159,7 @@ pub async fn batch_denoise_images(
                             "denoise-error",
                             format!("Failed to save {}: {}", real_path, e),
                         );
+                        emit_batch_progress();
                         continue;
                     }
 
@@ -194,6 +197,8 @@ pub async fn batch_denoise_images(
                     );
                 }
             }
+
+            emit_batch_progress();
         }
 
         Ok(results)
@@ -313,7 +318,10 @@ fn run_bm3d_core(
             let _ = app_handle.emit("denoise-progress", "Blending detail...");
         }
         let blurred_y = gaussian_blur_1ch(&original_y, width as usize, height as usize, 3.0);
-        let detail_strength = (intensity * 0.5_f32).clamp(0.0_f32, 0.5_f32);
+        // Low strength should retain more of the source texture, while high
+        // strength should allow the BM3D result to suppress it. Increasing this
+        // blend with intensity made the control feel flat (and even reversed).
+        let detail_strength = (0.35_f32 * (1.0_f32 - intensity)).clamp(0.0_f32, 0.35_f32);
         let y_ch = &mut denoised_channels[0];
         for i in 0..y_ch.len() {
             let hf = original_y[i] - blurred_y[i];
@@ -1128,5 +1136,36 @@ mod tests {
             .sum::<f32>()
             / (20 * 48) as f32;
         assert!(right_mean - left_mean > 0.35);
+    }
+
+    #[test]
+    fn higher_intensity_produces_a_materially_stronger_result() {
+        let source = Rgb32FImage::from_fn(48, 48, |x, y| {
+            let base = if x < 24 { 0.28 } else { 0.72 };
+            let hash = x
+                .wrapping_mul(747_796_405)
+                .wrapping_add(y.wrapping_mul(2_891_336_453))
+                .rotate_left((x + y) % 31 + 1);
+            let noise = (hash % 10_001) as f32 / 10_000.0 * 0.18 - 0.09;
+            let red = (base + noise).clamp(0.0, 1.0);
+            let green = (base * 0.92 + noise * 0.75).clamp(0.0, 1.0);
+            let blue = (base * 0.78 + noise * 0.55).clamp(0.0, 1.0);
+            Rgb([red, green, blue])
+        });
+
+        let low = run_bm3d_core(&source, 0.15, None).to_rgb32f();
+        let high = run_bm3d_core(&source, 0.85, None).to_rgb32f();
+        let low_change = mean_squared_error(&low, &source);
+        let high_change = mean_squared_error(&high, &source);
+        let result_separation = mean_squared_error(&low, &high);
+
+        assert!(
+            high_change > low_change * 1.2,
+            "high strength should alter the source more (low={low_change}, high={high_change})"
+        );
+        assert!(
+            result_separation > 0.000_01,
+            "15 and 85 strength should produce visibly distinct pixels (mse={result_separation})"
+        );
     }
 }

@@ -37,6 +37,7 @@ import CollapsibleSection from '../../ui/CollapsibleSection';
 import Switch from '../../ui/Switch';
 import Slider from '../../ui/Slider';
 import Button from '../../ui/Button';
+import TaskProgress from '../../ui/TaskProgress';
 
 import { useContextMenu } from '../../../context/ContextMenuContext';
 import {
@@ -1716,7 +1717,7 @@ function SettingsPanel({
   updateContainer,
   updateSubMask,
   isGeneratingAi,
-  isGeneratingAiMask: _isGeneratingAiMask,
+  isGeneratingAiMask,
   onGenerativeReplace,
   collapsibleState,
   setCollapsibleState,
@@ -1762,19 +1763,12 @@ function SettingsPanel({
         >
           <div className="space-y-4 pt-2">
             {aiModelDownloadStatus && aiModelDownloadStatus.includes('Inpainting') && (
-              <Text
-                as="div"
-                variant={TextVariants.small}
-                color={TextColors.accent}
-                weight={TextWeights.medium}
-                className="p-3 bg-card-active rounded-md border border-surface flex items-center gap-3"
-              >
-                <Loader2 size={16} className="animate-spin shrink-0" />
-                <div className="leading-relaxed">
-                  <Text variant={TextVariants.small}>{t('editor.ai.settings.downloading')}</Text>
-                  <span>{aiModelDownloadStatus}</span>
-                </div>
-              </Text>
+              <TaskProgress
+                ariaLabel={t('editor.ai.settings.downloading')}
+                compact
+                indeterminate
+                label={`${t('editor.ai.settings.downloading')}: ${aiModelDownloadStatus}`}
+              />
             )}
 
             <Text variant={TextVariants.small}>
@@ -1797,6 +1791,14 @@ function SettingsPanel({
                   : t('editor.ai.settings.inpaintSelectionButton')}
               </span>
             </Button>
+            {(isGeneratingAi || displayContainer.isLoading) && (
+              <TaskProgress
+                ariaLabel={t('editor.ai.settings.generating')}
+                compact
+                indeterminate
+                label={t('editor.ai.settings.generating')}
+              />
+            )}
           </div>
         </CollapsibleSection>
       )}
@@ -1833,20 +1835,21 @@ function SettingsPanel({
 
           {isComponentMode && (
             <>
-              {isAiMask && aiModelDownloadStatus && (
-                <Text
-                  as="div"
-                  variant={TextVariants.small}
-                  color={TextColors.accent}
-                  weight={TextWeights.medium}
-                  className="p-3 bg-card-active rounded-md border border-surface flex items-center gap-3"
-                >
-                  <Loader2 size={16} className="animate-spin shrink-0" />
-                  <div className="leading-relaxed">
-                    <Text variant={TextVariants.small}>{t('editor.ai.settings.aiModelDownloading')}</Text>
-                    <span>{aiModelDownloadStatus}</span>
-                  </div>
-                </Text>
+              {isAiMask && (aiModelDownloadStatus || isGeneratingAiMask) && (
+                <TaskProgress
+                  ariaLabel={
+                    aiModelDownloadStatus
+                      ? t('editor.ai.settings.aiModelDownloading')
+                      : t('editor.ai.settings.generating')
+                  }
+                  compact
+                  indeterminate
+                  label={
+                    aiModelDownloadStatus
+                      ? `${t('editor.ai.settings.aiModelDownloading')}: ${aiModelDownloadStatus}`
+                      : t('editor.ai.settings.generating')
+                  }
+                />
               )}
 
               {subMaskConfig.parameters?.map((param: any) => (

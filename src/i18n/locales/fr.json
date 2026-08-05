@@ -1271,7 +1271,7 @@
     "denoise": {
       "batchProgressText": "Débruitage {{current}} sur {{total}}...",
       "btnBatchDenoise": "Débruiter par lot & Enregistrer",
-      "btnRetry": "Réessayer",
+      "btnRetry": "Régénérer",
       "btnSave": "Enregistrer",
       "btnStart": "Démarrer",
       "cancel": "Annuler",
@@ -1288,6 +1288,7 @@
       "openInEditor": "Ouvrir dans l'éditeur",
       "original": "Original",
       "panZoomEnabled": "Panoramique & Zoom activés",
+      "previewNeedsUpdate": "Réglages modifiés — régénérez l’aperçu.",
       "processingFailed": "Échec du traitement",
       "qualityTileSizeLabel": "Qualité / Taille de la tuile",
       "reset": "Réinitialiser",

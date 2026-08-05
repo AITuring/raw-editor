@@ -1270,7 +1270,7 @@
     "denoise": {
       "batchProgressText": "Reduzindo ruído {{current}} de {{total}}...",
       "btnBatchDenoise": "Redução de Ruído em Lote e Salvar",
-      "btnRetry": "Tentar Novamente",
+      "btnRetry": "Gerar novamente",
       "btnSave": "Salvar",
       "btnStart": "Iniciar",
       "cancel": "Cancelar",
@@ -1287,6 +1287,7 @@
       "openInEditor": "Abrir no Editor",
       "original": "Original",
       "panZoomEnabled": "Panorâmica e Zoom ativados",
+      "previewNeedsUpdate": "As configurações mudaram — gere a pré-visualização novamente.",
       "processingFailed": "O Processamento Falhou",
       "qualityTileSizeLabel": "Qualidade / Tamanho do Bloco",
       "reset": "Redefinir",

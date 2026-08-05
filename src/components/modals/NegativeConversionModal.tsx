@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { RotateCcw, ZoomIn, ZoomOut, Maximize, Save, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Button from '../ui/Button';
+import TaskProgress from '../ui/TaskProgress';
 import Slider from '../ui/Slider';
 import clsx from 'clsx';
 import throttle from 'lodash.throttle';
@@ -293,14 +294,8 @@ export default function NegativeConversionModal({
             <Info size={16} className="shrink-0" />
             <div className="text-xs text-text-tertiary leading-tight space-y-1">
               <Trans i18nKey="modals.negativeConversion.noticeText">
-                Inversion logic inspired by{' '}
-                <span className="font-medium">
-                  NegPy
-                </span>{' '}
-                created by marcinz606 (
-                <span className="font-medium">
-                  GPL-3.0
-                </span>
+                Inversion logic inspired by <span className="font-medium">NegPy</span> created by marcinz606 (
+                <span className="font-medium">GPL-3.0</span>
                 ).
               </Trans>
             </div>
@@ -415,7 +410,9 @@ export default function NegativeConversionModal({
         'fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-xs transition-opacity duration-300',
         show ? 'opacity-100' : 'opacity-0',
       )}
-      onMouseDown={onClose}
+      onMouseDown={() => {
+        if (!isSaving) onClose();
+      }}
     >
       <AnimatePresence>
         {show && (
@@ -429,34 +426,53 @@ export default function NegativeConversionModal({
           >
             <div className="grow min-h-0 overflow-hidden">{renderContent()}</div>
 
-            <div className="shrink-0 p-4 flex justify-end gap-3 border-t border-surface bg-bg-secondary z-20">
-              <button
-                disabled={isSaving}
-                onClick={onClose}
-                className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {t('modals.negativeConversion.cancel')}
-              </button>
-              <Button onClick={handleSave} disabled={isSaving || isLoading || !previewUrl}>
-                {isSaving ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2" size={16} />
-                    {progress && progress.total > 1
+            <div className="shrink-0 p-4 flex flex-col gap-3 border-t border-surface bg-bg-secondary z-20">
+              {isSaving && (
+                <TaskProgress
+                  ariaLabel={t('modals.negativeConversion.converting')}
+                  compact
+                  current={progress?.current}
+                  indeterminate={targetPaths.length <= 1 || !progress}
+                  label={
+                    progress && progress.total > 1
                       ? t('modals.negativeConversion.convertingProgress', {
                           current: progress.current,
                           total: progress.total,
                         })
-                      : t('modals.negativeConversion.converting')}
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2" size={16} />
-                    {targetPaths.length > 1
-                      ? t('modals.negativeConversion.convertAndSaveAll', { count: targetPaths.length })
-                      : t('modals.negativeConversion.convertAndSave')}
-                  </>
-                )}
-              </Button>
+                      : t('modals.negativeConversion.converting')
+                  }
+                  total={progress?.total}
+                />
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  disabled={isSaving}
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('modals.negativeConversion.cancel')}
+                </button>
+                <Button onClick={handleSave} disabled={isSaving || isLoading || !previewUrl}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="animate-spin mr-2" size={16} />
+                      {progress && progress.total > 1
+                        ? t('modals.negativeConversion.convertingProgress', {
+                            current: progress.current,
+                            total: progress.total,
+                          })
+                        : t('modals.negativeConversion.converting')}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2" size={16} />
+                      {targetPaths.length > 1
+                        ? t('modals.negativeConversion.convertAndSaveAll', { count: targetPaths.length })
+                        : t('modals.negativeConversion.convertAndSave')}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}

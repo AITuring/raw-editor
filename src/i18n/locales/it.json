@@ -1270,7 +1270,7 @@
     "denoise": {
       "batchProgressText": "Riduzione rumore su {{current}} di {{total}}...",
       "btnBatchDenoise": "Riduci Rumore in Blocco e Salva",
-      "btnRetry": "Riprova",
+      "btnRetry": "Rigenera",
       "btnSave": "Salva",
       "btnStart": "Avvia",
       "cancel": "Annulla",
@@ -1287,6 +1287,7 @@
       "openInEditor": "Apri nell'Editor",
       "original": "Originale",
       "panZoomEnabled": "Panoramica e Zoom abilitati",
+      "previewNeedsUpdate": "Impostazioni modificate: rigenera l’anteprima.",
       "processingFailed": "Elaborazione Fallita",
       "qualityTileSizeLabel": "Qualità / Dimensione Sezione",
       "reset": "Ripristina",

@@ -20,6 +20,7 @@ import CullingView from './library/CullingView';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
+import TaskProgress from '../ui/TaskProgress';
 import {
   AppSettings,
   ImageFile,
@@ -281,6 +282,60 @@ export default function MainLibrary(props: MainLibraryProps) {
       setIsBusyLoaderMounted(true);
     }
   }, [isBusyDelayed]);
+
+  const isImporting = props.importState.status === Status.Importing;
+  const hasThumbnailProgress =
+    isBusyDelayed &&
+    (props.thumbnailProgress?.total ?? 0) > 0 &&
+    (props.thumbnailProgress?.current ?? 0) < (props.thumbnailProgress?.total ?? 0);
+  const activeLibraryTask = isImporting
+    ? {
+        current: props.importState.progress?.current ?? 0,
+        indeterminate: (props.importState.progress?.total ?? 0) <= 0,
+        label:
+          (props.importState.progress?.total ?? 0) > 0
+            ? t('library.status.importing', {
+                current: props.importState.progress?.current ?? 0,
+                total: props.importState.progress?.total ?? 0,
+              })
+            : t('library.status.processing'),
+        total: props.importState.progress?.total ?? 0,
+      }
+    : props.isIndexing
+      ? {
+          current: props.indexingProgress.current,
+          indeterminate: props.indexingProgress.total <= 0,
+          label:
+            props.indexingProgress.total > 0
+              ? t('library.status.indexing', {
+                  current: props.indexingProgress.current,
+                  total: props.indexingProgress.total,
+                })
+              : t('library.status.processing'),
+          total: props.indexingProgress.total,
+        }
+      : props.aiModelDownloadStatus
+        ? {
+            current: null,
+            indeterminate: true,
+            label: t('library.status.downloading', { status: props.aiModelDownloadStatus }),
+            total: null,
+          }
+        : hasThumbnailProgress
+          ? {
+              current: props.thumbnailProgress.current,
+              indeterminate: false,
+              label: `${t('library.status.processing')} (${props.thumbnailProgress.current}/${props.thumbnailProgress.total})`,
+              total: props.thumbnailProgress.total,
+            }
+          : isBusyDelayed && props.isLoading
+            ? {
+                current: null,
+                indeterminate: true,
+                label: t('library.status.processing'),
+                total: null,
+              }
+            : null;
 
   useEffect(() => {
     getVersion()
@@ -587,6 +642,19 @@ export default function MainLibrary(props: MainLibraryProps) {
           </div>
         </div>
       </header>
+
+      {activeLibraryTask && (
+        <div className="shrink-0 border-b border-surface bg-bg-primary/35 px-3 py-2">
+          <TaskProgress
+            ariaLabel={activeLibraryTask.label}
+            compact
+            current={activeLibraryTask.current}
+            indeterminate={activeLibraryTask.indeterminate}
+            label={activeLibraryTask.label}
+            total={activeLibraryTask.total}
+          />
+        </div>
+      )}
 
       {props.imageList.length > 0 ? (
         libraryDisplayMode === LibraryDisplayMode.Cull ? (

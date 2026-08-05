@@ -6,8 +6,10 @@ import Button from '../ui/Button';
 import Dropdown from '../ui/Dropdown';
 import Slider from '../ui/Slider';
 import Text from '../ui/Text';
+import TaskProgress from '../ui/TaskProgress';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { listen } from '@tauri-apps/api/event';
+import { getMessageTaskProgress } from '../../utils/taskProgress';
 
 interface DenoiseModalProps {
   isOpen: boolean;
@@ -231,6 +233,10 @@ export default function DenoiseModal({
   const [method, setMethod] = useState<'ai' | 'bm3d'>('ai');
   const [isSaving, setIsSaving] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
+  const [lastRunSettings, setLastRunSettings] = useState<{
+    intensity: number;
+    method: 'ai' | 'bm3d';
+  } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; path: string } | null>(null);
   const isBatch = targetPaths.length > 1;
   const mouseDownTarget = useRef<EventTarget | null>(null);
@@ -258,6 +264,18 @@ export default function DenoiseModal({
       : aiModelDownloadStatus?.includes('NIND')
         ? t('modals.denoise.downloadingText', { status: aiModelDownloadStatus })
         : progressMessage || t('modals.denoise.initializing');
+  const denoiseProgress = useMemo(
+    () => getMessageTaskProgress(isBatch ? null : currentStatusText, 'denoise'),
+    [currentStatusText, isBatch],
+  );
+  const batchOverallProgress =
+    batchProgress && batchProgress.total > 0 ? (batchProgress.current / batchProgress.total) * 100 : null;
+  const previewNeedsUpdate = Boolean(
+    !isBatch &&
+    previewBase64 &&
+    lastRunSettings &&
+    (lastRunSettings.intensity !== intensity || lastRunSettings.method !== method),
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -272,6 +290,7 @@ export default function DenoiseModal({
         setIsMounted(false);
         setSavedPath(null);
         setIsSaving(false);
+        setLastRunSettings(null);
         setBatchProgress(null);
       }, 300);
       return () => clearTimeout(timer);
@@ -298,6 +317,7 @@ export default function DenoiseModal({
     setSavedPath(null);
     if (isBatch) {
       setIsSaving(true);
+      setBatchProgress({ current: 0, total: targetPaths.length, path: targetPaths[0] ?? '' });
       try {
         await onBatchDenoise(intensity / 100, method, targetPaths);
         onClose();
@@ -308,6 +328,7 @@ export default function DenoiseModal({
         setBatchProgress(null);
       }
     } else {
+      setLastRunSettings({ intensity, method });
       onDenoise(intensity / 100, method);
     }
   };
@@ -389,24 +410,14 @@ export default function DenoiseModal({
               <Text variant={TextVariants.title} className="mb-2 text-center">
                 {t('modals.denoise.denoisingProgress')}
               </Text>
-              <Text className="text-center font-mono h-6 flex justify-center items-center">{currentStatusText}</Text>
-
-              <div className="mt-8 w-64 relative">
-                <div className="h-1 bg-surface rounded-full overflow-hidden relative w-full shadow-xs">
-                  <motion.div
-                    className="absolute inset-y-0 w-[80%] bg-linear-to-r from-transparent via-accent to-transparent mix-blend-screen"
-                    style={{ filter: 'blur(3px)' }}
-                    animate={{ x: ['-150%', '150%'] }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: [0.4, 0, 0.2, 1] }}
-                  />
-                  <motion.div
-                    className="absolute inset-y-0 w-[40%] bg-linear-to-r from-transparent via-white/90 to-transparent"
-                    style={{ filter: 'blur(1px)' }}
-                    animate={{ x: ['-250%', '250%'] }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: [0.4, 0, 0.2, 1] }}
-                  />
-                </div>
-              </div>
+              <TaskProgress
+                ariaLabel={t('modals.denoise.denoisingProgress')}
+                className="mt-5 max-w-sm"
+                indeterminate={isBatch ? batchOverallProgress === null : denoiseProgress.value === null}
+                label={currentStatusText}
+                showPercentage={isBatch || denoiseProgress.exact}
+                value={isBatch ? batchOverallProgress : denoiseProgress.value}
+              />
 
               <Text
                 variant={TextVariants.small}
@@ -487,6 +498,19 @@ export default function DenoiseModal({
               trackClassName="bg-bg-secondary"
               fillOrigin="min"
             />
+            {previewNeedsUpdate && (
+              <Text
+                as="div"
+                variant={TextVariants.small}
+                color={TextColors.accent}
+                className="mt-2 flex items-center gap-1.5 leading-tight"
+                aria-live="polite"
+                role="status"
+              >
+                <RefreshCw aria-hidden="true" className="shrink-0" size={12} />
+                <span>{t('modals.denoise.previewNeedsUpdate')}</span>
+              </Text>
+            )}
           </div>
         </div>
 
@@ -503,7 +527,7 @@ export default function DenoiseModal({
           <Button
             onClick={handleRunDenoise}
             disabled={isProcessing || isSaving}
-            variant={previewBase64 && !isBatch ? 'secondary' : 'primary'}
+            variant={previewBase64 && !isBatch && !previewNeedsUpdate ? 'secondary' : 'primary'}
           >
             {isProcessing || (isBatch && isSaving) ? (
               <Loader2 className="animate-spin mr-2" size={16} />
@@ -520,7 +544,7 @@ export default function DenoiseModal({
           </Button>
 
           {previewBase64 && !isBatch && (
-            <Button onClick={handleSave} disabled={isSaving || isProcessing}>
+            <Button onClick={handleSave} disabled={isSaving || isProcessing || previewNeedsUpdate}>
               {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
               {t('modals.denoise.btnSave')}
             </Button>
@@ -547,6 +571,15 @@ export default function DenoiseModal({
       >
         <div className="flex flex-col">
           {renderContent()}
+          {isSaving && !isProcessing && !isBatch && (
+            <TaskProgress
+              ariaLabel={t('modals.denoise.btnSave')}
+              className="mt-4"
+              compact
+              indeterminate
+              label={t('modals.denoise.btnSave')}
+            />
+          )}
           <div className={`mt-4 flex justify-end gap-3 ${savedPath ? '' : 'pt-4 border-t border-surface/50'}`}>
             {renderButtons()}
           </div>

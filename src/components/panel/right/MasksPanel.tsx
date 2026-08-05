@@ -37,6 +37,7 @@ import {
 import CollapsibleSection from '../../ui/CollapsibleSection';
 import Switch from '../../ui/Switch';
 import Slider from '../../ui/Slider';
+import TaskProgress from '../../ui/TaskProgress';
 import BasicAdjustments from '../../adjustments/Basic';
 import CurveGraph from '../../adjustments/Curves';
 import ColorPanel from '../../adjustments/Color';
@@ -1811,7 +1812,7 @@ function SettingsPanel({
   updateSubMask,
   histogram,
   appSettings,
-  isGeneratingAiMask: _isGeneratingAiMask,
+  isGeneratingAiMask,
   setIsMaskControlHovered,
   collapsibleState,
   setCollapsibleState,
@@ -2085,20 +2086,21 @@ function SettingsPanel({
 
           {isComponentMode && (
             <>
-              {isAiMask && aiModelDownloadStatus && (
-                <Text
-                  as="div"
-                  variant={TextVariants.small}
-                  color={TextColors.accent}
-                  weight={TextWeights.medium}
-                  className="p-3 bg-card-active rounded-md border border-surface flex items-center gap-3"
-                >
-                  <Loader2 size={16} className="animate-spin shrink-0" />
-                  <div className="leading-relaxed">
-                    <Text variant={TextVariants.small}>{t('editor.masks.settings.aiModelDownloading')}</Text>
-                    <span>{aiModelDownloadStatus}</span>
-                  </div>
-                </Text>
+              {isAiMask && (aiModelDownloadStatus || isGeneratingAiMask) && (
+                <TaskProgress
+                  ariaLabel={
+                    aiModelDownloadStatus
+                      ? t('editor.masks.settings.aiModelDownloading')
+                      : t('editor.ai.settings.generating')
+                  }
+                  compact
+                  indeterminate
+                  label={
+                    aiModelDownloadStatus
+                      ? `${t('editor.masks.settings.aiModelDownloading')}: ${aiModelDownloadStatus}`
+                      : t('editor.ai.settings.generating')
+                  }
+                />
               )}
 
               {activeSubMask.type === Mask.AiDepth && (

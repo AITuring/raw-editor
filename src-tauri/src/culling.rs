@@ -203,6 +203,9 @@ pub async fn cull_images(
     let analysis_results: Vec<Result<ImageAnalysisData, (String, String)>> = paths
         .par_iter()
         .map(|path| {
+            let result =
+                analyze_image(path, &hasher, &app_settings).map_err(|e| (path.to_string(), e));
+
             let completed = completed_count.fetch_add(1, Ordering::Relaxed) + 1;
             let _ = app_handle.emit(
                 "culling-progress",
@@ -213,7 +216,7 @@ pub async fn cull_images(
                 },
             );
 
-            analyze_image(path, &hasher, &app_settings).map_err(|e| (path.to_string(), e))
+            result
         })
         .collect();
 

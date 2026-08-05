@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'react-toastify';
-import { Loader2, Circle, Hexagon, Octagon, Aperture } from 'lucide-react';
+import { Circle, Hexagon, Octagon, Aperture } from 'lucide-react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import Slider from '../ui/Slider';
@@ -16,6 +16,7 @@ import { DepthRangePicker } from '../ui/DepthRangePicker';
 import { useProcessStore } from '../../store/useProcessStore';
 import DetailsPanel from './Details';
 import { AdjustmentSubsection } from '../ui/AdjustmentSubsection';
+import TaskProgress from '../ui/TaskProgress';
 
 interface EffectsPanelProps {
   adjustments: Adjustments;
@@ -374,18 +375,21 @@ export default function EffectsPanel({
           {adjustments.lensBlurEnabled && (
             <div className="space-y-4 pt-3 pb-1">
               {isGeneratingDepth ? (
-                <div className="camera-raw-status" role="status">
-                  <Loader2 aria-hidden="true" size={16} className="animate-spin shrink-0" />
-                  <Text variant={TextVariants.label}>
-                    {aiModelDownloadStatus
-                      ? t('editor.masks.settings.aiModelDownloading')
-                      : t('editor.ai.generatingDepthMap')}
-                  </Text>
-                  {aiModelDownloadStatus && (
-                    <Text variant={TextVariants.small} className="text-accent">
-                      {aiModelDownloadStatus}
-                    </Text>
-                  )}
+                <div className="py-1" role="status">
+                  <TaskProgress
+                    ariaLabel={
+                      aiModelDownloadStatus
+                        ? t('editor.masks.settings.aiModelDownloading')
+                        : t('editor.ai.generatingDepthMap')
+                    }
+                    compact
+                    indeterminate
+                    label={
+                      aiModelDownloadStatus
+                        ? `${t('editor.masks.settings.aiModelDownloading')}: ${aiModelDownloadStatus}`
+                        : t('editor.ai.generatingDepthMap')
+                    }
+                  />
                 </div>
               ) : (
                 <>

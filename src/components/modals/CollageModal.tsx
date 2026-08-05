@@ -19,6 +19,7 @@ import { ImageFile, Invokes } from '../ui/AppProperties';
 import Button from '../ui/Button';
 import Slider from '../ui/Slider';
 import Switch from '../ui/Switch';
+import TaskProgress from '../ui/TaskProgress';
 import clsx from 'clsx';
 import { LAYOUTS, type Layout, type LayoutDefinition } from '../../utils/CollageVariants';
 import Text from '../ui/Text';
@@ -891,7 +892,9 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
   return (
     <div
       className={`fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-xs transition-opacity duration-300 ${show ? 'opacity-100' : 'opacity-0'}`}
-      onMouseDown={onClose}
+      onMouseDown={() => {
+        if (!isSaving) onClose();
+      }}
     >
       <AnimatePresence>
         {show && (
@@ -904,23 +907,34 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
             <div className="grow min-h-0 overflow-hidden">{renderContent()}</div>
-            <div className="shrink-0 p-4 flex justify-end gap-3 border-t border-surface bg-bg-secondary">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-              >
-                {savedPath || error
-                  ? savedPath
-                    ? t('modals.collage.done')
-                    : t('modals.collage.close')
-                  : t('modals.collage.cancel')}
-              </button>
-              {!savedPath && !error && (
-                <Button onClick={handleSave} disabled={isSaving || isLoading || !activeLayout}>
-                  {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
-                  {isSaving ? t('modals.collage.saving') : t('modals.collage.saveButton')}
-                </Button>
+            <div className="shrink-0 p-4 flex flex-col gap-3 border-t border-surface bg-bg-secondary">
+              {isSaving && (
+                <TaskProgress
+                  ariaLabel={t('modals.collage.saving')}
+                  compact
+                  indeterminate
+                  label={t('modals.collage.saving')}
+                />
               )}
+              <div className="flex justify-end gap-3">
+                <button
+                  disabled={isSaving}
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savedPath || error
+                    ? savedPath
+                      ? t('modals.collage.done')
+                      : t('modals.collage.close')
+                    : t('modals.collage.cancel')}
+                </button>
+                {!savedPath && !error && (
+                  <Button onClick={handleSave} disabled={isSaving || isLoading || !activeLayout}>
+                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
+                    {isSaving ? t('modals.collage.saving') : t('modals.collage.saveButton')}
+                  </Button>
+                )}
+              </div>
             </div>
           </motion.div>
         )}

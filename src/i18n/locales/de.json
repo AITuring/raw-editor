@@ -1244,7 +1244,7 @@
     "denoise": {
       "batchProgressText": "Entrauschen von {{current}} aus {{total}}...",
       "btnBatchDenoise": "Stapel entrauschen & Speichern",
-      "btnRetry": "Wiederholen",
+      "btnRetry": "Neu erzeugen",
       "btnSave": "Speichern",
       "btnStart": "Start",
       "cancel": "Abbrechen",
@@ -1261,6 +1261,7 @@
       "openInEditor": "Im Editor öffnen",
       "original": "Original",
       "panZoomEnabled": "Schwenken & Zoomen aktiviert",
+      "previewNeedsUpdate": "Einstellungen geändert – Vorschau neu erzeugen.",
       "processingFailed": "Verarbeitung fehlgeschlagen",
       "qualityTileSizeLabel": "Qualität / Kachelgröße",
       "reset": "Zurücksetzen",

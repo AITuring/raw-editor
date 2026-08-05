@@ -1242,7 +1242,7 @@
     "denoise": {
       "batchProgressText": "{{total}}개 중 {{current}}개 노이즈 제거 중...",
       "btnBatchDenoise": "일괄 노이즈 제거 및 저장",
-      "btnRetry": "다시 시도",
+      "btnRetry": "다시 생성",
       "btnSave": "저장",
       "btnStart": "시작",
       "cancel": "취소",
@@ -1259,6 +1259,7 @@
       "openInEditor": "편집기에서 열기",
       "original": "원본",
       "panZoomEnabled": "이동 및 확대/축소 활성화됨",
+      "previewNeedsUpdate": "설정이 변경되었습니다. 미리보기를 다시 생성하세요.",
       "processingFailed": "처리 실패",
       "qualityTileSizeLabel": "품질 / 타일 크기",
       "reset": "초기화",

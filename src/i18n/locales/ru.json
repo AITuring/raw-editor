@@ -1296,7 +1296,7 @@
     "denoise": {
       "batchProgressText": "Шумоподавление: {{current}} из {{total}}...",
       "btnBatchDenoise": "Пакетное шумоподавление и сохранение",
-      "btnRetry": "Повторить",
+      "btnRetry": "Создать заново",
       "btnSave": "Сохранить",
       "btnStart": "Начать",
       "cancel": "Отмена",
@@ -1313,6 +1313,7 @@
       "openInEditor": "Открыть в редакторе",
       "original": "Оригинал",
       "panZoomEnabled": "Панорамирование и масштабирование активны",
+      "previewNeedsUpdate": "Настройки изменены — создайте предпросмотр заново.",
       "processingFailed": "Обработка не удалась",
       "qualityTileSizeLabel": "Качество / Размер плитки",
       "reset": "Сбросить",
