@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, useImperativeHandle } from 'react';
 import { Crop, PercentCrop } from 'react-image-crop';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { invoke } from '@tauri-apps/api/core';
 import debounce from 'lodash.debounce';
+import { useTranslation } from 'react-i18next';
 
 import { ImageDimensions, RenderSize, useImageRenderSize } from '../../hooks/useImageRenderSize';
 import { Adjustments, AiPatch, MaskContainer } from '../../utils/adjustments';
@@ -77,6 +78,7 @@ interface EditorProps {
 }
 
 export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, transformWrapperRef }: EditorProps) {
+  const { t } = useTranslation();
   const appSettings = useSettingsStore((s) => s.appSettings);
   const osPlatform = useSettingsStore((s) => s.osPlatform);
   const isFullScreen = useUIStore((s) => s.isFullScreen);
@@ -109,6 +111,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const activeAiSubMaskId = useEditorStore((s) => s.activeAiSubMaskId);
   const isMaskControlHovered = useEditorStore((s) => s.isMaskControlHovered);
   const hasRenderedFirstFrame = useEditorStore((s) => s.hasRenderedFirstFrame);
+  const imageLoadError = useEditorStore((s) => s.imageLoadError);
 
   const setEditor = useEditorStore((s) => s.setEditor);
   const undo = useEditorStore((s) => s.undo);
@@ -150,7 +153,6 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const contentRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
   const transformStateRef = useRef<TransformState>(transformState);
-  transformStateRef.current = transformState;
   const [isPanningState, setIsPanningState] = useState(false);
   const isClickAnimating = useRef(false);
   const clickAnimationTime = 250;
@@ -187,12 +189,40 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     physicalImageWidth: number;
   } | null>(null);
   const wgpuSyncRef = useRef<number | null>(null);
+  const syncWgpuRef = useRef<() => void>(() => {});
   const lastWgpuTransformRef = useRef<string | null>(null);
+
+  useEffect(
+    () => () => {
+      if (zoomDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(zoomDebounceTimeoutRef.current);
+      }
+      if (wheelSnapTimeout.current !== null) {
+        window.clearTimeout(wheelSnapTimeout.current);
+      }
+      if (animationFrameId.current !== null) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+      if (physicsFrameId.current !== null) {
+        cancelAnimationFrame(physicsFrameId.current);
+      }
+      syncWgpuRef.current = () => {};
+    },
+    [],
+  );
 
   const toggleShowOriginal = useCallback(
     () => setEditor((state) => ({ showOriginal: !state.showOriginal })),
     [setEditor],
   );
+
+  const retryImageLoad = useCallback(() => {
+    useLibraryStore.getState().setLibrary({ isViewLoading: true });
+    setEditor((state) => ({
+      imageLoadError: null,
+      imageLoadRevision: state.imageLoadRevision + 1,
+    }));
+  }, [setEditor]);
 
   const handleToggleFullScreen = useCallback(() => {
     const currentlyZoomed = targetZoom > 1.01;
@@ -381,11 +411,12 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const applyTransform = useCallback(
     (x: number, y: number, scale: number) => {
       transformStateRef.current = { positionX: x, positionY: y, scale };
-      setTransformState({ scale, positionX: x, positionY: y });
 
       if (contentRef.current) {
-        contentRef.current.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+        contentRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
       }
+
+      syncWgpuRef.current();
 
       if (!isTransitioningRef.current) {
         if (scale > 1.01) {
@@ -405,8 +436,16 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
       if (zoomDebounceTimeoutRef.current) clearTimeout(zoomDebounceTimeoutRef.current);
       zoomDebounceTimeoutRef.current = window.setTimeout(() => {
-        handleZoomed({ scale, positionX: x, positionY: y });
-      }, 100);
+        const latest = transformStateRef.current;
+        setTransformState((previous) =>
+          previous.scale === latest.scale &&
+          previous.positionX === latest.positionX &&
+          previous.positionY === latest.positionY
+            ? previous
+            : latest,
+        );
+        handleZoomed(latest);
+      }, 72);
     },
     [handleZoomed],
   );
@@ -576,13 +615,8 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     const currentScale = transformStateRef.current.scale || 1;
     if (Math.abs(currentScale - targetZoom) < 0.001) return;
 
-    const animationTime = 200;
-    if (targetZoom > currentScale) {
-      transformWrapperRef.current.zoomIn(Math.log(targetZoom / currentScale), animationTime);
-    } else {
-      transformWrapperRef.current.zoomOut(Math.log(currentScale / targetZoom), animationTime);
-    }
-  }, [targetZoom, transformWrapperRef]);
+    zoomToCenter(targetZoom, 0);
+  }, [targetZoom, transformWrapperRef, zoomToCenter]);
 
   const activeSubMask = useMemo(() => {
     if (isMasking && activeMaskId) {
@@ -1113,8 +1147,6 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     bgPrimary: [24 / 255, 24 / 255, 24 / 255, 1.0],
     bgSecondary: [35 / 255, 35 / 255, 35 / 255, 1.0],
   });
-  const syncWgpuRef = useRef<() => void>(() => {});
-
   useEffect(() => {
     const rootStyle = getComputedStyle(document.documentElement);
     const bgPrimaryStr = rootStyle.getPropertyValue('--app-bg-primary') || 'rgb(24, 24, 24)';
@@ -1152,7 +1184,6 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     showOriginal,
     appSettings?.theme,
     finalPreviewUrl,
-    transformState,
     imageRenderSize,
   ]);
 
@@ -2053,11 +2084,24 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           </div>
         )}
 
+        {imageLoadError && (
+          <div className="editor-load-error" role="alert">
+            <AlertTriangle aria-hidden="true" size={15} strokeWidth={1.8} />
+            <span className="truncate" title={imageLoadError}>
+              {t('library.import.openFailed')}
+            </span>
+            <button onClick={retryImageLoad} type="button">
+              <RefreshCw aria-hidden="true" size={13} strokeWidth={1.9} />
+              {t('modals.hdr.retry')}
+            </button>
+          </div>
+        )}
+
         <div
           ref={contentRef}
-          className="w-full h-full flex items-center justify-center origin-top-left"
+          className="editor-transform-layer w-full h-full flex items-center justify-center origin-top-left"
           style={{
-            transform: `translate(${transformState.positionX}px, ${transformState.positionY}px) scale(${transformState.scale})`,
+            transform: 'translate3d(0px, 0px, 0) scale(1)',
           }}
         >
           <ImageCanvas

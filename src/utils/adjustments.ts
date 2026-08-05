@@ -946,6 +946,8 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
     BasicAdjustment.Blacks,
     BasicAdjustment.Exposure,
     'toneMapper',
+  ],
+  color: [
     ColorAdjustment.Temperature,
     ColorAdjustment.Tint,
     ColorAdjustment.Vibrance,

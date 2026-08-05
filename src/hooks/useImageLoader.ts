@@ -18,6 +18,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   const originalSize = useEditorStore((s) => s.originalSize);
   const previewSize = useEditorStore((s) => s.previewSize);
   const hasRenderedFirstFrame = useEditorStore((s) => s.hasRenderedFirstFrame);
+  const imageLoadRevision = useEditorStore((s) => s.imageLoadRevision);
 
   const setEditor = useEditorStore((s) => s.setEditor);
   const resetHistory = useEditorStore((s) => s.resetHistory);
@@ -30,6 +31,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   useEffect(() => {
     if (selectedImage && !selectedImage.isReady && selectedImage.path) {
       let isEffectActive = true;
+      setEditor({ imageLoadError: null });
 
       const loadMetadataEarly = async () => {
         try {
@@ -55,7 +57,22 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
 
       const loadFullImageData = async () => {
         try {
-          const loadImageResult: any = await invoke(Invokes.LoadImage, { path: selectedImage.path });
+          let loadImageResult: any;
+          let lastError: unknown = null;
+
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              loadImageResult = await invoke(Invokes.LoadImage, { path: selectedImage.path });
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              if (!isEffectActive || attempt === 1) break;
+              await new Promise((resolve) => window.setTimeout(resolve, 180));
+            }
+          }
+
+          if (lastError || !loadImageResult) throw lastError || new Error('Image data was not returned.');
           if (!isEffectActive) return;
 
           const { width, height } = loadImageResult;
@@ -91,6 +108,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
                   originalUrl: null,
                   width: loadImageResult.width,
                 },
+                imageLoadError: null,
               };
             }
             return state;
@@ -108,7 +126,9 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
           if (isEffectActive) {
             console.error('Failed to load image:', err);
             toast.error(`Failed to load image: ${err}`);
-            setEditor({ selectedImage: null });
+            setEditor((state) =>
+              state.selectedImage?.path === selectedImage.path ? { imageLoadError: String(err) } : {},
+            );
           }
         } finally {
           if (isEffectActive) {
@@ -133,6 +153,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   }, [
     selectedImage?.path,
     selectedImage?.isReady,
+    imageLoadRevision,
     appSettings?.editorPreviewResolution,
     resetHistory,
     setEditor,

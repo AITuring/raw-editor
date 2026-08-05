@@ -101,7 +101,16 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         setUI({ activeView: 'editor' });
       }
 
-      if (selectedImage?.path === path) return;
+      if (selectedImage?.path === path) {
+        if (!selectedImage.isReady) {
+          setLibrary({ isViewLoading: true });
+          setEditor((state) => ({
+            imageLoadError: null,
+            imageLoadRevision: state.imageLoadRevision + 1,
+          }));
+        }
+        return;
+      }
 
       useEditorStore.getState().patchesSentToBackend.clear();
       debouncedSave.flush();
@@ -130,6 +139,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
       setEditor({
         showOriginal: false,
+        imageLoadError: null,
         activeMaskId: null,
         activeMaskContainerId: null,
         activeAiPatchContainerId: null,
@@ -223,6 +233,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         histogram: null,
         waveform: null,
         uncroppedAdjustedPreviewUrl: null,
+        imageLoadError: null,
       });
 
       setLibrary({ isViewLoading: true });

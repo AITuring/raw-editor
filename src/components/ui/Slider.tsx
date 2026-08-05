@@ -509,6 +509,9 @@ const Slider = ({
   };
 
   const numericValue = isNaN(Number(value)) ? 0 : Number(value);
+  const formattedValue = `${numericValue > 0 ? '+' : ''}${
+    decimalPlaces > 0 && numericValue === 0 ? '0' : numericValue.toFixed(decimalPlaces)
+  }`;
 
   return (
     <div className={`develop-slider group ${disabled ? 'opacity-45 cursor-not-allowed' : ''}`} ref={containerRef}>
@@ -577,7 +580,7 @@ const Slider = ({
               data-tooltip={disabled ? undefined : t('ui.slider.clickToEdit')}
               type="button"
             >
-              {decimalPlaces > 0 && numericValue === 0 ? '0' : numericValue.toFixed(decimalPlaces)}
+              {formattedValue}
               {suffix && <span className="text-[10px] align-top inline-block mt-0.5 ml-0.5">{suffix}</span>}
             </button>
           )}
@@ -586,17 +589,21 @@ const Slider = ({
 
       <div className="camera-raw-slider-track relative h-3.5 w-full">
         <div
-          className={`absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full pointer-events-none ${
-            trackClassName || 'bg-card-active'
+          className={`camera-raw-slider-rail absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full pointer-events-none ${
+            trackClassName || ''
           }`}
         />
-        <div
-          className="absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full pointer-events-none bg-accent/45"
-          style={{
-            left: `${Math.min(fillPercentage, originPercentage)}%`,
-            width: `${Math.abs(fillPercentage - originPercentage)}%`,
-          }}
-        />
+        {!trackClassName && (
+          <div
+            className={`camera-raw-slider-fill absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full pointer-events-none ${
+              isDragging ? 'is-active' : ''
+            }`}
+            style={{
+              left: `${Math.min(fillPercentage, originPercentage)}%`,
+              width: `${Math.abs(fillPercentage - originPercentage)}%`,
+            }}
+          />
+        )}
         <input
           aria-label={typeof label === 'string' ? label : undefined}
           ref={rangeInputRef}

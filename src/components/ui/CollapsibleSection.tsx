@@ -35,13 +35,13 @@ export default function CollapsibleSection({
     >
       <div className="develop-collapsible-header">
         <button aria-expanded={isOpen} className="develop-collapsible-toggle" onClick={onToggle} type="button">
-          <span className="truncate">{title}</span>
           <ChevronDown
             aria-hidden="true"
             className={clsx('develop-collapsible-chevron', isOpen && 'is-open')}
             size={15}
             strokeWidth={1.8}
           />
+          <span className="truncate">{title}</span>
         </button>
 
         {canToggleVisibility && (

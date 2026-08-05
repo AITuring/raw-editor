@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { RotateCcw, Copy, ClipboardPaste, Aperture } from 'lucide-react';
+import { RotateCcw, Copy, ClipboardPaste } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import CameraRawBasic from '../../adjustments/CameraRawBasic';
 import CurveGraph from '../../adjustments/Curves';
@@ -25,10 +25,10 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
 import { useAutoLensProfile } from '../../../hooks/useAutoLensProfile';
-import { BASIC_MODE } from '../../../basic/runtime';
 
 const CAMERA_RAW_SECTIONS = [
-  { name: 'basic', titleKey: 'editor.adjustments.sections.basic' },
+  { name: 'basic', titleKey: 'adjustments.basic.light' },
+  { name: 'color', titleKey: 'editor.adjustments.sections.color' },
   { name: 'effects', titleKey: 'editor.adjustments.sections.effects' },
   { name: 'curves', titleKey: 'editor.adjustments.sections.curves' },
   { name: 'colorMixer', titleKey: 'editor.adjustments.sections.colorMixer' },
@@ -221,7 +221,23 @@ export default function Controls() {
 
     switch (sectionName) {
       case 'basic':
-        return <CameraRawBasic {...commonProps} isWbPickerActive={isWbPickerActive} toggleWbPicker={toggleWbPicker} />;
+        return (
+          <CameraRawBasic
+            {...commonProps}
+            isWbPickerActive={isWbPickerActive}
+            toggleWbPicker={toggleWbPicker}
+            variant="light"
+          />
+        );
+      case 'color':
+        return (
+          <CameraRawBasic
+            {...commonProps}
+            isWbPickerActive={isWbPickerActive}
+            toggleWbPicker={toggleWbPicker}
+            variant="color"
+          />
+        );
       case 'curves':
         return <CurveGraph {...commonProps} histogram={histogram} theme={theme} />;
       case 'details':
@@ -262,33 +278,50 @@ export default function Controls() {
       <div className="develop-panel-header">
         <div className="min-w-0">
           <Text variant={TextVariants.heading}>{t('editor.adjustments.title')}</Text>
-          {BASIC_MODE && (
-            <div className="mt-0.5 text-[10px] text-text-secondary">{t('editor.adjustments.basicMode')}</div>
-          )}
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="develop-panel-header-actions">
           <button
             aria-label={t('editor.adjustments.tooltips.autoAdjust')}
-            className="develop-panel-action"
+            className="develop-panel-text-action"
             disabled={!selectedImage}
             onClick={handleAutoAdjustments}
             data-tooltip={t('editor.adjustments.tooltips.autoAdjust')}
             type="button"
           >
-            <Aperture aria-hidden="true" size={16} strokeWidth={1.8} />
+            {t('settings.processing.backends.auto')}
           </button>
           <button
             aria-label={t('editor.adjustments.tooltips.resetAdjustments')}
-            className="develop-panel-action"
+            className="develop-panel-text-action"
             disabled={!selectedImage}
             onClick={handleResetAdjustments}
             data-tooltip={t('editor.adjustments.tooltips.resetAdjustments')}
             type="button"
           >
-            <RotateCcw aria-hidden="true" size={16} strokeWidth={1.8} />
+            {t('adjustments.basic.reset')}
           </button>
         </div>
       </div>
+
+      {!appSettings?.tonemapperOverrideEnabled && (
+        <label className="develop-profile-strip">
+          <span>{t('adjustments.optics.profile')}</span>
+          <select
+            aria-label={t('adjustments.optics.profile')}
+            className="camera-raw-select"
+            onChange={(event) =>
+              setAdjustments((previous: Adjustments) => ({
+                ...previous,
+                toneMapper: event.target.value as 'basic' | 'agx',
+              }))
+            }
+            value={adjustments.toneMapper || 'basic'}
+          >
+            <option value="basic">{t('adjustments.basic.mappers.basic')}</option>
+            <option value="agx">{t('adjustments.basic.mappers.agx')}</option>
+          </select>
+        </label>
+      )}
 
       <div className="develop-adjustment-stack custom-scrollbar">
         {selectedImage ? (

@@ -15,16 +15,28 @@ export default function DevelopHistogram() {
   const theme = useSettingsStore((state) => state.theme);
   const { setAdjustments } = useEditorActions();
   const { setActiveWaveformChannel } = useWaveformControls();
-  const { activeWaveformChannel, adjustments, histogram, isWaveformVisible, setEditor, waveform } = useEditorStore(
-    useShallow((state) => ({
-      activeWaveformChannel: state.activeWaveformChannel,
-      adjustments: state.adjustments,
-      histogram: state.histogram,
-      isWaveformVisible: state.isWaveformVisible,
-      setEditor: state.setEditor,
-      waveform: state.waveform,
-    })),
-  );
+  const { activeWaveformChannel, adjustments, histogram, isWaveformVisible, selectedImage, setEditor, waveform } =
+    useEditorStore(
+      useShallow((state) => ({
+        activeWaveformChannel: state.activeWaveformChannel,
+        adjustments: state.adjustments,
+        histogram: state.histogram,
+        isWaveformVisible: state.isWaveformVisible,
+        selectedImage: state.selectedImage,
+        setEditor: state.setEditor,
+        waveform: state.waveform,
+      })),
+    );
+
+  const exif = selectedImage?.exif || {};
+  const captureDetails = [
+    exif.PhotographicSensitivity || exif.ISOSpeed
+      ? `ISO ${exif.PhotographicSensitivity || exif.ISOSpeed}`
+      : null,
+    exif.LensSpecification || exif.LensModel || (exif.FocalLength ? `${exif.FocalLength} mm` : null),
+    exif.FNumber || exif.ApertureValue || null,
+    exif.ExposureTime || null,
+  ].filter(Boolean) as string[];
 
   const toggleLabel = t('editor.adjustments.tooltips.toggleAnalytics');
 
@@ -44,21 +56,34 @@ export default function DevelopHistogram() {
 
   return (
     <div className="develop-histogram">
-      <Waveform
-        displayMode={BASIC_MODE ? DisplayMode.Histogram : activeWaveformChannel || DisplayMode.Histogram}
-        histogram={histogram}
-        histogramOnly={BASIC_MODE}
-        onToggleClipping={() => {
-          setAdjustments((previous: Adjustments) => ({
-            ...previous,
-            showClipping: !previous.showClipping,
-          }));
-        }}
-        setDisplayMode={setActiveWaveformChannel}
-        showClipping={adjustments.showClipping || false}
-        theme={theme}
-        waveformData={waveform || null}
-      />
+      <div className="develop-histogram-graph">
+        <Waveform
+          displayMode={BASIC_MODE ? DisplayMode.Histogram : activeWaveformChannel || DisplayMode.Histogram}
+          histogram={histogram}
+          histogramOnly={BASIC_MODE}
+          onToggleClipping={() => {
+            setAdjustments((previous: Adjustments) => ({
+              ...previous,
+              showClipping: !previous.showClipping,
+            }));
+          }}
+          setDisplayMode={setActiveWaveformChannel}
+          showClipping={adjustments.showClipping || false}
+          theme={theme}
+          waveformData={waveform || null}
+        />
+      </div>
+      <div className="develop-capture-strip">
+        {captureDetails.length > 0 ? (
+          captureDetails.map((detail, index) => (
+            <span className="truncate" key={`${detail}-${index}`} title={detail}>
+              {detail}
+            </span>
+          ))
+        ) : (
+          <span aria-hidden="true">—</span>
+        )}
+      </div>
       <button
         aria-label={toggleLabel}
         className="develop-histogram-collapse"

@@ -76,6 +76,8 @@ interface EditorState {
   isGeneratingAiMask: boolean;
   isGeneratingAi: boolean;
   hasRenderedFirstFrame: boolean;
+  imageLoadError: string | null;
+  imageLoadRevision: number;
   patchesSentToBackend: Set<string>;
 
   // Clipboard
@@ -139,6 +141,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   isGeneratingAi: false,
   isMaskControlHovered: false,
   hasRenderedFirstFrame: false,
+  imageLoadError: null,
+  imageLoadRevision: 0,
   patchesSentToBackend: new Set<string>(),
 
   setEditor: (updater) =>

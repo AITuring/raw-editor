@@ -186,7 +186,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   collapsibleSectionsState: {
     basic: true,
     calibration: false,
-    color: false,
+    color: true,
     colorGrading: false,
     colorMixer: false,
     curves: false,

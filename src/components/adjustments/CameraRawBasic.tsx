@@ -12,6 +12,7 @@ interface CameraRawBasicProps {
   isWbPickerActive?: boolean;
   toggleWbPicker?: () => void;
   onDragStateChange?: (isDragging: boolean) => void;
+  variant?: 'all' | 'light' | 'color';
 }
 
 export default function CameraRawBasic({
@@ -21,34 +22,37 @@ export default function CameraRawBasic({
   isWbPickerActive,
   toggleWbPicker,
   onDragStateChange,
+  variant = 'all',
 }: CameraRawBasicProps) {
   const { t } = useTranslation();
   const sharedProps = { adjustments, setAdjustments, appSettings, onDragStateChange };
+  const showLight = variant === 'all' || variant === 'light';
+  const showColor = variant === 'all' || variant === 'color';
 
   return (
     <div className="camera-raw-section-body">
-      {!appSettings?.tonemapperOverrideEnabled && (
+      {showLight && (
         <AdjustmentSubsection>
-          <BasicAdjustments {...sharedProps} variant="toneMapping" />
+          <BasicAdjustments {...sharedProps} variant="light" />
         </AdjustmentSubsection>
       )}
 
-      <AdjustmentSubsection title={t('adjustments.basic.light')}>
-        <BasicAdjustments {...sharedProps} variant="light" />
-      </AdjustmentSubsection>
+      {showColor && (
+        <>
+          <AdjustmentSubsection>
+            <ColorPanel
+              {...sharedProps}
+              variant="whiteBalance"
+              isWbPickerActive={isWbPickerActive}
+              toggleWbPicker={toggleWbPicker}
+            />
+          </AdjustmentSubsection>
 
-      <AdjustmentSubsection>
-        <ColorPanel
-          {...sharedProps}
-          variant="whiteBalance"
-          isWbPickerActive={isWbPickerActive}
-          toggleWbPicker={toggleWbPicker}
-        />
-      </AdjustmentSubsection>
-
-      <AdjustmentSubsection title={t('adjustments.color.presence')}>
-        <ColorPanel {...sharedProps} variant="presenceBare" />
-      </AdjustmentSubsection>
+          <AdjustmentSubsection title={t('adjustments.color.presence')}>
+            <ColorPanel {...sharedProps} variant="presenceBare" />
+          </AdjustmentSubsection>
+        </>
+      )}
     </div>
   );
 }

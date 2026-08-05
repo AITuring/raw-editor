@@ -2255,22 +2255,22 @@ fn get_global_adjustments_from_json(
         whites: get_val("basic", "whites", SCALES.whites, None),
         blacks: get_val("basic", "blacks", SCALES.blacks, None),
 
-        saturation: if is_reorganized_visible("basic", "color") {
+        saturation: if is_visible("color") {
             js_adjustments["saturation"].as_f64().unwrap_or(0.0) as f32 / SCALES.saturation
         } else {
             0.0
         },
-        temperature: if is_reorganized_visible("basic", "color") {
+        temperature: if is_visible("color") {
             js_adjustments["temperature"].as_f64().unwrap_or(0.0) as f32 / SCALES.temperature
         } else {
             0.0
         },
-        tint: if is_reorganized_visible("basic", "color") {
+        tint: if is_visible("color") {
             js_adjustments["tint"].as_f64().unwrap_or(0.0) as f32 / SCALES.tint
         } else {
             0.0
         },
-        vibrance: if is_reorganized_visible("basic", "color") {
+        vibrance: if is_visible("color") {
             js_adjustments["vibrance"].as_f64().unwrap_or(0.0) as f32 / SCALES.vibrance
         } else {
             0.0
