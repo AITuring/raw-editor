@@ -54,7 +54,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::{Engine as _, engine::general_purpose};
-use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Luma, Rgba};
 use image_hdr::hdr_merge_images;
 use image_hdr::input::HDRInput;
@@ -62,7 +61,7 @@ use imageproc::drawing::draw_line_segment_mut;
 use imageproc::edges::canny;
 use imageproc::hough::{LineDetectionOptions, detect_lines};
 use imgref::ImgRef;
-use mozjpeg_rs::{Encoder, Preset, Subsampling};
+use mozjpeg_rs::{Preset, Subsampling};
 use rgb::{FromSlice, RGBA8};
 
 use serde_json::Value;
@@ -77,6 +76,7 @@ use crate::cache_utils::{
     THUMBNAIL_GEOMETRY_CACHE_MAX_ENTRIES, calculate_full_job_hash, calculate_geometry_hash,
     calculate_transform_hash, calculate_visual_hash, dynamic_image_weight,
 };
+use crate::color_management::srgb_preview_encoder;
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::formats::is_raw_file;
 use crate::hdr_deghosting::{align_hdr_frames, assert_uniform_dimensions, load_hdr_frames};
@@ -597,7 +597,7 @@ fn process_preview_job(
             Subsampling::S420
         };
 
-        let encode_result = Encoder::new(Preset::BaselineFastest)
+        let encode_result = srgb_preview_encoder(Preset::BaselineFastest)
             .quality(encode_quality)
             .subsampling(chroma_subsampling)
             .fast_color(true)
@@ -885,7 +885,7 @@ async fn generate_uncropped_preview(
 
         let (width, height) = processed_image.dimensions();
         let rgb_pixels = processed_image.to_rgb8().into_vec();
-        Encoder::new(Preset::BaselineFastest)
+        srgb_preview_encoder(Preset::BaselineFastest)
             .quality(80)
             .encode_rgb(&rgb_pixels, width, height)
             .map_err(|e| format!("Failed to encode uncropped preview with mozjpeg-rs: {}", e))
@@ -951,7 +951,7 @@ fn generate_original_transformed_preview(
         Subsampling::S420
     };
 
-    let bytes = Encoder::new(Preset::BaselineFastest)
+    let bytes = srgb_preview_encoder(Preset::BaselineFastest)
         .quality(encode_quality)
         .subsampling(chroma_subsampling)
         .fast_color(true)
@@ -1152,7 +1152,7 @@ async fn preview_geometry_transform(
     let (width, height) = final_image.dimensions();
     let rgb_pixels = final_image.to_rgb8().into_vec();
 
-    let bytes = Encoder::new(Preset::BaselineFastest)
+    let bytes = srgb_preview_encoder(Preset::BaselineFastest)
         .quality(75)
         .encode_rgb(&rgb_pixels, width, height)
         .map_err(|e| format!("Failed to encode with mozjpeg-rs: {}", e))?;
@@ -1241,13 +1241,14 @@ fn generate_preset_preview(
         "generate_preset_preview",
     )?;
 
-    let mut buf = Cursor::new(Vec::new());
-    processed_image
-        .to_rgb8()
-        .write_with_encoder(JpegEncoder::new_with_quality(&mut buf, 80))
+    let rgb = processed_image.to_rgb8();
+    let (width, height) = rgb.dimensions();
+    let bytes = srgb_preview_encoder(Preset::BaselineFastest)
+        .quality(80)
+        .encode_rgb(rgb.as_raw(), width, height)
         .map_err(|e| e.to_string())?;
 
-    Ok(Response::new(buf.into_inner()))
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
@@ -1479,7 +1480,7 @@ async fn generate_preview_for_path(
         let (width, height) = final_image.dimensions();
         let rgb_pixels = final_image.to_rgb8().into_vec();
 
-        let bytes = Encoder::new(Preset::BaselineFastest)
+        let bytes = srgb_preview_encoder(Preset::BaselineFastest)
             .quality(92)
             .encode_rgb(&rgb_pixels, width, height)
             .map_err(|e| format!("Failed to encode with mozjpeg-rs: {}", e))?;

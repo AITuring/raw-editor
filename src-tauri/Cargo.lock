@@ -4919,6 +4919,7 @@ dependencies = [
  "log",
  "memmap2",
  "mimalloc",
+ "moxcms",
  "mozjpeg-rs",
  "nalgebra",
  "ndarray",

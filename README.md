@@ -102,16 +102,21 @@ npm run start            # Tauri 2 开发窗口
   sRGB 传递函数，修复 LinearRaw gamma 模式将 0.5 错误按 3.0 指数解码的问题，并通过
   `npm run color-contract:check` 锁定 CPU/WGSL、RAW 分支、GPU 输出与导出 ICC 边界。完整契约与
   已知缺口见 [`docs/color-pipeline.md`](docs/color-pipeline.md)。
+- ✅ 普通 JPEG/PNG/TIFF 输入现会读取嵌入 RGB ICC，并通过纯 Rust `moxcms` 转换为编辑器的
+  编码 sRGB 合同；4 MiB profile 上限、Display P3 数值基线、畸形/缺失 profile 回退和 TIFF
+  元数据解码器回归均有确定性内存测试。核心 WebView JPEG 预览、预设、LUT 与图库缩略图统一
+  嵌入 sRGB v4 ICC，原生 WGPU 继续声明 sRGB surface 交由系统合成器映射到当前显示器。
 
 按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
-的样片前，不会用合成样片冒充真实相机画质结论。色彩审计同时确认两个无需样片也必须继续完成的
-M1 缺口：普通图片的嵌入输入 ICC 尚未转换，原生/WebView 显示也尚未接入逐显示器 ICC。下一阶段
-优先实现并验证这两条 profile 变换，再继续收敛四级渲染策略和 CPU/GPU 缓冲占用。
+的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
+链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
+不冒充已经完成。下一阶段优先收敛快速预览、半分辨率编辑、100% ROI、全分辨率导出四级策略，
+并继续减少 CPU/GPU 重复缓冲与峰值内存。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run build`、`cargo fmt --all -- --check`、
-`cargo check --lib`、37 项 Rust 单元/回归测试和严格 Clippy；唯一忽略的 Rust 验收项需要本地授权
+`cargo check --lib`、42 项 Rust 单元/回归测试和严格 Clippy；唯一忽略的 Rust 验收项需要本地授权
 RAW 文件。`git diff --check` 也保持通过。
 
 ## 1.0 范围

@@ -43,6 +43,9 @@ const colorManagement = read('src-tauri/src/color_management.rs');
 const rawProcessing = read('src-tauri/src/raw_processing.rs');
 const imageLoader = read('src-tauri/src/image_loader.rs');
 const imageProcessing = read('src-tauri/src/image_processing.rs');
+const rustLib = read('src-tauri/src/lib.rs');
+const lutProcessing = read('src-tauri/src/lut_processing.rs');
+const fileManagement = read('src-tauri/src/file_management.rs');
 const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
 const exportProcessing = read('src-tauri/src/export_processing.rs');
 const mainShader = read('src-tauri/src/shaders/shader.wgsl');
@@ -58,6 +61,29 @@ const rustOetf = functionBody(colorManagement, 'linear_to_srgb_channel', 'canoni
 for (const token of ['max(0.0)', '0.003_130_8', '* 12.92', 'powf(1.0 / 2.4)']) {
   expectIncludes(rustOetf, token, `canonical CPU OETF must contain ${token}`);
 }
+
+const inputProfileNormalization = functionBody(
+  colorManagement,
+  'normalize_encoded_rgb_profile_to_srgb',
+  'embedded input profile conversion',
+);
+for (const token of [
+  'MAX_EMBEDDED_ICC_BYTES',
+  'validate_icc_profile(profile)',
+  'ColorProfile::new_from_slice_with_options',
+  'create_in_place_transform_f32',
+  'create_transform_f32',
+  'channel.clamp(0.0, 1.0)',
+]) {
+  expectIncludes(inputProfileNormalization, token, `embedded input profile conversion must contain ${token}`);
+}
+
+const previewEncoder = functionBody(colorManagement, 'srgb_preview_encoder', 'WebView preview encoder');
+expectIncludes(
+  previewEncoder,
+  '.icc_profile(srgb_v4_profile().to_vec())',
+  'WebView JPEG previews must embed the bundled sRGB profile',
+);
 
 const canonicalPath = path.join(repoRoot, 'src-tauri', 'src', 'color_management.rs');
 const transferDefinition = /\bfn\s+(?:srgb_to_linear(?:_channel)?|linear_to_srgb(?:_channel)?)\s*\(/g;
@@ -87,18 +113,42 @@ expectIncludes(
   'RAW development must stay linear by omitting rawler sRGB encoding',
 );
 
-expectIncludes(
-  imageLoader,
-  'use crate::color_management::srgb_to_linear_channel;',
-  'image patch LUT must use the canonical CPU EOTF',
-);
+expectIncludes(imageLoader, 'srgb_to_linear_channel', 'image patch LUT must use the canonical CPU EOTF');
 expectIncludes(
   imageLoader,
   '*v = srgb_to_linear_channel(i as f32 / 255.0);',
   'image patch LUT must be built from the canonical CPU EOTF',
 );
+expectIncludes(imageLoader, 'decoder.icc_profile()', 'generic image decoders must expose embedded ICC metadata');
+expectIncludes(
+  imageLoader,
+  'TiffDecoder::new(Cursor::new(bytes))',
+  'TIFF ICC metadata must bypass the ImageReader limit-reset regression',
+);
+expectIncludes(
+  imageLoader,
+  'normalize_encoded_rgb_profile_to_srgb(encoded_srgb.as_mut(), &profile)',
+  'decoded non-RAW pixels must be normalized to encoded sRGB',
+);
 expectIncludes(imageProcessing, 'linear_to_srgb_channel(p[0])', 'RGBA CPU encoding must use the canonical OETF');
 expectIncludes(imageProcessing, 'srgb_to_linear_channel(p[0])', 'RGBA CPU decoding must use the canonical EOTF');
+
+const corePreviewEncoderCalls = rustLib.match(/srgb_preview_encoder\(Preset::BaselineFastest\)/g)?.length ?? 0;
+expect(corePreviewEncoderCalls >= 6, 'all core JPEG preview paths must use the tagged sRGB encoder');
+expect(
+  !rustLib.includes('Encoder::new(Preset::BaselineFastest)'),
+  'core preview paths must not bypass the tagged sRGB encoder',
+);
+expectIncludes(
+  lutProcessing,
+  'srgb_preview_encoder(Preset::BaselineFastest)',
+  'LUT swatch previews must embed sRGB ICC',
+);
+expectIncludes(
+  fileManagement,
+  'encoder.set_icc_profile(srgb_v4_profile().to_vec())',
+  'library thumbnails must embed sRGB ICC',
+);
 
 for (const [source, label] of [
   [mainShader, 'main shader'],
@@ -161,5 +211,7 @@ if (failures.length > 0) {
   for (const failure of [...new Set(failures)].sort()) console.error(`- ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log('Validated the CPU/WGSL sRGB transfer, RAW routing, display boundary, and export profile contract.');
+  console.log(
+    'Validated input ICC normalization, tagged previews, CPU/WGSL sRGB transfer, RAW routing, display, and export contracts.',
+  );
 }

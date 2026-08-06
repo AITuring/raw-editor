@@ -9,5 +9,13 @@
 - License: CC0-1.0 / public-domain dedication
 - Local use: embedded in supported export formats as the default sRGB output profile; bytes are unmodified
 
+## moxcms
+
+- Component: `moxcms` 0.8.1
+- Project: [moxcms](https://github.com/awxkee/moxcms)
+- License: BSD-3-Clause OR Apache-2.0
+- Local use: parse untrusted embedded RGB ICC profiles and convert decoded non-RAW pixels to the editor's sRGB input contract
+- Integration: used as an unmodified Cargo dependency; no moxcms source is copied into this repository
+
 Existing bundled libraries, model code and the Lensfun database retain their upstream notices and
 licenses. See `NOTICE`, dependency manifests and the source headers distributed with this repository.

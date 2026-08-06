@@ -1,7 +1,7 @@
 use crate::Cursor;
 use crate::app_settings::{AppSettings, load_settings};
 use crate::app_state::{AppState, LoadedImage};
-use crate::color_management::srgb_to_linear_channel;
+use crate::color_management::{normalize_encoded_rgb_profile_to_srgb, srgb_to_linear_channel};
 use crate::exif_processing;
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::formats::is_raw_file;
@@ -13,7 +13,8 @@ use crate::mask_generation::{MaskDefinition, SubMask, generate_mask_bitmap};
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose};
 use exif::{Reader as ExifReader, Tag};
-use image::{DynamicImage, GenericImageView, ImageReader, imageops};
+use image::codecs::tiff::TiffDecoder;
+use image::{DynamicImage, GenericImageView, ImageDecoder, ImageReader, imageops};
 use rawler::Orientation;
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -346,6 +347,22 @@ fn linearize_embedded_preview(preview: DynamicImage) -> DynamicImage {
     DynamicImage::ImageRgb32F(linear_preview)
 }
 
+fn read_embedded_icc<D: ImageDecoder>(
+    bytes: &[u8],
+    format: Option<image::ImageFormat>,
+    decoder: &mut D,
+) -> image::ImageResult<Option<Vec<u8>>> {
+    // ImageReader applies limits while constructing its opaque decoder. In image
+    // 0.25.10 that rebuilds the TIFF decoder and loses access to the current IFD's
+    // ICC tag, so use a metadata-only direct decoder for TIFF until upstream fixes it.
+    if format == Some(image::ImageFormat::Tiff) {
+        let mut metadata_decoder = TiffDecoder::new(Cursor::new(bytes))?;
+        metadata_decoder.icc_profile()
+    } else {
+        decoder.icc_profile()
+    }
+}
+
 pub fn load_image_with_orientation(
     bytes: &[u8],
     cancel_token: Option<(Arc<AtomicUsize>, usize)>,
@@ -368,7 +385,20 @@ pub fn load_image_with_orientation(
 
     check_cancel()?;
 
-    let image = reader.decode().context("Failed to decode image")?;
+    let format = reader.format();
+    let mut decoder = reader
+        .into_decoder()
+        .context("Failed to initialize image decoder")?;
+    let embedded_icc = match read_embedded_icc(bytes, format, &mut decoder) {
+        Ok(profile) => profile,
+        Err(error) => {
+            log::warn!("Ignoring unreadable embedded ICC profile: {error}");
+            None
+        }
+    };
+
+    check_cancel()?;
+    let image = DynamicImage::from_decoder(decoder).context("Failed to decode image")?;
     check_cancel()?;
 
     let oriented_image = {
@@ -388,7 +418,18 @@ pub fn load_image_with_orientation(
         }
     };
 
-    Ok(DynamicImage::ImageRgb32F(oriented_image.to_rgb32f()))
+    check_cancel()?;
+    let mut encoded_srgb = oriented_image.to_rgb32f();
+    if let Some(profile) = embedded_icc {
+        match normalize_encoded_rgb_profile_to_srgb(encoded_srgb.as_mut(), &profile) {
+            Ok(true) => log::debug!("Converted embedded RGB ICC profile to sRGB"),
+            Ok(false) => {}
+            Err(error) => log::warn!("Ignoring unsupported embedded ICC profile: {error}"),
+        }
+    }
+    check_cancel()?;
+
+    Ok(DynamicImage::ImageRgb32F(encoded_srgb))
 }
 
 pub fn composite_patches_on_image(
@@ -881,4 +922,130 @@ pub async fn load_image(
         exif: exif_data,
         is_raw,
     })
+}
+
+#[cfg(test)]
+mod color_profile_tests {
+    use std::io::Cursor;
+
+    use image::codecs::{jpeg::JpegEncoder, png::PngEncoder, tiff::TiffEncoder};
+    use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, ImageReader, Rgb};
+    use moxcms::ColorProfile;
+
+    use super::{load_image_with_orientation, read_embedded_icc};
+    use crate::color_management::srgb_v4_profile;
+
+    fn encode_rgb_png(pixel: [u8; 3], profile: Option<Vec<u8>>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let mut encoder = PngEncoder::new(&mut bytes);
+        if let Some(profile) = profile {
+            encoder
+                .set_icc_profile(profile)
+                .expect("attach deterministic test profile");
+        }
+        encoder
+            .write_image(&pixel, 1, 1, ExtendedColorType::Rgb8)
+            .expect("encode deterministic PNG");
+        bytes
+    }
+
+    fn encode_rgb_jpeg(pixel: [u8; 3], profile: Vec<u8>) -> Vec<u8> {
+        let pixels = pixel.repeat(16);
+        let mut bytes = Vec::new();
+        let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 100);
+        encoder
+            .set_icc_profile(profile)
+            .expect("attach deterministic test profile");
+        encoder
+            .write_image(&pixels, 4, 4, ExtendedColorType::Rgb8)
+            .expect("encode deterministic JPEG");
+        bytes
+    }
+
+    fn encode_rgb_tiff(pixel: [u8; 3], profile: Vec<u8>) -> Vec<u8> {
+        let image = ImageBuffer::<Rgb<u16>, Vec<u16>>::from_pixel(
+            37,
+            23,
+            Rgb([
+                u16::from(pixel[0]) * 257,
+                u16::from(pixel[1]) * 257,
+                u16::from(pixel[2]) * 257,
+            ]),
+        );
+        let mut bytes = Vec::new();
+        let mut cursor = Cursor::new(&mut bytes);
+        let mut encoder = TiffEncoder::new(&mut cursor);
+        encoder
+            .set_icc_profile(profile)
+            .expect("attach deterministic test profile");
+        DynamicImage::ImageRgb16(image)
+            .write_with_encoder(encoder)
+            .expect("encode deterministic TIFF");
+        bytes
+    }
+
+    fn decoded_pixel(bytes: &[u8]) -> [f32; 3] {
+        let decoded = load_image_with_orientation(bytes, None)
+            .expect("decode test image")
+            .into_rgb32f();
+        decoded.get_pixel(0, 0).0
+    }
+
+    fn embedded_icc(bytes: &[u8]) -> Option<Vec<u8>> {
+        let reader = ImageReader::new(Cursor::new(bytes))
+            .with_guessed_format()
+            .expect("guess test image format");
+        let format = reader.format();
+        let mut decoder = reader
+            .into_decoder()
+            .expect("initialize test image decoder");
+        read_embedded_icc(bytes, format, &mut decoder).expect("read test image ICC")
+    }
+
+    fn assert_pixel_close(label: &str, actual: [f32; 3], expected: [f32; 3], tolerance: f32) {
+        for channel in 0..3 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() <= tolerance,
+                "{label} channel {channel}: expected {}, got {}",
+                expected[channel],
+                actual[channel]
+            );
+        }
+    }
+
+    #[test]
+    fn jpeg_png_and_tiff_display_p3_profiles_are_applied_during_decode() {
+        let mut display_p3 = ColorProfile::new_display_p3();
+        display_p3.description = None;
+        display_p3.copyright = None;
+        display_p3.cicp = None;
+        let profile = display_p3.encode().expect("encode Display P3 profile");
+        assert_eq!(profile.len() % 4, 0, "test ICC must be 4-byte aligned");
+        let png = encode_rgb_png([128, 64, 191], Some(profile.clone()));
+        let jpeg = encode_rgb_jpeg([128, 64, 191], profile.clone());
+        let tiff = encode_rgb_tiff([128, 64, 191], profile);
+        let srgb_tiff = encode_rgb_tiff([128, 64, 191], srgb_v4_profile().to_vec());
+        assert_eq!(embedded_icc(&srgb_tiff).as_deref(), Some(srgb_v4_profile()));
+
+        for (label, encoded) in [("PNG", &png), ("JPEG", &jpeg), ("TIFF", &tiff)] {
+            assert!(
+                embedded_icc(encoded).is_some(),
+                "{label} must expose its ICC profile"
+            );
+        }
+
+        for (label, encoded) in [("PNG", &png), ("JPEG", &jpeg), ("TIFF", &tiff)] {
+            assert_pixel_close(label, decoded_pixel(encoded), [0.539, 0.233, 0.776], 0.008);
+        }
+    }
+
+    #[test]
+    fn untagged_or_malformed_profile_falls_back_to_srgb_assumption() {
+        let expected = [128.0 / 255.0, 64.0 / 255.0, 191.0 / 255.0];
+        let untagged = encode_rgb_png([128, 64, 191], None);
+        let malformed = encode_rgb_png([128, 64, 191], Some(b"not an ICC profile".to_vec()));
+
+        assert_pixel_close("untagged PNG", decoded_pixel(&untagged), expected, 1.0e-6);
+        assert_pixel_close("malformed PNG", decoded_pixel(&malformed), expected, 1.0e-6);
+    }
 }

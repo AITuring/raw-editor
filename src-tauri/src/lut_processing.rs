@@ -12,11 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose};
-use mozjpeg_rs::{Encoder, Preset};
+use mozjpeg_rs::Preset;
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppState;
 use crate::cache_utils::calculate_transform_hash;
+use crate::color_management::srgb_preview_encoder;
 use crate::image_processing::{
     RenderRequest, get_all_adjustments_from_json, process_and_get_dynamic_image,
     resolve_tonemapper_override_from_handle,
@@ -613,7 +614,7 @@ fn render_lut_swatch(
 
     let rgb = processed.to_rgb8();
     let (width, height) = rgb.dimensions();
-    let bytes = Encoder::new(Preset::BaselineFastest)
+    let bytes = srgb_preview_encoder(Preset::BaselineFastest)
         .quality(80)
         .encode_rgb(&rgb.into_vec(), width, height)
         .ok()?;
