@@ -70,9 +70,10 @@ npm run start            # Tauri 2 开发窗口
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
 
-### 当前进度（2026-08-04）
+### 当前进度（2026-08-06）
 
-当前处于 **M0 基础整合完成、M1 真实 RAW 基线待采集阶段**。本轮已完成：
+当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。在暂不引入授权真实样片的前提下，
+本轮已完成：
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
 - ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、包元数据、Linux/Android 信息和基础 EXIF 软件标识调整。
@@ -97,16 +98,21 @@ npm run start            # Tauri 2 开发窗口
   协议更新画面，原生 WGPU 直接更新对应纹理区域；全分辨率变换底图使用 `Arc` 共享，避免深拷贝。
 - ✅ 原图对比、未裁切预览、几何/镜头预览和蒙版覆盖统一改为原生二进制 IPC；WebView 只在展示
   边界创建并回收 Blob URL，并通过 `npm run preview-transport:check` 阻止核心编辑链路退回整图 Base64。
+- ✅ 完成 RAW → WGPU → WebView/原生预览 → 文件导出的首轮颜色空间审计；CPU 端统一使用标准
+  sRGB 传递函数，修复 LinearRaw gamma 模式将 0.5 错误按 3.0 指数解码的问题，并通过
+  `npm run color-contract:check` 锁定 CPU/WGSL、RAW 分支、GPU 输出与导出 ICC 边界。完整契约与
+  已知缺口见 [`docs/color-pipeline.md`](docs/color-pipeline.md)。
 
-当前唯一明确延期项是 Sony α7R V 60MP ARW 的真实画质、性能和导出基线。下一步在取得可合法
-使用的样片后，按照 `tests/acceptance/raw-manifest.json` 记录原文件哈希、授权和传感器尺寸，
-再逐节点核对 RAW 解包、白平衡、去马赛克、色彩变换、预览与全分辨率导出的一致性；在此之前
-不会用合成样片冒充真实相机画质结论。
+按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
+的样片前，不会用合成样片冒充真实相机画质结论。色彩审计同时确认两个无需样片也必须继续完成的
+M1 缺口：普通图片的嵌入输入 ICC 尚未转换，原生/WebView 显示也尚未接入逐显示器 ICC。下一阶段
+优先实现并验证这两条 profile 变换，再继续收敛四级渲染策略和 CPU/GPU 缓冲占用。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
-`npm run local-only:check`、`npm run preview-transport:check`、`npm run build`、
-`cargo fmt --all -- --check`、`cargo check --lib`、23 项 Rust 单元/回归测试、严格 Clippy 和
-`git diff --check`。
+`npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
+`npm run preview-resolution:check`、`npm run build`、`cargo fmt --all -- --check`、
+`cargo check --lib`、37 项 Rust 单元/回归测试和严格 Clippy；唯一忽略的 Rust 验收项需要本地授权
+RAW 文件。`git diff --check` 也保持通过。
 
 ## 1.0 范围
 

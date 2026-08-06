@@ -1,3 +1,4 @@
+use crate::color_management::{linear_to_srgb_channel, srgb_to_linear_channel};
 use crate::gpu_processing::WgpuDisplay;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat3, Vec2, Vec3};
@@ -1209,24 +1210,17 @@ pub fn apply_cpu_default_raw_processing(image: &mut DynamicImage) {
 }
 
 pub fn apply_srgb_to_linear(mut image: DynamicImage) -> DynamicImage {
-    let to_linear = |x: f32| -> f32 {
-        let x = x.max(0.0);
-        if x <= 0.04045 {
-            x / 12.92
-        } else {
-            ((x + 0.055) / 1.055).powf(2.4)
-        }
-    };
-
     match &mut image {
         DynamicImage::ImageRgb32F(img) => {
-            img.as_mut().par_iter_mut().for_each(|c| *c = to_linear(*c));
+            img.as_mut()
+                .par_iter_mut()
+                .for_each(|c| *c = srgb_to_linear_channel(*c));
         }
         DynamicImage::ImageRgba32F(img) => {
             img.par_chunks_mut(4).for_each(|p| {
-                p[0] = to_linear(p[0]);
-                p[1] = to_linear(p[1]);
-                p[2] = to_linear(p[2]);
+                p[0] = srgb_to_linear_channel(p[0]);
+                p[1] = srgb_to_linear_channel(p[1]);
+                p[2] = srgb_to_linear_channel(p[2]);
             });
         }
         _ => {}
@@ -1235,24 +1229,17 @@ pub fn apply_srgb_to_linear(mut image: DynamicImage) -> DynamicImage {
 }
 
 pub fn apply_linear_to_srgb(mut image: DynamicImage) -> DynamicImage {
-    let to_srgb = |x: f32| -> f32 {
-        let x = x.max(0.0);
-        if x <= 0.0031308 {
-            x * 12.92
-        } else {
-            1.055 * x.powf(1.0 / 2.4) - 0.055
-        }
-    };
-
     match &mut image {
         DynamicImage::ImageRgb32F(img) => {
-            img.as_mut().par_iter_mut().for_each(|c| *c = to_srgb(*c));
+            img.as_mut()
+                .par_iter_mut()
+                .for_each(|c| *c = linear_to_srgb_channel(*c));
         }
         DynamicImage::ImageRgba32F(img) => {
             img.par_chunks_mut(4).for_each(|p| {
-                p[0] = to_srgb(p[0]);
-                p[1] = to_srgb(p[1]);
-                p[2] = to_srgb(p[2]);
+                p[0] = linear_to_srgb_channel(p[0]);
+                p[1] = linear_to_srgb_channel(p[1]);
+                p[2] = linear_to_srgb_channel(p[2]);
             });
         }
         _ => {}
@@ -3681,6 +3668,36 @@ pub fn calculate_auto_adjustments(
     let results = perform_auto_analysis(&original_image);
 
     Ok(auto_results_to_json(&results))
+}
+
+#[cfg(test)]
+mod color_transfer_tests {
+    use super::{apply_linear_to_srgb, apply_srgb_to_linear};
+    use image::{DynamicImage, ImageBuffer, Rgba};
+
+    #[test]
+    fn float_rgba_transfer_round_trips_rgb_and_preserves_alpha() {
+        let original = Rgba([0.0, 0.040_45, 0.5, 0.37]);
+        let encoded = DynamicImage::ImageRgba32F(ImageBuffer::from_pixel(1, 1, original));
+
+        let linear = apply_srgb_to_linear(encoded);
+        let linear_pixel = *linear
+            .as_rgba32f()
+            .expect("sRGB decode keeps RGBA32F storage")
+            .get_pixel(0, 0);
+        assert!((linear_pixel[2] - 0.214_041_14).abs() <= 1.0e-7);
+        assert_eq!(linear_pixel[3], original[3]);
+
+        let round_trip = apply_linear_to_srgb(linear);
+        let round_trip_pixel = round_trip
+            .as_rgba32f()
+            .expect("sRGB encode keeps RGBA32F storage")
+            .get_pixel(0, 0);
+        for channel in 0..3 {
+            assert!((round_trip_pixel[channel] - original[channel]).abs() <= 2.0e-6);
+        }
+        assert_eq!(round_trip_pixel[3], original[3]);
+    }
 }
 
 #[cfg(test)]

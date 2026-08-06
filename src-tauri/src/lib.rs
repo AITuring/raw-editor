@@ -730,6 +730,7 @@ fn start_preview_worker(app_handle: tauri::AppHandle) {
     });
 }
 
+#[allow(clippy::too_many_arguments)] // Tauri exposes these fields as the stable IPC command payload.
 #[tauri::command]
 async fn apply_adjustments(
     js_adjustments: serde_json::Value,
