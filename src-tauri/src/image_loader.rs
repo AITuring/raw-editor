@@ -1,6 +1,7 @@
 use crate::Cursor;
 use crate::app_settings::{AppSettings, load_settings};
 use crate::app_state::{AppState, LoadedImage};
+use crate::color_management::srgb_to_linear_channel;
 use crate::exif_processing;
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::formats::is_raw_file;
@@ -53,12 +54,7 @@ fn srgb_to_linear_lut() -> &'static [f32; 256] {
     LUT.get_or_init(|| {
         let mut lut = [0.0f32; 256];
         for (i, v) in lut.iter_mut().enumerate() {
-            let x = i as f32 / 255.0;
-            *v = if x <= 0.04045 {
-                x / 12.92
-            } else {
-                ((x + 0.055) / 1.055).powf(2.4)
-            };
+            *v = srgb_to_linear_channel(i as f32 / 255.0);
         }
         lut
     })

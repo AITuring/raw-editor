@@ -1,3 +1,4 @@
+use crate::color_management::srgb_to_linear_channel;
 use crate::image_processing::apply_orientation;
 use anyhow::{Result, anyhow};
 use image::{DynamicImage, ImageBuffer, Rgba};
@@ -87,11 +88,17 @@ fn is_linear_raw_format(raw_image: &RawImage) -> bool {
 }
 
 #[inline]
-fn srgb_to_linear(value: f32) -> f32 {
-    if value <= 0.04045 {
-        value / 12.92
+fn normalize_developed_channel(
+    value: f32,
+    rescale_factor: f32,
+    is_linear_format: bool,
+    apply_ungamma: bool,
+) -> f32 {
+    let rescaled = (value * rescale_factor).max(0.0);
+    if is_linear_format && apply_ungamma {
+        srgb_to_linear_channel(rescaled.clamp(0.0, 1.0))
     } else {
-        ((value + 0.055) / 1.055).powf(3.0)
+        rescaled
     }
 }
 
@@ -191,24 +198,35 @@ fn develop_internal(
     match &mut developed_intermediate {
         Intermediate::Monochrome(pixels) => {
             pixels.data.iter_mut().for_each(|p| {
-                let mut linear_val = *p * rescale_factor;
-                if is_linear_format && apply_ungamma {
-                    linear_val = srgb_to_linear(linear_val.clamp(0.0, 1.0));
-                }
+                let linear_val = normalize_developed_channel(
+                    *p,
+                    rescale_factor,
+                    is_linear_format,
+                    apply_ungamma,
+                );
                 *p = linear_val.clamp(0.0, clamp_limit);
             });
         }
         Intermediate::ThreeColor(pixels) => {
             pixels.data.iter_mut().for_each(|p| {
-                let mut r = (p[0] * rescale_factor).max(0.0);
-                let mut g = (p[1] * rescale_factor).max(0.0);
-                let mut b = (p[2] * rescale_factor).max(0.0);
-
-                if is_linear_format && apply_ungamma {
-                    r = srgb_to_linear(r.clamp(0.0, 1.0));
-                    g = srgb_to_linear(g.clamp(0.0, 1.0));
-                    b = srgb_to_linear(b.clamp(0.0, 1.0));
-                }
+                let r = normalize_developed_channel(
+                    p[0],
+                    rescale_factor,
+                    is_linear_format,
+                    apply_ungamma,
+                );
+                let g = normalize_developed_channel(
+                    p[1],
+                    rescale_factor,
+                    is_linear_format,
+                    apply_ungamma,
+                );
+                let b = normalize_developed_channel(
+                    p[2],
+                    rescale_factor,
+                    is_linear_format,
+                    apply_ungamma,
+                );
 
                 let max_c = r.max(g).max(b);
 
@@ -243,10 +261,12 @@ fn develop_internal(
         Intermediate::FourColor(pixels) => {
             pixels.data.iter_mut().for_each(|p| {
                 p.iter_mut().for_each(|c| {
-                    let mut linear_val = *c * rescale_factor;
-                    if is_linear_format && apply_ungamma {
-                        linear_val = srgb_to_linear(linear_val.clamp(0.0, 1.0));
-                    }
+                    let linear_val = normalize_developed_channel(
+                        *c,
+                        rescale_factor,
+                        is_linear_format,
+                        apply_ungamma,
+                    );
                     *c = linear_val.clamp(0.0, clamp_limit);
                 });
             });
@@ -308,7 +328,19 @@ pub fn get_fast_demosaic_scale_factor(
 
 #[cfg(test)]
 mod tests {
-    use super::correlated_color_temperature;
+    use super::{correlated_color_temperature, normalize_developed_channel};
+
+    #[test]
+    fn linear_raw_gamma_uses_standard_srgb_eotf() {
+        let decoded_mid_gray = normalize_developed_channel(0.5, 1.0, true, true);
+        assert!((decoded_mid_gray - 0.214_041_14).abs() <= 1.0e-7);
+
+        let already_linear_mid_gray = normalize_developed_channel(0.5, 1.0, true, false);
+        assert_eq!(already_linear_mid_gray, 0.5);
+
+        let non_linear_raw_value = normalize_developed_channel(0.5, 1.0, false, true);
+        assert_eq!(non_linear_raw_value, 0.5);
+    }
 
     #[test]
     fn rawler_bundles_sony_a7r_v_camera_profile_and_color_matrices() {
