@@ -467,6 +467,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Ângulo",
       "aspectRatioHeading": "Proporção de Tela",
       "custom": {
         "hPlaceholder": "A",
@@ -561,6 +562,7 @@
       "title": "Cortar e Transformar",
       "tooltips": {
         "compositionOverlay": "Sobreposição de Composição",
+        "constrainAspect": "Restringir proporção",
         "flipHoriz": "Inverter imagem horizontalmente",
         "flipVert": "Inverter imagem verticalmente",
         "lens": "Correção de distorção de lente",
@@ -573,7 +575,8 @@
         "switchOrientation": "Mudar orientação",
         "switchToLandscape": "Mudar para paisagem",
         "switchToPortrait": "Mudar para retrato",
-        "transform": "Correção de perspectiva e keystone"
+        "transform": "Correção de perspectiva e keystone",
+        "unconstrainAspect": "Desbloquear proporção"
       }
     },
     "externalEdit": {

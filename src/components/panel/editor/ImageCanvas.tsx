@@ -2432,7 +2432,7 @@ const ImageCanvas = memo(
       isStraightening.current = false;
       if (
         !straightenLine ||
-        (straightenLine.start.x === straightenLine.end.x && straightenLine.start.y === straightenLine.start.y)
+        Math.hypot(straightenLine.end.x - straightenLine.start.x, straightenLine.end.y - straightenLine.start.y) < 6
       ) {
         setStraightenLine(null);
         return;
@@ -3003,6 +3003,7 @@ const ImageCanvas = memo(
             >
               <ReactCrop
                 aspect={adjustments.aspectRatio ?? undefined}
+                className="camera-raw-crop"
                 crop={crop ?? undefined}
                 onChange={setCrop}
                 onComplete={handleCropComplete}
@@ -3071,7 +3072,7 @@ const ImageCanvas = memo(
                           straightenLine.end.x,
                           straightenLine.end.y,
                         ]}
-                        stroke="#0ea5e9"
+                        stroke="rgb(211, 157, 106)"
                         strokeWidth={2}
                       />
                     )}

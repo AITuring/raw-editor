@@ -294,7 +294,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const handleStraighten = useCallback(
     (angleCorrection: number) => {
       setAdjustments((prev: Adjustments) => {
-        const newRotation = (prev.rotation || 0) + angleCorrection;
+        const newRotation = Math.max(-45, Math.min(45, (prev.rotation || 0) + angleCorrection));
         return { ...prev, rotation: newRotation };
       });
       setEditor({ isStraightenActive: false });

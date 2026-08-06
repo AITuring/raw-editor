@@ -445,6 +445,7 @@
       }
     },
     "crop": {
+      "angleLabel": "角度",
       "aspectRatioHeading": "アスペクト比",
       "custom": {
         "hPlaceholder": "H",
@@ -539,6 +540,7 @@
       "title": "切り抜きと変形",
       "tooltips": {
         "compositionOverlay": "構図ガイド",
+        "constrainAspect": "縦横比を固定",
         "flipHoriz": "画像を水平方向に反転",
         "flipVert": "画像を垂直方向に反転",
         "lens": "レンズ歪み補正",
@@ -551,7 +553,8 @@
         "switchOrientation": "縦横比の向きを切り替え",
         "switchToLandscape": "横向きに切り替え",
         "switchToPortrait": "縦向きに切り替え",
-        "transform": "遠近歪みとあおり補正"
+        "transform": "遠近歪みとあおり補正",
+        "unconstrainAspect": "縦横比の固定を解除"
       }
     },
     "externalEdit": {

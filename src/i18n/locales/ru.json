@@ -487,6 +487,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Угол",
       "aspectRatioHeading": "Соотношение сторон",
       "custom": {
         "hPlaceholder": "В",
@@ -581,6 +582,7 @@
       "title": "Обрезка и трансформация",
       "tooltips": {
         "compositionOverlay": "Сетка композиции",
+        "constrainAspect": "Зафиксировать соотношение сторон",
         "flipHoriz": "Отразить горизонтально",
         "flipVert": "Отразить вертикально",
         "lens": "Коррекция искажений объектива",
@@ -593,7 +595,8 @@
         "switchOrientation": "Сменить ориентацию",
         "switchToLandscape": "Переключить на альбомную",
         "switchToPortrait": "Переключить на портретную",
-        "transform": "Коррекция перспективы и искажений"
+        "transform": "Коррекция перспективы и искажений",
+        "unconstrainAspect": "Снять фиксацию соотношения сторон"
       }
     },
     "externalEdit": {

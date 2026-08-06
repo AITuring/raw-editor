@@ -447,6 +447,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Winkel",
       "aspectRatioHeading": "Seitenverhältnis",
       "custom": {
         "hPlaceholder": "H",
@@ -541,6 +542,7 @@
       "title": "Zuschnitt & Form",
       "tooltips": {
         "compositionOverlay": "Kompositions-Überlagerung",
+        "constrainAspect": "Seitenverhältnis sperren",
         "flipHoriz": "Bild horizontal spiegeln",
         "flipVert": "Bild vertikal spiegeln",
         "lens": "Objektivverzerrung korrigieren",
@@ -553,7 +555,8 @@
         "switchOrientation": "Ausrichtung wechseln",
         "switchToLandscape": "Zum Querformat wechseln",
         "switchToPortrait": "Zum Hochformat wechseln",
-        "transform": "Perspektiv- und Trapezkorrektur"
+        "transform": "Perspektiv- und Trapezkorrektur",
+        "unconstrainAspect": "Seitenverhältnis entsperren"
       }
     },
     "externalEdit": {

@@ -447,6 +447,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Angle",
       "aspectRatioHeading": "Aspect Ratio",
       "custom": {
         "hPlaceholder": "H",
@@ -541,6 +542,7 @@
       "title": "Crop & Transform",
       "tooltips": {
         "compositionOverlay": "Composition Overlay",
+        "constrainAspect": "Constrain aspect ratio",
         "flipHoriz": "Flip image horizontally",
         "flipVert": "Flip image vertically",
         "lens": "Lens distortion correction",
@@ -553,7 +555,8 @@
         "switchOrientation": "Switch orientation",
         "switchToLandscape": "Switch to landscape",
         "switchToPortrait": "Switch to portrait",
-        "transform": "Perspective and keystone correction"
+        "transform": "Perspective and keystone correction",
+        "unconstrainAspect": "Unlock aspect ratio"
       }
     },
     "externalEdit": {

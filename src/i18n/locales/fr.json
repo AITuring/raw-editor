@@ -467,6 +467,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Angle",
       "aspectRatioHeading": "Rapport d'aspect",
       "custom": {
         "hPlaceholder": "H",
@@ -561,6 +562,7 @@
       "title": "Recadrage & Transformation",
       "tooltips": {
         "compositionOverlay": "Superposition de composition",
+        "constrainAspect": "Contraindre les proportions",
         "flipHoriz": "Retourner l'image horizontalement",
         "flipVert": "Retourner l'image verticalement",
         "lens": "Correction de distorsion de l'objectif",
@@ -573,7 +575,8 @@
         "switchOrientation": "Changer l'orientation",
         "switchToLandscape": "Basculer en paysage",
         "switchToPortrait": "Basculer en portrait",
-        "transform": "Correction de perspective et de trapèze"
+        "transform": "Correction de perspective et de trapèze",
+        "unconstrainAspect": "Libérer les proportions"
       }
     },
     "externalEdit": {

@@ -467,6 +467,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Angolo",
       "aspectRatioHeading": "Proporzioni",
       "custom": {
         "hPlaceholder": "A",
@@ -561,6 +562,7 @@
       "title": "Ritaglio e Trasformazione",
       "tooltips": {
         "compositionOverlay": "Sovrapposizione Composizione",
+        "constrainAspect": "Vincola proporzioni",
         "flipHoriz": "Rifletti immagine orizzontalmente",
         "flipVert": "Rifletti immagine verticalmente",
         "lens": "Correzione distorsione obiettivo",
@@ -573,7 +575,8 @@
         "switchOrientation": "Cambia orientamento",
         "switchToLandscape": "Passa a paesaggio",
         "switchToPortrait": "Passa a ritratto",
-        "transform": "Correzione prospettiva e distorsione trapezoidale"
+        "transform": "Correzione prospettiva e distorsione trapezoidale",
+        "unconstrainAspect": "Sblocca proporzioni"
       }
     },
     "externalEdit": {

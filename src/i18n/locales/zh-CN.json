@@ -445,6 +445,7 @@
       }
     },
     "crop": {
+      "angleLabel": "角度",
       "aspectRatioHeading": "宽高比",
       "custom": {
         "hPlaceholder": "高",
@@ -539,6 +540,7 @@
       "title": "裁剪与变换",
       "tooltips": {
         "compositionOverlay": "构图叠加",
+        "constrainAspect": "约束宽高比",
         "flipHoriz": "水平翻转图像",
         "flipVert": "垂直翻转图像",
         "lens": "镜头畸变校正",
@@ -551,7 +553,8 @@
         "switchOrientation": "切换方向",
         "switchToLandscape": "切换为横向",
         "switchToPortrait": "切换为纵向",
-        "transform": "透视和梯形校正"
+        "transform": "透视和梯形校正",
+        "unconstrainAspect": "取消约束宽高比"
       }
     },
     "externalEdit": {

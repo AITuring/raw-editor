@@ -487,6 +487,7 @@
       }
     },
     "crop": {
+      "angleLabel": "Kąt",
       "aspectRatioHeading": "Proporcje",
       "custom": {
         "hPlaceholder": "Wys.",
@@ -581,6 +582,7 @@
       "title": "Kadrowanie i Przekształcanie",
       "tooltips": {
         "compositionOverlay": "Nakładka kompozycji",
+        "constrainAspect": "Zablokuj proporcje",
         "flipHoriz": "Przerzuć obraz w poziomie",
         "flipVert": "Przerzuć obraz w pionie",
         "lens": "Korekcja zniekształceń obiektywu",
@@ -593,7 +595,8 @@
         "switchOrientation": "Zmień orientację",
         "switchToLandscape": "Zmień na krajobraz",
         "switchToPortrait": "Zmień na portret",
-        "transform": "Korekcja perspektywy i keystone"
+        "transform": "Korekcja perspektywy i keystone",
+        "unconstrainAspect": "Odblokuj proporcje"
       }
     },
     "externalEdit": {

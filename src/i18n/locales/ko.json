@@ -445,6 +445,7 @@
       }
     },
     "crop": {
+      "angleLabel": "각도",
       "aspectRatioHeading": "종횡비",
       "custom": {
         "hPlaceholder": "높이",
@@ -539,6 +540,7 @@
       "title": "자르기 및 변형",
       "tooltips": {
         "compositionOverlay": "구도 오버레이",
+        "constrainAspect": "종횡비 제한",
         "flipHoriz": "이미지를 좌우로 반전",
         "flipVert": "이미지를 상하로 반전",
         "lens": "렌즈 왜곡 보정",
@@ -551,7 +553,8 @@
         "switchOrientation": "방향 전환",
         "switchToLandscape": "가로로 전환",
         "switchToPortrait": "세로로 전환",
-        "transform": "원근 및 키스톤 보정"
+        "transform": "원근 및 키스톤 보정",
+        "unconstrainAspect": "종횡비 제한 해제"
       }
     },
     "externalEdit": {
