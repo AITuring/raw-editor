@@ -1,7 +1,5 @@
 import React from 'react';
 import clsx from 'clsx';
-import Text from './Text';
-import { TextVariants } from '../../types/typography';
 
 interface SwitchProps {
   checked: boolean;
@@ -46,9 +44,7 @@ const Switch = ({
       htmlFor={uniqueId}
       data-tooltip={tooltip}
     >
-      <Text variant={TextVariants.label} className="select-none">
-        {label}
-      </Text>
+      <span className="camera-raw-switch-label select-none">{label}</span>
       <div className="relative h-4 w-8 shrink-0">
         <input
           checked={checked}

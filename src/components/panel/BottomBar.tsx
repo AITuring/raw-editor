@@ -337,7 +337,7 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <Check size={16} className="text-green-500" />
+                    <Check size={16} className="text-status-success" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -371,7 +371,7 @@ export default function BottomBar({
                     transition={{ duration: 0.15 }}
                     className="absolute"
                   >
-                    <Check size={16} className="text-green-500" />
+                    <Check size={16} className="text-status-success" />
                   </motion.div>
                 ) : (
                   <motion.div

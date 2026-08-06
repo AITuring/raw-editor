@@ -92,7 +92,7 @@ export default function CullingModal({
       {
         value: 'reject' as const,
         label: t('modals.culling.actionReject'),
-        icon: <Tag size={16} className="text-red-500" />,
+        icon: <Tag size={16} className="text-status-error" />,
       },
       { value: 'rate_zero' as const, label: t('modals.culling.actionRateZero'), icon: <Star size={16} /> },
       { value: 'delete' as const, label: t('modals.culling.actionDelete'), icon: <Trash2 size={16} /> },
@@ -237,7 +237,7 @@ export default function CullingModal({
 
   const renderProgress = () => (
     <div className="flex flex-col items-center justify-center h-48">
-      <Loader2 className="w-8 h-8 text-accent animate-spin" />
+      <Loader2 className="w-8 h-8 text-status-info animate-spin" />
       <TaskProgress
         ariaLabel={progress?.stage || t('modals.culling.starting')}
         className="mt-5 max-w-xl"
@@ -253,7 +253,7 @@ export default function CullingModal({
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center h-48">
-          <XCircle className="w-16 h-16 text-red-500" />
+          <XCircle className="w-16 h-16 text-status-error" />
           <Text variant={TextVariants.heading} className="mt-4 text-center">
             {t('modals.culling.cullingFailed')}
           </Text>
@@ -271,7 +271,7 @@ export default function CullingModal({
     if (totalSuggestions === 0) {
       return (
         <div className="flex flex-col items-center justify-center h-48">
-          <CheckCircle className="w-16 h-16 text-green-500" />
+          <CheckCircle className="w-16 h-16 text-status-success" />
           <Text variant={TextVariants.heading} className="mt-4">
             {t('modals.culling.noIssuesFound')}
           </Text>

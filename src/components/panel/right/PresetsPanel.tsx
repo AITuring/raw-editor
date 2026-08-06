@@ -284,7 +284,7 @@ function PresetItemDisplay({
           {previewUrl ? (
             <PreviewImage src={previewUrl} alt={`${preset.name} preview`} />
           ) : (
-            <Loader2 size={20} className="animate-spin text-text-secondary" />
+            <Loader2 size={20} className="animate-spin text-status-info" />
           )}
 
           {(supportsMasks || supportsGeometry) && (

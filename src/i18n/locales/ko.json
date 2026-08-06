@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "렌즈 프로필 선택",
+      "defringe": "색 번짐 제거",
       "lensProfile": "렌즈 프로필",
+      "lensVignetting": "렌즈 비네팅",
       "profile": "프로필",
       "removeChromaticAberration": "색수차 제거",
       "useProfileCorrections": "프로필 보정 사용"

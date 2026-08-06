@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Aperture, Check, ChevronRight, Loader2, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LensAdjustment, type Adjustments } from '../../utils/adjustments';
+import {
+  DetailsAdjustment,
+  Effect,
+  LensAdjustment,
+  TransformAdjustment,
+  type Adjustments,
+} from '../../utils/adjustments';
 import type { AppSettings } from '../ui/AppProperties';
 import { useEditorStore } from '../../store/useEditorStore';
 import LensCorrectionModal from '../modals/LensCorrectionModal';
-import DetailsPanel from './Details';
 import Slider from '../ui/Slider';
 import Switch from '../ui/Switch';
 import { AdjustmentSubsection, AdjustmentTabs } from '../ui/AdjustmentSubsection';
@@ -22,14 +27,13 @@ interface OpticsPanelProps {
 export default function OpticsPanel({
   adjustments,
   setAdjustments,
-  appSettings,
   lensProfileStatus = 'idle',
   onDragStateChange,
 }: OpticsPanelProps) {
   const { t } = useTranslation();
   const selectedImage = useEditorStore((state) => state.selectedImage);
   const [isLensModalOpen, setIsLensModalOpen] = useState(false);
-  const activeTab = adjustments.lensCorrectionMode === 'auto' ? 'profile' : 'manual';
+  const [activeTab, setActiveTab] = useState<'profile' | 'manual'>('profile');
 
   const tabs = useMemo(
     () => [
@@ -39,17 +43,27 @@ export default function OpticsPanel({
     [t],
   );
 
-  const updateAdjustment = (key: LensAdjustment, value: boolean | number | string) => {
+  const updateAdjustment = (key: string, value: boolean | number | string) => {
     setAdjustments((prev: Adjustments) => ({ ...prev, [key]: value }));
   };
 
   const handleTabChange = (tab: 'profile' | 'manual') => {
-    updateAdjustment(LensAdjustment.LensCorrectionMode, tab === 'profile' ? 'auto' : 'manual');
+    setActiveTab(tab);
+  };
+
+  const handleManualAdjustment = (key: DetailsAdjustment | Effect | TransformAdjustment, value: string | number) => {
+    updateAdjustment(key, Number(value));
   };
 
   const hasProfile = Boolean(adjustments.lensDistortionParams);
   const profileCorrectionsEnabled =
     hasProfile && Boolean(adjustments.lensDistortionEnabled && adjustments.lensVignetteEnabled);
+  const profileDetectionTone =
+    lensProfileStatus === 'success' && hasProfile
+      ? 'success'
+      : lensProfileStatus === 'not_found'
+        ? 'warning'
+        : 'processing';
 
   const handleProfileToggle = (enabled: boolean) => {
     if (enabled && !hasProfile) {
@@ -72,19 +86,19 @@ export default function OpticsPanel({
   };
 
   return (
-    <div className="camera-raw-section-body">
-      <AdjustmentSubsection>
+    <div className="camera-raw-section-body camera-raw-optics">
+      <div className="camera-raw-optics-tabs">
         <AdjustmentTabs
           ariaLabel={t('editor.adjustments.sections.optics')}
           onChange={handleTabChange}
           tabs={tabs}
           value={activeTab}
         />
-      </AdjustmentSubsection>
+      </div>
 
       {activeTab === 'profile' ? (
-        <>
-          <AdjustmentSubsection>
+        <div className="camera-raw-optics-pane" data-tab="profile">
+          <AdjustmentSubsection className="camera-raw-optics-toggles">
             <Switch
               checked={hasProfile && Boolean(adjustments.lensTcaEnabled)}
               label={t('adjustments.optics.removeChromaticAberration')}
@@ -92,7 +106,6 @@ export default function OpticsPanel({
             />
             <Switch
               checked={profileCorrectionsEnabled}
-              className="mt-1"
               label={t('adjustments.optics.useProfileCorrections')}
               onChange={handleProfileToggle}
             />
@@ -101,97 +114,165 @@ export default function OpticsPanel({
           <AdjustmentSubsection title={t('adjustments.optics.lensProfile')}>
             <div
               aria-live="polite"
-              className="camera-raw-profile-detection"
+              className="camera-raw-profile-detection semantic-status semantic-status--badge"
               data-state={lensProfileStatus}
+              data-tone={profileDetectionTone}
               role="status"
             >
               {lensProfileStatus === 'detecting' ? (
                 <>
-                  <Loader2 aria-hidden="true" className="animate-spin" size={13} />
+                  <Loader2 aria-hidden="true" className="animate-spin" size={12} />
                   <span>{t('modals.lensCorrection.detectingExif')}</span>
                 </>
               ) : lensProfileStatus === 'success' && hasProfile ? (
                 <>
-                  <Check aria-hidden="true" size={13} />
+                  <Check aria-hidden="true" size={12} />
                   <span>{t('modals.lensCorrection.lensFound')}</span>
                 </>
               ) : lensProfileStatus === 'not_found' ? (
                 <>
-                  <TriangleAlert aria-hidden="true" size={13} />
+                  <TriangleAlert aria-hidden="true" size={12} />
                   <span>{t('modals.lensCorrection.lensProfileNotFound')}</span>
                 </>
               ) : (
-                <span>{t('modals.lensCorrection.waitingAutoDetect')}</span>
+                <>
+                  <span aria-hidden="true" className="semantic-status__dot" />
+                  <span>{t('modals.lensCorrection.waitingAutoDetect')}</span>
+                </>
               )}
             </div>
             <dl className="camera-raw-profile-summary">
               <div>
                 <dt>{t('modals.lensCorrection.selectManufacturer')}</dt>
-                <dd>{adjustments.lensMaker || t('modals.lensCorrection.notFound')}</dd>
+                <dd className="semantic-result" data-state={adjustments.lensMaker ? 'available' : 'missing'}>
+                  {adjustments.lensMaker || t('modals.lensCorrection.notFound')}
+                </dd>
               </div>
               <div>
                 <dt>{t('modals.lensCorrection.selectLensModel')}</dt>
-                <dd>{adjustments.lensModel || t('modals.lensCorrection.notFound')}</dd>
+                <dd className="semantic-result" data-state={adjustments.lensModel ? 'available' : 'missing'}>
+                  {adjustments.lensModel || t('modals.lensCorrection.notFound')}
+                </dd>
               </div>
             </dl>
 
             <button className="camera-raw-action-row" onClick={() => setIsLensModalOpen(true)} type="button">
-              <Aperture aria-hidden="true" size={16} strokeWidth={1.8} />
+              <Aperture aria-hidden="true" size={14} strokeWidth={1.8} />
               <span className="camera-raw-action-title grow">{t('adjustments.optics.chooseProfile')}</span>
-              <ChevronRight aria-hidden="true" size={15} strokeWidth={1.8} />
+              <ChevronRight aria-hidden="true" size={14} strokeWidth={1.8} />
             </button>
           </AdjustmentSubsection>
 
-          <AdjustmentSubsection title={t('modals.lensCorrection.corrections')}>
+          {hasProfile && (
+            <AdjustmentSubsection title={t('modals.lensCorrection.corrections')}>
+              <Slider
+                disabled={!adjustments.lensDistortionEnabled}
+                label={t('modals.lensCorrection.distortion')}
+                max={200}
+                min={0}
+                defaultValue={100}
+                onChange={(event) =>
+                  updateAdjustment(LensAdjustment.LensDistortionAmount, Number.parseFloat(String(event.target.value)))
+                }
+                step={1}
+                value={adjustments.lensDistortionAmount}
+                onDragStateChange={onDragStateChange}
+              />
+              <Slider
+                disabled={!adjustments.lensVignetteEnabled}
+                label={t('modals.lensCorrection.vignetting')}
+                max={200}
+                min={0}
+                defaultValue={100}
+                onChange={(event) =>
+                  updateAdjustment(LensAdjustment.LensVignetteAmount, Number.parseFloat(String(event.target.value)))
+                }
+                step={1}
+                value={adjustments.lensVignetteAmount}
+                onDragStateChange={onDragStateChange}
+              />
+              <Slider
+                disabled={!adjustments.lensTcaEnabled}
+                label={t('modals.lensCorrection.chromaticAberration')}
+                max={200}
+                min={0}
+                defaultValue={100}
+                onChange={(event) =>
+                  updateAdjustment(LensAdjustment.LensTcaAmount, Number.parseFloat(String(event.target.value)))
+                }
+                step={1}
+                value={adjustments.lensTcaAmount}
+                onDragStateChange={onDragStateChange}
+              />
+            </AdjustmentSubsection>
+          )}
+        </div>
+      ) : (
+        <div className="camera-raw-optics-pane" data-tab="manual">
+          <AdjustmentSubsection title={t('modals.lensCorrection.distortion')}>
             <Slider
-              disabled={!hasProfile || !adjustments.lensDistortionEnabled}
-              label={t('modals.lensCorrection.distortion')}
-              max={200}
-              min={0}
-              defaultValue={100}
-              onChange={(event) =>
-                updateAdjustment(LensAdjustment.LensDistortionAmount, Number.parseFloat(String(event.target.value)))
-              }
+              label={t('modals.lensCorrection.amount')}
+              max={100}
+              min={-100}
+              defaultValue={0}
+              onChange={(event) => handleManualAdjustment(TransformAdjustment.TransformDistortion, event.target.value)}
               step={1}
-              value={adjustments.lensDistortionAmount}
-              onDragStateChange={onDragStateChange}
-            />
-            <Slider
-              disabled={!hasProfile || !adjustments.lensVignetteEnabled}
-              label={t('modals.lensCorrection.vignetting')}
-              max={200}
-              min={0}
-              defaultValue={100}
-              onChange={(event) =>
-                updateAdjustment(LensAdjustment.LensVignetteAmount, Number.parseFloat(String(event.target.value)))
-              }
-              step={1}
-              value={adjustments.lensVignetteAmount}
-              onDragStateChange={onDragStateChange}
-            />
-            <Slider
-              disabled={!hasProfile || !adjustments.lensTcaEnabled}
-              label={t('modals.lensCorrection.chromaticAberration')}
-              max={200}
-              min={0}
-              defaultValue={100}
-              onChange={(event) =>
-                updateAdjustment(LensAdjustment.LensTcaAmount, Number.parseFloat(String(event.target.value)))
-              }
-              step={1}
-              value={adjustments.lensTcaAmount}
+              value={adjustments.transformDistortion}
               onDragStateChange={onDragStateChange}
             />
           </AdjustmentSubsection>
-        </>
-      ) : (
-        <DetailsPanel
-          adjustments={adjustments}
-          setAdjustments={setAdjustments}
-          appSettings={appSettings}
-          onDragStateChange={onDragStateChange}
-          variant="optics"
-        />
+
+          <AdjustmentSubsection title={t('adjustments.optics.defringe')}>
+            <Slider
+              label={t('adjustments.details.redCyan')}
+              max={100}
+              min={-100}
+              defaultValue={0}
+              onChange={(event) =>
+                handleManualAdjustment(DetailsAdjustment.ChromaticAberrationRedCyan, event.target.value)
+              }
+              step={1}
+              value={adjustments.chromaticAberrationRedCyan}
+              onDragStateChange={onDragStateChange}
+            />
+            <Slider
+              label={t('adjustments.details.blueYellow')}
+              max={100}
+              min={-100}
+              defaultValue={0}
+              onChange={(event) =>
+                handleManualAdjustment(DetailsAdjustment.ChromaticAberrationBlueYellow, event.target.value)
+              }
+              step={1}
+              value={adjustments.chromaticAberrationBlueYellow}
+              onDragStateChange={onDragStateChange}
+            />
+          </AdjustmentSubsection>
+
+          <AdjustmentSubsection title={t('adjustments.optics.lensVignetting')}>
+            <Slider
+              label={t('adjustments.effects.amount')}
+              max={100}
+              min={-100}
+              defaultValue={0}
+              onChange={(event) => handleManualAdjustment(Effect.VignetteAmount, event.target.value)}
+              step={1}
+              value={adjustments.vignetteAmount}
+              onDragStateChange={onDragStateChange}
+            />
+            <Slider
+              label={t('adjustments.effects.midpoint')}
+              max={100}
+              min={0}
+              defaultValue={50}
+              fillOrigin="min"
+              onChange={(event) => handleManualAdjustment(Effect.VignetteMidpoint, event.target.value)}
+              step={1}
+              value={adjustments.vignetteMidpoint}
+              onDragStateChange={onDragStateChange}
+            />
+          </AdjustmentSubsection>
+        </div>
       )}
 
       <LensCorrectionModal

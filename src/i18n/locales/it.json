@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "Scegli profilo obiettivo",
+      "defringe": "Rimozione aloni",
       "lensProfile": "Profilo obiettivo",
+      "lensVignetting": "Vignettatura obiettivo",
       "profile": "Profilo",
       "removeChromaticAberration": "Rimuovi aberrazione cromatica",
       "useProfileCorrections": "Usa correzioni profilo"

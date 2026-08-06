@@ -760,7 +760,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
     if (savedPath) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-center">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+          <CheckCircle className="w-16 h-16 text-status-success mx-auto mb-4" />
           <Text variant={TextVariants.heading} className="mb-2">
             {t('modals.collage.saved')}
           </Text>
@@ -770,7 +770,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-center">
-          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <XCircle className="w-16 h-16 text-status-error mx-auto mb-4" />
           <Text variant={TextVariants.heading} className="mb-2">
             {t('modals.collage.errorTitle')}
           </Text>
@@ -806,7 +806,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
           <div ref={previewContainerRef} className="grow flex items-center justify-center p-4 relative min-h-0">
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10">
-                <Loader2 className="w-12 h-12 text-accent animate-spin" />
+                <Loader2 className="w-12 h-12 text-status-info animate-spin" />
               </div>
             )}
 

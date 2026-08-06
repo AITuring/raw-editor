@@ -10,6 +10,10 @@
   --color-text-primary: var(--app-text-primary);
   --color-text-secondary: var(--app-text-secondary);
   --color-accent: var(--app-accent);
+  --color-status-info: var(--app-status-info);
+  --color-status-success: var(--app-status-success);
+  --color-status-warning: var(--app-status-warning);
+  --color-status-error: var(--app-status-error);
   --color-border-color: var(--app-border-color);
   --color-hover-color: var(--app-hover-color);
 
@@ -153,6 +157,82 @@
 }
 
 @layer components {
+  .semantic-status {
+    --semantic-status-color: var(--app-status-info);
+
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    color: var(--semantic-status-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .semantic-status[data-tone='neutral'] {
+    --semantic-status-color: var(--app-text-secondary);
+  }
+
+  .semantic-status[data-tone='processing'],
+  .semantic-status[data-tone='info'] {
+    --semantic-status-color: var(--app-status-info);
+  }
+
+  .semantic-status[data-tone='success'] {
+    --semantic-status-color: var(--app-status-success);
+  }
+
+  .semantic-status[data-tone='warning'] {
+    --semantic-status-color: var(--app-status-warning);
+  }
+
+  .semantic-status[data-tone='error'] {
+    --semantic-status-color: var(--app-status-error);
+  }
+
+  .semantic-status--badge,
+  .semantic-status--panel {
+    border: 1px solid color-mix(in srgb, var(--semantic-status-color) 24%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--semantic-status-color) 9%, transparent);
+  }
+
+  .semantic-status--badge {
+    width: fit-content;
+    min-height: 20px;
+    padding: 1px 6px;
+  }
+
+  .semantic-status--panel {
+    width: 100%;
+    min-height: 38px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 8px 10px;
+  }
+
+  .semantic-status--leading {
+    justify-content: flex-start;
+  }
+
+  .semantic-status__dot {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: currentcolor;
+  }
+
+  .semantic-status__result,
+  .semantic-result {
+    color: var(--app-text-primary);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .semantic-result[data-state='missing'] {
+    color: var(--app-status-warning);
+  }
+
   .slider-input::-webkit-slider-thumb {
     @apply h-2.5 w-2.5 appearance-none rounded-full bg-accent;
     transition:
@@ -1117,7 +1197,7 @@
     justify-content: flex-end;
     gap: 4px;
     margin: -1px 0 1px;
-    color: var(--app-text-secondary);
+    color: var(--semantic-status-color, var(--app-status-info));
     font-size: 10px;
     line-height: 1.2;
   }
@@ -1175,6 +1255,101 @@
     border-radius: 2px;
     outline: 1px solid var(--app-accent);
     outline-offset: -2px;
+  }
+
+  .camera-raw-optics-tabs {
+    min-width: 0;
+    padding-top: 1px;
+  }
+
+  .camera-raw-optics-tabs .camera-raw-tabs {
+    margin-bottom: 0;
+  }
+
+  .camera-raw-optics-tabs .camera-raw-tab {
+    min-height: 26px;
+    padding-block: 2px 4px;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.35;
+  }
+
+  .camera-raw-optics-tabs .camera-raw-tab[aria-checked='true'] {
+    font-weight: 600;
+  }
+
+  .camera-raw-optics-tabs .camera-raw-tab::after {
+    right: 1px;
+    left: 1px;
+    height: 1px;
+    border-radius: 0;
+  }
+
+  .camera-raw-optics-pane {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .camera-raw-optics-pane > .camera-raw-subsection {
+    padding-block: 7px;
+  }
+
+  .camera-raw-optics-pane > .camera-raw-subsection + .camera-raw-subsection {
+    border-top-color: color-mix(in srgb, var(--app-border-color) 72%, transparent);
+  }
+
+  .camera-raw-optics .camera-raw-subsection-header {
+    margin-bottom: 3px;
+  }
+
+  .camera-raw-optics .camera-raw-subsection-description {
+    margin-bottom: 5px;
+  }
+
+  .camera-raw-optics-toggles {
+    display: grid;
+    gap: 1px;
+  }
+
+  .camera-raw-optics .camera-raw-switch {
+    padding-inline: 1px;
+  }
+
+  .camera-raw-optics .camera-raw-switch-label {
+    color: var(--app-text-secondary);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.35;
+  }
+
+  .camera-raw-optics .camera-raw-profile-detection {
+    min-height: 21px;
+    margin: 0 0 2px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .camera-raw-optics .camera-raw-profile-summary {
+    gap: 0;
+    margin-bottom: 5px;
+  }
+
+  .camera-raw-optics .camera-raw-profile-summary > div {
+    min-height: 21px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .camera-raw-optics .camera-raw-action-row {
+    min-height: 28px;
+  }
+
+  .camera-raw-optics .camera-raw-action-title {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.35;
   }
 
   .camera-raw-mixer-channels {
@@ -1399,8 +1574,16 @@
     gap: 8px;
   }
 
-  .develop-panel-content .camera-raw-switch > :first-child {
+  .camera-raw-switch-label {
+    color: var(--app-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  .develop-panel-content .camera-raw-switch-label {
     font-size: 11px;
+    font-weight: 400;
     line-height: 1.25;
   }
 
@@ -1410,16 +1593,8 @@
     align-items: center;
     gap: 5px;
     margin-bottom: 2px;
-    color: var(--app-text-secondary);
+    color: var(--semantic-status-color, var(--app-status-info));
     font-size: 10px;
-  }
-
-  .camera-raw-profile-detection[data-state='success'] {
-    color: color-mix(in srgb, var(--app-accent) 82%, var(--app-text-primary));
-  }
-
-  .camera-raw-profile-detection[data-state='not_found'] {
-    color: #e5a24a;
   }
 
   .develop-panel-content .bg-bg-tertiary {
@@ -1625,10 +1800,28 @@
   }
 
   .task-progress {
+    --task-progress-color: var(--app-status-info);
+
     width: 100%;
     color: var(--app-text-secondary);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+  }
+
+  .task-progress[data-tone='neutral'] {
+    --task-progress-color: var(--app-text-secondary);
+  }
+
+  .task-progress[data-tone='success'] {
+    --task-progress-color: var(--app-status-success);
+  }
+
+  .task-progress[data-tone='warning'] {
+    --task-progress-color: var(--app-status-warning);
+  }
+
+  .task-progress[data-tone='error'] {
+    --task-progress-color: var(--app-status-error);
   }
 
   .task-progress__header {
@@ -1643,7 +1836,8 @@
   .task-progress__label {
     min-width: 0;
     overflow: hidden;
-    color: var(--app-text-secondary);
+    color: var(--task-progress-color);
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1670,7 +1864,7 @@
     inset-block: 0;
     left: 0;
     display: block;
-    background: var(--app-accent);
+    background: var(--task-progress-color);
   }
 
   .task-progress__fill {
@@ -1686,7 +1880,7 @@
     right: 0;
     bottom: 0;
     width: 1px;
-    background: color-mix(in srgb, var(--app-text-primary) 68%, var(--app-accent));
+    background: color-mix(in srgb, var(--app-text-primary) 68%, var(--task-progress-color));
     content: '';
   }
 

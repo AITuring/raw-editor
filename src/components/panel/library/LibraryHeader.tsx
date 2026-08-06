@@ -462,7 +462,7 @@ export function SearchInput({ indexingProgress, isIndexing }: any) {
         )}
         {isIndexing && (
           <div className="flex items-center pr-1 pointer-events-none shrink-0">
-            <Loader2 className="h-5 w-5 text-text-secondary animate-spin" />
+            <Loader2 className="h-5 w-5 text-status-info animate-spin" />
           </div>
         )}
       </div>

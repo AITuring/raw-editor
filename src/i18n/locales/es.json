@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "Elegir perfil de lente",
+      "defringe": "Eliminar halos",
       "lensProfile": "Perfil de lente",
+      "lensVignetting": "Viñeteado de lente",
       "profile": "Perfil",
       "removeChromaticAberration": "Eliminar aberración cromática",
       "useProfileCorrections": "Usar correcciones de perfil"

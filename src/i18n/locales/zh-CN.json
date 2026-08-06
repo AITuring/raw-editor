@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "选择镜头配置文件",
+      "defringe": "去边",
       "lensProfile": "镜头配置文件",
+      "lensVignetting": "镜头晕影",
       "profile": "配置文件",
       "removeChromaticAberration": "删除色差",
       "useProfileCorrections": "使用配置文件校正"

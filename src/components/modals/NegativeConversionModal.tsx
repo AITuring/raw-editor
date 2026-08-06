@@ -321,7 +321,7 @@ export default function NegativeConversionModal({
 
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-30">
-              <Loader2 className="w-12 h-12 text-accent animate-spin" />
+              <Loader2 className="w-12 h-12 text-status-info animate-spin" />
             </div>
           )}
 

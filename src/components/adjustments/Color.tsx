@@ -509,7 +509,12 @@ export default function ColorPanel({
             </div>
           </div>
           {isCalculatingWhiteBalance && (
-            <div aria-live="polite" className="camera-raw-white-balance-status" role="status">
+            <div
+              aria-live="polite"
+              className="camera-raw-white-balance-status semantic-status"
+              data-tone="processing"
+              role="status"
+            >
               <Loader2 aria-hidden="true" className="animate-spin" size={11} />
               <span>{t('adjustments.color.calculatingWhiteBalance')}</span>
             </div>

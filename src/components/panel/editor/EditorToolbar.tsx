@@ -112,7 +112,7 @@ const EditorToolbar = memo(
                   {t('editor.toolbar.vc')}-{imageIdentity.virtualCopyId}
                 </span>
               )}
-              {isLoading && <Loader2 aria-hidden="true" className="animate-spin text-text-secondary" size={11} />}
+              {isLoading && <Loader2 aria-hidden="true" className="animate-spin text-status-info" size={11} />}
             </div>
             {!isAndroid && selectedImage.width > 0 && selectedImage.height > 0 && (
               <span className="block text-[10px] tabular-nums text-text-secondary">

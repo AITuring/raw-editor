@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "レンズプロファイルを選択",
+      "defringe": "フリンジ軽減",
       "lensProfile": "レンズプロファイル",
+      "lensVignetting": "レンズ周辺光量補正",
       "profile": "プロファイル",
       "removeChromaticAberration": "色収差を除去",
       "useProfileCorrections": "プロファイル補正を使用"

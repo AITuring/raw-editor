@@ -23,7 +23,16 @@ export default function ExternalEditBar({ session, isFinishing, errorMessage, on
         <span className="min-w-0 truncate text-sm text-text-secondary whitespace-nowrap">
           {t('editor.externalEdit.savesTo')} <span className="text-text-primary">{outputName}</span>
         </span>
-        {errorMessage && <span className="text-sm text-red-400 max-w-xs truncate">{errorMessage}</span>}
+        {errorMessage && (
+          <span
+            aria-live="assertive"
+            className="semantic-status text-sm max-w-xs truncate"
+            data-tone="error"
+            role="status"
+          >
+            {errorMessage}
+          </span>
+        )}
         <Button onClick={onDone} disabled={isFinishing} className="ml-auto shrink-0 py-1.5">
           {isFinishing ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
           {isFinishing ? t('editor.externalEdit.exporting') : t('editor.externalEdit.done')}

@@ -171,9 +171,18 @@ const ConnectionStatus = () => {
 
   return (
     <div className="bg-surface rounded-lg px-4 py-2 flex items-center gap-2">
-      <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
       <Text variant={TextVariants.label}>{t('editor.ai.connection.builtinLabel')}</Text>
-      <Text variant={TextVariants.label} weight={TextWeights.bold} className="text-green-500">
+      <Text
+        aria-live="polite"
+        as="span"
+        color={TextColors.success}
+        className="semantic-status"
+        data-tone="success"
+        role="status"
+        variant={TextVariants.label}
+        weight={TextWeights.medium}
+      >
+        <span aria-hidden="true" className="semantic-status__dot" />
         {t('editor.ai.connection.ready')}
       </Text>
     </div>
@@ -1398,7 +1407,7 @@ function ContainerRow({
             {container.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
           <button
-            className="p-1 hover:text-red-500 text-text-secondary"
+            className="p-1 hover:text-status-error text-text-secondary"
             data-tooltip={t('editor.ai.actions.deleteEdit')}
             onClick={(e) => {
               e.stopPropagation();
@@ -1694,7 +1703,7 @@ function SubMaskRow({
           </button>
         )}
         <button
-          className="p-1 hover:text-red-500 text-text-secondary"
+          className="p-1 hover:text-status-error text-text-secondary"
           data-tooltip={t('editor.ai.actions.deleteComponent')}
           onClick={(e) => {
             e.stopPropagation();

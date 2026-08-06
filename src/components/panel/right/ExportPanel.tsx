@@ -906,15 +906,15 @@ export default function ExportPanel({
         <Button
           className={`group rounded-md h-11 w-full flex items-center text-md font-bold! justify-center ${
             status === Status.Exporting
-              ? 'bg-red-600/80 hover:bg-red-600 text-white'
+              ? 'bg-status-info/14 text-status-info border border-status-info/35 shadow-none hover:bg-status-error/16 hover:text-status-error hover:border-status-error/35'
               : status === Status.Cancelling
-                ? 'bg-yellow-500/20 text-yellow-400 shadow-none'
+                ? 'bg-status-warning/14 text-status-warning border border-status-warning/35 shadow-none'
                 : status === Status.Success
-                  ? 'bg-green-500/70 text-white shadow-none'
+                  ? 'bg-status-success/14 text-status-success border border-status-success/35 shadow-none'
                   : status === Status.Error
-                    ? 'bg-red-500/20 text-red-400 shadow-none'
+                    ? 'bg-status-error/14 text-status-error border border-status-error/35 shadow-none'
                     : status === Status.Cancelled
-                      ? 'bg-yellow-500/20 text-yellow-400 shadow-none'
+                      ? 'bg-status-warning/14 text-status-warning border border-status-warning/35 shadow-none'
                       : ''
           }`}
           disabled={isCancelling || (status !== Status.Exporting && !canExport)}

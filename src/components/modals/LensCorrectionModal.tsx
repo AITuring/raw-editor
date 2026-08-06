@@ -14,6 +14,7 @@ import {
   SquareDashed,
   CircleDashed,
   Activity,
+  TriangleAlert,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Button from '../ui/Button';
@@ -623,27 +624,39 @@ export default function LensCorrectionModal({
             </Text>
             <div className="space-y-3">
               <div
-                className={clsx(
-                  'w-full flex items-center justify-center gap-2 px-3 py-3 text-sm font-semibold rounded-md border',
+                aria-live="polite"
+                className="semantic-status semantic-status--panel text-sm font-medium"
+                data-tone={
                   detectionStatus === 'not_found'
-                    ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                    : params.lensMaker
-                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                      : 'bg-surface text-text-secondary border-surface',
-                )}
+                    ? 'warning'
+                    : params.lensMaker && params.lensModel
+                      ? 'success'
+                      : 'processing'
+                }
+                role="status"
               >
                 {detectionStatus === 'detecting' ? (
                   <>
                     <Loader size={16} className="animate-spin" /> {t('modals.lensCorrection.detectingExif')}
                   </>
                 ) : detectionStatus === 'not_found' ? (
-                  t('modals.lensCorrection.lensProfileNotFound')
+                  <>
+                    <TriangleAlert aria-hidden="true" size={16} />
+                    <span>{t('modals.lensCorrection.lensProfileNotFound')}</span>
+                  </>
                 ) : params.lensMaker && params.lensModel ? (
                   <>
-                    <Check size={16} /> {params.lensMaker} - {params.lensModel}
+                    <Check aria-hidden="true" size={16} />
+                    <span>{t('modals.lensCorrection.lensFound')}</span>
+                    <strong className="semantic-status__result">
+                      {params.lensMaker} — {params.lensModel}
+                    </strong>
                   </>
                 ) : (
-                  t('modals.lensCorrection.waitingAutoDetect')
+                  <>
+                    <span aria-hidden="true" className="semantic-status__dot" />
+                    <span>{t('modals.lensCorrection.waitingAutoDetect')}</span>
+                  </>
                 )}
               </div>
             </div>

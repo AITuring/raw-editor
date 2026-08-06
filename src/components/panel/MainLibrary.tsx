@@ -560,7 +560,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                   }
                 }}
               >
-                {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-text-secondary shrink-0" />}
+                {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-status-info shrink-0" />}
                 <div
                   className={`flex items-center transition-[max-width,opacity] duration-300 ease-out overflow-hidden ${
                     isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
@@ -578,7 +578,14 @@ export default function MainLibrary(props: MainLibraryProps) {
         </div>
         <div className="flex items-center gap-4 shrink-0">
           {props.importState.status === Status.Importing && (
-            <Text as="div" color={TextColors.accent} className="flex items-center gap-2 animate-pulse">
+            <Text
+              aria-live="polite"
+              as="div"
+              color={TextColors.info}
+              className="semantic-status"
+              data-tone="processing"
+              role="status"
+            >
               <FolderInput size={16} />
               <span>
                 {t('library.import.progress', {
@@ -589,13 +596,27 @@ export default function MainLibrary(props: MainLibraryProps) {
             </Text>
           )}
           {props.importState.status === Status.Success && (
-            <Text as="div" color={TextColors.success} className="flex items-center gap-2">
+            <Text
+              aria-live="polite"
+              as="div"
+              color={TextColors.success}
+              className="semantic-status"
+              data-tone="success"
+              role="status"
+            >
               <Check size={16} />
               <span>{t('library.import.complete')}</span>
             </Text>
           )}
           {props.importState.status === Status.Error && (
-            <Text as="div" color={TextColors.error} className="flex items-center gap-2">
+            <Text
+              aria-live="assertive"
+              as="div"
+              color={TextColors.error}
+              className="semantic-status"
+              data-tone="error"
+              role="status"
+            >
               <AlertTriangle size={16} />
               <span>{t('library.import.failed')}</span>
             </Text>

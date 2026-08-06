@@ -126,7 +126,7 @@ export default function ExportPresetsList({
                 onClick={handleOverwritePreset}
                 disabled={isSaved}
                 className={`p-2 bg-surface hover:bg-card-active rounded-md transition-colors ${
-                  isSaved ? 'text-green-500' : 'text-text-secondary'
+                  isSaved ? 'text-status-success' : 'text-text-secondary'
                 }`}
                 data-tooltip={isSaved ? t('ui.exportPresets.savedTooltip') : t('ui.exportPresets.overwriteTooltip')}
               >
@@ -134,7 +134,7 @@ export default function ExportPresetsList({
               </button>
               <button
                 onClick={handleDeletePreset}
-                className="p-2 bg-surface hover:bg-red-500/20 hover:text-red-500 rounded-md text-text-secondary transition-colors"
+                className="p-2 bg-surface hover:bg-status-error/20 hover:text-status-error rounded-md text-text-secondary transition-colors"
                 data-tooltip={t('ui.exportPresets.deleteTooltip')}
               >
                 <Trash2 size={18} />

@@ -357,7 +357,7 @@ export default function DenoiseModal({
       return (
         <div className="flex flex-col items-center justify-center py-10 h-[460px]">
           <div className="flex items-center justify-center mb-6">
-            <XCircle className="w-12 h-12 text-red-500" />
+            <XCircle className="w-12 h-12 text-status-error" />
           </div>
           <Text variant={TextVariants.title} className="mb-2 text-center">
             {t('modals.denoise.processingFailed')}
@@ -502,8 +502,9 @@ export default function DenoiseModal({
               <Text
                 as="div"
                 variant={TextVariants.small}
-                color={TextColors.accent}
-                className="mt-2 flex items-center gap-1.5 leading-tight"
+                color={TextColors.warning}
+                className="semantic-status mt-2 leading-tight"
+                data-tone="warning"
                 aria-live="polite"
                 role="status"
               >

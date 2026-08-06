@@ -15,6 +15,7 @@ interface TaskProgressProps {
   label?: ReactNode;
   showPercentage?: boolean;
   total?: number | null;
+  tone?: 'processing' | 'success' | 'warning' | 'error' | 'neutral';
   value?: number | null;
 }
 
@@ -30,6 +31,7 @@ export default function TaskProgress({
   label,
   showPercentage = true,
   total,
+  tone = 'processing',
   value,
 }: TaskProgressProps) {
   const explicitValue = typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -47,6 +49,7 @@ export default function TaskProgress({
     <div
       className={clsx('task-progress', compact && 'task-progress--compact', className)}
       data-state={isDeterminate ? 'determinate' : 'indeterminate'}
+      data-tone={tone}
     >
       {(label || meta) && (
         <div className="task-progress__header">

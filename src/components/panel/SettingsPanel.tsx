@@ -174,7 +174,7 @@ const KeybindRow = ({
     <div className="flex justify-between items-center py-2">
       <Text variant={TextVariants.label}>{t(def.description as any)}</Text>
       <div className="flex items-center gap-1">
-        {isConflicting && <span className="text-yellow-400 text-xs">⚠</span>}
+        {isConflicting && <span className="text-status-warning text-xs">⚠</span>}
         <button onClick={() => onStartRecording(def.action)} className="flex items-center gap-1 flex-wrap shrink-0">
           {recording ? (
             <Text
@@ -1140,7 +1140,7 @@ export default function SettingsPanel({
                               </div>
                               <button
                                 onClick={() => handleRemoveLens(index)}
-                                className="p-2 text-text-secondary hover:text-red-400 hover:bg-bg-primary rounded-md transition-colors"
+                                className="p-2 text-text-secondary hover:text-status-error hover:bg-bg-primary rounded-md transition-colors"
                                 data-tooltip={t('settings.lenses.removeTooltip')}
                               >
                                 <Trash2 size={16} />
@@ -1262,7 +1262,7 @@ export default function SettingsPanel({
                                       <button
                                         onClick={() => onSettingsChange({ ...appSettings, customAiTags: [] })}
                                         disabled={customAiTags.length === 0}
-                                        className="p-2 text-text-secondary hover:text-red-400 hover:bg-surface rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
+                                        className="p-2 text-text-secondary hover:text-status-error hover:bg-surface rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
                                         data-tooltip={t('settings.tagging.clearCustomTooltip')}
                                       >
                                         <Trash2 size={18} />
@@ -1340,7 +1340,7 @@ export default function SettingsPanel({
                             <button
                               onClick={() => onSettingsChange({ ...appSettings, taggingShortcuts: [] })}
                               disabled={taggingShortcuts.length === 0}
-                              className="p-2 text-text-secondary hover:text-red-400 hover:bg-surface rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
+                              className="p-2 text-text-secondary hover:text-status-error hover:bg-surface rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
                               data-tooltip={t('settings.tagging.clearShortcutsTooltip')}
                             >
                               <Trash2 size={18} />
@@ -1395,8 +1395,7 @@ export default function SettingsPanel({
                         [THIRD_PARTY_DISPLAY_NAMES.darktable, t('settings.thanks.list.darktable')],
                       ].map(([name, description]) => (
                         <li key={name}>
-                          <span className="font-semibold text-accent">{name}</span>:{' '}
-                          {description}
+                          <span className="font-semibold text-accent">{name}</span>: {description}
                         </li>
                       ))}
                       <li>
@@ -1684,9 +1683,12 @@ export default function SettingsPanel({
                       {restartRequired && (
                         <>
                           <Text
+                            aria-live="polite"
                             as="div"
                             color={TextColors.info}
-                            className="p-3 bg-blue-900/10 border border-blue-500/50 rounded-lg flex items-center gap-3"
+                            className="semantic-status semantic-status--panel semantic-status--leading"
+                            data-tone="info"
+                            role="status"
                           >
                             <Info size={18} />
                             <p>{t('settings.processing.restartRequired')}</p>

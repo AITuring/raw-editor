@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "Choose lens profile",
+      "defringe": "Defringe",
       "lensProfile": "Lens Profile",
+      "lensVignetting": "Lens vignetting",
       "profile": "Profile",
       "removeChromaticAberration": "Remove chromatic aberration",
       "useProfileCorrections": "Use profile corrections"

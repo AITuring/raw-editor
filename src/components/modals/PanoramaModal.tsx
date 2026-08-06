@@ -100,7 +100,7 @@ export default function PanoramaModal({
       return (
         <div className="flex flex-col items-center justify-center py-10 h-[460px]">
           <div className="flex items-center justify-center mb-6">
-            <XCircle className="w-12 h-12 text-red-500" />
+            <XCircle className="w-12 h-12 text-status-error" />
           </div>
           <Text variant={TextVariants.title} className="mb-2 text-center">
             {t('modals.panorama.failed')}

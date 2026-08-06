@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "Wybierz profil obiektywu",
+      "defringe": "Usuwanie obwódek",
       "lensProfile": "Profil obiektywu",
+      "lensVignetting": "Winietowanie obiektywu",
       "profile": "Profil",
       "removeChromaticAberration": "Usuń aberrację chromatyczną",
       "useProfileCorrections": "Użyj korekcji profilu"

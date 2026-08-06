@@ -199,7 +199,7 @@ function MenuItem({ option, path, hideContextMenu }: MenuItemProps) {
         className={`
           w-full text-left px-3 py-2 text-sm rounded-md flex items-center gap-3 justify-between
           transition-colors duration-150
-          ${option.isDestructive ? 'text-red-400 hover:bg-red-500/20' : 'text-text-primary hover:bg-bg-primary'}
+          ${option.isDestructive ? 'text-status-error hover:bg-status-error/20' : 'text-text-primary hover:bg-bg-primary'}
           ${option.disabled ? 'text-text-secondary bg-transparent cursor-not-allowed' : ''}
         `}
         disabled={option.disabled}

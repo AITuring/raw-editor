@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "Выбрать профиль объектива",
+      "defringe": "Устранение каймы",
       "lensProfile": "Профиль объектива",
+      "lensVignetting": "Виньетирование объектива",
       "profile": "Профиль",
       "removeChromaticAberration": "Удалить хроматическую аберрацию",
       "useProfileCorrections": "Использовать коррекции профиля"

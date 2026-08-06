@@ -1469,7 +1469,7 @@ function ContainerRow({
             {container.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
           <button
-            className="p-1 hover:text-red-500 text-text-secondary"
+            className="p-1 hover:text-status-error text-text-secondary"
             onClick={(e) => {
               e.stopPropagation();
               handleDelete(container.id);
@@ -1788,7 +1788,7 @@ function SubMaskRow({
           {subMask.visible ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
         <button
-          className="p-1 hover:text-red-500 text-text-secondary"
+          className="p-1 hover:text-status-error text-text-secondary"
           data-tooltip={t('editor.ai.actions.deleteComponent')}
           onClick={(e) => {
             e.stopPropagation();

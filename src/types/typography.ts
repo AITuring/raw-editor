@@ -1,6 +1,7 @@
 export type TextVariant = 'displayLarge' | 'display' | 'headline' | 'title' | 'heading' | 'body' | 'label' | 'small';
 export type TextWeight = 'bold' | 'semibold' | 'medium' | 'normal';
-export type TextColor = 'primary' | 'secondary' | 'accent' | 'button' | 'info' | 'success' | 'error' | 'white';
+export type TextColor =
+  'primary' | 'secondary' | 'accent' | 'button' | 'info' | 'success' | 'warning' | 'error' | 'white';
 
 export const TextWeights: Record<TextWeight, TextWeight> = {
   bold: 'bold',
@@ -15,6 +16,7 @@ export const TextColors: Record<TextColor, TextColor> = {
   button: 'button',
   info: 'info',
   success: 'success',
+  warning: 'warning',
   error: 'error',
   white: 'white',
 };
@@ -31,9 +33,10 @@ export const TEXT_COLOR_KEYS: Record<TextColor, string> = {
   secondary: 'text-text-secondary',
   accent: 'text-accent',
   button: 'text-button-text',
-  info: 'text-blue-400',
-  success: 'text-green-400',
-  error: 'text-red-400',
+  info: 'text-status-info',
+  success: 'text-status-success',
+  warning: 'text-status-warning',
+  error: 'text-status-error',
   white: 'text-white',
 };
 

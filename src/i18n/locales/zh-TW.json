@@ -161,7 +161,9 @@
     },
     "optics": {
       "chooseProfile": "選擇鏡頭描述檔",
+      "defringe": "去邊",
       "lensProfile": "鏡頭描述檔",
+      "lensVignetting": "鏡頭暈影",
       "profile": "描述檔",
       "removeChromaticAberration": "移除色差",
       "useProfileCorrections": "使用描述檔校正"
