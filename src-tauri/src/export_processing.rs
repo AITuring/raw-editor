@@ -38,6 +38,7 @@ use crate::lut_processing::{
     convert_image_to_cube_lut, generate_identity_lut_image, get_or_load_lut,
 };
 use crate::mask_generation::{MaskDefinition, generate_mask_bitmap};
+use crate::render_strategy::RenderTier;
 
 use crate::cache_utils::{calculate_full_job_hash, calculate_transform_hash};
 use crate::color_management::srgb_v4_profile;
@@ -442,6 +443,13 @@ fn process_image_for_export_pipeline(
     let (transformed_image, unscaled_crop_offset) =
         apply_all_transformations(Cow::Borrowed(base_image), js_adjustments);
     let (img_w, img_h) = transformed_image.dimensions();
+    log::info!(
+        "[{}] tier={} source={}x{}",
+        debug_tag,
+        RenderTier::FullResolutionExport.as_str(),
+        img_w,
+        img_h
+    );
 
     let mask_definitions: Vec<MaskDefinition> = js_adjustments
         .get("masks")

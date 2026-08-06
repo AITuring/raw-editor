@@ -36,6 +36,7 @@ mod panorama_utils;
 mod preset_converter;
 mod preview_protocol;
 mod raw_processing;
+mod render_strategy;
 mod sidecar_storage;
 mod tagging;
 mod tagging_utils;
@@ -92,6 +93,7 @@ use crate::mask_generation::{
     resolve_warped_image_for_masks,
 };
 use crate::preview_protocol::{encode_preview_patch, normalized_roi_to_pixels};
+use crate::render_strategy::{RenderTier, resolve_preview_render_tier};
 use crate::window_customizer::PinchZoomDisablePlugin;
 pub use adjustment_utils::*;
 pub use android_integration::*;
@@ -207,7 +209,53 @@ fn compute_full_transformed_res(
     };
 
     let (transformed_img, offset) = apply_all_transformations(patched_original_image, adjustments);
-    Ok((Arc::new(transformed_img.into_owned()), offset))
+    Ok((
+        transformed_image_into_arc(transformed_img, &loaded_image.image),
+        offset,
+    ))
+}
+
+fn transformed_image_into_arc<'a>(
+    image: Cow<'a, DynamicImage>,
+    original: &'a Arc<DynamicImage>,
+) -> Arc<DynamicImage> {
+    match image {
+        Cow::Borrowed(borrowed) if std::ptr::eq(borrowed, original.as_ref()) => {
+            Arc::clone(original)
+        }
+        Cow::Borrowed(borrowed) => Arc::new(borrowed.clone()),
+        Cow::Owned(owned) => Arc::new(owned),
+    }
+}
+
+#[cfg(test)]
+mod transformed_image_sharing_tests {
+    use super::{apply_all_transformations, transformed_image_into_arc};
+    use image::{DynamicImage, Rgb32FImage};
+    use std::borrow::Cow;
+    use std::sync::Arc;
+
+    #[test]
+    fn unchanged_full_resolution_images_reuse_the_decoded_arc() {
+        let original = Arc::new(DynamicImage::ImageRgb32F(Rgb32FImage::new(64, 48)));
+        let (unchanged, offset) =
+            apply_all_transformations(Cow::Borrowed(original.as_ref()), &serde_json::json!({}));
+        let shared = transformed_image_into_arc(unchanged, &original);
+
+        assert_eq!(offset, (0.0, 0.0));
+        assert!(Arc::ptr_eq(&shared, &original));
+    }
+
+    #[test]
+    fn owned_transform_results_keep_their_existing_allocation() {
+        let original = Arc::new(DynamicImage::ImageRgb32F(Rgb32FImage::new(64, 48)));
+        let transformed = DynamicImage::ImageRgb32F(Rgb32FImage::new(48, 64));
+        let shared = transformed_image_into_arc(Cow::Owned(transformed), &original);
+
+        assert!(!Arc::ptr_eq(&shared, &original));
+        assert_eq!(shared.width(), 48);
+        assert_eq!(shared.height(), 64);
+    }
 }
 
 #[tauri::command]
@@ -355,6 +403,7 @@ fn process_preview_job(
     mut adjustments_json: serde_json::Value,
     is_interactive: bool,
     target_resolution: Option<u32>,
+    requested_render_tier: Option<RenderTier>,
     roi: Option<(f32, f32, f32, f32)>,
     compute_waveform: bool,
     active_waveform_channel: Option<&str>,
@@ -378,17 +427,24 @@ fn process_preview_job(
 
     let default_preview_dim = settings.editor_preview_resolution.unwrap_or(1920);
     let preview_dim = target_resolution.unwrap_or(default_preview_dim);
+    let source_longest_edge = loaded_image.image.width().max(loaded_image.image.height());
+    let render_tier = resolve_preview_render_tier(
+        requested_render_tier,
+        is_interactive,
+        roi.is_some(),
+        preview_dim,
+        source_longest_edge,
+    )?;
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let native_display_enabled =
         prefer_native_display && settings.use_wgpu_renderer.unwrap_or(true);
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let native_display_enabled = false;
 
-    let has_roi = roi.is_some();
-    let (interactive_divisor, interactive_quality) = match live_quality {
-        "full" => (1.0_f32, 85_u8),
-        "performance" => (if has_roi { 1.8_f32 } else { 1.5_f32 }, 65_u8),
-        _ => (if has_roi { 1.4_f32 } else { 1.0_f32 }, 75_u8),
+    let interactive_quality = match live_quality {
+        "full" => 85_u8,
+        "performance" => 65_u8,
+        _ => 75_u8,
     };
 
     let mut cached_preview_lock = state.cached_preview.lock().unwrap();
@@ -396,12 +452,8 @@ fn process_preview_job(
     let base_valid = cached_preview_lock
         .as_ref()
         .is_some_and(|c| c.transform_hash == new_transform_hash && c.preview_dim == preview_dim);
-    let small_valid = base_valid
-        && cached_preview_lock
-            .as_ref()
-            .is_some_and(|c| c.interactive_divisor == interactive_divisor);
 
-    let (final_preview_base, scale_for_gpu, unscaled_crop_offset) = if base_valid {
+    let (processing_image, effective_scale, unscaled_crop_offset) = if base_valid {
         let cached = cached_preview_lock.as_ref().unwrap();
         (
             Arc::clone(&cached.image),
@@ -414,58 +466,31 @@ fn process_preview_job(
         generate_transformed_preview(&state, &loaded_image, &adjustments_clone, preview_dim)?
     };
 
-    let small_preview_base = if small_valid {
-        Arc::clone(&cached_preview_lock.as_ref().unwrap().small_image)
-    } else {
-        let small = if interactive_divisor > 1.0 {
-            let target_size = (preview_dim as f32 / interactive_divisor) as u32;
-            let (w, h) = final_preview_base.dimensions();
-            let (small_w, small_h) = if w > h {
-                let ratio = h as f32 / w as f32;
-                (target_size, (target_size as f32 * ratio) as u32)
-            } else {
-                let ratio = w as f32 / h as f32;
-                ((target_size as f32 * ratio) as u32, target_size)
-            };
-            Arc::new(image_processing::downscale_f32_image(
-                &final_preview_base,
-                small_w,
-                small_h,
-            ))
-        } else {
-            Arc::clone(&final_preview_base)
-        };
-
-        if is_interactive && base_valid {
-            *state.gpu_image_cache.lock().unwrap() = None;
-        }
-
-        small
-    };
-
     *cached_preview_lock = Some(CachedPreview {
-        image: Arc::clone(&final_preview_base),
-        small_image: Arc::clone(&small_preview_base),
+        image: Arc::clone(&processing_image),
         transform_hash: new_transform_hash,
-        scale: scale_for_gpu,
+        scale: effective_scale,
         unscaled_crop_offset,
         preview_dim,
-        interactive_divisor,
     });
 
     drop(cached_preview_lock);
 
-    let (processing_image, effective_scale, jpeg_quality) = if is_interactive {
-        let orig_w = final_preview_base.width() as f32;
-        let small_w = small_preview_base.width() as f32;
-        let scale_factor = if orig_w > 0.0 { small_w / orig_w } else { 1.0 };
-        let new_scale = scale_for_gpu * scale_factor;
-        (small_preview_base, new_scale, interactive_quality)
+    let jpeg_quality = if is_interactive {
+        interactive_quality
     } else {
-        (final_preview_base, scale_for_gpu, 94)
+        94
     };
 
     let (preview_width, preview_height) = processing_image.dimensions();
+    log::info!(
+        "[process_preview_job] tier={} target={} resolved={}x{} roi={}",
+        render_tier.as_str(),
+        preview_dim,
+        preview_width,
+        preview_height,
+        roi.is_some()
+    );
 
     let has_native_display = context
         .display
@@ -568,7 +593,6 @@ fn process_preview_job(
             return Ok(b"WGPU_RENDER".to_vec());
         }
 
-        let final_processed_image = Arc::new(final_processed_image);
         let final_rgba_image = match &*final_processed_image {
             DynamicImage::ImageRgba8(img) => img,
             _ => return Err("Expected Rgba8 image from GPU for encoding".to_string()),
@@ -714,6 +738,7 @@ fn start_preview_worker(app_handle: tauri::AppHandle) {
                 job.adjustments,
                 job.is_interactive,
                 job.target_resolution,
+                job.render_tier,
                 job.roi,
                 job.compute_waveform,
                 job.active_waveform_channel.as_deref(),
@@ -736,6 +761,7 @@ async fn apply_adjustments(
     js_adjustments: serde_json::Value,
     is_interactive: bool,
     target_resolution: Option<u32>,
+    render_tier: Option<RenderTier>,
     roi: Option<(f32, f32, f32, f32)>,
     compute_waveform: bool,
     active_waveform_channel: Option<String>,
@@ -751,6 +777,7 @@ async fn apply_adjustments(
                 adjustments: js_adjustments,
                 is_interactive,
                 target_resolution,
+                render_tier,
                 roi,
                 compute_waveform,
                 active_waveform_channel,
@@ -921,13 +948,16 @@ fn generate_original_transformed_preview(
 
     hydrate_adjustments(&state, &mut adjustments_clone);
 
-    let mut image_for_preview = loaded_image.image.as_ref().clone();
-    if loaded_image.is_raw {
-        apply_cpu_default_raw_processing(&mut image_for_preview);
-    }
+    let image_for_preview = if loaded_image.is_raw {
+        let mut raw_preview = loaded_image.image.as_ref().clone();
+        apply_cpu_default_raw_processing(&mut raw_preview);
+        Cow::Owned(raw_preview)
+    } else {
+        Cow::Borrowed(loaded_image.image.as_ref())
+    };
 
     let (transformed_full_res, _unscaled_crop_offset) =
-        apply_all_transformations(Cow::Borrowed(&image_for_preview), &adjustments_clone);
+        apply_all_transformations(image_for_preview, &adjustments_clone);
 
     let settings = load_settings(app_handle).unwrap_or_default();
     let default_dim = settings.editor_preview_resolution.unwrap_or(1920);
@@ -935,9 +965,13 @@ fn generate_original_transformed_preview(
 
     let (w, h) = transformed_full_res.dimensions();
     let transformed_image = if w > preview_dim || h > preview_dim {
-        downscale_f32_image(transformed_full_res.as_ref(), preview_dim, preview_dim)
+        Cow::Owned(downscale_f32_image(
+            transformed_full_res.as_ref(),
+            preview_dim,
+            preview_dim,
+        ))
     } else {
-        transformed_full_res.into_owned()
+        transformed_full_res
     };
 
     let (width, height) = transformed_image.dimensions();

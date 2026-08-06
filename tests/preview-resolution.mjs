@@ -17,6 +17,7 @@ const {
   calculateNormalizedPreviewViewport,
   calculateScreenSpacePreviewGeometry,
   calculatePreviewTargetResolution,
+  resolvePreviewRenderPlan,
   snapImageTranslationToDevicePixels,
 } = await import(`data:text/javascript;base64,${moduleSource}`);
 
@@ -141,4 +142,71 @@ assert.ok(Math.abs(snappedPhysicalY - Math.round(snappedPhysicalY)) < 1e-9);
 assert.ok(Math.abs(snapped.positionX - 13.17) <= 0.25);
 assert.ok(Math.abs(snapped.positionY + 8.36) <= 0.25);
 
-console.log('Validated physical-pixel preview resolution at fit, Retina 100%, and zoomed states.');
+const sixtyMegapixelSource = { width: 9504, height: 6336 };
+const rapidHigh = resolvePreviewRenderPlan({
+  requestedResolution: 9504,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: true,
+  hasViewportRoi: true,
+  editorPreviewResolution: 1920,
+  livePreviewQuality: 'high',
+});
+assert.deepEqual(rapidHigh, { tier: 'rapidPreview', targetResolution: 4752 });
+
+const rapidPerformance = resolvePreviewRenderPlan({
+  requestedResolution: 9504,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: true,
+  hasViewportRoi: true,
+  editorPreviewResolution: 1920,
+  livePreviewQuality: 'performance',
+});
+assert.deepEqual(rapidPerformance, { tier: 'rapidPreview', targetResolution: 3584 });
+
+const rapidFull = resolvePreviewRenderPlan({
+  requestedResolution: 9504,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: true,
+  hasViewportRoi: true,
+  editorPreviewResolution: 1920,
+  livePreviewQuality: 'full',
+});
+assert.deepEqual(rapidFull, { tier: 'rapidPreview', targetResolution: 9504 });
+
+const halfResolutionEdit = resolvePreviewRenderPlan({
+  requestedResolution: 5120,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: false,
+  hasViewportRoi: true,
+  editorPreviewResolution: 1920,
+});
+assert.deepEqual(halfResolutionEdit, { tier: 'halfResolutionEdit', targetResolution: 4752 });
+
+const fullResolutionRoi = resolvePreviewRenderPlan({
+  requestedResolution: 9504,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: false,
+  hasViewportRoi: true,
+  editorPreviewResolution: 1920,
+});
+assert.deepEqual(fullResolutionRoi, { tier: 'fullResolutionRoi', targetResolution: 9504 });
+
+const fullWithoutRoi = resolvePreviewRenderPlan({
+  requestedResolution: 9504,
+  originalSize: sixtyMegapixelSource,
+  isInteractive: false,
+  hasViewportRoi: false,
+  editorPreviewResolution: 1920,
+});
+assert.deepEqual(fullWithoutRoi, { tier: 'halfResolutionEdit', targetResolution: 4752 });
+
+const smallSourcePlan = resolvePreviewRenderPlan({
+  requestedResolution: 1920,
+  originalSize: { width: 1200, height: 900 },
+  isInteractive: false,
+  hasViewportRoi: false,
+  editorPreviewResolution: 1920,
+});
+assert.deepEqual(smallSourcePlan, { tier: 'halfResolutionEdit', targetResolution: 1200 });
+
+console.log('Validated rapid, half-resolution, and full-resolution ROI plans plus physical-pixel geometry.');

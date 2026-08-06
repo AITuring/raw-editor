@@ -106,17 +106,22 @@ npm run start            # Tauri 2 开发窗口
   编码 sRGB 合同；4 MiB profile 上限、Display P3 数值基线、畸形/缺失 profile 回退和 TIFF
   元数据解码器回归均有确定性内存测试。核心 WebView JPEG 预览、预设、LUT 与图库缩略图统一
   嵌入 sRGB v4 ICC，原生 WGPU 继续声明 sRGB surface 交由系统合成器映射到当前显示器。
+- ✅ 快速预览、半分辨率编辑、源像素级 ROI 和全分辨率导出现已成为显式四级合同；前端选择层级，
+  Rust 复核交互/ROI/源尺寸边界。预览缓存只保留单一目标底图，无蒙版使用 1×1 dummy texture，
+  活动蒙版逐层上传，分析结果与未变换原图通过 `Arc` 共享，消除多类整图重复缓冲。确定性 60MP
+  尺寸前后基线、限制和仍存在的峰值来源见 [`docs/render-strategy.md`](docs/render-strategy.md)。
 
 按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
 的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
 链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
-不冒充已经完成。下一阶段优先收敛快速预览、半分辨率编辑、100% ROI、全分辨率导出四级策略，
-并继续减少 CPU/GPU 重复缓冲与峰值内存。
+不冒充已经完成。四级渲染策略与首轮重复缓冲治理已经闭环；下一阶段优先推进全分辨率导出的
+tile-to-encoder 流式输出、GPU 高水位资源回收和可重复的合成大图性能 harness，继续降低尚存峰值。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
-`npm run preview-resolution:check`、`npm run build`、`cargo fmt --all -- --check`、
-`cargo check --lib`、42 项 Rust 单元/回归测试和严格 Clippy；唯一忽略的 Rust 验收项需要本地授权
+`npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run build`、
+`cargo fmt --all -- --check`、`cargo check --lib`、47 项 Rust 单元/回归测试和严格 Clippy；
+唯一忽略的 Rust 验收项需要本地授权
 RAW 文件。`git diff --check` 也保持通过。
 
 ## 1.0 范围

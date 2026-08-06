@@ -11,7 +11,7 @@ import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { parsePreviewResponse } from '../utils/previewProtocol';
 import { createImageObjectUrl } from '../utils/imageObjectUrl';
-import { calculatePreviewTargetResolution } from '../utils/previewResolution';
+import { calculatePreviewTargetResolution, resolvePreviewRenderPlan } from '../utils/previewResolution';
 import { BASIC_MODE } from '../basic/runtime';
 
 export function useImageProcessing(
@@ -176,12 +176,21 @@ export function useImageProcessing(
 
       const jobId = ++previewJobIdRef.current;
       const roi = calculateROI();
+      const renderPlan = resolvePreviewRenderPlan({
+        requestedResolution: targetRes ?? appSettings?.editorPreviewResolution ?? 1920,
+        originalSize,
+        isInteractive: dragging,
+        hasViewportRoi: roi !== null,
+        editorPreviewResolution: appSettings?.editorPreviewResolution,
+        livePreviewQuality: appSettings?.livePreviewQuality,
+      });
 
       try {
         const buffer: ArrayBuffer = await invoke(Invokes.ApplyAdjustments, {
           jsAdjustments: payload,
           isInteractive: dragging,
-          targetResolution: targetRes || null,
+          targetResolution: renderPlan.targetResolution,
+          renderTier: renderPlan.tier,
           roi: roi || null,
           computeWaveform: !!isWaveformVisible && !BASIC_MODE,
           activeWaveformChannel: BASIC_MODE ? null : activeWaveformChannelRef.current || null,
@@ -266,7 +275,17 @@ export function useImageProcessing(
         }
       }
     },
-    [selectedImage?.path, calculateROI, isWaveformVisible, setEditor, previewJobIdRef, latestRenderedJobIdRef],
+    [
+      selectedImage?.path,
+      calculateROI,
+      isWaveformVisible,
+      setEditor,
+      previewJobIdRef,
+      latestRenderedJobIdRef,
+      appSettings?.editorPreviewResolution,
+      appSettings?.livePreviewQuality,
+      originalSize,
+    ],
   );
 
   const flushPipeline = useCallback(() => {

@@ -11,6 +11,7 @@ use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
+use crate::render_strategy::MaskTexturePlan;
 use crate::{AppState, GpuImageCache};
 
 #[derive(Clone, Copy, Debug)]
@@ -537,6 +538,7 @@ pub struct GpuProcessor {
     main_pipeline: wgpu::ComputePipeline,
     adjustments_buffer: wgpu::Buffer,
     dummy_blur_view: wgpu::TextureView,
+    dummy_mask_view: wgpu::TextureView,
     dummy_lut_view: wgpu::TextureView,
     dummy_lut_sampler: wgpu::Sampler,
     ping_pong_view: wgpu::TextureView,
@@ -944,6 +946,25 @@ impl GpuProcessor {
         let dummy_blur_texture = device.create_texture(&dummy_texture_desc);
         let dummy_blur_view = dummy_blur_texture.create_view(&Default::default());
 
+        let dummy_mask_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Dummy Mask Texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let dummy_mask_view = dummy_mask_texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+
         let dummy_lut_texture = device.create_texture(&wgpu::TextureDescriptor {
             dimension: wgpu::TextureDimension::D3,
             ..dummy_texture_desc
@@ -1073,6 +1094,7 @@ impl GpuProcessor {
             main_pipeline,
             adjustments_buffer,
             dummy_blur_view,
+            dummy_mask_view,
             dummy_lut_view,
             dummy_lut_sampler,
             ping_pong_view,
@@ -1111,43 +1133,84 @@ impl GpuProcessor {
         });
         let out_width = bounds.width;
         let out_height = bounds.height;
-        let mask_layer_count = request.mask_bitmaps.len().clamp(2, MAX_MASKS) as u32;
-        let full_texture_size = wgpu::Extent3d {
+        let mask_plan = MaskTexturePlan::new(
             width,
             height,
-            depth_or_array_layers: mask_layer_count,
-        };
-        let buffer_size = (width as usize) * (height as usize) * (mask_layer_count as usize);
-        let mut mask_texture_data = Vec::with_capacity(buffer_size);
-        if request.mask_bitmaps.is_empty() {
-            mask_texture_data.resize(buffer_size, 0);
+            request.adjustments.mask_count as usize,
+            request.mask_bitmaps.len(),
+            MAX_MASKS,
+        );
+        let mask_texture_view = if mask_plan.use_dummy {
+            self.dummy_mask_view.clone()
         } else {
-            for mask_bitmap in request.mask_bitmaps.iter().take(MAX_MASKS) {
-                mask_texture_data.extend_from_slice(mask_bitmap.as_raw());
-            }
-            if mask_texture_data.len() < buffer_size {
-                mask_texture_data.resize(buffer_size, 0);
-            }
-        }
-        let mask_texture = device.create_texture_with_data(
-            queue,
-            &wgpu::TextureDescriptor {
-                label: Some("Full Mask Texture Array"),
-                size: full_texture_size,
+            let mask_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Active Mask Texture Array"),
+                size: wgpu::Extent3d {
+                    width: mask_plan.width,
+                    height: mask_plan.height,
+                    depth_or_array_layers: mask_plan.layers,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::R8Unorm,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
-            },
-            TextureDataOrder::MipMajor,
-            &mask_texture_data,
+            });
+
+            for (layer, mask_bitmap) in request
+                .mask_bitmaps
+                .iter()
+                .take(mask_plan.upload_layers as usize)
+                .enumerate()
+            {
+                if mask_bitmap.dimensions() != (width, height) {
+                    return Err(format!(
+                        "Mask layer {} dimensions {}x{} do not match render input {}x{}",
+                        layer,
+                        mask_bitmap.width(),
+                        mask_bitmap.height(),
+                        width,
+                        height
+                    ));
+                }
+
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &mask_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: 0,
+                            y: 0,
+                            z: layer as u32,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    mask_bitmap.as_raw(),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(width),
+                        rows_per_image: Some(height),
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+
+            mask_texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                ..Default::default()
+            })
+        };
+        log::debug!(
+            "Mask texture: {} layer(s), {} logical byte(s), {} uploaded layer(s)",
+            mask_plan.layers,
+            mask_plan.logical_texture_bytes(),
+            mask_plan.upload_layers
         );
-        let mask_texture_view = mask_texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
 
         let (lut_texture_view, lut_sampler) = if let Some(lut_arc) = &request.lut {
             let lut_data = &lut_arc.data;
@@ -1599,7 +1662,7 @@ pub fn process_and_get_dynamic_image(
     request: RenderRequest,
     caller_id: &str,
 ) -> Result<DynamicImage, String> {
-    process_and_get_dynamic_image_inner(
+    let shared = process_and_get_dynamic_image_inner(
         context,
         state,
         base_image,
@@ -1608,7 +1671,9 @@ pub fn process_and_get_dynamic_image(
         caller_id,
         false,
         None,
-    )
+    )?;
+    Arc::try_unwrap(shared)
+        .map_err(|_| "Unexpected shared GPU result in non-analytics render".to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1621,7 +1686,7 @@ pub fn process_and_get_dynamic_image_with_analytics(
     caller_id: &str,
     output_to_display: bool,
     analytics_config: Option<crate::AnalyticsConfig>,
-) -> Result<DynamicImage, String> {
+) -> Result<Arc<DynamicImage>, String> {
     process_and_get_dynamic_image_inner(
         context,
         state,
@@ -1644,7 +1709,7 @@ fn process_and_get_dynamic_image_inner(
     caller_id: &str,
     output_to_display: bool,
     analytics_config: Option<crate::AnalyticsConfig>,
-) -> Result<DynamicImage, String> {
+) -> Result<Arc<DynamicImage>, String> {
     let start_time = Instant::now();
     let (width, height) = base_image.dimensions();
     let device = &context.device;
@@ -1658,7 +1723,7 @@ fn process_and_get_dynamic_image_inner(
             height,
             max_dim
         );
-        return Ok(base_image.clone());
+        return Ok(Arc::new(base_image.clone()));
     }
 
     let mut processor_lock = state.gpu_processor.lock().unwrap();
@@ -1856,6 +1921,7 @@ fn process_and_get_dynamic_image_inner(
         queue.submit(Some(final_encoder.finish()));
     }
 
+    let mut immediate_analytics = None;
     if let Some(analytics) = analytics_config {
         if let Some(buffer) = async_readback_buffer {
             let output_buffer: wgpu::Buffer = buffer;
@@ -1914,20 +1980,7 @@ fn process_and_get_dynamic_image_inner(
                 }
             });
         } else {
-            let pixels_clone = processed_pixels.clone();
-            std::thread::spawn(move || {
-                if let Some(img_buf) =
-                    ImageBuffer::<Rgba<u8>, _>::from_raw(out_w, out_h, pixels_clone)
-                {
-                    let dynamic_img = DynamicImage::ImageRgba8(img_buf);
-                    let _ = analytics.sender.send(crate::AnalyticsJob {
-                        path: analytics.path,
-                        image: std::sync::Arc::new(dynamic_img),
-                        compute_waveform: analytics.compute_waveform,
-                        active_waveform_channel: analytics.active_waveform_channel,
-                    });
-                }
-            });
+            immediate_analytics = Some(analytics);
         }
     }
 
@@ -1978,7 +2031,7 @@ fn process_and_get_dynamic_image_inner(
             duration,
             fps
         );
-        return Ok(DynamicImage::new_rgba8(0, 0));
+        return Ok(Arc::new(DynamicImage::new_rgba8(0, 0)));
     }
 
     let duration = start_time.elapsed();
@@ -1996,5 +2049,16 @@ fn process_and_get_dynamic_image_inner(
 
     let img_buf = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(out_w, out_h, processed_pixels)
         .ok_or("Failed to create image buffer from GPU data")?;
-    Ok(DynamicImage::ImageRgba8(img_buf))
+    let shared_image = Arc::new(DynamicImage::ImageRgba8(img_buf));
+
+    if let Some(analytics) = immediate_analytics {
+        let _ = analytics.sender.send(crate::AnalyticsJob {
+            path: analytics.path,
+            image: Arc::clone(&shared_image),
+            compute_waveform: analytics.compute_waveform,
+            active_waveform_channel: analytics.active_waveform_channel,
+        });
+    }
+
+    Ok(shared_image)
 }

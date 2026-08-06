@@ -18,6 +18,7 @@ use crate::image_processing::GpuContext;
 use crate::launch_request::ExternalEditSession;
 use crate::lens_correction::LensDatabase;
 use crate::lut_processing::Lut;
+use crate::render_strategy::RenderTier;
 
 #[derive(Serialize, Deserialize)]
 pub struct WindowState {
@@ -39,12 +40,10 @@ pub struct LoadedImage {
 #[derive(Clone)]
 pub struct CachedPreview {
     pub image: Arc<DynamicImage>,
-    pub small_image: Arc<DynamicImage>,
     pub transform_hash: u64,
     pub scale: f32,
     pub unscaled_crop_offset: (f32, f32),
     pub preview_dim: u32,
-    pub interactive_divisor: f32,
 }
 
 pub struct GpuImageCache {
@@ -65,6 +64,7 @@ pub struct PreviewJob {
     pub adjustments: serde_json::Value,
     pub is_interactive: bool,
     pub target_resolution: Option<u32>,
+    pub render_tier: Option<RenderTier>,
     pub roi: Option<(f32, f32, f32, f32)>,
     pub compute_waveform: bool,
     pub active_waveform_channel: Option<String>,

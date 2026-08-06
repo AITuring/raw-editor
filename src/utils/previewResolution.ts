@@ -14,6 +14,22 @@ export interface PreviewResolutionOptions {
   devicePixelRatio?: number;
 }
 
+export type RenderTier = 'rapidPreview' | 'halfResolutionEdit' | 'fullResolutionRoi' | 'fullResolutionExport';
+
+export interface PreviewRenderPlanOptions {
+  requestedResolution: number;
+  originalSize: PreviewSize;
+  isInteractive: boolean;
+  hasViewportRoi: boolean;
+  editorPreviewResolution?: number;
+  livePreviewQuality?: string;
+}
+
+export interface PreviewRenderPlan {
+  tier: Exclude<RenderTier, 'fullResolutionExport'>;
+  targetResolution: number;
+}
+
 export interface DevicePixelTranslationOptions {
   positionX: number;
   positionY: number;
@@ -119,6 +135,65 @@ export function calculatePreviewTargetResolution({
   }
 
   return Math.ceil(target / RESOLUTION_BUCKET) * RESOLUTION_BUCKET;
+}
+
+/**
+ * Converts a display-resolution request into one of the editor's explicit
+ * render tiers. Large settled previews stop at half source resolution until a
+ * viewport reaches source-pixel detail; only that viewport is then processed
+ * as a full-resolution ROI. Export owns the fourth tier and never enters this
+ * preview-only resolver.
+ */
+export function resolvePreviewRenderPlan({
+  requestedResolution,
+  originalSize,
+  isInteractive,
+  hasViewportRoi,
+  editorPreviewResolution = 1920,
+  livePreviewQuality = 'high',
+}: PreviewRenderPlanOptions): PreviewRenderPlan {
+  const sourceLongest = longestEdge(originalSize);
+  const configuredBase = Math.max(MIN_PREVIEW_DIMENSION, finitePositive(editorPreviewResolution, 1920));
+  const requested = Math.max(MIN_PREVIEW_DIMENSION, finitePositive(requestedResolution, configuredBase));
+  const sourceBoundRequest = sourceLongest > 0 ? Math.min(requested, sourceLongest) : requested;
+  const halfResolutionCeiling =
+    sourceLongest > 0
+      ? Math.min(sourceLongest, Math.max(Math.min(configuredBase, sourceLongest), sourceLongest / 2))
+      : sourceBoundRequest;
+
+  const bucketAndClamp = (value: number, ceiling = sourceLongest > 0 ? sourceLongest : Number.POSITIVE_INFINITY) => {
+    const bucketed = Math.ceil(Math.max(MIN_PREVIEW_DIMENSION, value) / RESOLUTION_BUCKET) * RESOLUTION_BUCKET;
+    return Math.round(Math.min(bucketed, ceiling));
+  };
+
+  if (isInteractive) {
+    let rapidTarget = sourceBoundRequest;
+    if (livePreviewQuality === 'performance') {
+      rapidTarget = Math.min(sourceBoundRequest / 1.5, halfResolutionCeiling * 0.75);
+    } else if (livePreviewQuality !== 'full') {
+      rapidTarget = Math.min(sourceBoundRequest, halfResolutionCeiling);
+    }
+
+    return {
+      tier: 'rapidPreview',
+      targetResolution: bucketAndClamp(
+        rapidTarget,
+        livePreviewQuality === 'full' ? sourceBoundRequest : halfResolutionCeiling,
+      ),
+    };
+  }
+
+  if (hasViewportRoi && sourceLongest > 0 && sourceBoundRequest >= sourceLongest) {
+    return {
+      tier: 'fullResolutionRoi',
+      targetResolution: Math.round(sourceLongest),
+    };
+  }
+
+  return {
+    tier: 'halfResolutionEdit',
+    targetResolution: bucketAndClamp(Math.min(sourceBoundRequest, halfResolutionCeiling), halfResolutionCeiling),
+  };
 }
 
 /** Returns the bitmap's viewport geometry after applying the editor transform. */
