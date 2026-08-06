@@ -942,8 +942,18 @@ fn generate_original_transformed_preview(
     let (width, height) = transformed_image.dimensions();
     let rgb_pixels = transformed_image.to_rgb8().into_vec();
 
+    let is_full_resolution = preview_dim >= w.max(h);
+    let encode_quality = if is_full_resolution { 100 } else { 94 };
+    let chroma_subsampling = if is_full_resolution {
+        Subsampling::S444
+    } else {
+        Subsampling::S420
+    };
+
     let bytes = Encoder::new(Preset::BaselineFastest)
-        .quality(80)
+        .quality(encode_quality)
+        .subsampling(chroma_subsampling)
+        .fast_color(true)
         .encode_rgb(&rgb_pixels, width, height)
         .map_err(|e| format!("Failed to encode with mozjpeg-rs: {}", e))?;
 

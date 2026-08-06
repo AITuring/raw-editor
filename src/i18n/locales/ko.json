@@ -1812,6 +1812,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "이미지 {{total}}개 중 {{current}}개 선택됨",
+      "navigator": "탐색기",
       "tooltips": {
         "collapseFilmstrip": "필름스트립 접기",
         "copyPasteSettings": "설정 복사 및 붙여넣기",

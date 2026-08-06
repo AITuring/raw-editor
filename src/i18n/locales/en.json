@@ -1814,6 +1814,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} of {{total}} images selected",
+      "navigator": "Navigator",
       "tooltips": {
         "collapseFilmstrip": "Collapse Filmstrip",
         "copyPasteSettings": "Copy & Paste Settings",

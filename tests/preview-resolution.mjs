@@ -13,9 +13,12 @@ const bundled = await build({
   write: false,
 });
 const moduleSource = Buffer.from(bundled.outputFiles[0].contents).toString('base64');
-const { calculatePreviewTargetResolution, snapImageTranslationToDevicePixels } = await import(
-  `data:text/javascript;base64,${moduleSource}`
-);
+const {
+  calculateNormalizedPreviewViewport,
+  calculateScreenSpacePreviewGeometry,
+  calculatePreviewTargetResolution,
+  snapImageTranslationToDevicePixels,
+} = await import(`data:text/javascript;base64,${moduleSource}`);
 
 const source = { width: 5727, height: 7637 };
 const fit = { width: 768, height: 1024 };
@@ -80,6 +83,48 @@ const smallSourceResolution = calculatePreviewTargetResolution({
   devicePixelRatio: 2,
 });
 assert.equal(smallSourceResolution, 1200, 'preview requests must never exceed the available source detail');
+
+const fitScale = fit.width / source.width;
+const retina100TransformScale = 1 / (fitScale * 2);
+const retina100Geometry = calculateScreenSpacePreviewGeometry({
+  imageHeight: fit.height,
+  imageOffsetX: 7,
+  imageOffsetY: 11,
+  imageWidth: fit.width,
+  positionX: -300,
+  positionY: -420,
+  transformScale: retina100TransformScale,
+});
+assert.equal(
+  retina100Geometry.width * 2,
+  source.width,
+  'the settled screen-space layer must map one source pixel to one physical pixel at Retina 100%',
+);
+assert.equal(retina100Geometry.left, -300 + 7 * retina100TransformScale);
+assert.equal(retina100Geometry.top, -420 + 11 * retina100TransformScale);
+
+const navigatorViewport = calculateNormalizedPreviewViewport({
+  imageGeometry: { height: 2000, left: -500, top: -250, width: 3000 },
+  viewportHeight: 1000,
+  viewportWidth: 1500,
+});
+assert.deepEqual(navigatorViewport, {
+  height: 0.5,
+  isPannable: true,
+  left: 1 / 6,
+  top: 0.125,
+  width: 0.5,
+});
+
+assert.equal(
+  calculateNormalizedPreviewViewport({
+    imageGeometry: { height: 800, left: 100, top: 100, width: 1200 },
+    viewportHeight: 1000,
+    viewportWidth: 1400,
+  }).isPannable,
+  false,
+  'the navigator must stay hidden when the full image fits in the editor',
+);
 
 const snapped = snapImageTranslationToDevicePixels({
   positionX: 13.17,

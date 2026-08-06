@@ -1812,6 +1812,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "已选择 {{current}} / {{total}} 张图像",
+      "navigator": "导航器",
       "tooltips": {
         "collapseFilmstrip": "折叠胶片条",
         "copyPasteSettings": "复制与粘贴设置",

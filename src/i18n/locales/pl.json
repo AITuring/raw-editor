@@ -1880,6 +1880,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "Zaznaczono {{current}} z {{total}} obrazów",
+      "navigator": "Nawigator",
       "tooltips": {
         "collapseFilmstrip": "Zwiń pasek z klatkami",
         "copyPasteSettings": "Kopiuj i Wklej Ustawienia",

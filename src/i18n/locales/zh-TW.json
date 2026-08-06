@@ -1812,6 +1812,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "已選擇 {{current}} / {{total}} 張影像",
+      "navigator": "導覽器",
       "tooltips": {
         "collapseFilmstrip": "摺疊膠片條",
         "copyPasteSettings": "複製與貼上設定",

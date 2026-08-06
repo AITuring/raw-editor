@@ -23,6 +23,37 @@ export interface DevicePixelTranslationOptions {
   devicePixelRatio?: number;
 }
 
+export interface ScreenSpacePreviewGeometryOptions {
+  imageHeight: number;
+  imageOffsetX: number;
+  imageOffsetY: number;
+  imageWidth: number;
+  positionX: number;
+  positionY: number;
+  transformScale: number;
+}
+
+export interface ScreenSpacePreviewGeometry {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}
+
+export interface NormalizedPreviewViewport {
+  height: number;
+  isPannable: boolean;
+  left: number;
+  top: number;
+  width: number;
+}
+
+export interface PreviewViewportOptions {
+  imageGeometry: ScreenSpacePreviewGeometry;
+  viewportHeight: number;
+  viewportWidth: number;
+}
+
 const MIN_PREVIEW_DIMENSION = 512;
 const RESOLUTION_BUCKET = 256;
 const FIT_ZOOM_EPSILON = 0.01;
@@ -88,6 +119,53 @@ export function calculatePreviewTargetResolution({
   }
 
   return Math.ceil(target / RESOLUTION_BUCKET) * RESOLUTION_BUCKET;
+}
+
+/** Returns the bitmap's viewport geometry after applying the editor transform. */
+export function calculateScreenSpacePreviewGeometry({
+  imageHeight,
+  imageOffsetX,
+  imageOffsetY,
+  imageWidth,
+  positionX,
+  positionY,
+  transformScale,
+}: ScreenSpacePreviewGeometryOptions): ScreenSpacePreviewGeometry {
+  const scale = finitePositive(transformScale, 1);
+
+  return {
+    height: Math.max(0, imageHeight) * scale,
+    left: positionX + imageOffsetX * scale,
+    top: positionY + imageOffsetY * scale,
+    width: Math.max(0, imageWidth) * scale,
+  };
+}
+
+/** Maps the visible editor area to a normalized rectangle for the navigator. */
+export function calculateNormalizedPreviewViewport({
+  imageGeometry,
+  viewportHeight,
+  viewportWidth,
+}: PreviewViewportOptions): NormalizedPreviewViewport {
+  const imageWidth = Math.max(0, imageGeometry.width);
+  const imageHeight = Math.max(0, imageGeometry.height);
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return { height: 1, isPannable: false, left: 0, top: 0, width: 1 };
+  }
+
+  const clamp01 = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+  const left = clamp01(-imageGeometry.left / imageWidth);
+  const top = clamp01(-imageGeometry.top / imageHeight);
+  const right = clamp01((Math.max(0, viewportWidth) - imageGeometry.left) / imageWidth);
+  const bottom = clamp01((Math.max(0, viewportHeight) - imageGeometry.top) / imageHeight);
+
+  return {
+    height: Math.max(0, bottom - top),
+    isPannable: imageWidth > viewportWidth + 0.5 || imageHeight > viewportHeight + 0.5,
+    left,
+    top,
+    width: Math.max(0, right - left),
+  };
 }
 
 /** Aligns the rendered image origin, rather than the outer transform layer, to

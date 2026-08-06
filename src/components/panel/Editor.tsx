@@ -11,6 +11,8 @@ import { Adjustments, AiPatch, MaskContainer } from '../../utils/adjustments';
 import { calculateCenteredCrop, rotateCropCenter } from '../../utils/cropUtils';
 import EditorToolbar from './editor/EditorToolbar';
 import ImageCanvas from './editor/ImageCanvas';
+import PreviewNavigator from './editor/PreviewNavigator';
+import ScreenSpacePreview from './editor/ScreenSpacePreview';
 import { Mask, SubMask } from './right/Masks';
 import { Panel, TransformState, Invokes } from '../ui/AppProperties';
 import { useEditorStore } from '../../store/useEditorStore';
@@ -20,7 +22,12 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
 import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
 import { createImageObjectUrl } from '../../utils/imageObjectUrl';
-import { snapImageTranslationToDevicePixels } from '../../utils/previewResolution';
+import {
+  calculateNormalizedPreviewViewport,
+  calculateScreenSpacePreviewGeometry,
+  ScreenSpacePreviewGeometry,
+  snapImageTranslationToDevicePixels,
+} from '../../utils/previewResolution';
 import { BASIC_MODE } from '../../basic/runtime';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
@@ -30,6 +37,9 @@ const parseRgb = (rgbStr: string): [number, number, number, number] => {
   }
   return [0, 0, 0, 1.0];
 };
+
+const TRANSFORM_SETTLE_DELAY_MS = 140;
+const PREVIEW_BAKE_FALLBACK_MS = 1000;
 
 const checkCropValid = (pixelCrop: Partial<Crop>, imageW: number, imageH: number, rotation: number) => {
   if (pixelCrop.x === undefined || pixelCrop.y === undefined || !pixelCrop.width || !pixelCrop.height) {
@@ -152,12 +162,17 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const screenPreviewRef = useRef<HTMLDivElement>(null);
+  const bakedScreenPreviewGeometryRef = useRef<ScreenSpacePreviewGeometry | null>(null);
+  const navigatorViewportRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
   const transformStateRef = useRef<TransformState>(transformState);
   const [isPanningState, setIsPanningState] = useState(false);
   const isClickAnimating = useRef(false);
   const clickAnimationTime = 250;
   const zoomDebounceTimeoutRef = useRef<number | null>(null);
+  const screenPreviewBakeTimeoutRef = useRef<number | null>(null);
+  const screenPreviewReadyFrameRef = useRef<number | null>(null);
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const savedZoomState = useRef<{ scale: number; positionX: number; positionY: number } | null>(null);
   const focalPointRef = useRef({ x: 0.5, y: 0.5 });
@@ -197,6 +212,12 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     () => () => {
       if (zoomDebounceTimeoutRef.current !== null) {
         window.clearTimeout(zoomDebounceTimeoutRef.current);
+      }
+      if (screenPreviewBakeTimeoutRef.current !== null) {
+        window.clearTimeout(screenPreviewBakeTimeoutRef.current);
+      }
+      if (screenPreviewReadyFrameRef.current !== null) {
+        cancelAnimationFrame(screenPreviewReadyFrameRef.current);
       }
       if (wheelSnapTimeout.current !== null) {
         window.clearTimeout(wheelSnapTimeout.current);
@@ -409,13 +430,135 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     [getTransformBounds],
   );
 
+  const getScreenPreviewGeometry = useCallback((state: TransformState) => {
+    const renderSize = imageRenderSizeRef.current;
+    if (renderSize.width <= 0 || renderSize.height <= 0) return null;
+
+    return calculateScreenSpacePreviewGeometry({
+      imageHeight: renderSize.height,
+      imageOffsetX: renderSize.offsetX,
+      imageOffsetY: renderSize.offsetY,
+      imageWidth: renderSize.width,
+      positionX: state.positionX,
+      positionY: state.positionY,
+      transformScale: state.scale,
+    });
+  }, []);
+
+  const updatePreviewNavigator = useCallback(
+    (state: TransformState) => {
+      const container = imageContainerRef.current;
+      const imageGeometry = getScreenPreviewGeometry(state);
+      if (!container || !imageGeometry) return;
+
+      const viewport = calculateNormalizedPreviewViewport({
+        imageGeometry,
+        viewportHeight: container.clientHeight,
+        viewportWidth: container.clientWidth,
+      });
+      const indicator = navigatorViewportRef.current;
+      if (indicator) {
+        indicator.style.left = `${viewport.left * 100}%`;
+        indicator.style.top = `${viewport.top * 100}%`;
+        indicator.style.width = `${viewport.width * 100}%`;
+        indicator.style.height = `${viewport.height * 100}%`;
+      }
+    },
+    [getScreenPreviewGeometry],
+  );
+
+  const bakeScreenPreview = useCallback(
+    (state: TransformState) => {
+      const element = screenPreviewRef.current;
+      const geometry = getScreenPreviewGeometry(state);
+      if (!element || !geometry) return;
+
+      element.style.left = `${geometry.left}px`;
+      element.style.top = `${geometry.top}px`;
+      element.style.width = `${geometry.width}px`;
+      element.style.height = `${geometry.height}px`;
+      element.style.transform = 'none';
+      element.style.transformOrigin = '0 0';
+      bakedScreenPreviewGeometryRef.current = geometry;
+    },
+    [getScreenPreviewGeometry],
+  );
+
+  const transformScreenPreview = useCallback(
+    (state: TransformState) => {
+      const element = screenPreviewRef.current;
+      const current = getScreenPreviewGeometry(state);
+      const baked = bakedScreenPreviewGeometryRef.current;
+      if (!element || !current) return;
+
+      if (!baked || baked.width <= 0 || baked.height <= 0) {
+        bakeScreenPreview(state);
+        return;
+      }
+
+      const scale = current.width / baked.width;
+      const translateX = current.left - baked.left;
+      const translateY = current.top - baked.top;
+      element.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${translateX}, ${translateY})`;
+    },
+    [bakeScreenPreview, getScreenPreviewGeometry],
+  );
+
+  const handleScreenPreviewReady = useCallback(
+    (isViewportPatch: boolean) => {
+      if (zoomDebounceTimeoutRef.current !== null) return;
+      if (transformStateRef.current.scale > 1.01 && !isViewportPatch) return;
+      if (screenPreviewBakeTimeoutRef.current !== null) {
+        window.clearTimeout(screenPreviewBakeTimeoutRef.current);
+        screenPreviewBakeTimeoutRef.current = null;
+      }
+      if (screenPreviewReadyFrameRef.current !== null) {
+        cancelAnimationFrame(screenPreviewReadyFrameRef.current);
+      }
+
+      screenPreviewReadyFrameRef.current = requestAnimationFrame(() => {
+        screenPreviewReadyFrameRef.current = requestAnimationFrame(() => {
+          screenPreviewReadyFrameRef.current = null;
+          bakeScreenPreview(transformStateRef.current);
+        });
+      });
+    },
+    [bakeScreenPreview],
+  );
+
+  useLayoutEffect(() => {
+    bakedScreenPreviewGeometryRef.current = null;
+    bakeScreenPreview(transformStateRef.current);
+    updatePreviewNavigator(transformStateRef.current);
+  }, [
+    bakeScreenPreview,
+    imageRenderSize.height,
+    imageRenderSize.offsetX,
+    imageRenderSize.offsetY,
+    imageRenderSize.width,
+    selectedImage?.path,
+    updatePreviewNavigator,
+  ]);
+
   const applyTransform = useCallback(
     (x: number, y: number, scale: number) => {
-      transformStateRef.current = { positionX: x, positionY: y, scale };
+      const nextTransform = { positionX: x, positionY: y, scale };
+      transformStateRef.current = nextTransform;
+
+      if (screenPreviewBakeTimeoutRef.current !== null) {
+        window.clearTimeout(screenPreviewBakeTimeoutRef.current);
+        screenPreviewBakeTimeoutRef.current = null;
+      }
+      if (screenPreviewReadyFrameRef.current !== null) {
+        cancelAnimationFrame(screenPreviewReadyFrameRef.current);
+        screenPreviewReadyFrameRef.current = null;
+      }
 
       if (contentRef.current) {
         contentRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
       }
+      transformScreenPreview(nextTransform);
+      updatePreviewNavigator(nextTransform);
 
       syncWgpuRef.current();
 
@@ -437,6 +580,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
       if (zoomDebounceTimeoutRef.current) clearTimeout(zoomDebounceTimeoutRef.current);
       zoomDebounceTimeoutRef.current = window.setTimeout(() => {
+        zoomDebounceTimeoutRef.current = null;
         let latest = transformStateRef.current;
         const renderSize = imageRenderSizeRef.current;
         const dpr = window.devicePixelRatio || 1;
@@ -461,6 +605,8 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           syncWgpuRef.current();
         }
 
+        transformScreenPreview(latest);
+
         setTransformState((previous) =>
           previous.scale === latest.scale &&
           previous.positionX === latest.positionX &&
@@ -469,9 +615,50 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             : latest,
         );
         handleZoomed(latest);
-      }, 72);
+        if (screenPreviewBakeTimeoutRef.current !== null) {
+          window.clearTimeout(screenPreviewBakeTimeoutRef.current);
+        }
+        screenPreviewBakeTimeoutRef.current = window.setTimeout(() => {
+          screenPreviewBakeTimeoutRef.current = null;
+          bakeScreenPreview(transformStateRef.current);
+        }, PREVIEW_BAKE_FALLBACK_MS);
+      }, TRANSFORM_SETTLE_DELAY_MS);
     },
-    [clampToBounds, handleZoomed],
+    [bakeScreenPreview, clampToBounds, handleZoomed, transformScreenPreview, updatePreviewNavigator],
+  );
+
+  const handleNavigatorNavigate = useCallback(
+    (normalizedX: number, normalizedY: number) => {
+      const container = imageContainerRef.current;
+      const renderSize = imageRenderSizeRef.current;
+      const current = transformStateRef.current;
+      if (!container || renderSize.width <= 0 || renderSize.height <= 0) return;
+
+      const targetX = container.clientWidth / 2 - (renderSize.offsetX + normalizedX * renderSize.width) * current.scale;
+      const targetY =
+        container.clientHeight / 2 - (renderSize.offsetY + normalizedY * renderSize.height) * current.scale;
+      const bounded = clampToBounds(targetX, targetY, current.scale);
+      applyTransform(bounded.x, bounded.y, bounded.scale);
+    },
+    [applyTransform, clampToBounds],
+  );
+
+  const handleNavigatorNudge = useCallback(
+    (deltaX: number, deltaY: number) => {
+      const container = imageContainerRef.current;
+      const imageGeometry = getScreenPreviewGeometry(transformStateRef.current);
+      if (!container || !imageGeometry) return;
+      const viewport = calculateNormalizedPreviewViewport({
+        imageGeometry,
+        viewportHeight: container.clientHeight,
+        viewportWidth: container.clientWidth,
+      });
+      handleNavigatorNavigate(
+        Math.min(1, Math.max(0, viewport.left + viewport.width / 2 + deltaX)),
+        Math.min(1, Math.max(0, viewport.top + viewport.height / 2 + deltaY)),
+      );
+    },
+    [getScreenPreviewGeometry, handleNavigatorNavigate],
   );
 
   const animateTransform = useCallback(
@@ -2025,6 +2212,9 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
   const isZoomActionActive = !isPanningDisabled;
   const isMaxZoom = transformState.scale >= maxScaleRef.current - 0.5;
+  const isPreviewNavigatorNeeded =
+    imageRenderSize.width * transformState.scale > imageRenderSize.containerWidth + 0.5 ||
+    imageRenderSize.height * transformState.scale > imageRenderSize.containerHeight + 0.5;
 
   let cursorStyle = 'default';
   if (isPanningState && isMiddleMousePanning.current) {
@@ -2121,9 +2311,23 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           </div>
         )}
 
+        <ScreenSpacePreview
+          finalPreviewUrl={finalPreviewUrl}
+          hidden={isCropping || isWgpuActive}
+          imagePath={selectedImage.path}
+          interactivePatch={interactivePatch ?? null}
+          isMaxZoom={isMaxZoom}
+          isSliderDragging={isSliderDragging}
+          onProcessedFrameReady={handleScreenPreviewReady}
+          ref={screenPreviewRef}
+          showOriginal={showOriginal}
+          thumbnailUrl={selectedImage.thumbnailUrl}
+          transformedOriginalUrl={transformedOriginalUrl}
+        />
+
         <div
           ref={contentRef}
-          className="editor-transform-layer w-full h-full flex items-center justify-center origin-top-left"
+          className="editor-transform-layer relative z-10 w-full h-full flex items-center justify-center origin-top-left"
           style={{
             transform: 'translate3d(0px, 0px, 0) scale(1)',
           }}
@@ -2174,10 +2378,27 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             cursorStyle={cursorStyle}
             isMaxZoom={isMaxZoom}
             liveRotation={liveRotation}
+            renderPreviewExternally
             transformState={transformState}
             hasRenderedFirstFrame={hasRenderedFirstFrame}
           />
         </div>
+
+        <PreviewNavigator
+          aspectRatio={imageRenderSize.height > 0 ? imageRenderSize.width / imageRenderSize.height : 1}
+          label={t('ui.bottomBar.navigator')}
+          onNavigate={handleNavigatorNavigate}
+          onNudge={handleNavigatorNudge}
+          previewUrl={finalPreviewUrl || selectedImage.thumbnailUrl}
+          viewportRef={navigatorViewportRef}
+          visible={isPreviewNavigatorNeeded && !isCropping && !isWgpuActive}
+          zoomPercent={Math.round(
+            imageRenderSize.scale *
+              transformState.scale *
+              (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1) *
+              100,
+          )}
+        />
       </div>
     </div>
   );

@@ -74,6 +74,7 @@ interface ImageCanvasProps {
   cursorStyle: string;
   isMaxZoom?: boolean;
   liveRotation?: number | null;
+  renderPreviewExternally?: boolean;
   transformState: { scale: number; positionX: number; positionY: number };
   hasRenderedFirstFrame: boolean;
 }
@@ -1183,6 +1184,7 @@ const ImageCanvas = memo(
     cursorStyle,
     isMaxZoom,
     liveRotation,
+    renderPreviewExternally = false,
     transformState,
     hasRenderedFirstFrame,
   }: ImageCanvasProps) => {
@@ -1298,12 +1300,14 @@ const ImageCanvas = memo(
     );
 
     useEffect(() => {
+      if (renderPreviewExternally) return;
       if (interactivePatch) {
         retainedPatchRef.current = interactivePatch;
       }
-    }, [interactivePatch]);
+    }, [interactivePatch, renderPreviewExternally]);
 
     useEffect(() => {
+      if (renderPreviewExternally) return;
       const newSrc = finalPreviewUrl || selectedImage.thumbnailUrl;
       const isNewImage = prevImageIdentityRef.current !== selectedImage.thumbnailUrl;
 
@@ -1345,7 +1349,7 @@ const ImageCanvas = memo(
           setIsFadingIn(false);
         }
       }
-    }, [finalPreviewUrl, selectedImage.thumbnailUrl, isSliderDragging]);
+    }, [finalPreviewUrl, selectedImage.thumbnailUrl, isSliderDragging, renderPreviewExternally]);
 
     useEffect(() => {
       setBaseTool(brushSettings?.tool ?? ToolType.Brush);
@@ -2494,6 +2498,7 @@ const ImageCanvas = memo(
     const isShowingOriginal = showOriginal && !!originalSrc;
 
     useEffect(() => {
+      if (renderPreviewExternally) return;
       if (!originalSrc) {
         setOriginalLoaded(false);
         return;
@@ -2512,7 +2517,7 @@ const ImageCanvas = memo(
       return () => {
         img.onload = null;
       };
-    }, [originalSrc]);
+    }, [originalSrc, renderPreviewExternally]);
 
     const currentTarget = finalPreviewUrl || selectedImage.thumbnailUrl;
     const baseIsReady = displayState.base === currentTarget && !displayState.fade;
@@ -2520,10 +2525,11 @@ const ImageCanvas = memo(
     const visiblePatch = interactivePatch ?? (baseIsReady ? null : retainedPatchRef.current);
 
     useEffect(() => {
+      if (renderPreviewExternally) return;
       if (baseIsReady && !interactivePatch) {
         retainedPatchRef.current = null;
       }
-    }, [baseIsReady, interactivePatch]);
+    }, [baseIsReady, interactivePatch, renderPreviewExternally]);
 
     const uncroppedImageRenderSize = useMemo<Partial<RenderSize> | null>(() => {
       if (!selectedImage?.width || !selectedImage?.height || !imageRenderSize?.width || !imageRenderSize?.height) {
@@ -2663,67 +2669,82 @@ const ImageCanvas = memo(
             }}
           >
             <div className="absolute inset-0 w-full h-full">
-              <svg
-                className="pointer-events-none"
-                style={
-                  imageRenderSize.width > 0 && imageRenderSize.height > 0
-                    ? {
-                        position: 'absolute',
-                        left: `${imageRenderSize.offsetX}px`,
-                        top: `${imageRenderSize.offsetY}px`,
-                        width: `${imageRenderSize.width}px`,
-                        height: `${imageRenderSize.height}px`,
-                        overflow: 'visible',
-                      }
-                    : {
-                        position: 'absolute',
-                        inset: '0px',
-                        width: '100%',
+              {!renderPreviewExternally && (
+                <div
+                  className="pointer-events-none"
+                  style={
+                    imageRenderSize.width > 0 && imageRenderSize.height > 0
+                      ? {
+                          height: `${imageRenderSize.height}px`,
+                          left: `${imageRenderSize.offsetX}px`,
+                          overflow: 'visible',
+                          position: 'absolute',
+                          top: `${imageRenderSize.offsetY}px`,
+                          width: `${imageRenderSize.width}px`,
+                        }
+                      : {
+                          height: '100%',
+                          inset: '0px',
+                          overflow: 'visible',
+                          position: 'absolute',
+                          width: '100%',
+                        }
+                  }
+                >
+                  {displayState.base && !isWgpuActive && (
+                    <img
+                      alt=""
+                      draggable={false}
+                      src={displayState.base}
+                      style={{
                         height: '100%',
-                        overflow: 'visible',
-                      }
-                }
-              >
-                {displayState.base && !isWgpuActive && (
-                  <image
-                    href={displayState.base}
-                    x="0"
-                    y="0"
-                    width="100%"
-                    height="100%"
-                    style={{ imageRendering: isMaxZoom ? 'pixelated' : 'auto' }}
-                  />
-                )}
+                        imageRendering: isMaxZoom ? 'pixelated' : 'auto',
+                        inset: 0,
+                        objectFit: 'fill',
+                        position: 'absolute',
+                        width: '100%',
+                      }}
+                    />
+                  )}
 
-                {displayState.fade && !isWgpuActive && (
-                  <image
-                    href={displayState.fade}
-                    x="0"
-                    y="0"
-                    width="100%"
-                    height="100%"
-                    style={{
-                      imageRendering: isMaxZoom ? 'pixelated' : 'auto',
-                      opacity: isFadingIn ? 1 : 0,
-                      transition: 'opacity 150ms ease-in-out',
-                    }}
-                  />
-                )}
+                  {displayState.fade && !isWgpuActive && (
+                    <img
+                      alt=""
+                      draggable={false}
+                      src={displayState.fade}
+                      style={{
+                        height: '100%',
+                        imageRendering: isMaxZoom ? 'pixelated' : 'auto',
+                        inset: 0,
+                        objectFit: 'fill',
+                        opacity: isFadingIn ? 1 : 0,
+                        position: 'absolute',
+                        transition: 'opacity 150ms ease-in-out',
+                        width: '100%',
+                      }}
+                    />
+                  )}
 
-                {visiblePatch && !isWgpuActive && (
-                  <image
-                    href={visiblePatch.url}
-                    x={`${visiblePatch.normX * 100}%`}
-                    y={`${visiblePatch.normY * 100}%`}
-                    width={`${visiblePatch.normW * 100}%`}
-                    height={`${visiblePatch.normH * 100}%`}
-                    preserveAspectRatio="none"
-                    style={{ imageRendering: isMaxZoom ? 'pixelated' : 'auto' }}
-                  />
-                )}
-              </svg>
+                  {visiblePatch && !isWgpuActive && (
+                    <img
+                      alt=""
+                      draggable={false}
+                      src={visiblePatch.url}
+                      style={{
+                        height: `${visiblePatch.normH * 100}%`,
+                        imageRendering: isMaxZoom ? 'pixelated' : 'auto',
+                        left: `${visiblePatch.normX * 100}%`,
+                        objectFit: 'fill',
+                        position: 'absolute',
+                        top: `${visiblePatch.normY * 100}%`,
+                        width: `${visiblePatch.normW * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+              )}
 
-              {originalSrc && (
+              {!renderPreviewExternally && originalSrc && (
                 <img
                   alt="Original"
                   className={
@@ -2735,14 +2756,15 @@ const ImageCanvas = memo(
                   style={
                     imageRenderSize.width > 0 && imageRenderSize.height > 0
                       ? {
-                          position: 'absolute',
-                          left: `${imageRenderSize.offsetX}px`,
-                          top: `${imageRenderSize.offsetY}px`,
-                          width: `${imageRenderSize.width}px`,
                           height: `${imageRenderSize.height}px`,
                           imageRendering: isMaxZoom ? 'pixelated' : 'auto',
+                          left: `${imageRenderSize.offsetX}px`,
+                          objectFit: 'fill',
                           opacity: isShowingOriginal && originalLoaded ? 1 : 0,
+                          position: 'absolute',
+                          top: `${imageRenderSize.offsetY}px`,
                           transition: originalLoaded ? 'opacity 150ms ease-in-out' : 'none',
+                          width: `${imageRenderSize.width}px`,
                           zIndex: 2,
                         }
                       : {

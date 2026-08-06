@@ -1880,6 +1880,7 @@
   "ui": {
     "bottomBar": {
       "imagesSelected": "Выбрано снимков: {{current}} из {{total}}",
+      "navigator": "Навигатор",
       "tooltips": {
         "collapseFilmstrip": "Свернуть ленту кадров",
         "copyPasteSettings": "Копирование и вставка настроек",
