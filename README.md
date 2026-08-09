@@ -49,6 +49,9 @@ ONNX Runtime 或公开模型到应用私有数据目录；推理由本机完成�
 
 本地运行：
 
+当前 Vite 8 构建支持 Node.js 20.19+ 或 22.12+ 的对应版本线；开发与 CI 推荐固定 Node.js 24 LTS，
+Node.js 21 不受支持。
+
 ```bash
 npm install
 npm run dev              # 仅启动 Vite 前端
@@ -70,7 +73,7 @@ npm run start            # Tauri 2 开发窗口
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
 
-### 当前进度（2026-08-06）
+### 当前进度（2026-08-09）
 
 当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。在暂不引入授权真实样片的前提下，
 本轮已完成：
@@ -113,19 +116,32 @@ npm run start            # Tauri 2 开发窗口
   Rust 复核交互/ROI/源尺寸边界。预览缓存只保留单一目标底图，无蒙版使用 1×1 dummy texture，
   活动蒙版逐层上传，分析结果与未变换原图通过 `Arc` 共享，消除多类整图重复缓冲。确定性 60MP
   尺寸前后基线、限制和仍存在的峰值来源见 [`docs/render-strategy.md`](docs/render-strategy.md)。
+- ✅ 无 resize、无 watermark 的 PNG/TIFF 全分辨率导出现由 WGPU tile 汇集为最多 2048 行的带状
+  缓冲并直接写入原生编码器，再通过同目录临时文件原子发布；取消或编码失败不会留下半张目标文件。
+  9504×6336 的最终 RGBA8 CPU 缓冲上限从 240,869,376 B 降至 77,856,768 B，减少 163,012,608 B。
+- ✅ CPU 回读型导出不再额外分配两张完整尺寸显示 texture；按 9728×6400 的 GPU 对齐尺寸计算，
+  两张 RGBA8 显示 surface 的逻辑占用减少 498,073,592 B。导出结束后，processor 与输入 texture
+  合计达到 512 MiB 高水位即主动回收；大尺寸显示 processor 切换到 CPU 导出时也会按滞回规则收缩。
+- ✅ 增加可重复的 9504×6336 合成大图编码基准 `npm run synthetic-export:bench`。在 Apple M2 Max、
+  32 GB、macOS 15.6.1 的本轮运行中，PNG 为 818 ms / 84,721,664 B 峰值 RSS，TIFF 为
+  164 ms / 87,523,328 B；基准实际分配 77,856,768 B 带状缓冲，但不包含 RAW 解码或 GPU 处理，
+  因而只证明 tile-to-encoder 的确定性内存边界，不代表 α7R V 画质或端到端性能。
 
 按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
 的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
 链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
-不冒充已经完成。四级渲染策略与首轮重复缓冲治理已经闭环；下一阶段优先推进全分辨率导出的
-tile-to-encoder 流式输出、GPU 高水位资源回收和可重复的合成大图性能 harness，继续降低尚存峰值。
+不冒充已经完成。四级渲染策略、PNG/TIFF tile-to-encoder 输出、GPU 高水位回收和合成大图 harness
+已经闭环。JPEG、WebP、JXL、AVIF，以及带 resize 或 watermark 的导出仍走完整帧路径；其中当前
+`mozjpeg-rs 0.9.2` 流式接口在 60MP 压力图样上会触发依赖内部位移溢出，因此 JPEG 明确保留稳定
+回退，不以小图通过掩盖风险。下一阶段优先为 JPEG 选择可验证的逐行编码器、让 resize/watermark
+进入分块管线，并在取得授权 α7R V 样片后补齐 RAW → GPU → 文件的端到端画质、耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run build`、
-`cargo fmt --all -- --check`、`cargo check --lib`、47 项 Rust 单元/回归测试和严格 Clippy；
-唯一忽略的 Rust 验收项需要本地授权
-RAW 文件。`git diff --check` 也保持通过。
+`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、`cargo check --lib`、54 项默认执行的
+Rust 单元/回归测试和严格 Clippy。默认忽略两项：一项需要本地授权 RAW，另一项是手动 60MP harness；
+本轮已分别用 PNG 和 TIFF 显式执行后者。`git diff --check` 也保持通过。
 
 ## 1.0 范围
 
@@ -261,18 +277,18 @@ RAW 解包
 
 ## 参考项目与使用边界
 
-| 项目 | 用途 | 使用方式 |
-| --- | --- | --- |
-| [RapidRAW](https://github.com/CyberTimon/RapidRAW) | 应用基础、WGPU 管线、蒙版、sidecar、图库和批处理 | 直接 fork，持续跟踪上游 |
-| [darktable](https://github.com/darktable-org/darktable) | scene-linear 管线、模块顺序、蒙版、缓存和回归思路 | 研究并按许可证记录可复用部分 |
-| [RawTherapee](https://github.com/RawTherapee/RawTherapee) | 去马赛克、高光恢复、锐化、降噪、细节处理 | 算法和画质参考 |
-| [ART](https://github.com/artraweditor/ART) | 在专业能力下控制 UI 复杂度 | 产品和交互参考 |
-| [LibRaw](https://github.com/LibRaw/LibRaw) | RAW 格式兼容性和元数据 | 作为候选后备解码器 |
-| [RawSpeed](https://github.com/darktable-org/rawspeed) | 高速 RAW 解包和 CFA/黑电平 | 作为候选解包层 |
-| [Lensfun](https://github.com/lensfun/lensfun) | 畸变、暗角和横向色差 | 直接依赖并保留数据库许可信息 |
-| [LittleCMS](https://github.com/mm2/Little-CMS) | ICC v2/v4 色彩管理 | 计划直接依赖 |
-| [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO) | ACES、LUT 和高级颜色空间 | 1.0 后评估 |
-| [OpenImageIO](https://github.com/AcademySoftwareFoundation/OpenImageIO) | 专业格式输入输出 | TIFF/EXR/JXL 需求扩大时评估 |
+| 项目                                                                    | 用途                                              | 使用方式                     |
+| ----------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------- |
+| [RapidRAW](https://github.com/CyberTimon/RapidRAW)                      | 应用基础、WGPU 管线、蒙版、sidecar、图库和批处理  | 直接 fork，持续跟踪上游      |
+| [darktable](https://github.com/darktable-org/darktable)                 | scene-linear 管线、模块顺序、蒙版、缓存和回归思路 | 研究并按许可证记录可复用部分 |
+| [RawTherapee](https://github.com/RawTherapee/RawTherapee)               | 去马赛克、高光恢复、锐化、降噪、细节处理          | 算法和画质参考               |
+| [ART](https://github.com/artraweditor/ART)                              | 在专业能力下控制 UI 复杂度                        | 产品和交互参考               |
+| [LibRaw](https://github.com/LibRaw/LibRaw)                              | RAW 格式兼容性和元数据                            | 作为候选后备解码器           |
+| [RawSpeed](https://github.com/darktable-org/rawspeed)                   | 高速 RAW 解包和 CFA/黑电平                        | 作为候选解包层               |
+| [Lensfun](https://github.com/lensfun/lensfun)                           | 畸变、暗角和横向色差                              | 直接依赖并保留数据库许可信息 |
+| [LittleCMS](https://github.com/mm2/Little-CMS)                          | ICC v2/v4 色彩管理                                | 计划直接依赖                 |
+| [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO) | ACES、LUT 和高级颜色空间                          | 1.0 后评估                   |
+| [OpenImageIO](https://github.com/AcademySoftwareFoundation/OpenImageIO) | 专业格式输入输出                                  | TIFF/EXR/JXL 需求扩大时评估  |
 
 本项目整体继续使用 AGPL-3.0。任何复制、移植或改写外部源码的工作开始前，都必须先把
 项目、文件、原许可证、修改内容和版权声明加入第三方许可证清单。不能因为整体已经是
@@ -468,8 +484,10 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 不复制 Camera Raw 的品牌、图标或界面；对齐的是工作流和摄影能力。
 - 每次发布附带支持机型、已知限制、性能基准、迁移说明和完整对应源代码。
 
-
 ## 目前的问题
+
 - 主区域放大缩小图片不跟手
 - 不稳定，导入图片正在调整，突然就自动回首页了
 - 样式效果都比camera raw差远了
+- JPEG、WebP、JXL、AVIF，以及带 resize/watermark 的导出尚未接入 tile-to-encoder，60MP 时仍有
+  完整帧峰值；这属于下一阶段的明确任务，不视为已经完成。

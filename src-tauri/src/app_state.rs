@@ -18,7 +18,7 @@ use crate::image_processing::GpuContext;
 use crate::launch_request::ExternalEditSession;
 use crate::lens_correction::LensDatabase;
 use crate::lut_processing::Lut;
-use crate::render_strategy::RenderTier;
+use crate::render_strategy::{GpuProcessorTexturePlan, RenderTier};
 
 #[derive(Serialize, Deserialize)]
 pub struct WindowState {
@@ -58,6 +58,19 @@ pub struct GpuProcessorState {
     pub processor: GpuProcessor,
     pub width: u32,
     pub height: u32,
+    pub display_width: u32,
+    pub display_height: u32,
+}
+
+impl GpuProcessorState {
+    pub fn texture_plan(&self) -> GpuProcessorTexturePlan {
+        GpuProcessorTexturePlan {
+            processing_width: self.width,
+            processing_height: self.height,
+            display_width: self.display_width,
+            display_height: self.display_height,
+        }
+    }
 }
 
 pub struct PreviewJob {

@@ -38,15 +38,33 @@ assert.doesNotMatch(gpuProcessing, /mask_texture_data/);
 assert.doesNotMatch(gpuProcessing, /processed_pixels\.clone\(\)/);
 assert.match(gpuProcessing, /Result<Arc<DynamicImage>, String>/);
 assert.match(gpuProcessing, /image: Arc::clone\(&shared_image\)/);
+assert.match(gpuProcessing, /process_and_stream_rgba_rows/);
+assert.match(gpuProcessing, /StreamingExportBufferPlan::new/);
+assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
+assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
+
+assert.match(exportProcessing, /supports_streaming_export/);
+assert.match(exportProcessing, /encode_streaming_png/);
+assert.match(exportProcessing, /encode_streaming_tiff/);
+assert.doesNotMatch(exportProcessing, /"jpg" \| "jpeg" => encode_streaming/);
+assert.match(exportProcessing, /create_temporary_export/);
+assert.match(exportProcessing, /NamedTempFile::new_in\(output_parent\)/);
+assert.match(exportProcessing, /temporary\.persist\(output_path\)/);
+assert.match(exportProcessing, /reclaim_gpu_resources_after_export\(&context/);
 
 const pixels = 9504 * 6336;
 const oldEmptyMaskBytes = pixels * 2;
 const oldAnalyticsCloneBytes = pixels * 4;
 const oldUnchangedRgb32fCloneBytes = pixels * 12;
+const oldFullExportRgbaBytes = pixels * 4;
+const streamedBandBytes = 9504 * 2048 * 4;
 assert.equal(oldEmptyMaskBytes, 120_434_688);
 assert.equal(oldAnalyticsCloneBytes, 240_869_376);
 assert.equal(oldUnchangedRgb32fCloneBytes, 722_608_128);
+assert.equal(oldFullExportRgbaBytes, 240_869_376);
+assert.equal(streamedBandBytes, 77_856_768);
+assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 
 console.log(
-  'Validated four render tiers and removal of duplicate preview, empty-mask, analytics, and unchanged-source buffers.',
+  'Validated four render tiers, bounded tile-to-encoder rows, CPU-only GPU textures, and export high-water reclamation.',
 );

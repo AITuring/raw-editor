@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard};
 use std::time::Instant;
 
 use half::f16;
@@ -11,7 +11,10 @@ use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
-use crate::render_strategy::MaskTexturePlan;
+use crate::render_strategy::{
+    GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuProcessorTexturePlan, MaskTexturePlan,
+    StreamingExportBufferPlan, should_reclaim_gpu_resources,
+};
 use crate::{AppState, GpuImageCache};
 
 #[derive(Clone, Copy, Debug)]
@@ -28,6 +31,18 @@ pub struct RenderRequest<'a> {
     pub lut: Option<Arc<Lut>>,
     pub roi: Option<Roi>,
 }
+
+type RgbaRowSink<'a> = dyn FnMut(&[u8]) -> Result<(), String> + 'a;
+
+enum GpuRenderOutput<'a> {
+    CpuImage,
+    NativeDisplay,
+    StreamRows(&'a mut RgbaRowSink<'a>),
+}
+
+type GpuProcessorGuard<'a> = MutexGuard<'a, Option<crate::GpuProcessorState>>;
+type GpuImageCacheGuard<'a> = MutexGuard<'a, Option<GpuImageCache>>;
+type LockedGpuResources<'a> = (GpuProcessorGuard<'a>, GpuImageCacheGuard<'a>);
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -558,7 +573,15 @@ pub struct GpuProcessor {
 const FLARE_MAP_SIZE: u32 = 512;
 
 impl GpuProcessor {
-    pub fn new(context: GpuContext, max_width: u32, max_height: u32) -> Result<Self, String> {
+    pub fn new(
+        context: GpuContext,
+        width: u32,
+        height: u32,
+        needs_native_display: bool,
+    ) -> Result<Self, String> {
+        let texture_plan = GpuProcessorTexturePlan::new(width, height, needs_native_display);
+        let max_width = texture_plan.processing_width;
+        let max_height = texture_plan.processing_height;
         let device = &context.device;
         const MAX_MASK_BINDINGS: u32 = 1;
 
@@ -972,11 +995,8 @@ impl GpuProcessor {
         let dummy_lut_view = dummy_lut_texture.create_view(&Default::default());
         let dummy_lut_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
-        const TILE_SIZE: u32 = 2048;
-        const TILE_OVERLAP: u32 = 128;
-
-        let clamped_tile_width = max_width.min(TILE_SIZE + TILE_OVERLAP * 2);
-        let clamped_tile_height = max_height.min(TILE_SIZE + TILE_OVERLAP * 2);
+        let clamped_tile_width = max_width.min(GPU_TILE_SIZE + GPU_TILE_OVERLAP * 2);
+        let clamped_tile_height = max_height.min(GPU_TILE_SIZE + GPU_TILE_OVERLAP * 2);
 
         let clamped_tile_size = wgpu::Extent3d {
             width: clamped_tile_width,
@@ -984,9 +1004,9 @@ impl GpuProcessor {
             depth_or_array_layers: 1,
         };
 
-        let full_image_size = wgpu::Extent3d {
-            width: max_width,
-            height: max_height,
+        let display_image_size = wgpu::Extent3d {
+            width: texture_plan.display_width,
+            height: texture_plan.display_height,
             depth_or_array_layers: 1,
         };
 
@@ -1047,7 +1067,7 @@ impl GpuProcessor {
 
         let working_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Working Output Texture"),
-            size: full_image_size,
+            size: display_image_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -1062,7 +1082,7 @@ impl GpuProcessor {
 
         let output_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Full Output Texture"),
-            size: full_image_size,
+            size: display_image_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -1111,15 +1131,18 @@ impl GpuProcessor {
         })
     }
 
-    pub fn run(
+    fn run(
         &self,
         input_texture_view: &wgpu::TextureView,
         width: u32,
         height: u32,
         request: RenderRequest,
-        skip_cpu_readback: bool,
-        output_to_display: bool,
+        mut output: GpuRenderOutput<'_>,
     ) -> Result<(Vec<u8>, u32, u32, u32, u32), String> {
+        let skip_cpu_readback = matches!(&output, GpuRenderOutput::NativeDisplay);
+        let output_to_display = skip_cpu_readback;
+        let stream_rows = matches!(&output, GpuRenderOutput::StreamRows(_));
+
         let device = &self.context.device;
         let queue = &self.context.queue;
         let scale = (width.min(height) as f32) / 1080.0;
@@ -1133,6 +1156,38 @@ impl GpuProcessor {
         });
         let out_width = bounds.width;
         let out_height = bounds.height;
+        if out_width == 0 || out_height == 0 {
+            return Err("GPU render bounds must have non-zero dimensions".to_string());
+        }
+        let bounds_right = bounds
+            .x
+            .checked_add(bounds.width)
+            .filter(|right| *right <= width)
+            .ok_or_else(|| {
+                format!(
+                    "GPU render bounds x={} width={} exceed input width={width}",
+                    bounds.x, bounds.width
+                )
+            })?;
+        let bounds_bottom = bounds
+            .y
+            .checked_add(bounds.height)
+            .filter(|bottom| *bottom <= height)
+            .ok_or_else(|| {
+                format!(
+                    "GPU render bounds y={} height={} exceed input height={height}",
+                    bounds.y, bounds.height
+                )
+            })?;
+        if stream_rows {
+            let stream_plan = StreamingExportBufferPlan::new(out_width, out_height);
+            log::info!(
+                "Streaming GPU output in bands of at most {} rows ({} logical bytes instead of {} full-frame bytes)",
+                stream_plan.band_rows,
+                stream_plan.band_rgba_bytes(),
+                stream_plan.legacy_full_rgba_bytes()
+            );
+        }
         let mask_plan = MaskTexturePlan::new(
             width,
             height,
@@ -1355,44 +1410,60 @@ impl GpuProcessor {
             queue.submit(Some(encoder.finish()));
         }
 
-        const TILE_SIZE: u32 = 2048;
-        const TILE_OVERLAP: u32 = 128;
-
+        let final_pixel_bytes = (out_width as usize)
+            .saturating_mul(out_height as usize)
+            .saturating_mul(4);
         let mut final_pixels = vec![
             0u8;
-            if skip_cpu_readback {
+            if skip_cpu_readback || stream_rows {
                 0
             } else {
-                (out_width * out_height * 4) as usize
+                final_pixel_bytes
             }
         ];
 
-        let start_tile_x = bounds.x / TILE_SIZE;
-        let start_tile_y = bounds.y / TILE_SIZE;
-        let end_tile_x = (bounds.x + bounds.width).div_ceil(TILE_SIZE);
-        let end_tile_y = (bounds.y + bounds.height).div_ceil(TILE_SIZE);
+        let start_tile_x = bounds.x / GPU_TILE_SIZE;
+        let start_tile_y = bounds.y / GPU_TILE_SIZE;
+        let end_tile_x = bounds_right.div_ceil(GPU_TILE_SIZE);
+        let end_tile_y = bounds_bottom.div_ceil(GPU_TILE_SIZE);
 
         for tile_y in start_tile_y..end_tile_y {
+            let band_y_start = (tile_y * GPU_TILE_SIZE).max(bounds.y);
+            let band_y_end = ((tile_y + 1) * GPU_TILE_SIZE)
+                .min(bounds_bottom)
+                .min(height);
+            let band_height = band_y_end.saturating_sub(band_y_start);
+            let mut streamed_band = vec![
+                0u8;
+                if stream_rows {
+                    (out_width as usize)
+                        .saturating_mul(band_height as usize)
+                        .saturating_mul(4)
+                } else {
+                    0
+                }
+            ];
+
             for tile_x in start_tile_x..end_tile_x {
-                let x_start_unclamped = tile_x * TILE_SIZE;
-                let y_start_unclamped = tile_y * TILE_SIZE;
+                let x_start_unclamped = tile_x * GPU_TILE_SIZE;
+                let y_start_unclamped = tile_y * GPU_TILE_SIZE;
 
                 let x_start = x_start_unclamped.max(bounds.x);
                 let y_start = y_start_unclamped.max(bounds.y);
-                let x_end = (x_start_unclamped + TILE_SIZE)
-                    .min(bounds.x + bounds.width)
+                let x_end = (x_start_unclamped + GPU_TILE_SIZE)
+                    .min(bounds_right)
                     .min(width);
-                let y_end = (y_start_unclamped + TILE_SIZE)
-                    .min(bounds.y + bounds.height)
+                let y_end = (y_start_unclamped + GPU_TILE_SIZE)
+                    .min(bounds_bottom)
                     .min(height);
 
                 let tile_width = x_end - x_start;
                 let tile_height = y_end - y_start;
 
-                let input_x_start = (x_start as i32 - TILE_OVERLAP as i32).max(0) as u32;
-                let input_y_start = (y_start as i32 - TILE_OVERLAP as i32).max(0) as u32;
-                let input_x_end = (x_end + TILE_OVERLAP).min(width);
-                let input_y_end = (y_end + TILE_OVERLAP).min(height);
+                let input_x_start = (x_start as i32 - GPU_TILE_OVERLAP as i32).max(0) as u32;
+                let input_y_start = (y_start as i32 - GPU_TILE_OVERLAP as i32).max(0) as u32;
+                let input_x_end = (x_end + GPU_TILE_OVERLAP).min(width);
+                let input_y_end = (y_end + GPU_TILE_OVERLAP).min(height);
                 let input_width = input_x_end - input_x_start;
                 let input_height = input_y_end - input_y_start;
 
@@ -1634,13 +1705,24 @@ impl GpuProcessor {
                     for row in 0..tile_height {
                         let final_y = y_start + row - bounds.y;
                         let final_x = x_start - bounds.x;
-                        let final_row_offset = (final_y * out_width + final_x) as usize * 4;
+                        let final_row_offset = if stream_rows {
+                            ((y_start + row - band_y_start) as usize * out_width as usize
+                                + final_x as usize)
+                                * 4
+                        } else {
+                            (final_y as usize * out_width as usize + final_x as usize) * 4
+                        };
                         let source_y = crop_y_start + row;
                         let source_row_offset =
                             (source_y * input_width + crop_x_start) as usize * 4;
                         let copy_bytes = (tile_width * 4) as usize;
 
-                        final_pixels[final_row_offset..final_row_offset + copy_bytes]
+                        let destination = if stream_rows {
+                            &mut streamed_band
+                        } else {
+                            &mut final_pixels
+                        };
+                        destination[final_row_offset..final_row_offset + copy_bytes]
                             .copy_from_slice(
                                 &processed_tile_data
                                     [source_row_offset..source_row_offset + copy_bytes],
@@ -1648,10 +1730,119 @@ impl GpuProcessor {
                     }
                 }
             }
+
+            if let GpuRenderOutput::StreamRows(sink) = &mut output {
+                let row_bytes = out_width as usize * 4;
+                for row in streamed_band.chunks_exact(row_bytes) {
+                    sink(row)?;
+                }
+            }
         }
 
         Ok((final_pixels, out_width, out_height, bounds.x, bounds.y))
     }
+}
+
+fn lock_gpu_resources<'a>(
+    context: &GpuContext,
+    state: &'a AppState,
+    base_image: &DynamicImage,
+    transform_hash: u64,
+    output_to_display: bool,
+) -> Result<LockedGpuResources<'a>, String> {
+    let (width, height) = base_image.dimensions();
+    let device = &context.device;
+    let queue = &context.queue;
+    let requested_texture_plan = GpuProcessorTexturePlan::new(width, height, output_to_display);
+
+    let mut processor_lock = state.gpu_processor.lock().unwrap();
+    let needs_new_processor = match processor_lock.as_ref() {
+        Some(processor) => {
+            processor
+                .texture_plan()
+                .should_rebuild_for(width, height, output_to_display)
+        }
+        None => true,
+    };
+
+    if needs_new_processor {
+        let previous_bytes = processor_lock
+            .as_ref()
+            .map(|processor| processor.texture_plan().logical_texture_bytes())
+            .unwrap_or(0);
+        log::info!(
+            "Creating GPU processor for {}x{} (native display: {}, logical textures: {} -> {} bytes)",
+            requested_texture_plan.processing_width,
+            requested_texture_plan.processing_height,
+            output_to_display,
+            previous_bytes,
+            requested_texture_plan.logical_texture_bytes()
+        );
+
+        drop(processor_lock.take());
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_millis(500)),
+        });
+
+        let new_processor = GpuProcessor::new(context.clone(), width, height, output_to_display)?;
+        *processor_lock = Some(crate::GpuProcessorState {
+            processor: new_processor,
+            width: requested_texture_plan.processing_width,
+            height: requested_texture_plan.processing_height,
+            display_width: requested_texture_plan.display_width,
+            display_height: requested_texture_plan.display_height,
+        });
+    }
+
+    let mut cache_lock = state.gpu_image_cache.lock().unwrap();
+    let needs_new_cache = match cache_lock.as_ref() {
+        Some(cache) => {
+            cache.transform_hash != transform_hash || cache.width != width || cache.height != height
+        }
+        None => true,
+    };
+
+    if needs_new_cache {
+        drop(cache_lock.take());
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_millis(500)),
+        });
+
+        let img_rgba_f16 = to_rgba_f16(base_image);
+        let texture_size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture_with_data(
+            queue,
+            &wgpu::TextureDescriptor {
+                label: Some("Input Texture"),
+                size: texture_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            TextureDataOrder::MipMajor,
+            bytemuck::cast_slice(&img_rgba_f16),
+        );
+        let texture_view = texture.create_view(&Default::default());
+
+        *cache_lock = Some(GpuImageCache {
+            texture,
+            texture_view,
+            width,
+            height,
+            transform_hash,
+        });
+    }
+
+    Ok((processor_lock, cache_lock))
 }
 
 pub fn process_and_get_dynamic_image(
@@ -1699,6 +1890,90 @@ pub fn process_and_get_dynamic_image_with_analytics(
     )
 }
 
+pub fn process_and_stream_rgba_rows(
+    context: &GpuContext,
+    state: &tauri::State<AppState>,
+    base_image: &DynamicImage,
+    transform_hash: u64,
+    request: RenderRequest,
+    caller_id: &str,
+    row_sink: &mut dyn FnMut(&[u8]) -> Result<(), String>,
+) -> Result<(u32, u32), String> {
+    let start_time = Instant::now();
+    let (width, height) = base_image.dimensions();
+    let max_dim = context.limits.max_texture_dimension_2d;
+    if width > max_dim || height > max_dim {
+        return Err(format!(
+            "Cannot stream adjusted export {}x{} because the GPU limit is {}",
+            width, height, max_dim
+        ));
+    }
+
+    let (processor_lock, cache_lock) =
+        lock_gpu_resources(context, state.inner(), base_image, transform_hash, false)?;
+    let processor_state = processor_lock.as_ref().unwrap();
+    let cache = cache_lock.as_ref().unwrap();
+    let (_, out_width, out_height, _, _) = processor_state.processor.run(
+        &cache.texture_view,
+        cache.width,
+        cache.height,
+        request,
+        GpuRenderOutput::StreamRows(row_sink),
+    )?;
+
+    log::info!(
+        "[{}] {}x{} streamed from GPU tiles in {:?}",
+        caller_id,
+        out_width,
+        out_height,
+        start_time.elapsed()
+    );
+    Ok((out_width, out_height))
+}
+
+/// Drop export-sized processor and input textures once all batch workers have
+/// joined. The native display bind group owns its last presented output view,
+/// so the visible frame remains valid until the next preview replaces it.
+pub fn reclaim_gpu_resources_after_export(context: &GpuContext, state: &AppState) -> usize {
+    let mut processor_lock = state.gpu_processor.lock().unwrap();
+    let processor_bytes = processor_lock
+        .as_ref()
+        .map(|processor| processor.texture_plan().logical_texture_bytes())
+        .unwrap_or(0);
+
+    let mut cache_lock = state.gpu_image_cache.lock().unwrap();
+    let input_bytes = cache_lock
+        .as_ref()
+        .map(|cache| {
+            (cache.width as usize)
+                .saturating_mul(cache.height as usize)
+                .saturating_mul(8)
+        })
+        .unwrap_or(0);
+
+    if !should_reclaim_gpu_resources(processor_bytes, input_bytes) {
+        return 0;
+    }
+
+    drop(processor_lock.take());
+    drop(cache_lock.take());
+    drop(cache_lock);
+    drop(processor_lock);
+
+    let released_bytes = processor_bytes.saturating_add(input_bytes);
+    if released_bytes > 0 {
+        let _ = context.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_millis(500)),
+        });
+        log::info!(
+            "Released {} logical bytes of export GPU high-water resources",
+            released_bytes
+        );
+    }
+    released_bytes
+}
+
 #[allow(clippy::too_many_arguments)]
 fn process_and_get_dynamic_image_inner(
     context: &GpuContext,
@@ -1726,110 +2001,30 @@ fn process_and_get_dynamic_image_inner(
         return Ok(Arc::new(base_image.clone()));
     }
 
-    let mut processor_lock = state.gpu_processor.lock().unwrap();
-    let mut needs_new_processor = false;
-    let new_width = (width + 255) & !255;
-    let new_height = (height + 255) & !255;
-
-    if let Some(p) = processor_lock.as_ref() {
-        if p.width < width || p.height < height {
-            needs_new_processor = true;
-        }
-    } else {
-        needs_new_processor = true;
-    }
-
-    if needs_new_processor {
-        log::info!(
-            "Creating new GPU Processor for dimensions up to {}x{}",
-            new_width,
-            new_height
-        );
-
-        let old_processor = processor_lock.take();
-        drop(old_processor);
-
-        let _ = context.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(std::time::Duration::from_millis(500)),
-        });
-
-        let new_processor = GpuProcessor::new(context.clone(), new_width, new_height)?;
-
-        *processor_lock = Some(crate::GpuProcessorState {
-            processor: new_processor,
-            width: new_width,
-            height: new_height,
-        });
-    }
-
+    let (processor_lock, cache_lock) = lock_gpu_resources(
+        context,
+        state.inner(),
+        base_image,
+        transform_hash,
+        output_to_display,
+    )?;
     let processor_state = processor_lock.as_ref().unwrap();
     let processor = &processor_state.processor;
-
-    let mut cache_lock = state.gpu_image_cache.lock().unwrap();
-    let mut needs_new_cache = false;
-
-    if let Some(cache) = &*cache_lock {
-        if cache.transform_hash != transform_hash || cache.width != width || cache.height != height
-        {
-            needs_new_cache = true;
-        }
-    } else {
-        needs_new_cache = true;
-    }
-
-    if needs_new_cache {
-        let old_cache = cache_lock.take();
-        drop(old_cache);
-
-        let _ = context.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(std::time::Duration::from_millis(500)),
-        });
-
-        let img_rgba_f16 = to_rgba_f16(base_image);
-        let texture_size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture_with_data(
-            queue,
-            &wgpu::TextureDescriptor {
-                label: Some("Input Texture"),
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba16Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            },
-            TextureDataOrder::MipMajor,
-            bytemuck::cast_slice(&img_rgba_f16),
-        );
-        let texture_view = texture.create_view(&Default::default());
-
-        *cache_lock = Some(GpuImageCache {
-            texture,
-            texture_view,
-            width,
-            height,
-            transform_hash,
-        });
-    }
-
     let cache = cache_lock.as_ref().unwrap();
 
     let skip_readback = output_to_display;
 
+    let render_output = if output_to_display {
+        GpuRenderOutput::NativeDisplay
+    } else {
+        GpuRenderOutput::CpuImage
+    };
     let (processed_pixels, out_w, out_h, out_x, out_y) = processor.run(
         &cache.texture_view,
         cache.width,
         cache.height,
         request,
-        skip_readback,
-        output_to_display,
+        render_output,
     )?;
 
     let mut final_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1989,8 +2184,10 @@ fn process_and_get_dynamic_image_inner(
         && let Some(display) = display_lock.as_mut()
     {
         display.latest_transform.image_size = [width as f32, height as f32];
-        display.latest_transform.texture_size =
-            [processor_state.width as f32, processor_state.height as f32];
+        display.latest_transform.texture_size = [
+            processor_state.display_width as f32,
+            processor_state.display_height as f32,
+        ];
 
         queue.write_buffer(
             &display.transform_buffer,

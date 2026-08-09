@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+const MIB: usize = 1024 * 1024;
+
+pub const GPU_TILE_SIZE: u32 = 2_048;
+pub const GPU_TILE_OVERLAP: u32 = 128;
+pub const GPU_RECLAIM_HIGH_WATER_BYTES: usize = 512 * MIB;
+
+pub fn should_reclaim_gpu_resources(processor_bytes: usize, input_bytes: usize) -> bool {
+    processor_bytes.saturating_add(input_bytes) >= GPU_RECLAIM_HIGH_WATER_BYTES
+}
+
+const RGBA8_BYTES_PER_PIXEL: usize = 4;
+const RGBA16_FLOAT_BYTES_PER_PIXEL: usize = 8;
+const PROCESSOR_RGBA16_TILE_COUNT: usize = 5;
+const FLARE_TEXTURE_COUNT: usize = 3;
+const FLARE_TEXTURE_EDGE: usize = 512;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RenderTier {
@@ -106,9 +122,131 @@ impl MaskTexturePlan {
     }
 }
 
+/// Logical sizes of the long-lived textures owned by a `GpuProcessor`.
+///
+/// CPU readback jobs only need the reusable tile textures. Native display jobs
+/// additionally need two full-frame RGBA8 surfaces. Keeping those two cases
+/// explicit prevents a 60 MP file export from retaining blank full-frame
+/// display textures after the encoder has finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GpuProcessorTexturePlan {
+    pub processing_width: u32,
+    pub processing_height: u32,
+    pub display_width: u32,
+    pub display_height: u32,
+}
+
+impl GpuProcessorTexturePlan {
+    pub fn new(width: u32, height: u32, needs_native_display: bool) -> Self {
+        let processing_width = width.saturating_add(255) & !255;
+        let processing_height = height.saturating_add(255) & !255;
+        Self {
+            processing_width: processing_width.max(1),
+            processing_height: processing_height.max(1),
+            display_width: if needs_native_display {
+                processing_width.max(1)
+            } else {
+                1
+            },
+            display_height: if needs_native_display {
+                processing_height.max(1)
+            } else {
+                1
+            },
+        }
+    }
+
+    pub fn has_native_display_surfaces(self) -> bool {
+        self.display_width > 1 || self.display_height > 1
+    }
+
+    pub fn logical_texture_bytes(self) -> usize {
+        let tile_width = self
+            .processing_width
+            .min(GPU_TILE_SIZE + GPU_TILE_OVERLAP * 2) as usize;
+        let tile_height = self
+            .processing_height
+            .min(GPU_TILE_SIZE + GPU_TILE_OVERLAP * 2) as usize;
+        let tile_pixels = tile_width.saturating_mul(tile_height);
+        let tile_bytes = tile_pixels.saturating_mul(
+            PROCESSOR_RGBA16_TILE_COUNT * RGBA16_FLOAT_BYTES_PER_PIXEL + RGBA8_BYTES_PER_PIXEL,
+        );
+        let display_bytes = (self.display_width as usize)
+            .saturating_mul(self.display_height as usize)
+            .saturating_mul(RGBA8_BYTES_PER_PIXEL * 2);
+        let flare_bytes = FLARE_TEXTURE_EDGE
+            .saturating_mul(FLARE_TEXTURE_EDGE)
+            .saturating_mul(FLARE_TEXTURE_COUNT)
+            .saturating_mul(RGBA16_FLOAT_BYTES_PER_PIXEL);
+
+        tile_bytes
+            .saturating_add(display_bytes)
+            .saturating_add(flare_bytes)
+    }
+
+    pub fn should_rebuild_for(self, width: u32, height: u32, needs_native_display: bool) -> bool {
+        let requested = Self::new(width, height, needs_native_display);
+        if self.processing_width < width
+            || self.processing_height < height
+            || (needs_native_display
+                && (self.display_width < width || self.display_height < height))
+        {
+            return true;
+        }
+
+        if !needs_native_display
+            && self.has_native_display_surfaces()
+            && self.logical_texture_bytes() >= GPU_RECLAIM_HIGH_WATER_BYTES
+            && requested.logical_texture_bytes().saturating_mul(2) <= self.logical_texture_bytes()
+        {
+            return true;
+        }
+
+        let current_area =
+            (self.processing_width as usize).saturating_mul(self.processing_height as usize);
+        let requested_area = (requested.processing_width as usize)
+            .saturating_mul(requested.processing_height as usize);
+        self.logical_texture_bytes() >= GPU_RECLAIM_HIGH_WATER_BYTES
+            && requested_area.saturating_mul(4) <= current_area
+            && requested.logical_texture_bytes().saturating_mul(2) <= self.logical_texture_bytes()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamingExportBufferPlan {
+    pub width: u32,
+    pub height: u32,
+    pub band_rows: u32,
+}
+
+impl StreamingExportBufferPlan {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            band_rows: height.min(GPU_TILE_SIZE),
+        }
+    }
+
+    pub fn band_rgba_bytes(self) -> usize {
+        (self.width as usize)
+            .saturating_mul(self.band_rows as usize)
+            .saturating_mul(RGBA8_BYTES_PER_PIXEL)
+    }
+
+    pub fn legacy_full_rgba_bytes(self) -> usize {
+        (self.width as usize)
+            .saturating_mul(self.height as usize)
+            .saturating_mul(RGBA8_BYTES_PER_PIXEL)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MaskTexturePlan, RenderTier, resolve_preview_render_tier};
+    use super::{
+        GPU_RECLAIM_HIGH_WATER_BYTES, GpuProcessorTexturePlan, MaskTexturePlan, RenderTier,
+        StreamingExportBufferPlan, resolve_preview_render_tier, should_reclaim_gpu_resources,
+    };
 
     const A7R_V_WIDTH: u32 = 9_504;
     const A7R_V_HEIGHT: u32 = 6_336;
@@ -208,5 +346,60 @@ mod tests {
 
         let capped = MaskTexturePlan::new(A7R_V_WIDTH, A7R_V_HEIGHT, 40, 40, 32);
         assert_eq!(capped.upload_layers, 32);
+    }
+
+    #[test]
+    fn cpu_export_avoids_full_frame_display_textures() {
+        let cpu_export = GpuProcessorTexturePlan::new(A7R_V_WIDTH, A7R_V_HEIGHT, false);
+        let native_display = GpuProcessorTexturePlan::new(A7R_V_WIDTH, A7R_V_HEIGHT, true);
+
+        assert!(!cpu_export.has_native_display_surfaces());
+        assert!(native_display.has_native_display_surfaces());
+        assert_eq!(cpu_export.display_width, 1);
+        assert_eq!(cpu_export.display_height, 1);
+        assert_eq!(native_display.display_width, 9_728);
+        assert_eq!(native_display.display_height, 6_400);
+        assert_eq!(
+            native_display.logical_texture_bytes() - cpu_export.logical_texture_bytes(),
+            498_073_592
+        );
+    }
+
+    #[test]
+    fn high_water_processor_shrinks_with_hysteresis() {
+        let high_water = GpuProcessorTexturePlan::new(A7R_V_WIDTH, A7R_V_HEIGHT, true);
+        assert!(high_water.logical_texture_bytes() > GPU_RECLAIM_HIGH_WATER_BYTES);
+        assert!(high_water.should_rebuild_for(A7R_V_WIDTH, A7R_V_HEIGHT, false));
+        assert!(high_water.should_rebuild_for(2_048, 1_365, true));
+        assert!(!high_water.should_rebuild_for(A7R_V_WIDTH, A7R_V_HEIGHT, true));
+
+        let ordinary_preview = GpuProcessorTexturePlan::new(2_048, 1_365, true);
+        assert!(!ordinary_preview.should_rebuild_for(1_920, 1_280, true));
+        assert!(ordinary_preview.should_rebuild_for(4_096, 2_731, true));
+    }
+
+    #[test]
+    fn gpu_reclamation_uses_the_combined_processor_and_input_high_water() {
+        assert!(!should_reclaim_gpu_resources(
+            256 * 1024 * 1024,
+            255 * 1024 * 1024
+        ));
+        assert!(should_reclaim_gpu_resources(
+            256 * 1024 * 1024,
+            256 * 1024 * 1024
+        ));
+        assert!(should_reclaim_gpu_resources(usize::MAX, usize::MAX));
+    }
+
+    #[test]
+    fn streaming_export_bounds_the_60mp_cpu_output_band() {
+        let plan = StreamingExportBufferPlan::new(A7R_V_WIDTH, A7R_V_HEIGHT);
+        assert_eq!(plan.band_rows, 2_048);
+        assert_eq!(plan.band_rgba_bytes(), 77_856_768);
+        assert_eq!(plan.legacy_full_rgba_bytes(), 240_869_376);
+        assert_eq!(
+            plan.legacy_full_rgba_bytes() - plan.band_rgba_bytes(),
+            163_012_608
+        );
     }
 }

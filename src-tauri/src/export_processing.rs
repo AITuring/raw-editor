@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
+#[cfg(not(target_os = "android"))]
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,10 +17,18 @@ use jxl_encoder::{
     ImageMetadata as JxlImageMetadata, LosslessConfig, LossyConfig, PixelLayout,
     api::{calibrated_jxl_quality, quality_to_distance},
 };
+#[cfg(not(target_os = "android"))]
+use png::{BitDepth, ColorType as PngColorType, Encoder as PngStreamEncoder, Info as PngInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::Emitter;
 use tauri::Manager;
+#[cfg(not(target_os = "android"))]
+use tempfile::NamedTempFile;
+#[cfg(not(target_os = "android"))]
+use tiff::encoder::{TiffEncoder as StreamingTiffEncoder, colortype::RGB16};
+#[cfg(not(target_os = "android"))]
+use tiff::tags::Tag as TiffTag;
 
 use crate::AppState;
 use crate::exif_processing;
@@ -26,6 +36,9 @@ use crate::file_management::{
     generate_filename_from_template, parse_virtual_path, read_file_mapped,
 };
 use crate::formats::is_raw_file;
+#[cfg(not(target_os = "android"))]
+use crate::gpu_processing::process_and_stream_rgba_rows;
+use crate::gpu_processing::reclaim_gpu_resources_after_export;
 use crate::image_loader::{
     composite_patches_on_image, load_and_composite, load_base_image_from_bytes,
 };
@@ -35,7 +48,7 @@ use crate::image_processing::{
     resolve_tonemapper_override_from_handle,
 };
 use crate::lut_processing::{
-    convert_image_to_cube_lut, generate_identity_lut_image, get_or_load_lut,
+    Lut, convert_image_to_cube_lut, generate_identity_lut_image, get_or_load_lut,
 };
 use crate::mask_generation::{MaskDefinition, generate_mask_bitmap};
 use crate::render_strategy::RenderTier;
@@ -429,17 +442,24 @@ impl Drop for ExportTaskGuard {
     }
 }
 
+struct PreparedExportRender<'a> {
+    image: Cow<'a, DynamicImage>,
+    mask_bitmaps: Vec<GrayImage>,
+    adjustments: AllAdjustments,
+    lut: Option<Arc<Lut>>,
+    unique_hash: u64,
+}
+
 #[allow(clippy::too_many_arguments)]
-fn process_image_for_export_pipeline(
+fn prepare_export_render<'a>(
     path: &str,
-    base_image: &DynamicImage,
+    base_image: &'a DynamicImage,
     js_adjustments: &Value,
-    context: &GpuContext,
     state: &tauri::State<AppState>,
     is_raw: bool,
     debug_tag: &str,
     app_handle: &tauri::AppHandle,
-) -> Result<DynamicImage, String> {
+) -> PreparedExportRender<'a> {
     let (transformed_image, unscaled_crop_offset) =
         apply_all_transformations(Cow::Borrowed(base_image), js_adjustments);
     let (img_w, img_h) = transformed_image.dimensions();
@@ -480,15 +500,45 @@ fn process_image_for_export_pipeline(
 
     let unique_hash = calculate_full_job_hash(path, js_adjustments);
 
+    PreparedExportRender {
+        image: transformed_image,
+        mask_bitmaps,
+        adjustments: all_adjustments,
+        lut,
+        unique_hash,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_image_for_export_pipeline(
+    path: &str,
+    base_image: &DynamicImage,
+    js_adjustments: &Value,
+    context: &GpuContext,
+    state: &tauri::State<AppState>,
+    is_raw: bool,
+    debug_tag: &str,
+    app_handle: &tauri::AppHandle,
+) -> Result<DynamicImage, String> {
+    let prepared = prepare_export_render(
+        path,
+        base_image,
+        js_adjustments,
+        state,
+        is_raw,
+        debug_tag,
+        app_handle,
+    );
+
     process_and_get_dynamic_image(
         context,
         state,
-        transformed_image.as_ref(),
-        unique_hash,
+        prepared.image.as_ref(),
+        prepared.unique_hash,
         RenderRequest {
-            adjustments: all_adjustments,
-            mask_bitmaps: &mask_bitmaps,
-            lut,
+            adjustments: prepared.adjustments,
+            mask_bitmaps: &prepared.mask_bitmaps,
+            lut: prepared.lut,
             roi: None,
         },
         debug_tag,
@@ -544,6 +594,324 @@ fn save_image_with_metadata(
     #[cfg(not(target_os = "android"))]
     fs::write(output_path, image_bytes).map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+fn supports_streaming_export(output_format: &str, export_settings: &ExportSettings) -> bool {
+    #[cfg(target_os = "android")]
+    {
+        let _ = (output_format, export_settings);
+        false
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        // JPEG deliberately remains on the full-frame path: mozjpeg-rs 0.9.2's
+        // scanline encoder panics on the deterministic 60 MP stress pattern.
+        export_settings.resize.is_none()
+            && export_settings.watermark.is_none()
+            && matches!(
+                output_format.to_ascii_lowercase().as_str(),
+                "png" | "tif" | "tiff"
+            )
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn create_temporary_export(output_path: &Path) -> Result<NamedTempFile, String> {
+    let output_parent = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    NamedTempFile::new_in(output_parent).map_err(|error| {
+        format!(
+            "Failed to create temporary export beside '{}': {error}",
+            output_path.display()
+        )
+    })
+}
+
+#[cfg(not(target_os = "android"))]
+fn preserve_existing_export_permissions(
+    temporary: &NamedTempFile,
+    output_path: &Path,
+) -> Result<(), String> {
+    if let Ok(metadata) = fs::metadata(output_path) {
+        temporary
+            .as_file()
+            .set_permissions(metadata.permissions())
+            .map_err(|error| {
+                format!(
+                    "Failed to preserve permissions for '{}': {error}",
+                    output_path.display()
+                )
+            })?;
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+fn validate_streamed_rgba_row(
+    row: &[u8],
+    width: u32,
+    height: u32,
+    written_rows: u32,
+) -> Result<(), String> {
+    if written_rows >= height {
+        return Err(format!(
+            "Streaming encoder received more than the declared {height} rows"
+        ));
+    }
+    let expected = (width as usize)
+        .checked_mul(4)
+        .ok_or_else(|| format!("Streaming width {width} exceeds the RGBA row size limit"))?;
+    if row.len() != expected {
+        return Err(format!(
+            "Streamed row {} has {} bytes; expected {} RGBA bytes",
+            written_rows,
+            row.len(),
+            expected
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_streaming_png<F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    let mut info = PngInfo::with_size(width, height);
+    info.color_type = PngColorType::Rgba;
+    info.bit_depth = BitDepth::Eight;
+    info.icc_profile = Some(Cow::Owned(srgb_v4_profile().to_vec()));
+    let writer = BufWriter::new(output);
+    let encoder = PngStreamEncoder::with_info(writer, info)
+        .map_err(|error| format!("Failed to configure streaming PNG encoder: {error}"))?;
+    let mut png_writer = encoder
+        .write_header()
+        .map_err(|error| format!("Failed to write streaming PNG header: {error}"))?;
+    let mut stream = png_writer
+        .stream_writer_with_size(64 * 1024)
+        .map_err(|error| format!("Failed to start streaming PNG encoder: {error}"))?;
+    let mut written_rows = 0_u32;
+    {
+        let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+            stream
+                .write_all(rgba_row)
+                .map_err(|error| format!("Failed to stream PNG row {written_rows}: {error}"))?;
+            written_rows += 1;
+            Ok(())
+        };
+        render_rows(&mut sink)?;
+    }
+    if written_rows != height {
+        return Err(format!(
+            "Streaming PNG received {written_rows} rows; expected {height}"
+        ));
+    }
+    stream
+        .finish()
+        .map_err(|error| format!("Failed to finish streaming PNG data: {error}"))?;
+    png_writer
+        .finish()
+        .map_err(|error| format!("Failed to finish streaming PNG: {error}"))
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_streaming_tiff<F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    const ROWS_PER_STRIP: u32 = 64;
+
+    let mut encoder = StreamingTiffEncoder::new(output)
+        .map_err(|error| format!("Failed to start streaming TIFF encoder: {error}"))?;
+    let mut image = encoder
+        .new_image::<RGB16>(width, height)
+        .map_err(|error| format!("Failed to configure streaming TIFF image: {error}"))?;
+    image
+        .encoder()
+        .write_tag(TiffTag::IccProfile, srgb_v4_profile())
+        .map_err(|error| format!("Failed to attach TIFF ICC profile: {error}"))?;
+    image
+        .rows_per_strip(ROWS_PER_STRIP.min(height).max(1))
+        .map_err(|error| format!("Failed to configure TIFF strips: {error}"))?;
+
+    let mut strip = Vec::<u16>::with_capacity(width as usize * 3 * ROWS_PER_STRIP as usize);
+    let mut written_rows = 0_u32;
+    {
+        let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+            for pixel in rgba_row.chunks_exact(4) {
+                strip.push(u16::from(pixel[0]) * 257);
+                strip.push(u16::from(pixel[1]) * 257);
+                strip.push(u16::from(pixel[2]) * 257);
+            }
+            written_rows += 1;
+
+            let expected_samples = image.next_strip_sample_count() as usize;
+            if strip.len() == expected_samples {
+                image
+                    .write_strip(&strip)
+                    .map_err(|error| format!("Failed to write TIFF strip: {error}"))?;
+                strip.clear();
+            } else if strip.len() > expected_samples {
+                return Err(format!(
+                    "Streaming TIFF strip exceeded its expected {} samples",
+                    expected_samples
+                ));
+            }
+            Ok(())
+        };
+        render_rows(&mut sink)?;
+    }
+    if written_rows != height || !strip.is_empty() || image.next_strip_sample_count() != 0 {
+        return Err(format!(
+            "Streaming TIFF received {written_rows} complete rows; expected {height}"
+        ));
+    }
+    image
+        .finish()
+        .map_err(|error| format!("Failed to finish streaming TIFF: {error}"))
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_streaming_rgba_rows<F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    output_format: &str,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    match output_format.to_ascii_lowercase().as_str() {
+        "png" => encode_streaming_png(output, width, height, render_rows),
+        "tif" | "tiff" => encode_streaming_tiff(output, width, height, render_rows),
+        _ => Err(format!(
+            "Unsupported streaming export format: {output_format}"
+        )),
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
+fn process_and_save_streaming_export(
+    path: &str,
+    base_image: &DynamicImage,
+    js_adjustments: &Value,
+    output_path: &Path,
+    output_format: &str,
+    export_settings: &ExportSettings,
+    context: &GpuContext,
+    state: &tauri::State<AppState>,
+    is_raw: bool,
+    app_handle: &tauri::AppHandle,
+    cancellation_token: &AtomicBool,
+) -> Result<(), String> {
+    let prepared = prepare_export_render(
+        path,
+        base_image,
+        js_adjustments,
+        state,
+        is_raw,
+        "process_and_save_streaming_export",
+        app_handle,
+    );
+    let (width, height) = prepared.image.dimensions();
+    let mut temporary = create_temporary_export(output_path)?;
+
+    let PreparedExportRender {
+        image,
+        mask_bitmaps,
+        adjustments,
+        lut,
+        unique_hash,
+    } = prepared;
+    encode_streaming_rgba_rows(
+        temporary.as_file_mut(),
+        width,
+        height,
+        output_format,
+        |encoder_sink| {
+            let mut checked_sink = |row: &[u8]| -> Result<(), String> {
+                ensure_export_not_cancelled(cancellation_token)?;
+                encoder_sink(row)
+            };
+            let rendered_dimensions = process_and_stream_rgba_rows(
+                context,
+                state,
+                image.as_ref(),
+                unique_hash,
+                RenderRequest {
+                    adjustments,
+                    mask_bitmaps: &mask_bitmaps,
+                    lut,
+                    roi: None,
+                },
+                "process_and_save_streaming_export",
+                &mut checked_sink,
+            )?;
+            if rendered_dimensions != (width, height) {
+                return Err(format!(
+                    "Streamed GPU dimensions {:?} do not match encoder dimensions {}x{}",
+                    rendered_dimensions, width, height
+                ));
+            }
+            Ok(())
+        },
+    )?;
+    temporary
+        .as_file_mut()
+        .flush()
+        .map_err(|error| format!("Failed to flush temporary export: {error}"))?;
+    ensure_export_not_cancelled(cancellation_token)?;
+
+    if export_settings.keep_metadata
+        && !matches!(output_format.to_ascii_lowercase().as_str(), "tif" | "tiff")
+    {
+        let mut encoded = fs::read(temporary.path())
+            .map_err(|error| format!("Failed to reopen streamed export for metadata: {error}"))?;
+        exif_processing::write_image_with_metadata(
+            &mut encoded,
+            path,
+            output_format,
+            export_settings.keep_metadata,
+            export_settings.strip_gps,
+        )?;
+        let file = temporary.as_file_mut();
+        file.set_len(0)
+            .map_err(|error| format!("Failed to replace streamed export metadata: {error}"))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|error| format!("Failed to rewind streamed export: {error}"))?;
+        file.write_all(&encoded)
+            .map_err(|error| format!("Failed to write streamed export metadata: {error}"))?;
+        file.flush()
+            .map_err(|error| format!("Failed to flush streamed export metadata: {error}"))?;
+    }
+    ensure_export_not_cancelled(cancellation_token)?;
+    preserve_existing_export_permissions(&temporary, output_path)?;
+
+    temporary.persist(output_path).map_err(|error| {
+        format!(
+            "Failed to atomically publish streamed export '{}': {}",
+            output_path.display(),
+            error.error
+        )
+    })?;
     Ok(())
 }
 
@@ -1279,23 +1647,43 @@ pub(crate) async fn export_images_impl(
                         obj.insert("masks".to_string(), serde_json::json!([]));
                     }
 
-                    let final_image = process_image_for_export(
-                        &source_path_str,
-                        &base_image,
-                        &main_export_adjustments,
-                        &export_settings,
-                        &context_clone,
-                        &state,
-                        is_raw,
-                        &app_handle_clone,
-                    )?;
-                    ensure_export_not_cancelled(&cancellation_token_clone)?;
-                    save_image_with_metadata(
-                        &final_image,
-                        &output_path,
-                        &source_path_str,
-                        &export_settings,
-                    )?;
+                    if supports_streaming_export(&extension, &export_settings) {
+                        #[cfg(not(target_os = "android"))]
+                        process_and_save_streaming_export(
+                            &source_path_str,
+                            &base_image,
+                            &main_export_adjustments,
+                            &output_path,
+                            &extension,
+                            &export_settings,
+                            &context_clone,
+                            &state,
+                            is_raw,
+                            &app_handle_clone,
+                            &cancellation_token_clone,
+                        )?;
+
+                        #[cfg(target_os = "android")]
+                        unreachable!("Android exports do not select the filesystem streaming path");
+                    } else {
+                        let final_image = process_image_for_export(
+                            &source_path_str,
+                            &base_image,
+                            &main_export_adjustments,
+                            &export_settings,
+                            &context_clone,
+                            &state,
+                            is_raw,
+                            &app_handle_clone,
+                        )?;
+                        ensure_export_not_cancelled(&cancellation_token_clone)?;
+                        save_image_with_metadata(
+                            &final_image,
+                            &output_path,
+                            &source_path_str,
+                            &export_settings,
+                        )?;
+                    }
                     ensure_export_not_cancelled(&cancellation_token_clone)?;
 
                     if export_settings.preserve_timestamps {
@@ -1353,11 +1741,13 @@ pub(crate) async fn export_images_impl(
             }
         }
 
+        let export_state = app_handle.state::<AppState>();
+        reclaim_gpu_resources_after_export(&context, export_state.inner());
+
         let summary = summarize_batch_export_results(results);
         debug_assert_eq!(summary.completed, total_paths);
         let errors = summary.errors;
         let error_count = errors.len();
-        let export_state = app_handle.state::<AppState>();
         let finalized = finish_export_task(
             &export_state.export_task_token,
             &cancellation_token,
@@ -1846,7 +2236,10 @@ pub async fn estimate_export_sizes(
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{Cursor, Read, Seek, SeekFrom};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
 
     use crate::color_management::validate_icc_profile;
     use image::codecs::{jpeg::JpegDecoder, png::PngDecoder, tiff::TiffDecoder, webp::WebPDecoder};
@@ -1863,6 +2256,28 @@ mod tests {
                 ((x * 11 + y * 7) % 256) as u8,
             ])
         }))
+    }
+
+    fn encode_streaming_fixture(
+        image: &DynamicImage,
+        output_format: &str,
+    ) -> Result<Vec<u8>, String> {
+        let rgba = image.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let row_bytes = width as usize * 4;
+        let mut file = tempfile::tempfile().map_err(|error| error.to_string())?;
+        encode_streaming_rgba_rows(&mut file, width, height, output_format, |sink| {
+            for row in rgba.as_raw().chunks_exact(row_bytes) {
+                sink(row)?;
+            }
+            Ok(())
+        })?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|error| error.to_string())?;
+        let mut encoded = Vec::new();
+        file.read_to_end(&mut encoded)
+            .map_err(|error| error.to_string())?;
+        Ok(encoded)
     }
 
     fn assert_decoder_contract<D: ImageDecoder>(
@@ -1919,6 +2334,185 @@ mod tests {
             JxlDecoder::new(Cursor::new(jxl)).expect("decode JPEG XL"),
             (37, 23),
             false,
+        );
+    }
+
+    #[test]
+    fn streaming_color_managed_exports_round_trip_dimensions_and_icc() {
+        let image = fixture_image(37, 23);
+        let expected_rgba = image.to_rgba8();
+
+        let png = encode_streaming_fixture(&image, "png").expect("stream PNG");
+        assert_decoder_contract(
+            PngDecoder::new(Cursor::new(&png)).expect("decode streaming PNG"),
+            (37, 23),
+            true,
+        );
+        let decoded_png = image::load_from_memory_with_format(&png, ImageFormat::Png)
+            .expect("load streaming PNG pixels")
+            .to_rgba8();
+        assert_eq!(decoded_png, expected_rgba);
+
+        let tiff = encode_streaming_fixture(&image, "tiff").expect("stream TIFF");
+        assert_decoder_contract(
+            TiffDecoder::new(Cursor::new(&tiff)).expect("decode streaming TIFF"),
+            (37, 23),
+            true,
+        );
+        let decoded_tiff = image::load_from_memory_with_format(&tiff, ImageFormat::Tiff)
+            .expect("load streaming TIFF pixels")
+            .to_rgba8();
+        assert_eq!(decoded_tiff, expected_rgba);
+    }
+
+    #[test]
+    fn streaming_export_requires_exactly_one_complete_frame() {
+        let mut file = tempfile::tempfile().expect("temporary output");
+        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", |sink| {
+            sink(&[0; 4 * 4])?;
+            sink(&[0; 4 * 4])?;
+            Ok(())
+        })
+        .expect_err("missing final row must fail");
+        assert!(error.contains("expected 3"), "unexpected error: {error}");
+
+        let mut overflow_file = tempfile::tempfile().expect("temporary overflow output");
+        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", |sink| {
+            sink(&[0; 4 * 4])?;
+            sink(&[0; 4 * 4])?;
+            Ok(())
+        })
+        .expect_err("extra row must fail");
+        assert!(
+            error.contains("more than the declared 1 rows"),
+            "unexpected error: {error}"
+        );
+
+        let settings = ExportSettings {
+            jpeg_quality: 90,
+            resize: None,
+            keep_metadata: false,
+            preserve_timestamps: false,
+            strip_gps: false,
+            filename_template: None,
+            watermark: None,
+            export_masks: false,
+            preserve_folders: false,
+        };
+        assert!(!supports_streaming_export("jpeg", &settings));
+        assert!(supports_streaming_export("png", &settings));
+        assert!(supports_streaming_export("tiff", &settings));
+        assert!(!supports_streaming_export("webp", &settings));
+
+        let mut resized = settings.clone();
+        resized.resize = Some(ResizeOptions {
+            mode: ResizeMode::LongEdge,
+            value: 2_048,
+            dont_enlarge: true,
+        });
+        assert!(!supports_streaming_export("png", &resized));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn streamed_export_temp_preserves_existing_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().expect("temporary export directory");
+        let output_path = directory.path().join("existing.png");
+        fs::write(&output_path, b"old").expect("create existing export");
+        fs::set_permissions(&output_path, fs::Permissions::from_mode(0o640))
+            .expect("set existing permissions");
+
+        let temporary = create_temporary_export(&output_path).expect("create adjacent temporary");
+        preserve_existing_export_permissions(&temporary, &output_path)
+            .expect("preserve existing permissions");
+        let mode = temporary
+            .as_file()
+            .metadata()
+            .expect("temporary metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o640);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic large-image encoder benchmark"]
+    fn synthetic_60mp_streaming_export_harness() {
+        use crate::render_strategy::StreamingExportBufferPlan;
+
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let output_format =
+            std::env::var("RAW_EDITOR_BENCH_FORMAT").unwrap_or_else(|_| "png".to_string());
+        assert!(width > 0 && height > 0);
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(0));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let Ok(pid) = sysinfo::get_current_pid() else {
+                return;
+            };
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+
+        let mut output = tempfile::tempfile().expect("temporary benchmark output");
+        let buffer_plan = StreamingExportBufferPlan::new(width, height);
+        let row_bytes = width as usize * 4;
+        let mut band = vec![0_u8; buffer_plan.band_rgba_bytes()];
+        let started = Instant::now();
+        encode_streaming_rgba_rows(&mut output, width, height, &output_format, |sink| {
+            for band_y in (0..height).step_by(buffer_plan.band_rows as usize) {
+                let rows = buffer_plan.band_rows.min(height - band_y);
+                let active_band = &mut band[..rows as usize * row_bytes];
+                for (local_y, row) in active_band.chunks_exact_mut(row_bytes).enumerate() {
+                    let y = band_y + local_y as u32;
+                    for (x, pixel) in row.chunks_exact_mut(4).enumerate() {
+                        let x = x as u32;
+                        pixel[0] = x.wrapping_mul(17).wrapping_add(y * 3) as u8;
+                        pixel[1] = x.wrapping_mul(5).wrapping_add(y * 13) as u8;
+                        pixel[2] = x.wrapping_mul(11).wrapping_add(y * 7) as u8;
+                        pixel[3] = 255;
+                    }
+                }
+                for row in active_band.chunks_exact(row_bytes) {
+                    sink(row)?;
+                }
+            }
+            Ok(())
+        })
+        .expect("run synthetic streaming export");
+        let elapsed = started.elapsed();
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join RSS sampler");
+        let output_bytes = output.metadata().expect("benchmark output metadata").len();
+
+        println!(
+            "{{\"format\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"outputBytes\":{},\"peakRssBytes\":{},\"producerBandBytes\":{},\"legacyFullFrameBytes\":{}}}",
+            output_format,
+            width,
+            height,
+            elapsed.as_millis(),
+            output_bytes,
+            peak_rss.load(Ordering::Relaxed),
+            band.len(),
+            buffer_plan.legacy_full_rgba_bytes()
         );
     }
 
