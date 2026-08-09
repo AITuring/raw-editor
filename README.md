@@ -116,32 +116,45 @@ npm run start            # Tauri 2 开发窗口
   Rust 复核交互/ROI/源尺寸边界。预览缓存只保留单一目标底图，无蒙版使用 1×1 dummy texture，
   活动蒙版逐层上传，分析结果与未变换原图通过 `Arc` 共享，消除多类整图重复缓冲。确定性 60MP
   尺寸前后基线、限制和仍存在的峰值来源见 [`docs/render-strategy.md`](docs/render-strategy.md)。
-- ✅ 无 resize、无 watermark 的 PNG/TIFF 全分辨率导出现由 WGPU tile 汇集为最多 2048 行的带状
-  缓冲并直接写入原生编码器，再通过同目录临时文件原子发布；取消或编码失败不会留下半张目标文件。
-  9504×6336 的最终 RGBA8 CPU 缓冲上限从 240,869,376 B 降至 77,856,768 B，减少 163,012,608 B。
+- ✅ 桌面端 JPEG/PNG/TIFF 主图导出现由 WGPU tile 汇集为最多 2048 行的带状缓冲，再按需经过
+  `zenresize 0.3.1` 的逐行 Lanczos ring、单行水印混合并直接交给编码器；resize 和 watermark 不再
+  迫使这三种格式恢复完整 RGBA8 CPU 帧。输出仍通过同目录临时文件原子发布，取消或编码失败不会
+  留下半张目标文件。9504×6336 的生产者缓冲上限为 77,856,768 B，相比完整 RGBA8 帧少
+  163,012,608 B。
+- ✅ JPEG 文件导出已绕开会在 60MP 压力图样上位移溢出的 `mozjpeg-rs 0.9.2` 逐行接口，改用
+  `zenjpeg 0.8.4` 的 baseline 4:4:4、JPEG Annex K 固定 Huffman 单遍逐行输入；量化表继续使用旧
+  `image` 编码器的 Annex K 基表和 libjpeg 质量缩放，并关闭新编码器的 AQ/deringing，避免迁移时
+  偷换现有质量标尺。Q50/Q75/Q92 高频图样回归同时约束平均 RGB 误差、输出体积和质量单调性；
+  sRGB v4 ICC、逐行数校验和取消检查保持完整。resize 与旧 Lanczos3 的确定性图样平均通道差为
+  0.224、最大为 1，水印逐行混合与原完整帧实现逐像素一致。
 - ✅ CPU 回读型导出不再额外分配两张完整尺寸显示 texture；按 9728×6400 的 GPU 对齐尺寸计算，
   两张 RGBA8 显示 surface 的逻辑占用减少 498,073,592 B。导出结束后，processor 与输入 texture
   合计达到 512 MiB 高水位即主动回收；大尺寸显示 processor 切换到 CPU 导出时也会按滞回规则收缩。
-- ✅ 增加可重复的 9504×6336 合成大图编码基准 `npm run synthetic-export:bench`。在 Apple M2 Max、
-  32 GB、macOS 15.6.1 的本轮运行中，PNG 为 818 ms / 84,721,664 B 峰值 RSS，TIFF 为
-  164 ms / 87,523,328 B；基准实际分配 77,856,768 B 带状缓冲，但不包含 RAW 解码或 GPU 处理，
-  因而只证明 tile-to-encoder 的确定性内存边界，不代表 α7R V 画质或端到端性能。
+- ✅ 扩展可重复的 9504×6336 合成大图编码基准 `npm run synthetic-export:bench`。在 Apple M2 Max、
+  32 GB、macOS 15.6.1 的本轮运行中，全尺寸 PNG 为 816 ms / 84,590,592 B 峰值 RSS；全尺寸 JPEG
+  为 1,898 ms / 342,999,040 B，输出 81,882,505 B；从 60MP 逐行缩至 4096×2731 并叠加水印的
+  JPEG 为 1,304 ms / 143,982,592 B，输出 17,866,661 B。基准实际分配 77,856,768 B 生产者带状
+  缓冲，但不包含 RAW 解码或 GPU 处理，因而只证明 RGB 行管线的稳定性和内存边界，不代表
+  α7R V 画质或端到端性能。
 
 按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
 的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
 链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
-不冒充已经完成。四级渲染策略、PNG/TIFF tile-to-encoder 输出、GPU 高水位回收和合成大图 harness
-已经闭环。JPEG、WebP、JXL、AVIF，以及带 resize 或 watermark 的导出仍走完整帧路径；其中当前
-`mozjpeg-rs 0.9.2` 流式接口在 60MP 压力图样上会触发依赖内部位移溢出，因此 JPEG 明确保留稳定
-回退，不以小图通过掩盖风险。下一阶段优先为 JPEG 选择可验证的逐行编码器、让 resize/watermark
-进入分块管线，并在取得授权 α7R V 样片后补齐 RAW → GPU → 文件的端到端画质、耗时和峰值基线。
+不冒充已经完成。四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
+GPU 高水位回收和合成大图 harness 已经闭环。WebP、JXL、AVIF 与 Android 导出仍走完整帧路径；
+`zenjpeg` 虽不再保留完整 RGBA8 帧，但会在完成阶段同时持有压缩扫描数据和组装后的 JPEG；本轮
+4:4:4 高频全尺寸基准的峰值 RSS 仍达到 342,999,040 B。保留元数据时 JPEG/PNG 还会把压缩文件
+读回内存。下一阶段优先消除这些压缩码流峰值、评估其余格式的
+分块编码器，并继续把 RAW 解码/几何变换等更上游节点改造成有界管线；取得授权 α7R V 样片后，再
+补齐 RAW → GPU → 文件的端到端画质、耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run build`、
-`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、`cargo check --lib`、54 项默认执行的
+`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、`cargo check --lib --locked`、57 项默认执行的
 Rust 单元/回归测试和严格 Clippy。默认忽略两项：一项需要本地授权 RAW，另一项是手动 60MP harness；
-本轮已分别用 PNG 和 TIFF 显式执行后者。`git diff --check` 也保持通过。
+本轮已用 PNG、TIFF、全尺寸 JPEG，以及 4096 长边 + 水印 JPEG 显式执行后者。`git diff --check`
+也保持通过。
 
 ## 1.0 范围
 
@@ -489,5 +502,6 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 主区域放大缩小图片不跟手
 - 不稳定，导入图片正在调整，突然就自动回首页了
 - 样式效果都比camera raw差远了
-- JPEG、WebP、JXL、AVIF，以及带 resize/watermark 的导出尚未接入 tile-to-encoder，60MP 时仍有
-  完整帧峰值；这属于下一阶段的明确任务，不视为已经完成。
+- WebP、JXL、AVIF 与 Android 导出尚未接入 tile-to-encoder，60MP 时仍有完整帧峰值。
+- 桌面 JPEG/PNG/TIFF 的 resize/watermark 已进入行管线，但 JPEG 完成阶段和 JPEG/PNG 元数据保留
+  仍会缓冲压缩码流；RAW 解码、几何变换、活动蒙版以及授权 α7R V 端到端基线也尚未闭环。

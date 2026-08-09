@@ -66,6 +66,8 @@ image-hdr = { version = "0.6.0", default-features = false }
 mozjpeg-rs = "0.9.2"
 png = "0.18.1"
 tiff = "0.11.3"
+zenjpeg = { version = "0.8.4", default-features = false }
+zenresize = "0.3.1"
 webp = "0.3"
 jxl-oxide = { version = "0.12.6", features = ["image"] }
 jxl-encoder = "0.3.1"

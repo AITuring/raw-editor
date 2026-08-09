@@ -9,3 +9,9 @@ General Public License version 3. The full license text is in LICENSE.
 
 Bundled libraries, models, databases, and other third-party components remain
 subject to their respective copyright notices and licenses.
+
+Desktop streaming JPEG encoding and resizing use zenjpeg 0.8.4 and
+zenresize 0.3.1 from the Imazen projects. RAW Editor uses their
+AGPL-3.0-only license option, which matches this project's license:
+https://github.com/imazen/zenjpeg
+https://github.com/imazen/zenresize

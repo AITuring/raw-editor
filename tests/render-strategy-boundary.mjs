@@ -44,9 +44,15 @@ assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
 assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
 
 assert.match(exportProcessing, /supports_streaming_export/);
+assert.match(exportProcessing, /encode_streaming_jpeg/);
 assert.match(exportProcessing, /encode_streaming_png/);
 assert.match(exportProcessing, /encode_streaming_tiff/);
-assert.doesNotMatch(exportProcessing, /"jpg" \| "jpeg" => encode_streaming/);
+assert.match(exportProcessing, /"jpg" \| "jpeg" =>/);
+assert.match(exportProcessing, /HuffmanStrategy::FixedAnnexK/);
+assert.match(exportProcessing, /QuantTablePreset::JpegAnnexK/);
+assert.match(exportProcessing, /transform_streaming_rgba_rows/);
+assert.match(exportProcessing, /StreamingResize::new/);
+assert.match(exportProcessing, /prepare_watermark/);
 assert.match(exportProcessing, /create_temporary_export/);
 assert.match(exportProcessing, /NamedTempFile::new_in\(output_parent\)/);
 assert.match(exportProcessing, /temporary\.persist\(output_path\)/);
@@ -66,5 +72,5 @@ assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 
 console.log(
-  'Validated four render tiers, bounded tile-to-encoder rows, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, JPEG/PNG/TIFF row pipelines, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

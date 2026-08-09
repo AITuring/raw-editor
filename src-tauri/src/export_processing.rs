@@ -11,8 +11,10 @@ use std::sync::{Arc, Mutex};
 use image::codecs::{jpeg::JpegEncoder, png::PngEncoder, tiff::TiffEncoder};
 use image::{
     DynamicImage, GenericImageView, GrayImage, ImageBuffer, ImageEncoder, ImageFormat, Luma,
-    imageops,
+    RgbaImage, imageops,
 };
+#[cfg(not(target_os = "android"))]
+use image::{Pixel, Rgba};
 use jxl_encoder::{
     ImageMetadata as JxlImageMetadata, LosslessConfig, LossyConfig, PixelLayout,
     api::{calibrated_jxl_quality, quality_to_distance},
@@ -29,6 +31,14 @@ use tempfile::NamedTempFile;
 use tiff::encoder::{TiffEncoder as StreamingTiffEncoder, colortype::RGB16};
 #[cfg(not(target_os = "android"))]
 use tiff::tags::Tag as TiffTag;
+#[cfg(not(target_os = "android"))]
+use zenjpeg::encoder::{
+    ChromaSubsampling, EncoderConfig as JpegStreamEncoderConfig, HuffmanStrategy, MozjpegTables,
+    PixelLayout as JpegPixelLayout, Quality as JpegQuality, QuantTableConfig, QuantTablePreset,
+    Unstoppable,
+};
+#[cfg(not(target_os = "android"))]
+use zenresize::{Filter as StreamingResizeFilter, PixelDescriptor, ResizeConfig, StreamingResize};
 
 use crate::AppState;
 use crate::exif_processing;
@@ -127,14 +137,20 @@ pub struct WatermarkSettings {
     pub opacity: f32,
 }
 
-fn apply_watermark(
-    base_image: &mut DynamicImage,
+struct PreparedWatermark {
+    image: RgbaImage,
+    x: i64,
+    y: i64,
+}
+
+fn prepare_watermark(
+    base_w: u32,
+    base_h: u32,
     watermark_settings: &WatermarkSettings,
-) -> Result<(), String> {
+) -> Result<Option<PreparedWatermark>, String> {
     let watermark_img = image::open(&watermark_settings.path)
         .map_err(|e| format!("Failed to open watermark image: {}", e))?;
 
-    let (base_w, base_h) = base_image.dimensions();
     let base_min_dim = base_w.min(base_h) as f32;
 
     let watermark_scale_factor =
@@ -143,7 +159,7 @@ fn apply_watermark(
     let new_wm_h = (watermark_img.height() as f32 * watermark_scale_factor).round() as u32;
 
     if new_wm_w == 0 || new_wm_h == 0 {
-        return Ok(());
+        return Ok(None);
     }
 
     let scaled_watermark =
@@ -154,10 +170,8 @@ fn apply_watermark(
     for pixel in scaled_watermark_rgba.pixels_mut() {
         pixel[3] = (pixel[3] as f32 * opacity_factor) as u8;
     }
-    let final_watermark = DynamicImage::ImageRgba8(scaled_watermark_rgba);
-
     let spacing_pixels = (base_min_dim * (watermark_settings.spacing / 100.0)) as i64;
-    let (wm_w, wm_h) = final_watermark.dimensions();
+    let (wm_w, wm_h) = scaled_watermark_rgba.dimensions();
 
     let x = match watermark_settings.anchor {
         WatermarkAnchor::TopLeft | WatermarkAnchor::CenterLeft | WatermarkAnchor::BottomLeft => {
@@ -183,7 +197,21 @@ fn apply_watermark(
         | WatermarkAnchor::BottomRight => base_h as i64 - wm_h as i64 - spacing_pixels,
     };
 
-    image::imageops::overlay(base_image, &final_watermark, x, y);
+    Ok(Some(PreparedWatermark {
+        image: scaled_watermark_rgba,
+        x,
+        y,
+    }))
+}
+
+fn apply_watermark(
+    base_image: &mut DynamicImage,
+    watermark_settings: &WatermarkSettings,
+) -> Result<(), String> {
+    let (base_w, base_h) = base_image.dimensions();
+    if let Some(watermark) = prepare_watermark(base_w, base_h, watermark_settings)? {
+        image::imageops::overlay(base_image, &watermark.image, watermark.x, watermark.y);
+    }
 
     Ok(())
 }
@@ -597,23 +625,19 @@ fn save_image_with_metadata(
     Ok(())
 }
 
-fn supports_streaming_export(output_format: &str, export_settings: &ExportSettings) -> bool {
+fn supports_streaming_export(output_format: &str, _export_settings: &ExportSettings) -> bool {
     #[cfg(target_os = "android")]
     {
-        let _ = (output_format, export_settings);
+        let _ = (output_format, _export_settings);
         false
     }
 
     #[cfg(not(target_os = "android"))]
     {
-        // JPEG deliberately remains on the full-frame path: mozjpeg-rs 0.9.2's
-        // scanline encoder panics on the deterministic 60 MP stress pattern.
-        export_settings.resize.is_none()
-            && export_settings.watermark.is_none()
-            && matches!(
-                output_format.to_ascii_lowercase().as_str(),
-                "png" | "tif" | "tiff"
-            )
+        matches!(
+            output_format.to_ascii_lowercase().as_str(),
+            "jpg" | "jpeg" | "png" | "tif" | "tiff"
+        )
     }
 }
 
@@ -674,6 +698,248 @@ fn validate_streamed_rgba_row(
         ));
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+impl PreparedWatermark {
+    fn row_intersection(&self, base_width: u32, row_y: u32) -> Option<(u32, u32, u32)> {
+        let watermark_y = i64::from(row_y) - self.y;
+        if watermark_y < 0 || watermark_y >= i64::from(self.image.height()) {
+            return None;
+        }
+
+        let start_x = self.x.max(0);
+        let end_x = (self.x + i64::from(self.image.width())).min(i64::from(base_width));
+        if start_x >= end_x {
+            return None;
+        }
+
+        Some((start_x as u32, end_x as u32, watermark_y as u32))
+    }
+
+    fn blend_row(&self, base_width: u32, row_y: u32, rgba_row: &mut [u8]) {
+        let Some((start_x, end_x, watermark_y)) = self.row_intersection(base_width, row_y) else {
+            return;
+        };
+
+        for base_x in start_x..end_x {
+            let watermark_x = (i64::from(base_x) - self.x) as u32;
+            let byte_offset = base_x as usize * 4;
+            let mut base = Rgba([
+                rgba_row[byte_offset],
+                rgba_row[byte_offset + 1],
+                rgba_row[byte_offset + 2],
+                rgba_row[byte_offset + 3],
+            ]);
+            base.blend(self.image.get_pixel(watermark_x, watermark_y));
+            rgba_row[byte_offset..byte_offset + 4].copy_from_slice(&base.0);
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+struct StreamingRowOutput<'a> {
+    width: u32,
+    height: u32,
+    written_rows: u32,
+    watermark: Option<PreparedWatermark>,
+    scratch: Vec<u8>,
+    sink: &'a mut dyn FnMut(&[u8]) -> Result<(), String>,
+}
+
+#[cfg(not(target_os = "android"))]
+impl<'a> StreamingRowOutput<'a> {
+    fn new(
+        width: u32,
+        height: u32,
+        watermark: Option<PreparedWatermark>,
+        sink: &'a mut dyn FnMut(&[u8]) -> Result<(), String>,
+    ) -> Result<Self, String> {
+        let row_bytes = (width as usize)
+            .checked_mul(4)
+            .ok_or_else(|| format!("Streaming output width {width} exceeds the row size limit"))?;
+        let mut scratch = Vec::new();
+        if watermark.is_some() {
+            scratch
+                .try_reserve_exact(row_bytes)
+                .map_err(|error| format!("Failed to reserve the watermark row buffer: {error}"))?;
+        }
+        Ok(Self {
+            width,
+            height,
+            written_rows: 0,
+            watermark,
+            scratch,
+            sink,
+        })
+    }
+
+    fn emit(&mut self, rgba_row: &[u8]) -> Result<(), String> {
+        validate_streamed_rgba_row(rgba_row, self.width, self.height, self.written_rows)?;
+        let row_intersects_watermark = self
+            .watermark
+            .as_ref()
+            .and_then(|watermark| watermark.row_intersection(self.width, self.written_rows))
+            .is_some();
+
+        if row_intersects_watermark {
+            self.scratch.clear();
+            self.scratch.extend_from_slice(rgba_row);
+            if let Some(watermark) = &self.watermark {
+                watermark.blend_row(self.width, self.written_rows, &mut self.scratch);
+            }
+            (self.sink)(&self.scratch)?;
+        } else {
+            (self.sink)(rgba_row)?;
+        }
+        self.written_rows += 1;
+        Ok(())
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        if self.written_rows != self.height {
+            return Err(format!(
+                "Streaming transform produced {} rows; expected {}",
+                self.written_rows, self.height
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
+fn transform_streaming_rgba_rows<F>(
+    source_width: u32,
+    source_height: u32,
+    target_width: u32,
+    target_height: u32,
+    watermark_settings: Option<&WatermarkSettings>,
+    output_sink: &mut dyn FnMut(&[u8]) -> Result<(), String>,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    if source_width == 0 || source_height == 0 || target_width == 0 || target_height == 0 {
+        return Err(format!(
+            "Streaming transform requires non-zero dimensions; source={}x{}, target={}x{}",
+            source_width, source_height, target_width, target_height
+        ));
+    }
+
+    let watermark = watermark_settings
+        .map(|settings| prepare_watermark(target_width, target_height, settings))
+        .transpose()?
+        .flatten();
+    let mut output = StreamingRowOutput::new(target_width, target_height, watermark, output_sink)?;
+    let mut source_rows = 0_u32;
+
+    if (source_width, source_height) == (target_width, target_height) {
+        let mut input_sink = |row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(row, source_width, source_height, source_rows)?;
+            source_rows += 1;
+            output.emit(row)
+        };
+        render_rows(&mut input_sink)?;
+    } else {
+        // The legacy full-frame path used encoded-space Lanczos3. Keep that
+        // semantic while switching storage to zenresize's bounded row ring.
+        let resize_config =
+            ResizeConfig::builder(source_width, source_height, target_width, target_height)
+                .filter(StreamingResizeFilter::Lanczos)
+                .format(PixelDescriptor::RGBA8_SRGB)
+                .srgb()
+                .build();
+        let mut resizer = StreamingResize::new(&resize_config);
+        let mut input_sink = |row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(row, source_width, source_height, source_rows)?;
+            resizer.push_row(row).map_err(|error| {
+                format!("Failed to push source row {source_rows} into streaming resize: {error}")
+            })?;
+            source_rows += 1;
+            while let Some(resized_row) = resizer.next_output_row() {
+                output.emit(resized_row)?;
+            }
+            Ok(())
+        };
+        render_rows(&mut input_sink)?;
+        if source_rows != source_height {
+            return Err(format!(
+                "Streaming transform received {source_rows} source rows; expected {source_height}"
+            ));
+        }
+
+        resizer.finish();
+        while let Some(resized_row) = resizer.next_output_row() {
+            output.emit(resized_row)?;
+        }
+        if !resizer.is_complete() {
+            return Err("Streaming resize did not produce a complete output frame".to_string());
+        }
+    }
+
+    if source_rows != source_height {
+        return Err(format!(
+            "Streaming transform received {source_rows} source rows; expected {source_height}"
+        ));
+    }
+    output.finish()
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_streaming_jpeg<F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    jpeg_quality: u8,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    if width > u32::from(u16::MAX) || height > u32::from(u16::MAX) {
+        return Err(format!(
+            "JPEG dimensions {width}x{height} exceed the format limit of 65535 pixels per axis"
+        ));
+    }
+    let jpeg_quality = jpeg_quality.clamp(1, 100);
+    let quant_tables = MozjpegTables::generate(jpeg_quality, QuantTablePreset::JpegAnnexK);
+    let config = JpegStreamEncoderConfig::ycbcr(
+        JpegQuality::ApproxMozjpeg(jpeg_quality),
+        ChromaSubsampling::None,
+    )
+    .quant_table_config(QuantTableConfig::Custom(quant_tables))
+    .progressive(false)
+    .huffman(HuffmanStrategy::FixedAnnexK)
+    .deringing(false)
+    .aq_enabled(false);
+    let mut encoder = config
+        .request()
+        .icc_profile(srgb_v4_profile())
+        .encode_from_bytes(width, height, JpegPixelLayout::Rgba8Srgb)
+        .map_err(|error| format!("Failed to configure streaming JPEG encoder: {error}"))?;
+    let mut written_rows = 0_u32;
+    {
+        let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+            encoder
+                .push_packed(rgba_row, Unstoppable)
+                .map_err(|error| format!("Failed to stream JPEG row {written_rows}: {error}"))?;
+            written_rows += 1;
+            Ok(())
+        };
+        render_rows(&mut sink)?;
+    }
+    if written_rows != height {
+        return Err(format!(
+            "Streaming JPEG received {written_rows} rows; expected {height}"
+        ));
+    }
+    encoder
+        .finish_to(output)
+        .map(|_| ())
+        .map_err(|error| format!("Failed to finish streaming JPEG: {error}"))
 }
 
 #[cfg(not(target_os = "android"))]
@@ -749,7 +1015,14 @@ where
         .rows_per_strip(ROWS_PER_STRIP.min(height).max(1))
         .map_err(|error| format!("Failed to configure TIFF strips: {error}"))?;
 
-    let mut strip = Vec::<u16>::with_capacity(width as usize * 3 * ROWS_PER_STRIP as usize);
+    let strip_capacity = (width as usize)
+        .checked_mul(3)
+        .and_then(|samples_per_row| samples_per_row.checked_mul(ROWS_PER_STRIP as usize))
+        .ok_or_else(|| format!("TIFF width {width} exceeds the strip size limit"))?;
+    let mut strip = Vec::<u16>::new();
+    strip
+        .try_reserve_exact(strip_capacity)
+        .map_err(|error| format!("Failed to reserve the TIFF strip buffer: {error}"))?;
     let mut written_rows = 0_u32;
     {
         let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
@@ -793,12 +1066,14 @@ fn encode_streaming_rgba_rows<F>(
     width: u32,
     height: u32,
     output_format: &str,
+    jpeg_quality: u8,
     render_rows: F,
 ) -> Result<(), String>
 where
     F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
 {
     match output_format.to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" => encode_streaming_jpeg(output, width, height, jpeg_quality, render_rows),
         "png" => encode_streaming_png(output, width, height, render_rows),
         "tif" | "tiff" => encode_streaming_tiff(output, width, height, render_rows),
         _ => Err(format!(
@@ -831,7 +1106,12 @@ fn process_and_save_streaming_export(
         "process_and_save_streaming_export",
         app_handle,
     );
-    let (width, height) = prepared.image.dimensions();
+    let (source_width, source_height) = prepared.image.dimensions();
+    let (target_width, target_height) = export_settings
+        .resize
+        .as_ref()
+        .map(|resize| calculate_resize_target(source_width, source_height, resize))
+        .unwrap_or((source_width, source_height));
     let mut temporary = create_temporary_export(output_path)?;
 
     let PreparedExportRender {
@@ -843,35 +1123,50 @@ fn process_and_save_streaming_export(
     } = prepared;
     encode_streaming_rgba_rows(
         temporary.as_file_mut(),
-        width,
-        height,
+        target_width,
+        target_height,
         output_format,
+        export_settings.jpeg_quality,
         |encoder_sink| {
-            let mut checked_sink = |row: &[u8]| -> Result<(), String> {
+            let mut checked_encoder_sink = |row: &[u8]| -> Result<(), String> {
                 ensure_export_not_cancelled(cancellation_token)?;
                 encoder_sink(row)
             };
-            let rendered_dimensions = process_and_stream_rgba_rows(
-                context,
-                state,
-                image.as_ref(),
-                unique_hash,
-                RenderRequest {
-                    adjustments,
-                    mask_bitmaps: &mask_bitmaps,
-                    lut,
-                    roi: None,
+            transform_streaming_rgba_rows(
+                source_width,
+                source_height,
+                target_width,
+                target_height,
+                export_settings.watermark.as_ref(),
+                &mut checked_encoder_sink,
+                |transform_sink| {
+                    let mut checked_sink = |row: &[u8]| -> Result<(), String> {
+                        ensure_export_not_cancelled(cancellation_token)?;
+                        transform_sink(row)
+                    };
+                    let rendered_dimensions = process_and_stream_rgba_rows(
+                        context,
+                        state,
+                        image.as_ref(),
+                        unique_hash,
+                        RenderRequest {
+                            adjustments,
+                            mask_bitmaps: &mask_bitmaps,
+                            lut,
+                            roi: None,
+                        },
+                        "process_and_save_streaming_export",
+                        &mut checked_sink,
+                    )?;
+                    if rendered_dimensions != (source_width, source_height) {
+                        return Err(format!(
+                            "Streamed GPU dimensions {:?} do not match source dimensions {}x{}",
+                            rendered_dimensions, source_width, source_height
+                        ));
+                    }
+                    Ok(())
                 },
-                "process_and_save_streaming_export",
-                &mut checked_sink,
-            )?;
-            if rendered_dimensions != (width, height) {
-                return Err(format!(
-                    "Streamed GPU dimensions {:?} do not match encoder dimensions {}x{}",
-                    rendered_dimensions, width, height
-                ));
-            }
-            Ok(())
+            )
         },
     )?;
     temporary
@@ -2261,23 +2556,68 @@ mod tests {
     fn encode_streaming_fixture(
         image: &DynamicImage,
         output_format: &str,
+        jpeg_quality: u8,
     ) -> Result<Vec<u8>, String> {
         let rgba = image.to_rgba8();
         let (width, height) = rgba.dimensions();
         let row_bytes = width as usize * 4;
         let mut file = tempfile::tempfile().map_err(|error| error.to_string())?;
-        encode_streaming_rgba_rows(&mut file, width, height, output_format, |sink| {
-            for row in rgba.as_raw().chunks_exact(row_bytes) {
-                sink(row)?;
-            }
-            Ok(())
-        })?;
+        encode_streaming_rgba_rows(
+            &mut file,
+            width,
+            height,
+            output_format,
+            jpeg_quality,
+            |sink| {
+                for row in rgba.as_raw().chunks_exact(row_bytes) {
+                    sink(row)?;
+                }
+                Ok(())
+            },
+        )?;
         file.seek(SeekFrom::Start(0))
             .map_err(|error| error.to_string())?;
         let mut encoded = Vec::new();
         file.read_to_end(&mut encoded)
             .map_err(|error| error.to_string())?;
         Ok(encoded)
+    }
+
+    fn collect_streaming_transform(
+        image: &DynamicImage,
+        settings: &ExportSettings,
+    ) -> Result<RgbaImage, String> {
+        let rgba = image.to_rgba8();
+        let (source_width, source_height) = rgba.dimensions();
+        let (target_width, target_height) = settings
+            .resize
+            .as_ref()
+            .map(|resize| calculate_resize_target(source_width, source_height, resize))
+            .unwrap_or((source_width, source_height));
+        let source_row_bytes = source_width as usize * 4;
+        let mut transformed =
+            Vec::with_capacity(target_width as usize * target_height as usize * 4);
+        let mut output_sink = |row: &[u8]| -> Result<(), String> {
+            transformed.extend_from_slice(row);
+            Ok(())
+        };
+        transform_streaming_rgba_rows(
+            source_width,
+            source_height,
+            target_width,
+            target_height,
+            settings.watermark.as_ref(),
+            &mut output_sink,
+            |source_sink| {
+                for row in rgba.as_raw().chunks_exact(source_row_bytes) {
+                    source_sink(row)?;
+                }
+                Ok(())
+            },
+        )?;
+
+        RgbaImage::from_raw(target_width, target_height, transformed)
+            .ok_or_else(|| "Streaming transform returned an invalid RGBA buffer".to_string())
     }
 
     fn assert_decoder_contract<D: ImageDecoder>(
@@ -2295,6 +2635,20 @@ mod tests {
         if expect_exact_profile_bytes {
             assert_eq!(profile, srgb_v4_profile());
         }
+    }
+
+    fn mean_rgb_abs_error(reference: &RgbImage, candidate: &RgbImage) -> f64 {
+        assert_eq!(reference.dimensions(), candidate.dimensions());
+        let total_delta: u64 = reference
+            .pixels()
+            .zip(candidate.pixels())
+            .map(|(reference, candidate)| {
+                (0..3)
+                    .map(|channel| u64::from(reference[channel].abs_diff(candidate[channel])))
+                    .sum::<u64>()
+            })
+            .sum();
+        total_delta as f64 / (reference.width() as f64 * reference.height() as f64 * 3.0)
     }
 
     #[test]
@@ -2342,7 +2696,14 @@ mod tests {
         let image = fixture_image(37, 23);
         let expected_rgba = image.to_rgba8();
 
-        let png = encode_streaming_fixture(&image, "png").expect("stream PNG");
+        let jpeg = encode_streaming_fixture(&image, "jpeg", 92).expect("stream JPEG");
+        assert_decoder_contract(
+            JpegDecoder::new(Cursor::new(&jpeg)).expect("decode streaming JPEG"),
+            (37, 23),
+            true,
+        );
+
+        let png = encode_streaming_fixture(&image, "png", 92).expect("stream PNG");
         assert_decoder_contract(
             PngDecoder::new(Cursor::new(&png)).expect("decode streaming PNG"),
             (37, 23),
@@ -2353,7 +2714,7 @@ mod tests {
             .to_rgba8();
         assert_eq!(decoded_png, expected_rgba);
 
-        let tiff = encode_streaming_fixture(&image, "tiff").expect("stream TIFF");
+        let tiff = encode_streaming_fixture(&image, "tiff", 92).expect("stream TIFF");
         assert_decoder_contract(
             TiffDecoder::new(Cursor::new(&tiff)).expect("decode streaming TIFF"),
             (37, 23),
@@ -2366,9 +2727,56 @@ mod tests {
     }
 
     #[test]
+    fn streaming_jpeg_preserves_the_existing_quality_scale() {
+        let image = fixture_image(257, 173);
+        let reference = image.to_rgb8();
+        let mut previous_streamed_error = f64::INFINITY;
+        let mut previous_streamed_bytes = 0_usize;
+
+        for quality in [50, 75, 92] {
+            let legacy = encode_image_to_bytes(&image, "jpeg", quality)
+                .unwrap_or_else(|error| panic!("encode legacy JPEG Q{quality}: {error}"));
+            let streamed = encode_streaming_fixture(&image, "jpeg", quality)
+                .unwrap_or_else(|error| panic!("stream JPEG Q{quality}: {error}"));
+            let legacy_decoded = image::load_from_memory_with_format(&legacy, ImageFormat::Jpeg)
+                .unwrap_or_else(|error| panic!("decode legacy JPEG Q{quality}: {error}"))
+                .to_rgb8();
+            let streamed_decoded =
+                image::load_from_memory_with_format(&streamed, ImageFormat::Jpeg)
+                    .unwrap_or_else(|error| panic!("decode streaming JPEG Q{quality}: {error}"))
+                    .to_rgb8();
+            let legacy_error = mean_rgb_abs_error(&reference, &legacy_decoded);
+            let streamed_error = mean_rgb_abs_error(&reference, &streamed_decoded);
+            let size_delta = streamed.len().abs_diff(legacy.len());
+            let allowed_size_delta = (legacy.len() / 20).max(512);
+
+            assert!(
+                streamed_error <= legacy_error * 1.05 + 0.15,
+                "streamed JPEG Q{quality} mean RGB error {streamed_error:.3} drifted from legacy {legacy_error:.3}"
+            );
+            assert!(
+                size_delta <= allowed_size_delta,
+                "streamed JPEG Q{quality} size {} drifted from legacy {}",
+                streamed.len(),
+                legacy.len()
+            );
+            assert!(
+                streamed_error < previous_streamed_error,
+                "streamed JPEG error did not improve at Q{quality}"
+            );
+            assert!(
+                streamed.len() > previous_streamed_bytes,
+                "streamed JPEG size did not increase at Q{quality}"
+            );
+            previous_streamed_error = streamed_error;
+            previous_streamed_bytes = streamed.len();
+        }
+    }
+
+    #[test]
     fn streaming_export_requires_exactly_one_complete_frame() {
         let mut file = tempfile::tempfile().expect("temporary output");
-        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", |sink| {
+        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", 90, |sink| {
             sink(&[0; 4 * 4])?;
             sink(&[0; 4 * 4])?;
             Ok(())
@@ -2377,7 +2785,7 @@ mod tests {
         assert!(error.contains("expected 3"), "unexpected error: {error}");
 
         let mut overflow_file = tempfile::tempfile().expect("temporary overflow output");
-        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", |sink| {
+        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", 90, |sink| {
             sink(&[0; 4 * 4])?;
             sink(&[0; 4 * 4])?;
             Ok(())
@@ -2387,6 +2795,18 @@ mod tests {
             error.contains("more than the declared 1 rows"),
             "unexpected error: {error}"
         );
+
+        let mut oversized_jpeg = tempfile::tempfile().expect("temporary oversized JPEG");
+        let error = encode_streaming_rgba_rows(
+            &mut oversized_jpeg,
+            u32::from(u16::MAX) + 1,
+            1,
+            "jpeg",
+            90,
+            |_| Ok(()),
+        )
+        .expect_err("oversized JPEG dimensions must fail before encoding");
+        assert!(error.contains("65535"), "unexpected error: {error}");
 
         let settings = ExportSettings {
             jpeg_quality: 90,
@@ -2399,7 +2819,7 @@ mod tests {
             export_masks: false,
             preserve_folders: false,
         };
-        assert!(!supports_streaming_export("jpeg", &settings));
+        assert!(supports_streaming_export("jpeg", &settings));
         assert!(supports_streaming_export("png", &settings));
         assert!(supports_streaming_export("tiff", &settings));
         assert!(!supports_streaming_export("webp", &settings));
@@ -2410,7 +2830,111 @@ mod tests {
             value: 2_048,
             dont_enlarge: true,
         });
-        assert!(!supports_streaming_export("png", &resized));
+        assert!(supports_streaming_export("png", &resized));
+
+        let mut watermarked = resized;
+        watermarked.watermark = Some(WatermarkSettings {
+            path: "unused-routing-fixture.png".to_string(),
+            anchor: WatermarkAnchor::BottomRight,
+            scale: 10.0,
+            spacing: 5.0,
+            opacity: 50.0,
+        });
+        assert!(supports_streaming_export("jpeg", &watermarked));
+    }
+
+    #[test]
+    fn streaming_resize_matches_the_bounded_batch_reference() {
+        let image = fixture_image(37, 23);
+        let settings = ExportSettings {
+            jpeg_quality: 92,
+            resize: Some(ResizeOptions {
+                mode: ResizeMode::Width,
+                value: 19,
+                dont_enlarge: false,
+            }),
+            keep_metadata: false,
+            preserve_timestamps: false,
+            strip_gps: false,
+            filename_template: None,
+            watermark: None,
+            export_masks: false,
+            preserve_folders: false,
+        };
+        let streamed = collect_streaming_transform(&image, &settings).expect("stream resize");
+        let source = image.to_rgba8();
+        let (target_width, target_height) = streamed.dimensions();
+        let config =
+            ResizeConfig::builder(source.width(), source.height(), target_width, target_height)
+                .filter(StreamingResizeFilter::Lanczos)
+                .format(PixelDescriptor::RGBA8_SRGB)
+                .srgb()
+                .build();
+        let expected = zenresize::Resizer::new(&config).resize(source.as_raw());
+
+        assert_eq!(streamed.as_raw(), &expected);
+        assert_eq!(streamed.dimensions(), (19, 12));
+
+        let legacy = image
+            .resize(19, 12, imageops::FilterType::Lanczos3)
+            .to_rgba8();
+        let mut max_channel_delta = 0_u8;
+        let mut total_channel_delta = 0_u64;
+        for (streamed, legacy) in streamed.pixels().zip(legacy.pixels()) {
+            for channel in 0..3 {
+                let delta = streamed[channel].abs_diff(legacy[channel]);
+                max_channel_delta = max_channel_delta.max(delta);
+                total_channel_delta += u64::from(delta);
+            }
+        }
+        let mean_channel_delta = total_channel_delta as f64 / (19 * 12 * 3) as f64;
+        assert!(
+            mean_channel_delta <= 0.5,
+            "mean channel delta {mean_channel_delta:.3} exceeded the migration bound"
+        );
+        assert!(
+            max_channel_delta <= 2,
+            "max channel delta {max_channel_delta} exceeded the migration bound"
+        );
+    }
+
+    #[test]
+    fn streaming_watermark_matches_the_existing_full_frame_blend() {
+        let image = fixture_image(37, 23);
+        let directory = tempfile::tempdir().expect("watermark directory");
+        let watermark_path = directory.path().join("watermark.png");
+        let watermark = RgbaImage::from_fn(7, 3, |x, y| {
+            Rgba([
+                (x * 31) as u8,
+                (y * 67) as u8,
+                ((x + y) * 23) as u8,
+                (80 + x * 17 + y * 11) as u8,
+            ])
+        });
+        watermark.save(&watermark_path).expect("save watermark");
+        let settings = ExportSettings {
+            jpeg_quality: 92,
+            resize: None,
+            keep_metadata: false,
+            preserve_timestamps: false,
+            strip_gps: false,
+            filename_template: None,
+            watermark: Some(WatermarkSettings {
+                path: watermark_path.to_string_lossy().into_owned(),
+                anchor: WatermarkAnchor::BottomRight,
+                scale: 24.0,
+                spacing: 7.0,
+                opacity: 63.0,
+            }),
+            export_masks: false,
+            preserve_folders: false,
+        };
+
+        let streamed = collect_streaming_transform(&image, &settings).expect("stream watermark");
+        let expected = apply_export_resize_and_watermark(image, &settings)
+            .expect("apply existing watermark")
+            .to_rgba8();
+        assert_eq!(streamed, expected);
     }
 
     #[cfg(unix)]
@@ -2452,6 +2976,43 @@ mod tests {
             .unwrap_or(6_336_u32);
         let output_format =
             std::env::var("RAW_EDITOR_BENCH_FORMAT").unwrap_or_else(|_| "png".to_string());
+        let resize_long_edge = std::env::var("RAW_EDITOR_BENCH_RESIZE_LONG_EDGE")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0);
+        let resize_options = resize_long_edge.map(|value| ResizeOptions {
+            mode: ResizeMode::LongEdge,
+            value,
+            dont_enlarge: true,
+        });
+        let (target_width, target_height) = resize_options
+            .as_ref()
+            .map(|resize| calculate_resize_target(width, height, resize))
+            .unwrap_or((width, height));
+        let watermark_enabled = std::env::var("RAW_EDITOR_BENCH_WATERMARK")
+            .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "yes"));
+        let watermark_directory = watermark_enabled
+            .then(|| tempfile::tempdir().expect("temporary benchmark watermark directory"));
+        let watermark_settings = watermark_directory.as_ref().map(|directory| {
+            let path = directory.path().join("benchmark-watermark.png");
+            RgbaImage::from_fn(512, 128, |x, y| {
+                Rgba([
+                    x.wrapping_mul(29).wrapping_add(y * 3) as u8,
+                    x.wrapping_mul(7).wrapping_add(y * 17) as u8,
+                    x.wrapping_mul(13).wrapping_add(y * 11) as u8,
+                    (96 + (x + y) % 160) as u8,
+                ])
+            })
+            .save(&path)
+            .expect("write benchmark watermark");
+            WatermarkSettings {
+                path: path.to_string_lossy().into_owned(),
+                anchor: WatermarkAnchor::BottomRight,
+                scale: 12.0,
+                spacing: 5.0,
+                opacity: 75.0,
+            }
+        });
         assert!(width > 0 && height > 0);
 
         let running = Arc::new(AtomicBool::new(true));
@@ -2477,26 +3038,45 @@ mod tests {
         let row_bytes = width as usize * 4;
         let mut band = vec![0_u8; buffer_plan.band_rgba_bytes()];
         let started = Instant::now();
-        encode_streaming_rgba_rows(&mut output, width, height, &output_format, |sink| {
-            for band_y in (0..height).step_by(buffer_plan.band_rows as usize) {
-                let rows = buffer_plan.band_rows.min(height - band_y);
-                let active_band = &mut band[..rows as usize * row_bytes];
-                for (local_y, row) in active_band.chunks_exact_mut(row_bytes).enumerate() {
-                    let y = band_y + local_y as u32;
-                    for (x, pixel) in row.chunks_exact_mut(4).enumerate() {
-                        let x = x as u32;
-                        pixel[0] = x.wrapping_mul(17).wrapping_add(y * 3) as u8;
-                        pixel[1] = x.wrapping_mul(5).wrapping_add(y * 13) as u8;
-                        pixel[2] = x.wrapping_mul(11).wrapping_add(y * 7) as u8;
-                        pixel[3] = 255;
-                    }
-                }
-                for row in active_band.chunks_exact(row_bytes) {
-                    sink(row)?;
-                }
-            }
-            Ok(())
-        })
+        encode_streaming_rgba_rows(
+            &mut output,
+            target_width,
+            target_height,
+            &output_format,
+            92,
+            |encoder_sink| {
+                transform_streaming_rgba_rows(
+                    width,
+                    height,
+                    target_width,
+                    target_height,
+                    watermark_settings.as_ref(),
+                    encoder_sink,
+                    |source_sink| {
+                        for band_y in (0..height).step_by(buffer_plan.band_rows as usize) {
+                            let rows = buffer_plan.band_rows.min(height - band_y);
+                            let active_band = &mut band[..rows as usize * row_bytes];
+                            for (local_y, row) in
+                                active_band.chunks_exact_mut(row_bytes).enumerate()
+                            {
+                                let y = band_y + local_y as u32;
+                                for (x, pixel) in row.chunks_exact_mut(4).enumerate() {
+                                    let x = x as u32;
+                                    pixel[0] = x.wrapping_mul(17).wrapping_add(y * 3) as u8;
+                                    pixel[1] = x.wrapping_mul(5).wrapping_add(y * 13) as u8;
+                                    pixel[2] = x.wrapping_mul(11).wrapping_add(y * 7) as u8;
+                                    pixel[3] = 255;
+                                }
+                            }
+                            for row in active_band.chunks_exact(row_bytes) {
+                                source_sink(row)?;
+                            }
+                        }
+                        Ok(())
+                    },
+                )
+            },
+        )
         .expect("run synthetic streaming export");
         let elapsed = started.elapsed();
         running.store(false, Ordering::Relaxed);
@@ -2504,10 +3084,13 @@ mod tests {
         let output_bytes = output.metadata().expect("benchmark output metadata").len();
 
         println!(
-            "{{\"format\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"outputBytes\":{},\"peakRssBytes\":{},\"producerBandBytes\":{},\"legacyFullFrameBytes\":{}}}",
+            "{{\"format\":\"{}\",\"width\":{},\"height\":{},\"targetWidth\":{},\"targetHeight\":{},\"watermark\":{},\"elapsedMs\":{},\"outputBytes\":{},\"peakRssBytes\":{},\"producerBandBytes\":{},\"legacyFullFrameBytes\":{}}}",
             output_format,
             width,
             height,
+            target_width,
+            target_height,
+            watermark_enabled,
             elapsed.as_millis(),
             output_bytes,
             peak_rss.load(Ordering::Relaxed),
