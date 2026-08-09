@@ -25,6 +25,7 @@
     "preview-transport:check": "node tests/preview-transport-boundary.mjs",
     "preview-resolution:check": "node tests/preview-resolution.mjs",
     "render-strategy:check": "node tests/render-strategy-boundary.mjs",
+    "watermark-contract:check": "node tests/watermark-contract.mjs",
     "synthetic-export:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_streaming_export_harness -- --ignored --nocapture",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -1,5 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { ExportPreset, WatermarkAnchor } from '../components/ui/ExportImportProperties';
+import { DEFAULT_WATERMARK_PATH, normalizeWatermarkPath } from '../features/export/watermark';
+
+const WATERMARK_ANCHORS = new Set<string>(Object.values(WatermarkAnchor));
 
 export function useExportSettings() {
   const [fileFormat, setFileFormat] = useState('jpeg');
@@ -15,13 +18,14 @@ export function useExportSettings() {
   const [preserveFolders, setPreserveFolders] = useState(false);
   const [filenameTemplate, setFilenameTemplate] = useState('{original_filename}_edited');
   const [enableWatermark, setEnableWatermark] = useState(false);
-  const [watermarkPath, setWatermarkPath] = useState<string | null>(null);
-  const [watermarkAnchor, setWatermarkAnchor] = useState<WatermarkAnchor>(WatermarkAnchor.BottomRight);
+  const [watermarkPath, setWatermarkPath] = useState(DEFAULT_WATERMARK_PATH);
+  const [watermarkAnchor, setWatermarkAnchor] = useState<WatermarkAnchor>(WatermarkAnchor.Center);
   const [watermarkScale, setWatermarkScale] = useState(10);
   const [watermarkSpacing, setWatermarkSpacing] = useState(5);
-  const [watermarkOpacity, setWatermarkOpacity] = useState(75);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(80);
 
   const handleApplyPreset = useCallback((preset: ExportPreset) => {
+    const usesLegacyEmptyWatermark = !preset.watermarkPath;
     setFileFormat(preset.fileFormat);
     setJpegQuality(preset.jpegQuality);
     setEnableResize(preset.enableResize);
@@ -35,11 +39,15 @@ export function useExportSettings() {
     setPreserveFolders(preset.preserveFolders ?? false);
     setFilenameTemplate(preset.filenameTemplate);
     setEnableWatermark(preset.enableWatermark);
-    setWatermarkPath(preset.watermarkPath);
-    setWatermarkAnchor(preset.watermarkAnchor as WatermarkAnchor);
-    setWatermarkScale(preset.watermarkScale);
-    setWatermarkSpacing(preset.watermarkSpacing);
-    setWatermarkOpacity(preset.watermarkOpacity);
+    setWatermarkPath(normalizeWatermarkPath(preset.watermarkPath));
+    setWatermarkAnchor(
+      !usesLegacyEmptyWatermark && WATERMARK_ANCHORS.has(preset.watermarkAnchor)
+        ? (preset.watermarkAnchor as WatermarkAnchor)
+        : WatermarkAnchor.Center,
+    );
+    setWatermarkScale(preset.watermarkScale ?? 10);
+    setWatermarkSpacing(preset.watermarkSpacing ?? 5);
+    setWatermarkOpacity(usesLegacyEmptyWatermark ? 80 : (preset.watermarkOpacity ?? 80));
   }, []);
 
   const currentSettingsObject = useMemo(
@@ -82,7 +90,7 @@ export function useExportSettings() {
       watermarkScale,
       watermarkSpacing,
       watermarkOpacity,
-    ]
+    ],
   );
 
   return {

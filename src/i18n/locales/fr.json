@@ -890,11 +890,17 @@
         "topLeft": "En haut à gauche",
         "topRight": "En haut à droite"
       },
+      "customWatermark": "Filigrane personnalisé",
+      "defaultWatermark": "Filigrane par défaut",
+      "importFailed": "Impossible d’utiliser cette image de filigrane.",
       "logoText": "Logo",
       "opacity": "Opacité",
       "previewText": "Aperçu",
+      "replaceWatermark": "Remplacer l’image du filigrane",
       "scale": "Échelle",
       "spacing": "Espacement",
+      "useDefault": "Par défaut",
+      "useDefaultWatermark": "Utiliser le filigrane par défaut",
       "watermarkImage": "Image en filigrane"
     }
   },

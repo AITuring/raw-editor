@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use crate::app_state::AppState;
+use crate::export_processing::DEFAULT_WATERMARK_PATH;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -260,11 +261,11 @@ pub fn default_export_presets() -> Vec<ExportPreset> {
             strip_gps: false,
             filename_template: "{original_filename}".to_string(),
             enable_watermark: false,
-            watermark_path: None,
-            watermark_anchor: Some("bottomRight".to_string()),
+            watermark_path: Some(DEFAULT_WATERMARK_PATH.to_string()),
+            watermark_anchor: Some("center".to_string()),
             watermark_scale: 10,
             watermark_spacing: 5,
-            watermark_opacity: 75,
+            watermark_opacity: 80,
             export_masks: Some(false),
             preserve_folders: Some(false),
             last_export_path: None,
@@ -282,11 +283,11 @@ pub fn default_export_presets() -> Vec<ExportPreset> {
             strip_gps: true,
             filename_template: "{original_filename}_web".to_string(),
             enable_watermark: false,
-            watermark_path: None,
-            watermark_anchor: Some("bottomRight".to_string()),
+            watermark_path: Some(DEFAULT_WATERMARK_PATH.to_string()),
+            watermark_anchor: Some("center".to_string()),
             watermark_scale: 10,
             watermark_spacing: 5,
-            watermark_opacity: 75,
+            watermark_opacity: 80,
             export_masks: Some(false),
             preserve_folders: Some(false),
             last_export_path: None,

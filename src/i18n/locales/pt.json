@@ -890,11 +890,17 @@
         "topLeft": "Superior Esquerdo",
         "topRight": "Superior Direito"
       },
+      "customWatermark": "Marca d'água personalizada",
+      "defaultWatermark": "Marca d'água padrão",
+      "importFailed": "Não foi possível usar esta imagem de marca d'água.",
       "logoText": "Logo",
       "opacity": "Opacidade",
       "previewText": "Visualização",
+      "replaceWatermark": "Substituir imagem da marca d'água",
       "scale": "Escala",
       "spacing": "Espaçamento",
+      "useDefault": "Padrão",
+      "useDefaultWatermark": "Usar marca d'água padrão",
       "watermarkImage": "Imagem da Marca D'água"
     }
   },

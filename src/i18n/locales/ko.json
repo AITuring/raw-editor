@@ -865,11 +865,17 @@
         "topLeft": "상단 왼쪽",
         "topRight": "상단 오른쪽"
       },
+      "customWatermark": "사용자 지정 워터마크",
+      "defaultWatermark": "기본 워터마크",
+      "importFailed": "이 워터마크 이미지를 사용할 수 없습니다.",
       "logoText": "로고",
       "opacity": "불투명도",
       "previewText": "미리보기",
+      "replaceWatermark": "워터마크 이미지 교체",
       "scale": "크기",
       "spacing": "간격",
+      "useDefault": "기본값",
+      "useDefaultWatermark": "기본 워터마크 사용",
       "watermarkImage": "워터마크 이미지"
     }
   },

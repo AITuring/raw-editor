@@ -867,11 +867,17 @@
         "topLeft": "Oben Links",
         "topRight": "Oben Rechts"
       },
+      "customWatermark": "Benutzerdefiniertes Wasserzeichen",
+      "defaultWatermark": "Standardwasserzeichen",
+      "importFailed": "Dieses Wasserzeichenbild kann nicht verwendet werden.",
       "logoText": "Logo",
       "opacity": "Deckkraft",
       "previewText": "Vorschau",
+      "replaceWatermark": "Wasserzeichenbild ersetzen",
       "scale": "Skalierung",
       "spacing": "Abstand",
+      "useDefault": "Standard",
+      "useDefaultWatermark": "Standardwasserzeichen verwenden",
       "watermarkImage": "Wasserzeichen-Bild"
     }
   },

@@ -865,11 +865,17 @@
         "topLeft": "左上",
         "topRight": "右上"
       },
+      "customWatermark": "カスタムウォーターマーク",
+      "defaultWatermark": "デフォルトのウォーターマーク",
+      "importFailed": "このウォーターマーク画像を使用できません。",
       "logoText": "ロゴ",
       "opacity": "不透明度",
       "previewText": "プレビュー",
+      "replaceWatermark": "ウォーターマーク画像を変更",
       "scale": "倍率",
       "spacing": "間隔",
+      "useDefault": "デフォルト",
+      "useDefaultWatermark": "デフォルトのウォーターマークを使用",
       "watermarkImage": "ウォーターマーク画像"
     }
   },

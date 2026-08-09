@@ -913,11 +913,17 @@
         "topLeft": "Góra, lewo",
         "topRight": "Góra, prawo"
       },
+      "customWatermark": "Niestandardowy znak wodny",
+      "defaultWatermark": "Domyślny znak wodny",
+      "importFailed": "Nie można użyć tego obrazu znaku wodnego.",
       "logoText": "Logo",
       "opacity": "Krycie",
       "previewText": "Podgląd",
+      "replaceWatermark": "Zmień obraz znaku wodnego",
       "scale": "Skala",
       "spacing": "Odstępy",
+      "useDefault": "Domyślny",
+      "useDefaultWatermark": "Użyj domyślnego znaku wodnego",
       "watermarkImage": "Obraz znaku wodnego"
     }
   },

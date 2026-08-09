@@ -867,11 +867,17 @@
         "topLeft": "Top Left",
         "topRight": "Top Right"
       },
+      "customWatermark": "Custom watermark",
+      "defaultWatermark": "Default watermark",
+      "importFailed": "Could not use this watermark image.",
       "logoText": "Logo",
       "opacity": "Opacity",
       "previewText": "Preview",
+      "replaceWatermark": "Replace watermark image",
       "scale": "Scale",
       "spacing": "Spacing",
+      "useDefault": "Default",
+      "useDefaultWatermark": "Use default watermark",
       "watermarkImage": "Watermark Image"
     }
   },

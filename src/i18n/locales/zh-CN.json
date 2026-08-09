@@ -865,11 +865,17 @@
         "topLeft": "左上角",
         "topRight": "右上角"
       },
+      "customWatermark": "自定义水印",
+      "defaultWatermark": "默认水印",
+      "importFailed": "无法使用此水印图像。",
       "logoText": "标志",
       "opacity": "不透明度",
       "previewText": "预览",
+      "replaceWatermark": "更换水印图像",
       "scale": "缩放",
       "spacing": "间距",
+      "useDefault": "默认",
+      "useDefaultWatermark": "恢复默认水印",
       "watermarkImage": "水印图像"
     }
   },

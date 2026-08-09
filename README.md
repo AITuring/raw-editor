@@ -121,6 +121,14 @@ npm run start            # Tauri 2 开发窗口
   迫使这三种格式恢复完整 RGBA8 CPU 帧。输出仍通过同目录临时文件原子发布，取消或编码失败不会
   留下半张目标文件。9504×6336 的生产者缓冲上限为 77,856,768 B，相比完整 RGBA8 帧少
   163,012,608 B。
+- ✅ 水印添加与默认水印直接沿用 `my-watermark` 水印页的交互和 `public/logo.png` 原始资产
+  （SHA-256 `4db6f91d61c973c4a580bc0710c9115a9b84da9c46e52f1db1e2de129bf7f8c0`）：开启水印后立即显示
+  真实默认水印缩略图，点击即可用 PNG/JPEG/WebP/TIFF/GIF 替换，并可一步恢复默认。默认位置为
+  居中、不透明度 80%；水印开关仍默认关闭，避免未确认就改变导出。内置水印由 Vite 预览资产和
+  Rust `include_bytes!` 共用稳定标识，打包后不依赖开发服务器 URL 或用户机器文件路径；完整帧与
+  JPEG/PNG/TIFF 逐行导出继续复用同一后端缩放、定位和 alpha 混合逻辑。自定义水印仅接受文件
+  选择器明确授权的图像，验证大小和像素边界后转为 PNG，并按内容哈希原子写入应用私有
+  `watermarks` 目录；WebView 只获准预览该窄目录，因此重新启动后仍可显示，不需要开放主目录。
 - ✅ JPEG 文件导出已绕开会在 60MP 压力图样上位移溢出的 `mozjpeg-rs 0.9.2` 逐行接口，改用
   `zenjpeg 0.8.4` 的 baseline 4:4:4、JPEG Annex K 固定 Huffman 单遍逐行输入；量化表继续使用旧
   `image` 编码器的 Annex K 基表和 libjpeg 质量缩放，并关闭新编码器的 AQ/deringing，避免迁移时
@@ -131,9 +139,9 @@ npm run start            # Tauri 2 开发窗口
   两张 RGBA8 显示 surface 的逻辑占用减少 498,073,592 B。导出结束后，processor 与输入 texture
   合计达到 512 MiB 高水位即主动回收；大尺寸显示 processor 切换到 CPU 导出时也会按滞回规则收缩。
 - ✅ 扩展可重复的 9504×6336 合成大图编码基准 `npm run synthetic-export:bench`。在 Apple M2 Max、
-  32 GB、macOS 15.6.1 的本轮运行中，全尺寸 PNG 为 816 ms / 84,590,592 B 峰值 RSS；全尺寸 JPEG
-  为 1,898 ms / 342,999,040 B，输出 81,882,505 B；从 60MP 逐行缩至 4096×2731 并叠加水印的
-  JPEG 为 1,304 ms / 143,982,592 B，输出 17,866,661 B。基准实际分配 77,856,768 B 生产者带状
+  32 GB、macOS 15.6.1 的本轮运行中，全尺寸 PNG 为 821 ms / 84,770,816 B 峰值 RSS；全尺寸 JPEG
+  为 1,736 ms / 343,064,576 B，输出 81,882,505 B；从 60MP 逐行缩至 4096×2731 并叠加水印的
+  JPEG 为 1,289 ms / 142,966,784 B，输出 17,866,661 B。基准实际分配 77,856,768 B 生产者带状
   缓冲，但不包含 RAW 解码或 GPU 处理，因而只证明 RGB 行管线的稳定性和内存边界，不代表
   α7R V 画质或端到端性能。
 
@@ -141,7 +149,8 @@ npm run start            # Tauri 2 开发窗口
 的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
 链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
 不冒充已经完成。四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
-GPU 高水位回收和合成大图 harness 已经闭环。WebP、JXL、AVIF 与 Android 导出仍走完整帧路径；
+内置默认水印与替换/恢复交互、GPU 高水位回收和合成大图 harness 已经闭环。WebP、JXL、AVIF 与
+Android 导出仍走完整帧路径；
 `zenjpeg` 虽不再保留完整 RGBA8 帧，但会在完成阶段同时持有压缩扫描数据和组装后的 JPEG；本轮
 4:4:4 高频全尺寸基准的峰值 RSS 仍达到 342,999,040 B。保留元数据时 JPEG/PNG 还会把压缩文件
 读回内存。下一阶段优先消除这些压缩码流峰值、评估其余格式的
@@ -150,8 +159,9 @@ GPU 高水位回收和合成大图 harness 已经闭环。WebP、JXL、AVIF 与 
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
-`npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run build`、
-`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、`cargo check --lib --locked`、57 项默认执行的
+`npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
+`npm run build`、`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、
+`cargo check --lib --locked`、59 项默认执行的
 Rust 单元/回归测试和严格 Clippy。默认忽略两项：一项需要本地授权 RAW，另一项是手动 60MP harness；
 本轮已用 PNG、TIFF、全尺寸 JPEG，以及 4096 长边 + 水印 JPEG 显式执行后者。`git diff --check`
 也保持通过。

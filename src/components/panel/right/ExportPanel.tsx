@@ -29,7 +29,14 @@ import { useOsPlatform } from '../../../hooks/useOsPlatform';
 import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useEditorStore } from '../../../store/useEditorStore';
+import { useProcessStore } from '../../../store/useProcessStore';
 import { useUIStore } from '../../../store/useUIStore';
+import {
+  DEFAULT_WATERMARK_PATH,
+  getWatermarkPreviewUrl,
+  isDefaultWatermarkPath,
+  normalizeWatermarkPath,
+} from '../../../features/export/watermark';
 
 interface ExportPanelProps {
   exportState: ExportState;
@@ -64,17 +71,17 @@ function WatermarkPreview({
   scale,
   spacing,
   opacity,
-  watermarkPath,
+  watermarkImageSrc,
+  baseImageSrc,
   imageAspectRatio,
-  watermarkImageAspectRatio,
 }: {
   anchor: WatermarkAnchor;
   scale: number;
   spacing: number;
   opacity: number;
-  watermarkPath: string | null;
+  watermarkImageSrc: string;
+  baseImageSrc: string | null;
   imageAspectRatio: number;
-  watermarkImageAspectRatio: number;
 }) {
   const { t } = useTranslation();
 
@@ -145,16 +152,30 @@ function WatermarkPreview({
       <div className="absolute inset-0 flex items-center justify-center">
         <Text variant={TextVariants.label}>{t('export.watermark.previewText')}</Text>
       </div>
-      {watermarkPath && (
-        <div style={getPositionStyles()}>
-          <div
-            className="w-full bg-accent/50 border-2 border-dashed border-accent rounded-xs flex items-center justify-center"
-            style={{ aspectRatio: watermarkImageAspectRatio }}
-          >
-            <span className="text-white text-[8px] font-bold">{t('export.watermark.logoText')}</span>
-          </div>
-        </div>
+      {baseImageSrc && (
+        <img
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+          key={baseImageSrc}
+          onError={(event) => {
+            event.currentTarget.style.display = 'none';
+          }}
+          src={baseImageSrc}
+        />
       )}
+      <div style={getPositionStyles()}>
+        <div className="flex w-full items-center justify-center">
+          <img
+            alt=""
+            className="block h-auto w-full select-none object-contain"
+            key={watermarkImageSrc}
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+            src={watermarkImageSrc}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -272,7 +293,7 @@ export default function ExportPanel({
 
   const [estimatedSize, setEstimatedSize] = useState<number | null>(null);
   const [isEstimating, setIsEstimating] = useState<boolean>(false);
-  const [watermarkImageAspectRatio, setWatermarkImageAspectRatio] = useState(1);
+  const [isWatermarkImporting, setIsWatermarkImporting] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState(16 / 9);
   const filenameInputRef = useRef<HTMLInputElement>(null);
   const osPlatform = useOsPlatform();
@@ -296,6 +317,10 @@ export default function ExportPanel({
   }, [isLibraryContext, multiSelectedPaths, selectedImage?.path]);
 
   const numImages = pathsToExport.length;
+  const firstPathThumbnail = useProcessStore((state) =>
+    pathsToExport[0] ? state.thumbnails[pathsToExport[0]] : undefined,
+  );
+  const watermarkBaseImageSrc = selectedImage?.thumbnailUrl || firstPathThumbnail || null;
 
   useEffect(() => {
     const fetchDims = async () => {
@@ -312,25 +337,44 @@ export default function ExportPanel({
       }
     };
     fetchDims();
-  }, [pathsToExport, isLibraryContext, selectedImage, enableWatermark, numImages, isVisible]);
+  }, [pathsToExport, isLibraryContext, selectedImage, enableWatermark, numImages, isVisible, isPanelReallyActive]);
 
-  useEffect(() => {
-    const fetchWatermarkDimensions = async () => {
-      if (!watermarkPath) {
-        setWatermarkImageAspectRatio(1);
-        return;
-      }
+  const normalizedWatermarkPath = normalizeWatermarkPath(watermarkPath);
+  const isUsingDefaultWatermark = isDefaultWatermarkPath(watermarkPath);
+  const watermarkPreviewUrl = useMemo(() => getWatermarkPreviewUrl(watermarkPath), [watermarkPath]);
+  const watermarkImageName = isUsingDefaultWatermark
+    ? t('export.watermark.defaultWatermark')
+    : normalizedWatermarkPath
+        .split(/[\\/]/)
+        .pop()
+        ?.replace(/-[a-f0-9]{64}\.png$/i, '') || t('export.watermark.customWatermark');
+
+  const currentWatermarkSettings = useMemo(
+    () =>
+      enableWatermark
+        ? {
+            path: normalizedWatermarkPath,
+            anchor: watermarkAnchor,
+            scale: watermarkScale,
+            spacing: watermarkSpacing,
+            opacity: watermarkOpacity,
+          }
+        : null,
+    [enableWatermark, normalizedWatermarkPath, watermarkAnchor, watermarkScale, watermarkSpacing, watermarkOpacity],
+  );
+
+  const handleWatermarkImageSelect = useCallback(
+    async (path: string) => {
+      setIsWatermarkImporting(true);
       try {
-        const dimensions: { width: number; height: number } = await invoke('get_image_dimensions', {
-          path: watermarkPath,
-        });
-        setWatermarkImageAspectRatio(dimensions.height > 0 ? dimensions.width / dimensions.height : 1);
-      } catch (_error) {
-        setWatermarkImageAspectRatio(1);
+        const importedPath = await invoke<string>(Invokes.ImportWatermarkImage, { path });
+        setWatermarkPath(importedPath);
+      } finally {
+        setIsWatermarkImporting(false);
       }
-    };
-    fetchWatermarkDimensions();
-  }, [watermarkPath]);
+    },
+    [setWatermarkPath],
+  );
 
   const anchorOptions = useMemo(
     () => [
@@ -385,16 +429,7 @@ export default function ExportPanel({
       resize: enableResize ? { mode: resizeMode, value: resizeValue, dontEnlarge } : null,
       stripGps,
       exportMasks: !isLibraryContext ? exportMasks : undefined,
-      watermark:
-        enableWatermark && watermarkPath
-          ? {
-              path: watermarkPath,
-              anchor: watermarkAnchor,
-              scale: watermarkScale,
-              spacing: watermarkSpacing,
-              opacity: watermarkOpacity,
-            }
-          : null,
+      watermark: currentWatermarkSettings,
     };
     const format = FILE_FORMATS.find((f: FileFormat) => f.id === fileFormat)?.extensions[0] || 'jpeg';
     const runEstimate = () =>
@@ -429,12 +464,7 @@ export default function ExportPanel({
     preserveTimestamps,
     stripGps,
     filenameTemplate,
-    enableWatermark,
-    watermarkPath,
-    watermarkAnchor,
-    watermarkScale,
-    watermarkSpacing,
-    watermarkOpacity,
+    currentWatermarkSettings,
     debouncedEstimateSize,
     exportMasks,
     preserveFolders,
@@ -456,7 +486,7 @@ export default function ExportPanel({
   };
 
   const handleExport = async () => {
-    if (numImages === 0 || isExporting) return;
+    if (numImages === 0 || isExporting || isWatermarkImporting) return;
 
     let finalFilenameTemplate = filenameTemplate;
     if (
@@ -477,16 +507,7 @@ export default function ExportPanel({
       resize: enableResize ? { mode: resizeMode, value: resizeValue, dontEnlarge } : null,
       stripGps,
       exportMasks: !isLibraryContext ? exportMasks : undefined,
-      watermark:
-        enableWatermark && watermarkPath
-          ? {
-              path: watermarkPath,
-              anchor: watermarkAnchor,
-              scale: watermarkScale,
-              spacing: watermarkSpacing,
-              opacity: watermarkOpacity,
-            }
-          : null,
+      watermark: currentWatermarkSettings,
     };
 
     const lastExportPath = appSettings?.exportPresets?.find((p) => p.id === '__last_used__')?.lastExportPath;
@@ -572,6 +593,7 @@ export default function ExportPanel({
   };
 
   const canExport = numImages > 0;
+  const canStartExport = canExport && !isWatermarkImporting;
   const isLut = fileFormat === FileFormats.Cube;
   const itemLabel = isLut ? t('export.labels.lut') : t('export.labels.image');
   const itemLabelPlural = isLut ? t('export.labels.lut_plural') : t('export.labels.image_plural');
@@ -729,64 +751,63 @@ export default function ExportPanel({
                     <div className="space-y-4 pl-2 border-l-2 border-surface">
                       <div className={isExporting ? 'opacity-50 pointer-events-none' : ''}>
                         <ImagePicker
+                          disabled={isExporting}
                           label={t('export.watermark.watermarkImage')}
-                          imageName={watermarkPath ? watermarkPath.split(/[\\/]/).pop() || null : null}
-                          onImageSelect={setWatermarkPath}
-                          onClear={() => setWatermarkPath(null)}
+                          imageName={watermarkImageName}
+                          imageSrc={watermarkPreviewUrl}
+                          isDefault={isUsingDefaultWatermark}
+                          onImageSelect={handleWatermarkImageSelect}
+                          onUseDefault={() => setWatermarkPath(DEFAULT_WATERMARK_PATH)}
                         />
                       </div>
-                      {watermarkPath && (
-                        <>
-                          <Dropdown
-                            options={anchorOptions}
-                            value={watermarkAnchor}
-                            onChange={(val) => setWatermarkAnchor(val as WatermarkAnchor)}
-                            disabled={isExporting}
-                            className="w-full"
-                          />
-                          <div>
-                            <Slider
-                              label={t('export.watermark.scale')}
-                              min={1}
-                              max={50}
-                              step={1}
-                              value={watermarkScale}
-                              onChange={(e) => setWatermarkScale(Number(e.target.value))}
-                              disabled={isExporting}
-                              defaultValue={10}
-                            />
-                            <Slider
-                              label={t('export.watermark.spacing')}
-                              min={0}
-                              max={25}
-                              step={1}
-                              value={watermarkSpacing}
-                              onChange={(e) => setWatermarkSpacing(Number(e.target.value))}
-                              disabled={isExporting}
-                              defaultValue={5}
-                            />
-                            <Slider
-                              label={t('export.watermark.opacity')}
-                              min={0}
-                              max={100}
-                              step={1}
-                              value={watermarkOpacity}
-                              onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
-                              disabled={isExporting}
-                              defaultValue={75}
-                            />
-                          </div>
-                          <WatermarkPreview
-                            imageAspectRatio={imageAspectRatio}
-                            watermarkImageAspectRatio={watermarkImageAspectRatio}
-                            watermarkPath={watermarkPath}
-                            anchor={watermarkAnchor as WatermarkAnchor}
-                            scale={watermarkScale}
-                            spacing={watermarkSpacing}
-                            opacity={watermarkOpacity}
-                          />
-                        </>
-                      )}
+                      <Dropdown
+                        options={anchorOptions}
+                        value={watermarkAnchor}
+                        onChange={(val) => setWatermarkAnchor(val as WatermarkAnchor)}
+                        disabled={isExporting}
+                        className="w-full"
+                      />
+                      <div>
+                        <Slider
+                          label={t('export.watermark.scale')}
+                          min={1}
+                          max={50}
+                          step={1}
+                          value={watermarkScale}
+                          onChange={(e) => setWatermarkScale(Number(e.target.value))}
+                          disabled={isExporting}
+                          defaultValue={10}
+                        />
+                        <Slider
+                          label={t('export.watermark.spacing')}
+                          min={0}
+                          max={25}
+                          step={1}
+                          value={watermarkSpacing}
+                          onChange={(e) => setWatermarkSpacing(Number(e.target.value))}
+                          disabled={isExporting}
+                          defaultValue={5}
+                        />
+                        <Slider
+                          label={t('export.watermark.opacity')}
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={watermarkOpacity}
+                          onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
+                          disabled={isExporting}
+                          defaultValue={80}
+                        />
+                      </div>
+                      <WatermarkPreview
+                        baseImageSrc={watermarkBaseImageSrc}
+                        imageAspectRatio={imageAspectRatio}
+                        watermarkImageSrc={watermarkPreviewUrl}
+                        anchor={watermarkAnchor as WatermarkAnchor}
+                        scale={watermarkScale}
+                        spacing={watermarkSpacing}
+                        opacity={watermarkOpacity}
+                      />
                     </div>
                   )}
                 </Section>
@@ -917,7 +938,7 @@ export default function ExportPanel({
                       ? 'bg-status-warning/14 text-status-warning border border-status-warning/35 shadow-none'
                       : ''
           }`}
-          disabled={isCancelling || (status !== Status.Exporting && !canExport)}
+          disabled={isCancelling || (status !== Status.Exporting && !canStartExport)}
           onClick={status === Status.Exporting ? handleCancel : handleExport}
           size="lg"
         >

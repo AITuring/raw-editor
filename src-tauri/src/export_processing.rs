@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
-use std::io::Cursor;
 #[cfg(not(target_os = "android"))]
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -25,7 +25,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::Emitter;
 use tauri::Manager;
-#[cfg(not(target_os = "android"))]
 use tempfile::NamedTempFile;
 #[cfg(not(target_os = "android"))]
 use tiff::encoder::{TiffEncoder as StreamingTiffEncoder, colortype::RGB16};
@@ -137,10 +136,171 @@ pub struct WatermarkSettings {
     pub opacity: f32,
 }
 
+pub(crate) const DEFAULT_WATERMARK_PATH: &str = "builtin://default-watermark";
+const DEFAULT_WATERMARK_BYTES: &[u8] = include_bytes!("../../src/assets/default-watermark.png");
+const MAX_WATERMARK_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_WATERMARK_SOURCE_PIXELS: u64 = 100_000_000;
+const MAX_WATERMARK_SOURCE_EDGE: u32 = 32_768;
+const STORED_WATERMARK_EDGE: u32 = 4_096;
+
 struct PreparedWatermark {
     image: RgbaImage,
     x: i64,
     y: i64,
+}
+
+fn load_watermark_image(path: &str) -> Result<DynamicImage, String> {
+    if path == DEFAULT_WATERMARK_PATH {
+        return image::load_from_memory_with_format(DEFAULT_WATERMARK_BYTES, ImageFormat::Png)
+            .map_err(|error| format!("Failed to decode the built-in watermark image: {error}"));
+    }
+
+    image::open(path).map_err(|error| format!("Failed to open watermark image: {error}"))
+}
+
+fn safe_watermark_stem(source_path: &Path) -> String {
+    let stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("watermark");
+    let sanitized: String = stem
+        .chars()
+        .filter_map(|character| {
+            if character.is_alphanumeric() || matches!(character, '-' | '_') {
+                Some(character)
+            } else if character.is_whitespace() {
+                Some('-')
+            } else {
+                None
+            }
+        })
+        .take(48)
+        .collect();
+
+    if sanitized.is_empty() {
+        "watermark".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn import_watermark_image_impl(
+    source_path: &Path,
+    watermark_directory: &Path,
+) -> Result<PathBuf, String> {
+    let metadata = fs::metadata(source_path)
+        .map_err(|error| format!("Failed to inspect the selected watermark image: {error}"))?;
+    if !metadata.is_file() {
+        return Err("The selected watermark path is not a file.".to_string());
+    }
+    if metadata.len() > MAX_WATERMARK_SOURCE_BYTES {
+        return Err("The selected watermark image exceeds the 64 MiB input limit.".to_string());
+    }
+
+    let source_file = fs::File::open(source_path)
+        .map_err(|error| format!("Failed to open the selected watermark image: {error}"))?;
+    let mut source_bytes = Vec::new();
+    source_file
+        .take(MAX_WATERMARK_SOURCE_BYTES + 1)
+        .read_to_end(&mut source_bytes)
+        .map_err(|error| format!("Failed to read the selected watermark image: {error}"))?;
+    if source_bytes.len() as u64 > MAX_WATERMARK_SOURCE_BYTES {
+        return Err("The selected watermark image exceeds the 64 MiB input limit.".to_string());
+    }
+
+    let (source_width, source_height) = image::ImageReader::new(Cursor::new(&source_bytes))
+        .with_guessed_format()
+        .map_err(|error| format!("Failed to detect the selected watermark format: {error}"))?
+        .into_dimensions()
+        .map_err(|error| format!("Failed to read the selected watermark dimensions: {error}"))?;
+    let source_pixels = u64::from(source_width)
+        .checked_mul(u64::from(source_height))
+        .ok_or_else(|| {
+            "The selected watermark dimensions overflow the supported range.".to_string()
+        })?;
+    if source_pixels > MAX_WATERMARK_SOURCE_PIXELS
+        || source_width > MAX_WATERMARK_SOURCE_EDGE
+        || source_height > MAX_WATERMARK_SOURCE_EDGE
+    {
+        return Err("The selected watermark dimensions exceed the supported limit.".to_string());
+    }
+
+    let source_image = image::load_from_memory(&source_bytes)
+        .map_err(|error| format!("Failed to decode the selected watermark image: {error}"))?;
+    let stored_image = if source_width.max(source_height) > STORED_WATERMARK_EDGE {
+        source_image.resize(
+            STORED_WATERMARK_EDGE,
+            STORED_WATERMARK_EDGE,
+            imageops::FilterType::Lanczos3,
+        )
+    } else {
+        source_image
+    };
+
+    let mut encoded_png = Vec::new();
+    stored_image
+        .write_to(&mut Cursor::new(&mut encoded_png), ImageFormat::Png)
+        .map_err(|error| format!("Failed to encode the selected watermark image: {error}"))?;
+
+    fs::create_dir_all(watermark_directory)
+        .map_err(|error| format!("Failed to create the watermark library: {error}"))?;
+    let content_hash = blake3::hash(&encoded_png).to_hex().to_string();
+    let destination = watermark_directory.join(format!(
+        "{}-{}.png",
+        safe_watermark_stem(source_path),
+        content_hash
+    ));
+
+    let mut temporary = NamedTempFile::new_in(watermark_directory)
+        .map_err(|error| format!("Failed to create a temporary watermark asset: {error}"))?;
+    temporary
+        .write_all(&encoded_png)
+        .map_err(|error| format!("Failed to write the watermark asset: {error}"))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| format!("Failed to sync the watermark asset: {error}"))?;
+    match temporary.persist_noclobber(&destination) {
+        Ok(_) => Ok(destination),
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let existing = fs::read(&destination).map_err(|read_error| {
+                format!("Failed to verify the existing watermark asset: {read_error}")
+            })?;
+            if blake3::hash(&existing).to_hex().to_string() == content_hash {
+                Ok(destination)
+            } else {
+                Err("The stored watermark asset failed its content-hash check.".to_string())
+            }
+        }
+        Err(error) => Err(format!(
+            "Failed to publish the watermark asset: {}",
+            error.error
+        )),
+    }
+}
+
+#[tauri::command]
+pub async fn import_watermark_image(
+    path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    let source_path = fs::canonicalize(PathBuf::from(path))
+        .map_err(|error| format!("Failed to resolve the selected watermark image: {error}"))?;
+    if !app_handle.asset_protocol_scope().is_allowed(&source_path) {
+        return Err("Select the watermark image with the application file picker.".to_string());
+    }
+    let watermark_directory = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("watermarks");
+
+    tauri::async_runtime::spawn_blocking(move || {
+        import_watermark_image_impl(&source_path, &watermark_directory)
+            .map(|stored_path| stored_path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| format!("Watermark import task failed: {error}"))?
 }
 
 fn prepare_watermark(
@@ -148,8 +308,7 @@ fn prepare_watermark(
     base_h: u32,
     watermark_settings: &WatermarkSettings,
 ) -> Result<Option<PreparedWatermark>, String> {
-    let watermark_img = image::open(&watermark_settings.path)
-        .map_err(|e| format!("Failed to open watermark image: {}", e))?;
+    let watermark_img = load_watermark_image(&watermark_settings.path)?;
 
     let base_min_dim = base_w.min(base_h) as f32;
 
@@ -2896,6 +3055,65 @@ mod tests {
             max_channel_delta <= 2,
             "max channel delta {max_channel_delta} exceeded the migration bound"
         );
+    }
+
+    #[test]
+    fn imported_watermark_is_normalized_and_deduplicated_in_private_storage() {
+        let directory = tempfile::tempdir().expect("watermark import directory");
+        let source_path = directory.path().join("My Watermark.png");
+        let source = RgbaImage::from_fn(11, 7, |x, y| {
+            Rgba([
+                (x * 17) as u8,
+                (y * 29) as u8,
+                ((x + y) * 13) as u8,
+                (80 + x * 7 + y * 3) as u8,
+            ])
+        });
+        source.save(&source_path).expect("save source watermark");
+
+        let watermark_directory = directory.path().join("stored-watermarks");
+        let first = import_watermark_image_impl(&source_path, &watermark_directory)
+            .expect("import watermark");
+        let second = import_watermark_image_impl(&source_path, &watermark_directory)
+            .expect("deduplicate watermark");
+
+        assert_eq!(first, second);
+        assert_eq!(first.parent(), Some(watermark_directory.as_path()));
+        assert!(
+            first
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("My-Watermark-") && name.ends_with(".png"))
+        );
+        assert_eq!(
+            image::image_dimensions(first).expect("stored dimensions"),
+            (11, 7)
+        );
+    }
+
+    #[test]
+    fn bundled_default_watermark_matches_the_reference_asset() {
+        let watermark = load_watermark_image(DEFAULT_WATERMARK_PATH)
+            .expect("decode the bundled default watermark");
+        assert_eq!(watermark.dimensions(), (1908, 1462));
+
+        let prepared = prepare_watermark(
+            1000,
+            800,
+            &WatermarkSettings {
+                path: DEFAULT_WATERMARK_PATH.to_string(),
+                anchor: WatermarkAnchor::Center,
+                scale: 10.0,
+                spacing: 5.0,
+                opacity: 80.0,
+            },
+        )
+        .expect("prepare the bundled default watermark")
+        .expect("default watermark remains visible");
+
+        assert_eq!(prepared.image.width(), 80);
+        assert_eq!(prepared.x, 460);
+        assert_eq!(prepared.y, (800 - i64::from(prepared.image.height())) / 2);
     }
 
     #[test]

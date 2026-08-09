@@ -890,11 +890,17 @@
         "topLeft": "In alto a sinistra",
         "topRight": "In alto a destra"
       },
+      "customWatermark": "Filigrana personalizzata",
+      "defaultWatermark": "Filigrana predefinita",
+      "importFailed": "Impossibile usare questa immagine filigrana.",
       "logoText": "Logo",
       "opacity": "Opacità",
       "previewText": "Anteprima",
+      "replaceWatermark": "Sostituisci immagine filigrana",
       "scale": "Scala",
       "spacing": "Spaziatura",
+      "useDefault": "Predefinita",
+      "useDefaultWatermark": "Usa filigrana predefinita",
       "watermarkImage": "Immagine Filigrana"
     }
   },
