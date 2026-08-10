@@ -47,6 +47,13 @@ assert.match(exportProcessing, /supports_streaming_export/);
 assert.match(exportProcessing, /encode_streaming_jpeg/);
 assert.match(exportProcessing, /encode_streaming_png/);
 assert.match(exportProcessing, /encode_streaming_tiff/);
+assert.match(exportProcessing, /encode_webp_to_file/);
+assert.match(exportProcessing, /write_webp_bytes_to_file/);
+assert.match(exportProcessing, /check_webp_encoding_progress/);
+assert.match(exportProcessing, /libwebp_sys::WebPEncode/);
+assert.match(exportProcessing, /picture\.0\.use_argb = 0/);
+assert.match(exportProcessing, /rewrite_webp_icc_bounded/);
+assert.match(exportProcessing, /WEBP_OUTPUT_COPY_BUFFER_BYTES: usize = 64 \* 1024/);
 assert.match(exportProcessing, /"jpg" \| "jpeg" =>/);
 assert.match(exportProcessing, /MozjpegCompressor::new/);
 assert.match(exportProcessing, /encoder\.write_scanlines\(&rgb_row\)/);
@@ -63,7 +70,18 @@ assert.match(exportProcessing, /prepare_watermark/);
 assert.match(exportProcessing, /create_temporary_export/);
 assert.match(exportProcessing, /NamedTempFile::new_in\(output_parent\)/);
 assert.match(exportProcessing, /temporary\.persist\(output_path\)/);
+assert.match(exportProcessing, /final_temporary\.persist\(output_path\)/);
 assert.match(exportProcessing, /reclaim_gpu_resources_after_export\(&context/);
+
+const saveImageStart = exportProcessing.indexOf('fn save_image_with_metadata(');
+const saveImageEnd = exportProcessing.indexOf('\nfn supports_streaming_export', saveImageStart);
+assert.ok(saveImageStart >= 0 && saveImageEnd > saveImageStart);
+const saveImageWithMetadata = exportProcessing.slice(saveImageStart, saveImageEnd);
+assert.ok(
+  saveImageWithMetadata.indexOf('save_webp_with_bounded_output') <
+    saveImageWithMetadata.indexOf('encode_image_to_bytes'),
+  'desktop WebP must bypass the complete compressed-memory encoder',
+);
 
 const pixels = 9504 * 6336;
 const oldEmptyMaskBytes = pixels * 2;
@@ -79,5 +97,5 @@ assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 
 console.log(
-  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, in-encoder EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

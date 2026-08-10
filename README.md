@@ -138,6 +138,11 @@ npm run start            # Tauri 2 开发窗口
   在 JPEG 编码开始时写入 APP1、在 PNG 编码头写入标准 `eXIf` chunk；不再把已压缩输出整文件
   `read` 回内存、清空并重写。合成源的 Make/Software/GPS 保留与 `stripGps` 删除已做 JPEG/PNG
   往返测试，`npm run render-strategy:check` 同时禁止重新引入临时输出整文件读回和内存收尾 API。
+- ✅ 桌面 WebP 保持原有 libwebp 质量标尺、alpha 和最终文件字节不变，但有损编码现直接把 RGBA/RGB
+  输入导入 YUVA picture，避免 libwebp 在编码期间再持有一张完整 ARGB 工作图；压缩回调直接写入
+  同目录临时文件，sRGB v4 ICC 再用固定 64 KiB 缓冲做 RIFF 两遍重写并原子发布，不再同时持有
+  `WebPMemory` 和第二份完整 ICC 组装结果。RGB/RGBA 的 Q50/Q75/Q90/Q100 字节一致、ICC 往返、
+  截断 RIFF、取消和权限保留均有回归测试。
 - ✅ CPU 回读型导出不再额外分配两张完整尺寸显示 texture；按 9728×6400 的 GPU 对齐尺寸计算，
   两张 RGBA8 显示 surface 的逻辑占用减少 498,073,592 B。导出结束后，processor 与输入 texture
   合计达到 512 MiB 高水位即主动回收；大尺寸显示 processor 切换到 CPU 导出时也会按滞回规则收缩。
@@ -148,25 +153,31 @@ npm run start            # Tauri 2 开发窗口
   开启合成 EXIF 后为 388 ms / 90,619,904 B，证明元数据路径没有恢复与压缩文件大小成正比的
   读回缓冲。基准实际分配 77,856,768 B 生产者带状缓冲，但不包含 RAW 解码或 GPU 处理，因而
   只证明 RGB 行管线的稳定性和内存边界，不代表 α7R V 画质或端到端性能。
+- ✅ 新增 `npm run synthetic-webp:bench` 的 `memory`/`file` 同输入对照。同机同一测试二进制下，
+  9504×6336 RGBA、Q90 的旧内存路径为 11,178 ms / 31,316,612 B / 1,371,684,864 B 峰值 RSS；
+  新 YUVA + 文件路径为 11,128 ms / 31,316,612 B / 1,130,758,144 B，峰值减少 240,926,720 B
+  （17.6%）。50 ms（0.4%）耗时差属于近乎持平，输出逐字节一致。该合成基准不含 RAW 解码和
+  WGPU，不能替代真实相机端到端结论。
 
 按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
 的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
 链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
 不冒充已经完成。四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
-内置默认水印与替换/恢复交互、GPU 高水位回收、JPEG 压缩码流直接写文件、JPEG/PNG 编码期 EXIF
-和合成大图 harness 已经闭环。WebP、JXL、AVIF 与 Android 导出仍走完整帧路径，TIFF 仍沿用
-“不写 EXIF”的既有限制。下一阶段优先评估这些格式的分块编码器，并继续把 RAW 解码、几何变换
-等更上游节点改造成有界管线；取得授权 α7R V 样片后，再补齐 RAW → GPU → 文件的端到端画质、
-耗时和峰值基线。
+内置默认水印与替换/恢复交互、GPU 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG 编码期
+EXIF 和合成大图 harness 已经闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，
+但不再复制完整 ARGB 图或缓冲完整压缩输出；JXL、AVIF 与 Android 导出仍走完整帧路径，TIFF 仍
+沿用“不写 EXIF”的既有限制。下一阶段优先把 RAW 解码、几何变换等更上游节点改造成有界管线，
+并继续评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；取得授权 α7R V 样片后，再补齐
+RAW → GPU → 文件的端到端画质、耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
 `npm run build`、`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、
-`cargo check --lib --locked`、60 项默认执行的
-Rust 单元/回归测试和严格 Clippy。默认忽略两项：一项需要本地授权 RAW，另一项是手动 60MP harness；
-本轮已用全尺寸 JPEG 迁移前后、全尺寸 JPEG + EXIF 和 PNG 显式执行后者。`git diff --check` 也保持
-通过。
+`cargo check --lib --locked`、63 项默认执行的
+Rust 单元/回归测试和严格 Clippy。默认忽略三项：一项需要本地授权 RAW，另外两项是手动 60MP
+JPEG/PNG/TIFF 与 WebP harness；本轮已显式执行 WebP 的 `memory`/`file` 对照。`git diff --check`
+也保持通过。
 
 ## 1.0 范围
 
@@ -514,6 +525,7 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 主区域放大缩小图片不跟手
 - 不稳定，导入图片正在调整，突然就自动回首页了
 - 样式效果都比camera raw差远了
-- WebP、JXL、AVIF 与 Android 导出尚未接入 tile-to-encoder，60MP 时仍有完整帧峰值。
-- 桌面 JPEG/PNG/TIFF 的 resize/watermark 已进入行管线，但 JPEG 完成阶段和 JPEG/PNG 元数据保留
-  仍会缓冲压缩码流；RAW 解码、几何变换、活动蒙版以及授权 α7R V 端到端基线也尚未闭环。
+- WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL、AVIF 与 Android 导出尚未接入
+  tile-to-encoder，60MP 时仍有完整帧峰值。
+- RAW 解码、几何变换、活动蒙版以及授权 α7R V 端到端基线尚未闭环；当前 JXL/AVIF 编码依赖还会
+  在内部返回完整压缩缓冲。
