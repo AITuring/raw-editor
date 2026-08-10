@@ -18,6 +18,7 @@
     "build": "vite build",
     "tauri": "tauri",
     "start": "tauri dev",
+    "version:set": "node scripts/set-version.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "color-contract:check": "node tests/color-contract-boundary.mjs",

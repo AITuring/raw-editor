@@ -12,6 +12,10 @@ on:
       build-args:
         required: false
         type: string
+      app-version:
+        required: false
+        type: string
+        default: ''
       release-id:
         required: false
         type: string
@@ -63,6 +67,13 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Apply automatic release version
+        if: inputs.app-version != ''
+        shell: bash
+        env:
+          APP_VERSION: ${{ inputs.app-version }}
+        run: node scripts/set-version.mjs "$APP_VERSION"
 
       - name: Install additional system dependencies (Linux)
         if: runner.os == 'Linux' && inputs.mobile == ''

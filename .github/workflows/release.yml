@@ -2,41 +2,58 @@ name: 'Release: Build & Package App'
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: automatic-desktop-release
   cancel-in-progress: false
 
 jobs:
   prepare:
-    name: Validate release tag
+    name: Calculate release version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository and tags
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - id: version
-        name: Validate tag against app version
+        name: Increment patch version
         shell: bash
         run: |
           set -euo pipefail
 
-          version="$(jq -r '.version' src-tauri/tauri.conf.json)"
-          expected_tag="v${version}"
-
-          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
-            echo "Release tag '$GITHUB_REF_NAME' does not match app version '$expected_tag'." >&2
+          base_version="$(jq -r '.version' src-tauri/tauri.conf.json)"
+          if [[ ! "$base_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Base version '$base_version' is not a stable semantic version." >&2
             exit 1
           fi
 
+          IFS='.' read -r major minor base_patch <<< "$base_version"
+          latest_patch="$(
+            git tag --list "v${major}.${minor}.*" |
+              sed -nE "s/^v${major}\\.${minor}\\.([0-9]+)$/\\1/p" |
+              sort -n |
+              tail -n 1
+          )"
+
+          patch="$base_patch"
+          if [[ -n "$latest_patch" ]] && (( latest_patch >= base_patch )); then
+            patch=$((latest_patch + 1))
+          fi
+
+          version="${major}.${minor}.${patch}"
           echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Next release: v$version"
 
   build:
     name: Build ${{ matrix.platform }}
@@ -77,6 +94,7 @@ jobs:
       target: ${{ matrix.target }}
       build-args: ${{ matrix.args }}
       asset-prefix: ${{ matrix.asset-prefix }}
+      app-version: ${{ needs.prepare.outputs.version }}
     permissions:
       contents: read
 
@@ -124,19 +142,20 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
 
           mapfile -d '' assets < <(find release-assets -type f -print0 | sort -z)
 
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" \
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
               --draft \
               --generate-notes \
-              --title "RAW Editor v${RELEASE_VERSION}" \
-              --verify-tag
+              --target "$GITHUB_SHA" \
+              --title "RAW Editor v${RELEASE_VERSION}"
           fi
 
-          gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -1,9 +1,7 @@
-name: CI Build
+name: Manual CI Build
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   build:
