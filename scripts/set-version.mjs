@@ -30,7 +30,7 @@ replaceJsonVersion('src-tauri/tauri.conf.json');
 
 const cargoTomlPath = 'src-tauri/Cargo.toml';
 const cargoToml = readFileSync(cargoTomlPath, 'utf8');
-const cargoTomlVersionPattern = /(\[package\][\s\S]*?\nversion\s*=\s*")[^"]+("\s*\n)/;
+const cargoTomlVersionPattern = /(\[package\][\s\S]*?\r?\nversion\s*=\s*")[^"]+("[^\S\r\n]*\r?\n)/;
 
 if (!cargoTomlVersionPattern.test(cargoToml)) {
   throw new Error('Could not update the package version in src-tauri/Cargo.toml');
@@ -41,7 +41,7 @@ writeFileSync(cargoTomlPath, updatedCargoToml);
 
 const cargoLockPath = 'src-tauri/Cargo.lock';
 const cargoLock = readFileSync(cargoLockPath, 'utf8');
-const cargoLockVersionPattern = /(\[\[package\]\]\nname = "raw-editor"\nversion = ")[^"]+("\n)/;
+const cargoLockVersionPattern = /(\[\[package\]\]\r?\nname = "raw-editor"\r?\nversion = ")[^"]+("[^\S\r\n]*\r?\n)/;
 
 if (!cargoLockVersionPattern.test(cargoLock)) {
   throw new Error('Could not update the raw-editor package version in src-tauri/Cargo.lock');
