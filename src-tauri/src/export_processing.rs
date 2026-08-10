@@ -20,6 +20,10 @@ use jxl_encoder::{
     api::{calibrated_jxl_quality, quality_to_distance},
 };
 #[cfg(not(target_os = "android"))]
+use little_exif::{
+    endian::Endian as ExifEndian, ifd::ExifTagGroup, metadata::Metadata as ExifMetadata,
+};
+#[cfg(not(target_os = "android"))]
 use mozjpeg::{
     ColorSpace as MozjpegColorSpace, Compress as MozjpegCompressor, Marker as MozjpegMarker,
 };
@@ -31,9 +35,14 @@ use tauri::Emitter;
 use tauri::Manager;
 use tempfile::NamedTempFile;
 #[cfg(not(target_os = "android"))]
-use tiff::encoder::{TiffEncoder as StreamingTiffEncoder, colortype::RGB16};
+use tiff::Directory as TiffDirectory;
 #[cfg(not(target_os = "android"))]
-use tiff::tags::Tag as TiffTag;
+use tiff::encoder::{
+    DirectoryEncoder as TiffDirectoryEncoder, TiffEncoder as StreamingTiffEncoder,
+    TiffKindStandard, colortype::RGB16,
+};
+#[cfg(not(target_os = "android"))]
+use tiff::tags::{Tag as TiffTag, Type as TiffType};
 #[cfg(not(target_os = "android"))]
 use zenresize::{Filter as StreamingResizeFilter, PixelDescriptor, ResizeConfig, StreamingResize};
 
@@ -1681,10 +1690,84 @@ where
 }
 
 #[cfg(not(target_os = "android"))]
+fn has_writable_tiff_metadata_group(metadata: &ExifMetadata, group: ExifTagGroup) -> bool {
+    metadata
+        .into_iter()
+        .any(|tag| tag.get_group() == group && tag.is_writable())
+}
+
+#[cfg(not(target_os = "android"))]
+fn write_tiff_metadata_group<W: Write + Seek>(
+    directory: &mut TiffDirectoryEncoder<'_, W, TiffKindStandard>,
+    metadata: &ExifMetadata,
+    group: ExifTagGroup,
+) -> Result<(), String> {
+    let endian = if cfg!(target_endian = "little") {
+        ExifEndian::Little
+    } else {
+        ExifEndian::Big
+    };
+    let mut entries = TiffDirectory::empty();
+
+    for tag in metadata
+        .into_iter()
+        .filter(|tag| tag.get_group() == group && tag.is_writable())
+    {
+        let format = tag.format();
+        let data_type = TiffType::from_u16(format.as_u16()).ok_or_else(|| {
+            format!(
+                "Unsupported TIFF metadata type {} for tag 0x{:04x}",
+                format.as_u16(),
+                tag.as_u16()
+            )
+        })?;
+        let expected_bytes = usize::try_from(tag.number_of_components())
+            .ok()
+            .and_then(|components| components.checked_mul(format.bytes_per_component() as usize))
+            .ok_or_else(|| {
+                format!(
+                    "TIFF metadata tag 0x{:04x} exceeds the component size limit",
+                    tag.as_u16()
+                )
+            })?;
+        if expected_bytes == 0 {
+            return Err(format!(
+                "TIFF metadata tag 0x{:04x} has no components",
+                tag.as_u16()
+            ));
+        }
+
+        let mut value = tag.value_as_u8_vec(&endian);
+        if value.len() > expected_bytes {
+            return Err(format!(
+                "TIFF metadata tag 0x{:04x} encoded {} bytes; expected at most {expected_bytes}",
+                tag.as_u16(),
+                value.len()
+            ));
+        }
+        value.resize(expected_bytes, 0);
+
+        let entry = directory
+            .write_entry_bytes(data_type, &value)
+            .map_err(|error| {
+                format!(
+                    "Failed to encode TIFF metadata tag 0x{:04x}: {error}",
+                    tag.as_u16()
+                )
+            })?;
+        entries.extend([(TiffTag::from_u16_exhaustive(tag.as_u16()), entry)]);
+    }
+
+    directory.extend_from(&entries);
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
 fn encode_streaming_tiff<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    export_metadata: Option<&ExifMetadata>,
     render_rows: F,
 ) -> Result<(), String>
 where
@@ -1694,9 +1777,77 @@ where
 
     let mut encoder = StreamingTiffEncoder::new(output)
         .map_err(|error| format!("Failed to start streaming TIFF encoder: {error}"))?;
+
+    let interoperability_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::INTEROP) => {
+            let mut directory = encoder.extra_directory().map_err(|error| {
+                format!("Failed to start TIFF interoperability metadata: {error}")
+            })?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::INTEROP)?;
+            Some(directory.finish_with_offsets().map_err(|error| {
+                format!("Failed to finish TIFF interoperability metadata: {error}")
+            })?)
+        }
+        _ => None,
+    };
+
+    let exif_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::EXIF) => {
+            let mut directory = encoder
+                .extra_directory()
+                .map_err(|error| format!("Failed to start TIFF EXIF metadata: {error}"))?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::EXIF)?;
+            if let Some(interoperability_directory) = interoperability_directory {
+                directory
+                    .write_tag(TiffTag::Unknown(0xa005), interoperability_directory.offset)
+                    .map_err(|error| {
+                        format!("Failed to link TIFF interoperability metadata: {error}")
+                    })?;
+            }
+            Some(
+                directory
+                    .finish_with_offsets()
+                    .map_err(|error| format!("Failed to finish TIFF EXIF metadata: {error}"))?,
+            )
+        }
+        _ => None,
+    };
+
+    let gps_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::GPS) => {
+            let mut directory = encoder
+                .extra_directory()
+                .map_err(|error| format!("Failed to start TIFF GPS metadata: {error}"))?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::GPS)?;
+            Some(
+                directory
+                    .finish_with_offsets()
+                    .map_err(|error| format!("Failed to finish TIFF GPS metadata: {error}"))?,
+            )
+        }
+        _ => None,
+    };
+
     let mut image = encoder
         .new_image::<RGB16>(width, height)
         .map_err(|error| format!("Failed to configure streaming TIFF image: {error}"))?;
+    if let Some(metadata) = export_metadata
+        && has_writable_tiff_metadata_group(metadata, ExifTagGroup::GENERIC)
+    {
+        write_tiff_metadata_group(image.encoder(), metadata, ExifTagGroup::GENERIC)?;
+    }
+    if let Some(exif_directory) = exif_directory {
+        image
+            .encoder()
+            .write_tag(TiffTag::ExifDirectory, exif_directory.offset)
+            .map_err(|error| format!("Failed to link TIFF EXIF metadata: {error}"))?;
+    }
+    if let Some(gps_directory) = gps_directory {
+        image
+            .encoder()
+            .write_tag(TiffTag::GpsDirectory, gps_directory.offset)
+            .map_err(|error| format!("Failed to link TIFF GPS metadata: {error}"))?;
+    }
     image
         .encoder()
         .write_tag(TiffTag::IccProfile, srgb_v4_profile())
@@ -1751,29 +1902,48 @@ where
 }
 
 #[cfg(not(target_os = "android"))]
+#[derive(Clone, Copy)]
+enum StreamingExportMetadata<'a> {
+    None,
+    ExifTiffPayload(&'a [u8]),
+    TiffDirectories(&'a ExifMetadata),
+}
+
+#[cfg(not(target_os = "android"))]
 fn encode_streaming_rgba_rows<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
     output_format: &str,
     jpeg_quality: u8,
-    export_exif: Option<&[u8]>,
+    export_metadata: StreamingExportMetadata<'_>,
     render_rows: F,
 ) -> Result<(), String>
 where
     F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
 {
     match output_format.to_ascii_lowercase().as_str() {
-        "jpg" | "jpeg" => encode_streaming_jpeg(
-            output,
-            width,
-            height,
-            jpeg_quality,
-            export_exif,
-            render_rows,
-        ),
-        "png" => encode_streaming_png(output, width, height, export_exif, render_rows),
-        "tif" | "tiff" => encode_streaming_tiff(output, width, height, render_rows),
+        "jpg" | "jpeg" => {
+            let exif = match export_metadata {
+                StreamingExportMetadata::ExifTiffPayload(payload) => Some(payload),
+                _ => None,
+            };
+            encode_streaming_jpeg(output, width, height, jpeg_quality, exif, render_rows)
+        }
+        "png" => {
+            let exif = match export_metadata {
+                StreamingExportMetadata::ExifTiffPayload(payload) => Some(payload),
+                _ => None,
+            };
+            encode_streaming_png(output, width, height, exif, render_rows)
+        }
+        "tif" | "tiff" => {
+            let metadata = match export_metadata {
+                StreamingExportMetadata::TiffDirectories(metadata) => Some(metadata),
+                _ => None,
+            };
+            encode_streaming_tiff(output, width, height, metadata, render_rows)
+        }
         _ => Err(format!(
             "Unsupported streaming export format: {output_format}"
         )),
@@ -1810,12 +1980,33 @@ fn process_and_save_streaming_export(
         .as_ref()
         .map(|resize| calculate_resize_target(source_width, source_height, resize))
         .unwrap_or((source_width, source_height));
-    let export_exif = exif_processing::export_metadata_tiff_payload(
-        path,
-        output_format,
-        export_settings.keep_metadata,
-        export_settings.strip_gps,
-    )?;
+    let is_tiff_output = matches!(output_format.to_ascii_lowercase().as_str(), "tif" | "tiff");
+    let export_exif = if is_tiff_output {
+        None
+    } else {
+        exif_processing::export_metadata_tiff_payload(
+            path,
+            output_format,
+            export_settings.keep_metadata,
+            export_settings.strip_gps,
+        )?
+    };
+    let export_tiff_metadata = if is_tiff_output {
+        exif_processing::export_metadata_for_streaming_tiff(
+            path,
+            export_settings.keep_metadata,
+            export_settings.strip_gps,
+        )?
+    } else {
+        None
+    };
+    let streaming_metadata = if let Some(metadata) = export_tiff_metadata.as_ref() {
+        StreamingExportMetadata::TiffDirectories(metadata)
+    } else if let Some(payload) = export_exif.as_deref() {
+        StreamingExportMetadata::ExifTiffPayload(payload)
+    } else {
+        StreamingExportMetadata::None
+    };
     let mut temporary = create_temporary_export(output_path)?;
 
     let PreparedExportRender {
@@ -1831,7 +2022,7 @@ fn process_and_save_streaming_export(
         target_height,
         output_format,
         export_settings.jpeg_quality,
-        export_exif.as_deref(),
+        streaming_metadata,
         |encoder_sink| {
             let mut checked_encoder_sink = |row: &[u8]| -> Result<(), String> {
                 ensure_export_not_cancelled(cancellation_token)?;
@@ -3246,7 +3437,12 @@ mod tests {
         output_format: &str,
         jpeg_quality: u8,
     ) -> Result<Vec<u8>, String> {
-        encode_streaming_fixture_with_exif(image, output_format, jpeg_quality, None)
+        encode_streaming_fixture_with_metadata(
+            image,
+            output_format,
+            jpeg_quality,
+            StreamingExportMetadata::None,
+        )
     }
 
     fn encode_streaming_fixture_with_exif(
@@ -3254,6 +3450,36 @@ mod tests {
         output_format: &str,
         jpeg_quality: u8,
         export_exif: Option<&[u8]>,
+    ) -> Result<Vec<u8>, String> {
+        encode_streaming_fixture_with_metadata(
+            image,
+            output_format,
+            jpeg_quality,
+            export_exif.map_or(StreamingExportMetadata::None, |payload| {
+                StreamingExportMetadata::ExifTiffPayload(payload)
+            }),
+        )
+    }
+
+    fn encode_streaming_fixture_with_tiff_metadata(
+        image: &DynamicImage,
+        export_metadata: Option<&Metadata>,
+    ) -> Result<Vec<u8>, String> {
+        encode_streaming_fixture_with_metadata(
+            image,
+            "tiff",
+            100,
+            export_metadata.map_or(StreamingExportMetadata::None, |metadata| {
+                StreamingExportMetadata::TiffDirectories(metadata)
+            }),
+        )
+    }
+
+    fn encode_streaming_fixture_with_metadata(
+        image: &DynamicImage,
+        output_format: &str,
+        jpeg_quality: u8,
+        export_metadata: StreamingExportMetadata<'_>,
     ) -> Result<Vec<u8>, String> {
         let rgba = image.to_rgba8();
         let (width, height) = rgba.dimensions();
@@ -3265,7 +3491,7 @@ mod tests {
             height,
             output_format,
             jpeg_quality,
-            export_exif,
+            export_metadata,
             |sink| {
                 for row in rgba.as_raw().chunks_exact(row_bytes) {
                     sink(row)?;
@@ -3513,7 +3739,7 @@ mod tests {
     }
 
     #[test]
-    fn streaming_jpeg_and_png_embed_bounded_exif_and_strip_gps() {
+    fn streaming_jpeg_png_and_tiff_embed_bounded_exif_and_strip_gps() {
         fn read_export_exif(encoded: &[u8]) -> exif::Exif {
             exif::Reader::new()
                 .read_from_container(&mut Cursor::new(encoded))
@@ -3543,6 +3769,7 @@ mod tests {
         let mut source_metadata = Metadata::new();
         source_metadata.set_tag(ExifTag::Make("Bounded Camera".to_string()));
         source_metadata.set_tag(ExifTag::Model("Synthetic 60MP".to_string()));
+        source_metadata.set_tag(ExifTag::DateTimeOriginal("2026:08:10 12:34:56".to_string()));
         source_metadata.set_tag(ExifTag::GPSLatitudeRef("N".to_string()));
         source_metadata.set_tag(ExifTag::GPSLatitude(vec![
             uR64 {
@@ -3616,6 +3843,87 @@ mod tests {
                 .is_none(),
             "PNG must remove GPS when stripGps is true"
         );
+
+        let retained_tiff_metadata =
+            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, false)
+                .expect("build retained TIFF metadata")
+                .expect("retained TIFF metadata must exist");
+        let tiff =
+            encode_streaming_fixture_with_tiff_metadata(&image, Some(&retained_tiff_metadata))
+                .expect("stream TIFF with metadata");
+        assert_decoder_contract(
+            TiffDecoder::new(Cursor::new(&tiff)).expect("decode metadata TIFF"),
+            (37, 23),
+            true,
+        );
+        assert_eq!(
+            image::load_from_memory_with_format(&tiff, ImageFormat::Tiff)
+                .expect("load metadata TIFF pixels")
+                .to_rgba8(),
+            image.to_rgba8()
+        );
+        let tiff_exif = read_export_exif(&tiff);
+        assert_eq!(
+            ascii_tag(&tiff_exif, exif::Tag::Make).as_deref(),
+            Some("Bounded Camera")
+        );
+        assert_eq!(
+            ascii_tag(&tiff_exif, exif::Tag::Software).as_deref(),
+            Some("RAW Editor")
+        );
+        assert_eq!(
+            ascii_tag(&tiff_exif, exif::Tag::DateTimeOriginal).as_deref(),
+            Some("2026:08:10 12:34:56")
+        );
+        assert!(
+            tiff_exif
+                .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+                .is_some(),
+            "TIFF must retain GPS when stripGps is false"
+        );
+
+        let tiff_source_path = directory.path().join("source.tiff");
+        std::fs::write(&tiff_source_path, &tiff).expect("write metadata TIFF source");
+        let copied_tiff_metadata = exif_processing::export_metadata_for_streaming_tiff(
+            &tiff_source_path.to_string_lossy(),
+            true,
+            false,
+        )
+        .expect("copy TIFF source metadata")
+        .expect("copied TIFF metadata must exist");
+        let copied_tiff =
+            encode_streaming_fixture_with_tiff_metadata(&image, Some(&copied_tiff_metadata))
+                .expect("stream TIFF copied from TIFF metadata");
+        let copied_tiff_exif = read_export_exif(&copied_tiff);
+        assert_eq!(
+            ascii_tag(&copied_tiff_exif, exif::Tag::Make).as_deref(),
+            Some("Bounded Camera")
+        );
+        assert!(
+            copied_tiff_exif
+                .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+                .is_some(),
+            "TIFF source metadata must remain readable and copyable"
+        );
+
+        let stripped_tiff_metadata =
+            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, true)
+                .expect("build stripped TIFF metadata")
+                .expect("stripped TIFF metadata must exist");
+        let stripped_tiff =
+            encode_streaming_fixture_with_tiff_metadata(&image, Some(&stripped_tiff_metadata))
+                .expect("stream TIFF without GPS");
+        let stripped_tiff_exif = read_export_exif(&stripped_tiff);
+        assert_eq!(
+            ascii_tag(&stripped_tiff_exif, exif::Tag::Make).as_deref(),
+            Some("Bounded Camera")
+        );
+        assert!(
+            stripped_tiff_exif
+                .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+                .is_none(),
+            "TIFF must remove GPS when stripGps is true"
+        );
     }
 
     #[test]
@@ -3668,20 +3976,36 @@ mod tests {
     #[test]
     fn streaming_export_requires_exactly_one_complete_frame() {
         let mut file = tempfile::tempfile().expect("temporary output");
-        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", 90, None, |sink| {
-            sink(&[0; 4 * 4])?;
-            sink(&[0; 4 * 4])?;
-            Ok(())
-        })
+        let error = encode_streaming_rgba_rows(
+            &mut file,
+            4,
+            3,
+            "png",
+            90,
+            StreamingExportMetadata::None,
+            |sink| {
+                sink(&[0; 4 * 4])?;
+                sink(&[0; 4 * 4])?;
+                Ok(())
+            },
+        )
         .expect_err("missing final row must fail");
         assert!(error.contains("expected 3"), "unexpected error: {error}");
 
         let mut overflow_file = tempfile::tempfile().expect("temporary overflow output");
-        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", 90, None, |sink| {
-            sink(&[0; 4 * 4])?;
-            sink(&[0; 4 * 4])?;
-            Ok(())
-        })
+        let error = encode_streaming_rgba_rows(
+            &mut overflow_file,
+            4,
+            1,
+            "png",
+            90,
+            StreamingExportMetadata::None,
+            |sink| {
+                sink(&[0; 4 * 4])?;
+                sink(&[0; 4 * 4])?;
+                Ok(())
+            },
+        )
         .expect_err("extra row must fail");
         assert!(
             error.contains("more than the declared 1 rows"),
@@ -3695,7 +4019,7 @@ mod tests {
             1,
             "jpeg",
             90,
-            None,
+            StreamingExportMetadata::None,
             |_| Ok(()),
         )
         .expect_err("oversized JPEG dimensions must fail before encoding");
@@ -4072,20 +4396,27 @@ mod tests {
             .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "yes"))
             && matches!(
                 output_format.to_ascii_lowercase().as_str(),
-                "jpg" | "jpeg" | "png"
+                "jpg" | "jpeg" | "png" | "tif" | "tiff"
             );
-        let export_exif = metadata_enabled.then(|| {
+        let benchmark_metadata = metadata_enabled.then(|| {
             let mut metadata = Metadata::new();
             metadata.set_tag(ExifTag::Make("Synthetic benchmark".to_string()));
             metadata.set_tag(ExifTag::Model("Bounded EXIF".to_string()));
             metadata.set_tag(ExifTag::Software("RAW Editor".to_string()));
-            let encoded = metadata
-                .as_u8_vec(FileExtension::JPEG)
-                .expect("encode benchmark EXIF");
-            assert_eq!(&encoded[..2], b"\xff\xe1");
-            assert_eq!(&encoded[4..10], b"Exif\0\0");
-            encoded[10..].to_vec()
+            metadata
         });
+        let is_tiff_output = matches!(output_format.to_ascii_lowercase().as_str(), "tif" | "tiff");
+        let export_exif = benchmark_metadata
+            .as_ref()
+            .filter(|_| !is_tiff_output)
+            .map(|metadata| {
+                let encoded = metadata
+                    .as_u8_vec(FileExtension::JPEG)
+                    .expect("encode benchmark EXIF");
+                assert_eq!(&encoded[..2], b"\xff\xe1");
+                assert_eq!(&encoded[4..10], b"Exif\0\0");
+                encoded[10..].to_vec()
+            });
         let watermark_directory = watermark_enabled
             .then(|| tempfile::tempdir().expect("temporary benchmark watermark directory"));
         let watermark_settings = watermark_directory.as_ref().map(|directory| {
@@ -4139,7 +4470,13 @@ mod tests {
             target_height,
             &output_format,
             92,
-            export_exif.as_deref(),
+            if let Some(metadata) = benchmark_metadata.as_ref().filter(|_| is_tiff_output) {
+                StreamingExportMetadata::TiffDirectories(metadata)
+            } else if let Some(payload) = export_exif.as_deref() {
+                StreamingExportMetadata::ExifTiffPayload(payload)
+            } else {
+                StreamingExportMetadata::None
+            },
             |encoder_sink| {
                 transform_streaming_rgba_rows(
                     width,

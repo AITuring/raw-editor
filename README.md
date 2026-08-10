@@ -75,8 +75,9 @@ npm run start            # Tauri 2 开发窗口
 
 ### 当前进度（2026-08-10）
 
-当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。在暂不引入授权真实样片的前提下，
-本轮已完成：
+当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。用户授权的 `DSC05363.ARW` 已建立
+α7R V `lossy-arw` 单样片真实管线与本机 60MP 性能基线；其余光照、ISO、曝光和 RAW 压缩模式仍
+等待扩充。无需新增样片即可确定性验证的工程工作已完成：
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
 - ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、包元数据、Linux/Android 信息和基础 EXIF 软件标识调整。
@@ -134,10 +135,11 @@ npm run start            # Tauri 2 开发窗口
   继续约束相对旧 `image` 编码器的平均 RGB 误差、输出体积和质量单调性；sRGB v4 ICC、逐行数
   校验、取消检查和原子发布保持完整。编码调用整体包在 unwind 边界内，将底层 libjpeg 错误转换为
   导出失败并清理临时文件。
-- ✅ 保留元数据的桌面 JPEG/PNG 现在先生成最多一个 JPEG APP1 可表示的 TIFF/EXIF 小载荷，分别
-  在 JPEG 编码开始时写入 APP1、在 PNG 编码头写入标准 `eXIf` chunk；不再把已压缩输出整文件
-  `read` 回内存、清空并重写。合成源的 Make/Software/GPS 保留与 `stripGps` 删除已做 JPEG/PNG
-  往返测试，`npm run render-strategy:check` 同时禁止重新引入临时输出整文件读回和内存收尾 API。
+- ✅ 保留元数据的桌面 JPEG/PNG 先生成最多一个 JPEG APP1 可表示的 TIFF/EXIF 小载荷，分别在
+  JPEG 编码开始时写入 APP1、在 PNG 编码头写入标准 `eXIf` chunk；16 位 TIFF 则在条带编码期间
+  直接写 IFD0、ExifIFD、GPSIFD 和标准目录指针。三种格式都不再把已压缩输出整文件 `read` 回内存、
+  清空并重写。合成源的 Make/Software/拍摄时间/GPS 保留与 `stripGps` 删除已有往返测试，另覆盖
+  TIFF → TIFF 元数据复制；`npm run render-strategy:check` 锁定编码期写入和禁止整文件读回的边界。
 - ✅ 桌面 WebP 保持原有 libwebp 质量标尺、alpha 和最终文件字节不变，但有损编码现直接把 RGBA/RGB
   输入导入 YUVA picture，避免 libwebp 在编码期间再持有一张完整 ARGB 工作图；压缩回调直接写入
   同目录临时文件，sRGB v4 ICC 再用固定 64 KiB 缓冲做 RIFF 两遍重写并原子发布，不再同时持有
@@ -159,16 +161,18 @@ npm run start            # Tauri 2 开发窗口
   （17.6%）。50 ms（0.4%）耗时差属于近乎持平，输出逐字节一致。该合成基准不含 RAW 解码和
   WGPU，不能替代真实相机端到端结论。
 
-按当前开发安排，Sony α7R V 60MP ARW 的真实画质、性能和导出基线继续延期；在取得可合法使用
-的样片前，不会用合成样片冒充真实相机画质结论。无需真实样片的 RGB 输入 ICC 与日常 SDR 显示
-链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于明确的后续能力，
-不冒充已经完成。四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
-内置默认水印与替换/恢复交互、GPU 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG 编码期
-EXIF 和合成大图 harness 已经闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，
-但不再复制完整 ARGB 图或缓冲完整压缩输出；JXL、AVIF 与 Android 导出仍走完整帧路径，TIFF 仍
-沿用“不写 EXIF”的既有限制。下一阶段优先把 RAW 解码、几何变换等更上游节点改造成有界管线，
-并继续评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；取得授权 α7R V 样片后，再补齐
-RAW → GPU → 文件的端到端画质、耗时和峰值基线。
+Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损压缩样片基线，覆盖真实解包、
+开发、预览/全尺寸 JPEG、ICC、局部画质检查与本机耗时；结论和边界见
+[`tests/acceptance/sony-a7rv-60mp-baseline.md`](tests/acceptance/sony-a7rv-60mp-baseline.md)。它没有色卡、
+配对 ACR 输出，也不能代表日光、钨丝灯、高 ISO、欠曝、高饱和光、lossless-L 或 uncompressed，
+因此不会用合成图或这一个长曝光样片冒充完整机型结论。无需新增样片的 RGB 输入 ICC 与日常 SDR
+显示链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于后续能力。
+四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、内置默认水印、GPU
+高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经
+闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或
+缓冲完整压缩输出；JXL、AVIF 与 Android 导出仍走完整帧路径。下一阶段优先把 RAW 解码、几何变换
+等更上游节点改造成有界管线，并继续评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新
+α7R V 样片到位后，再扩充 RAW → GPU → 文件的场景画质、交互耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
@@ -527,5 +531,5 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 样式效果都比camera raw差远了
 - WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL、AVIF 与 Android 导出尚未接入
   tile-to-encoder，60MP 时仍有完整帧峰值。
-- RAW 解码、几何变换、活动蒙版以及授权 α7R V 端到端基线尚未闭环；当前 JXL/AVIF 编码依赖还会
-  在内部返回完整压缩缓冲。
+- RAW 解码、几何变换和活动蒙版仍有完整帧峰值；α7R V 目前只有一个有损压缩长曝光样片基线，
+  尚缺多场景/多压缩模式闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。

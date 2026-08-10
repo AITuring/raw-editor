@@ -13,6 +13,7 @@ const renderStrategy = read('src-tauri/src/render_strategy.rs');
 const lib = read('src-tauri/src/lib.rs');
 const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
 const exportProcessing = read('src-tauri/src/export_processing.rs');
+const exifProcessing = read('src-tauri/src/exif_processing.rs');
 
 for (const tier of ['rapidPreview', 'halfResolutionEdit', 'fullResolutionRoi', 'fullResolutionExport']) {
   assert.ok(previewResolution.includes(`'${tier}'`), `frontend render contract is missing ${tier}`);
@@ -60,7 +61,12 @@ assert.match(exportProcessing, /encoder\.write_scanlines\(&rgb_row\)/);
 assert.match(exportProcessing, /set_chroma_sampling_pixel_sizes\(\(1, 1\), \(1, 1\)\)/);
 assert.match(exportProcessing, /set_optimize_coding\(false\)/);
 assert.match(exportProcessing, /export_metadata_tiff_payload/);
+assert.match(exportProcessing, /export_metadata_for_streaming_tiff/);
+assert.match(exportProcessing, /write_tiff_metadata_group/);
+assert.match(exportProcessing, /TiffTag::ExifDirectory/);
+assert.match(exportProcessing, /TiffTag::GpsDirectory/);
 assert.match(exportProcessing, /info\.exif_metadata = export_exif/);
+assert.doesNotMatch(exifProcessing, /output_format\.to_lowercase\(\) == "tiff"/);
 assert.doesNotMatch(exportProcessing, /fs::read\(temporary\.path\(\)\)/);
 assert.doesNotMatch(exportProcessing, /\.finish_to\(/);
 assert.doesNotMatch(exportProcessing, /zenjpeg/);
@@ -97,5 +103,5 @@ assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 
 console.log(
-  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

@@ -972,8 +972,7 @@ fn build_export_metadata(
     keep_metadata: bool,
     strip_gps: bool,
 ) -> Result<Option<(Metadata, FileExtension)>, String> {
-    // FIXME: temporary solution until I find a way to write metadata to TIFF
-    if !keep_metadata || output_format.to_lowercase() == "tiff" {
+    if !keep_metadata {
         return Ok(None);
     }
 
@@ -982,22 +981,12 @@ fn build_export_metadata(
         return Ok(None);
     }
 
-    // Skip TIFF sources to avoid potential tag corruption issues
-    let original_ext = original_path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    if original_ext == "tiff" || original_ext == "tif" {
-        return Ok(None);
-    }
-
     let file_type = match output_format.to_lowercase().as_str() {
         "jpg" | "jpeg" => FileExtension::JPEG,
         "png" => FileExtension::PNG {
             as_zTXt_chunk: true,
         },
-        "tiff" => FileExtension::TIFF,
+        "tif" | "tiff" => FileExtension::TIFF,
         _ => return Ok(None),
     };
 
@@ -1401,6 +1390,18 @@ pub(crate) fn export_metadata_tiff_payload(
     Ok(Some(encoded[TIFF_PAYLOAD_OFFSET..].to_vec()))
 }
 
+#[cfg(not(target_os = "android"))]
+pub(crate) fn export_metadata_for_streaming_tiff(
+    original_path_str: &str,
+    keep_metadata: bool,
+    strip_gps: bool,
+) -> Result<Option<Metadata>, String> {
+    Ok(
+        build_export_metadata(original_path_str, "tiff", keep_metadata, strip_gps)?
+            .map(|(metadata, _)| metadata),
+    )
+}
+
 pub fn write_image_with_metadata(
     image_bytes: &mut Vec<u8>,
     original_path_str: &str,
@@ -1408,6 +1409,12 @@ pub fn write_image_with_metadata(
     keep_metadata: bool,
     strip_gps: bool,
 ) -> Result<(), String> {
+    // Desktop TIFF exports attach selected metadata while the streaming encoder is still writing
+    // the file. Avoid little_exif's whole-file TIFF rewrite on legacy/full-frame paths.
+    if matches!(output_format.to_ascii_lowercase().as_str(), "tif" | "tiff") {
+        return Ok(());
+    }
+
     let Some((metadata, file_type)) =
         build_export_metadata(original_path_str, output_format, keep_metadata, strip_gps)?
     else {

@@ -1,8 +1,9 @@
 # 渲染层级与内存合同
 
 本文记录 RAW Editor M1 阶段的预览/导出分辨率层级、原生缓冲所有权和确定性内存基线。
-这里的 9504×6336 只代表约 60MP 的尺寸算术，不是 Sony α7R V 真实样片测试，也不用于声明真实
-解码速度、画质或进程峰值内存。
+这里的 9504×6336 仍是约 60MP 的确定性尺寸算术，不是从 Sony α7R V 样片测得，也不用于声明
+真实解码速度、画质或进程峰值内存。项目另有一个用户授权 α7R V 有损 ARW 的真实单样片基线；
+两类证据的边界不能混用。
 
 ## 四级渲染策略
 
@@ -37,8 +38,9 @@
    `zenresize 0.3.1` 行 ring、可选的单行水印 scratch 和编码器；resize/watermark 不再构造完整尺寸
    `DynamicImage`。JPEG 使用 `mozjpeg 0.10.13` baseline 4:4:4 逐扫描行输入，并把压缩数据直接写入
    同目录临时文件；PNG 与 TIFF 同样直接写入。JPEG/PNG 需要保留元数据时，只在编码前生成一个受
-   JPEG APP1 上限约束的 TIFF/EXIF 小载荷，再分别写入 APP1 或 PNG `eXIf`，不会读回压缩输出。
-   完整编码、元数据写入和取消检查都成功后才原子替换目标路径。
+   JPEG APP1 上限约束的 TIFF/EXIF 小载荷，再分别写入 APP1 或 PNG `eXIf`；TIFF 在编码条带前把
+   筛选后的 IFD0、ExifIFD、GPSIFD 和目录指针直接写入同一输出。三种格式都不会读回压缩输出；完整
+   编码、元数据写入和取消检查都成功后才原子替换目标路径。
 6. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
    该 processor 中降为 1×1。大尺寸显示 processor 转入 CPU 导出时会按 512 MiB 高水位和滞回条件收缩。
 7. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
@@ -76,13 +78,14 @@
   临时文件发布和 GPU 高水位回收。
 - Rust 单元测试：验证 camelCase 序列化、预览/导出边界、60MP 空蒙版计划、`Arc::ptr_eq` 共享、
   60MP 带状缓冲算术、processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
-  参考一致、水印与旧完整帧混合逐像素一致、JPEG/PNG EXIF 与 GPS 删除往返，以及 JPEG
+  参考一致、水印与旧完整帧混合逐像素一致、JPEG/PNG/TIFF EXIF 与 GPS 删除往返、TIFF → TIFF
+  元数据复制，以及 JPEG
   Q50/Q75/Q92 相对旧编码器的平均 RGB 误差、文件体积和质量单调性；WebP 另验证 RGB/RGBA 在
   Q50/Q75/Q90/Q100 的新旧输出逐字节一致、ICC 往返、已有 ICC 替换、截断 RIFF、取消、原子目标
   保护和权限保留。
 - `npm run synthetic-export:bench`：默认编码 9504×6336 PNG；`RAW_EDITOR_BENCH_FORMAT` 可选
   `jpeg`/`png`/`tiff`，`RAW_EDITOR_BENCH_RESIZE_LONG_EDGE=4096` 启用逐行缩放，
-  `RAW_EDITOR_BENCH_WATERMARK=1` 加入确定性水印，`RAW_EDITOR_BENCH_METADATA=1` 为 JPEG/PNG
+  `RAW_EDITOR_BENCH_WATERMARK=1` 加入确定性水印，`RAW_EDITOR_BENCH_METADATA=1` 为 JPEG/PNG/TIFF
   加入确定性 EXIF；宽高仍可通过 `RAW_EDITOR_BENCH_WIDTH` 和 `RAW_EDITOR_BENCH_HEIGHT` 覆盖。
 - `npm run synthetic-webp:bench`：默认运行新的 `file` 路径；设置
   `RAW_EDITOR_BENCH_WEBP_MODE=memory` 可在同一测试二进制中运行旧的完整内存路径，宽高复用上述
@@ -105,7 +108,7 @@ JPEG/PNG/TIFF 编码器写入临时文件；RSS 由独立线程每 10 ms 采样�
 PNG 无变换结果为 558 ms / 2,934,463 B / 90,685,440 B 峰值 RSS。EXIF 只增加 110 B 输出；其
 311,296 B RSS 差异低于采样和 allocator 噪声量级，且源码合同明确禁止对临时输出调用整文件读取。
 合成图样高度可压缩，输出大小与耗时不代表真实照片；可复用的工程结论是生产者带状缓冲固定为
-77,856,768 B，并且 JPEG 压缩收尾和 JPEG/PNG 元数据都不再创建与完整输出大小成正比的缓冲。
+77,856,768 B，并且 JPEG 压缩收尾和 JPEG/PNG/TIFF 元数据都不再创建与完整输出大小成正比的缓冲。
 驱动对齐、GPU texture 和 RAW 解码内存仍需在端到端基准中单独记录。
 
 同机同一测试二进制另以确定性 RGBA 图样测量桌面 WebP Q90；采样线程在分配输入图前启动，并让
@@ -128,10 +131,11 @@ libwebp YUVA picture 和编码器工作内存，不能把约 1.08 GiB 当作端�
 - WebP 仍使用完整 CPU 输入与 libwebp YUVA picture，但已消除额外 ARGB 图和完整压缩输出缓冲；
   当前接口没有逐 tile 输入。JXL、AVIF 与 Android 导出仍使用完整 CPU 编码图，其中当前 JXL/AVIF
   编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码/几何节点推进有界管线，并
-  继续评估可替换的分块编码器。TIFF 继续沿用现有“不写 EXIF”限制。
+  继续评估可替换的分块编码器。
 - 桌面 JPEG 已消除完整压缩码流缓冲，但仍通过 C MozJPEG FFI 编码；当前默认 unwind 配置会把
   libjpeg 错误转换为普通导出失败，若未来改为 `panic=abort`，必须先替换这条错误边界。
 - 高水位回收是导出结束和尺寸切换时的确定性策略，尚未接入操作系统/驱动的实时内存压力通知。
 - 活动蒙版本身仍各自占用一张全尺寸灰度 bitmap；本阶段只消除了拼接副本和空蒙版开销。
-- 授权真实 60MP RAW 的首屏、滑块延迟、100% ROI、导出耗时和进程峰值仍按计划延期，取得样片后
-  必须补做，不得用上述尺寸算术替代。
+- 用户授权的 α7R V 有损 ARW 已建立一次本机解码、CPU 预览和全尺寸 JPEG 耗时基线；应用内首屏、
+  滑块 P95、100% GPU ROI、GPU 文件导出和进程峰值，以及其余光照/ISO/压缩模式仍待新样片扩充，
+  不得用上述尺寸算术或单样片结果替代。
