@@ -36,6 +36,10 @@ pub fn initialize(app_data_dir: &Path) -> Result<(), String> {
         .map_err(|_| "Failed to initialize sidecar storage".to_string())
 }
 
+pub fn is_initialized() -> bool {
+    SIDECAR_ROOT.get().is_some()
+}
+
 fn storage_root() -> &'static Path {
     SIDECAR_ROOT
         .get()

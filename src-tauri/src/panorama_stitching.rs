@@ -256,10 +256,7 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
 
     let mut image_data = Vec::new();
     for result in image_data_results {
-        match result {
-            Ok(info) => image_data.push(info),
-            Err(e) => return Err(e),
-        }
+        image_data.push(result?);
     }
 
     println!(

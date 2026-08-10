@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 #[cfg(not(target_os = "android"))]
-use std::io::{BufWriter, Seek, SeekFrom};
+use std::io::BufWriter;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -20,6 +20,10 @@ use jxl_encoder::{
     api::{calibrated_jxl_quality, quality_to_distance},
 };
 #[cfg(not(target_os = "android"))]
+use mozjpeg::{
+    ColorSpace as MozjpegColorSpace, Compress as MozjpegCompressor, Marker as MozjpegMarker,
+};
+#[cfg(not(target_os = "android"))]
 use png::{BitDepth, ColorType as PngColorType, Encoder as PngStreamEncoder, Info as PngInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -30,12 +34,6 @@ use tempfile::NamedTempFile;
 use tiff::encoder::{TiffEncoder as StreamingTiffEncoder, colortype::RGB16};
 #[cfg(not(target_os = "android"))]
 use tiff::tags::Tag as TiffTag;
-#[cfg(not(target_os = "android"))]
-use zenjpeg::encoder::{
-    ChromaSubsampling, EncoderConfig as JpegStreamEncoderConfig, HuffmanStrategy, MozjpegTables,
-    PixelLayout as JpegPixelLayout, Quality as JpegQuality, QuantTableConfig, QuantTablePreset,
-    Unstoppable,
-};
 #[cfg(not(target_os = "android"))]
 use zenresize::{Filter as StreamingResizeFilter, PixelDescriptor, ResizeConfig, StreamingResize};
 
@@ -1052,6 +1050,7 @@ fn encode_streaming_jpeg<F>(
     width: u32,
     height: u32,
     jpeg_quality: u8,
+    export_exif: Option<&[u8]>,
     render_rows: F,
 ) -> Result<(), String>
 where
@@ -1062,43 +1061,77 @@ where
             "JPEG dimensions {width}x{height} exceed the format limit of 65535 pixels per axis"
         ));
     }
-    let jpeg_quality = jpeg_quality.clamp(1, 100);
-    let quant_tables = MozjpegTables::generate(jpeg_quality, QuantTablePreset::JpegAnnexK);
-    let config = JpegStreamEncoderConfig::ycbcr(
-        JpegQuality::ApproxMozjpeg(jpeg_quality),
-        ChromaSubsampling::None,
-    )
-    .quant_table_config(QuantTableConfig::Custom(quant_tables))
-    .progressive(false)
-    .huffman(HuffmanStrategy::FixedAnnexK)
-    .deringing(false)
-    .aq_enabled(false);
-    let mut encoder = config
-        .request()
-        .icc_profile(srgb_v4_profile())
-        .encode_from_bytes(width, height, JpegPixelLayout::Rgba8Srgb)
-        .map_err(|error| format!("Failed to configure streaming JPEG encoder: {error}"))?;
-    let mut written_rows = 0_u32;
-    {
-        let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
-            validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
-            encoder
-                .push_packed(rgba_row, Unstoppable)
-                .map_err(|error| format!("Failed to stream JPEG row {written_rows}: {error}"))?;
-            written_rows += 1;
-            Ok(())
-        };
-        render_rows(&mut sink)?;
-    }
-    if written_rows != height {
-        return Err(format!(
-            "Streaming JPEG received {written_rows} rows; expected {height}"
-        ));
-    }
-    encoder
-        .finish_to(output)
-        .map(|_| ())
-        .map_err(|error| format!("Failed to finish streaming JPEG: {error}"))
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
+        let mut compressor = MozjpegCompressor::new(MozjpegColorSpace::JCS_RGB);
+        compressor.set_fastest_defaults();
+        compressor.set_size(width as usize, height as usize);
+        compressor.set_quality(f32::from(jpeg_quality.clamp(1, 100)));
+        compressor.set_chroma_sampling_pixel_sizes((1, 1), (1, 1));
+        compressor.set_optimize_coding(false);
+
+        let mut encoder = compressor
+            .start_compress(output)
+            .map_err(|error| format!("Failed to configure streaming JPEG encoder: {error}"))?;
+        const ICC_MARKER_OVERHEAD: usize = 14;
+        const MAX_MARKER_PAYLOAD: usize = 65_533;
+        let icc_profile = srgb_v4_profile();
+        // mozjpeg 0.10.13 numbers helper-generated ICC chunks from zero, while
+        // the JPEG ICC convention and image decoders require one-based indices.
+        let icc_chunk_size = MAX_MARKER_PAYLOAD - ICC_MARKER_OVERHEAD;
+        let icc_chunk_count = icc_profile.len().div_ceil(icc_chunk_size);
+        let icc_chunk_count = u8::try_from(icc_chunk_count)
+            .map_err(|_| "Bundled ICC profile requires too many JPEG markers".to_string())?;
+        for (chunk_index, chunk) in icc_profile.chunks(icc_chunk_size).enumerate() {
+            let mut marker = Vec::with_capacity(ICC_MARKER_OVERHEAD + chunk.len());
+            marker.extend_from_slice(b"ICC_PROFILE\0");
+            marker.push(
+                u8::try_from(chunk_index + 1)
+                    .map_err(|_| "Bundled ICC profile chunk index overflow".to_string())?,
+            );
+            marker.push(icc_chunk_count);
+            marker.extend_from_slice(chunk);
+            encoder.write_marker(MozjpegMarker::APP(2), &marker);
+        }
+        if let Some(tiff_payload) = export_exif {
+            const EXIF_HEADER: &[u8] = b"Exif\0\0";
+            if tiff_payload.len() > MAX_MARKER_PAYLOAD - EXIF_HEADER.len() {
+                return Err(format!(
+                    "Encoded EXIF metadata exceeds the JPEG APP1 limit ({} bytes)",
+                    tiff_payload.len()
+                ));
+            }
+            let mut marker = Vec::with_capacity(EXIF_HEADER.len() + tiff_payload.len());
+            marker.extend_from_slice(EXIF_HEADER);
+            marker.extend_from_slice(tiff_payload);
+            encoder.write_marker(MozjpegMarker::APP(1), &marker);
+        }
+        let mut written_rows = 0_u32;
+        let mut rgb_row = vec![0_u8; width as usize * 3];
+        {
+            let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
+                validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+                for (rgba, rgb) in rgba_row.chunks_exact(4).zip(rgb_row.chunks_exact_mut(3)) {
+                    rgb.copy_from_slice(&rgba[..3]);
+                }
+                encoder.write_scanlines(&rgb_row).map_err(|error| {
+                    format!("Failed to stream JPEG row {written_rows}: {error}")
+                })?;
+                written_rows += 1;
+                Ok(())
+            };
+            render_rows(&mut sink)?;
+        }
+        if written_rows != height {
+            return Err(format!(
+                "Streaming JPEG received {written_rows} rows; expected {height}"
+            ));
+        }
+        encoder
+            .finish()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to finish streaming JPEG: {error}"))
+    }))
+    .map_err(|_| "Streaming JPEG encoder aborted while processing the image".to_string())?
 }
 
 #[cfg(not(target_os = "android"))]
@@ -1106,6 +1139,7 @@ fn encode_streaming_png<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    export_exif: Option<&[u8]>,
     render_rows: F,
 ) -> Result<(), String>
 where
@@ -1115,6 +1149,7 @@ where
     info.color_type = PngColorType::Rgba;
     info.bit_depth = BitDepth::Eight;
     info.icc_profile = Some(Cow::Owned(srgb_v4_profile().to_vec()));
+    info.exif_metadata = export_exif.map(|metadata| Cow::Owned(metadata.to_vec()));
     let writer = BufWriter::new(output);
     let encoder = PngStreamEncoder::with_info(writer, info)
         .map_err(|error| format!("Failed to configure streaming PNG encoder: {error}"))?;
@@ -1226,14 +1261,22 @@ fn encode_streaming_rgba_rows<F>(
     height: u32,
     output_format: &str,
     jpeg_quality: u8,
+    export_exif: Option<&[u8]>,
     render_rows: F,
 ) -> Result<(), String>
 where
     F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
 {
     match output_format.to_ascii_lowercase().as_str() {
-        "jpg" | "jpeg" => encode_streaming_jpeg(output, width, height, jpeg_quality, render_rows),
-        "png" => encode_streaming_png(output, width, height, render_rows),
+        "jpg" | "jpeg" => encode_streaming_jpeg(
+            output,
+            width,
+            height,
+            jpeg_quality,
+            export_exif,
+            render_rows,
+        ),
+        "png" => encode_streaming_png(output, width, height, export_exif, render_rows),
         "tif" | "tiff" => encode_streaming_tiff(output, width, height, render_rows),
         _ => Err(format!(
             "Unsupported streaming export format: {output_format}"
@@ -1271,6 +1314,12 @@ fn process_and_save_streaming_export(
         .as_ref()
         .map(|resize| calculate_resize_target(source_width, source_height, resize))
         .unwrap_or((source_width, source_height));
+    let export_exif = exif_processing::export_metadata_tiff_payload(
+        path,
+        output_format,
+        export_settings.keep_metadata,
+        export_settings.strip_gps,
+    )?;
     let mut temporary = create_temporary_export(output_path)?;
 
     let PreparedExportRender {
@@ -1286,6 +1335,7 @@ fn process_and_save_streaming_export(
         target_height,
         output_format,
         export_settings.jpeg_quality,
+        export_exif.as_deref(),
         |encoder_sink| {
             let mut checked_encoder_sink = |row: &[u8]| -> Result<(), String> {
                 ensure_export_not_cancelled(cancellation_token)?;
@@ -1333,29 +1383,6 @@ fn process_and_save_streaming_export(
         .flush()
         .map_err(|error| format!("Failed to flush temporary export: {error}"))?;
     ensure_export_not_cancelled(cancellation_token)?;
-
-    if export_settings.keep_metadata
-        && !matches!(output_format.to_ascii_lowercase().as_str(), "tif" | "tiff")
-    {
-        let mut encoded = fs::read(temporary.path())
-            .map_err(|error| format!("Failed to reopen streamed export for metadata: {error}"))?;
-        exif_processing::write_image_with_metadata(
-            &mut encoded,
-            path,
-            output_format,
-            export_settings.keep_metadata,
-            export_settings.strip_gps,
-        )?;
-        let file = temporary.as_file_mut();
-        file.set_len(0)
-            .map_err(|error| format!("Failed to replace streamed export metadata: {error}"))?;
-        file.seek(SeekFrom::Start(0))
-            .map_err(|error| format!("Failed to rewind streamed export: {error}"))?;
-        file.write_all(&encoded)
-            .map_err(|error| format!("Failed to write streamed export metadata: {error}"))?;
-        file.flush()
-            .map_err(|error| format!("Failed to flush streamed export metadata: {error}"))?;
-    }
     ensure_export_not_cancelled(cancellation_token)?;
     preserve_existing_export_permissions(&temporary, output_path)?;
 
@@ -2699,6 +2726,10 @@ mod tests {
     use image::codecs::{jpeg::JpegDecoder, png::PngDecoder, tiff::TiffDecoder, webp::WebPDecoder};
     use image::{ImageDecoder, Rgb, RgbImage};
     use jxl_oxide::integration::JxlDecoder;
+    use little_exif::exif_tag::ExifTag;
+    use little_exif::filetype::FileExtension;
+    use little_exif::metadata::Metadata;
+    use little_exif::rational::uR64;
 
     use super::*;
 
@@ -2717,6 +2748,15 @@ mod tests {
         output_format: &str,
         jpeg_quality: u8,
     ) -> Result<Vec<u8>, String> {
+        encode_streaming_fixture_with_exif(image, output_format, jpeg_quality, None)
+    }
+
+    fn encode_streaming_fixture_with_exif(
+        image: &DynamicImage,
+        output_format: &str,
+        jpeg_quality: u8,
+        export_exif: Option<&[u8]>,
+    ) -> Result<Vec<u8>, String> {
         let rgba = image.to_rgba8();
         let (width, height) = rgba.dimensions();
         let row_bytes = width as usize * 4;
@@ -2727,6 +2767,7 @@ mod tests {
             height,
             output_format,
             jpeg_quality,
+            export_exif,
             |sink| {
                 for row in rgba.as_raw().chunks_exact(row_bytes) {
                     sink(row)?;
@@ -2886,6 +2927,112 @@ mod tests {
     }
 
     #[test]
+    fn streaming_jpeg_and_png_embed_bounded_exif_and_strip_gps() {
+        fn read_export_exif(encoded: &[u8]) -> exif::Exif {
+            exif::Reader::new()
+                .read_from_container(&mut Cursor::new(encoded))
+                .expect("read streamed export EXIF")
+        }
+
+        fn ascii_tag(exif_data: &exif::Exif, tag: exif::Tag) -> Option<String> {
+            let field = exif_data.get_field(tag, exif::In::PRIMARY)?;
+            let exif::Value::Ascii(values) = &field.value else {
+                return None;
+            };
+            Some(
+                values
+                    .iter()
+                    .map(|value| {
+                        String::from_utf8_lossy(value)
+                            .trim_end_matches('\0')
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            )
+        }
+
+        let image = fixture_image(37, 23);
+        let mut source = encode_image_to_bytes(&image, "jpeg", 92).expect("encode EXIF source");
+        let mut source_metadata = Metadata::new();
+        source_metadata.set_tag(ExifTag::Make("Bounded Camera".to_string()));
+        source_metadata.set_tag(ExifTag::Model("Synthetic 60MP".to_string()));
+        source_metadata.set_tag(ExifTag::GPSLatitudeRef("N".to_string()));
+        source_metadata.set_tag(ExifTag::GPSLatitude(vec![
+            uR64 {
+                nominator: 31,
+                denominator: 1,
+            },
+            uR64 {
+                nominator: 14,
+                denominator: 1,
+            },
+            uR64 {
+                nominator: 15,
+                denominator: 1,
+            },
+        ]));
+        source_metadata
+            .write_to_vec(&mut source, FileExtension::JPEG)
+            .expect("attach source EXIF");
+
+        let directory = tempfile::tempdir().expect("create metadata test directory");
+        let source_path = directory.path().join("source.jpg");
+        std::fs::write(&source_path, source).expect("write EXIF source");
+        let source_path = source_path.to_string_lossy();
+
+        let retained =
+            exif_processing::export_metadata_tiff_payload(&source_path, "jpeg", true, false)
+                .expect("build retained EXIF")
+                .expect("retained EXIF must exist");
+        let jpeg = encode_streaming_fixture_with_exif(&image, "jpeg", 92, Some(&retained))
+            .expect("stream JPEG with EXIF");
+        assert_decoder_contract(
+            JpegDecoder::new(Cursor::new(&jpeg)).expect("decode metadata JPEG"),
+            (37, 23),
+            true,
+        );
+        let jpeg_exif = read_export_exif(&jpeg);
+        assert_eq!(
+            ascii_tag(&jpeg_exif, exif::Tag::Make).as_deref(),
+            Some("Bounded Camera")
+        );
+        assert!(
+            jpeg_exif
+                .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+                .is_some(),
+            "JPEG must retain GPS when stripGps is false"
+        );
+
+        let stripped =
+            exif_processing::export_metadata_tiff_payload(&source_path, "png", true, true)
+                .expect("build stripped EXIF")
+                .expect("stripped EXIF must exist");
+        let png = encode_streaming_fixture_with_exif(&image, "png", 92, Some(&stripped))
+            .expect("stream PNG with EXIF");
+        assert_decoder_contract(
+            PngDecoder::new(Cursor::new(&png)).expect("decode metadata PNG"),
+            (37, 23),
+            true,
+        );
+        let png_exif = read_export_exif(&png);
+        assert_eq!(
+            ascii_tag(&png_exif, exif::Tag::Make).as_deref(),
+            Some("Bounded Camera")
+        );
+        assert_eq!(
+            ascii_tag(&png_exif, exif::Tag::Software).as_deref(),
+            Some("RAW Editor")
+        );
+        assert!(
+            png_exif
+                .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+                .is_none(),
+            "PNG must remove GPS when stripGps is true"
+        );
+    }
+
+    #[test]
     fn streaming_jpeg_preserves_the_existing_quality_scale() {
         let image = fixture_image(257, 173);
         let reference = image.to_rgb8();
@@ -2935,7 +3082,7 @@ mod tests {
     #[test]
     fn streaming_export_requires_exactly_one_complete_frame() {
         let mut file = tempfile::tempfile().expect("temporary output");
-        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", 90, |sink| {
+        let error = encode_streaming_rgba_rows(&mut file, 4, 3, "png", 90, None, |sink| {
             sink(&[0; 4 * 4])?;
             sink(&[0; 4 * 4])?;
             Ok(())
@@ -2944,7 +3091,7 @@ mod tests {
         assert!(error.contains("expected 3"), "unexpected error: {error}");
 
         let mut overflow_file = tempfile::tempfile().expect("temporary overflow output");
-        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", 90, |sink| {
+        let error = encode_streaming_rgba_rows(&mut overflow_file, 4, 1, "png", 90, None, |sink| {
             sink(&[0; 4 * 4])?;
             sink(&[0; 4 * 4])?;
             Ok(())
@@ -2962,6 +3109,7 @@ mod tests {
             1,
             "jpeg",
             90,
+            None,
             |_| Ok(()),
         )
         .expect_err("oversized JPEG dimensions must fail before encoding");
@@ -3209,6 +3357,24 @@ mod tests {
             .unwrap_or((width, height));
         let watermark_enabled = std::env::var("RAW_EDITOR_BENCH_WATERMARK")
             .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "yes"));
+        let metadata_enabled = std::env::var("RAW_EDITOR_BENCH_METADATA")
+            .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "yes"))
+            && matches!(
+                output_format.to_ascii_lowercase().as_str(),
+                "jpg" | "jpeg" | "png"
+            );
+        let export_exif = metadata_enabled.then(|| {
+            let mut metadata = Metadata::new();
+            metadata.set_tag(ExifTag::Make("Synthetic benchmark".to_string()));
+            metadata.set_tag(ExifTag::Model("Bounded EXIF".to_string()));
+            metadata.set_tag(ExifTag::Software("RAW Editor".to_string()));
+            let encoded = metadata
+                .as_u8_vec(FileExtension::JPEG)
+                .expect("encode benchmark EXIF");
+            assert_eq!(&encoded[..2], b"\xff\xe1");
+            assert_eq!(&encoded[4..10], b"Exif\0\0");
+            encoded[10..].to_vec()
+        });
         let watermark_directory = watermark_enabled
             .then(|| tempfile::tempdir().expect("temporary benchmark watermark directory"));
         let watermark_settings = watermark_directory.as_ref().map(|directory| {
@@ -3262,6 +3428,7 @@ mod tests {
             target_height,
             &output_format,
             92,
+            export_exif.as_deref(),
             |encoder_sink| {
                 transform_streaming_rgba_rows(
                     width,
@@ -3302,13 +3469,14 @@ mod tests {
         let output_bytes = output.metadata().expect("benchmark output metadata").len();
 
         println!(
-            "{{\"format\":\"{}\",\"width\":{},\"height\":{},\"targetWidth\":{},\"targetHeight\":{},\"watermark\":{},\"elapsedMs\":{},\"outputBytes\":{},\"peakRssBytes\":{},\"producerBandBytes\":{},\"legacyFullFrameBytes\":{}}}",
+            "{{\"format\":\"{}\",\"width\":{},\"height\":{},\"targetWidth\":{},\"targetHeight\":{},\"watermark\":{},\"metadata\":{},\"elapsedMs\":{},\"outputBytes\":{},\"peakRssBytes\":{},\"producerBandBytes\":{},\"legacyFullFrameBytes\":{}}}",
             output_format,
             width,
             height,
             target_width,
             target_height,
             watermark_enabled,
+            metadata_enabled,
             elapsed.as_millis(),
             output_bytes,
             peak_rss.load(Ordering::Relaxed),

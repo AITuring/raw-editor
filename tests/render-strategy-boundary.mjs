@@ -48,8 +48,15 @@ assert.match(exportProcessing, /encode_streaming_jpeg/);
 assert.match(exportProcessing, /encode_streaming_png/);
 assert.match(exportProcessing, /encode_streaming_tiff/);
 assert.match(exportProcessing, /"jpg" \| "jpeg" =>/);
-assert.match(exportProcessing, /HuffmanStrategy::FixedAnnexK/);
-assert.match(exportProcessing, /QuantTablePreset::JpegAnnexK/);
+assert.match(exportProcessing, /MozjpegCompressor::new/);
+assert.match(exportProcessing, /encoder\.write_scanlines\(&rgb_row\)/);
+assert.match(exportProcessing, /set_chroma_sampling_pixel_sizes\(\(1, 1\), \(1, 1\)\)/);
+assert.match(exportProcessing, /set_optimize_coding\(false\)/);
+assert.match(exportProcessing, /export_metadata_tiff_payload/);
+assert.match(exportProcessing, /info\.exif_metadata = export_exif/);
+assert.doesNotMatch(exportProcessing, /fs::read\(temporary\.path\(\)\)/);
+assert.doesNotMatch(exportProcessing, /\.finish_to\(/);
+assert.doesNotMatch(exportProcessing, /zenjpeg/);
 assert.match(exportProcessing, /transform_streaming_rgba_rows/);
 assert.match(exportProcessing, /StreamingResize::new/);
 assert.match(exportProcessing, /prepare_watermark/);
@@ -72,5 +79,5 @@ assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 
 console.log(
-  'Validated four render tiers, JPEG/PNG/TIFF row pipelines, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, in-encoder EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

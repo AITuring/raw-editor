@@ -966,21 +966,20 @@ pub fn get_creation_date_from_bytes(path_hint: &str, file_bytes: &[u8]) -> DateT
     Utc::now()
 }
 
-pub fn write_image_with_metadata(
-    image_bytes: &mut Vec<u8>,
+fn build_export_metadata(
     original_path_str: &str,
     output_format: &str,
     keep_metadata: bool,
     strip_gps: bool,
-) -> Result<(), String> {
+) -> Result<Option<(Metadata, FileExtension)>, String> {
     // FIXME: temporary solution until I find a way to write metadata to TIFF
     if !keep_metadata || output_format.to_lowercase() == "tiff" {
-        return Ok(());
+        return Ok(None);
     }
 
     let original_path = Path::new(original_path_str);
     if !original_path.exists() {
-        return Ok(());
+        return Ok(None);
     }
 
     // Skip TIFF sources to avoid potential tag corruption issues
@@ -990,7 +989,7 @@ pub fn write_image_with_metadata(
         .unwrap_or("")
         .to_lowercase();
     if original_ext == "tiff" || original_ext == "tif" {
-        return Ok(());
+        return Ok(None);
     }
 
     let file_type = match output_format.to_lowercase().as_str() {
@@ -999,7 +998,7 @@ pub fn write_image_with_metadata(
             as_zTXt_chunk: true,
         },
         "tiff" => FileExtension::TIFF,
-        _ => return Ok(()),
+        _ => return Ok(None),
     };
 
     let mut metadata = Metadata::new();
@@ -1364,6 +1363,57 @@ pub fn write_image_with_metadata(
     metadata.set_tag(ExifTag::Orientation(vec![1u16]));
     metadata.set_tag(ExifTag::ColorSpace(vec![1u16]));
 
+    Ok(Some((metadata, file_type)))
+}
+
+pub(crate) fn export_metadata_tiff_payload(
+    original_path_str: &str,
+    output_format: &str,
+    keep_metadata: bool,
+    strip_gps: bool,
+) -> Result<Option<Vec<u8>>, String> {
+    let Some((metadata, _)) =
+        build_export_metadata(original_path_str, output_format, keep_metadata, strip_gps)?
+    else {
+        return Ok(None);
+    };
+
+    let encoded = metadata
+        .as_u8_vec(FileExtension::JPEG)
+        .map_err(|error| format!("Failed to encode export metadata: {error}"))?;
+    const JPEG_EXIF_PREFIX: &[u8] = b"\xff\xe1";
+    const EXIF_HEADER: &[u8] = b"Exif\0\0";
+    const TIFF_PAYLOAD_OFFSET: usize = 10;
+    if encoded.len() < TIFF_PAYLOAD_OFFSET
+        || &encoded[..2] != JPEG_EXIF_PREFIX
+        || &encoded[4..TIFF_PAYLOAD_OFFSET] != EXIF_HEADER
+    {
+        return Err("Metadata encoder returned an invalid JPEG EXIF segment".to_string());
+    }
+    let declared_segment_len = u16::from_be_bytes([encoded[2], encoded[3]]) as usize;
+    if declared_segment_len + 2 != encoded.len() {
+        return Err(format!(
+            "Encoded EXIF segment is too large or malformed ({} bytes)",
+            encoded.len()
+        ));
+    }
+
+    Ok(Some(encoded[TIFF_PAYLOAD_OFFSET..].to_vec()))
+}
+
+pub fn write_image_with_metadata(
+    image_bytes: &mut Vec<u8>,
+    original_path_str: &str,
+    output_format: &str,
+    keep_metadata: bool,
+    strip_gps: bool,
+) -> Result<(), String> {
+    let Some((metadata, file_type)) =
+        build_export_metadata(original_path_str, output_format, keep_metadata, strip_gps)?
+    else {
+        return Ok(());
+    };
+
     if let Err(e) = metadata.write_to_vec(image_bytes, file_type) {
         log::warn!("Failed to write metadata: {}", e);
     }
@@ -1390,13 +1440,15 @@ fn save_primary_metadata(image_path: &Path, metadata: &ImageMetadata) -> std::io
 }
 
 pub fn read_rrexif_sidecar(image_path: &Path) -> Option<HashMap<String, String>> {
-    let metadata = load_primary_metadata(image_path);
-    if let Some(exif) = metadata.exif {
-        let legacy = get_rrexif_path(image_path);
-        if legacy.exists() {
-            let _ = fs::remove_file(legacy);
+    if crate::sidecar_storage::is_initialized() {
+        let metadata = load_primary_metadata(image_path);
+        if let Some(exif) = metadata.exif {
+            let legacy = get_rrexif_path(image_path);
+            if legacy.exists() {
+                let _ = fs::remove_file(legacy);
+            }
+            return Some(exif);
         }
-        return Some(exif);
     }
 
     let legacy = get_rrexif_path(image_path);
@@ -1404,10 +1456,12 @@ pub fn read_rrexif_sidecar(image_path: &Path) -> Option<HashMap<String, String>>
         && let Ok(content) = fs::read_to_string(&legacy)
         && let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content)
     {
-        let mut migrated = load_primary_metadata(image_path);
-        migrated.exif = Some(map.clone());
-        if save_primary_metadata(image_path, &migrated).is_ok() {
-            let _ = fs::remove_file(&legacy);
+        if crate::sidecar_storage::is_initialized() {
+            let mut migrated = load_primary_metadata(image_path);
+            migrated.exif = Some(map.clone());
+            if save_primary_metadata(image_path, &migrated).is_ok() {
+                let _ = fs::remove_file(&legacy);
+            }
         }
         return Some(map);
     }
