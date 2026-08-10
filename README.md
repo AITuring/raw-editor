@@ -8,6 +8,16 @@ AGPL-3.0 的前提下继续开发。现阶段不追求 AI 功能，也不追求�
 工作流与 Camera Raw 基本一致的非 AI RAW 编辑器。
 上游来源与再发行声明见 [NOTICE](NOTICE)。
 
+## 支持平台
+
+RAW Editor 当前只面向桌面平台开发、测试和发布：
+
+- **macOS**：首要开发和发布平台。
+- **Windows**：维持 x64 与 ARM64 构建和安装包。
+- **Linux**：维持 x64 与 ARM64 构建，并提供 AppImage、DEB 和 RPM 安装包。
+- **Android：暂停支持**。Daily RAW 1.0 阶段不再开发、测试或发布 Android 版本，也不提供
+  APK/AAB 安装包。仓库中的 Android 脚手架暂时保留，仅供未来重新评估，不代表当前可用或受支持。
+
 ## 项目目标
 
 首个正式目标是完成 **Daily RAW 1.0**：
@@ -80,7 +90,7 @@ npm run start            # Tauri 2 开发窗口
 等待扩充。无需新增样片即可确定性验证的工程工作已完成：
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
-- ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、包元数据、Linux/Android 信息和基础 EXIF 软件标识调整。
+- ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、桌面包元数据和基础 EXIF 软件标识调整。
 - ✅ 完成中英文首启自动选择、设置持久化、语言代码归一化和翻译完整性校验。
 - ✅ 固定为本地软件，移除账号、登录、社区、在线预设、云端处理、远程 connector、在线地图和更新检查链路。
 - ✅ 保留公开开源依赖与模型的可选下载/本地打包能力；所有照片处理和模型推理均在本机完成。
@@ -170,7 +180,7 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、内置默认水印、GPU
 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经
 闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或
-缓冲完整压缩输出；JXL、AVIF 与 Android 导出仍走完整帧路径。下一阶段优先把 RAW 解码、几何变换
+缓冲完整压缩输出；JXL 与 AVIF 导出仍走完整帧路径。下一阶段优先把 RAW 解码、几何变换
 等更上游节点改造成有界管线，并继续评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新
 α7R V 样片到位后，再扩充 RAW → GPU → 文件的场景画质、交互耗时和峰值基线。
 
@@ -236,6 +246,7 @@ JPEG/PNG/TIFF 与 WebP harness；本轮已显式执行 WebP 的 `memory`/`file` 
 
 ### 暂不进入 1.0
 
+- Android 移动端应用、APK/AAB 安装包和移动端发布流水线。
 - AI Denoise、Raw Details、Super Resolution。
 - 主体、天空、人物、背景、对象和深度 AI 蒙版。
 - 反射移除、自动尘点识别、生成式移除和生成式扩图。
@@ -529,7 +540,7 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 主区域放大缩小图片不跟手
 - 不稳定，导入图片正在调整，突然就自动回首页了
 - 样式效果都比camera raw差远了
-- WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL、AVIF 与 Android 导出尚未接入
+- WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL 与 AVIF 导出尚未接入
   tile-to-encoder，60MP 时仍有完整帧峰值。
 - RAW 解码、几何变换和活动蒙版仍有完整帧峰值；α7R V 目前只有一个有损压缩长曝光样片基线，
   尚缺多场景/多压缩模式闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。

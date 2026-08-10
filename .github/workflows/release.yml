@@ -1,11 +1,46 @@
 name: 'Release: Build & Package App'
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  prepare:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: version
+        name: Validate tag against app version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(jq -r '.version' src-tauri/tauri.conf.json)"
+          expected_tag="v${version}"
+
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Release tag '$GITHUB_REF_NAME' does not match app version '$expected_tag'." >&2
+            exit 1
+          fi
+
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -19,10 +54,10 @@ jobs:
             target: 'aarch64-pc-windows-msvc'
             asset-prefix: '01'
           - platform: 'macos-14'
-            target: aarch64-apple-darwin
+            target: 'aarch64-apple-darwin'
             asset-prefix: '02'
           - platform: 'macos-15-intel'
-            target: x86_64-apple-darwin
+            target: 'x86_64-apple-darwin'
             asset-prefix: '02'
           - platform: 'ubuntu-22.04'
             target: ''
@@ -36,20 +71,72 @@ jobs:
           - platform: 'ubuntu-24.04-arm'
             target: ''
             asset-prefix: '03'
-          - platform: 'ubuntu-latest'
-            mobile: 'android'
-            target: 'aarch64-linux-android'
-            args: '--target aarch64'
-            asset-prefix: '04'
     uses: ./.github/workflows/build.yml
     with:
-      release-id: ${{ github.event.release.id }}
       platform: ${{ matrix.platform }}
       target: ${{ matrix.target }}
       build-args: ${{ matrix.args }}
-      asset-name-pattern: '[name]_v[version]_[platform]_[arch][ext]'
       asset-prefix: ${{ matrix.asset-prefix }}
-      mobile: ${{ matrix.mobile }}
-    secrets: inherit
+    permissions:
+      contents: read
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+    steps:
+      - name: Download packaged applications
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Prepare uniquely named release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          asset_count=0
+
+          while IFS= read -r -d '' file; do
+            relative_path="${file#downloaded-artifacts/}"
+            artifact_name="${relative_path%%/*}"
+            platform_name="${artifact_name%_artifacts}"
+            file_name="${file##*/}"
+            safe_file_name="${file_name// /_}"
+
+            cp "$file" "release-assets/${platform_name}_${safe_file_name}"
+            asset_count=$((asset_count + 1))
+          done < <(find downloaded-artifacts -type f -print0)
+
+          if (( asset_count == 0 )); then
+            echo 'No packaged applications were downloaded.' >&2
+            exit 1
+          fi
+
+          echo "Prepared $asset_count release assets."
+
+      - name: Create and publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          mapfile -d '' assets < <(find release-assets -type f -print0 | sort -z)
+
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --generate-notes \
+              --title "RAW Editor v${RELEASE_VERSION}" \
+              --verify-tag
+          fi
+
+          gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false
