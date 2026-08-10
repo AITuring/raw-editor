@@ -100,16 +100,27 @@ jobs:
           link-to-sdk: true
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: Setup Android signing
-        if: inputs.mobile == 'android' && github.event_name != 'pull_request'
+        if: inputs.mobile == 'android' && inputs.release-id != ''
+        shell: bash
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
         run: |
+          set -euo pipefail
+
+          : "${ANDROID_KEY_ALIAS:?ANDROID_KEY_ALIAS secret is required for release builds}"
+          : "${ANDROID_KEY_PASSWORD:?ANDROID_KEY_PASSWORD secret is required for release builds}"
+          : "${ANDROID_KEY_BASE64:?ANDROID_KEY_BASE64 secret is required for release builds}"
+
           cd src-tauri/gen/android
-          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
-          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > $RUNNER_TEMP/keystore.jks
-          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+          printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS" > keystore.properties
+          printf 'password=%s\n' "$ANDROID_KEY_PASSWORD" >> keystore.properties
+          printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore.jks"
+          printf 'storeFile=%s\n' "$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
       - name: rustup install target
         if: ${{ inputs.target != '' }}
@@ -141,6 +152,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NO_STRIP: ${{ startsWith(inputs.platform, 'ubuntu') }}
         with:
+          tauriScript: npm run tauri
           args: --verbose ${{ inputs.build-args }} ${{ inputs.target != '' && '--target' || ''  }} ${{ inputs.target }}
           assetNamePattern: ${{ steps.patch-release-name.outputs.platform }}
           releaseId: ${{ inputs.release-id }}

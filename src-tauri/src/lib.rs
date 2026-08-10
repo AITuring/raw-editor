@@ -439,7 +439,10 @@ fn process_preview_job(
     let native_display_enabled =
         prefer_native_display && settings.use_wgpu_renderer.unwrap_or(true);
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let native_display_enabled = false;
+    let native_display_enabled = {
+        let _ = prefer_native_display;
+        false
+    };
 
     let interactive_quality = match live_quality {
         "full" => 85_u8,
