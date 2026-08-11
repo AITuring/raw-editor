@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 const MAX_AUTO_ANGLE_DEGREES: f32 = 15.0;
 const AXIS_TOLERANCE_DEGREES: f32 = 18.0;
 const CLUSTER_RADIUS_DEGREES: f32 = 1.5;
-const UPRIGHT_AXIS_TOLERANCE_DEGREES: f32 = 35.0;
+const UPRIGHT_AXIS_TOLERANCE_DEGREES: f32 = 25.0;
 const MAX_UPRIGHT_LINES: usize = 48;
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -290,12 +290,9 @@ fn refine_structural_line(edges: &GrayImage, line: PolarLine) -> Option<Structur
     let theta = (line.angle_in_degrees as f32).to_radians();
     let (sin_theta, cos_theta) = theta.sin_cos();
 
-    let mut count = 0usize;
-    let mut sum_x = 0.0f64;
-    let mut sum_y = 0.0f64;
-    let mut sum_xx = 0.0f64;
-    let mut sum_xy = 0.0f64;
-    let mut sum_yy = 0.0f64;
+    let tangent_x = -sin_theta;
+    let tangent_y = cos_theta;
+    let mut points = Vec::<(f32, f32, f32)>::new();
 
     for y in margin_y..height.saturating_sub(margin_y) {
         for x in margin_x..width.saturating_sub(margin_x) {
@@ -308,20 +305,69 @@ fn refine_structural_line(edges: &GrayImage, line: PolarLine) -> Option<Structur
                 continue;
             }
 
-            let xf = x as f64;
-            let yf = y as f64;
-            count += 1;
-            sum_x += xf;
-            sum_y += yf;
-            sum_xx += xf * xf;
-            sum_xy += xf * yf;
-            sum_yy += yf * yf;
+            let xf = x as f32;
+            let yf = y as f32;
+            points.push((xf, yf, xf * tangent_x + yf * tangent_y));
         }
     }
 
     let minimum_support = (min_dim as f32 * 0.035).round().max(12.0) as usize;
-    if count < minimum_support {
+    if points.len() < minimum_support {
         return None;
+    }
+
+    // A polar Hough line is infinite. Without a continuity check, unrelated
+    // glyphs or repeated texture that happen to share an x/y coordinate are
+    // merged into a fake full-height "structural" line. Keep only the
+    // strongest locally continuous run along the Hough tangent.
+    points.sort_by(|left, right| left.2.total_cmp(&right.2));
+    let maximum_gap = 5.0f32;
+    let mut run_start = 0usize;
+    let mut best_start = 0usize;
+    let mut best_end = 0usize;
+    let mut best_score = 0.0f32;
+    for run_end in 1..=points.len() {
+        let ends_run =
+            run_end == points.len() || points[run_end].2 - points[run_end - 1].2 > maximum_gap;
+        if !ends_run {
+            continue;
+        }
+
+        let support = run_end - run_start;
+        let span = points[run_end - 1].2 - points[run_start].2;
+        let score = span.max(0.0) * (support as f32).sqrt();
+        if score > best_score {
+            best_score = score;
+            best_start = run_start;
+            best_end = run_end;
+        }
+        run_start = run_end;
+    }
+
+    if best_end <= best_start {
+        return None;
+    }
+    let points = &points[best_start..best_end];
+    let count = points.len();
+    let run_span = points[count - 1].2 - points[0].2;
+    let minimum_span = min_dim as f32 * 0.14;
+    if count < minimum_support || run_span < minimum_span {
+        return None;
+    }
+
+    let mut sum_x = 0.0f64;
+    let mut sum_y = 0.0f64;
+    let mut sum_xx = 0.0f64;
+    let mut sum_xy = 0.0f64;
+    let mut sum_yy = 0.0f64;
+    for &(x, y, _) in points {
+        let xf = x as f64;
+        let yf = y as f64;
+        sum_x += xf;
+        sum_y += yf;
+        sum_xx += xf * xf;
+        sum_xy += xf * yf;
+        sum_yy += yf * yf;
     }
 
     let n = count as f64;
@@ -345,8 +391,9 @@ fn refine_structural_line(edges: &GrayImage, line: PolarLine) -> Option<Structur
 
     let straightness = (1.0 - minor / major).clamp(0.0, 1.0) as f32;
     let span = (12.0 * major).sqrt() as f32;
-    let coverage = (span / min_dim.max(1) as f32).clamp(0.1, 1.0);
-    let weight = count as f32 * straightness.powi(2) * coverage;
+    let coverage = (span / min_dim.max(1) as f32).clamp(0.0, 1.0);
+    let continuity = (count as f32 / run_span.max(1.0)).clamp(0.0, 1.0);
+    let weight = count as f32 * straightness.powi(2) * coverage * continuity.powi(2);
     if weight <= 0.0 {
         return None;
     }
@@ -603,8 +650,65 @@ pub fn analyze_upright(
     mode: UprightMode,
     orientation_steps: u8,
 ) -> UprightAnalysis {
-    let lines = extract_structural_lines(image);
-    if lines.len() < 2 {
+    let detected_lines = extract_structural_lines(image);
+    if detected_lines.len() < 2 {
+        return UprightAnalysis {
+            rotation: 0.0,
+            vertical: 0.0,
+            horizontal: 0.0,
+            confidence: 0.0,
+            detected: false,
+            line_count: detected_lines.len(),
+        };
+    }
+
+    let horizontal_count = detected_lines
+        .iter()
+        .filter(|line| line.axis == StructuralAxis::Horizontal)
+        .count();
+    let vertical_count = detected_lines.len() - horizontal_count;
+    let rotated_quarter_turn = orientation_steps % 2 == 1;
+    let minimum_axis_lines = if mode == UprightMode::Auto { 3 } else { 2 };
+    let (use_vertical_lines, use_horizontal_lines, enable_vertical, enable_horizontal) = match mode
+    {
+        UprightMode::Level => (
+            vertical_count >= minimum_axis_lines,
+            horizontal_count >= minimum_axis_lines,
+            false,
+            false,
+        ),
+        UprightMode::Vertical if rotated_quarter_turn => {
+            let has_horizontal_structure = horizontal_count >= minimum_axis_lines;
+            (
+                false,
+                has_horizontal_structure,
+                false,
+                has_horizontal_structure,
+            )
+        }
+        UprightMode::Vertical => {
+            let has_vertical_structure = vertical_count >= minimum_axis_lines;
+            (has_vertical_structure, false, has_vertical_structure, false)
+        }
+        UprightMode::Auto | UprightMode::Full => {
+            let has_vertical_structure = vertical_count >= minimum_axis_lines;
+            let has_horizontal_structure = horizontal_count >= minimum_axis_lines;
+            (
+                has_vertical_structure,
+                has_horizontal_structure,
+                has_vertical_structure,
+                has_horizontal_structure,
+            )
+        }
+    };
+    let lines = detected_lines
+        .into_iter()
+        .filter(|line| match line.axis {
+            StructuralAxis::Horizontal => use_horizontal_lines,
+            StructuralAxis::Vertical => use_vertical_lines,
+        })
+        .collect::<Vec<_>>();
+    if lines.len() < minimum_axis_lines {
         return UprightAnalysis {
             rotation: 0.0,
             vertical: 0.0,
@@ -614,25 +718,6 @@ pub fn analyze_upright(
             line_count: lines.len(),
         };
     }
-
-    let horizontal_count = lines
-        .iter()
-        .filter(|line| line.axis == StructuralAxis::Horizontal)
-        .count();
-    let vertical_count = lines.len() - horizontal_count;
-    let rotated_quarter_turn = orientation_steps % 2 == 1;
-    let minimum_axis_lines = if mode == UprightMode::Auto { 3 } else { 2 };
-    let (enable_vertical, enable_horizontal) = match mode {
-        UprightMode::Level => (false, false),
-        UprightMode::Vertical if rotated_quarter_turn => {
-            (false, horizontal_count >= minimum_axis_lines)
-        }
-        UprightMode::Vertical => (vertical_count >= minimum_axis_lines, false),
-        UprightMode::Auto | UprightMode::Full => (
-            vertical_count >= minimum_axis_lines,
-            horizontal_count >= minimum_axis_lines,
-        ),
-    };
     let regularization = if mode == UprightMode::Auto {
         0.1
     } else {
@@ -679,7 +764,7 @@ pub fn analyze_upright(
         vertical: round_tenth(params.vertical),
         horizontal: round_tenth(params.horizontal),
         confidence,
-        detected: confidence >= 0.12,
+        detected: confidence >= 0.35,
         line_count: lines.len(),
     }
 }
@@ -841,5 +926,131 @@ mod tests {
             (result.horizontal + distortion.horizontal).abs() <= 7.0,
             "{result:?}"
         );
+    }
+
+    #[test]
+    fn upright_modes_respect_their_axis_contract() {
+        let width = 800u32;
+        let height = 600u32;
+        let distortion = UprightParameters {
+            rotation: 5.0,
+            vertical: 24.0,
+            horizontal: -16.0,
+        };
+        let mut image = GrayImage::from_pixel(width, height, Luma([14]));
+        for line in synthetic_grid_lines(width as f32, height as f32, distortion) {
+            draw_line_segment_mut(&mut image, line.start, line.end, Luma([242]));
+        }
+        let image = DynamicImage::ImageLuma8(image);
+
+        let auto = analyze_upright(&image, UprightMode::Auto, 0);
+        let level = analyze_upright(&image, UprightMode::Level, 0);
+        let vertical = analyze_upright(&image, UprightMode::Vertical, 0);
+        let full = analyze_upright(&image, UprightMode::Full, 0);
+
+        assert!(auto.detected, "{auto:?}");
+        assert!(
+            (auto.rotation + distortion.rotation).abs() <= 2.0,
+            "{auto:?}"
+        );
+        assert!(
+            (auto.vertical + distortion.vertical).abs() <= 6.0,
+            "{auto:?}"
+        );
+        assert!(
+            (auto.horizontal + distortion.horizontal).abs() <= 6.0,
+            "{auto:?}"
+        );
+        assert!(level.detected, "{level:?}");
+        assert_eq!(level.vertical, 0.0);
+        assert_eq!(level.horizontal, 0.0);
+        assert!(
+            (level.rotation + distortion.rotation).abs() <= 4.0,
+            "{level:?}"
+        );
+        assert!(vertical.detected, "{vertical:?}");
+        assert_eq!(vertical.horizontal, 0.0);
+        assert!(
+            (vertical.rotation + distortion.rotation).abs() <= 2.0,
+            "{vertical:?}"
+        );
+        assert!(
+            (vertical.vertical + distortion.vertical).abs() <= 6.0,
+            "{vertical:?}"
+        );
+        assert!(full.detected, "{full:?}");
+        assert!(
+            (full.rotation + distortion.rotation).abs() <= 2.0,
+            "{full:?}"
+        );
+        assert!(
+            (full.vertical + distortion.vertical).abs() <= 6.0,
+            "{full:?}"
+        );
+        assert!(
+            (full.horizontal + distortion.horizontal).abs() <= 6.0,
+            "{full:?}"
+        );
+    }
+
+    #[test]
+    fn upright_rejects_disconnected_decorative_marks() {
+        let width = 600u32;
+        let height = 1000u32;
+        let mut image = GrayImage::from_pixel(width, height, Luma([18]));
+        for (base_x, slope) in [(130.0f32, -0.12f32), (300.0, 0.0), (470.0, 0.12)] {
+            for y in (40..940).step_by(65) {
+                let y = y as f32;
+                let x = base_x + (y - height as f32 * 0.5) * slope;
+                draw_line_segment_mut(
+                    &mut image,
+                    (x, y),
+                    (x + slope * 22.0, y + 22.0),
+                    Luma([240]),
+                );
+            }
+        }
+
+        let image = DynamicImage::ImageLuma8(image);
+        for mode in [
+            UprightMode::Auto,
+            UprightMode::Level,
+            UprightMode::Vertical,
+            UprightMode::Full,
+        ] {
+            let result = analyze_upright(&image, mode, 0);
+            assert!(
+                !result.detected,
+                "decorative marks are not {mode:?} perspective guides: {result:?}"
+            );
+            assert_eq!(result.rotation, 0.0);
+            assert_eq!(result.vertical, 0.0);
+            assert_eq!(result.horizontal, 0.0);
+        }
+    }
+
+    #[test]
+    fn vertical_mode_does_not_use_horizontal_lines_as_vertical_evidence() {
+        let mut image = GrayImage::from_pixel(640, 420, Luma([12]));
+        let slope = 5.0f32.to_radians().tan();
+        for base_y in [90.0, 205.0, 320.0] {
+            draw_line_segment_mut(
+                &mut image,
+                (28.0, base_y),
+                (612.0, base_y + 584.0 * slope),
+                Luma([245]),
+            );
+        }
+        let image = DynamicImage::ImageLuma8(image);
+
+        let vertical = analyze_upright(&image, UprightMode::Vertical, 0);
+        assert!(!vertical.detected, "{vertical:?}");
+        assert_eq!(vertical.rotation, 0.0);
+        assert_eq!(vertical.vertical, 0.0);
+        assert_eq!(vertical.horizontal, 0.0);
+
+        let level = analyze_upright(&image, UprightMode::Level, 0);
+        assert!(level.detected, "{level:?}");
+        assert!((level.rotation + 5.0).abs() <= 0.8, "{level:?}");
     }
 }
