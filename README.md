@@ -123,10 +123,12 @@ npm run start            # Tauri 2 开发窗口
 - ✅ 裁切工具已按 Camera Raw 的日常工作流重构：支持预设、自定义及可锁定宽高比、横竖比例切换、
   六种可实际切换的裁剪参考线（画布右键或 `Option/Alt+V` 循环）、±45° 精细旋转、画线拉直和基于
   本地图像直线检测的自动拉直、90° 旋转及水平/垂直翻转。几何面板提供关闭、自动、水平、垂直、
-  完全和引导六种 Upright 模式；自动、水平、垂直和完全模式在 Rust 图像分析端只采纳空间连续的
-  长结构线，并按模式隔离水平与垂直证据再求解旋转和透视。断续纹理、文字笔画和印章不会再被拼成
-  贯穿画面的假透视线，证据不足时保持图像不变。引导模式允许直接在照片上绘制 2–4 条应当水平或
-  垂直的参考线并实时写入同一组几何参数，而不是只改变界面状态。手动菜单中的投影、垂直、水平、
+  完全和引导六种 Upright 模式；自动、水平、垂直和完全模式在 Rust 图像分析端融合灰度与 RGB
+  分通道边缘，以长连续边作为透视主证据，并让分布在多个画面区域、方向一致且彼此正交的短边参与
+  旋转判断，因此印章、窗格和瓷砖等低明度差细节也能成为参考。轴向 RANSAC 会隔离水平与垂直证据，
+  只有跨画面的收敛关系明显优于平直模型时才写入透视参数；断续纹理和文字笔画不会再被拼成贯穿画面
+  的假透视线，证据不足时保持图像不变。引导模式允许直接在照片上绘制 2–4 条应当水平或垂直的参考线
+  并实时写入同一组几何参数，而不是只改变界面状态。手动菜单中的投影、垂直、水平、
   旋转、纵横比、缩放和 X/Y 偏移均进入同一套 Rust 逆向采样矩阵；其中“投影”负责压缩画面边缘拉伸，
   与光学面板的镜头畸变保持独立。每个参数都
   同步作用于未裁切预览、蒙版坐标、裁切安全区、sidecar 和全尺寸导出，并由合成网格像素回归锁定，
@@ -206,7 +208,7 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
 `npm run build`、`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、
-`cargo check --lib --locked`、80 项默认执行的
+`cargo check --lib --locked`、81 项默认执行的
 Rust 单元/回归测试和严格 Clippy。默认忽略三项：一项需要本地授权 RAW，另外两项是手动 60MP
 JPEG/PNG/TIFF 与 WebP harness；本轮已显式执行 WebP 的 `memory`/`file` 对照。`git diff --check`
 也保持通过。
