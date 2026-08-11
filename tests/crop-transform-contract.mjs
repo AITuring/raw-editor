@@ -75,6 +75,57 @@ assert.match(
   'geometry gestures must keep the crop frame stable until release',
 );
 assert.match(adjustmentsSource, /constrainCrop:\s*false,/, 'blank transform edges must be allowed by default');
+
+const cropResetKeysStart = cropPanelSource.indexOf('const CROP_RESET_KEYS = [');
+const cropResetKeysEnd = cropPanelSource.indexOf(
+  '] as const satisfies ReadonlyArray<keyof Adjustments>;',
+  cropResetKeysStart,
+);
+assert.ok(cropResetKeysStart >= 0 && cropResetKeysEnd > cropResetKeysStart, 'crop reset keys must be explicit');
+const cropResetKeysSource = cropPanelSource.slice(cropResetKeysStart, cropResetKeysEnd);
+for (const key of [
+  'aspectRatio',
+  'constrainCrop',
+  'crop',
+  'flipHorizontal',
+  'flipVertical',
+  'orientationSteps',
+  'rotation',
+  'transformProjection',
+  'transformVertical',
+  'transformHorizontal',
+  'transformRotate',
+  'transformAspect',
+  'transformScale',
+  'transformXOffset',
+  'transformYOffset',
+]) {
+  assert.match(cropResetKeysSource, new RegExp(`'${key}'`), `crop reset must restore ${key}`);
+}
+assert.doesNotMatch(
+  cropResetKeysSource,
+  /'transformDistortion'/,
+  'crop reset must preserve the independent Optics distortion correction',
+);
+
+const cropResetHandlerStart = cropPanelSource.indexOf('const handleResetCrop = useCallback');
+const cropResetHandlerEnd = cropPanelSource.indexOf('const isOrientationToggleDisabled', cropResetHandlerStart);
+assert.ok(cropResetHandlerStart >= 0 && cropResetHandlerEnd > cropResetHandlerStart, 'crop reset handler must exist');
+const cropResetHandlerSource = cropPanelSource.slice(cropResetHandlerStart, cropResetHandlerEnd);
+assert.match(
+  cropResetHandlerSource,
+  /const resetSnapshot = createCropResetSnapshot\(originalAspectRatio\)/,
+  'crop reset must restore the complete crop and geometry reset snapshot',
+);
+assert.match(cropResetHandlerSource, /\.\.\.resetSnapshot,/, 'crop reset snapshot must be applied atomically');
+assert.match(cropResetHandlerSource, /isGuidedUprightActive:\s*false/, 'crop reset must exit Guided Upright');
+assert.match(cropResetHandlerSource, /isSliderDragging:\s*false/, 'crop reset must end geometry drag state');
+assert.match(cropResetHandlerSource, /uprightMode:\s*'off'/, 'crop reset must clear the active Upright mode');
+assert.match(
+  cropResetHandlerSource,
+  /sectionVisibility:\s*\{\s*\.\.\.prev\.sectionVisibility,\s*geometry:\s*true\s*\}/,
+  'crop reset must leave reset geometry enabled',
+);
 assert.ok(
   tauriCommands.indexOf('downscale_f32_image(\n                    patched_image.as_ref()') <
     tauriCommands.indexOf('let warped_image = apply_geometry_warp(preview_source'),
@@ -245,4 +296,4 @@ await new Promise((resolvePromise) => setImmediate(resolvePromise));
 assert.deepEqual(queueResults, ['first-result', 'latest-result', 'resumed-result']);
 queue.dispose();
 
-console.log('Validated Upright, projection constraints, and latest-only crop preview scheduling.');
+console.log('Validated crop reset, Upright, projection constraints, and latest-only crop preview scheduling.');

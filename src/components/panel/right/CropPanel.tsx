@@ -98,8 +98,35 @@ const CROP_SESSION_KEYS = [
 
 type CropSessionSnapshot = Pick<Adjustments, (typeof CROP_SESSION_KEYS)[number]>;
 
+const CROP_RESET_KEYS = [
+  'aspectRatio',
+  'constrainCrop',
+  'crop',
+  'flipHorizontal',
+  'flipVertical',
+  'orientationSteps',
+  'rotation',
+  'transformProjection',
+  'transformVertical',
+  'transformHorizontal',
+  'transformRotate',
+  'transformAspect',
+  'transformScale',
+  'transformXOffset',
+  'transformYOffset',
+] as const satisfies ReadonlyArray<keyof Adjustments>;
+
+type CropResetSnapshot = Pick<Adjustments, (typeof CROP_RESET_KEYS)[number]>;
+
 function createCropSessionSnapshot(adjustments: Adjustments): CropSessionSnapshot {
   return Object.fromEntries(CROP_SESSION_KEYS.map((key) => [key, adjustments[key]])) as CropSessionSnapshot;
+}
+
+function createCropResetSnapshot(originalAspectRatio: number | null): CropResetSnapshot {
+  return {
+    ...(Object.fromEntries(CROP_RESET_KEYS.map((key) => [key, INITIAL_ADJUSTMENTS[key]])) as CropResetSnapshot),
+    aspectRatio: originalAspectRatio,
+  };
 }
 
 export default function CropPanel() {
@@ -544,25 +571,37 @@ export default function CropPanel() {
   const handleResetCrop = useCallback(() => {
     const originalAspectRatio =
       selectedImage?.width && selectedImage?.height ? selectedImage.width / selectedImage.height : null;
+    const resetSnapshot = createCropResetSnapshot(originalAspectRatio);
 
+    autoStraightenRequestRef.current += 1;
+    uprightRequestRef.current += 1;
+    lastSolvedGuideCountRef.current = 0;
     setPreferPortrait(Boolean(originalAspectRatio && originalAspectRatio < 1));
     setIsEditingCustom(false);
+    setIsAutoStraightening(false);
+    setIsAnalyzingUpright(false);
+    setIsRotationActive(false);
+    setCustomW('');
+    setCustomH('');
     lastSyncedRatio.current = null;
     updateLocalRotation(null);
-    setEditor({ isStraightenActive: false });
+    setEditor({
+      isGuidedUprightActive: false,
+      isRotationActive: false,
+      isSliderDragging: false,
+      isStraightenActive: false,
+      liveRotation: null,
+      uprightGuides: [],
+      uprightMode: 'off',
+    });
     setDisplayPresetId('original');
     preferredPresetIdRef.current = 'original';
     lastConstrainedRatioRef.current = originalAspectRatio;
 
     setAdjustments((prev: Adjustments) => ({
       ...prev,
-      aspectRatio: originalAspectRatio,
-      constrainCrop: INITIAL_ADJUSTMENTS.constrainCrop,
-      crop: INITIAL_ADJUSTMENTS.crop,
-      flipHorizontal: INITIAL_ADJUSTMENTS.flipHorizontal ?? false,
-      flipVertical: INITIAL_ADJUSTMENTS.flipVertical ?? false,
-      orientationSteps: INITIAL_ADJUSTMENTS.orientationSteps ?? 0,
-      rotation: INITIAL_ADJUSTMENTS.rotation ?? 0,
+      ...resetSnapshot,
+      sectionVisibility: { ...prev.sectionVisibility, geometry: true },
     }));
   }, [selectedImage, setAdjustments, setEditor, updateLocalRotation]);
 
