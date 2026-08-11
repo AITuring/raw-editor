@@ -149,13 +149,18 @@ jobs:
 
           mapfile -d '' assets < <(find release-assets -type f -print0 | sort -z)
 
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" \
-              --draft \
-              --generate-notes \
-              --target "$GITHUB_SHA" \
-              --title "RAW Editor v${RELEASE_VERSION}"
+          stale_draft_id="$(
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"${RELEASE_TAG}\" and .draft == true) | .id" \
+              | head -n 1
+          )"
+
+          if [[ -n "$stale_draft_id" ]]; then
+            echo "Removing stale draft release for ${RELEASE_TAG}."
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${stale_draft_id}"
           fi
 
-          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --generate-notes \
+            --target "$GITHUB_SHA" \
+            --title "RAW Editor v${RELEASE_VERSION}"
