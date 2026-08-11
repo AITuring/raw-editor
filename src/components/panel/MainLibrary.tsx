@@ -373,8 +373,8 @@ export default function MainLibrary(props: MainLibraryProps) {
 
     return (
       <div className="flex-1 flex h-full p-2 bg-transparent">
-        <div className="flex w-full h-full bg-bg-secondary rounded-lg border border-border-color/25 overflow-hidden">
-          <div className="w-1/2 hidden md:block relative overflow-hidden bg-black">
+        <div className="grid w-full h-full grid-cols-1 md:grid-cols-2 bg-bg-secondary rounded-lg border border-border-color/25 overflow-hidden">
+          <div className="hidden md:block relative min-w-0 overflow-hidden bg-black">
             <AnimatePresence initial={false}>
               {coverImage && (
                 <motion.img
@@ -408,7 +408,7 @@ export default function MainLibrary(props: MainLibraryProps) {
             </AnimatePresence>
           </div>
 
-          <div className="w-full md:w-1/2 relative overflow-hidden isolate">
+          <div className="relative min-w-0 overflow-hidden isolate">
             <div className="absolute inset-0 -z-10 pointer-events-none">
               <AnimatePresence initial={false}>
                 {coverImage && (
@@ -438,7 +438,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                 />
               ) : (
                 <>
-                  <div className="my-auto text-left relative z-10">
+                  <div className="w-full max-w-xl mx-auto my-auto text-left relative z-10">
                     <Text variant={TextVariants.displayLarge}>{t('library.splash.brand')}</Text>
                     <Text
                       variant={TextVariants.heading}
@@ -458,7 +458,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                         t('library.splash.descriptionDesktop')
                       )}
                     </Text>
-                    <div className="flex flex-col w-full max-w-xs gap-4 relative z-10">
+                    <div className="flex flex-col w-full gap-4 relative z-10">
                       {hasLastPath && (
                         <Button
                           className="rounded-md h-11 w-full flex justify-center items-center shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
