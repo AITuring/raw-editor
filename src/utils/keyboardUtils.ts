@@ -172,7 +172,7 @@ export const KEYBIND_DEFINITIONS: KeybindDefinition[] = [
   {
     action: 'toggle_crop_panel',
     description: 'settings.keybinds.actions.toggle_crop_panel',
-    defaultCombo: ['KeyR'],
+    defaultCombo: ['KeyC'],
     section: 'panels',
   },
   {
@@ -202,7 +202,7 @@ export const KEYBIND_DEFINITIONS: KeybindDefinition[] = [
   {
     action: 'toggle_analytics',
     description: 'settings.keybinds.actions.toggle_analytics',
-    defaultCombo: ['KeyA'],
+    defaultCombo: ['KeyH'],
     section: 'panels',
   },
   {
@@ -258,7 +258,7 @@ export const KEYBIND_DEFINITIONS: KeybindDefinition[] = [
   {
     action: 'toggle_crop',
     description: 'settings.keybinds.actions.toggle_crop',
-    defaultCombo: ['KeyS'],
+    defaultCombo: ['KeyA'],
     section: 'editing',
   },
   {

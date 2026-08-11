@@ -469,6 +469,11 @@
     "crop": {
       "angleLabel": "Angolo",
       "aspectRatioHeading": "Proporzioni",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Raddrizzamento automatico non riuscito: {{error}}",
+      "autoStraightenNoLines": "Non sono state rilevate linee orizzontali o verticali affidabili.",
+      "autoStraightenTooltip": "Analizza le linee dell’immagine e raddrizza automaticamente",
+      "constrainToImage": "Limita all’immagine",
       "custom": {
         "hPlaceholder": "A",
         "hTooltip": "Altezza",
@@ -484,18 +489,20 @@
         "rotateRight": "Ruota a Destra",
         "transform": "Trasforma"
       },
-      "orientationHeading": "Orientamento",
+      "orientationHeading": "Ruota e rifletti",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Dimensioni di output del ritaglio",
       "overlays": {
-        "armature": {
-          "desc": "Triangoli Armonici",
-          "name": "Armatura"
-        },
         "diagonal": {
           "desc": "Linee Diagonali",
           "name": "Linee Diagonali"
         },
+        "grid": {
+          "desc": "Griglia",
+          "name": "Griglia"
+        },
         "none": {
-          "desc": "Nessuna sovrapposizione",
+          "desc": "Nessuna guida",
           "name": "Nessuna"
         },
         "phiGrid": {
@@ -557,21 +564,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Ripristina Ritaglio e Trasformazione",
+      "resetTooltip": "Ripristina ritaglio",
       "rotationHeading": "Rotazione",
       "title": "Ritaglio e Trasformazione",
       "tooltips": {
-        "compositionOverlay": "Sovrapposizione Composizione",
+        "compositionOverlay": "Guide di ritaglio",
         "constrainAspect": "Vincola proporzioni",
+        "cycleGuides": "Scorri guide",
         "flipHoriz": "Rifletti immagine orizzontalmente",
         "flipVert": "Rifletti immagine verticalmente",
         "lens": "Correzione distorsione obiettivo",
-        "overlayDetails": "Sovrapposizione: {{name}}{{rotateHint}}",
+        "overlayDetails": "Guida: {{name}}{{rotateHint}}",
         "resetFineRotation": "Ripristina Rotazione Fine",
-        "rotateHint": " (Shift+O per ruotare)",
+        "rotateGuide": "Ruota guida",
+        "rotateHint": " (Maiusc+V per ruotare)",
         "rotateLeft": "Ruota 90° in senso antiorario",
         "rotateRight": "Ruota 90° in senso orario",
-        "straighten": "Strumento Raddrizza (S)",
+        "straighten": "Raddrizza (A)",
         "switchOrientation": "Cambia orientamento",
         "switchToLandscape": "Passa a paesaggio",
         "switchToPortrait": "Passa a ritratto",

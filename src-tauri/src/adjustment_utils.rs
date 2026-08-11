@@ -119,3 +119,51 @@ pub fn apply_all_transformations<'a, I: IntoCowImage<'a>>(
 
     (cropped_image, unscaled_crop_offset)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{GenericImageView, Rgb, RgbImage};
+
+    fn coordinate_image(width: u32, height: u32) -> DynamicImage {
+        let mut image = RgbImage::new(width, height);
+        for y in 0..height {
+            for x in 0..width {
+                image.put_pixel(x, y, Rgb([x as u8 * 20, y as u8 * 30, 11]));
+            }
+        }
+        DynamicImage::ImageRgb8(image)
+    }
+
+    #[test]
+    fn transformation_pipeline_applies_source_pixel_crop_and_reports_offset() {
+        let source = coordinate_image(6, 4);
+        let adjustments = serde_json::json!({
+            "crop": { "unit": "px", "x": 1.0, "y": 1.0, "width": 3.0, "height": 2.0 }
+        });
+
+        let (output, offset) = apply_all_transformations(&source, &adjustments);
+
+        assert_eq!(output.dimensions(), (3, 2));
+        assert_eq!(offset, (1.0, 1.0));
+        assert_eq!(output.get_pixel(0, 0), source.get_pixel(1, 1));
+        assert_eq!(output.get_pixel(2, 1), source.get_pixel(3, 2));
+    }
+
+    #[test]
+    fn crop_coordinates_follow_coarse_rotation_and_flip() {
+        let source = coordinate_image(4, 3);
+        let adjustments = serde_json::json!({
+            "orientationSteps": 1,
+            "flipHorizontal": true,
+            "crop": { "unit": "px", "x": 1.0, "y": 1.0, "width": 2.0, "height": 2.0 }
+        });
+
+        let (output, offset) = apply_all_transformations(&source, &adjustments);
+
+        assert_eq!(output.dimensions(), (2, 2));
+        assert_eq!(offset, (1.0, 1.0));
+        let expected = source.rotate90().fliph().crop_imm(1, 1, 2, 2);
+        assert_eq!(output.to_rgba8(), expected.to_rgba8());
+    }
+}

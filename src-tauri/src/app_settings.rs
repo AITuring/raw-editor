@@ -130,6 +130,7 @@ pub fn all_available_adjustments() -> HashSet<String> {
         "flareAmount",
         "crop",
         "aspectRatio",
+        "constrainCrop",
         "rotation",
         "flipHorizontal",
         "flipVertical",
@@ -164,6 +165,7 @@ pub fn default_included_adjustments() -> HashSet<String> {
     let off_by_default = [
         "crop",
         "aspectRatio",
+        "constrainCrop",
         "rotation",
         "flipHorizontal",
         "flipVertical",

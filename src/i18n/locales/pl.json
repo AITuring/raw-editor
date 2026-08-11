@@ -489,6 +489,11 @@
     "crop": {
       "angleLabel": "Kąt",
       "aspectRatioHeading": "Proporcje",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Automatyczne prostowanie nie powiodło się: {{error}}",
+      "autoStraightenNoLines": "Nie wykryto wiarygodnych linii poziomych ani pionowych.",
+      "autoStraightenTooltip": "Przeanalizuj linie obrazu i wyprostuj automatycznie",
+      "constrainToImage": "Ogranicz do obrazu",
       "custom": {
         "hPlaceholder": "Wys.",
         "hTooltip": "Wysokość",
@@ -504,18 +509,20 @@
         "rotateRight": "Obróć w prawo",
         "transform": "Przekształć"
       },
-      "orientationHeading": "Orientacja",
+      "orientationHeading": "Obrót i odbicie",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Wymiary wyjściowe kadru",
       "overlays": {
-        "armature": {
-          "desc": "Armatura",
-          "name": "Armatura"
-        },
         "diagonal": {
           "desc": "Linie ukośne",
           "name": "Linie ukośne"
         },
+        "grid": {
+          "desc": "Siatka",
+          "name": "Siatka"
+        },
         "none": {
-          "desc": "Brak nakładki",
+          "desc": "Bez linii pomocniczych",
           "name": "Brak"
         },
         "phiGrid": {
@@ -577,21 +584,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Resetuj Kadrowanie i Przekształcanie",
+      "resetTooltip": "Resetuj kadrowanie",
       "rotationHeading": "Obrót",
       "title": "Kadrowanie i Przekształcanie",
       "tooltips": {
-        "compositionOverlay": "Nakładka kompozycji",
+        "compositionOverlay": "Linie pomocnicze kadrowania",
         "constrainAspect": "Zablokuj proporcje",
+        "cycleGuides": "Przełącz linie",
         "flipHoriz": "Przerzuć obraz w poziomie",
         "flipVert": "Przerzuć obraz w pionie",
         "lens": "Korekcja zniekształceń obiektywu",
-        "overlayDetails": "Nakładka: {{name}}{{rotateHint}}",
+        "overlayDetails": "Linia: {{name}}{{rotateHint}}",
         "resetFineRotation": "Resetuj precyzyjny obrót",
-        "rotateHint": " (Shift+O aby obrócić)",
+        "rotateGuide": "Obróć linię",
+        "rotateHint": " (Shift+V aby obrócić)",
         "rotateLeft": "Obróć o 90° w lewo",
         "rotateRight": "Obróć o 90° w prawo",
-        "straighten": "Narzędzie Prostowanie (S)",
+        "straighten": "Prostowanie (A)",
         "switchOrientation": "Zmień orientację",
         "switchToLandscape": "Zmień na krajobraz",
         "switchToPortrait": "Zmień na portret",

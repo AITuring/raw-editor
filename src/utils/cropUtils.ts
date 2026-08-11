@@ -1,4 +1,4 @@
-import { Crop } from 'react-image-crop';
+import type { Crop } from 'react-image-crop';
 
 export function getOrientedDimensions(
   imageWidth: number,
@@ -18,12 +18,13 @@ export function calculateCenteredCrop(
   orientationSteps: number,
   aspectRatio: number | null,
   rotation: number = 0,
+  constrainToImage: boolean = true,
 ): Crop | null {
   if (!aspectRatio || aspectRatio <= 0) return null;
 
   const { width: W, height: H } = getOrientedDimensions(imageWidth, imageHeight, orientationSteps);
 
-  const angle = Math.abs(rotation);
+  const angle = constrainToImage ? Math.abs(rotation) : 0;
   const rad = ((angle % 180) * Math.PI) / 180;
   const sin = Math.sin(rad);
   const cos = Math.cos(rad);
@@ -40,7 +41,30 @@ export function calculateCenteredCrop(
   };
 }
 
-function isCropWithinBounds(crop: Crop, imageW: number, imageH: number, rotation: number): boolean {
+export function isCropWithinBounds(
+  crop: Partial<Crop>,
+  imageW: number,
+  imageH: number,
+  rotation: number,
+  constrainToImage: boolean = true,
+): boolean {
+  if (
+    crop.x === undefined ||
+    crop.y === undefined ||
+    !crop.width ||
+    !crop.height ||
+    crop.x < -1 ||
+    crop.y < -1 ||
+    crop.x + crop.width > imageW + 1 ||
+    crop.y + crop.height > imageH + 1
+  ) {
+    return false;
+  }
+
+  if (!constrainToImage || Math.abs(rotation) < 1e-6) {
+    return true;
+  }
+
   const cx = imageW / 2;
   const cy = imageH / 2;
   const rad = (-rotation * Math.PI) / 180;
@@ -67,6 +91,7 @@ export function calculateAreaPreservingCrop(
   aspectRatio: number | null,
   rotation: number,
   currentCrop: Crop | null | undefined,
+  constrainToImage: boolean = true,
 ): Crop | null {
   if (!aspectRatio || aspectRatio <= 0 || !currentCrop || !currentCrop.width || !currentCrop.height) return null;
 
@@ -86,7 +111,7 @@ export function calculateAreaPreservingCrop(
     height: Math.round(newH),
   };
 
-  return isCropWithinBounds(candidate, W, H, rotation) ? candidate : null;
+  return isCropWithinBounds(candidate, W, H, rotation, constrainToImage) ? candidate : null;
 }
 
 export function rotateCropCenter(
@@ -110,5 +135,48 @@ export function rotateCropCenter(
     y: Math.round(cy + ry - crop.height / 2),
     width: crop.width,
     height: crop.height,
+  };
+}
+
+export function rotateCropQuarterTurn(
+  crop: Crop,
+  imageWidth: number,
+  imageHeight: number,
+  orientationSteps: number,
+  direction: 1 | -1,
+): Crop {
+  const { width: currentWidth, height: currentHeight } = getOrientedDimensions(
+    imageWidth,
+    imageHeight,
+    orientationSteps,
+  );
+  const pixelCrop =
+    crop.unit === '%'
+      ? {
+          unit: 'px' as const,
+          x: (crop.x / 100) * currentWidth,
+          y: (crop.y / 100) * currentHeight,
+          width: (crop.width / 100) * currentWidth,
+          height: (crop.height / 100) * currentHeight,
+        }
+      : { ...crop, unit: 'px' as const };
+
+  const rotated =
+    direction === 1
+      ? {
+          x: currentHeight - pixelCrop.y - pixelCrop.height,
+          y: pixelCrop.x,
+        }
+      : {
+          x: pixelCrop.y,
+          y: currentWidth - pixelCrop.x - pixelCrop.width,
+        };
+
+  return {
+    unit: 'px',
+    x: Math.round(rotated.x),
+    y: Math.round(rotated.y),
+    width: Math.round(pixelCrop.height),
+    height: Math.round(pixelCrop.width),
   };
 }

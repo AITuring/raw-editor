@@ -449,6 +449,11 @@
     "crop": {
       "angleLabel": "Winkel",
       "aspectRatioHeading": "Seitenverhältnis",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Automatisches Ausrichten fehlgeschlagen: {{error}}",
+      "autoStraightenNoLines": "Keine zuverlässigen horizontalen oder vertikalen Linien erkannt.",
+      "autoStraightenTooltip": "Bildlinien analysieren und automatisch ausrichten",
+      "constrainToImage": "Auf Bild beschränken",
       "custom": {
         "hPlaceholder": "H",
         "hTooltip": "Höhe",
@@ -464,18 +469,20 @@
         "rotateRight": "Rechts drehen",
         "transform": "Transformieren"
       },
-      "orientationHeading": "Ausrichtung",
+      "orientationHeading": "Drehen und spiegeln",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Ausgabeabmessungen des Zuschnitts",
       "overlays": {
-        "armature": {
-          "desc": "Harmonische Dreiecke",
-          "name": "Dreiecke"
-        },
         "diagonal": {
           "desc": "Diagonale Linien",
           "name": "Diagonalen"
         },
+        "grid": {
+          "desc": "Raster",
+          "name": "Raster"
+        },
         "none": {
-          "desc": "Keine Überlagerung",
+          "desc": "Keine Hilfslinie",
           "name": "Keine"
         },
         "phiGrid": {
@@ -537,21 +544,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Zuschnitt & Transformation zurücksetzen",
+      "resetTooltip": "Zuschnitt zurücksetzen",
       "rotationHeading": "Drehung",
       "title": "Zuschnitt & Form",
       "tooltips": {
-        "compositionOverlay": "Kompositions-Überlagerung",
+        "compositionOverlay": "Zuschneidehilfslinien",
         "constrainAspect": "Seitenverhältnis sperren",
+        "cycleGuides": "Hilfslinien wechseln",
         "flipHoriz": "Bild horizontal spiegeln",
         "flipVert": "Bild vertikal spiegeln",
         "lens": "Objektivverzerrung korrigieren",
-        "overlayDetails": "Überlagerung: {{name}}{{rotateHint}}",
+        "overlayDetails": "Hilfslinie: {{name}}{{rotateHint}}",
         "resetFineRotation": "Feinrotation zurücksetzen",
-        "rotateHint": " (Shift+O zum Drehen)",
+        "rotateGuide": "Hilfslinie drehen",
+        "rotateHint": " (Shift+V zum Drehen)",
         "rotateLeft": "90° gegen den Uhrzeigersinn drehen",
         "rotateRight": "90° im Uhrzeigersinn drehen",
-        "straighten": "Gerade ausrichten (S)",
+        "straighten": "Gerade ausrichten (A)",
         "switchOrientation": "Ausrichtung wechseln",
         "switchToLandscape": "Zum Querformat wechseln",
         "switchToPortrait": "Zum Hochformat wechseln",

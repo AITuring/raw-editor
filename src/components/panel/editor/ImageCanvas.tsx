@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import clsx from 'clsx';
 import { Stage, Layer, Ellipse, Line, Transformer, Group, Circle, Rect } from 'react-konva';
 import { PercentCrop, Crop } from 'react-image-crop';
-import { Stamp, Bandage } from 'lucide-react';
+import { Bandage, Check, Stamp } from 'lucide-react';
 import { Adjustments, AiPatch, Coord, MaskContainer } from '../../../utils/adjustments';
 import { Mask, SubMask, SubMaskMode, ToolType } from '../right/Masks';
 import { AppSettings, BrushSettings, SelectedImage } from '../../ui/AppProperties';
 import { RenderSize } from '../../../hooks/useImageRenderSize';
 import { useOsPlatform } from '../../../hooks/useOsPlatform';
 import { useTranslation } from 'react-i18next';
-import type { OverlayMode } from '../right/CropPanel';
-import CompositionOverlays from './overlays/CompositionOverlays';
+import { CROP_GUIDE_MODES, CROP_GUIDE_TRANSLATION_KEYS, type CropGuideMode } from '../../../types/crop';
+import CropGuideOverlay from './overlays/CropGuideOverlay';
 import { BASIC_MODE } from '../../../basic/runtime';
 
 interface CursorPreview {
@@ -69,8 +70,9 @@ interface ImageCanvasProps {
   isWbPickerActive?: boolean;
   onWbPicked?: () => void;
   setAdjustments(fn: (prev: Adjustments) => Adjustments): void;
-  overlayMode?: OverlayMode;
-  overlayRotation?: number;
+  cropGuideMode?: CropGuideMode;
+  cropGuideRotation?: number;
+  onCropGuideChange?(mode: CropGuideMode): void;
   cursorStyle: string;
   isMaxZoom?: boolean;
   liveRotation?: number | null;
@@ -1179,8 +1181,9 @@ const ImageCanvas = memo(
     isWbPickerActive = false,
     onWbPicked,
     setAdjustments,
-    overlayRotation,
-    overlayMode,
+    cropGuideMode,
+    cropGuideRotation,
+    onCropGuideChange,
     cursorStyle,
     isMaxZoom,
     liveRotation,
@@ -1207,6 +1210,8 @@ const ImageCanvas = memo(
     const [cursorPreview, setCursorPreview] = useState<CursorPreview>({ x: 0, y: 0, visible: false });
     const [straightenLine, setStraightenLine] = useState<any>(null);
     const isStraightening = useRef(false);
+    const [cropGuideMenu, setCropGuideMenu] = useState<{ x: number; y: number } | null>(null);
+    const cropGuideMenuRef = useRef<HTMLDivElement>(null);
 
     const [displayState, setDisplayState] = useState({
       base: finalPreviewUrl || selectedImage.thumbnailUrl,
@@ -1225,6 +1230,60 @@ const ImageCanvas = memo(
     const { t } = useTranslation();
     const osPlatform = useOsPlatform();
     const modifierKey = osPlatform === 'macos' ? 'Cmd' : 'Ctrl';
+    const cropGuideCycleShortcut = osPlatform === 'macos' ? '⌥V' : 'Alt+V';
+    const cropGuideRotateShortcut = osPlatform === 'macos' ? '⇧V' : 'Shift+V';
+    const cropGuideOptions = useMemo<Array<{ id: CropGuideMode; label: string }>>(
+      () =>
+        [...CROP_GUIDE_MODES, 'none'].map((mode) => ({
+          id: mode as CropGuideMode,
+          label: t(`editor.crop.overlays.${CROP_GUIDE_TRANSLATION_KEYS[mode as CropGuideMode]}.name`),
+        })),
+      [t],
+    );
+
+    useEffect(() => {
+      if (!cropGuideMenu) return;
+
+      const handlePointerDown = (event: PointerEvent) => {
+        if (!cropGuideMenuRef.current?.contains(event.target as Node)) {
+          setCropGuideMenu(null);
+        }
+      };
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') setCropGuideMenu(null);
+      };
+
+      document.addEventListener('pointerdown', handlePointerDown);
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('pointerdown', handlePointerDown);
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [cropGuideMenu]);
+
+    useEffect(() => {
+      if (!isCropping) setCropGuideMenu(null);
+    }, [isCropping]);
+
+    const handleCropContextMenu = useCallback(
+      (event: React.MouseEvent<HTMLDivElement>) => {
+        if (!onCropGuideChange || isStraightenActive) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const menuWidth = 190;
+        const menuHeight = 284;
+        const requestedX = event.clientX - bounds.left;
+        const requestedY = event.clientY - bounds.top;
+
+        setCropGuideMenu({
+          x: Math.max(6, Math.min(requestedX, bounds.width - menuWidth - 6)),
+          y: Math.max(6, Math.min(requestedY, bounds.height - menuHeight - 6)),
+        });
+      },
+      [isStraightenActive, onCropGuideChange],
+    );
 
     const manualCleanupStateRef = useRef({
       inFlight: false,
@@ -2995,6 +3054,7 @@ const ImageCanvas = memo(
         >
           {cropPreviewUrl && uncroppedImageRenderSize && (
             <div
+              onContextMenu={handleCropContextMenu}
               style={{
                 height: uncroppedImageRenderSize.height,
                 position: 'relative',
@@ -3014,14 +3074,14 @@ const ImageCanvas = memo(
                     return null;
                   }
                   const showDenseGrid = isRotationActive && !isStraightenActive;
-                  const currentOverlayMode = isRotationActive || isStraightenActive ? 'none' : overlayMode || 'none';
+                  const visibleGuideMode = isRotationActive || isStraightenActive ? 'none' : cropGuideMode || 'none';
                   return (
-                    <CompositionOverlays
-                      width={width}
-                      height={height}
-                      mode={currentOverlayMode}
-                      rotation={overlayRotation || 0}
+                    <CropGuideOverlay
                       denseVisible={showDenseGrid}
+                      height={height}
+                      mode={visibleGuideMode}
+                      rotation={cropGuideRotation || 0}
+                      width={width}
                     />
                   );
                 }}
@@ -3040,6 +3100,47 @@ const ImageCanvas = memo(
                   }}
                 />
               </ReactCrop>
+
+              {cropGuideMenu && (
+                <div
+                  aria-label={t('editor.crop.tooltips.compositionOverlay')}
+                  className="crop-guide-menu"
+                  onContextMenu={(event) => event.preventDefault()}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  ref={cropGuideMenuRef}
+                  role="menu"
+                  style={{ left: cropGuideMenu.x, top: cropGuideMenu.y }}
+                >
+                  <div className="crop-guide-menu-title">{t('editor.crop.tooltips.compositionOverlay')}</div>
+                  <div className="crop-guide-menu-options">
+                    {cropGuideOptions.map((guide) => {
+                      const isActive = guide.id === (cropGuideMode || 'none');
+                      return (
+                        <button
+                          aria-checked={isActive}
+                          className={clsx('crop-guide-menu-item', guide.id === 'none' && 'is-separated')}
+                          key={guide.id}
+                          onClick={() => {
+                            onCropGuideChange?.(guide.id);
+                            setCropGuideMenu(null);
+                          }}
+                          role="menuitemradio"
+                          type="button"
+                        >
+                          <Check aria-hidden="true" className={clsx(!isActive && 'opacity-0')} size={13} />
+                          <span>{guide.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="crop-guide-menu-shortcuts" aria-hidden="true">
+                    <span>{t('editor.crop.tooltips.cycleGuides')}</span>
+                    <kbd>{cropGuideCycleShortcut}</kbd>
+                    <span>{t('editor.crop.tooltips.rotateGuide')}</span>
+                    <kbd>{cropGuideRotateShortcut}</kbd>
+                  </div>
+                </div>
+              )}
 
               {isStraightenActive && (
                 <Stage

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { Adjustments, TransformAdjustment } from '../../utils/adjustments';
 import Slider from '../ui/Slider';
 import Text from '../ui/Text';
@@ -6,20 +7,26 @@ import { TextVariants } from '../../types/typography';
 
 interface GeometryPanelProps {
   adjustments: Adjustments;
-  setAdjustments(adjustments: Partial<Adjustments>): any;
+  setAdjustments(adjustments: Partial<Adjustments> | ((previous: Adjustments) => Adjustments)): void;
   onDragStateChange?: (isDragging: boolean) => void;
+  compact?: boolean;
 }
 
-export default function GeometryPanel({ adjustments, setAdjustments, onDragStateChange }: GeometryPanelProps) {
+export default function GeometryPanel({
+  adjustments,
+  setAdjustments,
+  onDragStateChange,
+  compact = false,
+}: GeometryPanelProps) {
   const { t } = useTranslation();
 
   const handleChange = (key: TransformAdjustment, value: string | number) => {
-    setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, [key]: Number(value) }));
+    setAdjustments((previous) => ({ ...previous, [key]: Number(value) }));
   };
 
   return (
-    <div className="space-y-4">
-      <div className="p-2 bg-bg-tertiary rounded-md">
+    <div className={clsx(compact ? 'crop-geometry-controls' : 'space-y-4')}>
+      <div className={clsx(compact ? 'crop-geometry-group' : 'p-2 bg-bg-tertiary rounded-md')}>
         <Text variant={TextVariants.heading} className="mb-2">
           {t('modals.transform.distortion')}
         </Text>
@@ -35,7 +42,7 @@ export default function GeometryPanel({ adjustments, setAdjustments, onDragState
         />
       </div>
 
-      <div className="p-2 bg-bg-tertiary rounded-md">
+      <div className={clsx(compact ? 'crop-geometry-group' : 'p-2 bg-bg-tertiary rounded-md')}>
         <Text variant={TextVariants.heading} className="mb-2">
           {t('modals.transform.perspective')}
         </Text>
@@ -61,7 +68,7 @@ export default function GeometryPanel({ adjustments, setAdjustments, onDragState
         />
       </div>
 
-      <div className="p-2 bg-bg-tertiary rounded-md">
+      <div className={clsx(compact ? 'crop-geometry-group' : 'p-2 bg-bg-tertiary rounded-md')}>
         <Text variant={TextVariants.heading} className="mb-2">
           {t('modals.transform.title')}
         </Text>
@@ -97,7 +104,7 @@ export default function GeometryPanel({ adjustments, setAdjustments, onDragState
         />
       </div>
 
-      <div className="p-2 bg-bg-tertiary rounded-md">
+      <div className={clsx(compact ? 'crop-geometry-group' : 'p-2 bg-bg-tertiary rounded-md')}>
         <Text variant={TextVariants.heading} className="mb-2">
           {t('modals.transform.offset')}
         </Text>

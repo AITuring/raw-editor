@@ -449,6 +449,11 @@
     "crop": {
       "angleLabel": "Angle",
       "aspectRatioHeading": "Aspect Ratio",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Auto straighten failed: {{error}}",
+      "autoStraightenNoLines": "No reliable horizontal or vertical lines were detected.",
+      "autoStraightenTooltip": "Analyze image lines and straighten automatically",
+      "constrainToImage": "Constrain to image",
       "custom": {
         "hPlaceholder": "H",
         "hTooltip": "Height",
@@ -464,18 +469,20 @@
         "rotateRight": "Rotate Right",
         "transform": "Transform"
       },
-      "orientationHeading": "Orientation",
+      "orientationHeading": "Rotate & Flip",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Cropped output dimensions",
       "overlays": {
-        "armature": {
-          "desc": "Armature",
-          "name": "Armature"
-        },
         "diagonal": {
           "desc": "Diagonal Lines",
           "name": "Diagonal Lines"
         },
+        "grid": {
+          "desc": "Grid",
+          "name": "Grid"
+        },
         "none": {
-          "desc": "No overlay",
+          "desc": "No guide",
           "name": "None"
         },
         "phiGrid": {
@@ -537,21 +544,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Reset Crop & Transform",
+      "resetTooltip": "Reset Crop",
       "rotationHeading": "Rotation",
       "title": "Crop & Transform",
       "tooltips": {
-        "compositionOverlay": "Composition Overlay",
+        "compositionOverlay": "Crop Guides",
         "constrainAspect": "Constrain aspect ratio",
+        "cycleGuides": "Cycle guides",
         "flipHoriz": "Flip image horizontally",
         "flipVert": "Flip image vertically",
         "lens": "Lens distortion correction",
-        "overlayDetails": "Overlay: {{name}}{{rotateHint}}",
+        "overlayDetails": "Guide: {{name}}{{rotateHint}}",
         "resetFineRotation": "Reset Fine Rotation",
-        "rotateHint": " (Shift+O to rotate)",
+        "rotateGuide": "Rotate guide",
+        "rotateHint": " (Shift+V to rotate)",
         "rotateLeft": "Rotate 90° counter-clockwise",
         "rotateRight": "Rotate 90° clockwise",
-        "straighten": "Straighten Tool (S)",
+        "straighten": "Straighten (A)",
         "switchOrientation": "Switch orientation",
         "switchToLandscape": "Switch to landscape",
         "switchToPortrait": "Switch to portrait",

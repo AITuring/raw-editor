@@ -172,6 +172,7 @@ export interface Adjustments {
   colorGrading: ColorGradingProps;
   colorNoiseReduction: number;
   contrast: number;
+  constrainCrop: boolean;
   curves: Curves;
   pointCurves?: Curves;
   parametricCurve?: ParametricCurve;
@@ -522,6 +523,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   colorGrading: { ...INITIAL_COLOR_GRADING },
   colorNoiseReduction: 0,
   contrast: 0,
+  constrainCrop: true,
   crop: null,
   curves: getDefaultCurves(),
   pointCurves: getDefaultCurves(),
@@ -749,6 +751,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     transformScale: loadedAdjustments.transformScale ?? INITIAL_ADJUSTMENTS.transformScale,
     transformXOffset: loadedAdjustments.transformXOffset ?? INITIAL_ADJUSTMENTS.transformXOffset,
     transformYOffset: loadedAdjustments.transformYOffset ?? INITIAL_ADJUSTMENTS.transformYOffset,
+    constrainCrop: loadedAdjustments.constrainCrop ?? INITIAL_ADJUSTMENTS.constrainCrop,
     colorCalibration: { ...INITIAL_ADJUSTMENTS.colorCalibration, ...(loadedAdjustments.colorCalibration || {}) },
     colorGrading: { ...INITIAL_ADJUSTMENTS.colorGrading, ...(loadedAdjustments.colorGrading || {}) },
     hsl: { ...INITIAL_ADJUSTMENTS.hsl, ...(loadedAdjustments.hsl || {}) },
@@ -847,7 +850,7 @@ export const ADJUSTMENT_GROUPS: Record<string, AdjustmentGroup[]> = {
     },
   ],
   geometry: [
-    { label: 'modals.copyPaste.groups.cropAspectRatio', keys: ['crop', 'aspectRatio'] },
+    { label: 'modals.copyPaste.groups.cropAspectRatio', keys: ['crop', 'aspectRatio', 'constrainCrop'] },
     {
       label: 'modals.copyPaste.groups.transformRotation',
       keys: [

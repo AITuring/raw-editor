@@ -447,6 +447,11 @@
     "crop": {
       "angleLabel": "角度",
       "aspectRatioHeading": "宽高比",
+      "autoStraighten": "自动",
+      "autoStraightenFailed": "自动拉直失败：{{error}}",
+      "autoStraightenNoLines": "未检测到可靠的水平线或垂直线。",
+      "autoStraightenTooltip": "分析画面线条并自动拉直",
+      "constrainToImage": "约束到图像",
       "custom": {
         "hPlaceholder": "高",
         "hTooltip": "高度",
@@ -462,18 +467,20 @@
         "rotateRight": "向右旋转",
         "transform": "变换"
       },
-      "orientationHeading": "方向",
+      "orientationHeading": "旋转与翻转",
+      "outputDimensions": "{{width}} × {{height}} 像素",
+      "outputDimensionsTooltip": "裁剪后的输出尺寸",
       "overlays": {
-        "armature": {
-          "desc": "骨架",
-          "name": "骨架"
-        },
         "diagonal": {
           "desc": "对角线",
           "name": "对角线"
         },
+        "grid": {
+          "desc": "网格",
+          "name": "网格"
+        },
         "none": {
-          "desc": "无叠加",
+          "desc": "无参考线",
           "name": "无"
         },
         "phiGrid": {
@@ -535,21 +542,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "重置裁剪和变换",
+      "resetTooltip": "重置裁剪",
       "rotationHeading": "旋转",
       "title": "裁剪与变换",
       "tooltips": {
-        "compositionOverlay": "构图叠加",
+        "compositionOverlay": "裁剪参考线",
         "constrainAspect": "约束宽高比",
+        "cycleGuides": "切换参考线",
         "flipHoriz": "水平翻转图像",
         "flipVert": "垂直翻转图像",
         "lens": "镜头畸变校正",
-        "overlayDetails": "叠加：{{name}}{{rotateHint}}",
+        "overlayDetails": "参考线：{{name}}{{rotateHint}}",
         "resetFineRotation": "重置精细旋转",
-        "rotateHint": "（Shift+O 旋转）",
+        "rotateGuide": "旋转参考线",
+        "rotateHint": "（Shift+V 旋转）",
         "rotateLeft": "逆时针旋转 90°",
         "rotateRight": "顺时针旋转 90°",
-        "straighten": "拉直工具（S）",
+        "straighten": "拉直（A）",
         "switchOrientation": "切换方向",
         "switchToLandscape": "切换为横向",
         "switchToPortrait": "切换为纵向",

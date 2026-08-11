@@ -489,6 +489,11 @@
     "crop": {
       "angleLabel": "Угол",
       "aspectRatioHeading": "Соотношение сторон",
+      "autoStraighten": "Авто",
+      "autoStraightenFailed": "Не удалось автоматически выровнять изображение: {{error}}",
+      "autoStraightenNoLines": "Надёжные горизонтальные или вертикальные линии не обнаружены.",
+      "autoStraightenTooltip": "Проанализировать линии и автоматически выровнять изображение",
+      "constrainToImage": "Ограничить изображением",
       "custom": {
         "hPlaceholder": "В",
         "hTooltip": "Высота",
@@ -504,18 +509,20 @@
         "rotateRight": "Повернуть вправо",
         "transform": "Трансформировать"
       },
-      "orientationHeading": "Ориентация",
+      "orientationHeading": "Поворот и отражение",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Размеры кадрированного изображения",
       "overlays": {
-        "armature": {
-          "desc": "Гармоническая сетка (Диагонали)",
-          "name": "Диагонали"
-        },
         "diagonal": {
           "desc": "Диагональные линии",
           "name": "Диагонали"
         },
+        "grid": {
+          "desc": "Сетка",
+          "name": "Сетка"
+        },
         "none": {
-          "desc": "Без наложения",
+          "desc": "Без направляющих",
           "name": "Нет"
         },
         "phiGrid": {
@@ -577,21 +584,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Сбросить кадрирование и геометрию",
+      "resetTooltip": "Сбросить кадрирование",
       "rotationHeading": "Вращение",
       "title": "Обрезка и трансформация",
       "tooltips": {
-        "compositionOverlay": "Сетка композиции",
+        "compositionOverlay": "Направляющие кадрирования",
         "constrainAspect": "Зафиксировать соотношение сторон",
+        "cycleGuides": "Сменить направляющую",
         "flipHoriz": "Отразить горизонтально",
         "flipVert": "Отразить вертикально",
         "lens": "Коррекция искажений объектива",
-        "overlayDetails": "Сетка: {{name}}{{rotateHint}}",
+        "overlayDetails": "Направляющая: {{name}}{{rotateHint}}",
         "resetFineRotation": "Сбросить точный поворот",
-        "rotateHint": " (Shift+O для вращения сетки)",
+        "rotateGuide": "Повернуть направляющую",
+        "rotateHint": " (Shift+V для вращения)",
         "rotateLeft": "Повернуть на 90° против часовой стрелки",
         "rotateRight": "Повернуть на 90° по часовой стрелке",
-        "straighten": "Выравнивание горизонта (S)",
+        "straighten": "Выравнивание (A)",
         "switchOrientation": "Сменить ориентацию",
         "switchToLandscape": "Переключить на альбомную",
         "switchToPortrait": "Переключить на портретную",

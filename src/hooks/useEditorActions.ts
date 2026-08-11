@@ -14,7 +14,7 @@ import {
   LensAdjustment,
   normalizeLoadedAdjustments,
 } from '../utils/adjustments';
-import { calculateCenteredCrop } from '../utils/cropUtils';
+import { calculateCenteredCrop, rotateCropQuarterTurn } from '../utils/cropUtils';
 import { Invokes } from '../components/ui/AppProperties';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { LEGACY_DEFAULT_IMAGE_STATE, legacyStateToAdjustments } from '../basic/legacyAdjustmentAdapter';
@@ -50,12 +50,28 @@ export function useEditorActions() {
     (degrees: number) => {
       const { selectedImage, adjustments } = useEditorStore.getState();
       const increment = degrees > 0 ? 1 : 3;
+      const direction = degrees > 0 ? 1 : -1;
       const newAspectRatio =
         adjustments.aspectRatio && adjustments.aspectRatio !== 0 ? 1 / adjustments.aspectRatio : null;
       const newOrientationSteps = ((adjustments.orientationSteps || 0) + increment) % 4;
       const newCrop =
         selectedImage?.width && selectedImage?.height
-          ? calculateCenteredCrop(selectedImage.width, selectedImage.height, newOrientationSteps, newAspectRatio)
+          ? adjustments.crop
+            ? rotateCropQuarterTurn(
+                adjustments.crop,
+                selectedImage.width,
+                selectedImage.height,
+                adjustments.orientationSteps || 0,
+                direction,
+              )
+            : calculateCenteredCrop(
+                selectedImage.width,
+                selectedImage.height,
+                newOrientationSteps,
+                newAspectRatio,
+                0,
+                adjustments.constrainCrop ?? true,
+              )
           : null;
 
       setAdjustments((prev) => ({

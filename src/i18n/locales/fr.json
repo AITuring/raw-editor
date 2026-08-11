@@ -469,6 +469,11 @@
     "crop": {
       "angleLabel": "Angle",
       "aspectRatioHeading": "Rapport d'aspect",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Échec du redressement automatique : {{error}}",
+      "autoStraightenNoLines": "Aucune ligne horizontale ou verticale fiable n’a été détectée.",
+      "autoStraightenTooltip": "Analyser les lignes de l’image et redresser automatiquement",
+      "constrainToImage": "Contraindre à l’image",
       "custom": {
         "hPlaceholder": "H",
         "hTooltip": "Hauteur",
@@ -484,18 +489,20 @@
         "rotateRight": "Pivoter à droite",
         "transform": "Transformer"
       },
-      "orientationHeading": "Orientation",
+      "orientationHeading": "Rotation et symétrie",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Dimensions de sortie du recadrage",
       "overlays": {
-        "armature": {
-          "desc": "Armature",
-          "name": "Armature"
-        },
         "diagonal": {
           "desc": "Lignes diagonales",
           "name": "Lignes diagonales"
         },
+        "grid": {
+          "desc": "Grille",
+          "name": "Grille"
+        },
         "none": {
-          "desc": "Aucune superposition",
+          "desc": "Aucun repère",
           "name": "Aucune"
         },
         "phiGrid": {
@@ -557,21 +564,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Réinitialiser Recadrage & Transformation",
+      "resetTooltip": "Réinitialiser le recadrage",
       "rotationHeading": "Rotation",
       "title": "Recadrage & Transformation",
       "tooltips": {
-        "compositionOverlay": "Superposition de composition",
+        "compositionOverlay": "Repères de recadrage",
         "constrainAspect": "Contraindre les proportions",
+        "cycleGuides": "Parcourir les repères",
         "flipHoriz": "Retourner l'image horizontalement",
         "flipVert": "Retourner l'image verticalement",
         "lens": "Correction de distorsion de l'objectif",
-        "overlayDetails": "Superposition : {{name}}{{rotateHint}}",
+        "overlayDetails": "Repère : {{name}}{{rotateHint}}",
         "resetFineRotation": "Réinitialiser la rotation fine",
-        "rotateHint": " (Maj+O pour pivoter)",
+        "rotateGuide": "Faire pivoter le repère",
+        "rotateHint": " (Maj+V pour pivoter)",
         "rotateLeft": "Pivoter de 90° à gauche",
         "rotateRight": "Pivoter de 90° à droite",
-        "straighten": "Outil de redressement (S)",
+        "straighten": "Redresser (A)",
         "switchOrientation": "Changer l'orientation",
         "switchToLandscape": "Basculer en paysage",
         "switchToPortrait": "Basculer en portrait",

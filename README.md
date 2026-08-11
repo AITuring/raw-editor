@@ -83,7 +83,7 @@ npm run start            # Tauri 2 开发窗口
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
 
-### 当前进度（2026-08-10）
+### 当前进度（2026-08-11）
 
 当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。用户授权的 `DSC05363.ARW` 已建立
 α7R V `lossy-arw` 单样片真实管线与本机 60MP 性能基线；其余光照、ISO、曝光和 RAW 压缩模式仍
@@ -121,8 +121,11 @@ npm run start            # Tauri 2 开发窗口
   元数据解码器回归均有确定性内存测试。核心 WebView JPEG 预览、预设、LUT 与图库缩略图统一
   嵌入 sRGB v4 ICC，原生 WGPU 继续声明 sRGB surface 交由系统合成器映射到当前显示器。
 - ✅ 裁切工具已按 Camera Raw 的日常工作流重构：支持预设、自定义及可锁定宽高比、横竖比例切换、
-  七种构图辅助线与可旋转黄金构图、±45° 精细旋转、画线拉直、90° 旋转及水平/垂直翻转；面板、
-  裁切遮罩和拖拽控制点统一为紧凑的桌面摄影工具样式，并修复垂直拉直线与已有角度被清零的问题。
+  六种裁剪参考线（画布右键或 `Option/Alt+V` 切换）、±45° 精细旋转、画线拉直和基于本地图像
+  直线检测的自动拉直、90° 旋转及水平/垂直翻转；可选择“约束到图像”以避免旋转后的透明角，
+  面板会显示实际输出像素尺寸，方向键可按源像素微移裁剪框（`Shift` 为 10 像素）。`C` 进入裁切、
+  `A` 拉直，几何调整已内嵌到裁切面板；上述裁剪、旋转、翻转和几何参数统一进入 sidecar、预览与
+  全尺寸导出，裁切重置不再误清几何或镜头参数。
 - ✅ 快速预览、半分辨率编辑、源像素级 ROI 和全分辨率导出现已成为显式四级合同；前端选择层级，
   Rust 复核交互/ROI/源尺寸边界。预览缓存只保留单一目标底图，无蒙版使用 1×1 dummy texture，
   活动蒙版逐层上传，分析结果与未变换原图通过 `Arc` 共享，消除多类整图重复缓冲。确定性 60MP
@@ -188,7 +191,7 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
 `npm run build`、`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、
-`cargo check --lib --locked`、63 项默认执行的
+`cargo check --lib --locked`、68 项默认执行的
 Rust 单元/回归测试和严格 Clippy。默认忽略三项：一项需要本地授权 RAW，另外两项是手动 60MP
 JPEG/PNG/TIFF 与 WebP harness；本轮已显式执行 WebP 的 `memory`/`file` 对照。`git diff --check`
 也保持通过。

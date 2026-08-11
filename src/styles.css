@@ -1678,17 +1678,12 @@
     white-space: nowrap;
   }
 
-  .crop-aspect-controls,
-  .crop-overlay-controls {
+  .crop-aspect-controls {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) 27px;
+    grid-template-columns: minmax(0, 1fr) 27px 27px;
     align-items: center;
     gap: 4px;
-  }
-
-  .crop-aspect-controls {
-    grid-template-columns: minmax(0, 1fr) 27px 27px;
   }
 
   .crop-select,
@@ -1801,6 +1796,13 @@
     margin-top: 7px;
   }
 
+  .crop-inline-tool-group {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 2px;
+  }
+
   .crop-inline-tool {
     display: inline-flex;
     min-width: 0;
@@ -1831,6 +1833,11 @@
     color: var(--app-text-primary);
   }
 
+  .crop-inline-tool:disabled {
+    cursor: wait;
+    opacity: 0.62;
+  }
+
   .crop-inline-tool.is-active {
     border-color: color-mix(in srgb, var(--app-accent) 42%, var(--app-border-color));
     background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
@@ -1839,6 +1846,46 @@
 
   .crop-angle-slider {
     margin-top: 1px;
+  }
+
+  .crop-constraint-row {
+    display: flex;
+    min-height: 25px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 1px;
+  }
+
+  .crop-checkbox-label {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+    font-size: 10px;
+  }
+
+  .crop-checkbox-label input {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    accent-color: var(--app-accent);
+  }
+
+  .crop-checkbox-label:hover {
+    color: var(--app-text-primary);
+  }
+
+  .crop-dimensions {
+    overflow: hidden;
+    min-width: 0;
+    color: var(--app-text-tertiary, var(--app-text-secondary));
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .crop-section-heading {
@@ -1885,32 +1932,77 @@
     color: var(--app-accent);
   }
 
-  .crop-wide-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+  .crop-collapsible-heading {
+    display: flex;
+    min-height: 27px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
-  .crop-wide-action {
-    display: flex;
+  .crop-collapsible-trigger {
+    display: inline-flex;
     min-width: 0;
-    height: 29px;
+    min-height: 27px;
+    flex: 1;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border: 1px solid var(--app-border-color);
-    border-radius: 2px;
-    background: color-mix(in srgb, var(--app-surface) 68%, transparent);
+    gap: 4px;
+    color: var(--app-text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .crop-collapsible-trigger:hover {
+    color: var(--app-accent);
+  }
+
+  .crop-collapsible-chevron {
+    flex: 0 0 auto;
+    transition: transform 120ms ease-out;
+  }
+
+  .crop-collapsible-chevron.is-expanded {
+    transform: rotate(90deg);
+  }
+
+  .crop-collapsible-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 150ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 100ms ease-out;
+  }
+
+  .crop-collapsible-content > div {
+    overflow: hidden;
+  }
+
+  .crop-collapsible-content.is-expanded {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .crop-geometry-controls {
+    padding-top: 6px;
+  }
+
+  .crop-geometry-group {
+    border-top: 1px solid color-mix(in srgb, var(--app-border-color) 72%, transparent);
+    padding: 7px 0 3px;
+  }
+
+  .crop-geometry-group:first-child {
+    border-top: 0;
+    padding-top: 2px;
+  }
+
+  .crop-geometry-group > .mb-2 {
+    margin-bottom: 3px;
     color: var(--app-text-secondary);
     font-size: 10px;
-    transition:
-      background-color 100ms ease-out,
-      color 100ms ease-out;
-  }
-
-  .crop-wide-action:hover {
-    background: var(--app-card-active);
-    color: var(--app-text-primary);
+    font-weight: 500;
   }
 
   .camera-raw-crop.ReactCrop {
@@ -1981,6 +2073,88 @@
     background: rgb(245 244 240 / 96%);
   }
 
+  .crop-guide-overlay {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    overflow: visible;
+    filter: drop-shadow(0 0 1px rgb(8 9 10 / 80%));
+    pointer-events: none;
+  }
+
+  .crop-guide-menu {
+    position: absolute;
+    z-index: 80;
+    width: 190px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--app-border-color) 84%, var(--app-text-secondary));
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 96%, var(--app-surface));
+    color: var(--app-text-primary);
+    box-shadow: 0 10px 28px rgb(0 0 0 / 36%);
+    font-size: 11px;
+  }
+
+  .crop-guide-menu-title {
+    min-height: 28px;
+    padding: 7px 10px 5px;
+    color: var(--app-text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+  }
+
+  .crop-guide-menu-options {
+    padding: 2px 0 4px;
+  }
+
+  .crop-guide-menu-item {
+    display: grid;
+    width: 100%;
+    min-height: 27px;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    padding: 0 9px 0 7px;
+    color: inherit;
+    text-align: left;
+  }
+
+  .crop-guide-menu-item:hover,
+  .crop-guide-menu-item:focus-visible {
+    outline: 0;
+    background: var(--app-card-active);
+  }
+
+  .crop-guide-menu-item svg {
+    color: var(--app-accent);
+  }
+
+  .crop-guide-menu-item.is-separated {
+    min-height: 30px;
+    margin-top: 3px;
+    border-top: 1px solid var(--app-border-color);
+    padding-top: 3px;
+  }
+
+  .crop-guide-menu-shortcuts {
+    display: grid;
+    min-height: 48px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 10px;
+    border-top: 1px solid var(--app-border-color);
+    padding: 5px 10px;
+    color: var(--app-text-tertiary, var(--app-text-secondary));
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .crop-guide-menu-shortcuts kbd {
+    color: var(--app-text-secondary);
+    font: inherit;
+    text-align: right;
+  }
+
   @container (max-width: 285px) {
     .crop-field {
       grid-template-columns: minmax(66px, 0.29fr) minmax(0, 1fr);
@@ -1996,18 +2170,14 @@
     .crop-icon-button,
     .crop-action-button,
     .crop-inline-tool,
-    .crop-wide-action,
     .crop-select,
-    .crop-number-input {
+    .crop-number-input,
+    .crop-guide-menu-item {
       min-height: 44px;
     }
 
     .crop-aspect-controls {
       grid-template-columns: minmax(0, 1fr) 44px 44px;
-    }
-
-    .crop-overlay-controls {
-      grid-template-columns: minmax(0, 1fr) 44px;
     }
 
     .crop-icon-button {

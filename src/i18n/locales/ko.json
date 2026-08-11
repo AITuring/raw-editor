@@ -447,6 +447,11 @@
     "crop": {
       "angleLabel": "각도",
       "aspectRatioHeading": "종횡비",
+      "autoStraighten": "자동",
+      "autoStraightenFailed": "자동 수평 맞추기 실패: {{error}}",
+      "autoStraightenNoLines": "신뢰할 수 있는 수평선 또는 수직선을 감지하지 못했습니다.",
+      "autoStraightenTooltip": "이미지의 선을 분석하여 자동으로 수평 맞추기",
+      "constrainToImage": "이미지로 제한",
       "custom": {
         "hPlaceholder": "높이",
         "hTooltip": "높이",
@@ -462,18 +467,20 @@
         "rotateRight": "오른쪽으로 회전",
         "transform": "변형"
       },
-      "orientationHeading": "방향",
+      "orientationHeading": "회전 및 뒤집기",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "자른 출력 크기",
       "overlays": {
-        "armature": {
-          "desc": "골격선 구도",
-          "name": "골격선"
-        },
         "diagonal": {
           "desc": "대각선",
           "name": "대각선"
         },
+        "grid": {
+          "desc": "격자",
+          "name": "격자"
+        },
         "none": {
-          "desc": "오버레이 없음",
+          "desc": "안내선 없음",
           "name": "없음"
         },
         "phiGrid": {
@@ -535,21 +542,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "자르기 및 변형 초기화",
+      "resetTooltip": "자르기 초기화",
       "rotationHeading": "회전",
       "title": "자르기 및 변형",
       "tooltips": {
-        "compositionOverlay": "구도 오버레이",
+        "compositionOverlay": "자르기 안내선",
         "constrainAspect": "종횡비 제한",
+        "cycleGuides": "안내선 전환",
         "flipHoriz": "이미지를 좌우로 반전",
         "flipVert": "이미지를 상하로 반전",
         "lens": "렌즈 왜곡 보정",
-        "overlayDetails": "오버레이: {{name}}{{rotateHint}}",
+        "overlayDetails": "안내선: {{name}}{{rotateHint}}",
         "resetFineRotation": "미세 회전 초기화",
-        "rotateHint": " (Shift+O로 회전)",
+        "rotateGuide": "안내선 회전",
+        "rotateHint": " (Shift+V로 회전)",
         "rotateLeft": "90° 반시계 방향 회전",
         "rotateRight": "90° 시계 방향 회전",
-        "straighten": "수평 맞추기 도구 (S)",
+        "straighten": "수평 맞추기 (A)",
         "switchOrientation": "방향 전환",
         "switchToLandscape": "가로로 전환",
         "switchToPortrait": "세로로 전환",

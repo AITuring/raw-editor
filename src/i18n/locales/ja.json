@@ -447,6 +447,11 @@
     "crop": {
       "angleLabel": "角度",
       "aspectRatioHeading": "アスペクト比",
+      "autoStraighten": "自動",
+      "autoStraightenFailed": "自動角度補正に失敗しました：{{error}}",
+      "autoStraightenNoLines": "信頼できる水平線または垂直線を検出できませんでした。",
+      "autoStraightenTooltip": "画像内の線を解析して自動的に角度を補正",
+      "constrainToImage": "画像内に制限",
       "custom": {
         "hPlaceholder": "H",
         "hTooltip": "高さ",
@@ -462,15 +467,17 @@
         "rotateRight": "右回転",
         "transform": "変形"
       },
-      "orientationHeading": "方向",
+      "orientationHeading": "回転と反転",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "切り抜き後の出力サイズ",
       "overlays": {
-        "armature": {
-          "desc": "アーマチュア",
-          "name": "アーマチュア"
-        },
         "diagonal": {
           "desc": "対角線",
           "name": "対角線"
+        },
+        "grid": {
+          "desc": "グリッド",
+          "name": "グリッド"
         },
         "none": {
           "desc": "ガイドなし",
@@ -535,21 +542,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "切り抜きと変形をリセット",
+      "resetTooltip": "切り抜きをリセット",
       "rotationHeading": "回転",
       "title": "切り抜きと変形",
       "tooltips": {
-        "compositionOverlay": "構図ガイド",
+        "compositionOverlay": "切り抜きガイド",
         "constrainAspect": "縦横比を固定",
+        "cycleGuides": "ガイドを切り替え",
         "flipHoriz": "画像を水平方向に反転",
         "flipVert": "画像を垂直方向に反転",
         "lens": "レンズ歪み補正",
         "overlayDetails": "ガイド: {{name}}{{rotateHint}}",
         "resetFineRotation": "微調整回転をリセット",
-        "rotateHint": " (Shift+O で回転)",
+        "rotateGuide": "ガイドを回転",
+        "rotateHint": " (Shift+V で回転)",
         "rotateLeft": "反時計回りに90°回転",
         "rotateRight": "時計回りに90°回転",
-        "straighten": "角度補正ツール (S)",
+        "straighten": "角度補正 (A)",
         "switchOrientation": "縦横比の向きを切り替え",
         "switchToLandscape": "横向きに切り替え",
         "switchToPortrait": "縦向きに切り替え",

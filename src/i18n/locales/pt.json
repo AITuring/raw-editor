@@ -469,6 +469,11 @@
     "crop": {
       "angleLabel": "Ângulo",
       "aspectRatioHeading": "Proporção de Tela",
+      "autoStraighten": "Auto",
+      "autoStraightenFailed": "Falha ao endireitar automaticamente: {{error}}",
+      "autoStraightenNoLines": "Nenhuma linha horizontal ou vertical confiável foi detectada.",
+      "autoStraightenTooltip": "Analisar as linhas da imagem e endireitar automaticamente",
+      "constrainToImage": "Restringir à imagem",
       "custom": {
         "hPlaceholder": "A",
         "hTooltip": "Altura",
@@ -484,18 +489,20 @@
         "rotateRight": "Girar para a Direita",
         "transform": "Transformar"
       },
-      "orientationHeading": "Orientação",
+      "orientationHeading": "Girar e inverter",
+      "outputDimensions": "{{width}} × {{height}} px",
+      "outputDimensionsTooltip": "Dimensões de saída do corte",
       "overlays": {
-        "armature": {
-          "desc": "Armação",
-          "name": "Armação"
-        },
         "diagonal": {
           "desc": "Linhas Diagonais",
           "name": "Linhas Diagonais"
         },
+        "grid": {
+          "desc": "Grade",
+          "name": "Grade"
+        },
         "none": {
-          "desc": "Sem sobreposição",
+          "desc": "Sem guia",
           "name": "Nenhuma"
         },
         "phiGrid": {
@@ -557,21 +564,23 @@
           "name": "1:1"
         }
       },
-      "resetTooltip": "Redefinir Corte e Transformação",
+      "resetTooltip": "Redefinir corte",
       "rotationHeading": "Rotação",
       "title": "Cortar e Transformar",
       "tooltips": {
-        "compositionOverlay": "Sobreposição de Composição",
+        "compositionOverlay": "Guias de corte",
         "constrainAspect": "Restringir proporção",
+        "cycleGuides": "Alternar guias",
         "flipHoriz": "Inverter imagem horizontalmente",
         "flipVert": "Inverter imagem verticalmente",
         "lens": "Correção de distorção de lente",
-        "overlayDetails": "Sobreposição: {{name}}{{rotateHint}}",
+        "overlayDetails": "Guia: {{name}}{{rotateHint}}",
         "resetFineRotation": "Redefinir Rotação Fina",
-        "rotateHint": " (Shift+O para girar)",
+        "rotateGuide": "Girar guia",
+        "rotateHint": " (Shift+V para girar)",
         "rotateLeft": "Girar 90° no sentido anti-horário",
         "rotateRight": "Girar 90° no sentido horário",
-        "straighten": "Ferramenta de Endireitar (S)",
+        "straighten": "Endireitar (A)",
         "switchOrientation": "Mudar orientação",
         "switchToLandscape": "Mudar para paisagem",
         "switchToPortrait": "Mudar para retrato",

@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ImageDimensions, RenderSize, useImageRenderSize } from '../../hooks/useImageRenderSize';
 import { Adjustments, AiPatch, MaskContainer } from '../../utils/adjustments';
-import { calculateCenteredCrop, rotateCropCenter } from '../../utils/cropUtils';
+import { calculateCenteredCrop, isCropWithinBounds, rotateCropCenter } from '../../utils/cropUtils';
 import EditorToolbar from './editor/EditorToolbar';
 import ImageCanvas from './editor/ImageCanvas';
 import PreviewNavigator from './editor/PreviewNavigator';
@@ -29,6 +29,7 @@ import {
   snapImageTranslationToDevicePixels,
 } from '../../utils/previewResolution';
 import { BASIC_MODE } from '../../basic/runtime';
+import type { CropGuideMode } from '../../types/crop';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
   const match = rgbStr.match(/[\d.]+/g);
@@ -40,35 +41,6 @@ const parseRgb = (rgbStr: string): [number, number, number, number] => {
 
 const TRANSFORM_SETTLE_DELAY_MS = 140;
 const PREVIEW_BAKE_FALLBACK_MS = 1000;
-
-const checkCropValid = (pixelCrop: Partial<Crop>, imageW: number, imageH: number, rotation: number) => {
-  if (pixelCrop.x === undefined || pixelCrop.y === undefined || !pixelCrop.width || !pixelCrop.height) {
-    return false;
-  }
-
-  const cx = imageW / 2;
-  const cy = imageH / 2;
-  const rad = (-rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-
-  const pts = [
-    { x: pixelCrop.x, y: pixelCrop.y },
-    { x: pixelCrop.x + pixelCrop.width, y: pixelCrop.y },
-    { x: pixelCrop.x, y: pixelCrop.y + pixelCrop.height },
-    { x: pixelCrop.x + pixelCrop.width, y: pixelCrop.y + pixelCrop.height },
-  ];
-
-  for (let i = 0; i < 4; i++) {
-    const p = pts[i];
-    const nx = cos * (p.x - cx) - sin * (p.y - cy) + cx;
-    const ny = sin * (p.x - cx) + cos * (p.y - cy) + cy;
-    if (nx < -1 || nx > imageW + 1 || ny < -1 || ny > imageH + 1) {
-      return false;
-    }
-  }
-  return true;
-};
 
 interface WgpuRenderState {
   useWgpuRenderer: boolean | undefined;
@@ -110,8 +82,8 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const targetZoom = useEditorStore((s) => s.zoom);
   const originalSize = useEditorStore((s) => s.originalSize);
   const isRotationActive = useEditorStore((s) => s.isRotationActive);
-  const overlayMode = useEditorStore((s) => s.overlayMode);
-  const overlayRotation = useEditorStore((s) => s.overlayRotation);
+  const cropGuideMode = useEditorStore((s) => s.cropGuideMode);
+  const cropGuideRotation = useEditorStore((s) => s.cropGuideRotation);
   const isStraightenActive = useEditorStore((s) => s.isStraightenActive);
   const isWbPickerActive = useEditorStore((s) => s.isWbPickerActive);
   const liveRotation = useEditorStore((s) => s.liveRotation);
@@ -301,6 +273,8 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     },
     [setAdjustments, setEditor],
   );
+
+  const handleCropGuideChange = useCallback((mode: CropGuideMode) => setEditor({ cropGuideMode: mode }), [setEditor]);
 
   const updateSubMaskLocal = useCallback(
     (subMaskId: string, updatedData: any) => {
@@ -1684,13 +1658,20 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       return;
     }
 
-    const { aspectRatio, orientationSteps = 0, crop: currentAdjCrop, rotation = 0 } = adjustments;
+    const {
+      aspectRatio,
+      constrainCrop = true,
+      orientationSteps = 0,
+      crop: currentAdjCrop,
+      rotation = 0,
+    } = adjustments;
     const effectiveRotation = liveRotation !== null && liveRotation !== undefined ? liveRotation : rotation;
 
     const geometryChanged =
       prevCropParams.current?.rotation !== rotation ||
       prevCropParams.current?.aspectRatio !== aspectRatio ||
-      prevCropParams.current?.orientationSteps !== orientationSteps;
+      prevCropParams.current?.orientationSteps !== orientationSteps ||
+      prevCropParams.current?.constrainCrop !== constrainCrop;
 
     const isDraggingRotation = liveRotation !== null && liveRotation !== undefined;
     const needsRecalc = currentAdjCrop === null || geometryChanged || isDraggingRotation;
@@ -1715,6 +1696,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           orientationSteps,
           A,
           referenceRotation,
+          prevCropParams.current?.constrainCrop ?? constrainCrop,
         );
 
         if (
@@ -1728,14 +1710,26 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         }
       }
 
-      if (!currentAdjCrop || orientationChanged) {
+      if (!currentAdjCrop) {
         nextPixelCrop = calculateCenteredCrop(
           selectedImage.width,
           selectedImage.height,
           orientationSteps,
           A,
           effectiveRotation,
+          constrainCrop,
         );
+      } else if (orientationChanged) {
+        nextPixelCrop = isCropWithinBounds(currentAdjCrop, W, H, effectiveRotation, constrainCrop)
+          ? currentAdjCrop
+          : calculateCenteredCrop(
+              selectedImage.width,
+              selectedImage.height,
+              orientationSteps,
+              A,
+              effectiveRotation,
+              constrainCrop,
+            );
       } else if (aspectChanged) {
         if (!aspectRatio) {
           nextPixelCrop = currentAdjCrop;
@@ -1762,13 +1756,14 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           };
         }
 
-        if (!checkCropValid(nextPixelCrop, W, H, effectiveRotation)) {
+        if (!isCropWithinBounds(nextPixelCrop, W, H, effectiveRotation, constrainCrop)) {
           nextPixelCrop = calculateCenteredCrop(
             selectedImage.width,
             selectedImage.height,
             orientationSteps,
             A,
             effectiveRotation,
+            constrainCrop,
           );
         }
       } else if (isMaximized && rotationChanged) {
@@ -1778,6 +1773,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           orientationSteps,
           A,
           effectiveRotation,
+          constrainCrop,
         );
       } else {
         const referenceRotation = prevCropParams.current?.rotation ?? rotation;
@@ -1787,7 +1783,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             ? rotateCropCenter(currentAdjCrop, W, H, rotationDelta)
             : currentAdjCrop;
 
-        if (checkCropValid(followedCrop, W, H, effectiveRotation)) {
+        if (isCropWithinBounds(followedCrop, W, H, effectiveRotation, constrainCrop)) {
           nextPixelCrop = followedCrop;
         } else {
           let low = 0.1;
@@ -1808,7 +1804,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               height: nh,
             };
 
-            if (checkCropValid(testCrop, W, H, effectiveRotation)) {
+            if (isCropWithinBounds(testCrop, W, H, effectiveRotation, constrainCrop)) {
               bestCrop = testCrop;
               low = mid;
             } else {
@@ -1823,6 +1819,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               orientationSteps,
               A,
               effectiveRotation,
+              constrainCrop,
             );
           } else {
             nextPixelCrop = {
@@ -1849,7 +1846,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           lastValidCropRef.current = pc;
         }
       } else {
-        prevCropParams.current = { rotation, aspectRatio, orientationSteps };
+        prevCropParams.current = { rotation, aspectRatio, orientationSteps, constrainCrop };
 
         if (
           nextPixelCrop &&
@@ -1865,6 +1862,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     }
   }, [
     adjustments.aspectRatio,
+    adjustments.constrainCrop,
     adjustments.crop,
     adjustments.orientationSteps,
     adjustments.rotation,
@@ -1913,6 +1911,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       const W = isSwapped ? selectedImage.height : selectedImage.width;
       const H = isSwapped ? selectedImage.width : selectedImage.height;
       const rotation = liveRotation !== null && liveRotation !== undefined ? liveRotation : adjustments.rotation || 0;
+      const constrainCrop = adjustments.constrainCrop ?? true;
 
       const MIN_CROP_PX = 64;
       const minPctW = (MIN_CROP_PX / W) * 100;
@@ -1930,7 +1929,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         height: (pc.height / 100) * H,
       });
 
-      if (checkCropValid(toPixel(percentCrop), W, H, rotation)) {
+      if (isCropWithinBounds(toPixel(percentCrop), W, H, rotation, constrainCrop)) {
         setCrop(percentCrop);
         lastValidCropRef.current = percentCrop;
         return;
@@ -1942,7 +1941,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         return;
       }
 
-      if (!checkCropValid(toPixel(lastValidCropRef.current), W, H, rotation)) {
+      if (!isCropWithinBounds(toPixel(lastValidCropRef.current), W, H, rotation, constrainCrop)) {
         const lv = lastValidCropRef.current;
         const cx = lv.x + lv.width / 2;
         const cy = lv.y + lv.height / 2;
@@ -1959,7 +1958,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             width: lv.width * factor,
             height: lv.height * factor,
           };
-          if (checkCropValid(toPixel(test), W, H, rotation)) {
+          if (isCropWithinBounds(toPixel(test), W, H, rotation, constrainCrop)) {
             healed = test;
             hi = mid;
           } else {
@@ -2002,7 +2001,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               testCrop.y = finalCrop.y + (percentCrop.y - lastValid.y) * mid;
             }
 
-            if (checkCropValid(toPixel(testCrop), W, H, rotation)) {
+            if (isCropWithinBounds(toPixel(testCrop), W, H, rotation, constrainCrop)) {
               bestValid = { ...testCrop };
               low = mid;
             } else {
@@ -2072,7 +2071,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           targetCrop = { unit: '%', x: oldCX - newW / 2, y: oldCY - newH / 2, width: newW, height: newH };
         }
 
-        const isValidInitially = checkCropValid(toPixel(targetCrop), W, H, rotation);
+        const isValidInitially = isCropWithinBounds(toPixel(targetCrop), W, H, rotation, constrainCrop);
 
         if (newW <= oldW && isValidInitially) {
           setCrop(targetCrop);
@@ -2092,7 +2091,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               height: oldH + (targetCrop.height - oldH) * mid,
             };
 
-            if (checkCropValid(toPixel(testCrop), W, H, rotation)) {
+            if (isCropWithinBounds(toPixel(testCrop), W, H, rotation, constrainCrop)) {
               bestValid = testCrop;
               low = mid;
             } else {
@@ -2132,7 +2131,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               height: (edge === 'B' ? testVal : currB) - (edge === 'T' ? testVal : currT),
             };
 
-            if (checkCropValid(toPixel(testCrop), W, H, rotation)) {
+            if (isCropWithinBounds(toPixel(testCrop), W, H, rotation, constrainCrop)) {
               bestVal = testVal;
               low = mid;
             } else {
@@ -2170,7 +2169,14 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         lastValidCropRef.current = finalCrop;
       }
     },
-    [selectedImage, adjustments.orientationSteps, adjustments.rotation, adjustments.aspectRatio, liveRotation],
+    [
+      selectedImage,
+      adjustments.orientationSteps,
+      adjustments.rotation,
+      adjustments.aspectRatio,
+      adjustments.constrainCrop,
+      liveRotation,
+    ],
   );
 
   const handleCropComplete = useCallback(
@@ -2373,8 +2379,9 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             isWbPickerActive={isWbPickerActive}
             onWbPicked={handleWbPicked}
             setAdjustments={setAdjustments}
-            overlayRotation={overlayRotation}
-            overlayMode={overlayMode}
+            cropGuideMode={cropGuideMode}
+            cropGuideRotation={cropGuideRotation}
+            onCropGuideChange={handleCropGuideChange}
             cursorStyle={cursorStyle}
             isMaxZoom={isMaxZoom}
             liveRotation={liveRotation}
