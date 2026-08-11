@@ -24,23 +24,27 @@ export default function GeometryPanel({
 
   const handleChange = (key: TransformAdjustment, value: string | number) => {
     onTransformChange?.();
-    setAdjustments((previous) => ({ ...previous, [key]: Number(value) }));
+    setAdjustments((previous) => ({
+      ...previous,
+      [key]: Number(value),
+      sectionVisibility: {
+        ...previous.sectionVisibility,
+        geometry: true,
+      },
+    }));
   };
 
   return (
     <div className={clsx(compact ? 'crop-geometry-controls' : 'space-y-4')}>
       <div className={clsx(compact ? 'crop-geometry-group' : 'p-2 bg-bg-tertiary rounded-md')}>
-        <Text variant={TextVariants.heading} className="mb-2">
-          {t('modals.transform.distortion')}
-        </Text>
         <Slider
-          label={t('modals.transform.amount')}
-          value={adjustments.transformDistortion}
+          label={t('modals.transform.projection')}
+          value={adjustments.transformProjection}
           min={-100}
           max={100}
           defaultValue={0}
           step={1}
-          onChange={(e) => handleChange(TransformAdjustment.TransformDistortion, e.target.value)}
+          onChange={(e) => handleChange(TransformAdjustment.TransformProjection, e.target.value)}
           onDragStateChange={onDragStateChange}
         />
       </div>

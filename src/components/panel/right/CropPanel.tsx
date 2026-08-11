@@ -85,6 +85,7 @@ const CROP_SESSION_KEYS = [
   'orientationSteps',
   'rotation',
   'transformDistortion',
+  'transformProjection',
   'transformVertical',
   'transformHorizontal',
   'transformRotate',
@@ -109,6 +110,7 @@ export default function CropPanel() {
   const uprightMode = useEditorStore((s) => s.uprightMode);
   const uprightGuides = useEditorStore((s) => s.uprightGuides);
   const isGuidedUprightActive = useEditorStore((s) => s.isGuidedUprightActive);
+  const isCropPreviewUpdating = useEditorStore((s) => s.isCropPreviewUpdating);
   const setEditor = useEditorStore((s) => s.setEditor);
   const setRightPanel = useUIStore((s) => s.setRightPanel);
   const setCustomEscapeHandler = useUIStore((s) => s.setCustomEscapeHandler);
@@ -703,6 +705,7 @@ export default function CropPanel() {
     setEditor({ uprightGuides: [] });
     setAdjustments((prev: Adjustments) => ({
       ...prev,
+      sectionVisibility: { ...prev.sectionVisibility, geometry: true },
       transformVertical: 0,
       transformHorizontal: 0,
       transformRotate: 0,
@@ -726,6 +729,7 @@ export default function CropPanel() {
         });
         setAdjustments((prev: Adjustments) => ({
           ...prev,
+          sectionVisibility: { ...prev.sectionVisibility, geometry: true },
           transformVertical: 0,
           transformHorizontal: 0,
           transformRotate: 0,
@@ -739,6 +743,7 @@ export default function CropPanel() {
         setEditor({ uprightMode: 'off' });
         setAdjustments((prev: Adjustments) => ({
           ...prev,
+          sectionVisibility: { ...prev.sectionVisibility, geometry: true },
           transformVertical: 0,
           transformHorizontal: 0,
           transformRotate: 0,
@@ -765,6 +770,7 @@ export default function CropPanel() {
 
         setAdjustments((prev: Adjustments) => ({
           ...prev,
+          sectionVisibility: { ...prev.sectionVisibility, geometry: true },
           transformVertical: result.vertical,
           transformHorizontal: result.horizontal,
           transformRotate: result.rotation,
@@ -810,6 +816,7 @@ export default function CropPanel() {
     lastSolvedGuideCountRef.current = uprightGuides.length;
     setAdjustments((prev: Adjustments) => ({
       ...prev,
+      sectionVisibility: { ...prev.sectionVisibility, geometry: true },
       transformRotate: Math.max(-45, Math.min(45, (prev.transformRotate ?? 0) + correction.rotation)),
       transformVertical: Math.max(-100, Math.min(100, (prev.transformVertical ?? 0) + correction.vertical)),
       transformHorizontal: Math.max(-100, Math.min(100, (prev.transformHorizontal ?? 0) + correction.horizontal)),
@@ -838,7 +845,7 @@ export default function CropPanel() {
 
   const hasGeometryAdjustments = useMemo(
     () =>
-      (adjustments.transformDistortion ?? 0) !== (INITIAL_ADJUSTMENTS.transformDistortion ?? 0) ||
+      (adjustments.transformProjection ?? 0) !== (INITIAL_ADJUSTMENTS.transformProjection ?? 0) ||
       (adjustments.transformVertical ?? 0) !== (INITIAL_ADJUSTMENTS.transformVertical ?? 0) ||
       (adjustments.transformHorizontal ?? 0) !== (INITIAL_ADJUSTMENTS.transformHorizontal ?? 0) ||
       (adjustments.transformRotate ?? 0) !== (INITIAL_ADJUSTMENTS.transformRotate ?? 0) ||
@@ -855,7 +862,8 @@ export default function CropPanel() {
     setEditor({ isGuidedUprightActive: false, uprightGuides: [], uprightMode: 'off' });
     setAdjustments((prev: Adjustments) => ({
       ...prev,
-      transformDistortion: INITIAL_ADJUSTMENTS.transformDistortion ?? 0,
+      sectionVisibility: { ...prev.sectionVisibility, geometry: true },
+      transformProjection: INITIAL_ADJUSTMENTS.transformProjection ?? 0,
       transformVertical: INITIAL_ADJUSTMENTS.transformVertical ?? 0,
       transformHorizontal: INITIAL_ADJUSTMENTS.transformHorizontal ?? 0,
       transformRotate: INITIAL_ADJUSTMENTS.transformRotate ?? 0,
@@ -1337,6 +1345,9 @@ export default function CropPanel() {
                     strokeWidth={2}
                   />
                   <span>{t('editor.crop.geometryHeading')}</span>
+                  {isCropPreviewUpdating && (
+                    <Loader2 aria-hidden="true" className="animate-spin" size={12} strokeWidth={1.8} />
+                  )}
                 </button>
                 <button
                   aria-label={t('modals.transform.resetTooltip')}

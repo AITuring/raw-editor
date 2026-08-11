@@ -1508,6 +1508,7 @@
       "offset": "Смещение",
       "original": "Оригинал",
       "perspective": "Перспектива",
+      "projection": "Проекция",
       "resetTooltip": "Сбросить трансформацию",
       "resetZoomTooltip": "Сбросить масштаб",
       "rotate": "Поворот",

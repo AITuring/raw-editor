@@ -106,6 +106,7 @@ export enum CreativeAdjustment {
 
 export enum TransformAdjustment {
   TransformDistortion = 'transformDistortion',
+  TransformProjection = 'transformProjection',
   TransformVertical = 'transformVertical',
   TransformHorizontal = 'transformHorizontal',
   TransformRotate = 'transformRotate',
@@ -241,6 +242,7 @@ export interface Adjustments {
   whiteBalanceMode: WhiteBalanceMode;
   toneMapper: 'agx' | 'basic';
   transformDistortion: number;
+  transformProjection: number;
   transformVertical: number;
   transformHorizontal: number;
   transformRotate: number;
@@ -603,6 +605,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   whiteBalanceMode: 'asShot',
   toneMapper: 'basic',
   transformDistortion: 0,
+  transformProjection: 0,
   transformVertical: 0,
   transformHorizontal: 0,
   transformRotate: 0,
@@ -744,6 +747,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     lensVignetteEnabled: loadedAdjustments.lensVignetteEnabled ?? INITIAL_ADJUSTMENTS.lensVignetteEnabled,
     lensDistortionParams: loadedAdjustments.lensDistortionParams ?? INITIAL_ADJUSTMENTS.lensDistortionParams,
     transformDistortion: loadedAdjustments.transformDistortion ?? INITIAL_ADJUSTMENTS.transformDistortion,
+    transformProjection: loadedAdjustments.transformProjection ?? INITIAL_ADJUSTMENTS.transformProjection,
     transformVertical: loadedAdjustments.transformVertical ?? INITIAL_ADJUSTMENTS.transformVertical,
     transformHorizontal: loadedAdjustments.transformHorizontal ?? INITIAL_ADJUSTMENTS.transformHorizontal,
     transformRotate: loadedAdjustments.transformRotate ?? INITIAL_ADJUSTMENTS.transformRotate,
@@ -858,7 +862,7 @@ export const ADJUSTMENT_GROUPS: Record<string, AdjustmentGroup[]> = {
         'flipHorizontal',
         'flipVertical',
         'orientationSteps',
-        TransformAdjustment.TransformDistortion,
+        TransformAdjustment.TransformProjection,
         TransformAdjustment.TransformVertical,
         TransformAdjustment.TransformHorizontal,
         TransformAdjustment.TransformRotate,
@@ -872,6 +876,7 @@ export const ADJUSTMENT_GROUPS: Record<string, AdjustmentGroup[]> = {
       label: 'modals.copyPaste.groups.lensCorrection',
       keys: [
         LensAdjustment.LensCorrectionMode,
+        TransformAdjustment.TransformDistortion,
         LensAdjustment.LensMaker,
         LensAdjustment.LensModel,
         LensAdjustment.LensDistortionAmount,
@@ -980,6 +985,7 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
   optics: [
     DetailsAdjustment.ChromaticAberrationRedCyan,
     DetailsAdjustment.ChromaticAberrationBlueYellow,
+    TransformAdjustment.TransformDistortion,
     LensAdjustment.LensCorrectionMode,
     LensAdjustment.LensMaker,
     LensAdjustment.LensModel,
@@ -992,7 +998,7 @@ export const CAMERA_RAW_ADJUSTMENT_SECTIONS: Record<string, string[]> = {
     LensAdjustment.LensVignetteEnabled,
   ],
   geometry: [
-    TransformAdjustment.TransformDistortion,
+    TransformAdjustment.TransformProjection,
     TransformAdjustment.TransformVertical,
     TransformAdjustment.TransformHorizontal,
     TransformAdjustment.TransformRotate,

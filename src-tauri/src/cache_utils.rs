@@ -126,6 +126,7 @@ pub fn dynamic_image_weight(image: &DynamicImage) -> usize {
 
 pub const GEOMETRY_KEYS: &[&str] = &[
     "transformDistortion",
+    "transformProjection",
     "transformVertical",
     "transformHorizontal",
     "transformRotate",

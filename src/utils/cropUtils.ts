@@ -7,6 +7,7 @@ export type CropConstraintTransform = Pick<
   | 'flipHorizontal'
   | 'flipVertical'
   | 'transformDistortion'
+  | 'transformProjection'
   | 'transformVertical'
   | 'transformHorizontal'
   | 'transformRotate'
@@ -85,21 +86,30 @@ export function calculateCenteredCrop(
     }
   }
 
-  return best
-    ? {
-        ...best,
-        x: Math.round(best.x),
-        y: Math.round(best.y),
-        width: Math.max(1, Math.floor(best.width)),
-        height: Math.max(1, Math.floor(best.height)),
-      }
-    : null;
+  if (!best) return null;
+
+  const centerX = best.x + best.width / 2;
+  const centerY = best.y + best.height / 2;
+  for (let inset = 0; inset <= 32; inset += 1) {
+    const factor = Math.max(0, 1 - inset / Math.min(best.width, best.height));
+    const width = Math.max(1, Math.floor(best.width * factor));
+    const height = Math.max(1, Math.floor(best.height * factor));
+    const rounded: Crop = {
+      unit: 'px',
+      x: Math.ceil(centerX - width / 2),
+      y: Math.ceil(centerY - height / 2),
+      width,
+      height,
+    };
+    if (isCropWithinBounds(rounded, W, H, rotation, constrainToImage, transform)) return rounded;
+  }
+
+  return null;
 }
 
 function computeGeometryAutoCropScale(transform: CropConstraintTransform, width: number, height: number): number {
-  const geometryVisible = transform.sectionVisibility?.geometry ?? true;
   const opticsVisible = transform.sectionVisibility?.optics ?? transform.sectionVisibility?.details ?? true;
-  const distortion = geometryVisible ? (transform.transformDistortion ?? 0) : 0;
+  const distortion = opticsVisible ? (transform.transformDistortion ?? 0) : 0;
   const params = opticsVisible && transform.lensDistortionEnabled ? transform.lensDistortionParams : null;
   const lensAmount = ((transform.lensDistortionAmount ?? 100) / 100) * 2.5;
   const manualK = (distortion / 100) * 2.5;
@@ -158,6 +168,33 @@ function computeGeometryAutoCropScale(transform: CropConstraintTransform, width:
   return maximumScale > 1 ? maximumScale * 1.002 : maximumScale;
 }
 
+const MAX_PROJECTION_STRENGTH = 1.1;
+
+function invertProjectionPoint(
+  x: number,
+  y: number,
+  centerX: number,
+  centerY: number,
+  projection: number,
+): [number, number] {
+  if (Math.abs(projection) < 1e-5) return [x, y];
+
+  const dx = x - centerX;
+  const dy = y - centerY;
+  const halfDiagonal = Math.hypot(centerX, centerY);
+  const radius = Math.hypot(dx, dy);
+  if (radius < 1e-6 || halfDiagonal < 1e-6) return [x, y];
+
+  const normalizedRadius = radius / halfDiagonal;
+  const strength = (Math.abs(projection) / 100) * MAX_PROJECTION_STRENGTH;
+  const sourceRadius =
+    projection > 0
+      ? Math.tan(Math.min(strength * normalizedRadius, Math.PI / 2 - 1e-4)) / strength
+      : Math.atan(strength * normalizedRadius) / strength;
+  const radialScale = sourceRadius / normalizedRadius;
+  return [centerX + dx * radialScale, centerY + dy * radialScale];
+}
+
 function isGeometrySampleVisible(
   orientedX: number,
   orientedY: number,
@@ -195,6 +232,7 @@ function isGeometrySampleVisible(
   }
 
   const geometryVisible = transform.sectionVisibility?.geometry ?? true;
+  const projection = geometryVisible ? (transform.transformProjection ?? 0) : 0;
   const vertical = geometryVisible ? (transform.transformVertical ?? 0) : 0;
   const horizontal = geometryVisible ? (transform.transformHorizontal ?? 0) : 0;
   const geometryRotation = geometryVisible ? (transform.transformRotate ?? 0) : 0;
@@ -225,6 +263,8 @@ function isGeometrySampleVisible(
   if (Math.abs(scaleFactor) < 1e-6 || Math.abs(aspectFactor) < 1e-6) return false;
   let sourceX = centerX + unrotatedX / (scaleFactor * aspectFactor);
   let sourceY = centerY + unrotatedY / scaleFactor;
+
+  [sourceX, sourceY] = invertProjectionPoint(sourceX, sourceY, centerX, centerY, projection);
 
   const autoCropScale = computeGeometryAutoCropScale(transform, sourceWidth, sourceHeight);
   if (autoCropScale > 1) {
@@ -259,7 +299,7 @@ function isGeometrySampleVisible(
     }
   }
 
-  const manualDistortion = geometryVisible ? (transform.transformDistortion ?? 0) : 0;
+  const manualDistortion = opticsVisible ? (transform.transformDistortion ?? 0) : 0;
   if (Math.abs(manualDistortion) >= 1e-5) {
     const dx = sourceX - centerX;
     const dy = sourceY - centerY;

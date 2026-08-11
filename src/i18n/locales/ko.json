@@ -1446,6 +1446,7 @@
       "offset": "오프셋",
       "original": "원본",
       "perspective": "원근",
+      "projection": "투영",
       "resetTooltip": "변형 초기화",
       "resetZoomTooltip": "확대/축소 초기화",
       "rotate": "회전",

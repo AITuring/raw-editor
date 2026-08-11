@@ -825,6 +825,8 @@ async fn generate_uncropped_preview(
         let path = loaded_image.path.clone();
         let is_raw = loaded_image.is_raw;
         let unique_hash = calculate_full_job_hash(&path, &adjustments_clone);
+        let settings = load_settings(app_handle.clone()).unwrap_or_default();
+        let preview_dim = settings.editor_preview_resolution.unwrap_or(1920);
         let has_patches = adjustments_clone
             .get("aiPatches")
             .and_then(|v| v.as_array())
@@ -842,7 +844,22 @@ async fn generate_uncropped_preview(
             Cow::Borrowed(loaded_image.image.as_ref())
         };
 
-        let warped_image = apply_geometry_warp(patched_image, &adjustments_clone);
+        let (source_width, source_height) = patched_image.dimensions();
+        let preview_source = if source_width > preview_dim || source_height > preview_dim {
+            Cow::Owned(downscale_f32_image(
+                patched_image.as_ref(),
+                preview_dim,
+                preview_dim,
+            ))
+        } else {
+            patched_image
+        };
+
+        // Geometry is resolution invariant because its perspective and offset
+        // terms are normalized by the image dimensions. Warping the static
+        // preview instead of a 40-60 MP original keeps crop sliders responsive
+        // while the full-resolution export continues through the same mapping.
+        let warped_image = apply_geometry_warp(preview_source, &adjustments_clone);
         let blurred_image = crate::lens_blur::apply_lens_blur(warped_image, &adjustments_clone);
         let orientation_steps = adjustments_clone["orientationSteps"].as_u64().unwrap_or(0) as u8;
         let coarse_rotated_image = apply_coarse_rotation(blurred_image, orientation_steps);
@@ -855,23 +872,17 @@ async fn generate_uncropped_preview(
         let flipped_image =
             apply_flip(coarse_rotated_image, flip_horizontal, flip_vertical).into_owned();
 
-        let settings = load_settings(app_handle.clone()).unwrap_or_default();
-        let preview_dim = settings.editor_preview_resolution.unwrap_or(1920);
-
-        let (rotated_w, rotated_h) = flipped_image.dimensions();
-
-        let (processing_base, scale_for_gpu) = if rotated_w > preview_dim || rotated_h > preview_dim
-        {
-            let base = downscale_f32_image(&flipped_image, preview_dim, preview_dim);
-            let scale = if rotated_w > 0 {
-                base.width() as f32 / rotated_w as f32
-            } else {
-                1.0
-            };
-            (base, scale)
+        let full_oriented_width = if orientation_steps % 2 == 1 {
+            source_height
         } else {
-            (flipped_image.clone(), 1.0)
+            source_width
         };
+        let scale_for_gpu = if full_oriented_width > 0 {
+            flipped_image.width() as f32 / full_oriented_width as f32
+        } else {
+            1.0
+        };
+        let processing_base = flipped_image;
 
         let (preview_width, preview_height) = processing_base.dimensions();
 
@@ -979,6 +990,7 @@ async fn analyze_crop_upright(
     if let Some(object) = analysis_adjustments.as_object_mut() {
         object.insert("crop".to_string(), serde_json::Value::Null);
         object.insert("rotation".to_string(), serde_json::json!(0.0));
+        object.insert("transformProjection".to_string(), serde_json::json!(0.0));
         object.insert("transformVertical".to_string(), serde_json::json!(0.0));
         object.insert("transformHorizontal".to_string(), serde_json::json!(0.0));
         object.insert("transformRotate".to_string(), serde_json::json!(0.0));

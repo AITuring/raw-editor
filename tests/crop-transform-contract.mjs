@@ -11,12 +11,16 @@ async function loadTypeScriptModule(relativePath) {
 
 const upright = await loadTypeScriptModule('src/utils/upright.ts');
 const crop = await loadTypeScriptModule('src/utils/cropUtils.ts');
-const [tauriCommands, cropPanelSource, canvasSource, invokeSource] = await Promise.all([
-  readFile(resolve('src-tauri/src/lib.rs'), 'utf8'),
-  readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
-  readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),
-  readFile(resolve('src/components/ui/AppProperties.tsx'), 'utf8'),
-]);
+const latestQueue = await loadTypeScriptModule('src/utils/latestOnlyAsyncQueue.ts');
+const [tauriCommands, imageProcessingSource, cropPanelSource, canvasSource, invokeSource, processingHookSource] =
+  await Promise.all([
+    readFile(resolve('src-tauri/src/lib.rs'), 'utf8'),
+    readFile(resolve('src-tauri/src/image_processing.rs'), 'utf8'),
+    readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
+    readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),
+    readFile(resolve('src/components/ui/AppProperties.tsx'), 'utf8'),
+    readFile(resolve('src/hooks/useImageProcessing.ts'), 'utf8'),
+  ]);
 
 assert.match(tauriCommands, /async fn analyze_crop_upright\(/, 'Upright must execute through a native image command');
 assert.match(tauriCommands, /generate_handler!\[[\s\S]*analyze_crop_upright,/, 'Upright command must be registered');
@@ -28,6 +32,18 @@ assert.match(
 );
 assert.match(cropPanelSource, /transformVertical:\s*result\.vertical/, 'native Upright output must update geometry');
 assert.match(canvasSource, /onUprightGuideAdd\(\{/, 'Guided Upright must send canvas lines into the solver');
+assert.match(imageProcessingSource, /pub projection:\s*f32/, 'Projection must be a native geometry parameter');
+assert.match(imageProcessingSource, /unproject_geometry_point\(/, 'Projection must alter native inverse sampling');
+assert.match(
+  processingHookSource,
+  /createLatestOnlyAsyncQueue<UncroppedPreviewRequest, ArrayBuffer>/,
+  'crop preview requests must be coalesced instead of queueing every slider event',
+);
+assert.ok(
+  tauriCommands.indexOf('downscale_f32_image(\n                    patched_image.as_ref()') <
+    tauriCommands.indexOf('let warped_image = apply_geometry_warp(preview_source'),
+  'crop preview must downscale before the expensive geometry warp',
+);
 
 function projectVerticalLine(x, perspective) {
   const project = (y) => {
@@ -88,6 +104,7 @@ const identityTransform = {
   flipHorizontal: false,
   flipVertical: false,
   transformDistortion: 0,
+  transformProjection: 0,
   transformVertical: 0,
   transformHorizontal: 0,
   transformRotate: 0,
@@ -119,4 +136,44 @@ assert.ok(perspectiveCrop, 'perspective geometry should produce a safe centered 
 assert.ok(perspectiveCrop.width < 1000 && perspectiveCrop.height < 800, JSON.stringify(perspectiveCrop));
 assert.equal(crop.isCropWithinBounds(perspectiveCrop, 1000, 800, 0, true, perspectiveTransform), true);
 
-console.log('Validated Guided Upright solving and geometry-aware crop constraints.');
+const projectionTransform = { ...identityTransform, transformProjection: 100 };
+assert.equal(crop.isCropWithinBounds(fullCrop, 1000, 800, 0, true, projectionTransform), false);
+const projectionCrop = crop.calculateCenteredCrop(1000, 800, 0, 1.25, 0, true, projectionTransform);
+assert.ok(projectionCrop, 'projection correction should produce a safe centered crop');
+assert.ok(projectionCrop.width < 900 && projectionCrop.height < 720, JSON.stringify(projectionCrop));
+assert.equal(crop.isCropWithinBounds(projectionCrop, 1000, 800, 0, true, projectionTransform), true);
+
+const pendingExecutions = [];
+const queueResults = [];
+const busyTransitions = [];
+const queue = latestQueue.createLatestOnlyAsyncQueue({
+  execute(input) {
+    return new Promise((resolvePromise) => pendingExecutions.push({ input, resolve: resolvePromise }));
+  },
+  getKey: (input) => input,
+  onResult: (output) => queueResults.push(output),
+  onBusyChange: (busy) => busyTransitions.push(busy),
+});
+
+queue.submit('first');
+queue.submit('obsolete');
+queue.submit('latest');
+assert.equal(pendingExecutions.length, 1, 'only one native-style request may run at once');
+pendingExecutions[0].resolve('first-result');
+await new Promise((resolvePromise) => setImmediate(resolvePromise));
+assert.equal(pendingExecutions.length, 2, 'the queue should start one follow-up request');
+assert.equal(pendingExecutions[1].input, 'latest', 'intermediate slider requests must be discarded');
+pendingExecutions[1].resolve('latest-result');
+await new Promise((resolvePromise) => setImmediate(resolvePromise));
+assert.deepEqual(queueResults, ['first-result', 'latest-result']);
+assert.deepEqual(busyTransitions, [true, false]);
+
+queue.submit('cancelled');
+assert.equal(pendingExecutions.length, 3);
+queue.cancel();
+pendingExecutions[2].resolve('stale-result');
+await new Promise((resolvePromise) => setImmediate(resolvePromise));
+assert.deepEqual(queueResults, ['first-result', 'latest-result'], 'cancelled results must never replace the preview');
+queue.dispose();
+
+console.log('Validated Upright, projection constraints, and latest-only crop preview scheduling.');

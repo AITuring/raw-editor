@@ -33,6 +33,7 @@ import { detectLensProfileFromExif, parseExifNumber } from '../../utils/lensProf
 
 interface GeometryParams {
   distortion: number;
+  projection: number;
   vertical: number;
   horizontal: number;
   rotate: number;
@@ -240,6 +241,7 @@ export default function LensCorrectionModal({
       try {
         const fullParams: GeometryParams = {
           distortion: currentAdjustments.transformDistortion ?? 0,
+          projection: currentAdjustments.transformProjection ?? 0,
           vertical: currentAdjustments.transformVertical ?? 0,
           horizontal: currentAdjustments.transformHorizontal ?? 0,
           rotate: currentAdjustments.transformRotate ?? 0,
@@ -495,6 +497,7 @@ export default function LensCorrectionModal({
     if (active) {
       const fullParams: GeometryParams = {
         distortion: currentAdjustments.transformDistortion ?? 0,
+        projection: currentAdjustments.transformProjection ?? 0,
         vertical: currentAdjustments.transformVertical ?? 0,
         horizontal: currentAdjustments.transformHorizontal ?? 0,
         rotate: currentAdjustments.transformRotate ?? 0,

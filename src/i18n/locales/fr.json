@@ -1479,6 +1479,7 @@
       "offset": "Décalage",
       "original": "Original",
       "perspective": "Perspective",
+      "projection": "Projection",
       "resetTooltip": "Réinitialiser la transformation",
       "resetZoomTooltip": "Réinitialiser le zoom",
       "rotate": "Rotation",

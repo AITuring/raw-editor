@@ -16,6 +16,7 @@ import { createImageObjectUrl } from '../../utils/imageObjectUrl';
 
 interface GeometryParams {
   distortion: number;
+  projection: number;
   vertical: number;
   horizontal: number;
   rotate: number;
@@ -42,6 +43,7 @@ interface GeometryParams {
 
 type TransformParams = Omit<
   GeometryParams,
+  | 'distortion'
   | 'lens_distortion_amount'
   | 'lens_vignette_amount'
   | 'lens_tca_amount'
@@ -67,7 +69,7 @@ interface TransformModalProps {
 }
 
 const DEFAULT_PARAMS: TransformParams = {
-  distortion: 0,
+  projection: 0,
   vertical: 0,
   horizontal: 0,
   rotate: 0,
@@ -209,6 +211,7 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
       try {
         const fullParams: GeometryParams = {
           ...currentParams,
+          distortion: currentAdjustments.transformDistortion ?? 0,
           lens_distortion_amount: (currentAdjustments.lensDistortionAmount ?? 100) / SLIDER_DIVISOR,
           lens_vignette_amount: (currentAdjustments.lensVignetteAmount ?? 100) / SLIDER_DIVISOR,
           lens_tca_amount: (currentAdjustments.lensTcaAmount ?? 100) / SLIDER_DIVISOR,
@@ -257,7 +260,7 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
       setIsMounted(true);
       const timer = setTimeout(() => setShow(true), 10);
       const initParams = {
-        distortion: currentAdjustments.transformDistortion ?? 0,
+        projection: currentAdjustments.transformProjection ?? 0,
         vertical: currentAdjustments.transformVertical ?? 0,
         horizontal: currentAdjustments.transformHorizontal ?? 0,
         rotate: currentAdjustments.transformRotate ?? 0,
@@ -317,6 +320,7 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
     if (active) {
       const fullParams: GeometryParams = {
         ...DEFAULT_PARAMS,
+        distortion: currentAdjustments.transformDistortion ?? 0,
         lens_distortion_amount: (currentAdjustments.lensDistortionAmount ?? 100) / SLIDER_DIVISOR,
         lens_vignette_amount: (currentAdjustments.lensVignetteAmount ?? 100) / SLIDER_DIVISOR,
         lens_tca_amount: (currentAdjustments.lensTcaAmount ?? 100) / SLIDER_DIVISOR,
@@ -366,17 +370,17 @@ export default function TransformModal({ isOpen, onClose, onApply, currentAdjust
       <div className="grow overflow-y-auto p-4 flex flex-col gap-8" onPointerDownCapture={handleInteractionStart}>
         <div>
           <Text variant={TextVariants.heading} className="mb-2">
-            {t('modals.transform.distortion')}
+            {t('modals.transform.projection')}
           </Text>
           <div className="space-y-3">
             <Slider
               label={t('modals.transform.amount')}
-              value={params.distortion}
+              value={params.projection}
               min={-100}
               max={100}
               defaultValue={0}
               step={1}
-              onChange={(e) => handleChange('distortion', Number(e.target.value))}
+              onChange={(e) => handleChange('projection', Number(e.target.value))}
             />
           </div>
         </div>

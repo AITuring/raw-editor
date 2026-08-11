@@ -87,8 +87,10 @@ pub struct Crop {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(default)]
 pub struct GeometryParams {
     pub distortion: f32,
+    pub projection: f32,
     pub vertical: f32,
     pub horizontal: f32,
     pub rotate: f32,
@@ -117,6 +119,7 @@ impl Default for GeometryParams {
     fn default() -> Self {
         Self {
             distortion: 0.0,
+            projection: 0.0,
             vertical: 0.0,
             horizontal: 0.0,
             rotate: 0.0,
@@ -169,8 +172,13 @@ pub fn get_geometry_params_from_json(adjustments: &serde_json::Value) -> Geometr
         .flatten();
 
     GeometryParams {
-        distortion: if geometry_visible {
+        distortion: if optics_visible {
             adjustments["transformDistortion"].as_f64().unwrap_or(0.0) as f32
+        } else {
+            0.0
+        },
+        projection: if geometry_visible {
+            adjustments["transformProjection"].as_f64().unwrap_or(0.0) as f32
         } else {
             0.0
         },
@@ -526,6 +534,70 @@ fn build_transform_matrices(
     (forward, cx, cy, half_diagonal)
 }
 
+const MAX_PROJECTION_STRENGTH: f64 = 1.1;
+
+#[inline(always)]
+fn remap_projection_point(
+    x: f64,
+    y: f64,
+    cx: f64,
+    cy: f64,
+    half_diagonal: f64,
+    projection: f32,
+    inverse: bool,
+) -> (f64, f64) {
+    if projection.abs() < 1e-5 || half_diagonal < 1e-6 {
+        return (x, y);
+    }
+
+    let dx = x - cx;
+    let dy = y - cy;
+    let radius = (dx * dx + dy * dy).sqrt();
+    if radius < 1e-6 {
+        return (x, y);
+    }
+
+    let normalized_radius = radius / half_diagonal;
+    let strength = (projection.abs() as f64 / 100.0) * MAX_PROJECTION_STRENGTH;
+    let compress = if inverse {
+        projection < 0.0
+    } else {
+        projection > 0.0
+    };
+    let mapped_radius = if compress {
+        (strength * normalized_radius).atan() / strength
+    } else {
+        let angle = (strength * normalized_radius).min(std::f64::consts::FRAC_PI_2 - 1e-4);
+        angle.tan() / strength
+    };
+    let scale = mapped_radius / normalized_radius;
+    (cx + dx * scale, cy + dy * scale)
+}
+
+#[inline(always)]
+fn project_geometry_point(
+    x: f64,
+    y: f64,
+    cx: f64,
+    cy: f64,
+    half_diagonal: f64,
+    projection: f32,
+) -> (f64, f64) {
+    remap_projection_point(x, y, cx, cy, half_diagonal, projection, false)
+}
+
+#[inline(always)]
+fn unproject_geometry_point(
+    x: f64,
+    y: f64,
+    cx: f64,
+    cy: f64,
+    half_diagonal: f64,
+    projection: f32,
+) -> (f64, f64) {
+    remap_projection_point(x, y, cx, cy, half_diagonal, projection, true)
+}
+
 struct TcaContext<'a> {
     src_raw: &'a [f32],
     src_width: usize,
@@ -792,6 +864,17 @@ pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> Dyna
                     let mut src_x = current_vec.x * inv_z;
                     let mut src_y = current_vec.y * inv_z;
 
+                    let (unprojected_x, unprojected_y) = unproject_geometry_point(
+                        src_x as f64,
+                        src_y as f64,
+                        cx as f64,
+                        cy as f64,
+                        hd,
+                        params.projection,
+                    );
+                    src_x = unprojected_x as f32;
+                    src_y = unprojected_y as f32;
+
                     if auto_crop_scale > 1.0 {
                         src_x = cx + (src_x - cx) / auto_crop_scale;
                         src_y = cy + (src_y - cy) / auto_crop_scale;
@@ -992,6 +1075,17 @@ pub fn unwarp_image_geometry(warped_image: &DynamicImage, params: GeometryParams
                     current_y = cy + (current_y - cy) * auto_crop_scale;
                 }
 
+                let (projected_x, projected_y) = project_geometry_point(
+                    current_x as f64,
+                    current_y as f64,
+                    cx as f64,
+                    cy as f64,
+                    hd,
+                    params.projection,
+                );
+                current_x = projected_x as f32;
+                current_y = projected_y as f32;
+
                 let target_vec = forward_transform * NaVector3::new(current_x, current_y, 1.0);
 
                 if target_vec.z.abs() > 1e-6 {
@@ -1115,6 +1209,8 @@ pub fn inverse_transform_point(
         let inv_z = 1.0 / (vec.z as f64);
         let mut src_x = (vec.x as f64) * inv_z;
         let mut src_y = (vec.y as f64) * inv_z;
+
+        (src_x, src_y) = unproject_geometry_point(src_x, src_y, cx, cy, hd, params.projection);
 
         let k_distortion = (params.distortion as f64 / 100.0) * 2.5;
         let lk1 = params.lens_dist_k1 as f64;
@@ -1388,6 +1484,7 @@ pub fn is_geometry_identity(params: &GeometryParams) -> bool {
             && params.vig_k3.abs() < 1e-6);
 
     params.distortion == 0.0
+        && params.projection == 0.0
         && params.vertical == 0.0
         && params.horizontal == 0.0
         && params.rotate == 0.0
@@ -3668,6 +3765,127 @@ pub fn calculate_auto_adjustments(
     let results = perform_auto_analysis(&original_image);
 
     Ok(auto_results_to_json(&results))
+}
+
+#[cfg(test)]
+mod geometry_transform_tests {
+    use super::*;
+
+    fn coordinate_gradient(width: u32, height: u32) -> DynamicImage {
+        DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(width, height, |x, y| {
+            image::Rgb([
+                x as f32 / (width - 1) as f32,
+                y as f32 / (height - 1) as f32,
+                ((x * 7 + y * 11) % 31) as f32 / 30.0,
+            ])
+        }))
+    }
+
+    fn absolute_difference(left: &DynamicImage, right: &DynamicImage) -> f64 {
+        let left = left.to_rgb32f();
+        let right = right.to_rgb32f();
+        left.as_raw()
+            .iter()
+            .zip(right.as_raw())
+            .map(|(a, b)| (*a as f64 - *b as f64).abs())
+            .sum()
+    }
+
+    #[test]
+    fn every_geometry_menu_slider_changes_native_pixels() {
+        let source = coordinate_gradient(161, 121);
+        let mut cases = Vec::new();
+
+        let mut projection = GeometryParams::default();
+        projection.projection = 70.0;
+        cases.push(("projection", projection));
+
+        let mut vertical = GeometryParams::default();
+        vertical.vertical = 45.0;
+        cases.push(("vertical", vertical));
+
+        let mut horizontal = GeometryParams::default();
+        horizontal.horizontal = -45.0;
+        cases.push(("horizontal", horizontal));
+
+        let mut rotate = GeometryParams::default();
+        rotate.rotate = 12.0;
+        cases.push(("rotate", rotate));
+
+        let mut aspect = GeometryParams::default();
+        aspect.aspect = 25.0;
+        cases.push(("aspect", aspect));
+
+        let mut scale = GeometryParams::default();
+        scale.scale = 82.0;
+        cases.push(("scale", scale));
+
+        let mut x_offset = GeometryParams::default();
+        x_offset.x_offset = 12.0;
+        cases.push(("x offset", x_offset));
+
+        let mut y_offset = GeometryParams::default();
+        y_offset.y_offset = -12.0;
+        cases.push(("y offset", y_offset));
+
+        for (name, params) in cases {
+            let transformed = warp_image_geometry(&source, params);
+            assert!(
+                absolute_difference(&source, &transformed) > 100.0,
+                "{name} unexpectedly produced an identity image"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_sampling_and_inverse_coordinates_share_the_same_geometry() {
+        let width = 181;
+        let height = 137;
+        let source = coordinate_gradient(width, height);
+        let adjustments = serde_json::json!({
+            "transformProjection": 42.0,
+            "transformVertical": 28.0,
+            "transformHorizontal": -19.0,
+            "transformRotate": 4.5,
+            "transformAspect": 8.0,
+            "transformScale": 96.0,
+            "transformXOffset": 2.0,
+            "transformYOffset": -3.0,
+            "sectionVisibility": { "geometry": true, "optics": true }
+        });
+        let transformed = apply_geometry_warp(&source, &adjustments).into_owned();
+        let target_x = 91;
+        let target_y = 68;
+        let (source_x, source_y) = inverse_transform_point(
+            target_x as f64,
+            target_y as f64,
+            width as f64,
+            height as f64,
+            &adjustments,
+        );
+        let pixel = transformed.to_rgb32f().get_pixel(target_x, target_y).0;
+
+        assert!((pixel[0] as f64 - source_x / (width - 1) as f64).abs() < 0.015);
+        assert!((pixel[1] as f64 - source_y / (height - 1) as f64).abs() < 0.015);
+    }
+
+    #[test]
+    fn projection_forward_and_inverse_round_trip() {
+        let (cx, cy, half_diagonal) = (500.0, 400.0, 640.312_423_7);
+        for projection in [-100.0, -35.0, 35.0, 100.0] {
+            let projected = project_geometry_point(820.0, 145.0, cx, cy, half_diagonal, projection);
+            let restored = unproject_geometry_point(
+                projected.0,
+                projected.1,
+                cx,
+                cy,
+                half_diagonal,
+                projection,
+            );
+            assert!((restored.0 - 820.0).abs() < 1e-6);
+            assert!((restored.1 - 145.0).abs() < 1e-6);
+        }
+    }
 }
 
 #[cfg(test)]

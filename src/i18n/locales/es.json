@@ -1478,6 +1478,7 @@
       "offset": "Desplazamiento",
       "original": "Original",
       "perspective": "Perspectiva",
+      "projection": "Proyección",
       "resetTooltip": "Restablecer transformación",
       "resetZoomTooltip": "Restablecer zoom",
       "rotate": "Rotar",

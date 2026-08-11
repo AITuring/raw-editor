@@ -166,4 +166,23 @@ mod tests {
         let expected = source.rotate90().fliph().crop_imm(1, 1, 2, 2);
         assert_eq!(output.to_rgba8(), expected.to_rgba8());
     }
+
+    #[test]
+    fn transformation_pipeline_applies_projection_and_perspective_before_export_crop() {
+        let source = coordinate_image(10, 8);
+        let adjustments = serde_json::json!({
+            "transformProjection": 65.0,
+            "transformVertical": 35.0,
+            "transformHorizontal": -20.0,
+            "sectionVisibility": { "geometry": true, "optics": true },
+            "crop": { "unit": "px", "x": 2.0, "y": 2.0, "width": 5.0, "height": 4.0 }
+        });
+
+        let (output, offset) = apply_all_transformations(&source, &adjustments);
+        let identity_crop = source.crop_imm(2, 2, 5, 4);
+
+        assert_eq!(output.dimensions(), (5, 4));
+        assert_eq!(offset, (2.0, 2.0));
+        assert_ne!(output.to_rgba8(), identity_crop.to_rgba8());
+    }
 }

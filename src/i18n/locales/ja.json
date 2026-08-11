@@ -1446,6 +1446,7 @@
       "offset": "オフセット",
       "original": "オリジナル",
       "perspective": "遠近歪み",
+      "projection": "投影",
       "resetTooltip": "変形をリセット",
       "resetZoomTooltip": "ズームをリセット",
       "rotate": "回転",

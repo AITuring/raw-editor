@@ -1457,6 +1457,7 @@
       "offset": "偏移",
       "original": "原始",
       "perspective": "透視",
+      "projection": "投影",
       "resetTooltip": "重置變換",
       "resetZoomTooltip": "重置縮放",
       "rotate": "旋轉",

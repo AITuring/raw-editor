@@ -9,6 +9,7 @@ import { Invokes } from '../components/ui/AppProperties';
 
 const getTransformAdjustments = (adj: Adjustments) => ({
   transformDistortion: adj.transformDistortion,
+  transformProjection: adj.transformProjection,
   transformVertical: adj.transformVertical,
   transformHorizontal: adj.transformHorizontal,
   transformRotate: adj.transformRotate,

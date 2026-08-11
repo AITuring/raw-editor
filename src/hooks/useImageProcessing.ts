@@ -13,6 +13,13 @@ import { parsePreviewResponse } from '../utils/previewProtocol';
 import { createImageObjectUrl } from '../utils/imageObjectUrl';
 import { calculatePreviewTargetResolution, resolvePreviewRenderPlan } from '../utils/previewResolution';
 import { BASIC_MODE } from '../basic/runtime';
+import { createLatestOnlyAsyncQueue } from '../utils/latestOnlyAsyncQueue';
+
+interface UncroppedPreviewRequest {
+  adjustments: Adjustments;
+  key: string;
+  path: string;
+}
 
 export function useImageProcessing(
   transformWrapperRef: any,
@@ -48,7 +55,6 @@ export function useImageProcessing(
   const pendingApplyRef = useRef<{ adjustments: Adjustments; targetRes?: number } | null>(null);
   const currentOriginalResRef = useRef<number>(0);
   const originalPreviewJobIdRef = useRef(0);
-  const uncroppedPreviewJobIdRef = useRef(0);
   const lastViewportRequestKeyRef = useRef<string | null>(null);
   const dragIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeWaveformChannelRef = useRef(activeWaveformChannel);
@@ -59,16 +65,88 @@ export function useImageProcessing(
     selectedImagePathRef.current = selectedImage?.path ?? null;
   }, [selectedImage?.path]);
 
+  const uncroppedPreviewAdjustmentsRef = useRef(adjustments);
+  uncroppedPreviewAdjustmentsRef.current = adjustments;
+
+  const uncroppedPreviewKey = useMemo(() => {
+    const previewAdjustments: Partial<Adjustments> = { ...adjustments };
+    delete previewAdjustments.crop;
+    delete previewAdjustments.aspectRatio;
+    delete previewAdjustments.constrainCrop;
+    delete previewAdjustments.rotation;
+    return JSON.stringify(previewAdjustments);
+  }, [adjustments]);
+
   const geometricAdjustmentsKey = useMemo(() => {
     if (!adjustments) return '';
-    const { crop, rotation, flipHorizontal, flipVertical, orientationSteps } = adjustments;
-    return JSON.stringify({ crop, rotation, flipHorizontal, flipVertical, orientationSteps });
+    const {
+      crop,
+      rotation,
+      flipHorizontal,
+      flipVertical,
+      orientationSteps,
+      transformDistortion,
+      transformProjection,
+      transformVertical,
+      transformHorizontal,
+      transformRotate,
+      transformAspect,
+      transformScale,
+      transformXOffset,
+      transformYOffset,
+      lensDistortionAmount,
+      lensVignetteAmount,
+      lensTcaAmount,
+      lensDistortionEnabled,
+      lensTcaEnabled,
+      lensVignetteEnabled,
+      lensDistortionParams,
+    } = adjustments;
+    return JSON.stringify({
+      crop,
+      rotation,
+      flipHorizontal,
+      flipVertical,
+      orientationSteps,
+      transformDistortion,
+      transformProjection,
+      transformVertical,
+      transformHorizontal,
+      transformRotate,
+      transformAspect,
+      transformScale,
+      transformXOffset,
+      transformYOffset,
+      lensDistortionAmount,
+      lensVignetteAmount,
+      lensTcaAmount,
+      lensDistortionEnabled,
+      lensTcaEnabled,
+      lensVignetteEnabled,
+      lensDistortionParams,
+    });
   }, [
     adjustments?.crop,
     adjustments?.rotation,
     adjustments?.flipHorizontal,
     adjustments?.flipVertical,
     adjustments?.orientationSteps,
+    adjustments?.transformDistortion,
+    adjustments?.transformProjection,
+    adjustments?.transformVertical,
+    adjustments?.transformHorizontal,
+    adjustments?.transformRotate,
+    adjustments?.transformAspect,
+    adjustments?.transformScale,
+    adjustments?.transformXOffset,
+    adjustments?.transformYOffset,
+    adjustments?.lensDistortionAmount,
+    adjustments?.lensVignetteAmount,
+    adjustments?.lensTcaAmount,
+    adjustments?.lensDistortionEnabled,
+    adjustments?.lensTcaEnabled,
+    adjustments?.lensVignetteEnabled,
+    adjustments?.lensDistortionParams,
   ]);
 
   const calculateROI = useCallback(() => {
@@ -320,31 +398,44 @@ export function useImageProcessing(
     [selectedImage?.isReady, flushPipeline, executeApplyAdjustments],
   );
 
-  const generateUncroppedPreview = useCallback(
-    async (currentAdjustments: Adjustments) => {
-      const currentPath = selectedImage?.path;
-      if (!selectedImage?.isReady || !currentPath) return;
-
-      const jobId = ++uncroppedPreviewJobIdRef.current;
-      try {
-        const buffer: ArrayBuffer = await invoke(Invokes.GenerateUncroppedPreview, {
-          jsAdjustments: currentAdjustments,
-        });
-        if (jobId !== uncroppedPreviewJobIdRef.current || currentPath !== selectedImagePathRef.current) {
-          return;
-        }
-
-        const url = createImageObjectUrl(buffer, 'image/jpeg');
-        if (!url) throw new Error('Uncropped preview returned no image data');
-        setEditor({ uncroppedAdjustedPreviewUrl: url });
-      } catch (err) {
-        if (jobId === uncroppedPreviewJobIdRef.current) {
-          console.error('Failed to generate uncropped preview:', err);
-        }
-      }
-    },
-    [selectedImage?.isReady, selectedImage?.path, setEditor],
+  const uncroppedPreviewQueue = useMemo(
+    () =>
+      createLatestOnlyAsyncQueue<UncroppedPreviewRequest, ArrayBuffer>({
+        execute: (request) =>
+          invoke(Invokes.GenerateUncroppedPreview, {
+            jsAdjustments: request.adjustments,
+          }),
+        getKey: (request) => request.key,
+        onBusyChange: (busy) => setEditor({ isCropPreviewUpdating: busy }),
+        onError: (error, request) => {
+          if (request.path === selectedImagePathRef.current) {
+            console.error('Failed to generate uncropped preview:', error);
+          }
+        },
+        onResult: (buffer, request) => {
+          if (request.path !== selectedImagePathRef.current) return;
+          const url = createImageObjectUrl(buffer, 'image/jpeg');
+          if (!url) {
+            console.error('Failed to generate uncropped preview: native command returned no image data');
+            return;
+          }
+          setEditor({ uncroppedAdjustedPreviewUrl: url });
+        },
+      }),
+    [setEditor],
   );
+
+  useEffect(() => () => uncroppedPreviewQueue.dispose(), [uncroppedPreviewQueue]);
+
+  const generateUncroppedPreview = useCallback(() => {
+    const currentPath = selectedImage?.path;
+    if (!selectedImage?.isReady || !currentPath) return;
+    uncroppedPreviewQueue.submit({
+      adjustments: uncroppedPreviewAdjustmentsRef.current,
+      key: `${currentPath}:${uncroppedPreviewKey}`,
+      path: currentPath,
+    });
+  }, [selectedImage?.isReady, selectedImage?.path, uncroppedPreviewKey, uncroppedPreviewQueue]);
 
   const calculateTargetRes = useCallback(() => {
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -418,12 +509,19 @@ export function useImageProcessing(
 
   useEffect(() => {
     if (activeView === 'editor' && activeRightPanel === Panel.Crop && selectedImage?.isReady) {
-      generateUncroppedPreview(adjustments);
+      generateUncroppedPreview();
     } else {
-      uncroppedPreviewJobIdRef.current += 1;
-      setEditor({ uncroppedAdjustedPreviewUrl: null });
+      uncroppedPreviewQueue.cancel();
+      setEditor({ uncroppedAdjustedPreviewUrl: null, isCropPreviewUpdating: false });
     }
-  }, [activeView, adjustments, activeRightPanel, selectedImage?.isReady, generateUncroppedPreview, setEditor]);
+  }, [
+    activeView,
+    activeRightPanel,
+    selectedImage?.isReady,
+    generateUncroppedPreview,
+    setEditor,
+    uncroppedPreviewQueue,
+  ]);
 
   useEffect(() => {
     if (activeView === 'editor' && selectedImage?.isReady && displaySize.width > 0 && !isSliderDragging) {
@@ -466,6 +564,14 @@ export function useImageProcessing(
 
     const targetRes = calculateTargetRes();
     const renderAdjustments = previewOverride ?? adjustments;
+
+    // The crop workspace renders the uncropped geometry preview through its own
+    // latest-only queue. Starting the hidden main preview for every pointer move
+    // would make both native jobs compete and is especially noticeable on large
+    // RAW files. A final main preview is still rendered when the pointer is released.
+    if (activeView === 'editor' && activeRightPanel === Panel.Crop && isSliderDragging) {
+      return;
+    }
 
     if (activeView !== 'editor') {
       if (isSliderDragging) return;
@@ -515,6 +621,7 @@ export function useImageProcessing(
     };
   }, [
     activeView,
+    activeRightPanel,
     adjustments,
     previewOverride,
     selectedImage?.path,
