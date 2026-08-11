@@ -927,11 +927,31 @@ async fn generate_uncropped_preview(
         )?;
 
         let (width, height) = processed_image.dimensions();
-        let rgb_pixels = processed_image.to_rgb8().into_vec();
-        srgb_preview_encoder(Preset::BaselineFastest)
-            .quality(80)
+        let rgba_pixels = processed_image.to_rgba8();
+        let mut rgb_pixels = Vec::with_capacity((width * height * 3) as usize);
+        for (index, pixel) in rgba_pixels.pixels().enumerate() {
+            let x = index as u32 % width;
+            let y = index as u32 / width;
+            let checker = if ((x / 12) + (y / 12)).is_multiple_of(2) {
+                35u8
+            } else {
+                47u8
+            };
+            let alpha = pixel[3] as u16;
+            let inverse_alpha = 255 - alpha;
+            for channel in 0..3 {
+                let composited =
+                    (pixel[channel] as u16 * alpha + checker as u16 * inverse_alpha + 127) / 255;
+                rgb_pixels.push(composited as u8);
+            }
+        }
+        let encoded = srgb_preview_encoder(Preset::BaselineFastest)
+            .quality(82)
             .encode_rgb(&rgb_pixels, width, height)
-            .map_err(|e| format!("Failed to encode uncropped preview with mozjpeg-rs: {}", e))
+            .map_err(|error| {
+                format!("Failed to encode uncropped preview with mozjpeg-rs: {error}")
+            })?;
+        Ok(encoded)
     })
     .await
     .map_err(|e| format!("Uncropped preview worker failed: {}", e))??;

@@ -525,7 +525,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   colorGrading: { ...INITIAL_COLOR_GRADING },
   colorNoiseReduction: 0,
   contrast: 0,
-  constrainCrop: true,
+  constrainCrop: false,
   crop: null,
   curves: getDefaultCurves(),
   pointCurves: getDefaultCurves(),

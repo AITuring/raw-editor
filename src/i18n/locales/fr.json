@@ -473,6 +473,8 @@
       "autoStraightenFailed": "Échec du redressement automatique : {{error}}",
       "autoStraightenNoLines": "Aucune ligne horizontale ou verticale fiable n’a été détectée.",
       "autoStraightenTooltip": "Analyser les lignes de l’image et redresser automatiquement",
+      "constrainDisabledHint": "Conserver les bords vides de la transformation",
+      "constrainEnabledHint": "Recadrer automatiquement les bords vides",
       "constrainToImage": "Contraindre à l’image",
       "custom": {
         "hPlaceholder": "H",

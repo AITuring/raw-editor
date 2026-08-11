@@ -12,15 +12,25 @@ async function loadTypeScriptModule(relativePath) {
 const upright = await loadTypeScriptModule('src/utils/upright.ts');
 const crop = await loadTypeScriptModule('src/utils/cropUtils.ts');
 const latestQueue = await loadTypeScriptModule('src/utils/latestOnlyAsyncQueue.ts');
-const [tauriCommands, imageProcessingSource, cropPanelSource, canvasSource, invokeSource, processingHookSource] =
-  await Promise.all([
-    readFile(resolve('src-tauri/src/lib.rs'), 'utf8'),
-    readFile(resolve('src-tauri/src/image_processing.rs'), 'utf8'),
-    readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
-    readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),
-    readFile(resolve('src/components/ui/AppProperties.tsx'), 'utf8'),
-    readFile(resolve('src/hooks/useImageProcessing.ts'), 'utf8'),
-  ]);
+const [
+  tauriCommands,
+  imageProcessingSource,
+  cropPanelSource,
+  editorSource,
+  canvasSource,
+  invokeSource,
+  processingHookSource,
+  adjustmentsSource,
+] = await Promise.all([
+  readFile(resolve('src-tauri/src/lib.rs'), 'utf8'),
+  readFile(resolve('src-tauri/src/image_processing.rs'), 'utf8'),
+  readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
+  readFile(resolve('src/components/panel/Editor.tsx'), 'utf8'),
+  readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),
+  readFile(resolve('src/components/ui/AppProperties.tsx'), 'utf8'),
+  readFile(resolve('src/hooks/useImageProcessing.ts'), 'utf8'),
+  readFile(resolve('src/utils/adjustments.ts'), 'utf8'),
+]);
 
 assert.match(tauriCommands, /async fn analyze_crop_upright\(/, 'Upright must execute through a native image command');
 assert.match(tauriCommands, /generate_handler!\[[\s\S]*analyze_crop_upright,/, 'Upright command must be registered');
@@ -39,6 +49,32 @@ assert.match(
   /createLatestOnlyAsyncQueue<UncroppedPreviewRequest, ArrayBuffer>/,
   'crop preview requests must be coalesced instead of queueing every slider event',
 );
+assert.match(
+  processingHookSource,
+  /useEffect\(\(\) => \(\) => uncroppedPreviewQueue\.cancel\(\)/,
+  'Strict Mode cleanup must cancel rather than permanently dispose the crop preview queue',
+);
+assert.doesNotMatch(
+  processingHookSource,
+  /\(\) => uncroppedPreviewQueue\.dispose\(\)/,
+  'Strict Mode must not leave the memoized crop preview queue disposed',
+);
+assert.match(
+  tauriCommands,
+  /let checker = if \(\(x \/ 12\) \+ \(y \/ 12\)\)\.is_multiple_of\(2\)/,
+  'transparent crop-preview edges must be composited onto a visible neutral canvas',
+);
+assert.doesNotMatch(
+  imageProcessingSource,
+  /compute_lens_auto_crop_scale|auto_crop_scale/,
+  'geometry must not silently zoom to hide blank edges',
+);
+assert.match(
+  editorSource,
+  /if \(isSliderDragging \|\| \(liveRotation !== null && liveRotation !== undefined\)\) \{\s*return;/,
+  'geometry gestures must keep the crop frame stable until release',
+);
+assert.match(adjustmentsSource, /constrainCrop:\s*false,/, 'blank transform edges must be allowed by default');
 assert.ok(
   tauriCommands.indexOf('downscale_f32_image(\n                    patched_image.as_ref()') <
     tauriCommands.indexOf('let warped_image = apply_geometry_warp(preview_source'),
@@ -135,6 +171,34 @@ const perspectiveCrop = crop.calculateCenteredCrop(1000, 800, 0, 1.25, 0, true, 
 assert.ok(perspectiveCrop, 'perspective geometry should produce a safe centered crop');
 assert.ok(perspectiveCrop.width < 1000 && perspectiveCrop.height < 800, JSON.stringify(perspectiveCrop));
 assert.equal(crop.isCropWithinBounds(perspectiveCrop, 1000, 800, 0, true, perspectiveTransform), true);
+const constrainedFromFull = crop.resolveCropForConstraintChange(
+  1000,
+  800,
+  0,
+  1.25,
+  0,
+  fullCrop,
+  true,
+  perspectiveTransform,
+);
+assert.ok(crop.areCropsApproximatelyEqual(constrainedFromFull, perspectiveCrop, 3));
+const restoredBlankCanvas = crop.resolveCropForConstraintChange(
+  1000,
+  800,
+  0,
+  1.25,
+  0,
+  perspectiveCrop,
+  false,
+  perspectiveTransform,
+);
+assert.ok(crop.areCropsApproximatelyEqual(restoredBlankCanvas, fullCrop, 1));
+const customCrop = { unit: 'px', x: 220, y: 160, width: 500, height: 400 };
+assert.deepEqual(
+  crop.resolveCropForConstraintChange(1000, 800, 0, 1.25, 0, customCrop, false, perspectiveTransform),
+  customCrop,
+  'disabling the constraint must preserve a hand-authored crop',
+);
 
 const projectionTransform = { ...identityTransform, transformProjection: 100 };
 assert.equal(crop.isCropWithinBounds(fullCrop, 1000, 800, 0, true, projectionTransform), false);
@@ -174,6 +238,11 @@ queue.cancel();
 pendingExecutions[2].resolve('stale-result');
 await new Promise((resolvePromise) => setImmediate(resolvePromise));
 assert.deepEqual(queueResults, ['first-result', 'latest-result'], 'cancelled results must never replace the preview');
+queue.submit('resumed');
+assert.equal(pendingExecutions.length, 4, 'a Strict Mode cleanup cancellation must leave the queue reusable');
+pendingExecutions[3].resolve('resumed-result');
+await new Promise((resolvePromise) => setImmediate(resolvePromise));
+assert.deepEqual(queueResults, ['first-result', 'latest-result', 'resumed-result']);
 queue.dispose();
 
 console.log('Validated Upright, projection constraints, and latest-only crop preview scheduling.');

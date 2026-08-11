@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
   FlipHorizontal,
@@ -30,6 +30,7 @@ import {
   calculateAreaPreservingCrop,
   calculateCenteredCrop,
   isCropWithinBounds,
+  resolveCropForConstraintChange,
   rotateCropQuarterTurn,
 } from '../../../utils/cropUtils';
 import { Crop } from 'react-image-crop';
@@ -203,7 +204,7 @@ export default function CropPanel() {
 
   const {
     aspectRatio,
-    constrainCrop = true,
+    constrainCrop = false,
     rotation = 0,
     flipHorizontal = false,
     flipVertical = false,
@@ -230,7 +231,7 @@ export default function CropPanel() {
 
   useEffect(() => {
     return () => {
-      setEditor({ liveRotation: null });
+      setEditor({ isRotationActive: false, isSliderDragging: false, liveRotation: null });
     };
   }, [setEditor]);
 
@@ -618,7 +619,7 @@ export default function CropPanel() {
                 newOrientationSteps,
                 newAspectRatio,
                 0,
-                prev.constrainCrop ?? true,
+                prev.constrainCrop ?? false,
                 prev,
               )
           : null;
@@ -885,6 +886,30 @@ export default function CropPanel() {
     [setEditor],
   );
 
+  const handleConstrainCropChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const nextConstrainCrop = event.target.checked;
+      setAdjustments((prev: Adjustments) => {
+        if (!selectedImage?.width || !selectedImage?.height) {
+          return { ...prev, constrainCrop: nextConstrainCrop };
+        }
+
+        const nextCrop = resolveCropForConstraintChange(
+          selectedImage.width,
+          selectedImage.height,
+          prev.orientationSteps ?? 0,
+          prev.aspectRatio,
+          prev.rotation ?? 0,
+          prev.crop,
+          nextConstrainCrop,
+          prev,
+        );
+        return { ...prev, constrainCrop: nextConstrainCrop, crop: nextCrop };
+      });
+    },
+    [selectedImage, setAdjustments],
+  );
+
   const nudgeCrop = useCallback(
     (deltaX: number, deltaY: number) => {
       if (!selectedImage?.width || !selectedImage?.height) return;
@@ -913,7 +938,7 @@ export default function CropPanel() {
         };
 
         if (
-          isCropWithinBounds(desired, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true, prev)
+          isCropWithinBounds(desired, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? false, prev)
         ) {
           return { ...prev, crop: desired };
         }
@@ -930,7 +955,14 @@ export default function CropPanel() {
             y: sourceCrop.y + (desired.y - sourceCrop.y) * amount,
           };
           if (
-            isCropWithinBounds(candidate, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true, prev)
+            isCropWithinBounds(
+              candidate,
+              imageWidth,
+              imageHeight,
+              prev.rotation || 0,
+              prev.constrainCrop ?? false,
+              prev,
+            )
           ) {
             best = candidate;
             low = amount;
@@ -957,6 +989,7 @@ export default function CropPanel() {
 
   const handleDragStateChange = useCallback(
     (isDragging: boolean) => {
+      setEditor({ isSliderDragging: isDragging });
       if (isDragging) {
         setIsRotationActive(true);
         setEditor({ isRotationActive: true });
@@ -1266,14 +1299,13 @@ export default function CropPanel() {
 
               <div className="crop-constraint-row">
                 <label className="crop-checkbox-label">
-                  <input
-                    checked={constrainCrop}
-                    onChange={(event) =>
-                      setAdjustments((prev: Adjustments) => ({ ...prev, constrainCrop: event.target.checked }))
-                    }
-                    type="checkbox"
-                  />
-                  <span>{t('editor.crop.constrainToImage')}</span>
+                  <input checked={constrainCrop} onChange={handleConstrainCropChange} type="checkbox" />
+                  <span className="crop-constraint-copy">
+                    <span>{t('editor.crop.constrainToImage')}</span>
+                    <small className="crop-constraint-note">
+                      {t(constrainCrop ? 'editor.crop.constrainEnabledHint' : 'editor.crop.constrainDisabledHint')}
+                    </small>
+                  </span>
                 </label>
                 <output className="crop-dimensions" title={t('editor.crop.outputDimensionsTooltip')}>
                   {cropDimensionsLabel}

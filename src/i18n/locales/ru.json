@@ -493,6 +493,8 @@
       "autoStraightenFailed": "Не удалось автоматически выровнять изображение: {{error}}",
       "autoStraightenNoLines": "Надёжные горизонтальные или вертикальные линии не обнаружены.",
       "autoStraightenTooltip": "Проанализировать линии и автоматически выровнять изображение",
+      "constrainDisabledHint": "Сохранять пустые края после трансформации",
+      "constrainEnabledHint": "Автоматически обрезать пустые края",
       "constrainToImage": "Ограничить изображением",
       "custom": {
         "hPlaceholder": "В",

@@ -473,6 +473,8 @@
       "autoStraightenFailed": "Raddrizzamento automatico non riuscito: {{error}}",
       "autoStraightenNoLines": "Non sono state rilevate linee orizzontali o verticali affidabili.",
       "autoStraightenTooltip": "Analizza le linee dell’immagine e raddrizza automaticamente",
+      "constrainDisabledHint": "Mantieni i bordi vuoti della trasformazione",
+      "constrainEnabledHint": "Ritaglia automaticamente i bordi vuoti",
       "constrainToImage": "Limita all’immagine",
       "custom": {
         "hPlaceholder": "A",

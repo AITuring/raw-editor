@@ -39,7 +39,7 @@ export function calculateCenteredCrop(
   orientationSteps: number,
   aspectRatio: number | null,
   rotation: number = 0,
-  constrainToImage: boolean = true,
+  constrainToImage: boolean = false,
   transform?: CropConstraintTransform,
 ): Crop | null {
   if (!aspectRatio || aspectRatio <= 0) return null;
@@ -105,67 +105,6 @@ export function calculateCenteredCrop(
   }
 
   return null;
-}
-
-function computeGeometryAutoCropScale(transform: CropConstraintTransform, width: number, height: number): number {
-  const opticsVisible = transform.sectionVisibility?.optics ?? transform.sectionVisibility?.details ?? true;
-  const distortion = opticsVisible ? (transform.transformDistortion ?? 0) : 0;
-  const params = opticsVisible && transform.lensDistortionEnabled ? transform.lensDistortionParams : null;
-  const lensAmount = ((transform.lensDistortionAmount ?? 100) / 100) * 2.5;
-  const manualK = (distortion / 100) * 2.5;
-  if (!params && Math.abs(manualK) < 1e-5) return 1;
-
-  const cx = width / 2;
-  const cy = height / 2;
-  const halfDiagonal = Math.hypot(cx, cy);
-  let maximumScale = 1;
-  const points = [
-    [cx, 0],
-    [cx, height],
-    [0, cy],
-    [width, cy],
-    [0, 0],
-    [width, 0],
-    [0, height],
-    [width, height],
-  ];
-
-  for (const [x, y] of points) {
-    const dx = x - cx;
-    const dy = y - cy;
-    const radius = Math.hypot(dx, dy);
-    if (radius < 1e-6) continue;
-    let mappedX = dx;
-    let mappedY = dy;
-
-    if (params) {
-      const normalizedRadius = radius / halfDiagonal;
-      const radiusSquared = normalizedRadius * normalizedRadius;
-      const distortedRadius =
-        params.model === 1
-          ? normalizedRadius *
-            (params.k1 * radiusSquared * normalizedRadius +
-              params.k2 * radiusSquared +
-              params.k3 * normalizedRadius +
-              (1 - params.k1 - params.k2 - params.k3))
-          : normalizedRadius *
-            (1 + params.k1 * radiusSquared + params.k2 * radiusSquared ** 2 + params.k3 * radiusSquared ** 3);
-      const effectiveRadius = normalizedRadius + (distortedRadius - normalizedRadius) * lensAmount;
-      const scale = effectiveRadius / normalizedRadius;
-      mappedX *= scale;
-      mappedY *= scale;
-    }
-
-    if (Math.abs(manualK) >= 1e-5) {
-      const normalizedRadiusSquared = (mappedX * mappedX + mappedY * mappedY) / (cx * cx + cy * cy);
-      const factor = 1 + manualK * normalizedRadiusSquared;
-      mappedX *= factor;
-      mappedY *= factor;
-    }
-    maximumScale = Math.max(maximumScale, Math.hypot(mappedX, mappedY) / radius);
-  }
-
-  return maximumScale > 1 ? maximumScale * 1.002 : maximumScale;
 }
 
 const MAX_PROJECTION_STRENGTH = 1.1;
@@ -266,12 +205,6 @@ function isGeometrySampleVisible(
 
   [sourceX, sourceY] = invertProjectionPoint(sourceX, sourceY, centerX, centerY, projection);
 
-  const autoCropScale = computeGeometryAutoCropScale(transform, sourceWidth, sourceHeight);
-  if (autoCropScale > 1) {
-    sourceX = centerX + (sourceX - centerX) / autoCropScale;
-    sourceY = centerY + (sourceY - centerY) / autoCropScale;
-  }
-
   const opticsVisible = transform.sectionVisibility?.optics ?? transform.sectionVisibility?.details ?? true;
   const params = opticsVisible && transform.lensDistortionEnabled ? transform.lensDistortionParams : null;
   if (params) {
@@ -317,7 +250,7 @@ export function isCropWithinBounds(
   imageW: number,
   imageH: number,
   rotation: number,
-  constrainToImage: boolean = true,
+  constrainToImage: boolean = false,
   transform?: CropConstraintTransform,
 ): boolean {
   if (
@@ -391,7 +324,7 @@ export function calculateAreaPreservingCrop(
   aspectRatio: number | null,
   rotation: number,
   currentCrop: Crop | null | undefined,
-  constrainToImage: boolean = true,
+  constrainToImage: boolean = false,
   transform?: CropConstraintTransform,
 ): Crop | null {
   if (!aspectRatio || aspectRatio <= 0 || !currentCrop || !currentCrop.width || !currentCrop.height) return null;
@@ -413,6 +346,80 @@ export function calculateAreaPreservingCrop(
   };
 
   return isCropWithinBounds(candidate, W, H, rotation, constrainToImage, transform) ? candidate : null;
+}
+
+export function areCropsApproximatelyEqual(
+  first: Crop | null | undefined,
+  second: Crop | null | undefined,
+  tolerance: number = 2,
+): boolean {
+  if (!first || !second) return first === second;
+  return (
+    Math.abs(first.x - second.x) <= tolerance &&
+    Math.abs(first.y - second.y) <= tolerance &&
+    Math.abs(first.width - second.width) <= tolerance &&
+    Math.abs(first.height - second.height) <= tolerance
+  );
+}
+
+function cropToPixels(crop: Crop, width: number, height: number): Crop {
+  if (crop.unit !== '%') return { ...crop, unit: 'px' };
+  return {
+    unit: 'px',
+    x: (crop.x / 100) * width,
+    y: (crop.y / 100) * height,
+    width: (crop.width / 100) * width,
+    height: (crop.height / 100) * height,
+  };
+}
+
+/**
+ * Keeps a hand-authored crop intact while making the constraint switch behave
+ * like Camera Raw: enabling it trims blank transform edges, disabling it
+ * restores the full available canvas when the crop was auto-managed.
+ */
+export function resolveCropForConstraintChange(
+  imageWidth: number,
+  imageHeight: number,
+  orientationSteps: number,
+  aspectRatio: number | null,
+  rotation: number,
+  currentCrop: Crop | null | undefined,
+  nextConstrainToImage: boolean,
+  transform?: CropConstraintTransform,
+): Crop | null {
+  const { width, height } = getOrientedDimensions(imageWidth, imageHeight, orientationSteps);
+  const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : width / height;
+  const currentPixelCrop = currentCrop ? cropToPixels(currentCrop, width, height) : null;
+  const nextMaximum = calculateCenteredCrop(
+    imageWidth,
+    imageHeight,
+    orientationSteps,
+    ratio,
+    rotation,
+    nextConstrainToImage,
+    transform,
+  );
+
+  if (!currentPixelCrop) return nextMaximum;
+
+  if (nextConstrainToImage) {
+    return isCropWithinBounds(currentPixelCrop, width, height, rotation, true, transform)
+      ? currentPixelCrop
+      : nextMaximum;
+  }
+
+  const constrainedMaximum = calculateCenteredCrop(
+    imageWidth,
+    imageHeight,
+    orientationSteps,
+    ratio,
+    rotation,
+    true,
+    transform,
+  );
+  const wasAutoManaged = areCropsApproximatelyEqual(currentPixelCrop, constrainedMaximum, 3);
+  return wasAutoManaged ? (nextMaximum ?? currentPixelCrop) : currentPixelCrop;
 }
 
 export function rotateCropCenter(

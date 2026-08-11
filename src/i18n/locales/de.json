@@ -453,6 +453,8 @@
       "autoStraightenFailed": "Automatisches Ausrichten fehlgeschlagen: {{error}}",
       "autoStraightenNoLines": "Keine zuverlässigen horizontalen oder vertikalen Linien erkannt.",
       "autoStraightenTooltip": "Bildlinien analysieren und automatisch ausrichten",
+      "constrainDisabledHint": "Leere Transformationsränder beibehalten",
+      "constrainEnabledHint": "Leere Transformationsränder automatisch beschneiden",
       "constrainToImage": "Auf Bild beschränken",
       "custom": {
         "hPlaceholder": "H",

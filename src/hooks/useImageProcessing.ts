@@ -425,7 +425,10 @@ export function useImageProcessing(
     [setEditor],
   );
 
-  useEffect(() => () => uncroppedPreviewQueue.dispose(), [uncroppedPreviewQueue]);
+  // React Strict Mode replays effect cleanup in development without recreating
+  // this memoized queue. A permanent dispose here leaves crop preview submits
+  // inert and produces a stable white workspace after switching to Crop.
+  useEffect(() => () => uncroppedPreviewQueue.cancel(), [uncroppedPreviewQueue]);
 
   const generateUncroppedPreview = useCallback(() => {
     const currentPath = selectedImage?.path;

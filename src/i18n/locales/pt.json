@@ -473,6 +473,8 @@
       "autoStraightenFailed": "Falha ao endireitar automaticamente: {{error}}",
       "autoStraightenNoLines": "Nenhuma linha horizontal ou vertical confiável foi detectada.",
       "autoStraightenTooltip": "Analisar as linhas da imagem e endireitar automaticamente",
+      "constrainDisabledHint": "Manter as bordas vazias da transformação",
+      "constrainEnabledHint": "Cortar automaticamente as bordas vazias",
       "constrainToImage": "Restringir à imagem",
       "custom": {
         "hPlaceholder": "A",

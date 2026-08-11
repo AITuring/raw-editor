@@ -8,7 +8,12 @@ import { useTranslation } from 'react-i18next';
 
 import { ImageDimensions, RenderSize, useImageRenderSize } from '../../hooks/useImageRenderSize';
 import { Adjustments, AiPatch, MaskContainer } from '../../utils/adjustments';
-import { calculateCenteredCrop, isCropWithinBounds, rotateCropCenter } from '../../utils/cropUtils';
+import {
+  areCropsApproximatelyEqual,
+  calculateCenteredCrop,
+  isCropWithinBounds,
+  rotateCropCenter,
+} from '../../utils/cropUtils';
 import EditorToolbar from './editor/EditorToolbar';
 import ImageCanvas from './editor/ImageCanvas';
 import PreviewNavigator from './editor/PreviewNavigator';
@@ -58,6 +63,15 @@ interface EditorProps {
   onContextMenu(event: any): void;
   onImageSelect?(path: string, event?: any): void;
   transformWrapperRef: any;
+}
+
+interface PreviousCropParams {
+  aspectRatio: number | null;
+  constrainCrop: boolean;
+  constraintSignature: string;
+  orientationSteps: number;
+  rotation: number;
+  wasMaximized: boolean;
 }
 
 export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, transformWrapperRef }: EditorProps) {
@@ -125,7 +139,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const { handleGenerateAiMask, handleQuickErase, handleManualCleanup } = useAiMasking();
 
   const [crop, setCrop] = useState<Crop | null>(null);
-  const prevCropParams = useRef<any>(null);
+  const prevCropParams = useRef<PreviousCropParams | null>(null);
   const lastValidCropRef = useRef<PercentCrop | null>(null);
 
   const [isMaskHovered, setIsMaskHovered] = useState(false);
@@ -1707,8 +1721,22 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       return;
     }
 
-    const { aspectRatio, constrainCrop = true, orientationSteps = 0, crop: currentAdjCrop, rotation = 0 } = adjustments;
-    const effectiveRotation = liveRotation !== null && liveRotation !== undefined ? liveRotation : rotation;
+    const {
+      aspectRatio,
+      constrainCrop = false,
+      orientationSteps = 0,
+      crop: currentAdjCrop,
+      rotation = 0,
+    } = adjustments;
+
+    // During a geometry gesture, keep the crop frame still and move the image
+    // beneath it. Re-solving once on release avoids the rigid, jumping frame
+    // that made rotation and perspective controls feel constrained.
+    if (isSliderDragging || (liveRotation !== null && liveRotation !== undefined)) {
+      return;
+    }
+
+    const effectiveRotation = rotation;
 
     const geometryChanged =
       prevCropParams.current?.rotation !== rotation ||
@@ -1717,8 +1745,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       prevCropParams.current?.constrainCrop !== constrainCrop ||
       prevCropParams.current?.constraintSignature !== cropConstraintSignature;
 
-    const isDraggingRotation = liveRotation !== null && liveRotation !== undefined;
-    const needsRecalc = currentAdjCrop === null || geometryChanged || isDraggingRotation;
+    const needsRecalc = currentAdjCrop === null || geometryChanged;
 
     if (needsRecalc) {
       const isSwapped = orientationSteps === 1 || orientationSteps === 3;
@@ -1729,30 +1756,20 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       let nextPixelCrop = currentAdjCrop;
       const aspectChanged = prevCropParams.current?.aspectRatio !== aspectRatio;
       const orientationChanged = prevCropParams.current?.orientationSteps !== orientationSteps;
-      const rotationChanged = prevCropParams.current?.rotation !== rotation || isDraggingRotation;
+      const rotationChanged = prevCropParams.current?.rotation !== rotation;
 
-      let isMaximized = false;
-      if (currentAdjCrop) {
-        const referenceRotation = prevCropParams.current?.rotation ?? rotation;
-        const maxCropForReference = calculateCenteredCrop(
+      let isMaximized = prevCropParams.current?.wasMaximized ?? false;
+      if (currentAdjCrop && !prevCropParams.current) {
+        const maxCropForCurrentGeometry = calculateCenteredCrop(
           selectedImage.width,
           selectedImage.height,
           orientationSteps,
           A,
-          referenceRotation,
-          prevCropParams.current?.constrainCrop ?? constrainCrop,
+          rotation,
+          constrainCrop,
           adjustments,
         );
-
-        if (
-          maxCropForReference &&
-          Math.abs(currentAdjCrop.x - maxCropForReference.x) <= 2 &&
-          Math.abs(currentAdjCrop.y - maxCropForReference.y) <= 2 &&
-          Math.abs(currentAdjCrop.width - maxCropForReference.width) <= 2 &&
-          Math.abs(currentAdjCrop.height - maxCropForReference.height) <= 2
-        ) {
-          isMaximized = true;
-        }
+        isMaximized = areCropsApproximatelyEqual(currentAdjCrop, maxCropForCurrentGeometry);
       }
 
       if (!currentAdjCrop) {
@@ -1814,7 +1831,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             adjustments,
           );
         }
-      } else if (isMaximized && rotationChanged) {
+      } else if (isMaximized && geometryChanged) {
         nextPixelCrop = calculateCenteredCrop(
           selectedImage.width,
           selectedImage.height,
@@ -1883,37 +1900,33 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         }
       }
 
-      if (isDraggingRotation) {
-        if (nextPixelCrop) {
-          const pc: PercentCrop = {
-            unit: '%',
-            x: (nextPixelCrop.x / W) * 100,
-            y: (nextPixelCrop.y / H) * 100,
-            width: (nextPixelCrop.width / W) * 100,
-            height: (nextPixelCrop.height / H) * 100,
-          };
-          setCrop(pc);
-          lastValidCropRef.current = pc;
-        }
-      } else {
-        prevCropParams.current = {
-          rotation,
-          aspectRatio,
-          orientationSteps,
-          constrainCrop,
-          constraintSignature: cropConstraintSignature,
-        };
+      const maximumForNextGeometry = calculateCenteredCrop(
+        selectedImage.width,
+        selectedImage.height,
+        orientationSteps,
+        A,
+        rotation,
+        constrainCrop,
+        adjustments,
+      );
+      prevCropParams.current = {
+        rotation,
+        aspectRatio,
+        orientationSteps,
+        constrainCrop,
+        constraintSignature: cropConstraintSignature,
+        wasMaximized: areCropsApproximatelyEqual(nextPixelCrop, maximumForNextGeometry),
+      };
 
-        if (
-          nextPixelCrop &&
-          (!currentAdjCrop ||
-            Math.abs(currentAdjCrop.x - nextPixelCrop.x) > 1 ||
-            Math.abs(currentAdjCrop.y - nextPixelCrop.y) > 1 ||
-            Math.abs(currentAdjCrop.width - nextPixelCrop.width) > 1 ||
-            Math.abs(currentAdjCrop.height - nextPixelCrop.height) > 1)
-        ) {
-          setAdjustments((prev: Adjustments) => ({ ...prev, crop: nextPixelCrop }));
-        }
+      if (
+        nextPixelCrop &&
+        (!currentAdjCrop ||
+          Math.abs(currentAdjCrop.x - nextPixelCrop.x) > 1 ||
+          Math.abs(currentAdjCrop.y - nextPixelCrop.y) > 1 ||
+          Math.abs(currentAdjCrop.width - nextPixelCrop.width) > 1 ||
+          Math.abs(currentAdjCrop.height - nextPixelCrop.height) > 1)
+      ) {
+        setAdjustments((prev: Adjustments) => ({ ...prev, crop: nextPixelCrop }));
       }
     }
   }, [
@@ -1923,6 +1936,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     adjustments.orientationSteps,
     adjustments.rotation,
     cropConstraintSignature,
+    isSliderDragging,
     liveRotation,
     isCropping,
     selectedImage,
@@ -1968,7 +1982,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       const W = isSwapped ? selectedImage.height : selectedImage.width;
       const H = isSwapped ? selectedImage.width : selectedImage.height;
       const rotation = liveRotation !== null && liveRotation !== undefined ? liveRotation : adjustments.rotation || 0;
-      const constrainCrop = adjustments.constrainCrop ?? true;
+      const constrainCrop = adjustments.constrainCrop ?? false;
 
       const MIN_CROP_PX = 64;
       const minPctW = (MIN_CROP_PX / W) * 100;
@@ -1976,6 +1990,10 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
       if (percentCrop.width < minPctW || percentCrop.height < minPctH) {
         return;
+      }
+
+      if (prevCropParams.current) {
+        prevCropParams.current.wasMaximized = false;
       }
 
       const toPixel = (pc: PercentCrop): Crop => ({
@@ -2251,6 +2269,10 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
         width: Math.floor((pc.width / 100) * baseW),
         height: Math.floor((pc.height / 100) * baseH),
       };
+
+      if (prevCropParams.current) {
+        prevCropParams.current.wasMaximized = false;
+      }
 
       setAdjustments((prev: Adjustments) => {
         if (JSON.stringify(newPixelCrop) !== JSON.stringify(prev.crop)) {

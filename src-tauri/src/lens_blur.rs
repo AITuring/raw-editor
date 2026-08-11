@@ -1,6 +1,6 @@
 use crate::cache_utils::is_section_visible_with_legacy;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use image::{DynamicImage, GenericImageView, Rgb32FImage};
+use image::{DynamicImage, GenericImageView, Rgb32FImage, Rgba, Rgba32FImage};
 use rayon::prelude::*;
 use std::borrow::Cow;
 
@@ -90,7 +90,17 @@ pub fn apply_lens_blur<'a>(
         start.elapsed()
     );
 
-    Cow::Owned(DynamicImage::ImageRgb32F(out))
+    if image.color().has_alpha() {
+        let source_rgba = image.as_ref().to_rgba32f();
+        let with_alpha = Rgba32FImage::from_fn(w, h, |x, y| {
+            let rgb = out.get_pixel(x, y);
+            let alpha = source_rgba.get_pixel(x, y)[3];
+            Rgba([rgb[0], rgb[1], rgb[2], alpha])
+        });
+        Cow::Owned(DynamicImage::ImageRgba32F(with_alpha))
+    } else {
+        Cow::Owned(DynamicImage::ImageRgb32F(out))
+    }
 }
 
 #[inline(always)]

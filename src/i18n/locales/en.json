@@ -453,6 +453,8 @@
       "autoStraightenFailed": "Auto straighten failed: {{error}}",
       "autoStraightenNoLines": "No reliable horizontal or vertical lines were detected.",
       "autoStraightenTooltip": "Analyze image lines and straighten automatically",
+      "constrainDisabledHint": "Keep blank transform edges",
+      "constrainEnabledHint": "Crop blank transform edges automatically",
       "constrainToImage": "Constrain to image",
       "custom": {
         "hPlaceholder": "H",

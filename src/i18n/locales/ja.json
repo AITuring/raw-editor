@@ -451,6 +451,8 @@
       "autoStraightenFailed": "自動角度補正に失敗しました：{{error}}",
       "autoStraightenNoLines": "信頼できる水平線または垂直線を検出できませんでした。",
       "autoStraightenTooltip": "画像内の線を解析して自動的に角度を補正",
+      "constrainDisabledHint": "変形で生じた空白の端を残す",
+      "constrainEnabledHint": "変形で生じた空白の端を自動で切り取る",
       "constrainToImage": "画像内に制限",
       "custom": {
         "hPlaceholder": "H",

@@ -70,7 +70,7 @@ export function useEditorActions() {
                 newOrientationSteps,
                 newAspectRatio,
                 0,
-                adjustments.constrainCrop ?? true,
+                adjustments.constrainCrop ?? false,
                 adjustments,
               )
           : null;

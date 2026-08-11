@@ -451,6 +451,8 @@
       "autoStraightenFailed": "自動拉直失敗：{{error}}",
       "autoStraightenNoLines": "未偵測到可靠的水平線或垂直線。",
       "autoStraightenTooltip": "分析畫面線條並自動拉直",
+      "constrainDisabledHint": "保留變形產生的空白邊緣",
+      "constrainEnabledHint": "自動裁除變形產生的空白邊緣",
       "constrainToImage": "限制於影像",
       "custom": {
         "hPlaceholder": "高",

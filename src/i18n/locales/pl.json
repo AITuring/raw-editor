@@ -493,6 +493,8 @@
       "autoStraightenFailed": "Automatyczne prostowanie nie powiodło się: {{error}}",
       "autoStraightenNoLines": "Nie wykryto wiarygodnych linii poziomych ani pionowych.",
       "autoStraightenTooltip": "Przeanalizuj linie obrazu i wyprostuj automatycznie",
+      "constrainDisabledHint": "Zachowaj puste krawędzie po przekształceniu",
+      "constrainEnabledHint": "Automatycznie przytnij puste krawędzie",
       "constrainToImage": "Ogranicz do obrazu",
       "custom": {
         "hPlaceholder": "Wys.",

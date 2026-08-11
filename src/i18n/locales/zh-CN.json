@@ -451,6 +451,8 @@
       "autoStraightenFailed": "自动拉直失败：{{error}}",
       "autoStraightenNoLines": "未检测到可靠的水平线或垂直线。",
       "autoStraightenTooltip": "分析画面线条并自动拉直",
+      "constrainDisabledHint": "保留变换产生的空白边缘",
+      "constrainEnabledHint": "自动裁去变换产生的空白边缘",
       "constrainToImage": "约束到图像",
       "custom": {
         "hPlaceholder": "高",

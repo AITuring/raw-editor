@@ -451,6 +451,8 @@
       "autoStraightenFailed": "자동 수평 맞추기 실패: {{error}}",
       "autoStraightenNoLines": "신뢰할 수 있는 수평선 또는 수직선을 감지하지 못했습니다.",
       "autoStraightenTooltip": "이미지의 선을 분석하여 자동으로 수평 맞추기",
+      "constrainDisabledHint": "변형으로 생긴 빈 가장자리를 유지",
+      "constrainEnabledHint": "변형으로 생긴 빈 가장자리를 자동으로 자르기",
       "constrainToImage": "이미지로 제한",
       "custom": {
         "hPlaceholder": "높이",

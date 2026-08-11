@@ -3163,6 +3163,7 @@ const ImageCanvas = memo(
         >
           {cropPreviewUrl && uncroppedImageRenderSize && (
             <div
+              className="crop-preview-canvas"
               onContextMenu={handleCropContextMenu}
               style={{
                 height: uncroppedImageRenderSize.height,
