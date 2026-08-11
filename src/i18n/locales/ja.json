@@ -564,7 +564,11 @@
         "switchToPortrait": "縦向きに切り替え",
         "transform": "遠近歪みとあおり補正",
         "unconstrainAspect": "縦横比の固定を解除"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "水平または垂直にする線を2～4本描画"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "完了",

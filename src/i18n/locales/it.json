@@ -586,7 +586,11 @@
         "switchToPortrait": "Passa a ritratto",
         "transform": "Correzione prospettiva e distorsione trapezoidale",
         "unconstrainAspect": "Sblocca proporzioni"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Traccia da due a quattro linee che devono essere orizzontali o verticali"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Fatto",

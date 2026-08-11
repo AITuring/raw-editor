@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import clsx from 'clsx';
-import { Stage, Layer, Ellipse, Line, Transformer, Group, Circle, Rect } from 'react-konva';
+import { Stage, Layer, Ellipse, Line, Transformer, Group, Circle, Rect, Text } from 'react-konva';
 import { PercentCrop, Crop } from 'react-image-crop';
 import { Bandage, Check, Stamp } from 'lucide-react';
 import { Adjustments, AiPatch, Coord, MaskContainer } from '../../../utils/adjustments';
@@ -11,7 +11,13 @@ import { AppSettings, BrushSettings, SelectedImage } from '../../ui/AppPropertie
 import { RenderSize } from '../../../hooks/useImageRenderSize';
 import { useOsPlatform } from '../../../hooks/useOsPlatform';
 import { useTranslation } from 'react-i18next';
-import { CROP_GUIDE_MODES, CROP_GUIDE_TRANSLATION_KEYS, type CropGuideMode } from '../../../types/crop';
+import {
+  CROP_GUIDE_MODES,
+  CROP_GUIDE_TRANSLATION_KEYS,
+  type CropGuideMode,
+  type UprightGuide,
+} from '../../../types/crop';
+import { classifyUprightGuide } from '../../../utils/upright';
 import CropGuideOverlay from './overlays/CropGuideOverlay';
 import { BASIC_MODE } from '../../../basic/runtime';
 
@@ -45,6 +51,7 @@ interface ImageCanvasProps {
   isCropping: boolean;
   isMaskControlHovered: boolean;
   isMasking: boolean;
+  isGuidedUprightActive: boolean;
   isSliderDragging: boolean;
   isStraightenActive: boolean;
   isRotationActive?: boolean;
@@ -58,6 +65,7 @@ interface ImageCanvasProps {
   onSelectAiPatchContainer?: (id: string | null) => void;
   onSelectMaskContainer?: (id: string | null) => void;
   onStraighten(val: number): void;
+  onUprightGuideAdd(guide: UprightGuide): void;
   selectedImage: SelectedImage;
   setCrop(crop: Crop, perfentCrop: PercentCrop): void;
   setIsMaskHovered(isHovered: boolean): void;
@@ -72,6 +80,7 @@ interface ImageCanvasProps {
   setAdjustments(fn: (prev: Adjustments) => Adjustments): void;
   cropGuideMode?: CropGuideMode;
   cropGuideRotation?: number;
+  uprightGuides: UprightGuide[];
   onCropGuideChange?(mode: CropGuideMode): void;
   cursorStyle: string;
   isMaxZoom?: boolean;
@@ -1157,6 +1166,7 @@ const ImageCanvas = memo(
     isCropping,
     isMaskControlHovered,
     isMasking,
+    isGuidedUprightActive,
     isSliderDragging,
     isStraightenActive,
     isRotationActive,
@@ -1170,6 +1180,7 @@ const ImageCanvas = memo(
     onSelectAiPatchContainer,
     onSelectMaskContainer,
     onStraighten,
+    onUprightGuideAdd,
     selectedImage,
     setCrop,
     setIsMaskHovered,
@@ -1183,6 +1194,7 @@ const ImageCanvas = memo(
     setAdjustments,
     cropGuideMode,
     cropGuideRotation,
+    uprightGuides,
     onCropGuideChange,
     cursorStyle,
     isMaxZoom,
@@ -1210,6 +1222,8 @@ const ImageCanvas = memo(
     const [cursorPreview, setCursorPreview] = useState<CursorPreview>({ x: 0, y: 0, visible: false });
     const [straightenLine, setStraightenLine] = useState<any>(null);
     const isStraightening = useRef(false);
+    const [uprightGuideDraft, setUprightGuideDraft] = useState<{ start: Coord; end: Coord } | null>(null);
+    const isDrawingUprightGuide = useRef(false);
     const [cropGuideMenu, setCropGuideMenu] = useState<{ x: number; y: number } | null>(null);
     const cropGuideMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1267,7 +1281,7 @@ const ImageCanvas = memo(
 
     const handleCropContextMenu = useCallback(
       (event: React.MouseEvent<HTMLDivElement>) => {
-        if (!onCropGuideChange || isStraightenActive) return;
+        if (!onCropGuideChange || isStraightenActive || isGuidedUprightActive) return;
 
         event.preventDefault();
         event.stopPropagation();
@@ -1282,7 +1296,7 @@ const ImageCanvas = memo(
           y: Math.max(6, Math.min(requestedY, bounds.height - menuHeight - 6)),
         });
       },
-      [isStraightenActive, onCropGuideChange],
+      [isGuidedUprightActive, isStraightenActive, onCropGuideChange],
     );
 
     const manualCleanupStateRef = useRef({
@@ -2552,6 +2566,81 @@ const ImageCanvas = memo(
       }
     };
 
+    const handleUprightGuideMouseDown = (event: any) => {
+      if (uprightGuides.length >= 4 || (event.evt.button !== 0 && !event.evt.touches)) return;
+      const position = event.target.getStage().getPointerPosition();
+      isDrawingUprightGuide.current = true;
+      setUprightGuideDraft({ start: position, end: position });
+    };
+
+    const handleUprightGuideMouseMove = (event: any) => {
+      if (!isDrawingUprightGuide.current) return;
+      const position = event.target.getStage().getPointerPosition();
+      setUprightGuideDraft((previous) => (previous ? { ...previous, end: position } : previous));
+      if (event.evt?.cancelable) event.evt.preventDefault();
+    };
+
+    const handleUprightGuideMouseUp = (event: any) => {
+      if (!isDrawingUprightGuide.current) return;
+      isDrawingUprightGuide.current = false;
+      const pointer = event.target.getStage().getPointerPosition();
+      const completed = uprightGuideDraft ? { ...uprightGuideDraft, end: pointer ?? uprightGuideDraft.end } : null;
+      setUprightGuideDraft(null);
+      if (
+        !completed ||
+        Math.hypot(completed.end.x - completed.start.x, completed.end.y - completed.start.y) < 8 ||
+        !uncroppedImageRenderSize?.width ||
+        !uncroppedImageRenderSize?.height
+      ) {
+        return;
+      }
+
+      const width = uncroppedImageRenderSize.width;
+      const height = uncroppedImageRenderSize.height;
+      const fineRotation =
+        liveRotation !== null && liveRotation !== undefined ? liveRotation : adjustments.rotation || 0;
+      const radians = (-fineRotation * Math.PI) / 180;
+      const cosine = Math.cos(radians);
+      const sine = Math.sin(radians);
+      const unrotate = (point: Coord) => {
+        const x = point.x - width / 2;
+        const y = point.y - height / 2;
+        return {
+          x: width / 2 + x * cosine - y * sine,
+          y: height / 2 + x * sine + y * cosine,
+        };
+      };
+      const start = unrotate(completed.start);
+      const end = unrotate(completed.end);
+      const normalizedStart = {
+        x: Math.max(0, Math.min(1, start.x / width)),
+        y: Math.max(0, Math.min(1, start.y / height)),
+      };
+      const normalizedEnd = {
+        x: Math.max(0, Math.min(1, end.x / width)),
+        y: Math.max(0, Math.min(1, end.y / height)),
+      };
+
+      onUprightGuideAdd({
+        id: `upright-${Date.now()}-${uprightGuides.length}`,
+        axis: classifyUprightGuide(normalizedStart, normalizedEnd, width / height),
+        start: normalizedStart,
+        end: normalizedEnd,
+      });
+    };
+
+    const handleUprightGuideMouseLeave = () => {
+      if (!isDrawingUprightGuide.current) return;
+      isDrawingUprightGuide.current = false;
+      setUprightGuideDraft(null);
+    };
+
+    useEffect(() => {
+      if (isGuidedUprightActive) return;
+      isDrawingUprightGuide.current = false;
+      setUprightGuideDraft(null);
+    }, [isGuidedUprightActive]);
+
     const cropPreviewUrl = uncroppedAdjustedPreviewUrl || selectedImage.thumbnailUrl;
     const originalSrc = transformedOriginalUrl;
     const isShowingOriginal = showOriginal && !!originalSrc;
@@ -2621,6 +2710,26 @@ const ImageCanvas = memo(
       const rotation = liveRotation !== null && liveRotation !== undefined ? liveRotation : adjustments.rotation || 0;
       return `rotate(${rotation}deg)`;
     }, [adjustments.rotation, liveRotation]);
+
+    const displayedUprightGuides = useMemo(() => {
+      if (!uncroppedImageRenderSize?.width || !uncroppedImageRenderSize?.height) return [];
+      const width = uncroppedImageRenderSize.width;
+      const height = uncroppedImageRenderSize.height;
+      const fineRotation =
+        liveRotation !== null && liveRotation !== undefined ? liveRotation : adjustments.rotation || 0;
+      const radians = (fineRotation * Math.PI) / 180;
+      const cosine = Math.cos(radians);
+      const sine = Math.sin(radians);
+      const project = (point: { x: number; y: number }) => {
+        const x = (point.x - 0.5) * width;
+        const y = (point.y - 0.5) * height;
+        return {
+          x: width / 2 + x * cosine - y * sine,
+          y: height / 2 + x * sine + y * cosine,
+        };
+      };
+      return uprightGuides.map((guide) => ({ ...guide, start: project(guide.start), end: project(guide.end) }));
+    }, [adjustments.rotation, liveRotation, uncroppedImageRenderSize, uprightGuides]);
 
     const getCropDimensions = () => {
       if (!crop || !uncroppedImageRenderSize?.width || !uncroppedImageRenderSize?.height) {
@@ -3073,8 +3182,9 @@ const ImageCanvas = memo(
                   if (width <= 0 || height <= 0) {
                     return null;
                   }
-                  const showDenseGrid = isRotationActive && !isStraightenActive;
-                  const visibleGuideMode = isRotationActive || isStraightenActive ? 'none' : cropGuideMode || 'none';
+                  const showDenseGrid = isRotationActive && !isStraightenActive && !isGuidedUprightActive;
+                  const visibleGuideMode =
+                    isRotationActive || isStraightenActive || isGuidedUprightActive ? 'none' : cropGuideMode || 'none';
                   return (
                     <CropGuideOverlay
                       denseVisible={showDenseGrid}
@@ -3172,6 +3282,81 @@ const ImageCanvas = memo(
                           straightenLine.start.y,
                           straightenLine.end.x,
                           straightenLine.end.y,
+                        ]}
+                        stroke="rgb(211, 157, 106)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </Layer>
+                </Stage>
+              )}
+
+              {isGuidedUprightActive && (
+                <Stage
+                  height={uncroppedImageRenderSize.height}
+                  onMouseDown={handleUprightGuideMouseDown}
+                  onTouchStart={handleUprightGuideMouseDown}
+                  onMouseLeave={handleUprightGuideMouseLeave}
+                  onMouseMove={handleUprightGuideMouseMove}
+                  onTouchMove={handleUprightGuideMouseMove}
+                  onMouseUp={handleUprightGuideMouseUp}
+                  onTouchEnd={handleUprightGuideMouseUp}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    zIndex: 11,
+                    cursor: uprightGuides.length >= 4 ? 'not-allowed' : 'crosshair',
+                    touchAction: 'none',
+                  }}
+                  width={uncroppedImageRenderSize.width}
+                >
+                  <Layer>
+                    {displayedUprightGuides.map((guide, index) => {
+                      const color = guide.axis === 'vertical' ? 'rgb(211, 157, 106)' : 'rgb(101, 184, 201)';
+                      const points = [guide.start.x, guide.start.y, guide.end.x, guide.end.y];
+                      return (
+                        <Group key={guide.id} listening={false}>
+                          <Line points={points} stroke="rgba(0, 0, 0, 0.72)" strokeWidth={5} />
+                          <Line points={points} stroke={color} strokeWidth={2} />
+                          <Circle
+                            fill={color}
+                            radius={4}
+                            stroke="rgba(0, 0, 0, 0.72)"
+                            strokeWidth={1.5}
+                            x={guide.start.x}
+                            y={guide.start.y}
+                          />
+                          <Circle
+                            fill={color}
+                            radius={4}
+                            stroke="rgba(0, 0, 0, 0.72)"
+                            strokeWidth={1.5}
+                            x={guide.end.x}
+                            y={guide.end.y}
+                          />
+                          <Text
+                            fill="white"
+                            fontSize={11}
+                            fontStyle="bold"
+                            shadowColor="black"
+                            shadowBlur={2}
+                            text={`${guide.axis === 'vertical' ? 'V' : 'H'}${index + 1}`}
+                            x={(guide.start.x + guide.end.x) / 2 + 6}
+                            y={(guide.start.y + guide.end.y) / 2 + 6}
+                          />
+                        </Group>
+                      );
+                    })}
+                    {uprightGuideDraft && (
+                      <Line
+                        dash={[6, 4]}
+                        listening={false}
+                        points={[
+                          uprightGuideDraft.start.x,
+                          uprightGuideDraft.start.y,
+                          uprightGuideDraft.end.x,
+                          uprightGuideDraft.end.y,
                         ]}
                         stroke="rgb(211, 157, 106)"
                         strokeWidth={2}

@@ -19,11 +19,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Adjustments, INITIAL_ADJUSTMENTS } from '../../../utils/adjustments';
 import clsx from 'clsx';
-import { Invokes, Orientation } from '../../ui/AppProperties';
+import { Invokes, Orientation, Panel } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
 import Slider from '../../ui/Slider';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useEditorStore } from '../../../store/useEditorStore';
+import { useUIStore } from '../../../store/useUIStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
 import {
   calculateAreaPreservingCrop,
@@ -38,7 +39,9 @@ import {
   getNextCropGuide,
   ROTATABLE_CROP_GUIDES,
   type CropGuideMode,
+  type UprightMode,
 } from '../../../types/crop';
+import { mapOrientedUprightCorrection, snapUprightGuides, solveGuidedUpright } from '../../../utils/upright';
 
 const BASE_RATIO = 1.618;
 const ORIGINAL_RATIO = 0;
@@ -64,13 +67,51 @@ interface StraightenAnalysisResult {
   lineCount: number;
 }
 
+interface UprightAnalysisResult {
+  rotation: number;
+  vertical: number;
+  horizontal: number;
+  confidence: number;
+  detected: boolean;
+  lineCount: number;
+}
+
+const CROP_SESSION_KEYS = [
+  'aspectRatio',
+  'constrainCrop',
+  'crop',
+  'flipHorizontal',
+  'flipVertical',
+  'orientationSteps',
+  'rotation',
+  'transformDistortion',
+  'transformVertical',
+  'transformHorizontal',
+  'transformRotate',
+  'transformAspect',
+  'transformScale',
+  'transformXOffset',
+  'transformYOffset',
+] as const satisfies ReadonlyArray<keyof Adjustments>;
+
+type CropSessionSnapshot = Pick<Adjustments, (typeof CROP_SESSION_KEYS)[number]>;
+
+function createCropSessionSnapshot(adjustments: Adjustments): CropSessionSnapshot {
+  return Object.fromEntries(CROP_SESSION_KEYS.map((key) => [key, adjustments[key]])) as CropSessionSnapshot;
+}
+
 export default function CropPanel() {
   const { t } = useTranslation();
   const selectedImage = useEditorStore((s) => s.selectedImage);
   const adjustments = useEditorStore((s) => s.adjustments);
   const isStraightenActive = useEditorStore((s) => s.isStraightenActive);
   const cropGuideMode = useEditorStore((s) => s.cropGuideMode);
+  const uprightMode = useEditorStore((s) => s.uprightMode);
+  const uprightGuides = useEditorStore((s) => s.uprightGuides);
+  const isGuidedUprightActive = useEditorStore((s) => s.isGuidedUprightActive);
   const setEditor = useEditorStore((s) => s.setEditor);
+  const setRightPanel = useUIStore((s) => s.setRightPanel);
+  const setCustomEscapeHandler = useUIStore((s) => s.setCustomEscapeHandler);
   const { setAdjustments } = useEditorActions();
   const [customW, setCustomW] = useState('');
   const [customH, setCustomH] = useState('');
@@ -78,8 +119,9 @@ export default function CropPanel() {
   const [preferPortrait, setPreferPortrait] = useState(false);
   const [isEditingCustom, setIsEditingCustom] = useState(false);
   const [displayPresetId, setDisplayPresetId] = useState('free');
-  const [isGeometryExpanded, setIsGeometryExpanded] = useState(false);
+  const [isGeometryExpanded, setIsGeometryExpanded] = useState(true);
   const [isAutoStraightening, setIsAutoStraightening] = useState(false);
+  const [isAnalyzingUpright, setIsAnalyzingUpright] = useState(false);
 
   const [localRotation, setLocalRotation] = useState<number | null>(null);
   const localRotationRef = useRef<number | null>(null);
@@ -87,6 +129,12 @@ export default function CropPanel() {
   const preferredPresetIdRef = useRef<string | null>(null);
   const selectedImagePathRef = useRef<string | null>(null);
   const autoStraightenRequestRef = useRef(0);
+  const uprightRequestRef = useRef(0);
+  const lastSolvedGuideCountRef = useRef(0);
+  const cropSessionRef = useRef<{ path: string | null; snapshot: CropSessionSnapshot }>({
+    path: selectedImage?.path ?? null,
+    snapshot: createCropSessionSnapshot(adjustments),
+  });
 
   const PRESETS = useMemo<Array<CropPreset>>(
     () => [
@@ -159,6 +207,18 @@ export default function CropPanel() {
     flipVertical = false,
     orientationSteps = 0,
   } = adjustments;
+
+  useEffect(() => {
+    const imagePath = selectedImage?.path ?? null;
+    if (cropSessionRef.current.path === imagePath) return;
+    cropSessionRef.current = { path: imagePath, snapshot: createCropSessionSnapshot(adjustments) };
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({
+      isGuidedUprightActive: false,
+      uprightGuides: [],
+      uprightMode: 'off',
+    });
+  }, [adjustments, selectedImage?.path, setEditor]);
 
   useEffect(() => {
     if (isStraightenActive) {
@@ -261,6 +321,12 @@ export default function CropPanel() {
   const orientation = effectiveAspectForUi && effectiveAspectForUi < 1 ? Orientation.Vertical : Orientation.Horizontal;
   const isAspectConstrained = aspectRatio !== null;
   const isCustomActive = displayPresetId === 'custom';
+  const orientedImageAspect = useMemo(() => {
+    if (!selectedImage?.width || !selectedImage?.height) return 1;
+    return orientationSteps % 2 === 1
+      ? selectedImage.height / selectedImage.width
+      : selectedImage.width / selectedImage.height;
+  }, [orientationSteps, selectedImage]);
 
   useEffect(() => {
     if (aspectRatio && aspectRatio !== 1) {
@@ -300,6 +366,7 @@ export default function CropPanel() {
             rotation,
             adjustments.crop,
             constrainCrop,
+            adjustments,
           ) ??
           calculateCenteredCrop(
             selectedImage.width,
@@ -308,6 +375,7 @@ export default function CropPanel() {
             newAspectRatio,
             rotation,
             constrainCrop,
+            adjustments,
           );
       }
       setAdjustments((prev: Adjustments) => ({ ...prev, aspectRatio: newAspectRatio, crop: newCrop }));
@@ -504,6 +572,10 @@ export default function CropPanel() {
   const displayRotation = localRotation !== null ? localRotation : fineRotation;
 
   const handleFineRotationChange = (e: any) => {
+    if (isGuidedUprightActive) {
+      lastSolvedGuideCountRef.current = 0;
+      setEditor({ isGuidedUprightActive: false, uprightGuides: [], uprightMode: 'off' });
+    }
     const newFineRotation = parseFloat(e.target.value);
     if (isRotationActive) {
       updateLocalRotation(newFineRotation);
@@ -515,7 +587,12 @@ export default function CropPanel() {
   const handleStepRotate = (degrees: number) => {
     const increment = degrees > 0 ? 1 : 3;
     const direction = degrees > 0 ? 1 : -1;
-    setEditor({ isStraightenActive: false });
+    setEditor({
+      isGuidedUprightActive: false,
+      isStraightenActive: false,
+      uprightGuides: [],
+      uprightMode: uprightMode === 'guided' ? 'off' : uprightMode,
+    });
     if (lastConstrainedRatioRef.current) {
       lastConstrainedRatioRef.current = 1 / lastConstrainedRatioRef.current;
       setPreferPortrait(lastConstrainedRatioRef.current < 1);
@@ -540,6 +617,7 @@ export default function CropPanel() {
                 newAspectRatio,
                 0,
                 prev.constrainCrop ?? true,
+                prev,
               )
           : null;
       return {
@@ -559,7 +637,13 @@ export default function CropPanel() {
 
   const toggleStraighten = useCallback(() => {
     updateLocalRotation(null);
-    setEditor((state) => ({ isStraightenActive: !state.isStraightenActive }));
+    lastSolvedGuideCountRef.current = 0;
+    setEditor((state) => ({
+      isGuidedUprightActive: false,
+      isStraightenActive: !state.isStraightenActive,
+      uprightGuides: [],
+      uprightMode: state.uprightMode === 'guided' ? 'off' : state.uprightMode,
+    }));
   }, [setEditor, updateLocalRotation]);
 
   const handleAutoStraighten = useCallback(async () => {
@@ -568,7 +652,13 @@ export default function CropPanel() {
     const requestId = ++autoStraightenRequestRef.current;
     const imagePath = selectedImage.path;
     setIsAutoStraightening(true);
-    setEditor({ isStraightenActive: false });
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({
+      isGuidedUprightActive: false,
+      isStraightenActive: false,
+      uprightGuides: [],
+      uprightMode: uprightMode === 'guided' ? 'off' : uprightMode,
+    });
     updateLocalRotation(null);
 
     try {
@@ -593,14 +683,148 @@ export default function CropPanel() {
         setIsAutoStraightening(false);
       }
     }
-  }, [adjustments, isAutoStraightening, selectedImage, setAdjustments, setEditor, t, updateLocalRotation]);
+  }, [adjustments, isAutoStraightening, selectedImage, setAdjustments, setEditor, t, updateLocalRotation, uprightMode]);
 
   useEffect(
     () => () => {
       autoStraightenRequestRef.current += 1;
+      uprightRequestRef.current += 1;
     },
     [],
   );
+
+  const exitGuidedUpright = useCallback(() => {
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({ isGuidedUprightActive: false, uprightGuides: [], uprightMode: 'off' });
+  }, [setEditor]);
+
+  const clearGuidedUpright = useCallback(() => {
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({ uprightGuides: [] });
+    setAdjustments((prev: Adjustments) => ({
+      ...prev,
+      transformVertical: 0,
+      transformHorizontal: 0,
+      transformRotate: 0,
+    }));
+  }, [setAdjustments, setEditor]);
+
+  const handleUprightMode = useCallback(
+    async (mode: UprightMode) => {
+      if (!selectedImage || isAnalyzingUpright) return;
+      updateLocalRotation(null);
+      setEditor({ isStraightenActive: false });
+
+      if (mode === 'guided') {
+        uprightRequestRef.current += 1;
+        lastSolvedGuideCountRef.current = 0;
+        setIsGeometryExpanded(true);
+        setEditor({
+          isGuidedUprightActive: true,
+          uprightGuides: [],
+          uprightMode: 'guided',
+        });
+        setAdjustments((prev: Adjustments) => ({
+          ...prev,
+          transformVertical: 0,
+          transformHorizontal: 0,
+          transformRotate: 0,
+        }));
+        return;
+      }
+
+      if (mode === 'off') {
+        uprightRequestRef.current += 1;
+        exitGuidedUpright();
+        setEditor({ uprightMode: 'off' });
+        setAdjustments((prev: Adjustments) => ({
+          ...prev,
+          transformVertical: 0,
+          transformHorizontal: 0,
+          transformRotate: 0,
+        }));
+        return;
+      }
+
+      const requestId = ++uprightRequestRef.current;
+      const imagePath = selectedImage.path;
+      exitGuidedUpright();
+      setIsAnalyzingUpright(true);
+
+      try {
+        const result = await invoke<UprightAnalysisResult>(Invokes.AnalyzeCropUpright, {
+          mode,
+          jsAdjustments: adjustments,
+        });
+        if (requestId !== uprightRequestRef.current || selectedImagePathRef.current !== imagePath) return;
+
+        if (!result.detected) {
+          toast.info(t('editor.crop.autoStraightenNoLines'));
+          return;
+        }
+
+        setAdjustments((prev: Adjustments) => ({
+          ...prev,
+          transformVertical: result.vertical,
+          transformHorizontal: result.horizontal,
+          transformRotate: result.rotation,
+        }));
+        setEditor({ uprightMode: mode });
+      } catch (error) {
+        if (requestId === uprightRequestRef.current) {
+          toast.error(t('editor.crop.autoStraightenFailed', { error: String(error) }));
+        }
+      } finally {
+        if (requestId === uprightRequestRef.current) setIsAnalyzingUpright(false);
+      }
+    },
+    [
+      adjustments,
+      exitGuidedUpright,
+      isAnalyzingUpright,
+      selectedImage,
+      setAdjustments,
+      setEditor,
+      t,
+      updateLocalRotation,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isGuidedUprightActive) {
+      lastSolvedGuideCountRef.current = 0;
+      return;
+    }
+    if (uprightGuides.length < 2) {
+      lastSolvedGuideCountRef.current = uprightGuides.length;
+      return;
+    }
+    if (uprightGuides.length <= lastSolvedGuideCountRef.current) return;
+
+    const correction = mapOrientedUprightCorrection(
+      solveGuidedUpright(uprightGuides, orientedImageAspect),
+      orientationSteps,
+      flipHorizontal,
+      flipVertical,
+    );
+    lastSolvedGuideCountRef.current = uprightGuides.length;
+    setAdjustments((prev: Adjustments) => ({
+      ...prev,
+      transformRotate: Math.max(-45, Math.min(45, (prev.transformRotate ?? 0) + correction.rotation)),
+      transformVertical: Math.max(-100, Math.min(100, (prev.transformVertical ?? 0) + correction.vertical)),
+      transformHorizontal: Math.max(-100, Math.min(100, (prev.transformHorizontal ?? 0) + correction.horizontal)),
+    }));
+    setEditor({ uprightGuides: snapUprightGuides(uprightGuides), uprightMode: 'guided' });
+  }, [
+    flipHorizontal,
+    flipVertical,
+    isGuidedUprightActive,
+    orientationSteps,
+    orientedImageAspect,
+    setAdjustments,
+    setEditor,
+    uprightGuides,
+  ]);
 
   const cropDimensionsLabel = useMemo(() => {
     if (!selectedImage?.width || !selectedImage?.height) return '';
@@ -626,6 +850,9 @@ export default function CropPanel() {
   );
 
   const resetGeometry = useCallback(() => {
+    uprightRequestRef.current += 1;
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({ isGuidedUprightActive: false, uprightGuides: [], uprightMode: 'off' });
     setAdjustments((prev: Adjustments) => ({
       ...prev,
       transformDistortion: INITIAL_ADJUSTMENTS.transformDistortion ?? 0,
@@ -637,7 +864,13 @@ export default function CropPanel() {
       transformXOffset: INITIAL_ADJUSTMENTS.transformXOffset ?? 0,
       transformYOffset: INITIAL_ADJUSTMENTS.transformYOffset ?? 0,
     }));
-  }, [setAdjustments]);
+  }, [setAdjustments, setEditor]);
+
+  const handleManualGeometryChange = useCallback(() => {
+    uprightRequestRef.current += 1;
+    lastSolvedGuideCountRef.current = 0;
+    setEditor({ isGuidedUprightActive: false, uprightGuides: [], uprightMode: 'off' });
+  }, [setEditor]);
 
   const handleGeometryDragStateChange = useCallback(
     (isDragging: boolean) => setEditor({ isSliderDragging: isDragging }),
@@ -671,7 +904,9 @@ export default function CropPanel() {
           y: Math.min(imageHeight - sourceCrop.height, Math.max(0, sourceCrop.y + deltaY)),
         };
 
-        if (isCropWithinBounds(desired, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true)) {
+        if (
+          isCropWithinBounds(desired, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true, prev)
+        ) {
           return { ...prev, crop: desired };
         }
 
@@ -687,7 +922,7 @@ export default function CropPanel() {
             y: sourceCrop.y + (desired.y - sourceCrop.y) * amount,
           };
           if (
-            isCropWithinBounds(candidate, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true)
+            isCropWithinBounds(candidate, imageWidth, imageHeight, prev.rotation || 0, prev.constrainCrop ?? true, prev)
           ) {
             best = candidate;
             low = amount;
@@ -729,6 +964,46 @@ export default function CropPanel() {
     },
     [setEditor, updateLocalRotation, setAdjustments],
   );
+
+  const handleFinishCrop = useCallback(() => {
+    uprightRequestRef.current += 1;
+    updateLocalRotation(null);
+    setEditor({
+      isGuidedUprightActive: false,
+      isStraightenActive: false,
+      uprightGuides: [],
+      uprightMode: uprightMode === 'guided' ? 'off' : uprightMode,
+    });
+    setRightPanel(Panel.Adjustments);
+  }, [setEditor, setRightPanel, updateLocalRotation, uprightMode]);
+
+  const handleCancelCrop = useCallback(() => {
+    uprightRequestRef.current += 1;
+    autoStraightenRequestRef.current += 1;
+    updateLocalRotation(null);
+    const snapshot = cropSessionRef.current.snapshot;
+    setAdjustments((prev: Adjustments) => ({ ...prev, ...snapshot }));
+    setEditor({
+      isGuidedUprightActive: false,
+      isStraightenActive: false,
+      uprightGuides: [],
+      uprightMode: 'off',
+    });
+    setRightPanel(Panel.Adjustments);
+  }, [setAdjustments, setEditor, setRightPanel, updateLocalRotation]);
+
+  const handleCropEscape = useCallback(() => {
+    if (isGuidedUprightActive) {
+      exitGuidedUpright();
+      return;
+    }
+    handleCancelCrop();
+  }, [exitGuidedUpright, handleCancelCrop, isGuidedUprightActive]);
+
+  useEffect(() => {
+    setCustomEscapeHandler(handleCropEscape);
+    return () => setCustomEscapeHandler(null);
+  }, [handleCropEscape, setCustomEscapeHandler]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -779,6 +1054,11 @@ export default function CropPanel() {
         nudgeCrop(deltaX, deltaY);
         return;
       }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleFinishCrop();
+        return;
+      }
       if (event.key === 'Escape' && isStraightenActive) {
         event.preventDefault();
         setEditor({ isStraightenActive: false });
@@ -790,6 +1070,7 @@ export default function CropPanel() {
   }, [
     cropGuideMode,
     handleAspectConstraintToggle,
+    handleFinishCrop,
     handleResetCrop,
     isStraightenActive,
     nudgeCrop,
@@ -1074,10 +1355,58 @@ export default function CropPanel() {
                 inert={!isGeometryExpanded}
               >
                 <div>
+                  <div className="crop-upright-block">
+                    <div className="crop-upright-heading">
+                      <span>{t('editor.crop.uprightHeading')}</span>
+                      {isAnalyzingUpright && (
+                        <Loader2 aria-hidden="true" className="animate-spin" size={13} strokeWidth={1.8} />
+                      )}
+                    </div>
+                    <div aria-label={t('editor.crop.uprightHeading')} className="crop-upright-modes" role="radiogroup">
+                      {(['off', 'auto', 'level', 'vertical', 'full', 'guided'] as const).map((mode) => {
+                        const glyphs: Record<UprightMode, string> = {
+                          off: '×',
+                          auto: 'A',
+                          level: '—',
+                          vertical: '‖',
+                          full: '▣',
+                          guided: '⌁',
+                        };
+                        return (
+                          <button
+                            aria-checked={uprightMode === mode}
+                            className={clsx('crop-upright-mode', uprightMode === mode && 'is-active')}
+                            data-tooltip={t(`editor.crop.upright.${mode}Tooltip`)}
+                            disabled={isAnalyzingUpright}
+                            key={mode}
+                            onClick={() => void handleUprightMode(mode)}
+                            role="radio"
+                            type="button"
+                          >
+                            <span aria-hidden="true" className="crop-upright-glyph">
+                              {glyphs[mode]}
+                            </span>
+                            <span>{t(`editor.crop.upright.${mode}`)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isGuidedUprightActive && (
+                      <div className="crop-upright-guided-status" role="status">
+                        <span>
+                          {t('editor.crop.upright.guidedTooltip')} · {uprightGuides.length}/4
+                        </span>
+                        <button disabled={uprightGuides.length === 0} onClick={clearGuidedUpright} type="button">
+                          {t('adjustments.basic.reset')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <GeometryPanel
                     adjustments={adjustments}
                     compact
                     onDragStateChange={handleGeometryDragStateChange}
+                    onTransformChange={handleManualGeometryChange}
                     setAdjustments={setAdjustments}
                   />
                 </div>
@@ -1097,6 +1426,16 @@ export default function CropPanel() {
           </div>
         )}
       </div>
+      {selectedImage && (
+        <div className="crop-panel-footer">
+          <button className="crop-session-button" onClick={handleCancelCrop} type="button">
+            {t('contextMenus.editor.cancel')}
+          </button>
+          <button className="crop-session-button is-primary" onClick={handleFinishCrop} type="button">
+            {t('editor.externalEdit.done')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1988,6 +1988,95 @@
     padding-top: 6px;
   }
 
+  .crop-upright-block {
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border-color) 72%, transparent);
+    padding: 3px 0 9px;
+  }
+
+  .crop-upright-heading {
+    display: flex;
+    min-height: 22px;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--app-text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .crop-upright-modes {
+    display: grid;
+    overflow: hidden;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    border: 1px solid var(--app-border-color);
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--app-surface) 68%, transparent);
+  }
+
+  .crop-upright-mode {
+    display: flex;
+    min-width: 0;
+    height: 43px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-right: 1px solid var(--app-border-color);
+    color: var(--app-text-secondary);
+    font-size: 8px;
+    line-height: 1;
+    transition:
+      background-color 100ms ease-out,
+      color 100ms ease-out;
+  }
+
+  .crop-upright-mode:last-child {
+    border-right: 0;
+  }
+
+  .crop-upright-mode:hover:not(:disabled),
+  .crop-upright-mode:focus-visible {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .crop-upright-mode.is-active {
+    background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
+    color: var(--app-accent);
+  }
+
+  .crop-upright-mode:disabled {
+    cursor: wait;
+    opacity: 0.5;
+  }
+
+  .crop-upright-glyph {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 16px;
+  }
+
+  .crop-upright-guided-status {
+    display: flex;
+    min-height: 25px;
+    align-items: end;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 5px;
+    color: var(--app-text-tertiary, var(--app-text-secondary));
+    font-size: 9px;
+  }
+
+  .crop-upright-guided-status button {
+    color: var(--app-accent);
+    font-size: 9px;
+  }
+
+  .crop-upright-guided-status button:disabled {
+    color: var(--app-text-tertiary, var(--app-text-secondary));
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   .crop-geometry-group {
     border-top: 1px solid color-mix(in srgb, var(--app-border-color) 72%, transparent);
     padding: 7px 0 3px;
@@ -2003,6 +2092,41 @@
     color: var(--app-text-secondary);
     font-size: 10px;
     font-weight: 500;
+  }
+
+  .crop-panel-footer {
+    display: flex;
+    min-height: 45px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    border-top: 1px solid var(--app-border-color);
+    padding: 7px 11px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
+  }
+
+  .crop-session-button {
+    min-width: 68px;
+    height: 29px;
+    border: 1px solid var(--app-border-color);
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--app-surface) 75%, transparent);
+    color: var(--app-text-primary);
+    font-size: 11px;
+  }
+
+  .crop-session-button:hover,
+  .crop-session-button:focus-visible {
+    border-color: color-mix(in srgb, var(--app-text-secondary) 75%, var(--app-border-color));
+    background: var(--app-card-active);
+  }
+
+  .crop-session-button.is-primary {
+    border-color: color-mix(in srgb, var(--app-accent) 70%, var(--app-border-color));
+    background: var(--app-accent);
+    color: var(--app-accent-contrast, white);
+    font-weight: 600;
   }
 
   .camera-raw-crop.ReactCrop {

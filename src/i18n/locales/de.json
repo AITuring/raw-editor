@@ -566,7 +566,11 @@
         "switchToPortrait": "Zum Hochformat wechseln",
         "transform": "Perspektiv- und Trapezkorrektur",
         "unconstrainAspect": "Seitenverhältnis entsperren"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Zeichnen Sie zwei bis vier Linien, die horizontal oder vertikal sein sollen"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Fertig",

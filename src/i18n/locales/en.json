@@ -566,7 +566,22 @@
         "switchToPortrait": "Switch to portrait",
         "transform": "Perspective and keystone correction",
         "unconstrainAspect": "Unlock aspect ratio"
-      }
+      },
+      "upright": {
+        "auto": "Auto",
+        "autoTooltip": "Apply a balanced level and perspective correction",
+        "full": "Full",
+        "fullTooltip": "Correct level, vertical, and horizontal perspective",
+        "guided": "Guided",
+        "guidedTooltip": "Draw two to four lines that should be horizontal or vertical",
+        "level": "Level",
+        "levelTooltip": "Correct image level",
+        "off": "Off",
+        "offTooltip": "Remove the current Upright correction",
+        "vertical": "Vertical",
+        "verticalTooltip": "Correct level and converging vertical lines"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Done",

@@ -606,7 +606,11 @@
         "switchToPortrait": "Zmień na portret",
         "transform": "Korekcja perspektywy i keystone",
         "unconstrainAspect": "Odblokuj proporcje"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Narysuj od dwóch do czterech linii, które powinny być poziome lub pionowe"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Gotowe",

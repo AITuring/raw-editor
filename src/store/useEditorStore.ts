@@ -4,7 +4,7 @@ import { SelectedImage, WaveformData, BrushSettings } from '../components/ui/App
 import { ChannelConfig } from '../components/adjustments/Curves';
 import { ImageDimensions } from '../hooks/useImageRenderSize';
 import { ToolType } from '../components/panel/right/Masks';
-import type { CropGuideMode } from '../types/crop';
+import type { CropGuideMode, UprightGuide, UprightMode } from '../types/crop';
 import { LEGACY_DEFAULT_IMAGE_STATE, legacyStateToAdjustments } from '../basic/legacyAdjustmentAdapter';
 import { revokeImageObjectUrlLater } from '../utils/imageObjectUrl';
 
@@ -63,6 +63,9 @@ interface EditorState {
   cropGuideMode: CropGuideMode;
   cropGuideRotation: number;
   isStraightenActive: boolean;
+  uprightMode: UprightMode;
+  uprightGuides: UprightGuide[];
+  isGuidedUprightActive: boolean;
   isWbPickerActive: boolean;
   liveRotation: number | null;
   brushSettings: BrushSettings | null;
@@ -129,6 +132,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   cropGuideRotation: 0,
   transformedOriginalUrl: null,
   isStraightenActive: false,
+  uprightMode: 'off',
+  uprightGuides: [],
+  isGuidedUprightActive: false,
   isWbPickerActive: false,
   liveRotation: null,
 

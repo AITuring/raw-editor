@@ -586,7 +586,11 @@
         "switchToPortrait": "Cambiar a vertical",
         "transform": "Corrección de perspectiva y distorsión trapezoidal",
         "unconstrainAspect": "Liberar proporción"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Dibuja de dos a cuatro líneas que deban ser horizontales o verticales"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Listo",

@@ -564,7 +564,22 @@
         "switchToPortrait": "切换为纵向",
         "transform": "透视和梯形校正",
         "unconstrainAspect": "取消约束宽高比"
-      }
+      },
+      "upright": {
+        "auto": "自动",
+        "autoTooltip": "均衡校正水平与透视",
+        "full": "完全",
+        "fullTooltip": "校正水平、垂直与水平方向透视",
+        "guided": "引导",
+        "guidedTooltip": "绘制两到四条应当水平或垂直的线",
+        "level": "水平",
+        "levelTooltip": "校正画面水平",
+        "off": "关闭",
+        "offTooltip": "移除当前 Upright 校正",
+        "vertical": "垂直",
+        "verticalTooltip": "校正水平与汇聚的垂直线"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "完成",

@@ -79,7 +79,7 @@ use crate::cache_utils::{
     calculate_transform_hash, calculate_visual_hash, dynamic_image_weight,
 };
 use crate::color_management::srgb_preview_encoder;
-use crate::crop_analysis::StraightenAnalysis;
+use crate::crop_analysis::{StraightenAnalysis, UprightAnalysis, UprightMode};
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::formats::is_raw_file;
 use crate::hdr_deghosting::{align_hdr_frames, assert_uniform_dimensions, load_hdr_frames};
@@ -962,6 +962,53 @@ async fn analyze_crop_straighten(
     })
     .await
     .map_err(|error| format!("Straighten analysis worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn analyze_crop_upright(
+    mode: UprightMode,
+    js_adjustments: serde_json::Value,
+    state: tauri::State<'_, AppState>,
+) -> Result<UprightAnalysis, String> {
+    let mut analysis_adjustments = js_adjustments;
+    hydrate_adjustments(&state, &mut analysis_adjustments);
+    let orientation_steps = analysis_adjustments["orientationSteps"]
+        .as_u64()
+        .unwrap_or(0) as u8;
+
+    if let Some(object) = analysis_adjustments.as_object_mut() {
+        object.insert("crop".to_string(), serde_json::Value::Null);
+        object.insert("rotation".to_string(), serde_json::json!(0.0));
+        object.insert("transformVertical".to_string(), serde_json::json!(0.0));
+        object.insert("transformHorizontal".to_string(), serde_json::json!(0.0));
+        object.insert("transformRotate".to_string(), serde_json::json!(0.0));
+        object.insert("transformAspect".to_string(), serde_json::json!(0.0));
+        object.insert("transformScale".to_string(), serde_json::json!(100.0));
+        object.insert("transformXOffset".to_string(), serde_json::json!(0.0));
+        object.insert("transformYOffset".to_string(), serde_json::json!(0.0));
+    }
+
+    let loaded_image = state
+        .original_image
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("No original image loaded")?;
+
+    tokio::task::spawn_blocking(move || {
+        let mut analysis_image = downscale_f32_image(loaded_image.image.as_ref(), 1200, 1200);
+        if loaded_image.is_raw {
+            apply_cpu_default_raw_processing(&mut analysis_image);
+        }
+        let lens_corrected = apply_geometry_warp(Cow::Owned(analysis_image), &analysis_adjustments);
+        Ok(crop_analysis::analyze_upright(
+            lens_corrected.as_ref(),
+            mode,
+            orientation_steps,
+        ))
+    })
+    .await
+    .map_err(|error| format!("Upright analysis worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -2248,6 +2295,7 @@ pub fn run() {
             generate_preset_preview,
             generate_uncropped_preview,
             analyze_crop_straighten,
+            analyze_crop_upright,
             preview_geometry_transform,
             get_log_file_path,
             frontend_log,

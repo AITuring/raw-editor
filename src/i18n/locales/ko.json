@@ -564,7 +564,11 @@
         "switchToPortrait": "세로로 전환",
         "transform": "원근 및 키스톤 보정",
         "unconstrainAspect": "종횡비 제한 해제"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "수평 또는 수직이어야 하는 선을 2~4개 그리세요"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "완료",

@@ -9,6 +9,7 @@ interface GeometryPanelProps {
   adjustments: Adjustments;
   setAdjustments(adjustments: Partial<Adjustments> | ((previous: Adjustments) => Adjustments)): void;
   onDragStateChange?: (isDragging: boolean) => void;
+  onTransformChange?: () => void;
   compact?: boolean;
 }
 
@@ -16,11 +17,13 @@ export default function GeometryPanel({
   adjustments,
   setAdjustments,
   onDragStateChange,
+  onTransformChange,
   compact = false,
 }: GeometryPanelProps) {
   const { t } = useTranslation();
 
   const handleChange = (key: TransformAdjustment, value: string | number) => {
+    onTransformChange?.();
     setAdjustments((previous) => ({ ...previous, [key]: Number(value) }));
   };
 

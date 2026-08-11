@@ -3,6 +3,22 @@ export const CROP_GUIDE_MODES = ['thirds', 'grid', 'diagonal', 'goldenTriangle',
 export type VisibleCropGuideMode = (typeof CROP_GUIDE_MODES)[number];
 export type CropGuideMode = VisibleCropGuideMode | 'none';
 
+export type UprightMode = 'off' | 'auto' | 'level' | 'vertical' | 'full' | 'guided';
+
+export type UprightGuideAxis = 'horizontal' | 'vertical';
+
+export interface UprightGuidePoint {
+  x: number;
+  y: number;
+}
+
+export interface UprightGuide {
+  id: string;
+  axis: UprightGuideAxis;
+  start: UprightGuidePoint;
+  end: UprightGuidePoint;
+}
+
 export const ROTATABLE_CROP_GUIDES = new Set<CropGuideMode>(['goldenTriangle', 'goldenSpiral']);
 
 export const CROP_GUIDE_TRANSLATION_KEYS = {

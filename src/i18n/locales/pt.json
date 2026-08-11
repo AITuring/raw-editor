@@ -586,7 +586,11 @@
         "switchToPortrait": "Mudar para retrato",
         "transform": "Correção de perspectiva e keystone",
         "unconstrainAspect": "Desbloquear proporção"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Desenhe de duas a quatro linhas que devem ficar horizontais ou verticais"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Concluído",

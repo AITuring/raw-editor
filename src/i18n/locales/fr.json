@@ -586,7 +586,11 @@
         "switchToPortrait": "Basculer en portrait",
         "transform": "Correction de perspective et de trapèze",
         "unconstrainAspect": "Libérer les proportions"
-      }
+      },
+      "upright": {
+        "guidedTooltip": "Tracez deux à quatre lignes devant être horizontales ou verticales"
+      },
+      "uprightHeading": "Upright"
     },
     "externalEdit": {
       "done": "Terminé",

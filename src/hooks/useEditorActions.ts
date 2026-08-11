@@ -71,6 +71,7 @@ export function useEditorActions() {
                 newAspectRatio,
                 0,
                 adjustments.constrainCrop ?? true,
+                adjustments,
               )
           : null;
 

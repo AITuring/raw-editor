@@ -33,6 +33,7 @@ export const OPTION_SEPARATOR = 'separator';
 
 export enum Invokes {
   AnalyzeCropStraighten = 'analyze_crop_straighten',
+  AnalyzeCropUpright = 'analyze_crop_upright',
   AddTagForPaths = 'add_tag_for_paths',
   ApplyAdjustments = 'apply_adjustments',
   ApplyAdjustmentsToPaths = 'apply_adjustments_to_paths',
