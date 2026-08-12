@@ -49,6 +49,14 @@ assert.match(maskGeneration, /Option<SharedMaskBitmap>/);
 assert.match(maskGeneration, /return Some\(Arc::clone\(img\)\)/);
 assert.match(maskGeneration, /cache\.insert\(key, Arc::clone\(img\)/);
 assert.match(maskGeneration, /\*final_mask = Some\(sub_bitmap\)/);
+assert.match(maskGeneration, /enum TiledSubMaskRasterizer/);
+assert.match(maskGeneration, /let Some\(rasterizer\) = TiledSubMaskRasterizer::new\(sub_mask\)/);
+assert.match(maskGeneration, /rasterizer\.rasterize\(/);
+assert.match(maskGeneration, /"brush" \| "clone" \| "heal" =>/);
+assert.match(maskGeneration, /"radial" \| "linear" \| "all" => has_composition/);
+assert.match(maskGeneration, /step_by\(tile_edge as usize\)/);
+assert.match(maskGeneration, /\(tile_x, tile_y\)/);
+assert.match(maskGeneration, /GPU_TILE_SIZE/);
 assert.doesNotMatch(maskGeneration, /return Some\(img\.clone\(\)\)/);
 assert.doesNotMatch(mainShader, /get_mask_influence\(i, absolute_coord\)/);
 assert.equal(
@@ -130,6 +138,7 @@ const streamedBandBytes = 9504 * 2048 * 4;
 const geometryRgba32fBytes = pixels * 4 * 4;
 const activeMaskFullTextureBytes = pixels;
 const activeMaskTileTextureBytes = (2048 + 128 * 2) ** 2;
+const maskGenerationTileBytes = 2048 ** 2;
 assert.equal(oldEmptyMaskBytes, 120_434_688);
 assert.equal(oldAnalyticsCloneBytes, 240_869_376);
 assert.equal(oldUnchangedRgb32fCloneBytes, 722_608_128);
@@ -140,9 +149,12 @@ assert.equal(geometryRgba32fBytes, 963_477_504);
 assert.equal(activeMaskFullTextureBytes, 60_217_344);
 assert.equal(activeMaskTileTextureBytes, 5_308_416);
 assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
+assert.equal(activeMaskFullTextureBytes * 2 - (activeMaskFullTextureBytes + maskGenerationTileBytes), 56_023_040);
+assert.equal(activeMaskFullTextureBytes * 3 - (activeMaskFullTextureBytes + maskGenerationTileBytes * 2), 112_046_080);
 assert.match(packageJson.scripts['gpu-mask:check'], /tiled_mask_gpu_sampling/);
 assert.match(packageJson.scripts['synthetic-mask:bench'], /synthetic_60mp_mask_cache_ownership/);
+assert.match(packageJson.scripts['synthetic-mask-compose:bench'], /synthetic_60mp_mask_composition_scratch/);
 
 console.log(
-  'Validated four render tiers, shared CPU mask ownership, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, shared CPU mask ownership, bounded programmatic/brush mask generation, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

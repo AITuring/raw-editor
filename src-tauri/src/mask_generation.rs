@@ -15,6 +15,7 @@ use tauri::ipc::Response;
 
 use crate::app_state::{AppState, SharedMaskBitmap};
 use crate::get_cached_full_warped_image;
+use crate::render_strategy::GPU_TILE_SIZE;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(crate = "serde")]
@@ -346,6 +347,7 @@ fn stroke_bounds(
     radius: f32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
 ) -> Option<(u32, u32, u32, u32)> {
     if width == 0 || height == 0 || points.is_empty() {
         return None;
@@ -358,8 +360,8 @@ fn stroke_bounds(
     let r_pad = radius.ceil() + 2.0;
 
     for p in points {
-        let px = p.x as f32 * scale - crop_offset.0;
-        let py = p.y as f32 * scale - crop_offset.1;
+        let px = p.x as f32 * scale - crop_offset.0 - output_origin.0 as f32;
+        let py = p.y as f32 * scale - crop_offset.1 - output_origin.1 as f32;
 
         min_x = min_x.min(px - r_pad);
         min_y = min_y.min(py - r_pad);
@@ -390,6 +392,7 @@ fn render_stroke_layer_parallel(
     feather: f32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
     layer_offset: (f32, f32),
     bb_w: u32,
     bb_h: u32,
@@ -413,10 +416,10 @@ fn render_stroke_layer_parallel(
 
     let mut segments = Vec::with_capacity(points.len().saturating_sub(1));
     for pair in points.windows(2) {
-        let x1 = pair[0].x as f32 * scale - crop_offset.0 - layer_offset.0;
-        let y1 = pair[0].y as f32 * scale - crop_offset.1 - layer_offset.1;
-        let x2 = pair[1].x as f32 * scale - crop_offset.0 - layer_offset.0;
-        let y2 = pair[1].y as f32 * scale - crop_offset.1 - layer_offset.1;
+        let x1 = pair[0].x as f32 * scale - crop_offset.0 - output_origin.0 as f32 - layer_offset.0;
+        let y1 = pair[0].y as f32 * scale - crop_offset.1 - output_origin.1 as f32 - layer_offset.1;
+        let x2 = pair[1].x as f32 * scale - crop_offset.0 - output_origin.0 as f32 - layer_offset.0;
+        let y2 = pair[1].y as f32 * scale - crop_offset.1 - output_origin.1 as f32 - layer_offset.1;
 
         let left = ((x1.min(x2) - radius).floor() as i32).max(0);
         let right = ((x1.max(x2) + radius).ceil() as i32).min(bb_w as i32 - 1);
@@ -446,8 +449,10 @@ fn render_stroke_layer_parallel(
 
     let mut single_point = None;
     if segments.is_empty() && !points.is_empty() {
-        let x1 = points[0].x as f32 * scale - crop_offset.0 - layer_offset.0;
-        let y1 = points[0].y as f32 * scale - crop_offset.1 - layer_offset.1;
+        let x1 =
+            points[0].x as f32 * scale - crop_offset.0 - output_origin.0 as f32 - layer_offset.0;
+        let y1 =
+            points[0].y as f32 * scale - crop_offset.1 - output_origin.1 as f32 - layer_offset.1;
         let left = ((x1 - radius).floor() as i32).max(0);
         let right = ((x1 + radius).ceil() as i32).min(bb_w as i32 - 1);
         let top = ((y1 - radius).floor() as i32).max(0);
@@ -538,14 +543,13 @@ fn render_stroke_layer_parallel(
 }
 
 fn generate_radial_bitmap(
-    params_value: &Value,
+    params: &RadialMaskParameters,
     width: u32,
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
 ) -> GrayImage {
-    let params: RadialMaskParameters =
-        serde_json::from_value(params_value.clone()).unwrap_or_default();
     let mut mask = GrayImage::new(width, height);
 
     let center_x = (params.center_x as f32 * scale - crop_offset.0) as i32;
@@ -556,8 +560,8 @@ fn generate_radial_bitmap(
 
     for y in 0..height {
         for x in 0..width {
-            let dx = x as f32 - center_x as f32;
-            let dy = y as f32 - center_y as f32;
+            let dx = (x + output_origin.0) as f32 - center_x as f32;
+            let dy = (y + output_origin.1) as f32 - center_y as f32;
 
             let cos_rot = rotation_rad.cos();
             let sin_rot = rotation_rad.sin();
@@ -582,14 +586,13 @@ fn generate_radial_bitmap(
 }
 
 fn generate_linear_bitmap(
-    params_value: &Value,
+    params: &LinearMaskParameters,
     width: u32,
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
 ) -> GrayImage {
-    let params: LinearMaskParameters =
-        serde_json::from_value(params_value.clone()).unwrap_or_default();
     let mut mask = GrayImage::new(width, height);
 
     let start_x = params.start_x as f32 * scale - crop_offset.0;
@@ -614,8 +617,8 @@ fn generate_linear_bitmap(
 
     for y_u in 0..height {
         for x_u in 0..width {
-            let x = x_u as f32;
-            let y = y_u as f32;
+            let x = (x_u + output_origin.0) as f32;
+            let y = (y_u + output_origin.1) as f32;
 
             let pixel_vec_x = x - start_x;
             let pixel_vec_y = y - start_y;
@@ -636,14 +639,13 @@ fn generate_linear_bitmap(
 }
 
 fn generate_brush_bitmap(
-    params_value: &Value,
+    params: &BrushMaskParameters,
     width: u32,
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
 ) -> GrayImage {
-    let params: BrushMaskParameters =
-        serde_json::from_value(params_value.clone()).unwrap_or_default();
     let mut final_mask = GrayImage::new(width, height);
 
     for line in &params.lines {
@@ -655,9 +657,15 @@ fn generate_brush_bitmap(
         let radius = (line.brush_size * scale / 2.0).max(0.0);
         let feather = line.feather.clamp(0.0, 1.0);
 
-        let Some((min_x, min_y, max_x, max_y)) =
-            stroke_bounds(&line.points, width, height, radius, scale, crop_offset)
-        else {
+        let Some((min_x, min_y, max_x, max_y)) = stroke_bounds(
+            &line.points,
+            width,
+            height,
+            radius,
+            scale,
+            crop_offset,
+            output_origin,
+        ) else {
             continue;
         };
 
@@ -671,6 +679,7 @@ fn generate_brush_bitmap(
             feather,
             scale,
             crop_offset,
+            output_origin,
             layer_offset,
             bb_w,
             bb_h,
@@ -703,14 +712,13 @@ fn generate_brush_bitmap(
 }
 
 fn generate_flow_bitmap(
-    params_value: &Value,
+    params: &FlowMaskParameters,
     width: u32,
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
+    output_origin: (u32, u32),
 ) -> GrayImage {
-    let params: FlowMaskParameters =
-        serde_json::from_value(params_value.clone()).unwrap_or_default();
     let mut final_mask = GrayImage::new(width, height);
 
     for line in &params.lines {
@@ -723,9 +731,15 @@ fn generate_flow_bitmap(
         let radius = (line.brush_size * scale / 2.0).max(0.0);
         let feather = line.feather.clamp(0.0, 1.0);
 
-        let Some((min_x, min_y, max_x, max_y)) =
-            stroke_bounds(&line.points, width, height, radius, scale, crop_offset)
-        else {
+        let Some((min_x, min_y, max_x, max_y)) = stroke_bounds(
+            &line.points,
+            width,
+            height,
+            radius,
+            scale,
+            crop_offset,
+            output_origin,
+        ) else {
             continue;
         };
 
@@ -739,6 +753,7 @@ fn generate_flow_bitmap(
             feather,
             scale,
             crop_offset,
+            output_origin,
             layer_offset,
             bb_w,
             bb_h,
@@ -1256,34 +1271,54 @@ fn generate_sub_mask_bitmap(
     }
 
     match sub_mask.mask_type.as_str() {
-        "radial" => Some(generate_radial_bitmap(
-            &sub_mask.parameters,
-            width,
-            height,
-            scale,
-            crop_offset,
-        )),
-        "linear" => Some(generate_linear_bitmap(
-            &sub_mask.parameters,
-            width,
-            height,
-            scale,
-            crop_offset,
-        )),
-        "brush" | "clone" | "heal" => Some(generate_brush_bitmap(
-            &sub_mask.parameters,
-            width,
-            height,
-            scale,
-            crop_offset,
-        )),
-        "flow" => Some(generate_flow_bitmap(
-            &sub_mask.parameters,
-            width,
-            height,
-            scale,
-            crop_offset,
-        )),
+        "radial" => {
+            let parameters =
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default();
+            Some(generate_radial_bitmap(
+                &parameters,
+                width,
+                height,
+                scale,
+                crop_offset,
+                (0, 0),
+            ))
+        }
+        "linear" => {
+            let parameters =
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default();
+            Some(generate_linear_bitmap(
+                &parameters,
+                width,
+                height,
+                scale,
+                crop_offset,
+                (0, 0),
+            ))
+        }
+        "brush" | "clone" | "heal" => {
+            let parameters =
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default();
+            Some(generate_brush_bitmap(
+                &parameters,
+                width,
+                height,
+                scale,
+                crop_offset,
+                (0, 0),
+            ))
+        }
+        "flow" => {
+            let parameters =
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default();
+            Some(generate_flow_bitmap(
+                &parameters,
+                width,
+                height,
+                scale,
+                crop_offset,
+                (0, 0),
+            ))
+        }
         "color" => generate_color_bitmap(
             &sub_mask.parameters,
             width,
@@ -1318,6 +1353,60 @@ fn generate_sub_mask_bitmap(
     }
 }
 
+enum TiledSubMaskRasterizer {
+    Radial(RadialMaskParameters),
+    Linear(LinearMaskParameters),
+    Brush(BrushMaskParameters),
+    Flow(FlowMaskParameters),
+    All,
+}
+
+impl TiledSubMaskRasterizer {
+    fn new(sub_mask: &SubMask) -> Option<Self> {
+        match sub_mask.mask_type.as_str() {
+            "radial" => Some(Self::Radial(
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default(),
+            )),
+            "linear" => Some(Self::Linear(
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default(),
+            )),
+            "brush" | "clone" | "heal" => Some(Self::Brush(
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default(),
+            )),
+            "flow" => Some(Self::Flow(
+                serde_json::from_value(sub_mask.parameters.clone()).unwrap_or_default(),
+            )),
+            "all" => Some(Self::All),
+            _ => None,
+        }
+    }
+
+    fn rasterize(
+        &self,
+        width: u32,
+        height: u32,
+        scale: f32,
+        crop_offset: (f32, f32),
+        output_origin: (u32, u32),
+    ) -> GrayImage {
+        match self {
+            Self::Radial(parameters) => {
+                generate_radial_bitmap(parameters, width, height, scale, crop_offset, output_origin)
+            }
+            Self::Linear(parameters) => {
+                generate_linear_bitmap(parameters, width, height, scale, crop_offset, output_origin)
+            }
+            Self::Brush(parameters) => {
+                generate_brush_bitmap(parameters, width, height, scale, crop_offset, output_origin)
+            }
+            Self::Flow(parameters) => {
+                generate_flow_bitmap(parameters, width, height, scale, crop_offset, output_origin)
+            }
+            Self::All => generate_all_bitmap(width, height),
+        }
+    }
+}
+
 pub fn generate_mask_bitmap(
     mask_def: &MaskDefinition,
     width: u32,
@@ -1339,22 +1428,14 @@ pub fn generate_mask_bitmap(
         if final_mask.is_none() && sub_mask.mode != SubMaskMode::Additive {
             continue;
         }
+        if should_generate_sub_mask_in_tiles(sub_mask, final_mask.is_some()) {
+            composite_sub_mask_tiled(&mut final_mask, sub_mask, width, height, scale, crop_offset);
+            continue;
+        }
         if let Some(mut sub_bitmap) =
             generate_sub_mask_bitmap(sub_mask, width, height, scale, crop_offset, warped_image)
         {
-            if sub_mask.invert {
-                for p in sub_bitmap.pixels_mut() {
-                    p[0] = 255 - p[0];
-                }
-            }
-
-            let opacity_multiplier = (sub_mask.opacity / 100.0).clamp(0.0, 1.0);
-            if opacity_multiplier < 1.0 {
-                for pixel in sub_bitmap.pixels_mut() {
-                    pixel[0] = (pixel[0] as f32 * opacity_multiplier) as u8;
-                }
-            }
-
+            apply_sub_mask_modifiers(&mut sub_bitmap, sub_mask);
             composite_sub_mask(&mut final_mask, sub_bitmap, sub_mask.mode);
         }
     }
@@ -1375,6 +1456,119 @@ pub fn generate_mask_bitmap(
     }
 
     Some(final_mask)
+}
+
+fn should_generate_sub_mask_in_tiles(sub_mask: &SubMask, has_composition: bool) -> bool {
+    if !sub_mask.visible {
+        return false;
+    }
+    match sub_mask.mask_type.as_str() {
+        // Brush and flow generators otherwise hold their full-frame result plus a stroke layer.
+        "brush" | "clone" | "heal" => {
+            serde_json::from_value::<BrushMaskParameters>(sub_mask.parameters.clone())
+                .is_ok_and(|parameters| parameters.lines.iter().any(|line| !line.points.is_empty()))
+        }
+        "flow" => serde_json::from_value::<FlowMaskParameters>(sub_mask.parameters.clone())
+            .is_ok_and(|parameters| parameters.lines.iter().any(|line| !line.points.is_empty())),
+        // The first pointwise additive mask can become the output allocation directly. Later
+        // masks use bounded tiles so composition never needs a second full-frame bitmap.
+        "radial" | "linear" | "all" => has_composition,
+        _ => false,
+    }
+}
+
+fn apply_sub_mask_modifiers(bitmap: &mut GrayImage, sub_mask: &SubMask) {
+    if sub_mask.invert {
+        for pixel in bitmap.pixels_mut() {
+            pixel[0] = 255 - pixel[0];
+        }
+    }
+
+    let opacity_multiplier = (sub_mask.opacity / 100.0).clamp(0.0, 1.0);
+    if opacity_multiplier < 1.0 {
+        for pixel in bitmap.pixels_mut() {
+            pixel[0] = (pixel[0] as f32 * opacity_multiplier) as u8;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn composite_sub_mask_tiled(
+    final_mask: &mut Option<GrayImage>,
+    sub_mask: &SubMask,
+    width: u32,
+    height: u32,
+    scale: f32,
+    crop_offset: (f32, f32),
+) {
+    composite_sub_mask_tiled_with_edge(
+        final_mask,
+        sub_mask,
+        width,
+        height,
+        scale,
+        crop_offset,
+        GPU_TILE_SIZE,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn composite_sub_mask_tiled_with_edge(
+    final_mask: &mut Option<GrayImage>,
+    sub_mask: &SubMask,
+    width: u32,
+    height: u32,
+    scale: f32,
+    crop_offset: (f32, f32),
+    tile_edge: u32,
+) {
+    debug_assert!(tile_edge > 0);
+    debug_assert!(final_mask.is_some() || sub_mask.mode == SubMaskMode::Additive);
+    let Some(rasterizer) = TiledSubMaskRasterizer::new(sub_mask) else {
+        return;
+    };
+    let output = final_mask.get_or_insert_with(|| GrayImage::new(width, height));
+
+    for tile_y in (0..height).step_by(tile_edge as usize) {
+        let tile_height = (height - tile_y).min(tile_edge);
+        for tile_x in (0..width).step_by(tile_edge as usize) {
+            let tile_width = (width - tile_x).min(tile_edge);
+            let mut tile = rasterizer.rasterize(
+                tile_width,
+                tile_height,
+                scale,
+                crop_offset,
+                (tile_x, tile_y),
+            );
+            apply_sub_mask_modifiers(&mut tile, sub_mask);
+            composite_sub_mask_tile(output, &tile, tile_x, tile_y, sub_mask.mode);
+        }
+    }
+}
+
+fn composite_sub_mask_tile(
+    final_mask: &mut GrayImage,
+    tile: &GrayImage,
+    tile_x: u32,
+    tile_y: u32,
+    mode: SubMaskMode,
+) {
+    let (output_width, output_height) = final_mask.dimensions();
+    let (tile_width, tile_height) = tile.dimensions();
+    debug_assert!(tile_x.saturating_add(tile_width) <= output_width);
+    debug_assert!(tile_y.saturating_add(tile_height) <= output_height);
+
+    let output_width = output_width as usize;
+    let tile_width = tile_width as usize;
+    for row in 0..tile_height as usize {
+        let output_start = (tile_y as usize + row) * output_width + tile_x as usize;
+        let tile_start = row * tile_width;
+        composite_mask_pixels(
+            &mut final_mask.as_mut()[output_start..output_start + tile_width],
+            &tile.as_raw()[tile_start..tile_start + tile_width],
+            mode,
+        );
+    }
 }
 
 fn composite_sub_mask(
@@ -1400,18 +1594,23 @@ fn composite_sub_mask(
         .as_mut()
         .expect("mask allocation checked above")
         .as_mut();
+    composite_mask_pixels(final_raw, sub_bitmap.as_raw(), mode);
+}
+
+fn composite_mask_pixels(output: &mut [u8], input: &[u8], mode: SubMaskMode) {
+    debug_assert_eq!(output.len(), input.len());
     match mode {
-        SubMaskMode::Additive => final_raw
+        SubMaskMode::Additive => output
             .iter_mut()
-            .zip(sub_bitmap.as_raw())
+            .zip(input)
             .for_each(|(output, input)| *output = (*output).max(*input)),
-        SubMaskMode::Subtractive => final_raw
+        SubMaskMode::Subtractive => output
             .iter_mut()
-            .zip(sub_bitmap.as_raw())
+            .zip(input)
             .for_each(|(output, input)| *output = output.saturating_sub(*input)),
-        SubMaskMode::Intersect => final_raw
+        SubMaskMode::Intersect => output
             .iter_mut()
-            .zip(sub_bitmap.as_raw())
+            .zip(input)
             .for_each(|(output, input)| *output = (*output).min(*input)),
     }
 }
@@ -1610,6 +1809,322 @@ mod tests {
         assert!(Arc::ptr_eq(&mask, &caller));
         assert_eq!(mask.as_raw().as_ptr(), caller.as_raw().as_ptr());
         assert_eq!(MASK_BYTES * 2 - MASK_BYTES, MASK_BYTES);
+    }
+
+    fn test_sub_mask(mask_type: &str, parameters: Value, mode: SubMaskMode) -> SubMask {
+        SubMask {
+            id: format!("test-{mask_type}"),
+            mask_type: mask_type.to_string(),
+            visible: true,
+            invert: true,
+            opacity: 63.0,
+            mode,
+            parameters,
+        }
+    }
+
+    fn brush_parameters(flow: bool) -> Value {
+        let first_line = if flow {
+            serde_json::json!({
+                "tool": "brush",
+                "brushSize": 29.0,
+                "feather": 0.37,
+                "flow": 42.0,
+                "points": [{ "x": 8.0, "y": 12.0 }, { "x": 128.0, "y": 91.0 }]
+            })
+        } else {
+            serde_json::json!({
+                "tool": "brush",
+                "brushSize": 29.0,
+                "feather": 0.37,
+                "points": [{ "x": 8.0, "y": 12.0 }, { "x": 128.0, "y": 91.0 }]
+            })
+        };
+        let eraser_line = if flow {
+            serde_json::json!({
+                "tool": "eraser",
+                "brushSize": 17.0,
+                "feather": 0.61,
+                "flow": 73.0,
+                "points": [{ "x": 76.0, "y": 5.0 }, { "x": 65.0, "y": 104.0 }]
+            })
+        } else {
+            serde_json::json!({
+                "tool": "eraser",
+                "brushSize": 17.0,
+                "feather": 0.61,
+                "points": [{ "x": 76.0, "y": 5.0 }, { "x": 65.0, "y": 104.0 }]
+            })
+        };
+        serde_json::json!({ "lines": [first_line, eraser_line] })
+    }
+
+    #[test]
+    fn tiled_programmatic_and_brush_composition_matches_full_frame_across_seams() {
+        const WIDTH: u32 = 141;
+        const HEIGHT: u32 = 109;
+        const TEST_TILE_EDGE: u32 = 64;
+        const SCALE: f32 = 1.25;
+        const CROP_OFFSET: (f32, f32) = (11.5, 7.25);
+
+        let cases = [
+            (
+                "radial",
+                serde_json::json!({
+                    "centerX": 61.0,
+                    "centerY": 47.0,
+                    "radiusX": 54.0,
+                    "radiusY": 31.0,
+                    "rotation": 23.0,
+                    "feather": 0.41
+                }),
+            ),
+            (
+                "linear",
+                serde_json::json!({
+                    "startX": 17.0,
+                    "startY": 19.0,
+                    "endX": 119.0,
+                    "endY": 88.0,
+                    "range": 38.0
+                }),
+            ),
+            ("brush", brush_parameters(false)),
+            ("clone", brush_parameters(false)),
+            ("heal", brush_parameters(false)),
+            ("flow", brush_parameters(true)),
+            ("all", serde_json::json!({})),
+        ];
+        let modes = [
+            SubMaskMode::Additive,
+            SubMaskMode::Subtractive,
+            SubMaskMode::Intersect,
+        ];
+
+        for (mask_type, parameters) in cases {
+            for mode in modes {
+                let sub_mask = test_sub_mask(mask_type, parameters.clone(), mode);
+                let base = GrayImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                    Luma([x.wrapping_mul(11).wrapping_add(y * 7) as u8])
+                });
+
+                let mut expected = Some(base.clone());
+                let mut full_sub_mask =
+                    generate_sub_mask_bitmap(&sub_mask, WIDTH, HEIGHT, SCALE, CROP_OFFSET, None)
+                        .expect("test mask type should rasterize");
+                apply_sub_mask_modifiers(&mut full_sub_mask, &sub_mask);
+                composite_sub_mask(&mut expected, full_sub_mask, mode);
+
+                let mut actual = Some(base);
+                composite_sub_mask_tiled_with_edge(
+                    &mut actual,
+                    &sub_mask,
+                    WIDTH,
+                    HEIGHT,
+                    SCALE,
+                    CROP_OFFSET,
+                    TEST_TILE_EDGE,
+                );
+
+                let actual = actual.expect("tiled composition output");
+                let expected = expected.expect("full-frame composition output");
+                let first_difference = actual
+                    .as_raw()
+                    .iter()
+                    .zip(expected.as_raw())
+                    .position(|(actual, expected)| actual != expected)
+                    .map(|index| {
+                        (
+                            index as u32 % WIDTH,
+                            index as u32 / WIDTH,
+                            actual.as_raw()[index],
+                            expected.as_raw()[index],
+                        )
+                    });
+                assert_eq!(
+                    first_difference, None,
+                    "{mask_type} {mode:?} changed at a tile boundary"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn first_brush_and_flow_submasks_match_full_frame_when_generated_in_tiles() {
+        const WIDTH: u32 = 141;
+        const HEIGHT: u32 = 109;
+
+        for (mask_type, parameters) in [
+            ("brush", brush_parameters(false)),
+            ("flow", brush_parameters(true)),
+        ] {
+            let sub_mask = test_sub_mask(mask_type, parameters, SubMaskMode::Additive);
+            let mut expected_sub_mask =
+                generate_sub_mask_bitmap(&sub_mask, WIDTH, HEIGHT, 1.0, (0.0, 0.0), None)
+                    .expect("brush-like test mask should rasterize");
+            apply_sub_mask_modifiers(&mut expected_sub_mask, &sub_mask);
+
+            let mut actual = None;
+            composite_sub_mask_tiled_with_edge(
+                &mut actual,
+                &sub_mask,
+                WIDTH,
+                HEIGHT,
+                1.0,
+                (0.0, 0.0),
+                64,
+            );
+
+            assert_eq!(actual, Some(expected_sub_mask), "{mask_type}");
+        }
+    }
+
+    #[test]
+    fn tiled_generation_bounds_60mp_programmatic_and_brush_scratch() {
+        const WIDTH: usize = 9_504;
+        const HEIGHT: usize = 6_336;
+        const FULL_MASK_BYTES: usize = 60_217_344;
+        const MAX_TILE_BYTES: usize = 4_194_304;
+
+        assert_eq!(WIDTH * HEIGHT, FULL_MASK_BYTES);
+        assert_eq!(
+            WIDTH.min(GPU_TILE_SIZE as usize) * HEIGHT.min(GPU_TILE_SIZE as usize),
+            MAX_TILE_BYTES
+        );
+        assert_eq!(
+            FULL_MASK_BYTES * 2 - (FULL_MASK_BYTES + MAX_TILE_BYTES),
+            56_023_040
+        );
+        assert_eq!(
+            FULL_MASK_BYTES * 3 - (FULL_MASK_BYTES + MAX_TILE_BYTES * 2),
+            112_046_080
+        );
+    }
+
+    #[test]
+    fn tiled_generation_routes_only_pixel_local_nonempty_submasks() {
+        let radial = test_sub_mask("radial", serde_json::json!({}), SubMaskMode::Additive);
+        assert!(!should_generate_sub_mask_in_tiles(&radial, false));
+        assert!(should_generate_sub_mask_in_tiles(&radial, true));
+
+        let brush = test_sub_mask("brush", brush_parameters(false), SubMaskMode::Additive);
+        assert!(should_generate_sub_mask_in_tiles(&brush, false));
+
+        let mut empty_brush = brush.clone();
+        empty_brush.parameters = serde_json::json!({ "lines": [] });
+        assert!(!should_generate_sub_mask_in_tiles(&empty_brush, false));
+
+        let mut hidden_brush = brush;
+        hidden_brush.visible = false;
+        assert!(!should_generate_sub_mask_in_tiles(&hidden_brush, true));
+
+        let color = test_sub_mask("color", serde_json::json!({}), SubMaskMode::Additive);
+        assert!(!should_generate_sub_mask_in_tiles(&color, true));
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP mask composition scratch benchmark"]
+    fn synthetic_60mp_mask_composition_scratch_harness() {
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode = std::env::var("RAW_EDITOR_MASK_COMPOSITION_BENCH_MODE")
+            .unwrap_or_else(|_| "tiled".to_string());
+        assert!(matches!(mode.as_str(), "full" | "tiled"));
+
+        let mut composition = GrayImage::from_pixel(width, height, Luma([17]));
+        let pid = sysinfo::get_current_pid().expect("resolve benchmark process id");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read benchmark process after output allocation")
+            .memory();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let started = Instant::now();
+        if mode == "full" {
+            let full_sub_mask = GrayImage::from_fn(width, height, |x, y| {
+                Luma([x.wrapping_mul(17).wrapping_add(y * 13) as u8])
+            });
+            std::thread::sleep(Duration::from_millis(10));
+            let mut output = Some(composition);
+            composite_sub_mask(&mut output, full_sub_mask, SubMaskMode::Additive);
+            composition = output.expect("full-frame composition output");
+        } else {
+            for tile_y in (0..height).step_by(GPU_TILE_SIZE as usize) {
+                let tile_height = (height - tile_y).min(GPU_TILE_SIZE);
+                for tile_x in (0..width).step_by(GPU_TILE_SIZE as usize) {
+                    let tile_width = (width - tile_x).min(GPU_TILE_SIZE);
+                    let tile = GrayImage::from_fn(tile_width, tile_height, |x, y| {
+                        Luma([(x + tile_x)
+                            .wrapping_mul(17)
+                            .wrapping_add((y + tile_y) * 13) as u8])
+                    });
+                    if tile_x == 0 && tile_y == 0 {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    composite_sub_mask_tile(
+                        &mut composition,
+                        &tile,
+                        tile_x,
+                        tile_y,
+                        SubMaskMode::Additive,
+                    );
+                }
+            }
+        }
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(10));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join mask composition RSS sampler");
+
+        let sample_stride = (composition.as_raw().len() / 4_096).max(1);
+        let sample_hash = composition
+            .as_raw()
+            .iter()
+            .step_by(sample_stride)
+            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, sample| {
+                (hash ^ u64::from(*sample)).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        let peak_rss = peak_rss.load(Ordering::Relaxed);
+        let expected_scratch_bytes = if mode == "full" {
+            u64::from(width) * u64::from(height)
+        } else {
+            u64::from(width.min(GPU_TILE_SIZE)) * u64::from(height.min(GPU_TILE_SIZE))
+        };
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"expectedScratchBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss,
+            peak_rss.saturating_sub(baseline_rss),
+            expected_scratch_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(composition);
     }
 
     #[test]
