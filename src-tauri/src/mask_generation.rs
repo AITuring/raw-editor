@@ -13,7 +13,7 @@ use std::io::Cursor;
 use std::sync::Arc; // Required for parallel rasterization
 use tauri::ipc::Response;
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, SharedMaskBitmap};
 use crate::get_cached_full_warped_image;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1330,9 +1330,15 @@ pub fn generate_mask_bitmap(
         return None;
     }
 
-    let mut final_mask = GrayImage::new(width, height);
+    let mut final_mask: Option<GrayImage> = None;
 
     for sub_mask in &mask_def.sub_masks {
+        // The historical composition starts from black. Subtractive and intersect masks cannot
+        // change that state, so defer the first allocation/generation until an additive mask can
+        // become the output buffer itself.
+        if final_mask.is_none() && sub_mask.mode != SubMaskMode::Additive {
+            continue;
+        }
         if let Some(mut sub_bitmap) =
             generate_sub_mask_bitmap(sub_mask, width, height, scale, crop_offset, warped_image)
         {
@@ -1349,28 +1355,11 @@ pub fn generate_mask_bitmap(
                 }
             }
 
-            match sub_mask.mode {
-                SubMaskMode::Additive => {
-                    for (x, y, pixel) in final_mask.enumerate_pixels_mut() {
-                        let sub_pixel = sub_bitmap.get_pixel(x, y);
-                        pixel[0] = pixel[0].max(sub_pixel[0]);
-                    }
-                }
-                SubMaskMode::Subtractive => {
-                    for (x, y, pixel) in final_mask.enumerate_pixels_mut() {
-                        let sub_pixel = sub_bitmap.get_pixel(x, y);
-                        pixel[0] = pixel[0].saturating_sub(sub_pixel[0]);
-                    }
-                }
-                SubMaskMode::Intersect => {
-                    for (x, y, pixel) in final_mask.enumerate_pixels_mut() {
-                        let sub_pixel = sub_bitmap.get_pixel(x, y);
-                        pixel[0] = pixel[0].min(sub_pixel[0]);
-                    }
-                }
-            }
+            composite_sub_mask(&mut final_mask, sub_bitmap, sub_mask.mode);
         }
     }
+
+    let mut final_mask = final_mask.unwrap_or_else(|| GrayImage::new(width, height));
 
     if mask_def.invert {
         for pixel in final_mask.pixels_mut() {
@@ -1386,6 +1375,45 @@ pub fn generate_mask_bitmap(
     }
 
     Some(final_mask)
+}
+
+fn composite_sub_mask(
+    final_mask: &mut Option<GrayImage>,
+    sub_bitmap: GrayImage,
+    mode: SubMaskMode,
+) {
+    if final_mask.is_none() {
+        if mode == SubMaskMode::Additive {
+            *final_mask = Some(sub_bitmap);
+        }
+        return;
+    }
+
+    debug_assert_eq!(
+        final_mask
+            .as_ref()
+            .expect("mask allocation checked above")
+            .dimensions(),
+        sub_bitmap.dimensions()
+    );
+    let final_raw = final_mask
+        .as_mut()
+        .expect("mask allocation checked above")
+        .as_mut();
+    match mode {
+        SubMaskMode::Additive => final_raw
+            .iter_mut()
+            .zip(sub_bitmap.as_raw())
+            .for_each(|(output, input)| *output = (*output).max(*input)),
+        SubMaskMode::Subtractive => final_raw
+            .iter_mut()
+            .zip(sub_bitmap.as_raw())
+            .for_each(|(output, input)| *output = output.saturating_sub(*input)),
+        SubMaskMode::Intersect => final_raw
+            .iter_mut()
+            .zip(sub_bitmap.as_raw())
+            .for_each(|(output, input)| *output = (*output).min(*input)),
+    }
 }
 
 #[tauri::command]
@@ -1462,7 +1490,7 @@ pub fn get_cached_or_generate_mask(
     scale: f32,
     crop_offset: (f32, f32),
     adjustments: &serde_json::Value,
-) -> Option<GrayImage> {
+) -> Option<SharedMaskBitmap> {
     let mut hasher = DefaultHasher::new();
 
     let mut def_for_hash = def.clone();
@@ -1481,7 +1509,7 @@ pub fn get_cached_or_generate_mask(
     {
         let mut cache = state.mask_cache.lock().unwrap();
         if let Some(img) = cache.get(&key) {
-            return Some(img.clone());
+            return Some(Arc::clone(img));
         }
     }
 
@@ -1495,12 +1523,197 @@ pub fn get_cached_or_generate_mask(
         scale,
         crop_offset,
         warped_image.as_deref(),
-    );
+    )
+    .map(Arc::new);
 
     if let Some(img) = &generated {
         let mut cache = state.mask_cache.lock().unwrap();
-        cache.insert(key, img.clone(), img.as_raw().len());
+        cache.insert(key, Arc::clone(img), img.as_raw().len());
     }
 
     generated
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
+
+    use super::*;
+    use crate::cache_utils::BudgetedCache;
+
+    #[test]
+    fn first_additive_submask_reuses_its_pixel_allocation() {
+        let additive = GrayImage::from_fn(17, 11, |x, y| Luma([((x * 13 + y * 7) % 256) as u8]));
+        let additive_ptr = additive.as_raw().as_ptr();
+        let expected = additive.clone();
+        let mut composed = None;
+
+        composite_sub_mask(&mut composed, additive, SubMaskMode::Additive);
+
+        let composed = composed.expect("additive bitmap becomes the composition base");
+        assert_eq!(composed.as_raw().as_ptr(), additive_ptr);
+        assert_eq!(composed, expected);
+    }
+
+    #[test]
+    fn lazy_mask_composition_preserves_black_base_semantics() {
+        let mut composed = None;
+        composite_sub_mask(
+            &mut composed,
+            GrayImage::from_pixel(5, 3, Luma([200])),
+            SubMaskMode::Subtractive,
+        );
+        composite_sub_mask(
+            &mut composed,
+            GrayImage::from_pixel(5, 3, Luma([100])),
+            SubMaskMode::Intersect,
+        );
+        assert!(composed.is_none());
+
+        composite_sub_mask(
+            &mut composed,
+            GrayImage::from_pixel(5, 3, Luma([180])),
+            SubMaskMode::Additive,
+        );
+        composite_sub_mask(
+            &mut composed,
+            GrayImage::from_pixel(5, 3, Luma([30])),
+            SubMaskMode::Subtractive,
+        );
+        composite_sub_mask(
+            &mut composed,
+            GrayImage::from_pixel(5, 3, Luma([120])),
+            SubMaskMode::Intersect,
+        );
+
+        assert!(
+            composed
+                .expect("additive submask establishes the output")
+                .pixels()
+                .all(|pixel| pixel[0] == 120)
+        );
+    }
+
+    #[test]
+    fn shared_mask_cache_keeps_one_60mp_pixel_allocation() {
+        const WIDTH: usize = 9_504;
+        const HEIGHT: usize = 6_336;
+        const MASK_BYTES: usize = 60_217_344;
+
+        assert_eq!(WIDTH * HEIGHT, MASK_BYTES);
+        let mask = Arc::new(GrayImage::from_pixel(7, 5, Luma([123])));
+        let mut cache = BudgetedCache::new(2, 1_024);
+        assert!(cache.insert(42_u64, Arc::clone(&mask), mask.as_raw().len()));
+        let caller = Arc::clone(cache.get(&42).expect("shared mask cache hit"));
+
+        assert!(Arc::ptr_eq(&mask, &caller));
+        assert_eq!(mask.as_raw().as_ptr(), caller.as_raw().as_ptr());
+        assert_eq!(MASK_BYTES * 2 - MASK_BYTES, MASK_BYTES);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP mask cache ownership benchmark"]
+    fn synthetic_60mp_mask_cache_ownership_harness() {
+        enum Fixture {
+            Cloned {
+                cache: GrayImage,
+                caller: GrayImage,
+            },
+            Shared {
+                cache: Arc<GrayImage>,
+                caller: Arc<GrayImage>,
+            },
+        }
+
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode =
+            std::env::var("RAW_EDITOR_MASK_BENCH_MODE").unwrap_or_else(|_| "shared".to_string());
+        assert!(matches!(mode.as_str(), "shared" | "cloned"));
+
+        let pid = sysinfo::get_current_pid().expect("resolve benchmark process id");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read benchmark process before mask allocation")
+            .memory();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+
+        let started = Instant::now();
+        let source = GrayImage::from_fn(width, height, |x, y| {
+            Luma([x.wrapping_mul(17).wrapping_add(y * 13) as u8])
+        });
+        let fixture = if mode == "cloned" {
+            Fixture::Cloned {
+                caller: source.clone(),
+                cache: source,
+            }
+        } else {
+            let cache = Arc::new(source);
+            Fixture::Shared {
+                caller: Arc::clone(&cache),
+                cache,
+            }
+        };
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(25));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join mask RSS sampler");
+
+        let (cache_raw, caller_raw, shared_allocation) = match &fixture {
+            Fixture::Cloned { cache, caller } => (cache.as_raw(), caller.as_raw(), false),
+            Fixture::Shared { cache, caller } => {
+                assert!(Arc::ptr_eq(cache, caller));
+                (cache.as_raw(), caller.as_raw(), true)
+            }
+        };
+        assert_eq!(cache_raw, caller_raw);
+        let sample_stride = (cache_raw.len() / 4_096).max(1);
+        let sample_hash = cache_raw
+            .iter()
+            .step_by(sample_stride)
+            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, sample| {
+                (hash ^ u64::from(*sample)).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        let mask_bytes = u64::from(width) * u64::from(height);
+        let expected_live_pixel_bytes = mask_bytes * if shared_allocation { 1 } else { 2 };
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"maskBytes\":{},\"expectedLivePixelBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss.load(Ordering::Relaxed),
+            peak_rss
+                .load(Ordering::Relaxed)
+                .saturating_sub(baseline_rss),
+            mask_bytes,
+            expected_live_pixel_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(fixture);
+    }
 }

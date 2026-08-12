@@ -47,6 +47,7 @@ use tiff::tags::{Tag as TiffTag, Type as TiffType};
 use zenresize::{Filter as StreamingResizeFilter, PixelDescriptor, ResizeConfig, StreamingResize};
 
 use crate::AppState;
+use crate::app_state::SharedMaskBitmap;
 use crate::exif_processing;
 use crate::file_management::{
     generate_filename_from_template, parse_virtual_path, read_file_mapped,
@@ -638,7 +639,7 @@ impl Drop for ExportTaskGuard {
 
 struct PreparedExportRender<'a> {
     image: Cow<'a, DynamicImage>,
-    mask_bitmaps: Vec<GrayImage>,
+    mask_bitmaps: Vec<SharedMaskBitmap>,
     adjustments: AllAdjustments,
     lut: Option<Arc<Lut>>,
     unique_hash: u64,
@@ -671,7 +672,7 @@ fn prepare_export_render<'a>(
         .unwrap_or_default();
 
     let warped_image = resolve_warped_image_for_masks(state, js_adjustments, &mask_definitions);
-    let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+    let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
         .iter()
         .filter_map(|def| {
             generate_mask_bitmap(
@@ -682,6 +683,7 @@ fn prepare_export_render<'a>(
                 unscaled_crop_offset,
                 warped_image.as_deref(),
             )
+            .map(Arc::new)
         })
         .collect();
 
@@ -2385,7 +2387,7 @@ fn export_masks_for_image(
             unscaled_crop_offset,
             warped_image.as_deref(),
         ) {
-            mask_bitmaps.push(bitmap);
+            mask_bitmaps.push(Arc::new(bitmap));
         }
         ensure_export_not_cancelled(cancellation_token)?;
     }
@@ -2410,7 +2412,7 @@ fn export_masks_for_image(
             ensure_export_not_cancelled(cancellation_token)?;
             let single_adjustments = build_single_mask_adjustments(&all_adjustments, i);
             let full_white_mask = ImageBuffer::from_fn(img_w, img_h, |_, _| Luma([255u8]));
-            let single_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = vec![full_white_mask];
+            let single_bitmaps: Vec<SharedMaskBitmap> = vec![Arc::new(full_white_mask)];
 
             let processed = process_and_get_dynamic_image(
                 context,
@@ -2431,7 +2433,7 @@ fn export_masks_for_image(
             let (out_w, out_h) = with_options.dimensions();
 
             let alpha_resized = imageops::resize(
-                &mask_bitmaps[i],
+                mask_bitmaps[i].as_ref(),
                 out_w,
                 out_h,
                 imageops::FilterType::Lanczos3,
@@ -3196,7 +3198,7 @@ pub async fn estimate_export_sizes(
             unscaled_crop_offset.1 * scale,
         );
 
-        let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+        let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
                 get_cached_or_generate_mask(
@@ -3334,7 +3336,7 @@ pub async fn estimate_export_sizes(
             unscaled_crop_offset.1 * gpu_scale,
         );
 
-        let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+        let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
                 get_cached_or_generate_mask(

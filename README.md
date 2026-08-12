@@ -153,6 +153,12 @@ npm run start            # Tauri 2 开发窗口
   60,217,344 B 收敛到最多 5,308,416 B，减少 54,908,928 B（91.2%）；32 层上限从
   1,926,955,008 B 降至 169,869,312 B。本机 Metal 像素回归另跨越 2048px seam 验证零蒙版逐字节
   不变、白蒙版正确应用调整。CPU 侧每层完整灰度 bitmap 仍存在，尚未宣称蒙版生成已流式化。
+- ✅ 蒙版缓存与当前 render 现在通过 `Arc<GrayImage>` 共享同一像素分配，命中和写入缓存都不再深拷贝；
+  常见的首个加法子蒙版直接成为最终合成缓冲，初始黑色整图不再预分配，前置减去/相交也不再生成
+  注定无法改变黑色底图的临时 bitmap。9504×6336 单层缓存 + caller 的逻辑 CPU 像素从
+  120,434,688 B 降至 60,217,344 B（50%）。同机独立进程合成对照的 RSS 增量从 120,750,080 B
+  降至 60,489,728 B，减少 60,260,352 B（49.9%），稀疏哈希一致。每个活动蒙版仍需一张完整 CPU
+  灰度 bitmap，多子蒙版合成也仍可能短暂同时持有最终图和下一张子蒙版，因此这不是 tile 化生成。
 - ✅ 全尺寸几何 warp 对 RGB32F/RGBA32F 源直接借用底层浮点切片，只有其他存储格式才回退到
   RGBA32F 转换，不再为 9504×6336 RGB32F 输入额外 staging 一张 963,477,504 B 的 RGBA32F 源图。
   同机合成 60MP 连续对照中，旧 staging 路径为 291 ms / 2,613,788,672 B 峰值 RSS，新借用路径为
@@ -208,23 +214,23 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 配对 ACR 输出，也不能代表日光、钨丝灯、高 ISO、欠曝、高饱和光、lossless-L 或 uncompressed，
 因此不会用合成图或这一个长曝光样片冒充完整机型结论。无需新增样片的 RGB 输入 ICC 与日常 SDR
 显示链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于后续能力。
-四级渲染策略、活动蒙版 GPU tile、几何 warp 浮点输入借用、桌面端 JPEG/PNG/TIFF
+四级渲染策略、活动蒙版 GPU tile 与 CPU 共享所有权、几何 warp 浮点输入借用、桌面端 JPEG/PNG/TIFF
 tile-to-encoder、逐行 resize/watermark、内置默认水印、GPU 高水位回收、JPEG/WebP 压缩码流直接
 写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经闭环。WebP 仍接收一张完整 CPU 输入并
-保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或缓冲完整压缩输出；活动蒙版 CPU bitmap、
-几何 warp RGBA32F 输出以及 JXL/AVIF 导出仍走完整帧路径。下一阶段继续收敛 RAW 解码、几何输出和
-蒙版 CPU 生成/缓存的完整帧峰值，并评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新
+保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或缓冲完整压缩输出；每个活动蒙版的 CPU
+生成结果、几何 warp RGBA32F 输出以及 JXL/AVIF 导出仍走完整帧路径。下一阶段继续收敛 RAW 解码、
+几何输出和程序化/画笔蒙版的 tile 化生成，并评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新
 α7R V 样片到位后，再扩充 RAW → GPU → 文件的场景画质、交互耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、`npm run crop-transform:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
 `npm run build`、`npm run synthetic-export:bench`、`npm run synthetic-geometry:bench`、
-`npm run gpu-mask:check`、`cargo fmt --all -- --check`、
-`cargo check --lib --locked`、86 项默认执行的
-Rust 单元/回归测试和严格 Clippy。默认忽略五项：一项需要本地授权 RAW，三项是手动 60MP
-JPEG/PNG/TIFF、WebP 与几何 harness，另一项需要本机 GPU；本轮已显式执行跨 tile 的 Metal 蒙版
-像素回归，几何阶段的 `borrowed`/`staged` 对照则保持相同稀疏输出哈希。`git diff --check` 也保持通过。
+`npm run synthetic-mask:bench`、`npm run gpu-mask:check`、`cargo fmt --all -- --check`、
+`cargo check --lib --locked`、89 项默认执行的 Rust 单元/回归测试和严格 Clippy。默认忽略六项：
+一项需要本地授权 RAW，四项是手动 60MP JPEG/PNG/TIFF、WebP、几何与蒙版 harness，另一项需要
+本机 GPU；本轮已显式执行跨 tile 的 Metal 蒙版像素回归，几何阶段的 `borrowed`/`staged` 以及蒙版
+阶段的 `shared`/`cloned` 对照都保持相同稀疏输出哈希。`git diff --check` 也保持通过。
 
 ## 1.0 范围
 
@@ -579,6 +585,7 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 样式效果都比camera raw差远了
 - WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL 与 AVIF 导出尚未接入
   tile-to-encoder，60MP 时仍有完整帧峰值。
-- RAW 解码、几何 warp 输出和活动蒙版 CPU bitmap 仍有完整帧峰值；几何输入 staging 与蒙版 GPU
-  完整 texture 已消除，但对应输出/生成尚未改造成 tile/带状管线。α7R V 目前只有一个有损压缩
+- RAW 解码、几何 warp 输出和每个活动蒙版的 CPU bitmap 仍有完整帧峰值；几何输入 staging、蒙版
+  缓存/caller 深拷贝与蒙版 GPU 完整 texture 已消除，但对应输出/生成尚未改造成 tile/带状管线。多
+  子蒙版合成时仍可能短暂持有两张完整灰度图。α7R V 目前只有一个有损压缩
   长曝光样片基线，尚缺多场景/多压缩模式闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。

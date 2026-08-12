@@ -2,13 +2,14 @@ use std::sync::{Arc, MutexGuard};
 use std::time::Instant;
 
 use half::f16;
-use image::{DynamicImage, GenericImageView, ImageBuffer, Luma, Rgba};
+use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use std::num::NonZero;
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use tauri::Manager;
 use wgpu::util::{DeviceExt, TextureDataOrder};
 
+use crate::app_state::SharedMaskBitmap;
 use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
 use crate::render_strategy::{
@@ -27,7 +28,7 @@ pub struct Roi {
 
 pub struct RenderRequest<'a> {
     pub adjustments: AllAdjustments,
-    pub mask_bitmaps: &'a [ImageBuffer<Luma<u8>, Vec<u8>>],
+    pub mask_bitmaps: &'a [SharedMaskBitmap],
     pub lut: Option<Arc<Lut>>,
     pub roi: Option<Roi>,
 }
@@ -2412,10 +2413,10 @@ mod shader_tests {
                 .expect("render unmasked GPU reference");
 
             let horizontal_case = width > height;
-            let mask = GrayImage::from_fn(width, height, |x, y| {
+            let mask = Arc::new(GrayImage::from_fn(width, height, |x, y| {
                 let axis = if horizontal_case { x } else { y };
                 Luma([if (axis / 64) % 2 == 0 { 255 } else { 0 }])
-            });
+            }));
             let mut masked_adjustments = base_adjustments;
             masked_adjustments.mask_count = 1;
             masked_adjustments.mask_adjustments[0].exposure = 1.0;

@@ -56,7 +56,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::{Engine as _, engine::general_purpose};
-use image::{DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Luma, Rgba};
+use image::{DynamicImage, GenericImageView, ImageFormat, Rgba};
 use image_hdr::hdr_merge_images;
 use image_hdr::input::HDRInput;
 use imageproc::drawing::draw_line_segment_mut;
@@ -522,7 +522,7 @@ fn process_preview_job(
         unscaled_crop_offset.1 * effective_scale,
     );
 
-    let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+    let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
         .iter()
         .filter_map(|def| {
             get_cached_or_generate_mask(
@@ -891,7 +891,7 @@ async fn generate_uncropped_preview(
             .and_then(|m| serde_json::from_value(m.clone()).ok())
             .unwrap_or_default();
 
-        let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+        let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
                 get_cached_or_generate_mask(
@@ -1361,7 +1361,7 @@ fn generate_preset_preview(
         unscaled_crop_offset.1 * scale_for_gpu,
     );
 
-    let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+    let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
         .iter()
         .filter_map(|def| {
             get_cached_or_generate_mask(
@@ -1597,7 +1597,7 @@ async fn generate_preview_for_path(
 
         let warped_image =
             resolve_warped_image_for_masks(&state, &js_adjustments, &mask_definitions);
-        let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+        let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
                 generate_mask_bitmap(
@@ -1608,6 +1608,7 @@ async fn generate_preview_for_path(
                     unscaled_crop_offset,
                     warped_image.as_deref(),
                 )
+                .map(Arc::new)
             })
             .collect();
 

@@ -16,6 +16,7 @@ const exportProcessing = read('src-tauri/src/export_processing.rs');
 const exifProcessing = read('src-tauri/src/exif_processing.rs');
 const imageProcessing = read('src-tauri/src/image_processing.rs');
 const mainShader = read('src-tauri/src/shaders/shader.wgsl');
+const maskGeneration = read('src-tauri/src/mask_generation.rs');
 const packageJson = JSON.parse(read('package.json'));
 
 for (const tier of ['rapidPreview', 'halfResolutionEdit', 'fullResolutionRoi', 'fullResolutionExport']) {
@@ -44,6 +45,11 @@ assert.match(gpuProcessing, /height: mask_plan\.texture_height/);
 assert.match(gpuProcessing, /offset: upload\.source_offset_bytes/);
 assert.match(gpuProcessing, /queue\.write_texture\(/);
 assert.doesNotMatch(gpuProcessing, /mask_texture_data/);
+assert.match(maskGeneration, /Option<SharedMaskBitmap>/);
+assert.match(maskGeneration, /return Some\(Arc::clone\(img\)\)/);
+assert.match(maskGeneration, /cache\.insert\(key, Arc::clone\(img\)/);
+assert.match(maskGeneration, /\*final_mask = Some\(sub_bitmap\)/);
+assert.doesNotMatch(maskGeneration, /return Some\(img\.clone\(\)\)/);
 assert.doesNotMatch(mainShader, /get_mask_influence\(i, absolute_coord\)/);
 assert.equal(
   [...mainShader.matchAll(/get_mask_influence\(i, id\.xy\)/g)].length,
@@ -135,7 +141,8 @@ assert.equal(activeMaskFullTextureBytes, 60_217_344);
 assert.equal(activeMaskTileTextureBytes, 5_308_416);
 assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
 assert.match(packageJson.scripts['gpu-mask:check'], /tiled_mask_gpu_sampling/);
+assert.match(packageJson.scripts['synthetic-mask:bench'], /synthetic_60mp_mask_cache_ownership/);
 
 console.log(
-  'Validated four render tiers, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, shared CPU mask ownership, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

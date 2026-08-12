@@ -147,6 +147,7 @@ impl MetadataManager {
 }
 
 pub type TransformedImageCache = (u64, Arc<DynamicImage>, (f32, f32));
+pub type SharedMaskBitmap = Arc<GrayImage>;
 
 pub struct AppState {
     pub window_setup_complete: AtomicBool,
@@ -170,7 +171,7 @@ pub struct AppState {
     pub thumbnail_progress: Mutex<ThumbnailProgressTracker>,
     pub preview_worker_tx: Mutex<Option<Sender<PreviewJob>>>,
     pub analytics_worker_tx: Mutex<Option<Sender<AnalyticsJob>>>,
-    pub mask_cache: Mutex<BudgetedCache<u64, GrayImage>>,
+    pub mask_cache: Mutex<BudgetedCache<u64, SharedMaskBitmap>>,
     pub patch_cache: Mutex<HashMap<String, serde_json::Value>>,
     pub geometry_cache: Mutex<BudgetedCache<u64, DynamicImage>>,
     pub thumbnail_geometry_cache: Mutex<BudgetedCache<String, (u64, DynamicImage, f32)>>,

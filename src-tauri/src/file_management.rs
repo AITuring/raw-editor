@@ -15,7 +15,7 @@ use std::thread;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use image::codecs::jpeg::JpegEncoder;
-use image::{DynamicImage, GenericImageView, ImageBuffer, ImageEncoder, Luma};
+use image::{DynamicImage, GenericImageView, ImageEncoder};
 use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,7 @@ use crate::PendingMetadata;
 #[cfg(target_os = "android")]
 use crate::android_integration::*;
 use crate::app_settings::*;
+use crate::app_state::SharedMaskBitmap;
 use crate::color_management::srgb_v4_profile;
 use crate::exif_processing;
 use crate::formats::{is_raw_file, is_supported_image_file};
@@ -1576,7 +1577,7 @@ pub fn generate_thumbnail_data(
             .and_then(|m| serde_json::from_value(m.clone()).ok())
             .unwrap_or_else(Vec::new);
 
-        let mask_bitmaps: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = mask_definitions
+        let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
                 crate::get_cached_or_generate_mask(
