@@ -166,7 +166,16 @@ npm run start            # Tauri 2 开发窗口
   scratch 从 120,434,688 B 降至 64,411,648 B（减少 46.5%）。画笔最坏情况下的子蒙版结果 + 单笔
   stroke scratch 都被限制为两个 tile；加上最终图后从 180,652,032 B 降至 68,605,952 B（减少
   62.0%）。同机 60MP 独立进程对照的 scratch RSS 增量从 60,522,496 B 降至 4,751,360 B，减少
-  55,771,136 B（92.1%），稀疏哈希一致。颜色、明度和 AI 蒙版仍因 grow/feather 或源图解码保持完整帧。
+  55,771,136 B（92.1%），稀疏哈希一致。颜色、明度的跨像素过滤由下一项继续收敛；AI 蒙版仍保持完整帧。
+- ✅ 颜色范围与明度范围蒙版现按 2048px core 加精确 halo 生成：grow 的方形形态学半径与
+  `imageproc` 有限 Gaussian 核的 `ceil(2σ)` 半径相加，tile 只在完整画布边缘截断，过滤后仅把 core
+  就地合成到最终 bitmap。旋转、翻转、粗方向、正负 grow、feather、添加/减去/相交、反转和透明度均
+  已跨横纵 seam 与旧完整帧逐像素一致。在 9504×6336 和 UI 支持的最大 grow/feather 下，halo 为
+  127px，单个扩展 tile 最多 2302×2302；过滤期三张灰度 scratch 从 180,652,032 B 降至
+  15,897,612 B，减少 164,754,420 B（91.2%）。同机 60MP 独立进程以 grow=2、feather=1 同时覆盖
+  形态学和模糊，对照 scratch RSS 增量从 186,531,840 B 降至 18,055,168 B，减少 168,476,672 B
+  （90.3%），稀疏哈希同为 `22b2b2054060aa43`。每个最终 CPU 灰度 bitmap 与供范围匹配使用的完整
+  warped source 仍存在；AI 蒙版的解码与 grow/feather 尚未接入 overlap tile。
 - ✅ 全尺寸几何 warp 对 RGB32F/RGBA32F 源直接借用底层浮点切片，只有其他存储格式才回退到
   RGBA32F 转换，不再为 9504×6336 RGB32F 输入额外 staging 一张 963,477,504 B 的 RGBA32F 源图。
   同机合成 60MP 连续对照中，旧 staging 路径为 291 ms / 2,613,788,672 B 峰值 RSS，新借用路径为
@@ -222,26 +231,27 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 配对 ACR 输出，也不能代表日光、钨丝灯、高 ISO、欠曝、高饱和光、lossless-L 或 uncompressed，
 因此不会用合成图或这一个长曝光样片冒充完整机型结论。无需新增样片的 RGB 输入 ICC 与日常 SDR
 显示链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于后续能力。
-四级渲染策略、活动蒙版 GPU tile、CPU 共享所有权与程序化/画笔分块生成、几何 warp 浮点输入借用、
-桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、内置默认水印、GPU 高水位回收、
-JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经闭环。WebP 仍
-接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或缓冲完整压缩输出；
-每个活动蒙版的最终 CPU bitmap、颜色/明度/AI 子蒙版、几何 warp RGBA32F 输出以及 JXL/AVIF 导出
-仍走完整帧路径。下一阶段继续收敛 RAW 解码、几何输出和其余蒙版生成，并评估能否替换当前内部返回
-完整 `Vec` 的 JXL/AVIF 编码器；待新 α7R V 样片到位后，再扩充 RAW → GPU → 文件的场景画质、
-交互耗时和峰值基线。
+四级渲染策略、活动蒙版 GPU tile、CPU 共享所有权、程序化/画笔分块生成与颜色/明度精确 overlap、
+几何 warp 浮点输入借用、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、内置默认水印、
+GPU 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经
+闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或缓冲
+完整压缩输出；每个活动蒙版的最终 CPU bitmap、AI 子蒙版、供颜色/明度匹配使用的完整 warped source、
+几何 warp RGBA32F 输出以及 JXL/AVIF 导出仍走完整帧路径。下一阶段继续收敛 RAW 解码、几何输出和
+AI 蒙版生成，并评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；待新 α7R V 样片到位后，
+再扩充 RAW → GPU → 文件的场景画质、交互耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、`npm run crop-transform:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
 `npm run build`、`npm run synthetic-export:bench`、`npm run synthetic-geometry:bench`、
-`npm run synthetic-mask:bench`、`npm run synthetic-mask-compose:bench`、`npm run gpu-mask:check`、
+`npm run synthetic-mask:bench`、`npm run synthetic-mask-compose:bench`、
+`npm run synthetic-range-mask:bench`、`npm run gpu-mask:check`、
 `cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、
-`cargo check --manifest-path src-tauri/Cargo.toml --lib --locked`、93 项默认执行的 Rust 单元/回归测试和
-严格 Clippy。默认忽略七项：一项需要本地授权 RAW，五项是手动 60MP JPEG/PNG/TIFF、WebP、几何、
-蒙版所有权与蒙版组合 harness，另一项需要本机 GPU；本轮已显式执行跨 tile 的 Metal 蒙版像素回归，
-几何阶段的 `borrowed`/`staged` 以及蒙版阶段的 `shared`/`cloned`、`tiled`/`full` 对照都保持相同
-稀疏输出哈希。`git diff --check` 也保持通过。
+`cargo check --manifest-path src-tauri/Cargo.toml --lib --locked`、95 项默认执行的 Rust 单元/回归测试和
+严格 Clippy。默认忽略八项：一项需要本地授权 RAW，六项是手动 60MP JPEG/PNG/TIFF、WebP、几何、
+蒙版所有权、蒙版组合与范围蒙版 overlap harness，另一项需要本机 GPU；本轮已显式执行跨 tile 的
+Metal 蒙版像素回归，几何阶段的 `borrowed`/`staged` 以及蒙版阶段的 `shared`/`cloned`、
+`tiled`/`full`、范围蒙版 `tiled`/`full` 对照都保持相同稀疏输出哈希。`git diff --check` 也保持通过。
 
 ## 1.0 范围
 
@@ -597,6 +607,7 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL 与 AVIF 导出尚未接入
   tile-to-encoder，60MP 时仍有完整帧峰值。
 - RAW 解码、几何 warp 输出和每个活动蒙版的最终 CPU bitmap 仍有完整帧峰值；几何输入 staging、
-  蒙版缓存/caller 深拷贝、蒙版 GPU 完整 texture 以及程序化/画笔子蒙版的完整临时图已消除，但颜色、
-  明度与 AI 子蒙版仍因跨像素 grow/feather 或源图解码走完整帧。α7R V 目前只有一个有损压缩
+  蒙版缓存/caller 深拷贝、蒙版 GPU 完整 texture、程序化/画笔完整临时图以及颜色/明度 grow/feather
+  完整临时图已消除，但颜色/明度匹配仍依赖完整 warped source，AI 子蒙版仍因源图解码和跨像素过滤
+  走完整帧。α7R V 目前只有一个有损压缩
   长曝光样片基线，尚缺多场景/多压缩模式闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。
