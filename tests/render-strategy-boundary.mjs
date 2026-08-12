@@ -58,6 +58,12 @@ assert.match(maskGeneration, /struct GrowFeatherPlan/);
 assert.match(maskGeneration, /feather_radius: \(2\.0 \* feather_sigma\)\.ceil\(\) as u32/);
 assert.match(maskGeneration, /Self::Color\(parameters\) \| Self::Luminance\(parameters\)/);
 assert.match(maskGeneration, /"color" \| "luminance" =>/);
+assert.match(maskGeneration, /fn decode_ai_bitmap_from_base64\(/);
+assert.match(maskGeneration, /struct TiledAiMaskRasterizer/);
+assert.match(maskGeneration, /Ai\(TiledAiMaskRasterizer\)/);
+assert.match(maskGeneration, /"ai-subject" \| "ai-foreground" \| "ai-sky" \| "ai-depth" \| "quick-eraser"/);
+assert.match(maskGeneration, /fn image_gaussian_blur_radius\(/);
+assert.match(maskGeneration, /selection\.apply_blur\(mask\)/);
 assert.match(maskGeneration, /let halo = grow_feather\.halo\(\)/);
 assert.match(maskGeneration, /tile_x\.saturating_sub\(halo\)/);
 assert.match(maskGeneration, /grow_feather\.apply\(&mut tile\)/);
@@ -149,6 +155,8 @@ const activeMaskTileTextureBytes = (2048 + 128 * 2) ** 2;
 const maskGenerationTileBytes = 2048 ** 2;
 const maxRangeMaskHalo = 63 + 64;
 const maxRangeMaskTileBytes = (2048 + maxRangeMaskHalo * 2) ** 2;
+const maxAiDepthMaskHalo = 32 + maxRangeMaskHalo;
+const maxAiDepthMaskTileBytes = (2048 + maxAiDepthMaskHalo * 2) ** 2;
 assert.equal(oldEmptyMaskBytes, 120_434_688);
 assert.equal(oldAnalyticsCloneBytes, 240_869_376);
 assert.equal(oldUnchangedRgb32fCloneBytes, 722_608_128);
@@ -164,11 +172,15 @@ assert.equal(activeMaskFullTextureBytes * 3 - (activeMaskFullTextureBytes + mask
 assert.equal(maxRangeMaskHalo, 127);
 assert.equal(maxRangeMaskTileBytes, 5_299_204);
 assert.equal(activeMaskFullTextureBytes * 3 - maxRangeMaskTileBytes * 3, 164_754_420);
+assert.equal(maxAiDepthMaskHalo, 159);
+assert.equal(maxAiDepthMaskTileBytes, 5_597_956);
+assert.equal(activeMaskFullTextureBytes * 3 - maxAiDepthMaskTileBytes * 3, 163_858_164);
 assert.match(packageJson.scripts['gpu-mask:check'], /tiled_mask_gpu_sampling/);
 assert.match(packageJson.scripts['synthetic-mask:bench'], /synthetic_60mp_mask_cache_ownership/);
 assert.match(packageJson.scripts['synthetic-mask-compose:bench'], /synthetic_60mp_mask_composition_scratch/);
 assert.match(packageJson.scripts['synthetic-range-mask:bench'], /synthetic_60mp_range_mask_overlap_scratch/);
+assert.match(packageJson.scripts['synthetic-ai-mask:bench'], /synthetic_60mp_ai_mask_overlap_scratch/);
 
 console.log(
-  'Validated four render tiers, shared CPU mask ownership, bounded programmatic/brush/range mask generation, exact grow/feather halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

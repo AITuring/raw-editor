@@ -23,7 +23,7 @@
 
 ## 缓冲所有权收敛
 
-本阶段收敛了十二类可确定的重复缓冲或高水位资源：
+本阶段收敛了十四类可确定的重复缓冲或高水位资源：
 
 1. `CachedPreview` 只保存当前层级的一张 `Arc<DynamicImage>`。快速预览直接生成目标尺寸，
    不再先生成较大底图后再长期保存一张 `small_image`。
@@ -46,27 +46,32 @@
    Gaussian `ceil(2σ)` 核半径，扩展区只在完整画布边缘截断，过滤后仅将 core 应用反转/透明度并
    就地合成。9504×6336 在 UI 支持的 grow `[-100, 100]`、feather `[0, 100]` 内最多为 127px halo，
    扩展 tile 不超过 2302×2302；原始 tile、形态学/模糊中间图和输出三张 scratch 合计最多
-   15,897,612 B。范围匹配仍读取完整 warped source，每个最终 CPU bitmap 也仍为完整尺寸；AI
-   子蒙版的 base64 解码和 grow/feather 仍走完整帧。
-7. WebView 回读的 RGBA8 结果使用 `Arc<DynamicImage>` 同时交给 JPEG 编码和分析 worker，
+   15,897,612 B。范围匹配仍读取完整 warped source，每个最终 CPU bitmap 也仍为完整尺寸。
+7. `ai-subject`/`ai-foreground`/`ai-sky`/`ai-depth`/`quick-eraser` 每个子蒙版只解码一次 base64
+   灰度源，几何映射按 2048px core 加精确 halo 输出。深度范围先在 tile 内就地计算，再按 `image`
+   0.25.x 的有限 Gaussian 核半径执行 depth feather，最后叠加通用 grow/feather；最大 depth 核半径
+   32px 与通用 127px halo 合计 159px，三张过滤 scratch 最多为 3 × 2366² = 16,793,868 B。首个
+   无过滤加法 AI 蒙版仍直接成为最终完整 bitmap；其余路径不再构造完整变换结果或完整过滤临时图。
+   解码后的 AI 源和最终 CPU bitmap 仍为完整尺寸，本项不是 AI 推理或源存储的流式化。
+8. WebView 回读的 RGBA8 结果使用 `Arc<DynamicImage>` 同时交给 JPEG 编码和分析 worker，
    不再为 histogram/waveform 调用 `processed_pixels.clone()`。
-8. 无 patch、几何、旋转、翻转、镜头模糊或裁剪时，全尺寸变换缓存直接复用已解码图像的 `Arc`，
+9. 无 patch、几何、旋转、翻转、镜头模糊或裁剪时，全尺寸变换缓存直接复用已解码图像的 `Arc`，
    不再因 `Cow::into_owned()` 复制一张完整 RGB32F 图。
-9. 几何 warp 对 RGB32F/RGBA32F 输入直接借用现有底层浮点切片，采样器同时支持三、四通道；只有
-   其他存储格式才回退到 RGBA32F 转换。输出合同仍是完整 RGBA32F，因此本项只消除输入 staging，
-   没有把几何节点描述成 tile/带状管线。
-10. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
+10. 几何 warp 对 RGB32F/RGBA32F 输入直接借用现有底层浮点切片，采样器同时支持三、四通道；只有
+    其他存储格式才回退到 RGBA32F 转换。输出合同仍是完整 RGBA32F，因此本项只消除输入 staging，
+    没有把几何节点描述成 tile/带状管线。
+11. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
     `zenresize 0.3.1` 行 ring、可选的单行水印 scratch 和编码器；resize/watermark 不再构造完整尺寸
     `DynamicImage`。JPEG 使用 `mozjpeg 0.10.13` baseline 4:4:4 逐扫描行输入，并把压缩数据直接写入
     同目录临时文件；PNG 与 TIFF 同样直接写入。JPEG/PNG 需要保留元数据时，只在编码前生成一个受
     JPEG APP1 上限约束的 TIFF/EXIF 小载荷，再分别写入 APP1 或 PNG `eXIf`；TIFF 在编码条带前把
     筛选后的 IFD0、ExifIFD、GPSIFD 和目录指针直接写入同一输出。三种格式都不会读回压缩输出；完整
     编码、元数据写入和取消检查都成功后才原子替换目标路径。
-11. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
+12. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
     该 processor 中降为 1×1。大尺寸显示 processor 转入 CPU 导出时会按 512 MiB 高水位和滞回条件收缩。
-12. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
+13. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
     释放两者并触发一次有界 GPU poll，避免 60MP 导出的高水位常驻到后续编辑。
-13. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
+14. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
     ARGB 工作图。libwebp 输出回调直接写临时文件，随后以固定 64 KiB 缓冲扫描/重写 RIFF、替换
     sRGB v4 `ICCP` chunk；两个阶段都成功且未取消后才原子发布。现有完整 CPU 输入与 YUVA picture
     仍然存在，本项没有把 WebP 变成 tile-to-encoder。
@@ -86,6 +91,7 @@
 | 后续程序化子蒙版结果 scratch                           |   60,217,344 B（57.4 MiB） |     4,194,304 B（4.0 MiB） |  56,023,040 B |
 | 画笔子蒙版结果 + 最坏单笔 stroke scratch               | 120,434,688 B（114.9 MiB） |     8,388,608 B（8.0 MiB） | 112,046,080 B |
 | 颜色/明度过滤最坏三张 scratch（UI 最大 halo）          | 180,652,032 B（172.3 MiB） |   15,897,612 B（15.2 MiB） | 164,754,420 B |
+| AI 深度过滤最坏三张 scratch（UI 最大 halo）            | 180,652,032 B（172.3 MiB） |   16,793,868 B（16.0 MiB） | 163,858,164 B |
 | WebView 分析用 RGBA8 像素复制                          | 240,869,376 B（229.7 MiB） |          0 B（`Arc` 共享） | 240,869,376 B |
 | 未变换 RGB32F 全尺寸缓存复制                           | 722,608,128 B（689.1 MiB） |          0 B（`Arc` 共享） | 722,608,128 B |
 | 几何 warp 的 RGBA32F 输入 staging                      | 963,477,504 B（918.8 MiB） |          0 B（借用浮点源） | 963,477,504 B |
@@ -107,24 +113,28 @@ grow/feather 使用精确 halo。后续程序化子蒙版加上最终图的逻�
 后续画笔在“子蒙版结果与单笔包围盒都覆盖全图”的最坏情况下，加上最终图从 180,652,032 B 降到
 68,605,952 B（减少 62.0%）。颜色/明度在 UI 最大 halo 下，过滤 scratch 从三张完整图的
 180,652,032 B 降到三张 2302×2302 tile 的 15,897,612 B（减少 91.2%）；若已有最终图，总逻辑峰值
-从 240,869,376 B 降到 76,114,956 B（减少 68.4%）。这些数字不包含仍为完整尺寸的 warped source
-和最终 CPU bitmap，也不适用于尚未接入 overlap 的 AI 蒙版。
+从 240,869,376 B 降到 76,114,956 B（减少 68.4%）。AI 深度在 UI 最大 halo 下，过滤 scratch 从
+180,652,032 B 降到三张 2366×2366 tile 的 16,793,868 B（减少 90.7%）。这些数字不包含仍为完整
+尺寸的 warped source、AI 解码源和最终 CPU bitmap；各项生命周期不同，不能与表内其他减少量直接
+相加为进程峰值。
 
 ## 自动验证
 
 - `npm run preview-resolution:check`：验证 Retina 100%、快速预览、半分辨率编辑和全分辨率 ROI 选择。
 - `npm run render-strategy:check`：锁定四级 IPC 合同、单底图缓存、dummy mask、活动蒙版 tile texture、
-  CPU 蒙版 `Arc` 共享、首个加法子蒙版接管输出、程序化/画笔 2048px 分块、颜色/明度有限 halo 及
-  完整坐标原点、源 offset 上传与 WGSL 局部坐标采样、分析 `Arc` 共享、原图 `Arc` 复用、几何浮点
-  输入借用、流式编码器边界、编码期 EXIF、禁止临时输出整文件读回、临时文件发布和 GPU 高水位回收。
+  CPU 蒙版 `Arc` 共享、首个加法子蒙版接管输出、程序化/画笔 2048px 分块、颜色/明度与 AI 蒙版有限
+  halo、AI 源单次解码及完整坐标原点、源 offset 上传与 WGSL 局部坐标采样、分析 `Arc` 共享、原图
+  `Arc` 复用、几何浮点输入借用、流式编码器边界、编码期 EXIF、禁止临时输出整文件读回、临时文件
+  发布和 GPU 高水位回收。
 - `npm run gpu-mask:check`：在本机 GPU 上用 2305×8 与 8×2050 确定性输入分别跨过水平、垂直
   2048px tile seam；黑色蒙版区域必须与无蒙版输出逐字节一致，白色区域必须应用曝光，seam 两侧
   分别按原始全图蒙版像素取值。该项默认忽略，避免无图形适配器的 CI 环境失败。
 - Rust 单元测试：验证 camelCase 序列化、预览/导出边界、60MP 空蒙版/活动蒙版 tile 计划、蒙版局部
   坐标到全图 source offset 的一致性、首个加法子蒙版像素分配复用、黑色底图的减去/相交语义、
   radial/linear/brush/clone/heal/flow/all 在添加、减去、相交、反转和透明度下跨 seam 与完整帧逐像素
-  一致，color/luminance 另覆盖旋转、翻转、粗方向、正负 grow、feather 和横纵 overlap seam；同时
-  验证空/隐藏/跨像素蒙版路由、60MP tile/halo scratch 算术、cache/caller 的 `Arc::ptr_eq`、
+  一致，color/luminance 另覆盖旋转、翻转、粗方向、正负 grow、feather 和横纵 overlap seam；五种
+  AI 蒙版再覆盖相同几何、深度双重 feather、三种组合模式、反转、透明度和横纵 overlap seam；同时
+  验证空/隐藏/跨像素蒙版路由、60MP range/AI tile/halo scratch 算术、cache/caller 的 `Arc::ptr_eq`、
   全部内置 WGSL 的 Naga 解析与验证、分析结果 `Arc::ptr_eq` 共享、
   60MP 带状缓冲算术、几何 RGB32F 借用与显式 RGBA32F staging 的逐像素一致、60MP 几何缓冲计划、
   processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
@@ -152,6 +162,10 @@ grow/feather 使用精确 halo。后续程序化子蒙版加上最终图的逻�
 - `npm run synthetic-range-mask:bench`：默认以 2048px core 加精确 halo 运行 grow=2、feather=1 的
   `tiled` 路径；设置 `RAW_EDITOR_RANGE_MASK_BENCH_MODE=full` 可运行相同输入的旧完整帧过滤。两种
   模式都保留并预先触碰最终 bitmap，以 2 ms 间隔采样形态学和 Gaussian scratch 的 RSS。
+- `npm run synthetic-ai-mask:bench`：默认以 2048px core 加精确 halo 运行 depth feather=1、grow=2、
+  通用 feather=1 的 `tiled` 路径；设置 `RAW_EDITOR_AI_MASK_BENCH_MODE=full` 可运行相同输入的完整帧
+  几何映射与过滤。两种模式都预先触碰并共同保留完整解码源和最终 bitmap，以 2 ms 间隔隔离采样
+  变换、深度 Gaussian 与 grow/feather scratch 的 RSS。
 
 ## 合成 60MP 蒙版所有权基准
 
@@ -201,6 +215,25 @@ scratch RSS 增量减少 168,476,672 B（90.3%），逻辑 scratch 减少 168,01
 哈希一致。66 ms 耗时差不用于声明真实颜色/明度选择提速：该 harness 直接构造灰度输入，不读取 warped
 source、不执行颜色距离/明度距离匹配，也不解码 RAW 或初始化 WGPU。UI 最大 grow/feather 对应的
 127px halo 已由尺寸算术和逐像素 seam 回归约束，未用最慢设置重复此 RSS 采样。
+
+## 合成 60MP AI 蒙版 overlap 基准
+
+2026-08-12 在同机独立测试进程中先分配并触碰一张 9504×6336 灰度解码源和一张最终 bitmap，再对
+同一确定性深度输入执行几何映射、深度范围、depth feather=1、grow=2 和通用 feather=1。该设置同时
+触发 1px depth Gaussian、1px 形态学与 1px 通用 Gaussian，生产 halo 为 3px。`full` 对完整帧执行
+相同生产过滤，`tiled` 使用 2048px core、扩展 tile 和 core-only 合成。两种模式共同保留的源与输出
+逻辑像素均为 120,434,688 B，RSS 基线在它们触碰后读取，因此增量只用于比较附加 scratch；这不是
+迁移前完整调用生命周期或真实 AI 推理的端到端峰值。
+
+| AI 深度变换/过滤路径       |    耗时 |      基线 RSS |      峰值 RSS |      RSS 增量 |  逻辑 scratch | 稀疏输出哈希       |
+| -------------------------- | ------: | ------------: | ------------: | ------------: | ------------: | ------------------ |
+| 完整帧对照                 | 1000 ms | 131,710,976 B | 737,411,072 B | 605,700,096 B | 180,652,032 B | `849aa825f4208721` |
+| 新：2048px core + 3px halo | 1168 ms | 131,710,976 B | 201,818,112 B |  70,107,136 B |  12,656,748 B | `849aa825f4208721` |
+
+scratch RSS 增量减少 535,592,960 B（88.4%），逻辑 scratch 减少 167,995,284 B（93.0%），稀疏输出
+哈希一致。168 ms 耗时差不用于声明真实 AI 蒙版速度变化：该 harness 直接构造灰度源，不执行 base64
+或 PNG 解码、ONNX 推理、RAW 解码或 WGPU。UI 最大参数的 159px halo 与 16,793,868 B tile scratch
+由独立尺寸算术及五种 AI 蒙版的逐像素 seam 回归约束，未用最慢设置重复 RSS 采样。
 
 ## 合成 60MP 编码基准
 
@@ -260,15 +293,16 @@ libwebp YUVA picture 和编码器工作内存，不能把约 1.08 GiB 当作端�
   完整 RGBA32F 输出；RAW 解码和几何输出都尚未改造成流式节点。
 - WebP 仍使用完整 CPU 输入与 libwebp YUVA picture，但已消除额外 ARGB 图和完整压缩输出缓冲；
   当前接口没有逐 tile 输入。JXL、AVIF 与 Android 导出仍使用完整 CPU 编码图，其中当前 JXL/AVIF
-  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码、几何输出和 AI 蒙版生成推进
-  有界管线，并继续评估可替换的分块编码器。
+  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码和几何输出推进有界管线，并
+  继续评估可替换的分块编码器。
 - 桌面 JPEG 已消除完整压缩码流缓冲，但仍通过 C MozJPEG FFI 编码；当前默认 unwind 配置会把
   libjpeg 错误转换为普通导出失败，若未来改为 `panic=abort`，必须先替换这条错误边界。
 - 高水位回收是导出结束和尺寸切换时的确定性策略，尚未接入操作系统/驱动的实时内存压力通知。
 - 活动蒙版 GPU texture、cache/caller 所有权、程序化/画笔 scratch 与颜色/明度 grow/feather 已按
-  tile、overlap 或共享所有权收敛，但每个最终 CPU 结果仍占用一张全尺寸灰度 bitmap；颜色/明度匹配
-  仍读取完整 warped source，AI 子蒙版还会短暂保留最终图和下一张完整临时图。缓存预算只阻止超大
-  条目长期驻留，AI 源图解码与其跨像素 grow/feather 尚未接入带 overlap 的 tile 生成。
+  tile、overlap 或共享所有权收敛，AI 几何变换和过滤也已接入精确 halo；但每个最终 CPU 结果仍占用
+  一张全尺寸灰度 bitmap，颜色/明度匹配仍读取完整 warped source，AI 子蒙版仍保留完整灰度解码源。
+  缓存预算只阻止超大条目长期驻留；后续若要继续降低蒙版峰值，需要改变最终 bitmap、范围匹配源或
+  AI 解码源的存储/消费合同，而不只是继续缩小 scratch。
 - 用户授权的 α7R V 有损 ARW 已建立一次本机解码、CPU 预览和全尺寸 JPEG 耗时基线；应用内首屏、
   滑块 P95、100% GPU ROI、GPU 文件导出和进程峰值，以及其余光照/ISO/压缩模式仍待新样片扩充，
   不得用上述尺寸算术或单样片结果替代。

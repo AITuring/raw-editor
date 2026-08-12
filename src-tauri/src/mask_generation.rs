@@ -837,6 +837,7 @@ pub struct TransformParams {
 fn generate_ai_bitmap_from_full_mask(
     full_mask_image: &GrayImage,
     tf: &TransformParams,
+    output_origin: (u32, u32),
 ) -> GrayImage {
     let (full_mask_w, full_mask_h) = full_mask_image.dimensions();
     let mut final_mask = GrayImage::new(tf.width, tf.height);
@@ -858,8 +859,8 @@ fn generate_ai_bitmap_from_full_mask(
 
     for y_out in 0..tf.height {
         for x_out in 0..tf.width {
-            let x_uncrop = x_out as f32 + tf.crop_offset.0;
-            let y_uncrop = y_out as f32 + tf.crop_offset.1;
+            let x_uncrop = (x_out + output_origin.0) as f32 + tf.crop_offset.0;
+            let y_uncrop = (y_out + output_origin.1) as f32 + tf.crop_offset.1;
 
             let x_centered = x_uncrop - center_x;
             let y_centered = y_uncrop - center_y;
@@ -906,7 +907,7 @@ fn generate_ai_bitmap_from_full_mask(
     final_mask
 }
 
-pub fn generate_ai_bitmap_from_base64(data_url: &str, tf: &TransformParams) -> Option<GrayImage> {
+fn decode_ai_bitmap_from_base64(data_url: &str) -> Option<GrayImage> {
     let b64_data = if let Some(idx) = data_url.find(',') {
         &data_url[idx + 1..]
     } else {
@@ -914,9 +915,267 @@ pub fn generate_ai_bitmap_from_base64(data_url: &str, tf: &TransformParams) -> O
     };
 
     let decoded_bytes = general_purpose::STANDARD.decode(b64_data).ok()?;
-    let full_mask_image = image::load_from_memory(&decoded_bytes).ok()?.to_luma8();
+    Some(image::load_from_memory(&decoded_bytes).ok()?.to_luma8())
+}
 
-    Some(generate_ai_bitmap_from_full_mask(&full_mask_image, tf))
+pub fn generate_ai_bitmap_from_base64(data_url: &str, tf: &TransformParams) -> Option<GrayImage> {
+    let full_mask_image = decode_ai_bitmap_from_base64(data_url)?;
+    Some(generate_ai_bitmap_from_full_mask(
+        &full_mask_image,
+        tf,
+        (0, 0),
+    ))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AiMaskTransform {
+    rotation: f32,
+    flip_horizontal: bool,
+    flip_vertical: bool,
+    orientation_steps: u8,
+}
+
+impl AiMaskTransform {
+    fn from_options(
+        rotation: Option<f32>,
+        flip_horizontal: Option<bool>,
+        flip_vertical: Option<bool>,
+        orientation_steps: Option<u8>,
+    ) -> Self {
+        Self {
+            rotation: rotation.unwrap_or(0.0),
+            flip_horizontal: flip_horizontal.unwrap_or(false),
+            flip_vertical: flip_vertical.unwrap_or(false),
+            orientation_steps: orientation_steps.unwrap_or(0),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn rasterize(
+        self,
+        full_mask_image: &GrayImage,
+        width: u32,
+        height: u32,
+        scale: f32,
+        crop_offset: (f32, f32),
+        output_origin: (u32, u32),
+    ) -> GrayImage {
+        generate_ai_bitmap_from_full_mask(
+            full_mask_image,
+            &TransformParams {
+                rotation: self.rotation,
+                flip_horizontal: self.flip_horizontal,
+                flip_vertical: self.flip_vertical,
+                orientation_steps: self.orientation_steps,
+                width,
+                height,
+                scale,
+                crop_offset,
+            },
+            output_origin,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AiDepthSelection {
+    min_depth: f32,
+    max_depth: f32,
+    min_fade: f32,
+    max_fade: f32,
+    feather_sigma: f32,
+}
+
+impl AiDepthSelection {
+    fn new(min_depth: f32, max_depth: f32, min_fade: f32, max_fade: f32, feather: f32) -> Self {
+        Self {
+            min_depth,
+            max_depth,
+            min_fade,
+            max_fade,
+            feather_sigma: if feather > 0.0 { feather * 0.1 } else { 0.0 },
+        }
+    }
+
+    fn blur_radius(self) -> u32 {
+        image_gaussian_blur_radius(self.feather_sigma)
+    }
+
+    fn apply_pointwise(self, mask: &mut GrayImage) {
+        fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+            let t = ((x - edge0) / (edge1 - edge0).max(0.0001)).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        }
+
+        for pixel in mask.pixels_mut() {
+            let value_percentage = (pixel[0] as f32 / 255.0) * 100.0;
+            let lower_bound = smoothstep(
+                self.min_depth - self.min_fade,
+                self.min_depth,
+                value_percentage,
+            );
+            let upper_bound = 1.0
+                - smoothstep(
+                    self.max_depth,
+                    self.max_depth + self.max_fade,
+                    value_percentage,
+                );
+            let bandpass_weight = lower_bound * upper_bound;
+            let depth_intensity = value_percentage / 100.0;
+            pixel[0] = (bandpass_weight * depth_intensity * 255.0) as u8;
+        }
+    }
+
+    fn apply_blur(self, mask: &mut GrayImage) {
+        if self.feather_sigma > 0.0 {
+            *mask = image::imageops::blur(mask, self.feather_sigma);
+        }
+    }
+}
+
+fn image_gaussian_blur_radius(sigma: f32) -> u32 {
+    if sigma <= 0.0 {
+        return 0;
+    }
+
+    // Keep this in lockstep with image 0.25.x GaussianBlurParameters::kernel_size_from_sigma.
+    let possible_size = (((((sigma - 0.8) / 0.3) + 1.0) * 2.0) + 1.0).max(3.0) as u32;
+    let kernel_size = if possible_size.is_multiple_of(2) {
+        possible_size + 1
+    } else {
+        possible_size
+    };
+    kernel_size / 2
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AiMaskPostprocess {
+    Binary,
+    Depth(AiDepthSelection),
+}
+
+struct TiledAiMaskRasterizer {
+    full_mask_image: GrayImage,
+    transform: AiMaskTransform,
+    grow: f32,
+    feather: f32,
+    postprocess: AiMaskPostprocess,
+}
+
+impl TiledAiMaskRasterizer {
+    fn new(sub_mask: &SubMask) -> Option<Self> {
+        let parameters = &sub_mask.parameters;
+        let number = |camel_case: &str, snake_case: &str| {
+            parameters
+                .get(camel_case)
+                .or_else(|| parameters.get(snake_case))
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32
+        };
+        let boolean = |camel_case: &str, snake_case: &str| {
+            parameters
+                .get(camel_case)
+                .or_else(|| parameters.get(snake_case))
+                .and_then(Value::as_bool)
+        };
+        let integer = |camel_case: &str, snake_case: &str| {
+            parameters
+                .get(camel_case)
+                .or_else(|| parameters.get(snake_case))
+                .and_then(Value::as_u64)
+                .map(|value| value as u8)
+        };
+        let data_url = parameters
+            .get("maskDataBase64")
+            .or_else(|| parameters.get("mask_data_base64"))
+            .and_then(Value::as_str)?;
+        let grow = number("grow", "grow");
+        let feather = number("feather", "feather");
+        let transform = AiMaskTransform::from_options(
+            Some(number("rotation", "rotation")),
+            boolean("flipHorizontal", "flip_horizontal"),
+            boolean("flipVertical", "flip_vertical"),
+            integer("orientationSteps", "orientation_steps"),
+        );
+
+        let postprocess = match sub_mask.mask_type.as_str() {
+            "ai-subject" | "quick-eraser" => {
+                parameters
+                    .get("startX")
+                    .or_else(|| parameters.get("start_x"))
+                    .and_then(Value::as_f64)?;
+                parameters
+                    .get("startY")
+                    .or_else(|| parameters.get("start_y"))
+                    .and_then(Value::as_f64)?;
+                parameters
+                    .get("endX")
+                    .or_else(|| parameters.get("end_x"))
+                    .and_then(Value::as_f64)?;
+                parameters
+                    .get("endY")
+                    .or_else(|| parameters.get("end_y"))
+                    .and_then(Value::as_f64)?;
+                AiMaskPostprocess::Binary
+            }
+            "ai-foreground" | "ai-sky" => AiMaskPostprocess::Binary,
+            "ai-depth" => AiMaskPostprocess::Depth(AiDepthSelection::new(
+                number("minDepth", "min_depth"),
+                number("maxDepth", "max_depth"),
+                number("minFade", "min_fade"),
+                number("maxFade", "max_fade"),
+                feather,
+            )),
+            _ => return None,
+        };
+
+        Some(Self {
+            full_mask_image: decode_ai_bitmap_from_base64(data_url)?,
+            transform,
+            grow,
+            feather,
+            postprocess,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn rasterize(
+        &self,
+        width: u32,
+        height: u32,
+        scale: f32,
+        crop_offset: (f32, f32),
+        output_origin: (u32, u32),
+    ) -> GrayImage {
+        let mut mask = self.transform.rasterize(
+            &self.full_mask_image,
+            width,
+            height,
+            scale,
+            crop_offset,
+            output_origin,
+        );
+        if let AiMaskPostprocess::Depth(selection) = self.postprocess {
+            selection.apply_pointwise(&mut mask);
+        }
+        mask
+    }
+
+    fn halo(&self, width: u32, height: u32) -> u32 {
+        let depth_radius = match self.postprocess {
+            AiMaskPostprocess::Binary => 0,
+            AiMaskPostprocess::Depth(selection) => selection.blur_radius(),
+        };
+        depth_radius
+            .saturating_add(GrowFeatherPlan::new(self.grow, self.feather, width, height).halo())
+    }
+
+    fn apply_cross_pixel_filters(&self, mask: &mut GrayImage, width: u32, height: u32) {
+        if let AiMaskPostprocess::Depth(selection) = self.postprocess {
+            selection.apply_blur(mask);
+        }
+        GrowFeatherPlan::new(self.grow, self.feather, width, height).apply(mask);
+    }
 }
 
 fn generate_ai_sky_bitmap(
@@ -977,35 +1236,16 @@ fn generate_ai_depth_bitmap(
         crop_offset,
     };
 
-    let depth_map = generate_ai_bitmap_from_base64(&data_url, &tf)?;
-
-    let (w, h) = depth_map.dimensions();
-    let mut mask = GrayImage::new(w, h);
-
-    fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-        let t = ((x - edge0) / (edge1 - edge0).max(0.0001)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    }
-
-    let min_fade = params.min_fade;
-    let max_fade = params.max_fade;
-
-    for (x, y, p) in depth_map.enumerate_pixels() {
-        let val_pct = (p[0] as f32 / 255.0) * 100.0;
-
-        let lower_bound = smoothstep(params.min_depth - min_fade, params.min_depth, val_pct);
-        let upper_bound = 1.0 - smoothstep(params.max_depth, params.max_depth + max_fade, val_pct);
-        let bandpass_weight = lower_bound * upper_bound;
-
-        let depth_intensity = val_pct / 100.0;
-        let final_intensity = bandpass_weight * depth_intensity;
-
-        mask.put_pixel(x, y, Luma([(final_intensity * 255.0) as u8]));
-    }
-
-    if params.feather > 0.0 {
-        mask = image::imageops::blur(&mask, params.feather * 0.1);
-    }
+    let mut mask = generate_ai_bitmap_from_base64(&data_url, &tf)?;
+    let depth_selection = AiDepthSelection::new(
+        params.min_depth,
+        params.max_depth,
+        params.min_fade,
+        params.max_fade,
+        params.feather,
+    );
+    depth_selection.apply_pointwise(&mut mask);
+    depth_selection.apply_blur(&mut mask);
 
     apply_grow_and_feather(
         &mut mask,
@@ -1435,6 +1675,7 @@ enum TiledSubMaskRasterizer {
     Flow(FlowMaskParameters),
     Color(ParametricMaskParameters),
     Luminance(ParametricMaskParameters),
+    Ai(TiledAiMaskRasterizer),
     All,
 }
 
@@ -1459,6 +1700,9 @@ impl TiledSubMaskRasterizer {
             "luminance" => Some(Self::Luminance(
                 serde_json::from_value(sub_mask.parameters.clone()).ok()?,
             )),
+            "ai-subject" | "ai-foreground" | "ai-sky" | "ai-depth" | "quick-eraser" => {
+                Some(Self::Ai(TiledAiMaskRasterizer::new(sub_mask)?))
+            }
             "all" => Some(Self::All),
             _ => None,
         }
@@ -1524,16 +1768,33 @@ impl TiledSubMaskRasterizer {
                 output_origin,
                 warped_image?,
             ),
+            Self::Ai(rasterizer) => {
+                Some(rasterizer.rasterize(width, height, scale, crop_offset, output_origin))
+            }
             Self::All => Some(generate_all_bitmap(width, height)),
         }
     }
 
-    fn grow_feather_plan(&self, width: u32, height: u32) -> GrowFeatherPlan {
+    fn halo(&self, width: u32, height: u32) -> u32 {
+        match self {
+            Self::Color(parameters) | Self::Luminance(parameters) => {
+                GrowFeatherPlan::new(parameters.grow, parameters.feather, width, height).halo()
+            }
+            Self::Ai(rasterizer) => rasterizer.halo(width, height),
+            _ => 0,
+        }
+    }
+
+    fn apply_cross_pixel_filters(&self, mask: &mut GrayImage, width: u32, height: u32) {
         match self {
             Self::Color(parameters) | Self::Luminance(parameters) => {
                 GrowFeatherPlan::new(parameters.grow, parameters.feather, width, height)
+                    .apply(mask);
             }
-            _ => GrowFeatherPlan::default(),
+            Self::Ai(rasterizer) => {
+                rasterizer.apply_cross_pixel_filters(mask, width, height);
+            }
+            _ => {}
         }
     }
 
@@ -1550,6 +1811,7 @@ impl TiledSubMaskRasterizer {
                         && target_y < height as i32
                 })
             }
+            Self::Ai(_) => true,
             _ => true,
         }
     }
@@ -1645,6 +1907,24 @@ fn should_generate_sub_mask_in_tiles(
                             .has_effect()
                 })
         }
+        // AI masks keep their decoded source bitmap, but bounded output/filter tiles avoid a
+        // transformed full-frame temporary whenever composition or a cross-pixel filter needs it.
+        "ai-subject" | "ai-foreground" | "ai-sky" | "quick-eraser" | "ai-depth" => {
+            let grow = sub_mask
+                .parameters
+                .get("grow")
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32;
+            let feather = sub_mask
+                .parameters
+                .get("feather")
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32;
+            let grow_feather_effect =
+                GrowFeatherPlan::new(grow, feather, width, height).has_effect();
+            let depth_blur_effect = sub_mask.mask_type == "ai-depth" && feather > 0.0;
+            has_composition || grow_feather_effect || depth_blur_effect
+        }
         _ => false,
     }
 }
@@ -1709,8 +1989,7 @@ fn composite_sub_mask_tiled_with_edge(
     if !rasterizer.is_ready(warped_image) {
         return false;
     }
-    let grow_feather = rasterizer.grow_feather_plan(width, height);
-    let halo = grow_feather.halo();
+    let halo = rasterizer.halo(width, height);
     let output = final_mask.get_or_insert_with(|| GrayImage::new(width, height));
 
     for tile_y in (0..height).step_by(tile_edge as usize) {
@@ -1739,7 +2018,7 @@ fn composite_sub_mask_tiled_with_edge(
                     warped_image,
                 )
                 .expect("validated tiled mask rasterizer");
-            grow_feather.apply(&mut tile);
+            rasterizer.apply_cross_pixel_filters(&mut tile, width, height);
             composite_sub_mask_tile_region(
                 output,
                 &mut tile,
@@ -2069,6 +2348,17 @@ mod tests {
         }
     }
 
+    fn grayscale_png_data_url(image: &GrayImage) -> String {
+        let mut encoded = Cursor::new(Vec::new());
+        image
+            .write_to(&mut encoded, ImageFormat::Png)
+            .expect("encode deterministic AI mask fixture");
+        format!(
+            "data:image/png;base64,{}",
+            general_purpose::STANDARD.encode(encoded.get_ref())
+        )
+    }
+
     fn brush_parameters(flow: bool) -> Value {
         let first_line = if flow {
             serde_json::json!({
@@ -2339,6 +2629,143 @@ mod tests {
     }
 
     #[test]
+    fn tiled_ai_masks_match_full_frame_with_exact_halo_and_one_decoded_source() {
+        const WIDTH: u32 = 141;
+        const HEIGHT: u32 = 109;
+        const TEST_TILE_EDGE: u32 = 37;
+        const SCALE: f32 = 1.25;
+        const CROP_OFFSET: (f32, f32) = (11.5, 7.25);
+
+        let full_mask = GrayImage::from_fn(181, 137, |x, y| {
+            Luma([x.wrapping_mul(17).wrapping_add(y.wrapping_mul(13)) as u8])
+        });
+        let data_url = grayscale_png_data_url(&full_mask);
+        let binary_parameters = serde_json::json!({
+            "startX": 12.0,
+            "startY": 9.0,
+            "endX": 128.0,
+            "endY": 96.0,
+            "maskDataBase64": data_url,
+            "grow": 100.0,
+            "feather": 100.0,
+            "rotation": 17.0,
+            "flipHorizontal": true,
+            "flipVertical": false,
+            "orientationSteps": 1
+        });
+        let cases = vec![
+            ("ai-subject", binary_parameters.clone()),
+            ("ai-foreground", binary_parameters.clone()),
+            ("ai-sky", binary_parameters.clone()),
+            ("quick-eraser", binary_parameters),
+            (
+                "ai-depth",
+                serde_json::json!({
+                    "maskDataBase64": grayscale_png_data_url(&full_mask),
+                    "minDepth": 18.0,
+                    "maxDepth": 82.0,
+                    "minFade": 11.0,
+                    "maxFade": 9.0,
+                    "grow": -100.0,
+                    "feather": 60.0,
+                    "rotation": -13.0,
+                    "flipHorizontal": false,
+                    "flipVertical": true,
+                    "orientationSteps": 2
+                }),
+            ),
+        ];
+
+        for (mask_type, parameters) in cases {
+            for mode in [
+                SubMaskMode::Additive,
+                SubMaskMode::Subtractive,
+                SubMaskMode::Intersect,
+            ] {
+                let sub_mask = test_sub_mask(mask_type, parameters.clone(), mode);
+                let base = GrayImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                    Luma([x.wrapping_mul(11).wrapping_add(y * 7) as u8])
+                });
+
+                let mut expected = (mode != SubMaskMode::Additive).then(|| base.clone());
+                let mut full_sub_mask =
+                    generate_sub_mask_bitmap(&sub_mask, WIDTH, HEIGHT, SCALE, CROP_OFFSET, None)
+                        .expect("AI mask should decode and rasterize");
+                let first_pixel = full_sub_mask.get_pixel(0, 0)[0];
+                assert!(
+                    full_sub_mask.pixels().any(|pixel| pixel[0] != first_pixel),
+                    "{mask_type} fixture must exercise non-uniform pixels"
+                );
+                apply_sub_mask_modifiers(&mut full_sub_mask, &sub_mask);
+                composite_sub_mask(&mut expected, full_sub_mask, mode);
+
+                let mut actual = (mode != SubMaskMode::Additive).then_some(base);
+                assert!(composite_sub_mask_tiled_with_edge(
+                    &mut actual,
+                    &sub_mask,
+                    WIDTH,
+                    HEIGHT,
+                    SCALE,
+                    CROP_OFFSET,
+                    None,
+                    TEST_TILE_EDGE,
+                ));
+
+                let actual = actual.expect("tiled AI composition output");
+                let expected = expected.expect("full-frame AI composition output");
+                let first_difference = actual
+                    .as_raw()
+                    .iter()
+                    .zip(expected.as_raw())
+                    .position(|(actual, expected)| actual != expected)
+                    .map(|index| {
+                        (
+                            index as u32 % WIDTH,
+                            index as u32 / WIDTH,
+                            actual.as_raw()[index],
+                            expected.as_raw()[index],
+                        )
+                    });
+                assert_eq!(
+                    first_difference, None,
+                    "{mask_type} {mode:?} changed at an overlap seam"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ai_depth_halo_bounds_supported_60mp_filter_scratch() {
+        const WIDTH: u32 = 9_504;
+        const HEIGHT: u32 = 6_336;
+        const FULL_MASK_BYTES: u64 = 60_217_344;
+        const MAX_AI_DEPTH_HALO: u64 = 159;
+        const MAX_EXPANDED_TILE_EDGE: u64 = 2_366;
+        const MAX_EXPANDED_TILE_BYTES: u64 = 5_597_956;
+
+        assert_eq!(image_gaussian_blur_radius(0.0), 0);
+        assert_eq!(image_gaussian_blur_radius(0.1), 1);
+        assert_eq!(image_gaussian_blur_radius(1.5), 3);
+        assert_eq!(image_gaussian_blur_radius(10.0), 32);
+
+        let grow_feather = GrowFeatherPlan::new(100.0, 100.0, WIDTH, HEIGHT);
+        assert_eq!(
+            u64::from(grow_feather.halo()) + u64::from(image_gaussian_blur_radius(10.0)),
+            MAX_AI_DEPTH_HALO
+        );
+        assert_eq!(
+            u64::from(GPU_TILE_SIZE) + MAX_AI_DEPTH_HALO * 2,
+            MAX_EXPANDED_TILE_EDGE
+        );
+        assert_eq!(MAX_EXPANDED_TILE_EDGE.pow(2), MAX_EXPANDED_TILE_BYTES);
+        assert_eq!(u64::from(WIDTH) * u64::from(HEIGHT), FULL_MASK_BYTES);
+        assert_eq!(
+            FULL_MASK_BYTES * 3 - MAX_EXPANDED_TILE_BYTES * 3,
+            163_858_164
+        );
+    }
+
+    #[test]
     fn grow_feather_halo_bounds_supported_60mp_range_mask_scratch() {
         const WIDTH: u32 = 9_504;
         const HEIGHT: u32 = 6_336;
@@ -2435,6 +2862,40 @@ mod tests {
         color.parameters["feather"] = serde_json::json!(35.0);
         assert!(should_generate_sub_mask_in_tiles(
             &color, false, 9_504, 6_336
+        ));
+
+        let mut ai_subject = test_sub_mask(
+            "ai-subject",
+            serde_json::json!({ "grow": 0.0, "feather": 0.0 }),
+            SubMaskMode::Additive,
+        );
+        assert!(!should_generate_sub_mask_in_tiles(
+            &ai_subject,
+            false,
+            9_504,
+            6_336
+        ));
+        assert!(should_generate_sub_mask_in_tiles(
+            &ai_subject,
+            true,
+            9_504,
+            6_336
+        ));
+        ai_subject.parameters["grow"] = serde_json::json!(50.0);
+        assert!(should_generate_sub_mask_in_tiles(
+            &ai_subject,
+            false,
+            9_504,
+            6_336
+        ));
+
+        let ai_depth = test_sub_mask(
+            "ai-depth",
+            serde_json::json!({ "grow": 0.0, "feather": 15.0 }),
+            SubMaskMode::Additive,
+        );
+        assert!(should_generate_sub_mask_in_tiles(
+            &ai_depth, false, 9_504, 6_336
         ));
     }
 
@@ -2570,6 +3031,157 @@ mod tests {
             expected_scratch_bytes,
             sample_hash,
         );
+        std::hint::black_box(composition);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP AI-mask overlap scratch benchmark"]
+    fn synthetic_60mp_ai_mask_overlap_scratch_harness() {
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode =
+            std::env::var("RAW_EDITOR_AI_MASK_BENCH_MODE").unwrap_or_else(|_| "tiled".to_string());
+        assert!(matches!(mode.as_str(), "full" | "tiled"));
+
+        let source = GrayImage::from_fn(width, height, |x, y| {
+            Luma([x.wrapping_mul(17).wrapping_add(y.wrapping_mul(13)) as u8])
+        });
+        let mut composition = GrayImage::from_pixel(width, height, Luma([17]));
+        let transform = AiMaskTransform::from_options(None, None, None, None);
+        let depth_selection = AiDepthSelection::new(18.0, 82.0, 10.0, 10.0, 1.0);
+        let grow_feather = GrowFeatherPlan::new(2.0, 1.0, width, height);
+        let halo = depth_selection
+            .blur_radius()
+            .saturating_add(grow_feather.halo());
+        let sub_mask = SubMask {
+            id: "synthetic-ai-mask".to_string(),
+            mask_type: "ai-depth".to_string(),
+            visible: true,
+            invert: false,
+            opacity: 100.0,
+            mode: SubMaskMode::Additive,
+            parameters: Value::Null,
+        };
+        let pid = sysinfo::get_current_pid().expect("resolve benchmark process id");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read benchmark process after AI source and output allocation")
+            .memory();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let started = Instant::now();
+        if mode == "full" {
+            let mut full_sub_mask =
+                transform.rasterize(&source, width, height, 1.0, (0.0, 0.0), (0, 0));
+            depth_selection.apply_pointwise(&mut full_sub_mask);
+            depth_selection.apply_blur(&mut full_sub_mask);
+            grow_feather.apply(&mut full_sub_mask);
+            composite_sub_mask_tile(
+                &mut composition,
+                &full_sub_mask,
+                0,
+                0,
+                SubMaskMode::Additive,
+            );
+        } else {
+            for tile_y in (0..height).step_by(GPU_TILE_SIZE as usize) {
+                let tile_height = (height - tile_y).min(GPU_TILE_SIZE);
+                for tile_x in (0..width).step_by(GPU_TILE_SIZE as usize) {
+                    let tile_width = (width - tile_x).min(GPU_TILE_SIZE);
+                    let expanded_x = tile_x.saturating_sub(halo);
+                    let expanded_y = tile_y.saturating_sub(halo);
+                    let expanded_right = tile_x
+                        .saturating_add(tile_width)
+                        .saturating_add(halo)
+                        .min(width);
+                    let expanded_bottom = tile_y
+                        .saturating_add(tile_height)
+                        .saturating_add(halo)
+                        .min(height);
+                    let mut tile = transform.rasterize(
+                        &source,
+                        expanded_right - expanded_x,
+                        expanded_bottom - expanded_y,
+                        1.0,
+                        (0.0, 0.0),
+                        (expanded_x, expanded_y),
+                    );
+                    depth_selection.apply_pointwise(&mut tile);
+                    depth_selection.apply_blur(&mut tile);
+                    grow_feather.apply(&mut tile);
+                    composite_sub_mask_tile_region(
+                        &mut composition,
+                        &mut tile,
+                        tile_x - expanded_x,
+                        tile_y - expanded_y,
+                        tile_width,
+                        tile_height,
+                        tile_x,
+                        tile_y,
+                        &sub_mask,
+                    );
+                }
+            }
+        }
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(10));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join AI-mask RSS sampler");
+
+        let sample_stride = (composition.as_raw().len() / 4_096).max(1);
+        let sample_hash = composition
+            .as_raw()
+            .iter()
+            .step_by(sample_stride)
+            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, sample| {
+                (hash ^ u64::from(*sample)).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        let pixel_bytes = u64::from(width) * u64::from(height);
+        let peak_rss = peak_rss.load(Ordering::Relaxed);
+        let expected_scratch_bytes = if mode == "full" {
+            pixel_bytes * 3
+        } else {
+            let expanded_width = width.min(GPU_TILE_SIZE.saturating_add(halo * 2));
+            let expanded_height = height.min(GPU_TILE_SIZE.saturating_add(halo * 2));
+            u64::from(expanded_width) * u64::from(expanded_height) * 3
+        };
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"haloPixels\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"sourceAndOutputBytes\":{},\"expectedScratchBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            halo,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss,
+            peak_rss.saturating_sub(baseline_rss),
+            pixel_bytes * 2,
+            expected_scratch_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(source);
         std::hint::black_box(composition);
     }
 
