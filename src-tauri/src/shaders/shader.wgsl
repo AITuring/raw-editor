@@ -1252,8 +1252,8 @@ fn apply_all_curves(color: vec3<f32>, luma_curve: array<Point, 16>, luma_curve_c
     }
 }
 
-fn get_mask_influence(mask_index: u32, coords: vec2<u32>) -> f32 {
-    return textureLoad(mask_textures, vec2<i32>(coords), i32(mask_index), 0).r;
+fn get_mask_influence(mask_index: u32, tile_coords: vec2<u32>) -> f32 {
+    return textureLoad(mask_textures, vec2<i32>(tile_coords), i32(mask_index), 0).r;
 }
 
 fn sample_lut_tetrahedral(uv: vec3<f32>) -> vec3<f32> {
@@ -1512,7 +1512,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     var h7_h = adjustments.global.hsl[7].hue; var h7_s = adjustments.global.hsl[7].saturation; var h7_l = adjustments.global.hsl[7].luminance;
 
     for (var i = 0u; i < adjustments.mask_count; i = i + 1u) {
-        let influence = get_mask_influence(i, absolute_coord);
+        let influence = get_mask_influence(i, id.xy);
         if (influence > 0.001) {
             let m = adjustments.mask_adjustments[i];
 
@@ -1577,7 +1577,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
     var sharpness_delta = vec3<f32>(0.0);
     for (var i = 0u; i < adjustments.mask_count; i = i + 1u) {
-        let influence = get_mask_influence(i, absolute_coord);
+        let influence = get_mask_influence(i, id.xy);
         if (influence > 0.001) {
             let m = adjustments.mask_adjustments[i];
             if (abs(m.sharpness) > 0.001) {
@@ -1647,7 +1647,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     );
 
     for (var i = 0u; i < adjustments.mask_count; i = i + 1u) {
-        let influence = get_mask_influence(i, absolute_coord);
+        let influence = get_mask_influence(i, id.xy);
         if (influence > 0.001) {
             let m = adjustments.mask_adjustments[i];
             let mask_graded = apply_color_grading(
@@ -1699,7 +1699,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     );
 
     for (var i = 0u; i < adjustments.mask_count; i = i + 1u) {
-        let influence = get_mask_influence(i, absolute_coord);
+        let influence = get_mask_influence(i, id.xy);
         if (influence > 0.001) {
             let m = adjustments.mask_adjustments[i];
             let mask_curved_srgb = apply_all_curves(final_rgb,

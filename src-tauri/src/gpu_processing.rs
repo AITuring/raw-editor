@@ -12,7 +12,7 @@ use wgpu::util::{DeviceExt, TextureDataOrder};
 use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
 use crate::render_strategy::{
-    GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuProcessorTexturePlan, MaskTexturePlan,
+    GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuProcessorTexturePlan, MaskTexturePlan, MaskTileUploadPlan,
     StreamingExportBufferPlan, should_reclaim_gpu_resources,
 };
 use crate::{AppState, GpuImageCache};
@@ -1195,14 +1195,31 @@ impl GpuProcessor {
             request.mask_bitmaps.len(),
             MAX_MASKS,
         );
-        let mask_texture_view = if mask_plan.use_dummy {
-            self.dummy_mask_view.clone()
+        for (layer, mask_bitmap) in request
+            .mask_bitmaps
+            .iter()
+            .take(mask_plan.upload_layers as usize)
+            .enumerate()
+        {
+            if mask_bitmap.dimensions() != (width, height) {
+                return Err(format!(
+                    "Mask layer {} dimensions {}x{} do not match render input {}x{}",
+                    layer,
+                    mask_bitmap.width(),
+                    mask_bitmap.height(),
+                    width,
+                    height
+                ));
+            }
+        }
+        let mask_texture = if mask_plan.use_dummy {
+            None
         } else {
-            let mask_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Active Mask Texture Array"),
+            Some(device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Active Mask Tile Texture Array"),
                 size: wgpu::Extent3d {
-                    width: mask_plan.width,
-                    height: mask_plan.height,
+                    width: mask_plan.texture_width,
+                    height: mask_plan.texture_height,
                     depth_or_array_layers: mask_plan.layers,
                 },
                 mip_level_count: 1,
@@ -1211,59 +1228,26 @@ impl GpuProcessor {
                 format: wgpu::TextureFormat::R8Unorm,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
-            });
-
-            for (layer, mask_bitmap) in request
-                .mask_bitmaps
-                .iter()
-                .take(mask_plan.upload_layers as usize)
-                .enumerate()
-            {
-                if mask_bitmap.dimensions() != (width, height) {
-                    return Err(format!(
-                        "Mask layer {} dimensions {}x{} do not match render input {}x{}",
-                        layer,
-                        mask_bitmap.width(),
-                        mask_bitmap.height(),
-                        width,
-                        height
-                    ));
-                }
-
-                queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &mask_texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: layer as u32,
-                        },
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    mask_bitmap.as_raw(),
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(width),
-                        rows_per_image: Some(height),
-                    },
-                    wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
-
-            mask_texture.create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2Array),
-                ..Default::default()
-            })
+            }))
         };
+        let mask_texture_view = mask_texture
+            .as_ref()
+            .map(|texture| {
+                texture.create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2Array),
+                    ..Default::default()
+                })
+            })
+            .unwrap_or_else(|| self.dummy_mask_view.clone());
         log::debug!(
-            "Mask texture: {} layer(s), {} logical byte(s), {} uploaded layer(s)",
+            "Mask texture: {} layer(s), {}x{} tile / {}x{} source, {} logical byte(s), {} byte(s) avoided, {} uploaded layer(s)",
             mask_plan.layers,
+            mask_plan.texture_width,
+            mask_plan.texture_height,
+            mask_plan.source_width,
+            mask_plan.source_height,
             mask_plan.logical_texture_bytes(),
+            mask_plan.saved_texture_bytes(),
             mask_plan.upload_layers
         );
 
@@ -1472,6 +1456,66 @@ impl GpuProcessor {
                     height: input_height,
                     depth_or_array_layers: 1,
                 };
+
+                if let Some(mask_texture) = &mask_texture {
+                    // Queue writes and dispatches are ordered. Refill the reusable mask array with
+                    // this input tile's ROI, then let WGSL sample it with `id.xy` local coordinates.
+                    if input_width > mask_plan.texture_width
+                        || input_height > mask_plan.texture_height
+                    {
+                        return Err(format!(
+                            "Mask tile {}x{} exceeds reusable texture {}x{}",
+                            input_width,
+                            input_height,
+                            mask_plan.texture_width,
+                            mask_plan.texture_height
+                        ));
+                    }
+                    let upload = MaskTileUploadPlan::new(
+                        width,
+                        height,
+                        input_x_start,
+                        input_y_start,
+                        input_width,
+                        input_height,
+                    )
+                    .ok_or_else(|| {
+                        format!(
+                            "Mask tile x={} y={} {}x{} exceeds source {}x{}",
+                            input_x_start, input_y_start, input_width, input_height, width, height
+                        )
+                    })?;
+                    for (layer, mask_bitmap) in request
+                        .mask_bitmaps
+                        .iter()
+                        .take(mask_plan.upload_layers as usize)
+                        .enumerate()
+                    {
+                        queue.write_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: mask_texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d {
+                                    x: 0,
+                                    y: 0,
+                                    z: layer as u32,
+                                },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            mask_bitmap.as_raw(),
+                            wgpu::TexelCopyBufferLayout {
+                                offset: upload.source_offset_bytes,
+                                bytes_per_row: Some(upload.bytes_per_row),
+                                rows_per_image: Some(upload.rows_per_image),
+                            },
+                            wgpu::Extent3d {
+                                width: upload.width,
+                                height: upload.height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                    }
+                }
 
                 let run_blur = |base_radius: f32, output_view: &wgpu::TextureView| -> bool {
                     let radius = (base_radius * scale).ceil().max(1.0) as u32;
@@ -2258,4 +2302,173 @@ fn process_and_get_dynamic_image_inner(
     }
 
     Ok(shared_image)
+}
+
+#[cfg(test)]
+mod shader_tests {
+    use std::sync::{Arc, Mutex};
+
+    use half::f16;
+    use image::{GrayImage, Luma};
+    use naga::valid::{Capabilities, ValidationFlags, Validator};
+    use wgpu::util::{DeviceExt, TextureDataOrder};
+
+    use super::{GpuProcessor, GpuRenderOutput, RenderRequest};
+    use crate::image_processing::{AllAdjustments, GpuContext};
+
+    #[test]
+    fn bundled_wgsl_modules_parse_and_validate() {
+        for (name, source) in [
+            ("display", include_str!("shaders/display.wgsl")),
+            ("blur", include_str!("shaders/blur.wgsl")),
+            ("flare", include_str!("shaders/flare.wgsl")),
+            ("image-processing", include_str!("shaders/shader.wgsl")),
+        ] {
+            let module = naga::front::wgsl::parse_str(source)
+                .unwrap_or_else(|error| panic!("{name} WGSL failed to parse: {error}"));
+            Validator::new(ValidationFlags::all(), Capabilities::all())
+                .validate(&module)
+                .unwrap_or_else(|error| panic!("{name} WGSL failed validation: {error}"));
+        }
+    }
+
+    #[test]
+    #[ignore = "manual local-GPU mask tile pixel regression"]
+    fn tiled_mask_gpu_sampling_matches_source_pixels_across_tile_boundary() {
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            ..Default::default()
+        }))
+        .expect("local GPU adapter for mask tile regression");
+        let limits = adapter.limits();
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("Mask Tile Regression Device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: limits.clone(),
+            experimental_features: wgpu::ExperimentalFeatures::default(),
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
+        }))
+        .expect("request local GPU device for mask tile regression");
+        let context = GpuContext {
+            device: Arc::new(device),
+            queue: Arc::new(queue),
+            limits,
+            display: Arc::new(Mutex::new(None)),
+        };
+
+        for (width, height) in [(2_305_u32, 8_u32), (8, 2_050)] {
+            let processor = GpuProcessor::new(context.clone(), width, height, false)
+                .expect("create GPU processor for mask tile regression");
+
+            let mut source = Vec::with_capacity(width as usize * height as usize * 4);
+            for _ in 0..u64::from(width) * u64::from(height) {
+                source.extend([
+                    f16::from_f32(0.18),
+                    f16::from_f32(0.22),
+                    f16::from_f32(0.26),
+                    f16::ONE,
+                ]);
+            }
+            let input_texture = context.device.create_texture_with_data(
+                &context.queue,
+                &wgpu::TextureDescriptor {
+                    label: Some("Mask Tile Regression Input"),
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                },
+                TextureDataOrder::MipMajor,
+                bytemuck::cast_slice(&source),
+            );
+            let input_view = input_texture.create_view(&Default::default());
+
+            let mut base_adjustments = AllAdjustments::default();
+            base_adjustments.global.is_raw_image = 1;
+            let (base, ..) = processor
+                .run(
+                    &input_view,
+                    width,
+                    height,
+                    RenderRequest {
+                        adjustments: base_adjustments,
+                        mask_bitmaps: &[],
+                        lut: None,
+                        roi: None,
+                    },
+                    GpuRenderOutput::CpuImage,
+                )
+                .expect("render unmasked GPU reference");
+
+            let horizontal_case = width > height;
+            let mask = GrayImage::from_fn(width, height, |x, y| {
+                let axis = if horizontal_case { x } else { y };
+                Luma([if (axis / 64) % 2 == 0 { 255 } else { 0 }])
+            });
+            let mut masked_adjustments = base_adjustments;
+            masked_adjustments.mask_count = 1;
+            masked_adjustments.mask_adjustments[0].exposure = 1.0;
+            let (masked, ..) = processor
+                .run(
+                    &input_view,
+                    width,
+                    height,
+                    RenderRequest {
+                        adjustments: masked_adjustments,
+                        mask_bitmaps: std::slice::from_ref(&mask),
+                        lut: None,
+                        roi: None,
+                    },
+                    GpuRenderOutput::CpuImage,
+                )
+                .expect("render tiled GPU mask");
+
+            assert_eq!(base.len(), masked.len());
+            for y in 0..height {
+                for x in 0..width {
+                    let offset = (y as usize * width as usize + x as usize) * 4;
+                    let base_pixel = &base[offset..offset + 4];
+                    let masked_pixel = &masked[offset..offset + 4];
+                    if mask.get_pixel(x, y)[0] == 0 {
+                        assert_eq!(
+                            masked_pixel, base_pixel,
+                            "zero mask changed pixel ({x}, {y}) in {width}x{height} case"
+                        );
+                    } else {
+                        assert!(
+                            masked_pixel[0] > base_pixel[0],
+                            "white mask did not apply exposure at ({x}, {y}) in {width}x{height} case: {base_pixel:?} -> {masked_pixel:?}"
+                        );
+                        assert_eq!(masked_pixel[3], base_pixel[3]);
+                    }
+                }
+            }
+
+            for axis in [2_047, 2_048, 2_049] {
+                let (x, y) = if horizontal_case {
+                    (axis, 0)
+                } else {
+                    (0, axis)
+                };
+                let offset = (y as usize * width as usize + x as usize) * 4;
+                let changed = masked[offset] > base[offset];
+                assert_eq!(
+                    changed,
+                    mask.get_pixel(x, y)[0] == 255,
+                    "tile seam at ({x}, {y}) in {width}x{height} case"
+                );
+            }
+        }
+    }
 }

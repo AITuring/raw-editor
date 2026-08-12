@@ -15,6 +15,8 @@ const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
 const exportProcessing = read('src-tauri/src/export_processing.rs');
 const exifProcessing = read('src-tauri/src/exif_processing.rs');
 const imageProcessing = read('src-tauri/src/image_processing.rs');
+const mainShader = read('src-tauri/src/shaders/shader.wgsl');
+const packageJson = JSON.parse(read('package.json'));
 
 for (const tier of ['rapidPreview', 'halfResolutionEdit', 'fullResolutionRoi', 'fullResolutionExport']) {
   assert.ok(previewResolution.includes(`'${tier}'`), `frontend render contract is missing ${tier}`);
@@ -35,8 +37,19 @@ assert.match(lib, /Arc::ptr_eq/);
 
 assert.match(gpuProcessing, /dummy_mask_view/);
 assert.match(gpuProcessing, /MaskTexturePlan::new/);
+assert.match(gpuProcessing, /MaskTileUploadPlan::new/);
+assert.match(gpuProcessing, /Active Mask Tile Texture Array/);
+assert.match(gpuProcessing, /width: mask_plan\.texture_width/);
+assert.match(gpuProcessing, /height: mask_plan\.texture_height/);
+assert.match(gpuProcessing, /offset: upload\.source_offset_bytes/);
 assert.match(gpuProcessing, /queue\.write_texture\(/);
 assert.doesNotMatch(gpuProcessing, /mask_texture_data/);
+assert.doesNotMatch(mainShader, /get_mask_influence\(i, absolute_coord\)/);
+assert.equal(
+  [...mainShader.matchAll(/get_mask_influence\(i, id\.xy\)/g)].length,
+  4,
+  'every mask adjustment pass must sample the uploaded tile with tile-local coordinates',
+);
 assert.doesNotMatch(gpuProcessing, /processed_pixels\.clone\(\)/);
 assert.match(gpuProcessing, /Result<Arc<DynamicImage>, String>/);
 assert.match(gpuProcessing, /image: Arc::clone\(&shared_image\)/);
@@ -109,6 +122,8 @@ const oldUnchangedRgb32fCloneBytes = pixels * 12;
 const oldFullExportRgbaBytes = pixels * 4;
 const streamedBandBytes = 9504 * 2048 * 4;
 const geometryRgba32fBytes = pixels * 4 * 4;
+const activeMaskFullTextureBytes = pixels;
+const activeMaskTileTextureBytes = (2048 + 128 * 2) ** 2;
 assert.equal(oldEmptyMaskBytes, 120_434_688);
 assert.equal(oldAnalyticsCloneBytes, 240_869_376);
 assert.equal(oldUnchangedRgb32fCloneBytes, 722_608_128);
@@ -116,7 +131,11 @@ assert.equal(oldFullExportRgbaBytes, 240_869_376);
 assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
 assert.equal(geometryRgba32fBytes, 963_477_504);
+assert.equal(activeMaskFullTextureBytes, 60_217_344);
+assert.equal(activeMaskTileTextureBytes, 5_308_416);
+assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
+assert.match(packageJson.scripts['gpu-mask:check'], /tiled_mask_gpu_sampling/);
 
 console.log(
-  'Validated four render tiers, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

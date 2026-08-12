@@ -4958,6 +4958,7 @@ dependencies = [
  "moxcms",
  "mozjpeg",
  "mozjpeg-rs",
+ "naga",
  "nalgebra",
  "ndarray",
  "ndk-context",

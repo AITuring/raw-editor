@@ -23,35 +23,38 @@
 
 ## 缓冲所有权收敛
 
-本阶段收敛了九类可确定的重复缓冲或高水位资源：
+本阶段收敛了十类可确定的重复缓冲或高水位资源：
 
 1. `CachedPreview` 只保存当前层级的一张 `Arc<DynamicImage>`。快速预览直接生成目标尺寸，
    不再先生成较大底图后再长期保存一张 `small_image`。
-2. 无蒙版任务绑定复用的 1×1 `R8Unorm` dummy texture，不再构造两层全尺寸零数组。
-   有蒙版任务按实际活动层数创建 texture，并从现有 bitmap 逐层 `queue.write_texture`，不再把所有
-   bitmap 拼成第二份连续 CPU 数组。缺失 bitmap 的已声明层由 WGPU 的资源初始化保持为零。
-3. WebView 回读的 RGBA8 结果使用 `Arc<DynamicImage>` 同时交给 JPEG 编码和分析 worker，
+2. 无蒙版任务绑定复用的 1×1 `R8Unorm` dummy texture，不再构造两层全尺寸零数组；有蒙版任务也不再
+   把所有 bitmap 拼成第二份连续 CPU 上传数组。缺失 bitmap 的已声明层由 WGPU 资源初始化保持为零。
+3. 活动蒙版按实际层数创建一个复用的 tile texture array，宽高最多为
+   `(2048 + 2 × 128) = 2304`。每次图像 tile dispatch 前，`queue.write_texture` 以源 stride 和 offset
+   直接上传各灰度 bitmap 的对应 ROI；WGSL 用 tile 局部坐标采样，同一层不再常驻全尺寸 GPU texture。
+   CPU 侧完整灰度 bitmap 仍存在，本项没有把蒙版生成或缓存描述成流式管线。
+4. WebView 回读的 RGBA8 结果使用 `Arc<DynamicImage>` 同时交给 JPEG 编码和分析 worker，
    不再为 histogram/waveform 调用 `processed_pixels.clone()`。
-4. 无 patch、几何、旋转、翻转、镜头模糊或裁剪时，全尺寸变换缓存直接复用已解码图像的 `Arc`，
+5. 无 patch、几何、旋转、翻转、镜头模糊或裁剪时，全尺寸变换缓存直接复用已解码图像的 `Arc`，
    不再因 `Cow::into_owned()` 复制一张完整 RGB32F 图。
-5. 几何 warp 对 RGB32F/RGBA32F 输入直接借用现有底层浮点切片，采样器同时支持三、四通道；只有
+6. 几何 warp 对 RGB32F/RGBA32F 输入直接借用现有底层浮点切片，采样器同时支持三、四通道；只有
    其他存储格式才回退到 RGBA32F 转换。输出合同仍是完整 RGBA32F，因此本项只消除输入 staging，
    没有把几何节点描述成 tile/带状管线。
-6. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
+7. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
    `zenresize 0.3.1` 行 ring、可选的单行水印 scratch 和编码器；resize/watermark 不再构造完整尺寸
    `DynamicImage`。JPEG 使用 `mozjpeg 0.10.13` baseline 4:4:4 逐扫描行输入，并把压缩数据直接写入
    同目录临时文件；PNG 与 TIFF 同样直接写入。JPEG/PNG 需要保留元数据时，只在编码前生成一个受
    JPEG APP1 上限约束的 TIFF/EXIF 小载荷，再分别写入 APP1 或 PNG `eXIf`；TIFF 在编码条带前把
    筛选后的 IFD0、ExifIFD、GPSIFD 和目录指针直接写入同一输出。三种格式都不会读回压缩输出；完整
    编码、元数据写入和取消检查都成功后才原子替换目标路径。
-7. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
+8. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
    该 processor 中降为 1×1。大尺寸显示 processor 转入 CPU 导出时会按 512 MiB 高水位和滞回条件收缩。
-8. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
+9. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
    释放两者并触发一次有界 GPU poll，避免 60MP 导出的高水位常驻到后续编辑。
-9. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
-   ARGB 工作图。libwebp 输出回调直接写临时文件，随后以固定 64 KiB 缓冲扫描/重写 RIFF、替换
-   sRGB v4 `ICCP` chunk；两个阶段都成功且未取消后才原子发布。现有完整 CPU 输入与 YUVA picture
-   仍然存在，本项没有把 WebP 变成 tile-to-encoder。
+10. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
+    ARGB 工作图。libwebp 输出回调直接写临时文件，随后以固定 64 KiB 缓冲扫描/重写 RIFF、替换
+    sRGB v4 `ICCP` chunk；两个阶段都成功且未取消后才原子发布。现有完整 CPU 输入与 YUVA picture
+    仍然存在，本项没有把 WebP 变成 tile-to-encoder。
 
 ## 确定性前后基线
 
@@ -63,6 +66,7 @@
 | ------------------------------------------------------ | -------------------------: | -----------------------: | ------------: |
 | 无蒙版 CPU 两层零上传数组                              | 120,434,688 B（114.9 MiB） |                      0 B | 120,434,688 B |
 | 无蒙版 GPU `R8` 两层 texture                           | 120,434,688 B（114.9 MiB） |                1 B dummy | 120,434,687 B |
+| 每层活动蒙版 GPU `R8` texture                          |   60,217,344 B（57.4 MiB） |   5,308,416 B（5.1 MiB） |  54,908,928 B |
 | WebView 分析用 RGBA8 像素复制                          | 240,869,376 B（229.7 MiB） |        0 B（`Arc` 共享） | 240,869,376 B |
 | 未变换 RGB32F 全尺寸缓存复制                           | 722,608,128 B（689.1 MiB） |        0 B（`Arc` 共享） | 722,608,128 B |
 | 几何 warp 的 RGBA32F 输入 staging                      | 963,477,504 B（918.8 MiB） |        0 B（借用浮点源） | 963,477,504 B |
@@ -72,15 +76,22 @@
 | CPU 导出 processor 的两张 9728×6400 RGBA8 显示 surface | 498,073,600 B（475.0 MiB） |          8 B（两张 1×1） | 498,073,592 B |
 
 这些减少项不能简单相加当作真实进程峰值：它们的生命周期并不完全重叠。回归测试只锁定每一项
-不再由应用代码重新分配。
+不再由应用代码重新分配。单层活动蒙版仍有 60,217,344 B CPU 灰度 bitmap，因此 CPU + GPU 的逻辑
+像素缓冲从 120,434,688 B 降到 65,525,760 B（减少 45.6%），而不是只剩 5,308,416 B。GPU tile
+texture 在整次 render 中复用，逐 tile 上传不会并发累加其容量。代价是相邻 tile 的 128px overlap
+会重复传输边界像素；本阶段只声明峰值容量下降，不把总上传字节或处理耗时描述为同步下降。
 
 ## 自动验证
 
 - `npm run preview-resolution:check`：验证 Retina 100%、快速预览、半分辨率编辑和全分辨率 ROI 选择。
-- `npm run render-strategy:check`：锁定四级 IPC 合同、单底图缓存、dummy mask、逐层上传、
-  分析 `Arc` 共享、原图 `Arc` 复用、几何浮点输入借用、流式编码器边界、编码期 EXIF、禁止临时
-  输出整文件读回、临时文件发布和 GPU 高水位回收。
-- Rust 单元测试：验证 camelCase 序列化、预览/导出边界、60MP 空蒙版计划、`Arc::ptr_eq` 共享、
+- `npm run render-strategy:check`：锁定四级 IPC 合同、单底图缓存、dummy mask、活动蒙版 tile texture、
+  源 offset 上传与 WGSL 局部坐标采样、分析 `Arc` 共享、原图 `Arc` 复用、几何浮点输入借用、流式
+  编码器边界、编码期 EXIF、禁止临时输出整文件读回、临时文件发布和 GPU 高水位回收。
+- `npm run gpu-mask:check`：在本机 GPU 上用 2305×8 与 8×2050 确定性输入分别跨过水平、垂直
+  2048px tile seam；黑色蒙版区域必须与无蒙版输出逐字节一致，白色区域必须应用曝光，seam 两侧
+  分别按原始全图蒙版像素取值。该项默认忽略，避免无图形适配器的 CI 环境失败。
+- Rust 单元测试：验证 camelCase 序列化、预览/导出边界、60MP 空蒙版/活动蒙版 tile 计划、蒙版局部
+  坐标到全图 source offset 的一致性、全部内置 WGSL 的 Naga 解析与验证、`Arc::ptr_eq` 共享、
   60MP 带状缓冲算术、几何 RGB32F 借用与显式 RGBA32F staging 的逐像素一致、60MP 几何缓冲计划、
   processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
   参考一致、水印与旧完整帧混合逐像素一致、JPEG/PNG/TIFF EXIF 与 GPS 删除往返、TIFF → TIFF
@@ -157,12 +168,13 @@ libwebp YUVA picture 和编码器工作内存，不能把约 1.08 GiB 当作端�
   完整 RGBA32F 输出；RAW 解码和几何输出都尚未改造成流式节点。
 - WebP 仍使用完整 CPU 输入与 libwebp YUVA picture，但已消除额外 ARGB 图和完整压缩输出缓冲；
   当前接口没有逐 tile 输入。JXL、AVIF 与 Android 导出仍使用完整 CPU 编码图，其中当前 JXL/AVIF
-  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码、几何输出和活动蒙版推进
-  有界管线，并继续评估可替换的分块编码器。
+  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码、几何输出和蒙版 CPU
+  生成/缓存推进有界管线，并继续评估可替换的分块编码器。
 - 桌面 JPEG 已消除完整压缩码流缓冲，但仍通过 C MozJPEG FFI 编码；当前默认 unwind 配置会把
   libjpeg 错误转换为普通导出失败，若未来改为 `panic=abort`，必须先替换这条错误边界。
 - 高水位回收是导出结束和尺寸切换时的确定性策略，尚未接入操作系统/驱动的实时内存压力通知。
-- 活动蒙版本身仍各自占用一张全尺寸灰度 bitmap；本阶段只消除了拼接副本和空蒙版开销。
+- 活动蒙版 GPU texture 已按 tile 收敛，但 CPU 生成结果仍各自占用一张全尺寸灰度 bitmap；缓存预算
+  只阻止超大条目长期驻留，尚未让当前 render 按 tile 生成程序化/画笔/AI 蒙版。
 - 用户授权的 α7R V 有损 ARW 已建立一次本机解码、CPU 预览和全尺寸 JPEG 耗时基线；应用内首屏、
   滑块 P95、100% GPU ROI、GPU 文件导出和进程峰值，以及其余光照/ISO/压缩模式仍待新样片扩充，
   不得用上述尺寸算术或单样片结果替代。
