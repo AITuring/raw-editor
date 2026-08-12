@@ -23,7 +23,7 @@
 
 ## 缓冲所有权收敛
 
-本阶段收敛了八类可确定的重复缓冲或高水位资源：
+本阶段收敛了九类可确定的重复缓冲或高水位资源：
 
 1. `CachedPreview` 只保存当前层级的一张 `Arc<DynamicImage>`。快速预览直接生成目标尺寸，
    不再先生成较大底图后再长期保存一张 `small_image`。
@@ -34,18 +34,21 @@
    不再为 histogram/waveform 调用 `processed_pixels.clone()`。
 4. 无 patch、几何、旋转、翻转、镜头模糊或裁剪时，全尺寸变换缓存直接复用已解码图像的 `Arc`，
    不再因 `Cow::into_owned()` 复制一张完整 RGB32F 图。
-5. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
+5. 几何 warp 对 RGB32F/RGBA32F 输入直接借用现有底层浮点切片，采样器同时支持三、四通道；只有
+   其他存储格式才回退到 RGBA32F 转换。输出合同仍是完整 RGBA32F，因此本项只消除输入 staging，
+   没有把几何节点描述成 tile/带状管线。
+6. 桌面 JPEG/PNG/TIFF 主图导出按横向 tile 完成一个最多 2048 行的带状 RGBA8 缓冲后，依次交给可选的
    `zenresize 0.3.1` 行 ring、可选的单行水印 scratch 和编码器；resize/watermark 不再构造完整尺寸
    `DynamicImage`。JPEG 使用 `mozjpeg 0.10.13` baseline 4:4:4 逐扫描行输入，并把压缩数据直接写入
    同目录临时文件；PNG 与 TIFF 同样直接写入。JPEG/PNG 需要保留元数据时，只在编码前生成一个受
    JPEG APP1 上限约束的 TIFF/EXIF 小载荷，再分别写入 APP1 或 PNG `eXIf`；TIFF 在编码条带前把
    筛选后的 IFD0、ExifIFD、GPSIFD 和目录指针直接写入同一输出。三种格式都不会读回压缩输出；完整
    编码、元数据写入和取消检查都成功后才原子替换目标路径。
-6. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
+7. CPU 回读任务只保留 tile 工作 texture；原生显示所需的 `working_texture` 与 `output_texture` 在
    该 processor 中降为 1×1。大尺寸显示 processor 转入 CPU 导出时会按 512 MiB 高水位和滞回条件收缩。
-7. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
+8. 批量任务全部 join 后，若 processor 与 RGBA16F 输入 texture 的逻辑占用合计达到 512 MiB，立即
    释放两者并触发一次有界 GPU poll，避免 60MP 导出的高水位常驻到后续编辑。
-8. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
+9. 桌面 WebP 有损编码直接把现有 RGB/RGBA 输入导入 libwebp 的 YUVA picture，不再保留第二张完整
    ARGB 工作图。libwebp 输出回调直接写临时文件，随后以固定 64 KiB 缓冲扫描/重写 RIFF、替换
    sRGB v4 `ICCP` chunk；两个阶段都成功且未取消后才原子发布。现有完整 CPU 输入与 YUVA picture
    仍然存在，本项没有把 WebP 变成 tile-to-encoder。
@@ -62,6 +65,7 @@
 | 无蒙版 GPU `R8` 两层 texture                           | 120,434,688 B（114.9 MiB） |                1 B dummy | 120,434,687 B |
 | WebView 分析用 RGBA8 像素复制                          | 240,869,376 B（229.7 MiB） |        0 B（`Arc` 共享） | 240,869,376 B |
 | 未变换 RGB32F 全尺寸缓存复制                           | 722,608,128 B（689.1 MiB） |        0 B（`Arc` 共享） | 722,608,128 B |
+| 几何 warp 的 RGBA32F 输入 staging                      | 963,477,504 B（918.8 MiB） |        0 B（借用浮点源） | 963,477,504 B |
 | 旧 Performance 1.5× 降采样的额外 RGB32F `small_image`  | 321,159,168 B（306.3 MiB） |      0 B（单一目标底图） | 321,159,168 B |
 | JPEG/PNG/TIFF 最终 RGBA8 CPU 编码缓冲                  | 240,869,376 B（229.7 MiB） | 77,856,768 B（74.2 MiB） | 163,012,608 B |
 | libwebp 额外 ARGB 工作图                               | 240,869,376 B（229.7 MiB） |                      0 B | 240,869,376 B |
@@ -74,10 +78,11 @@
 
 - `npm run preview-resolution:check`：验证 Retina 100%、快速预览、半分辨率编辑和全分辨率 ROI 选择。
 - `npm run render-strategy:check`：锁定四级 IPC 合同、单底图缓存、dummy mask、逐层上传、
-  分析 `Arc` 共享、原图 `Arc` 复用、流式编码器边界、编码期 EXIF、禁止临时输出整文件读回、
-  临时文件发布和 GPU 高水位回收。
+  分析 `Arc` 共享、原图 `Arc` 复用、几何浮点输入借用、流式编码器边界、编码期 EXIF、禁止临时
+  输出整文件读回、临时文件发布和 GPU 高水位回收。
 - Rust 单元测试：验证 camelCase 序列化、预览/导出边界、60MP 空蒙版计划、`Arc::ptr_eq` 共享、
-  60MP 带状缓冲算术、processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
+  60MP 带状缓冲算术、几何 RGB32F 借用与显式 RGBA32F staging 的逐像素一致、60MP 几何缓冲计划、
+  processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
   参考一致、水印与旧完整帧混合逐像素一致、JPEG/PNG/TIFF EXIF 与 GPS 删除往返、TIFF → TIFF
   元数据复制，以及 JPEG
   Q50/Q75/Q92 相对旧编码器的平均 RGB 误差、文件体积和质量单调性；WebP 另验证 RGB/RGBA 在
@@ -90,6 +95,9 @@
 - `npm run synthetic-webp:bench`：默认运行新的 `file` 路径；设置
   `RAW_EDITOR_BENCH_WEBP_MODE=memory` 可在同一测试二进制中运行旧的完整内存路径，宽高复用上述
   环境变量。
+- `npm run synthetic-geometry:bench`：默认运行直接借用浮点输入的 `borrowed` 路径；设置
+  `RAW_EDITOR_GEOMETRY_BENCH_MODE=staged` 可用同一 harness 模拟旧 RGBA32F 输入 staging，宽高复用
+  上述环境变量。两种模式都保留 RGB32F 源和 RGBA32F 输出，以 10 ms 间隔采样进程 RSS。
 
 ## 合成 60MP 编码基准
 
@@ -111,6 +119,24 @@ PNG 无变换结果为 558 ms / 2,934,463 B / 90,685,440 B 峰值 RSS。EXIF 只
 77,856,768 B，并且 JPEG 压缩收尾和 JPEG/PNG/TIFF 元数据都不再创建与完整输出大小成正比的缓冲。
 驱动对齐、GPU texture 和 RAW 解码内存仍需在端到端基准中单独记录。
 
+## 合成 60MP 几何基准
+
+2026-08-12 在同一台 Apple M5（10 核）、32 GB、macOS 26.5 上，以确定性 RGB32F 图样运行生产几何
+warp。`staged` 模式模拟迁移前把输入转换为 RGBA32F，`borrowed` 模式直接借用 RGB32F；两者都让
+原始 RGB32F 和最终 RGBA32F 输出存活到采样结束，并计算相同位置的稀疏输出哈希。
+
+| 几何输入路径             |   耗时 |        峰值 RSS | 相对旧路径峰值 | 稀疏输出哈希       |
+| ------------------------ | -----: | --------------: | -------------: | ------------------ |
+| 旧：显式 RGBA32F staging | 291 ms | 2,613,788,672 B |              — | `8e4db981add93a0d` |
+| 新：直接借用 RGB32F      | 180 ms | 1,649,917,952 B | -963,870,720 B | `8e4db981add93a0d` |
+
+峰值下降 36.9%，减少量与一张 9504×6336 RGBA32F 图的逻辑大小 963,477,504 B 只差 393,216 B；耗时
+下降 111 ms（38.1%）。逐像素单元测试另以 RGB32F 和显式 RGBA32F 输入锁定完整输出一致。该结果是
+单次合成进程基准，不包含 RAW 解码、WGPU 或真实相机内容；可复用的工程结论仅是浮点输入不再复制，
+最终 RGBA32F 几何输出仍是完整帧。
+
+## 合成 60MP WebP 基准
+
 同机同一测试二进制另以确定性 RGBA 图样测量桌面 WebP Q90；采样线程在分配输入图前启动，并让
 完整输入保持存活到采样结束：
 
@@ -127,11 +153,12 @@ libwebp YUVA picture 和编码器工作内存，不能把约 1.08 GiB 当作端�
 ## 仍然存在的峰值来源
 
 - 全分辨率导出仍同时需要已解码/变换输入和一张 RGBA16F GPU 输入 texture；本阶段只移除了桌面
-  JPEG/PNG/TIFF 的最终完整 RGBA8 输出图，并未把 RAW 解码或几何变换改造成流式节点。
+  JPEG/PNG/TIFF 的最终完整 RGBA8 输出图。几何 warp 已消除浮点源的 RGBA32F staging，但仍产生
+  完整 RGBA32F 输出；RAW 解码和几何输出都尚未改造成流式节点。
 - WebP 仍使用完整 CPU 输入与 libwebp YUVA picture，但已消除额外 ARGB 图和完整压缩输出缓冲；
   当前接口没有逐 tile 输入。JXL、AVIF 与 Android 导出仍使用完整 CPU 编码图，其中当前 JXL/AVIF
-  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码/几何节点推进有界管线，并
-  继续评估可替换的分块编码器。
+  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先向上游 RAW 解码、几何输出和活动蒙版推进
+  有界管线，并继续评估可替换的分块编码器。
 - 桌面 JPEG 已消除完整压缩码流缓冲，但仍通过 C MozJPEG FFI 编码；当前默认 unwind 配置会把
   libjpeg 错误转换为普通导出失败，若未来改为 `panic=abort`，必须先替换这条错误边界。
 - 高水位回收是导出结束和尺寸切换时的确定性策略，尚未接入操作系统/驱动的实时内存压力通知。

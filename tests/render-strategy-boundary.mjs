@@ -14,6 +14,7 @@ const lib = read('src-tauri/src/lib.rs');
 const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
 const exportProcessing = read('src-tauri/src/export_processing.rs');
 const exifProcessing = read('src-tauri/src/exif_processing.rs');
+const imageProcessing = read('src-tauri/src/image_processing.rs');
 
 for (const tier of ['rapidPreview', 'halfResolutionEdit', 'fullResolutionRoi', 'fullResolutionExport']) {
   assert.ok(previewResolution.includes(`'${tier}'`), `frontend render contract is missing ${tier}`);
@@ -43,6 +44,18 @@ assert.match(gpuProcessing, /process_and_stream_rgba_rows/);
 assert.match(gpuProcessing, /StreamingExportBufferPlan::new/);
 assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
 assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
+assert.match(imageProcessing, /enum GeometryPixelSource/);
+assert.match(imageProcessing, /DynamicImage::ImageRgb32F\(source\) => Self::Rgb32F/);
+assert.match(imageProcessing, /DynamicImage::ImageRgba32F\(source\) => Self::Rgba32F/);
+assert.match(imageProcessing, /GeometryWarpBufferPlan::new/);
+const geometryWarpStart = imageProcessing.indexOf('pub fn warp_image_geometry(');
+const geometryWarpEnd = imageProcessing.indexOf('\npub fn unwarp_image_geometry(', geometryWarpStart);
+assert.ok(geometryWarpStart >= 0 && geometryWarpEnd > geometryWarpStart);
+assert.doesNotMatch(
+  imageProcessing.slice(geometryWarpStart, geometryWarpEnd),
+  /image\.to_rgba32f\(\)/,
+  'geometry warp must not stage every float source through a complete RGBA32F copy',
+);
 
 assert.match(exportProcessing, /supports_streaming_export/);
 assert.match(exportProcessing, /encode_streaming_jpeg/);
@@ -95,13 +108,15 @@ const oldAnalyticsCloneBytes = pixels * 4;
 const oldUnchangedRgb32fCloneBytes = pixels * 12;
 const oldFullExportRgbaBytes = pixels * 4;
 const streamedBandBytes = 9504 * 2048 * 4;
+const geometryRgba32fBytes = pixels * 4 * 4;
 assert.equal(oldEmptyMaskBytes, 120_434_688);
 assert.equal(oldAnalyticsCloneBytes, 240_869_376);
 assert.equal(oldUnchangedRgb32fCloneBytes, 722_608_128);
 assert.equal(oldFullExportRgbaBytes, 240_869_376);
 assert.equal(streamedBandBytes, 77_856_768);
 assert.equal(oldFullExportRgbaBytes - streamedBandBytes, 163_012_608);
+assert.equal(geometryRgba32fBytes, 963_477_504);
 
 console.log(
-  'Validated four render tiers, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

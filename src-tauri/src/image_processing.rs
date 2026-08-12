@@ -12,6 +12,7 @@ use serde_json::Value;
 use serde_json::json;
 use std::borrow::Cow;
 use std::f32::consts::PI;
+use std::mem::size_of;
 use std::sync::Arc;
 
 pub use crate::gpu_processing::{
@@ -485,46 +486,148 @@ fn interpolate_pixel(
     }
 }
 
-#[inline(always)]
-fn interpolate_pixel_rgba(
-    src_raw: &[f32],
+enum GeometryPixelSource<'a> {
+    Rgb32F(&'a [f32]),
+    Rgba32F(&'a [f32]),
+    ConvertedRgba32F(Rgba32FImage),
+}
+
+impl<'a> GeometryPixelSource<'a> {
+    fn new(image: &'a DynamicImage) -> Self {
+        match image {
+            DynamicImage::ImageRgb32F(source) => Self::Rgb32F(source.as_raw()),
+            DynamicImage::ImageRgba32F(source) => Self::Rgba32F(source.as_raw()),
+            _ => Self::ConvertedRgba32F(image.to_rgba32f()),
+        }
+    }
+
+    fn raw(&self) -> &[f32] {
+        match self {
+            Self::Rgb32F(raw) | Self::Rgba32F(raw) => raw,
+            Self::ConvertedRgba32F(source) => source.as_raw(),
+        }
+    }
+
+    fn channels(&self) -> usize {
+        match self {
+            Self::Rgb32F(_) => 3,
+            Self::Rgba32F(_) | Self::ConvertedRgba32F(_) => 4,
+        }
+    }
+
+    fn conversion_bytes(&self) -> usize {
+        match self {
+            Self::ConvertedRgba32F(source) => source.as_raw().len() * size_of::<f32>(),
+            Self::Rgb32F(_) | Self::Rgba32F(_) => 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GeometryWarpBufferPlan {
+    output_samples: usize,
+    output_rgba32f_bytes: usize,
+    source_conversion_bytes: usize,
+}
+
+impl GeometryWarpBufferPlan {
+    fn new(
+        width: u32,
+        height: u32,
+        source_conversion_bytes: usize,
+    ) -> Option<GeometryWarpBufferPlan> {
+        let pixels = (width as usize).checked_mul(height as usize)?;
+        let output_samples = pixels.checked_mul(4)?;
+        Some(Self {
+            output_samples,
+            output_rgba32f_bytes: output_samples.checked_mul(size_of::<f32>())?,
+            source_conversion_bytes,
+        })
+    }
+
+    fn transient_bytes(&self) -> usize {
+        self.output_rgba32f_bytes + self.source_conversion_bytes
+    }
+}
+
+#[derive(Clone, Copy)]
+struct GeometrySampleContext<'a> {
+    src_raw: &'a [f32],
     src_width: usize,
     src_height: usize,
+    src_channels: usize,
+    cx: f32,
+    cy: f32,
+}
+
+impl GeometrySampleContext<'_> {
+    #[inline(always)]
+    fn contains_bilinear_sample(&self, x: f32, y: f32) -> bool {
+        x.is_finite()
+            && y.is_finite()
+            && x >= 0.0
+            && y >= 0.0
+            && x < self.src_width as f32 - 1.0
+            && y < self.src_height as f32 - 1.0
+    }
+
+    #[inline(always)]
+    fn sample_channel_clamped(&self, x: f32, y: f32, channel: usize) -> f32 {
+        if !x.is_finite() || !y.is_finite() {
+            return 0.0;
+        }
+        if channel == 3 && self.src_channels == 3 {
+            return 1.0;
+        }
+
+        let x = x.clamp(0.0, self.src_width as f32 - 1.0);
+        let y = y.clamp(0.0, self.src_height as f32 - 1.0);
+        let mut x0 = x.floor() as usize;
+        let mut y0 = y.floor() as usize;
+        if x0 >= self.src_width - 1 {
+            x0 = self.src_width.saturating_sub(2);
+        }
+        if y0 >= self.src_height - 1 {
+            y0 = self.src_height.saturating_sub(2);
+        }
+
+        let wx = x - x0 as f32;
+        let wy = y - y0 as f32;
+        let one_minus_wx = 1.0 - wx;
+        let one_minus_wy = 1.0 - wy;
+        let stride = self.src_width * self.src_channels;
+        let idx_row0 = y0 * stride;
+        let idx_row1 = idx_row0 + stride;
+        let idx_p00 = idx_row0 + x0 * self.src_channels + channel;
+
+        unsafe {
+            let p00 = *self.src_raw.get_unchecked(idx_p00);
+            let p10 = *self.src_raw.get_unchecked(idx_p00 + self.src_channels);
+            let p01 = *self
+                .src_raw
+                .get_unchecked(idx_row1 + x0 * self.src_channels + channel);
+            let p11 = *self
+                .src_raw
+                .get_unchecked(idx_row1 + x0 * self.src_channels + self.src_channels + channel);
+            let top = p00 * one_minus_wx + p10 * wx;
+            let bottom = p01 * one_minus_wx + p11 * wx;
+            top * one_minus_wy + bottom * wy
+        }
+    }
+}
+
+#[inline(always)]
+fn interpolate_geometry_pixel(
+    source: &GeometrySampleContext<'_>,
     x: f32,
     y: f32,
     pixel_out: &mut [f32],
 ) {
-    if x.is_nan()
-        || y.is_nan()
-        || x < 0.0
-        || y < 0.0
-        || x >= src_width as f32 - 1.0
-        || y >= src_height as f32 - 1.0
-    {
+    if !source.contains_bilinear_sample(x, y) {
         return;
     }
-
-    let x0 = x.floor() as usize;
-    let y0 = y.floor() as usize;
-    let wx = x - x0 as f32;
-    let wy = y - y0 as f32;
-    let one_minus_wx = 1.0 - wx;
-    let one_minus_wy = 1.0 - wy;
-    let stride = src_width * 4;
-    let idx_row0 = y0 * stride;
-    let idx_row1 = idx_row0 + stride;
-    let idx_p00 = idx_row0 + x0 * 4;
-
     for (channel, output) in pixel_out.iter_mut().enumerate().take(4) {
-        unsafe {
-            let p00 = *src_raw.get_unchecked(idx_p00 + channel);
-            let p10 = *src_raw.get_unchecked(idx_p00 + 4 + channel);
-            let p01 = *src_raw.get_unchecked(idx_row1 + x0 * 4 + channel);
-            let p11 = *src_raw.get_unchecked(idx_row1 + x0 * 4 + 4 + channel);
-            let top = p00 * one_minus_wx + p10 * wx;
-            let bottom = p01 * one_minus_wx + p11 * wx;
-            *output = top * one_minus_wy + bottom * wy;
-        }
+        *output = source.sample_channel_clamped(x, y, channel);
     }
 }
 
@@ -641,28 +744,17 @@ fn unproject_geometry_point(
     remap_projection_point(x, y, cx, cy, half_diagonal, projection, true)
 }
 
-struct TcaContext<'a> {
-    src_raw: &'a [f32],
-    src_width: usize,
-    src_height: usize,
-    cx: f32,
-    cy: f32,
-}
-
 #[inline(always)]
 fn interpolate_pixel_with_tca(
-    tca: &TcaContext,
+    source: &GeometrySampleContext<'_>,
     base_x: f32,
     base_y: f32,
     vr: f32,
     vb: f32,
     pixel_out: &mut [f32],
 ) {
-    let src_raw = tca.src_raw;
-    let src_width = tca.src_width;
-    let src_height = tca.src_height;
-    let cx = tca.cx;
-    let cy = tca.cy;
+    let cx = source.cx;
+    let cy = source.cy;
     let gx = base_x;
     let gy = base_y;
 
@@ -672,61 +764,14 @@ fn interpolate_pixel_with_tca(
     let bx = cx + (base_x - cx) * vb;
     let by = cy + (base_y - cy) * vb;
 
-    if base_x.is_nan()
-        || base_y.is_nan()
-        || base_x < 0.0
-        || base_y < 0.0
-        || base_x >= src_width as f32 - 1.0
-        || base_y >= src_height as f32 - 1.0
-    {
+    if !source.contains_bilinear_sample(base_x, base_y) {
         return;
     }
 
-    let sample_channel = |target_x: f32, target_y: f32, channel_idx: usize| -> f32 {
-        if target_x.is_nan() || target_y.is_nan() {
-            return 0.0;
-        }
-
-        let x_clamped = target_x.clamp(0.0, src_width as f32 - 1.0);
-        let y_clamped = target_y.clamp(0.0, src_height as f32 - 1.0);
-
-        let mut x0 = x_clamped.floor() as usize;
-        let mut y0 = y_clamped.floor() as usize;
-
-        if x0 >= src_width - 1 {
-            x0 = src_width.saturating_sub(2);
-        }
-        if y0 >= src_height - 1 {
-            y0 = src_height.saturating_sub(2);
-        }
-
-        let wx = x_clamped - x0 as f32;
-        let wy = y_clamped - y0 as f32;
-        let one_minus_wx = 1.0 - wx;
-        let one_minus_wy = 1.0 - wy;
-
-        let stride = src_width * 4;
-        let idx_row0 = y0 * stride;
-        let idx_row1 = idx_row0 + stride;
-
-        let idx_p00 = idx_row0 + x0 * 4 + channel_idx;
-
-        unsafe {
-            let p00 = *src_raw.get_unchecked(idx_p00);
-            let p10 = *src_raw.get_unchecked(idx_p00 + 4);
-            let p01 = *src_raw.get_unchecked(idx_row1 + x0 * 4 + channel_idx);
-            let p11 = *src_raw.get_unchecked(idx_row1 + x0 * 4 + 4 + channel_idx);
-
-            let top = p00 * one_minus_wx + p10 * wx;
-            let bot = p01 * one_minus_wx + p11 * wx;
-            top * one_minus_wy + bot * wy
-        }
-    };
-
-    pixel_out[0] = sample_channel(rx, ry, 0);
-    pixel_out[1] = sample_channel(gx, gy, 1);
-    pixel_out[2] = sample_channel(bx, by, 2);
-    pixel_out[3] = sample_channel(gx, gy, 3);
+    pixel_out[0] = source.sample_channel_clamped(rx, ry, 0);
+    pixel_out[1] = source.sample_channel_clamped(gx, gy, 1);
+    pixel_out[2] = source.sample_channel_clamped(bx, by, 2);
+    pixel_out[3] = source.sample_channel_clamped(gx, gy, 3);
 }
 
 fn solve_generic_distortion_inv(r_target: f64, k_scaled: f64) -> f64 {
@@ -753,9 +798,17 @@ fn solve_generic_distortion_inv(r_target: f64, k_scaled: f64) -> f64 {
 }
 
 pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> DynamicImage {
-    let src_img = image.to_rgba32f();
-    let (width, height) = src_img.dimensions();
-    let mut out_buffer = vec![0.0f32; (width * height * 4) as usize];
+    let (width, height) = image.dimensions();
+    let source = GeometryPixelSource::new(image);
+    let buffer_plan = GeometryWarpBufferPlan::new(width, height, source.conversion_bytes())
+        .expect("geometry warp dimensions exceed the addressable buffer size");
+    log::debug!(
+        "geometry warp buffers: output={} B source_conversion={} B transient={} B",
+        buffer_plan.output_rgba32f_bytes,
+        buffer_plan.source_conversion_bytes,
+        buffer_plan.transient_bytes()
+    );
+    let mut out_buffer = vec![0.0f32; buffer_plan.output_samples];
 
     let (forward_transform, cx, cy, half_diagonal) =
         build_transform_matrices(&params, width as f32, height as f32);
@@ -800,13 +853,13 @@ pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> Dyna
         && (vk1.abs() > 1e-6 || vk2.abs() > 1e-6 || vk3.abs() > 1e-6)
         && lens_vig_amt > 0.01;
 
-    let src_raw = src_img.as_raw();
     let width_usize = width as usize;
     let height_usize = height as usize;
-    let tca_ctx = TcaContext {
-        src_raw,
+    let sample_context = GeometrySampleContext {
+        src_raw: source.raw(),
         src_width: width_usize,
         src_height: height_usize,
+        src_channels: source.channels(),
         cx,
         cy,
     };
@@ -877,16 +930,9 @@ pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> Dyna
                     }
 
                     if has_tca {
-                        interpolate_pixel_with_tca(&tca_ctx, src_x, src_y, vr, vb, pixel);
+                        interpolate_pixel_with_tca(&sample_context, src_x, src_y, vr, vb, pixel);
                     } else {
-                        interpolate_pixel_rgba(
-                            src_raw,
-                            width_usize,
-                            height_usize,
-                            src_x,
-                            src_y,
-                            pixel,
-                        );
+                        interpolate_geometry_pixel(&sample_context, src_x, src_y, pixel);
                     }
 
                     if has_vignetting {
@@ -3719,6 +3765,193 @@ mod geometry_transform_tests {
                 ((x * 7 + y * 11) % 31) as f32 / 30.0,
             ])
         }))
+    }
+
+    #[test]
+    fn float_geometry_sources_are_borrowed_without_rgba_staging() {
+        let rgb = coordinate_gradient(97, 73);
+        let rgb_raw = rgb
+            .as_rgb32f()
+            .expect("fixture must use RGB32F storage")
+            .as_raw();
+        let rgb_source = GeometryPixelSource::new(&rgb);
+        assert_eq!(rgb_source.channels(), 3);
+        assert_eq!(rgb_source.conversion_bytes(), 0);
+        assert_eq!(rgb_source.raw().as_ptr(), rgb_raw.as_ptr());
+
+        let rgba = DynamicImage::ImageRgba32F(rgb.to_rgba32f());
+        let rgba_raw = rgba
+            .as_rgba32f()
+            .expect("fixture must use RGBA32F storage")
+            .as_raw();
+        let rgba_source = GeometryPixelSource::new(&rgba);
+        assert_eq!(rgba_source.channels(), 4);
+        assert_eq!(rgba_source.conversion_bytes(), 0);
+        assert_eq!(rgba_source.raw().as_ptr(), rgba_raw.as_ptr());
+
+        let rgb8 = DynamicImage::ImageRgb8(RgbImage::new(97, 73));
+        let converted = GeometryPixelSource::new(&rgb8);
+        assert_eq!(converted.channels(), 4);
+        assert_eq!(converted.conversion_bytes(), 97 * 73 * 4 * size_of::<f32>());
+    }
+
+    #[test]
+    fn borrowed_rgb_geometry_matches_explicit_rgba_staging() {
+        let rgb = coordinate_gradient(161, 121);
+        let staged_rgba = DynamicImage::ImageRgba32F(rgb.to_rgba32f());
+        let params = GeometryParams {
+            distortion: 12.0,
+            projection: 24.0,
+            vertical: 13.0,
+            horizontal: -9.0,
+            rotate: 3.5,
+            aspect: 4.0,
+            scale: 97.0,
+            x_offset: 1.5,
+            y_offset: -2.0,
+            lens_dist_k1: 0.012,
+            lens_dist_k2: -0.003,
+            tca_vr: 1.0015,
+            tca_vb: 0.998,
+            vig_k1: -0.08,
+            ..GeometryParams::default()
+        };
+
+        let borrowed = warp_image_geometry(&rgb, params);
+        let staged = warp_image_geometry(&staged_rgba, params);
+
+        assert_eq!(
+            borrowed
+                .as_rgba32f()
+                .expect("geometry output must be RGBA32F")
+                .as_raw(),
+            staged
+                .as_rgba32f()
+                .expect("geometry output must be RGBA32F")
+                .as_raw(),
+            "borrowing RGB32F must preserve the previous explicitly staged RGBA32F pixels"
+        );
+    }
+
+    #[test]
+    fn geometry_buffer_plan_removes_one_60mp_rgba32f_frame() {
+        const WIDTH: u32 = 9_504;
+        const HEIGHT: u32 = 6_336;
+        const RGBA32F_BYTES: usize = 963_477_504;
+
+        let borrowed = GeometryWarpBufferPlan::new(WIDTH, HEIGHT, 0).expect("60MP buffer plan");
+        let staged = GeometryWarpBufferPlan::new(WIDTH, HEIGHT, RGBA32F_BYTES)
+            .expect("legacy 60MP buffer plan");
+
+        assert_eq!(borrowed.output_rgba32f_bytes, RGBA32F_BYTES);
+        assert_eq!(borrowed.transient_bytes(), RGBA32F_BYTES);
+        assert_eq!(staged.transient_bytes(), RGBA32F_BYTES * 2);
+        assert_eq!(
+            staged.transient_bytes() - borrowed.transient_bytes(),
+            RGBA32F_BYTES
+        );
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP geometry memory benchmark"]
+    fn synthetic_60mp_geometry_source_harness() {
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::time::{Duration, Instant};
+
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode = std::env::var("RAW_EDITOR_GEOMETRY_BENCH_MODE")
+            .unwrap_or_else(|_| "borrowed".to_string());
+        assert!(matches!(mode.as_str(), "borrowed" | "staged"));
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(0));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let Ok(pid) = sysinfo::get_current_pid() else {
+                return;
+            };
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+
+        let source = DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(width, height, |x, y| {
+            image::Rgb([
+                (x % 1024) as f32 / 1023.0,
+                (y % 1024) as f32 / 1023.0,
+                (x.wrapping_mul(17).wrapping_add(y * 13) % 1024) as f32 / 1023.0,
+            ])
+        }));
+        let started = Instant::now();
+        let staged_source =
+            (mode == "staged").then(|| DynamicImage::ImageRgba32F(source.to_rgba32f()));
+        let input = staged_source.as_ref().unwrap_or(&source);
+        let output = warp_image_geometry(
+            input,
+            GeometryParams {
+                projection: 18.0,
+                vertical: 11.0,
+                horizontal: -7.0,
+                rotate: 2.0,
+                ..GeometryParams::default()
+            },
+        );
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(25));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join geometry RSS sampler");
+
+        let pixels = u64::from(width) * u64::from(height);
+        let source_rgb32f_bytes = pixels * 3 * size_of::<f32>() as u64;
+        let rgba32f_frame_bytes = pixels * 4 * size_of::<f32>() as u64;
+        let expected_live_pixel_bytes = source_rgb32f_bytes
+            + rgba32f_frame_bytes
+            + if mode == "staged" {
+                rgba32f_frame_bytes
+            } else {
+                0
+            };
+        let output_raw = output
+            .as_rgba32f()
+            .expect("geometry benchmark output must be RGBA32F")
+            .as_raw();
+        let sample_stride = (output_raw.len() / 4_096).max(1);
+        let sample_hash = output_raw
+            .iter()
+            .step_by(sample_stride)
+            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, sample| {
+                (hash ^ u64::from(sample.to_bits())).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"peakRssBytes\":{},\"sourceRgb32fBytes\":{},\"rgba32fFrameBytes\":{},\"expectedLivePixelBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            peak_rss.load(Ordering::Relaxed),
+            source_rgb32f_bytes,
+            rgba32f_frame_bytes,
+            expected_live_pixel_bytes,
+            sample_hash,
+        );
+
+        assert_eq!(output.dimensions(), (width, height));
+        std::hint::black_box(source);
+        std::hint::black_box(staged_source);
+        std::hint::black_box(output);
     }
 
     fn absolute_difference(left: &DynamicImage, right: &DynamicImage) -> f64 {

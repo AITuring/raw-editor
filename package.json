@@ -30,6 +30,7 @@
     "watermark-contract:check": "node tests/watermark-contract.mjs",
     "synthetic-export:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_streaming_export_harness -- --ignored --nocapture",
     "synthetic-webp:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_webp_output_harness -- --ignored --nocapture",
+    "synthetic-geometry:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_geometry_source_harness -- --ignored --nocapture",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

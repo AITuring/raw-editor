@@ -83,7 +83,7 @@ npm run start            # Tauri 2 开发窗口
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
 
-### 当前进度（2026-08-11）
+### 当前进度（2026-08-12）
 
 当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。用户授权的 `DSC05363.ARW` 已建立
 α7R V `lossy-arw` 单样片真实管线与本机 60MP 性能基线；其余光照、ISO、曝光和 RAW 压缩模式仍
@@ -147,6 +147,11 @@ npm run start            # Tauri 2 开发窗口
   Rust 复核交互/ROI/源尺寸边界。预览缓存只保留单一目标底图，无蒙版使用 1×1 dummy texture，
   活动蒙版逐层上传，分析结果与未变换原图通过 `Arc` 共享，消除多类整图重复缓冲。确定性 60MP
   尺寸前后基线、限制和仍存在的峰值来源见 [`docs/render-strategy.md`](docs/render-strategy.md)。
+- ✅ 全尺寸几何 warp 对 RGB32F/RGBA32F 源直接借用底层浮点切片，只有其他存储格式才回退到
+  RGBA32F 转换，不再为 9504×6336 RGB32F 输入额外 staging 一张 963,477,504 B 的 RGBA32F 源图。
+  同机合成 60MP 连续对照中，旧 staging 路径为 291 ms / 2,613,788,672 B 峰值 RSS，新借用路径为
+  180 ms / 1,649,917,952 B，峰值减少 963,870,720 B（36.9%），稀疏输出哈希一致。warp 输出仍是
+  一张完整 RGBA32F 图，因此这是输入所有权收敛，不是几何节点已经流式化。
 - ✅ 桌面端 JPEG/PNG/TIFF 主图导出现由 WGPU tile 汇集为最多 2048 行的带状缓冲，再按需经过
   `zenresize 0.3.1` 的逐行 Lanczos ring、单行水印混合并直接交给编码器；resize 和 watermark 不再
   迫使这三种格式恢复完整 RGBA8 CPU 帧。输出仍通过同目录临时文件原子发布，取消或编码失败不会
@@ -197,21 +202,23 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 配对 ACR 输出，也不能代表日光、钨丝灯、高 ISO、欠曝、高饱和光、lossless-L 或 uncompressed，
 因此不会用合成图或这一个长曝光样片冒充完整机型结论。无需新增样片的 RGB 输入 ICC 与日常 SDR
 显示链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于后续能力。
-四级渲染策略、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、内置默认水印、GPU
-高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成大图 harness 已经
-闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或
-缓冲完整压缩输出；JXL 与 AVIF 导出仍走完整帧路径。下一阶段优先把 RAW 解码、几何变换
-等更上游节点改造成有界管线，并继续评估能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新
-α7R V 样片到位后，再扩充 RAW → GPU → 文件的场景画质、交互耗时和峰值基线。
+四级渲染策略、几何 warp 浮点输入借用、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行
+resize/watermark、内置默认水印、GPU 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF
+编码期 EXIF 和合成大图 harness 已经闭环。WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA
+picture，但不再复制完整 ARGB 图或缓冲完整压缩输出；几何 warp 仍分配完整 RGBA32F 输出，JXL 与
+AVIF 导出仍走完整帧路径。下一阶段继续收敛 RAW 解码、几何输出和活动蒙版的完整帧峰值，并评估
+能否替换当前内部返回完整 `Vec` 的 JXL/AVIF 编码器；新 α7R V 样片到位后，再扩充 RAW → GPU →
+文件的场景画质、交互耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、`npm run crop-transform:check`、
 `npm run color-contract:check`、`npm run local-only:check`、`npm run preview-transport:check`、
 `npm run preview-resolution:check`、`npm run render-strategy:check`、`npm run watermark-contract:check`、
-`npm run build`、`npm run synthetic-export:bench`、`cargo fmt --all -- --check`、
-`cargo check --lib --locked`、81 项默认执行的
-Rust 单元/回归测试和严格 Clippy。默认忽略三项：一项需要本地授权 RAW，另外两项是手动 60MP
-JPEG/PNG/TIFF 与 WebP harness；本轮已显式执行 WebP 的 `memory`/`file` 对照。`git diff --check`
-也保持通过。
+`npm run build`、`npm run synthetic-export:bench`、`npm run synthetic-geometry:bench`、
+`cargo fmt --all -- --check`、
+`cargo check --lib --locked`、84 项默认执行的
+Rust 单元/回归测试和严格 Clippy。默认忽略四项：一项需要本地授权 RAW，另外三项是手动 60MP
+JPEG/PNG/TIFF、WebP 与几何 harness；本轮已显式执行几何的 `borrowed`/`staged` 对照，两者稀疏
+输出哈希一致。`git diff --check` 也保持通过。
 
 ## 1.0 范围
 
@@ -566,5 +573,6 @@ AGPL 就省略来源和原作者声明。发布二进制时必须同步提供对
 - 样式效果都比camera raw差远了
 - WebP 仍需完整 CPU 输入和 libwebp YUVA picture；JXL 与 AVIF 导出尚未接入
   tile-to-encoder，60MP 时仍有完整帧峰值。
-- RAW 解码、几何变换和活动蒙版仍有完整帧峰值；α7R V 目前只有一个有损压缩长曝光样片基线，
-  尚缺多场景/多压缩模式闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。
+- RAW 解码、几何 warp 输出和活动蒙版仍有完整帧峰值；几何输入的 RGBA32F staging 已消除，但尚未
+  把输出改造成 tile/带状管线。α7R V 目前只有一个有损压缩长曝光样片基线，尚缺多场景/多压缩模式
+  闭环；当前 JXL/AVIF 编码依赖还会在内部返回完整压缩缓冲。
