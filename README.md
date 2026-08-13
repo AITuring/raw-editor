@@ -1,5 +1,9 @@
 # RAW Editor
 
+<p align="center">
+  <img src="public/logo.svg" alt="RAW Editor 标志" width="128" height="128" />
+</p>
+
 一个面向个人摄影工作流的、跨平台、非破坏性 RAW 编辑器。
 
 本项目以 [RapidRAW](https://github.com/CyberTimon/RapidRAW) 为上游基础，在接受并遵守
@@ -79,6 +83,15 @@ npm run start            # Tauri 2 开发窗口
 - 当前开发版本：`0.1.0`
 - 项目主页：<https://github.com/AITuring/raw-editor>
 
+### 品牌与图标资源
+
+应用标志采用相机轮廓与非均分六叶光圈组合。可缩放的纯 SVG 主资源位于
+[`public/logo.svg`](public/logo.svg)，macOS Liquid Glass 分层源稿位于
+[`design/logo/macos-liquid-glass`](design/logo/macos-liquid-glass)。Tauri 打包所需的 macOS
+`icns`、Windows `ico`、Linux PNG、Windows 磁贴以及保留脚手架中的 Android/iOS 图标，均由
+该 SVG 生成并存放在 [`src-tauri/icons`](src-tauri/icons)。更新品牌标志时，应从 SVG 重新生成
+整套平台资源，不要在 SVG 中嵌入或放大 PNG。
+
 首次启动会按照系统语言自动选择最接近的界面语言，并在设置中持久化用户选择。英语、
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
@@ -91,6 +104,8 @@ npm run start            # Tauri 2 开发窗口
 
 - ✅ 合并 RapidRAW 上游代码，保留 `rapidraw-upstream` 远程，并完成 Tauri 2 原生启动基线。
 - ✅ 完成 RAW Editor 的应用标识、版本、窗口标题、桌面包元数据和基础 EXIF 软件标识调整。
+- ✅ 采用相机与非均分六叶光圈组成的新标志，并由纯 SVG 统一生成 Web、macOS、Windows、
+  Linux 以及保留脚手架中的 Android/iOS 图标资源；仓库内不再保留旧标志位图。
 - ✅ 完成中英文首启自动选择、设置持久化、语言代码归一化和翻译完整性校验。
 - ✅ 固定为本地软件，移除账号、登录、社区、在线预设、云端处理、远程 connector、在线地图和更新检查链路。
 - ✅ 保留公开开源依赖与模型的可选下载/本地打包能力；所有照片处理和模型推理均在本机完成。
@@ -196,7 +211,8 @@ npm run start            # Tauri 2 开发窗口
   迫使这三种格式恢复完整 RGBA8 CPU 帧。输出仍通过同目录临时文件原子发布，取消或编码失败不会
   留下半张目标文件。9504×6336 的生产者缓冲上限为 77,856,768 B，相比完整 RGBA8 帧少
   163,012,608 B。
-- ✅ 水印添加与默认水印直接沿用 `my-watermark` 水印页的交互和 `public/logo.png` 原始资产
+- ✅ 水印添加与默认水印直接沿用 `my-watermark` 水印页的交互和
+  `src/assets/default-watermark.png` 原始资产
   （SHA-256 `4db6f91d61c973c4a580bc0710c9115a9b84da9c46e52f1db1e2de129bf7f8c0`）：开启水印后立即显示
   真实默认水印缩略图，点击即可用 PNG/JPEG/WebP/TIFF/GIF 替换，并可一步恢复默认。默认位置为
   居中、不透明度 80%；水印开关仍默认关闭，避免未确认就改变导出。内置水印由 Vite 预览资产和

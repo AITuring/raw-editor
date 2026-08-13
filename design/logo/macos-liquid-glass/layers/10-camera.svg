@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Flat source artwork: let Icon Composer add glass, shadow, and specular response. -->
+  <path fill="#24282A" d="M184 320c0-40 32-72 72-72h110l52-74c14-20 38-32 62-32h64c24 0 48 12 62 32l52 74h110c40 0 72 32 72 72v384c0 40-32 72-72 72H256c-40 0-72-32-72-72V320Z"/>
+</svg>
