@@ -35,6 +35,7 @@
     "synthetic-mask-compose:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_mask_composition_scratch_harness -- --ignored --nocapture",
     "synthetic-range-mask:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_range_mask_overlap_scratch_harness -- --ignored --nocapture",
     "synthetic-ai-mask:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_ai_mask_overlap_scratch_harness -- --ignored --nocapture",
+    "synthetic-raw-handoff:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_raw_rgb_handoff_harness -- --ignored --nocapture",
     "gpu-mask:check": "cargo test --manifest-path src-tauri/Cargo.toml tiled_mask_gpu_sampling_matches_source_pixels_across_tile_boundary -- --ignored --nocapture",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

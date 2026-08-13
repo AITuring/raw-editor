@@ -503,8 +503,29 @@ fn read_texture_data_roi(
 }
 
 fn to_rgba_f16(img: &DynamicImage) -> Vec<f16> {
-    let rgba_f32 = img.to_rgba32f();
-    rgba_f32.into_raw().into_iter().map(f16::from_f32).collect()
+    match img {
+        DynamicImage::ImageRgb32F(rgb) => {
+            let mut output = Vec::with_capacity(rgb.as_raw().len() / 3 * 4);
+            for pixel in rgb.as_raw().chunks_exact(3) {
+                output.extend_from_slice(&[
+                    f16::from_f32(pixel[0]),
+                    f16::from_f32(pixel[1]),
+                    f16::from_f32(pixel[2]),
+                    f16::ONE,
+                ]);
+            }
+            output
+        }
+        DynamicImage::ImageRgba32F(rgba) => {
+            rgba.as_raw().iter().copied().map(f16::from_f32).collect()
+        }
+        _ => img
+            .to_rgba32f()
+            .into_raw()
+            .into_iter()
+            .map(f16::from_f32)
+            .collect(),
+    }
 }
 
 #[repr(C)]
@@ -2307,14 +2328,15 @@ fn process_and_get_dynamic_image_inner(
 
 #[cfg(test)]
 mod shader_tests {
+    use std::mem::size_of;
     use std::sync::{Arc, Mutex};
 
     use half::f16;
-    use image::{GrayImage, Luma};
+    use image::{DynamicImage, GrayImage, Luma, Rgb32FImage, Rgba32FImage};
     use naga::valid::{Capabilities, ValidationFlags, Validator};
     use wgpu::util::{DeviceExt, TextureDataOrder};
 
-    use super::{GpuProcessor, GpuRenderOutput, RenderRequest};
+    use super::{GpuProcessor, GpuRenderOutput, RenderRequest, to_rgba_f16};
     use crate::image_processing::{AllAdjustments, GpuContext};
 
     #[test]
@@ -2331,6 +2353,51 @@ mod shader_tests {
                 .validate(&module)
                 .unwrap_or_else(|error| panic!("{name} WGSL failed validation: {error}"));
         }
+    }
+
+    #[test]
+    fn float_images_convert_directly_to_the_existing_rgba_f16_contract() {
+        let images = [
+            DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(7, 5, |x, y| {
+                image::Rgb([
+                    (x * 3 + y) as f32 / 31.0,
+                    (x + y * 5) as f32 / 37.0,
+                    (x * 7 + y * 11) as f32 / 127.0,
+                ])
+            })),
+            DynamicImage::ImageRgba32F(Rgba32FImage::from_fn(7, 5, |x, y| {
+                image::Rgba([
+                    (x * 3 + y) as f32 / 31.0,
+                    (x + y * 5) as f32 / 37.0,
+                    (x * 7 + y * 11) as f32 / 127.0,
+                    (x * 13 + y * 2) as f32 / 97.0,
+                ])
+            })),
+        ];
+
+        for image in images {
+            let expected = image
+                .to_rgba32f()
+                .into_raw()
+                .into_iter()
+                .map(f16::from_f32)
+                .collect::<Vec<_>>();
+            assert_eq!(to_rgba_f16(&image), expected);
+        }
+    }
+
+    #[test]
+    fn direct_float_upload_removes_60mp_rgba32f_cpu_staging() {
+        const WIDTH: u64 = 9_504;
+        const HEIGHT: u64 = 6_336;
+        const RGBA32F_BYTES: u64 = 963_477_504;
+        const RGBA16F_BYTES: u64 = 481_738_752;
+
+        let pixels = WIDTH * HEIGHT;
+        assert_eq!(pixels * 4 * size_of::<f32>() as u64, RGBA32F_BYTES);
+        assert_eq!(pixels * 4 * size_of::<f16>() as u64, RGBA16F_BYTES);
+        assert_eq!(RGBA32F_BYTES + RGBA16F_BYTES, 1_445_216_256);
+        assert_eq!(RGBA32F_BYTES + RGBA16F_BYTES - RGBA16F_BYTES, RGBA32F_BYTES);
     }
 
     #[test]

@@ -1268,8 +1268,17 @@ pub fn inverse_transform_point(
 }
 
 pub fn apply_cpu_default_raw_processing(image: &mut DynamicImage) {
-    let mut f32_image = image.to_rgb32f();
+    if let Some(f32_image) = image.as_mut_rgb32f() {
+        apply_cpu_default_raw_processing_to_rgb32f(f32_image);
+        return;
+    }
 
+    let mut f32_image = image.to_rgb32f();
+    apply_cpu_default_raw_processing_to_rgb32f(&mut f32_image);
+    *image = DynamicImage::ImageRgb32F(f32_image);
+}
+
+fn apply_cpu_default_raw_processing_to_rgb32f(f32_image: &mut Rgb32FImage) {
     const GAMMA: f32 = 2.38;
     const INV_GAMMA: f32 = 1.0 / GAMMA;
     const CONTRAST: f32 = 1.28;
@@ -1287,8 +1296,6 @@ pub fn apply_cpu_default_raw_processing(image: &mut DynamicImage) {
         pixel_chunk[1] = g_contrast.clamp(0.0, 1.0);
         pixel_chunk[2] = b_contrast.clamp(0.0, 1.0);
     });
-
-    *image = DynamicImage::ImageRgb32F(f32_image);
 }
 
 pub fn apply_srgb_to_linear(mut image: DynamicImage) -> DynamicImage {
@@ -2719,7 +2726,21 @@ pub fn remove_raw_artifacts_and_enhance(
     color_nr_inv_sigma: f32,
     sharpening_amount: f32,
 ) {
+    if let Some(buffer) = image.as_mut_rgb32f() {
+        enhance_rgb32f_buffer(buffer, color_nr_inv_sigma, sharpening_amount);
+        return;
+    }
+
     let mut buffer = image.to_rgb32f();
+    enhance_rgb32f_buffer(&mut buffer, color_nr_inv_sigma, sharpening_amount);
+    *image = DynamicImage::ImageRgb32F(buffer);
+}
+
+fn enhance_rgb32f_buffer(
+    buffer: &mut Rgb32FImage,
+    color_nr_inv_sigma: f32,
+    sharpening_amount: f32,
+) {
     let w = buffer.width() as usize;
     let h = buffer.height() as usize;
 
@@ -2822,10 +2843,8 @@ pub fn remove_raw_artifacts_and_enhance(
     }
 
     if sharpening_amount > 0.0 {
-        apply_gentle_detail_enhance(&mut buffer, &ycbcr_buffer, sharpening_amount);
+        apply_gentle_detail_enhance(buffer, &ycbcr_buffer, sharpening_amount);
     }
-
-    *image = DynamicImage::ImageRgb32F(buffer);
 }
 
 fn apply_gentle_detail_enhance(
@@ -2918,6 +2937,63 @@ fn apply_gentle_detail_enhance(
                 rgb_row[b_idx] = (b + safe_boost).clamp(0.0, 1.0);
             }
         });
+}
+
+#[cfg(test)]
+mod raw_enhancement_tests {
+    use super::*;
+
+    fn rgb_fixture(width: u32, height: u32) -> Rgb32FImage {
+        Rgb32FImage::from_fn(width, height, |x, y| {
+            image::Rgb([
+                (x * 7 + y * 3) as f32 / 128.0,
+                (x * 5 + y * 11) as f32 / 192.0,
+                (x * 13 + y * 2) as f32 / 224.0,
+            ])
+        })
+    }
+
+    #[test]
+    fn rgb32f_raw_enhancement_reuses_pixels_and_matches_converted_input() {
+        let rgb = rgb_fixture(13, 11);
+        let mut reused = DynamicImage::ImageRgb32F(rgb.clone());
+        let original_allocation = reused.as_rgb32f().expect("RGB fixture").as_raw().as_ptr();
+        let mut converted = DynamicImage::ImageRgba32F(DynamicImage::ImageRgb32F(rgb).to_rgba32f());
+
+        remove_raw_artifacts_and_enhance(&mut reused, 2.0, 0.35);
+        remove_raw_artifacts_and_enhance(&mut converted, 2.0, 0.35);
+
+        let reused = reused.as_rgb32f().expect("enhanced RGB output");
+        assert_eq!(reused.as_raw().as_ptr(), original_allocation);
+        assert_eq!(
+            reused.as_raw(),
+            converted
+                .as_rgb32f()
+                .expect("converted enhancement output")
+                .as_raw()
+        );
+    }
+
+    #[test]
+    fn rgb32f_default_raw_display_transform_reuses_pixels() {
+        let rgb = rgb_fixture(13, 11);
+        let mut reused = DynamicImage::ImageRgb32F(rgb.clone());
+        let original_allocation = reused.as_rgb32f().expect("RGB fixture").as_raw().as_ptr();
+        let mut converted = DynamicImage::ImageRgba32F(DynamicImage::ImageRgb32F(rgb).to_rgba32f());
+
+        apply_cpu_default_raw_processing(&mut reused);
+        apply_cpu_default_raw_processing(&mut converted);
+
+        let reused = reused.as_rgb32f().expect("display RGB output");
+        assert_eq!(reused.as_raw().as_ptr(), original_allocation);
+        assert_eq!(
+            reused.as_raw(),
+            converted
+                .as_rgb32f()
+                .expect("converted display output")
+                .as_raw()
+        );
+    }
 }
 
 #[derive(Serialize, Clone)]

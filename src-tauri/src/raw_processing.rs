@@ -1,7 +1,7 @@
 use crate::color_management::srgb_to_linear_channel;
 use crate::image_processing::apply_orientation;
 use anyhow::{Result, anyhow};
-use image::{DynamicImage, ImageBuffer, Rgba};
+use image::{DynamicImage, ImageBuffer, Rgb};
 use nalgebra::{Matrix3, Vector3};
 use rawler::{
     decoders::{Orientation, RawDecodeParams},
@@ -99,6 +99,39 @@ fn normalize_developed_channel(
         srgb_to_linear_channel(rescaled.clamp(0.0, 1.0))
     } else {
         rescaled
+    }
+}
+
+fn developed_intermediate_into_dynamic_image(
+    developed_intermediate: Intermediate,
+) -> Result<DynamicImage> {
+    let dimensions = developed_intermediate.dim();
+    let width = dimensions.w as u32;
+    let height = dimensions.h as u32;
+
+    match developed_intermediate {
+        Intermediate::ThreeColor(pixels) => {
+            // rawler already owns tightly packed [f32; 3] pixels. Vec::into_flattened keeps that
+            // allocation and only changes its element view, so the developed RGB frame can become
+            // image::Rgb32F without allocating an overlapping RGBA32F copy.
+            let buffer = ImageBuffer::<Rgb<f32>, _>::from_raw(
+                width,
+                height,
+                pixels.into_inner().into_flattened(),
+            )
+            .ok_or_else(|| anyhow!("Failed to transfer developed RGB pixels"))?;
+            Ok(DynamicImage::ImageRgb32F(buffer))
+        }
+        Intermediate::Monochrome(pixels) => {
+            let buffer = ImageBuffer::<Rgb<f32>, _>::from_fn(width, height, |x, y| {
+                let value = pixels.data[(y * width + x) as usize];
+                Rgb([value, value, value])
+            });
+            Ok(DynamicImage::ImageRgb32F(buffer))
+        }
+        Intermediate::FourColor(_) => {
+            Err(anyhow!("Unsupported intermediate format for conversion"))
+        }
     }
 }
 
@@ -273,32 +306,9 @@ fn develop_internal(
         }
     }
 
-    let (width, height) = {
-        let dim = developed_intermediate.dim();
-        (dim.w as u32, dim.h as u32)
-    };
-
     check_cancel()?;
 
-    let dynamic_image = match developed_intermediate {
-        Intermediate::ThreeColor(pixels) => {
-            let buffer = ImageBuffer::<Rgba<f32>, _>::from_fn(width, height, |x, y| {
-                let p = pixels.data[(y * width + x) as usize];
-                Rgba([p[0], p[1], p[2], 1.0])
-            });
-            DynamicImage::ImageRgba32F(buffer)
-        }
-        Intermediate::Monochrome(pixels) => {
-            let buffer = ImageBuffer::<Rgba<f32>, _>::from_fn(width, height, |x, y| {
-                let p = pixels.data[(y * width + x) as usize];
-                Rgba([p, p, p, 1.0])
-            });
-            DynamicImage::ImageRgba32F(buffer)
-        }
-        _ => {
-            return Err(anyhow!("Unsupported intermediate format for conversion"));
-        }
-    };
+    let dynamic_image = developed_intermediate_into_dynamic_image(developed_intermediate)?;
 
     Ok((dynamic_image, orientation))
 }
@@ -328,7 +338,188 @@ pub fn get_fast_demosaic_scale_factor(
 
 #[cfg(test)]
 mod tests {
-    use super::{correlated_color_temperature, normalize_developed_channel};
+    use super::{
+        correlated_color_temperature, developed_intermediate_into_dynamic_image,
+        normalize_developed_channel,
+    };
+    use image::{DynamicImage, ImageBuffer, Rgba};
+    use rawler::{
+        imgop::develop::Intermediate,
+        pixarray::{Color2D, PixF32},
+    };
+    use std::mem::size_of;
+
+    #[test]
+    fn developed_three_color_pixels_transfer_into_rgb32f_without_copying() {
+        let pixels = Color2D::new_with(
+            vec![
+                [0.1, 0.2, 0.3],
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+                [1.0, 1.1, 1.2],
+            ],
+            2,
+            2,
+        );
+        let original_allocation = pixels.data.as_ptr().cast::<f32>();
+
+        let image = developed_intermediate_into_dynamic_image(Intermediate::ThreeColor(pixels))
+            .expect("transfer developed RGB pixels");
+        let rgb = image
+            .as_rgb32f()
+            .expect("three-color development must remain RGB32F");
+
+        assert_eq!(rgb.as_raw().as_ptr(), original_allocation);
+        assert_eq!(
+            rgb.as_raw(),
+            &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+        );
+
+        let monochrome = PixF32::new_with(vec![0.2, 0.7], 2, 1);
+        let monochrome_image =
+            developed_intermediate_into_dynamic_image(Intermediate::Monochrome(monochrome))
+                .expect("expand monochrome development to RGB");
+        assert_eq!(
+            monochrome_image
+                .as_rgb32f()
+                .expect("monochrome development must use RGB32F")
+                .as_raw(),
+            &[0.2, 0.2, 0.2, 0.7, 0.7, 0.7]
+        );
+    }
+
+    #[test]
+    fn zero_copy_raw_handoff_removes_60mp_rgba_expansion() {
+        const WIDTH: u64 = 9_504;
+        const HEIGHT: u64 = 6_336;
+        const RGB32F_BYTES: u64 = 722_608_128;
+        const RGBA32F_BYTES: u64 = 963_477_504;
+
+        let pixels = WIDTH * HEIGHT;
+        assert_eq!(pixels * 3 * size_of::<f32>() as u64, RGB32F_BYTES);
+        assert_eq!(pixels * 4 * size_of::<f32>() as u64, RGBA32F_BYTES);
+        assert_eq!(RGB32F_BYTES + RGBA32F_BYTES, 1_686_085_632);
+        assert_eq!(RGB32F_BYTES + RGBA32F_BYTES - RGB32F_BYTES, RGBA32F_BYTES);
+        assert_eq!(RGBA32F_BYTES - RGB32F_BYTES, 240_869_376);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP RAW RGB handoff memory benchmark"]
+    fn synthetic_60mp_raw_rgb_handoff_harness() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU64, Ordering},
+        };
+        use std::time::{Duration, Instant};
+
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode = std::env::var("RAW_EDITOR_RAW_HANDOFF_BENCH_MODE")
+            .unwrap_or_else(|_| "reused".to_string());
+        assert!(matches!(mode.as_str(), "expanded" | "reused"));
+
+        let pixel_count = width as usize * height as usize;
+        let pixels = Color2D::new_with(
+            vec![[0.125_f32, 0.5, 0.875]; pixel_count],
+            width as usize,
+            height as usize,
+        );
+        let pid = sysinfo::get_current_pid().expect("resolve benchmark process id");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read benchmark process after developed RGB allocation")
+            .memory();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let started = Instant::now();
+        let image = if mode == "expanded" {
+            let buffer = ImageBuffer::<Rgba<f32>, _>::from_fn(width, height, |x, y| {
+                let pixel = pixels.data[(y * width + x) as usize];
+                Rgba([pixel[0], pixel[1], pixel[2], 1.0])
+            });
+            DynamicImage::ImageRgba32F(buffer)
+        } else {
+            developed_intermediate_into_dynamic_image(Intermediate::ThreeColor(pixels))
+                .expect("reuse developed RGB allocation")
+        };
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(10));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join RAW handoff RSS sampler");
+
+        let mut sample_hash = 0xcbf2_9ce4_8422_2325_u64;
+        let sample_stride = (pixel_count / 4_096).max(1);
+        match &image {
+            DynamicImage::ImageRgb32F(buffer) => {
+                for pixel in buffer.pixels().step_by(sample_stride) {
+                    for channel in pixel.0 {
+                        sample_hash = (sample_hash ^ u64::from(channel.to_bits()))
+                            .wrapping_mul(0x0000_0100_0000_01b3);
+                    }
+                }
+            }
+            DynamicImage::ImageRgba32F(buffer) => {
+                for pixel in buffer.pixels().step_by(sample_stride) {
+                    for channel in &pixel.0[..3] {
+                        sample_hash = (sample_hash ^ u64::from(channel.to_bits()))
+                            .wrapping_mul(0x0000_0100_0000_01b3);
+                    }
+                }
+            }
+            _ => unreachable!("RAW handoff benchmark must stay float RGB/RGBA"),
+        }
+
+        let pixels = u64::from(width) * u64::from(height);
+        let rgb32f_bytes = pixels * 3 * size_of::<f32>() as u64;
+        let rgba32f_bytes = pixels * 4 * size_of::<f32>() as u64;
+        let expected_peak_pixel_bytes = if mode == "expanded" {
+            rgb32f_bytes + rgba32f_bytes
+        } else {
+            rgb32f_bytes
+        };
+        let output_pixel_bytes = if mode == "expanded" {
+            rgba32f_bytes
+        } else {
+            rgb32f_bytes
+        };
+        let peak_rss = peak_rss.load(Ordering::Relaxed);
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"expectedPeakPixelBytes\":{},\"outputPixelBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss,
+            peak_rss.saturating_sub(baseline_rss),
+            expected_peak_pixel_bytes,
+            output_pixel_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(image);
+    }
 
     #[test]
     fn linear_raw_gamma_uses_standard_srgb_eotf() {
