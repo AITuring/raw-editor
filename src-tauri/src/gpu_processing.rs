@@ -13,8 +13,9 @@ use crate::app_state::SharedMaskBitmap;
 use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
 use crate::render_strategy::{
-    GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuProcessorTexturePlan, MaskTexturePlan, MaskTileUploadPlan,
-    StreamingExportBufferPlan, should_reclaim_gpu_resources,
+    GPU_INPUT_UPLOAD_BAND_ROWS, GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuInputUploadPlan,
+    GpuProcessorTexturePlan, MaskTexturePlan, MaskTileUploadPlan, StreamingExportBufferPlan,
+    should_reclaim_gpu_resources,
 };
 use crate::{AppState, GpuImageCache};
 
@@ -502,6 +503,7 @@ fn read_texture_data_roi(
     }
 }
 
+#[cfg(test)]
 fn to_rgba_f16(img: &DynamicImage) -> Vec<f16> {
     match img {
         DynamicImage::ImageRgb32F(rgb) => {
@@ -526,6 +528,188 @@ fn to_rgba_f16(img: &DynamicImage) -> Vec<f16> {
             .map(f16::from_f32)
             .collect(),
     }
+}
+
+#[inline]
+fn write_rgba_f16_pixel(output: &mut [f16], pixel_index: usize, rgba: [f32; 4]) {
+    let offset = pixel_index * 4;
+    output[offset] = f16::from_f32(rgba[0]);
+    output[offset + 1] = f16::from_f32(rgba[1]);
+    output[offset + 2] = f16::from_f32(rgba[2]);
+    output[offset + 3] = f16::from_f32(rgba[3]);
+}
+
+fn write_rgba_f16_row_from_samples<T>(
+    source: &[T],
+    y: u32,
+    output: &mut [f16],
+    width: usize,
+    channels: usize,
+    max_value: f32,
+) -> Result<(), String>
+where
+    T: Copy + Into<f32>,
+{
+    let row_samples = width
+        .checked_mul(4)
+        .ok_or_else(|| "GPU input row exceeds the addressable buffer size".to_string())?;
+    if output.len() < row_samples {
+        return Err("GPU input row staging buffer is too small".to_string());
+    }
+    if !(1..=4).contains(&channels) {
+        return Err("GPU input row has an unsupported channel count".to_string());
+    }
+
+    let source_row_samples = width
+        .checked_mul(channels)
+        .ok_or_else(|| "GPU input source row exceeds the addressable buffer size".to_string())?;
+    let start = (y as usize)
+        .checked_mul(source_row_samples)
+        .ok_or_else(|| "GPU input source row offset overflow".to_string())?;
+    let end = start
+        .checked_add(source_row_samples)
+        .ok_or_else(|| "GPU input source row end overflow".to_string())?;
+    let row = source
+        .get(start..end)
+        .ok_or_else(|| "GPU input source row is outside the source image".to_string())?;
+
+    for (pixel_index, pixel) in row.chunks_exact(channels).enumerate() {
+        let red = pixel[0].into() / max_value;
+        let green = if channels >= 3 {
+            pixel[1].into() / max_value
+        } else {
+            red
+        };
+        let blue = if channels >= 3 {
+            pixel[2].into() / max_value
+        } else {
+            red
+        };
+        let alpha = match channels {
+            2 => pixel[1].into() / max_value,
+            4 => pixel[3].into() / max_value,
+            _ => 1.0,
+        };
+        write_rgba_f16_pixel(output, pixel_index, [red, green, blue, alpha]);
+    }
+
+    Ok(())
+}
+
+fn write_rgba_f16_row(
+    image: &DynamicImage,
+    y: u32,
+    output: &mut [f16],
+    width: usize,
+) -> Result<(), String> {
+    let max_u8 = u8::MAX as f32;
+    let max_u16 = u16::MAX as f32;
+
+    match image {
+        DynamicImage::ImageLuma8(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 1, max_u8)?;
+        }
+        DynamicImage::ImageLumaA8(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 2, max_u8)?;
+        }
+        DynamicImage::ImageRgb8(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 3, max_u8)?;
+        }
+        DynamicImage::ImageRgba8(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 4, max_u8)?;
+        }
+        DynamicImage::ImageLuma16(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 1, max_u16)?;
+        }
+        DynamicImage::ImageLumaA16(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 2, max_u16)?;
+        }
+        DynamicImage::ImageRgb16(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 3, max_u16)?;
+        }
+        DynamicImage::ImageRgba16(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 4, max_u16)?;
+        }
+        DynamicImage::ImageRgb32F(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 3, 1.0)?;
+        }
+        DynamicImage::ImageRgba32F(source) => {
+            write_rgba_f16_row_from_samples(source.as_raw(), y, output, width, 4, 1.0)?;
+        }
+        _ => {
+            for x in 0..width as u32 {
+                let pixel = image.get_pixel(x, y);
+                write_rgba_f16_pixel(
+                    output,
+                    x as usize,
+                    [
+                        f32::from(pixel[0]) / max_u8,
+                        f32::from(pixel[1]) / max_u8,
+                        f32::from(pixel[2]) / max_u8,
+                        f32::from(pixel[3]) / max_u8,
+                    ],
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn upload_image_to_texture_bounded(
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    image: &DynamicImage,
+) -> Result<GpuInputUploadPlan, String> {
+    let (width, height) = image.dimensions();
+    let plan = GpuInputUploadPlan::new(width, height)
+        .ok_or_else(|| format!("Cannot upload invalid GPU input dimensions {width}x{height}"))?;
+    let padded_row_samples = plan.padded_bytes_per_row as usize / std::mem::size_of::<f16>();
+    let max_staging_samples = plan.max_staging_bytes / std::mem::size_of::<f16>();
+    let mut staging = vec![f16::ZERO; max_staging_samples];
+
+    for band_start in (0..height).step_by(GPU_INPUT_UPLOAD_BAND_ROWS as usize) {
+        let band_height = (height - band_start).min(plan.band_rows);
+        let band_samples = padded_row_samples
+            .checked_mul(band_height as usize)
+            .ok_or_else(|| "GPU input band exceeds the addressable buffer size".to_string())?;
+        staging[..band_samples].fill(f16::ZERO);
+        for row in 0..band_height {
+            let row_start = row as usize * padded_row_samples;
+            write_rgba_f16_row(
+                image,
+                band_start + row,
+                &mut staging[row_start..row_start + padded_row_samples],
+                width as usize,
+            )?;
+        }
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: band_start,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            bytemuck::cast_slice(&staging[..band_samples]),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(plan.padded_bytes_per_row),
+                rows_per_image: Some(band_height),
+            },
+            wgpu::Extent3d {
+                width,
+                height: band_height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    Ok(plan)
 }
 
 #[repr(C)]
@@ -1876,26 +2060,29 @@ fn lock_gpu_resources<'a>(
             timeout: Some(std::time::Duration::from_millis(500)),
         });
 
-        let img_rgba_f16 = to_rgba_f16(base_image);
         let texture_size = wgpu::Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture_with_data(
-            queue,
-            &wgpu::TextureDescriptor {
-                label: Some("Input Texture"),
-                size: texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba16Float,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            },
-            TextureDataOrder::MipMajor,
-            bytemuck::cast_slice(&img_rgba_f16),
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Input Texture"),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let upload_plan = upload_image_to_texture_bounded(queue, &texture, base_image)?;
+        log::debug!(
+            "GPU input upload {}x{} uses {} row bands of at most {} B (saved {} B vs padded full-frame staging)",
+            upload_plan.width,
+            upload_plan.height,
+            upload_plan.height.div_ceil(upload_plan.band_rows),
+            upload_plan.max_staging_bytes,
+            upload_plan.saved_staging_bytes(),
         );
         let texture_view = texture.create_view(&Default::default());
 
@@ -2336,7 +2523,7 @@ mod shader_tests {
     use naga::valid::{Capabilities, ValidationFlags, Validator};
     use wgpu::util::{DeviceExt, TextureDataOrder};
 
-    use super::{GpuProcessor, GpuRenderOutput, RenderRequest, to_rgba_f16};
+    use super::{GpuProcessor, GpuRenderOutput, RenderRequest, to_rgba_f16, write_rgba_f16_row};
     use crate::image_processing::{AllAdjustments, GpuContext};
 
     #[test]
@@ -2383,6 +2570,99 @@ mod shader_tests {
                 .map(f16::from_f32)
                 .collect::<Vec<_>>();
             assert_eq!(to_rgba_f16(&image), expected);
+        }
+    }
+
+    fn assert_bounded_upload_matches_reference(image: &DynamicImage) {
+        let plan = crate::render_strategy::GpuInputUploadPlan::new(image.width(), image.height())
+            .expect("upload plan");
+        let padded_row_samples = plan.padded_bytes_per_row as usize / std::mem::size_of::<f16>();
+        let row_samples = image.width() as usize * 4;
+        let mut streamed = Vec::with_capacity(row_samples * image.height() as usize);
+        for y in 0..image.height() {
+            let mut row = vec![f16::ZERO; padded_row_samples];
+            write_rgba_f16_row(image, y, &mut row, image.width() as usize)
+                .expect("convert bounded upload row");
+            streamed.extend_from_slice(&row[..row_samples]);
+        }
+
+        assert_eq!(streamed, to_rgba_f16(image));
+    }
+
+    #[test]
+    fn bounded_upload_rows_match_the_full_float_conversion_reference() {
+        let images = [
+            DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(7, 5, |x, y| {
+                image::Rgb([
+                    (x * 3 + y) as f32 / 31.0,
+                    (x + y * 5) as f32 / 37.0,
+                    (x * 7 + y * 11) as f32 / 127.0,
+                ])
+            })),
+            DynamicImage::ImageRgba32F(Rgba32FImage::from_fn(7, 5, |x, y| {
+                image::Rgba([
+                    (x * 3 + y) as f32 / 31.0,
+                    (x + y * 5) as f32 / 37.0,
+                    (x * 7 + y * 11) as f32 / 127.0,
+                    (x * 13 + y * 2) as f32 / 97.0,
+                ])
+            })),
+        ];
+
+        for image in images {
+            assert_bounded_upload_matches_reference(&image);
+        }
+    }
+
+    #[test]
+    fn bounded_upload_rows_preserve_integer_image_conversion_reference() {
+        let images = [
+            DynamicImage::ImageLuma8(image::GrayImage::from_fn(7, 5, |x, y| {
+                image::Luma([(x * 17 + y * 5) as u8])
+            })),
+            DynamicImage::ImageLumaA8(image::GrayAlphaImage::from_fn(7, 5, |x, y| {
+                image::LumaA([(x * 17 + y * 5) as u8, (x * 23 + y * 7) as u8])
+            })),
+            DynamicImage::ImageRgb8(image::RgbImage::from_fn(7, 5, |x, y| {
+                image::Rgb([
+                    (x * 17 + y * 5) as u8,
+                    (x * 23 + y * 7) as u8,
+                    (x * 29 + y * 11) as u8,
+                ])
+            })),
+            DynamicImage::ImageRgba8(image::RgbaImage::from_fn(7, 5, |x, y| {
+                image::Rgba([
+                    (x * 17 + y * 5) as u8,
+                    (x * 23 + y * 7) as u8,
+                    (x * 29 + y * 11) as u8,
+                    (x * 31 + y * 13) as u8,
+                ])
+            })),
+            DynamicImage::ImageLuma16(image::ImageBuffer::from_fn(7, 5, |x, y| {
+                image::Luma([(x * 1_003 + y * 257) as u16])
+            })),
+            DynamicImage::ImageLumaA16(image::ImageBuffer::from_fn(7, 5, |x, y| {
+                image::LumaA([(x * 1_003 + y * 257) as u16, (x * 1_307 + y * 313) as u16])
+            })),
+            DynamicImage::ImageRgb16(image::ImageBuffer::from_fn(7, 5, |x, y| {
+                image::Rgb([
+                    (x * 1_003 + y * 257) as u16,
+                    (x * 1_307 + y * 313) as u16,
+                    (x * 1_711 + y * 401) as u16,
+                ])
+            })),
+            DynamicImage::ImageRgba16(image::ImageBuffer::from_fn(7, 5, |x, y| {
+                image::Rgba([
+                    (x * 1_003 + y * 257) as u16,
+                    (x * 1_307 + y * 313) as u16,
+                    (x * 1_711 + y * 401) as u16,
+                    (x * 1_913 + y * 433) as u16,
+                ])
+            })),
+        ];
+
+        for image in images {
+            assert_bounded_upload_matches_reference(&image);
         }
     }
 

@@ -86,6 +86,10 @@ assert.match(gpuProcessing, /process_and_stream_rgba_rows/);
 assert.match(gpuProcessing, /StreamingExportBufferPlan::new/);
 assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
 assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
+assert.match(gpuProcessing, /GpuInputUploadPlan::new/);
+assert.match(gpuProcessing, /upload_image_to_texture_bounded/);
+assert.match(gpuProcessing, /GPU_INPUT_UPLOAD_BAND_ROWS/);
+assert.doesNotMatch(gpuProcessing, /let img_rgba_f16 = to_rgba_f16\(base_image\)/);
 const rgbaF16Start = gpuProcessing.indexOf('fn to_rgba_f16(');
 const rgbaF16End = gpuProcessing.indexOf('\n#[repr(C)]', rgbaF16Start);
 assert.ok(rgbaF16Start >= 0 && rgbaF16End > rgbaF16Start);
@@ -174,7 +178,8 @@ const oldFullExportRgbaBytes = pixels * 4;
 const streamedBandBytes = 9504 * 2048 * 4;
 const geometryRgba32fBytes = pixels * 4 * 4;
 const rawRgb32fBytes = pixels * 3 * 4;
-const gpuRgba16fUploadBytes = pixels * 4 * 2;
+const gpuRgba16fFullUploadBytes = pixels * 4 * 2;
+const gpuRgba16fUploadBandBytes = Math.ceil((9504 * 8) / 256) * 256 * 64;
 const activeMaskFullTextureBytes = pixels;
 const activeMaskTileTextureBytes = (2048 + 128 * 2) ** 2;
 const maskGenerationTileBytes = 2048 ** 2;
@@ -193,8 +198,10 @@ assert.equal(rawRgb32fBytes, 722_608_128);
 assert.equal(rawRgb32fBytes + geometryRgba32fBytes, 1_686_085_632);
 assert.equal(rawRgb32fBytes + geometryRgba32fBytes - rawRgb32fBytes, geometryRgba32fBytes);
 assert.equal(geometryRgba32fBytes - rawRgb32fBytes, 240_869_376);
-assert.equal(gpuRgba16fUploadBytes, 481_738_752);
-assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBytes, 1_445_216_256);
+assert.equal(gpuRgba16fFullUploadBytes, 481_738_752);
+assert.equal(gpuRgba16fUploadBandBytes, 4_866_048);
+assert.equal(gpuRgba16fFullUploadBytes - gpuRgba16fUploadBandBytes, 476_872_704);
+assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes, 968_343_552);
 assert.equal(activeMaskFullTextureBytes, 60_217_344);
 assert.equal(activeMaskTileTextureBytes, 5_308_416);
 assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
@@ -214,5 +221,5 @@ assert.match(packageJson.scripts['synthetic-ai-mask:bench'], /synthetic_60mp_ai_
 assert.match(packageJson.scripts['synthetic-raw-handoff:bench'], /synthetic_60mp_raw_rgb_handoff/);
 
 console.log(
-  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, direct float-to-RGBA16F upload staging, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

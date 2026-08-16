@@ -84,7 +84,11 @@
     与回退路径逐像素一致由单元测试锁定。
 17. GPU 的 RGBA16F 上传数据直接从 RGB32F/RGBA32F 源生成；RGB 输入逐像素补 `f16::ONE` alpha，
     RGBA 输入直接降精度。两种常见浮点路径不再先调用 `to_rgba32f()` 克隆一张 963,477,504 B CPU
-    staging；481,738,752 B RGBA16F 上传数组与同尺寸 GPU texture 仍然存在，因此这还不是分块上传。
+    staging。
+18. GPU 输入纹理继续保持完整尺寸，以便现有 shader 使用全图坐标和邻域 blur；但 CPU 转换改为复用最多
+    64 行、按 256-byte 行对齐的 RGBA16F 带状 buffer，通过 `queue.write_texture` 逐带上传。9504×6336
+    的 CPU staging 上限从 481,738,752 B 降为 4,866,048 B，上传纹理和几何 warp 的完整输出仍然存在，
+    因而本项是有界上传，不把几何节点或 GPU 输入纹理描述成 tile 化存储。
 
 ## 确定性前后基线
 
@@ -107,7 +111,7 @@
 | RAW RGB32F → RGBA32F 开发结果交接峰值                  | 1,686,085,632 B（1.57 GiB） | 722,608,128 B（689.1 MiB） | 963,477,504 B |
 | 单张 RAW 浮点开发结果                                  |  963,477,504 B（918.8 MiB） | 722,608,128 B（689.1 MiB） | 240,869,376 B |
 | RGB32F RAW 预处理/显示变换输入复制                     |  722,608,128 B（689.1 MiB） |                        0 B | 722,608,128 B |
-| 浮点源 → RGBA16F 上传的 CPU 转换缓冲                   | 1,445,216,256 B（1.35 GiB） | 481,738,752 B（459.4 MiB） | 963,477,504 B |
+| 浮点源 → RGBA16F 上传的 CPU 转换缓冲                   | 1,445,216,256 B（1.35 GiB） |   4,866,048 B（4.6 MiB） | 1,440,350,208 B |
 | 几何 warp 的 RGBA32F 输入 staging                      |  963,477,504 B（918.8 MiB） |          0 B（借用浮点源） | 963,477,504 B |
 | 旧 Performance 1.5× 降采样的额外 RGB32F `small_image`  |  321,159,168 B（306.3 MiB） |        0 B（单一目标底图） | 321,159,168 B |
 | JPEG/PNG/TIFF 最终 RGBA8 CPU 编码缓冲                  |  240,869,376 B（229.7 MiB） |   77,856,768 B（74.2 MiB） | 163,012,608 B |
@@ -117,8 +121,10 @@
 这些减少项不能简单相加当作真实进程峰值：它们的生命周期并不完全重叠。回归测试只锁定每一项
 不再由应用代码重新分配。RAW 交接把 rawler 已有的 722,608,128 B RGB32F 分配直接变成开发结果，
 逻辑峰值从 RGB32F + RGBA32F 的 1,686,085,632 B 降至 RGB32F 一张，减少 57.1%；结果长期容量另因
-移除无意义 alpha 下降 25%。之后两个原位 CPU 变换各自避免一张 RGB32F 输入副本；GPU 转换阶段则
-只构造 481,738,752 B RGBA16F 上传数组，不再同时保留额外 RGBA32F staging，转换缓冲减少 66.7%。
+移除无意义 alpha 下降 25%。之后两个原位 CPU 变换各自避免一张 RGB32F 输入副本；GPU 转换阶段先
+不再同时保留额外 RGBA32F staging，随后又把完整 RGBA16F 上传数组收敛成最多 4,866,048 B 的 64 行
+带状 buffer。按 60MP 尺寸计算，当前 CPU 上传 staging 比直接 RGBA16F 路径减少 476,872,704 B
+（99.0%）；GPU 输入纹理仍是完整尺寸，不能把该数字当作 GPU 显存下降。
 这三项共享同一开发帧且发生在不同时间，不能彼此相加，也不包括 rawler 内部 mosaic、开发算法 scratch、
 GPU texture 或几何输出。GPU tile 改造本身把单层 render 的一张 CPU 灰度 bitmap + GPU texture 从
 120,434,688 B 降到 65,525,760 B（减少 45.6%），而不是只剩 5,308,416 B。缓存路径在本次改造前还会
@@ -141,7 +147,7 @@ grow/feather 使用精确 halo。后续程序化子蒙版加上最终图的逻�
 
 - `npm run preview-resolution:check`：验证 Retina 100%、快速预览、半分辨率编辑和全分辨率 ROI 选择。
 - `npm run render-strategy:check`：锁定四级 IPC 合同、单底图缓存、dummy mask、活动蒙版 tile texture、
-  RAW RGB 分配交接、RGB32F 原位预处理/显示变换、直接 RGBA16F 上传 staging、CPU 蒙版 `Arc` 共享、
+  RAW RGB 分配交接、RGB32F 原位预处理/显示变换、有界 RGBA16F 带状上传、CPU 蒙版 `Arc` 共享、
   首个加法子蒙版接管输出、程序化/画笔 2048px 分块、颜色/明度与 AI 蒙版有限 halo、AI 源单次解码
   及完整坐标原点、源 offset 上传与 WGSL 局部坐标采样、分析 `Arc` 共享、原图 `Arc` 复用、几何浮点
   输入借用、流式编码器边界、编码期 EXIF、禁止临时输出整文件读回、临时文件发布和 GPU 高水位回收。
@@ -157,7 +163,7 @@ grow/feather 使用精确 halo。后续程序化子蒙版加上最终图的逻�
   AI 蒙版再覆盖相同几何、深度双重 feather、三种组合模式、反转、透明度和横纵 overlap seam；同时
   验证空/隐藏/跨像素蒙版路由、60MP range/AI tile/halo scratch 算术、cache/caller 的 `Arc::ptr_eq`、
   全部内置 WGSL 的 Naga 解析与验证、分析结果 `Arc::ptr_eq` 共享、
-  60MP 带状缓冲算术、几何 RGB32F 借用与显式 RGBA32F staging 的逐像素一致、60MP 几何缓冲计划、
+  60MP 编码带状缓冲和 GPU 输入带状上传算术、几何 RGB32F 借用与显式 RGBA32F staging 的逐像素一致、60MP 几何缓冲计划、
   processor 收缩、JPEG/PNG/TIFF 尺寸和 sRGB v4 ICC 往返、行缩放与 batch
   参考一致、水印与旧完整帧混合逐像素一致、JPEG/PNG/TIFF EXIF 与 GPS 删除往返、TIFF → TIFF
   元数据复制，以及 JPEG
@@ -208,7 +214,7 @@ grow/feather 使用精确 halo。后续程序化子蒙版加上最终图的逻�
 容量减少 240,869,376 B（25%）；两条路径的 RGB 哈希一致。附加 RSS 减少 99.97%，但 0 ms 只表示
 所有权转交低于毫秒计时精度，不用于声明真实 RAW 开发加速。该 harness 不读取 RAW 文件、不执行
 mosaic 解包、去马赛克、颜色校准、预处理、WGPU 或导出；可复用结论仅是开发后的三通道分配不再被
-扩展复制。原位预处理和直接 RGBA16F staging 由指针/逐值单元测试与 60MP 尺寸算术分别约束。
+扩展复制。原位预处理和有界 RGBA16F 带状上传由指针/逐值单元测试与 60MP 尺寸算术分别约束。
 
 ## 合成 60MP 蒙版所有权基准
 
@@ -331,14 +337,15 @@ libwebp YUVA picture 和编码器工作内存，不能把约 1.08 GiB 当作端�
 
 ## 仍然存在的峰值来源
 
-- 全分辨率导出仍同时需要已解码/变换输入、完整 RGBA16F CPU 上传数组和一张 RGBA16F GPU 输入
-  texture；浮点源到上传数组之间的 RGBA32F staging 已消除，桌面 JPEG/PNG/TIFF 的最终完整 RGBA8
+- 全分辨率导出仍同时需要已解码/变换输入、一张完整 RGBA16F GPU 输入 texture 和最多 64 行的
+  RGBA16F CPU 上传 buffer；浮点源到上传数组之间的 RGBA32F staging 已消除，桌面 JPEG/PNG/TIFF 的最终完整 RGBA8
   输出图也已消除。几何 warp 已消除输入 staging，但仍产生完整 RGBA32F 输出；RAW 开发结果已收敛
   为一张 RGB32F，然而 rawler 内部 mosaic/算法 scratch 与最终开发帧都尚未改造成流式节点。
 - WebP 仍使用完整 CPU 输入与 libwebp YUVA picture，但已消除额外 ARGB 图和完整压缩输出缓冲；
   当前接口没有逐 tile 输入。JXL、AVIF 与 Android 导出仍使用完整 CPU 编码图，其中当前 JXL/AVIF
-  编码依赖会在内部返回完整压缩 `Vec`；下一阶段优先收敛几何输出，并调查 rawler 上游能否提供
-  分块/行式开发接口，同时继续评估可替换的分块编码器。
+  编码依赖会在内部返回完整压缩 `Vec`；有界 GPU 上传已经完成，下一阶段优先收敛几何输出，并继续
+  评估可替换的分块编码器。当前锁定的 rawler 上游没有公开行式/分块 `Intermediate` 开发接口，需先
+  设计新的上游 API 或替换开发器后才能继续降低 RAW mosaic/开发帧峰值。
 - 桌面 JPEG 已消除完整压缩码流缓冲，但仍通过 C MozJPEG FFI 编码；当前默认 unwind 配置会把
   libjpeg 错误转换为普通导出失败，若未来改为 `panic=abort`，必须先替换这条错误边界。
 - 高水位回收是导出结束和尺寸切换时的确定性策略，尚未接入操作系统/驱动的实时内存压力通知。

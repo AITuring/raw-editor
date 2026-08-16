@@ -5,6 +5,9 @@ const MIB: usize = 1024 * 1024;
 pub const GPU_TILE_SIZE: u32 = 2_048;
 pub const GPU_TILE_OVERLAP: u32 = 128;
 pub const GPU_RECLAIM_HIGH_WATER_BYTES: usize = 512 * MIB;
+pub const GPU_INPUT_UPLOAD_BAND_ROWS: u32 = 64;
+
+const GPU_COPY_BYTES_PER_ROW_ALIGNMENT: usize = 256;
 
 pub fn should_reclaim_gpu_resources(processor_bytes: usize, input_bytes: usize) -> bool {
     processor_bytes.saturating_add(input_bytes) >= GPU_RECLAIM_HIGH_WATER_BYTES
@@ -15,6 +18,51 @@ const RGBA16_FLOAT_BYTES_PER_PIXEL: usize = 8;
 const PROCESSOR_RGBA16_TILE_COUNT: usize = 5;
 const FLARE_TEXTURE_COUNT: usize = 3;
 const FLARE_TEXTURE_EDGE: usize = 512;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GpuInputUploadPlan {
+    pub width: u32,
+    pub height: u32,
+    pub bytes_per_row: u32,
+    pub padded_bytes_per_row: u32,
+    pub band_rows: u32,
+    pub max_staging_bytes: usize,
+}
+
+impl GpuInputUploadPlan {
+    pub fn new(width: u32, height: u32) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+
+        let bytes_per_row = (width as usize).checked_mul(RGBA16_FLOAT_BYTES_PER_PIXEL)?;
+        let padded_bytes_per_row = bytes_per_row
+            .div_ceil(GPU_COPY_BYTES_PER_ROW_ALIGNMENT)
+            .checked_mul(GPU_COPY_BYTES_PER_ROW_ALIGNMENT)?;
+        let bytes_per_row = u32::try_from(bytes_per_row).ok()?;
+        let padded_bytes_per_row = u32::try_from(padded_bytes_per_row).ok()?;
+        let band_rows = height.min(GPU_INPUT_UPLOAD_BAND_ROWS);
+        let max_staging_bytes = (padded_bytes_per_row as usize).checked_mul(band_rows as usize)?;
+
+        Some(Self {
+            width,
+            height,
+            bytes_per_row,
+            padded_bytes_per_row,
+            band_rows,
+            max_staging_bytes,
+        })
+    }
+
+    pub fn full_frame_staging_bytes(self) -> usize {
+        (self.padded_bytes_per_row as usize).saturating_mul(self.height as usize)
+    }
+
+    pub fn saved_staging_bytes(self) -> usize {
+        self.full_frame_staging_bytes()
+            .saturating_sub(self.max_staging_bytes)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -303,9 +351,9 @@ impl StreamingExportBufferPlan {
 #[cfg(test)]
 mod tests {
     use super::{
-        GPU_RECLAIM_HIGH_WATER_BYTES, GpuProcessorTexturePlan, MaskTexturePlan, MaskTileUploadPlan,
-        RenderTier, StreamingExportBufferPlan, resolve_preview_render_tier,
-        should_reclaim_gpu_resources,
+        GPU_INPUT_UPLOAD_BAND_ROWS, GPU_RECLAIM_HIGH_WATER_BYTES, GpuInputUploadPlan,
+        GpuProcessorTexturePlan, MaskTexturePlan, MaskTileUploadPlan, RenderTier,
+        StreamingExportBufferPlan, resolve_preview_render_tier, should_reclaim_gpu_resources,
     };
 
     const A7R_V_WIDTH: u32 = 9_504;
@@ -499,5 +547,25 @@ mod tests {
             plan.legacy_full_rgba_bytes() - plan.band_rgba_bytes(),
             163_012_608
         );
+    }
+
+    #[test]
+    fn gpu_input_upload_bounds_the_60mp_cpu_staging_band() {
+        let plan =
+            GpuInputUploadPlan::new(A7R_V_WIDTH, A7R_V_HEIGHT).expect("60MP GPU input upload plan");
+        assert_eq!(plan.bytes_per_row, 76_032);
+        assert_eq!(plan.padded_bytes_per_row, 76_032);
+        assert_eq!(plan.band_rows, GPU_INPUT_UPLOAD_BAND_ROWS);
+        assert_eq!(plan.max_staging_bytes, 4_866_048);
+        assert_eq!(plan.full_frame_staging_bytes(), 481_738_752);
+        assert_eq!(plan.saved_staging_bytes(), 476_872_704);
+
+        let narrow = GpuInputUploadPlan::new(1, 2).expect("narrow upload plan");
+        assert_eq!(narrow.bytes_per_row, 8);
+        assert_eq!(narrow.padded_bytes_per_row, 256);
+        assert_eq!(narrow.band_rows, 2);
+        assert_eq!(narrow.max_staging_bytes, 512);
+        assert!(GpuInputUploadPlan::new(0, 2).is_none());
+        assert!(GpuInputUploadPlan::new(2, 0).is_none());
     }
 }
