@@ -87,7 +87,10 @@ assert.match(gpuProcessing, /StreamingExportBufferPlan::new/);
 assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
 assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
 assert.match(gpuProcessing, /GpuInputUploadPlan::new/);
-assert.match(gpuProcessing, /upload_image_to_texture_bounded/);
+assert.match(gpuProcessing, /trait GpuInputSource: Sync/);
+assert.match(gpuProcessing, /impl GpuInputSource for GeometryWarpRows/);
+assert.match(gpuProcessing, /materialize_cpu_fallback/);
+assert.match(gpuProcessing, /upload_source_to_texture_bounded/);
 assert.match(gpuProcessing, /GPU_INPUT_UPLOAD_BAND_ROWS/);
 assert.doesNotMatch(gpuProcessing, /let img_rgba_f16 = to_rgba_f16\(base_image\)/);
 const rgbaF16Start = gpuProcessing.indexOf('fn to_rgba_f16(');
@@ -116,6 +119,10 @@ assert.match(imageProcessing, /enum GeometryPixelSource/);
 assert.match(imageProcessing, /DynamicImage::ImageRgb32F\(source\) => Self::Rgb32F/);
 assert.match(imageProcessing, /DynamicImage::ImageRgba32F\(source\) => Self::Rgba32F/);
 assert.match(imageProcessing, /GeometryWarpBufferPlan::new/);
+assert.match(imageProcessing, /struct GeometryWarpContext/);
+assert.match(imageProcessing, /pub struct GeometryWarpRows/);
+assert.match(imageProcessing, /pub fn write_rgba16f_row/);
+assert.match(imageProcessing, /context\s*\.write_rgba32f_row/);
 const geometryWarpStart = imageProcessing.indexOf('pub fn warp_image_geometry(');
 const geometryWarpEnd = imageProcessing.indexOf('\npub fn unwarp_image_geometry(', geometryWarpStart);
 assert.ok(geometryWarpStart >= 0 && geometryWarpEnd > geometryWarpStart);
@@ -124,6 +131,11 @@ assert.doesNotMatch(
   /image\.to_rgba32f\(\)/,
   'geometry warp must not stage every float source through a complete RGBA32F copy',
 );
+assert.match(exportProcessing, /enum PreparedExportSource/);
+assert.match(exportProcessing, /StreamedGeometry\(Box<GeometryWarpRows/);
+assert.match(exportProcessing, /fn can_stream_geometry_output/);
+assert.match(exportProcessing, /GeometryWarpRows::try_new_borrowed/);
+assert.match(exportProcessing, /prepared\.source\.gpu_input\(\)/);
 
 assert.match(exportProcessing, /supports_streaming_export/);
 assert.match(exportProcessing, /encode_streaming_jpeg/);
@@ -202,6 +214,7 @@ assert.equal(gpuRgba16fFullUploadBytes, 481_738_752);
 assert.equal(gpuRgba16fUploadBandBytes, 4_866_048);
 assert.equal(gpuRgba16fFullUploadBytes - gpuRgba16fUploadBandBytes, 476_872_704);
 assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes, 968_343_552);
+assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes - gpuRgba16fUploadBandBytes, geometryRgba32fBytes);
 assert.equal(activeMaskFullTextureBytes, 60_217_344);
 assert.equal(activeMaskTileTextureBytes, 5_308_416);
 assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
@@ -219,7 +232,8 @@ assert.match(packageJson.scripts['synthetic-mask-compose:bench'], /synthetic_60m
 assert.match(packageJson.scripts['synthetic-range-mask:bench'], /synthetic_60mp_range_mask_overlap_scratch/);
 assert.match(packageJson.scripts['synthetic-ai-mask:bench'], /synthetic_60mp_ai_mask_overlap_scratch/);
 assert.match(packageJson.scripts['synthetic-raw-handoff:bench'], /synthetic_60mp_raw_rgb_handoff/);
+assert.match(packageJson.scripts['synthetic-geometry-output:bench'], /synthetic_60mp_geometry_output/);
 
 console.log(
-  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, row-streamed geometry output, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

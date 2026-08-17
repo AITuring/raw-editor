@@ -2,6 +2,7 @@ use crate::color_management::{linear_to_srgb_channel, srgb_to_linear_channel};
 use crate::gpu_processing::WgpuDisplay;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat3, Vec2, Vec3};
+use half::f16;
 use image::{DynamicImage, GenericImageView, Rgb32FImage, RgbImage, Rgba, Rgba32FImage};
 use imageproc::geometric_transformations::{Border, Interpolation, rotate_about_center};
 use nalgebra::{Matrix3 as NaMatrix3, Vector3 as NaVector3};
@@ -797,10 +798,411 @@ fn solve_generic_distortion_inv(r_target: f64, k_scaled: f64) -> f64 {
     r
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GeometryCropRect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+fn resolve_geometry_crop_rect(
+    image_width: u32,
+    image_height: u32,
+    crop_value: &Value,
+) -> GeometryCropRect {
+    let full = GeometryCropRect {
+        x: 0,
+        y: 0,
+        width: image_width,
+        height: image_height,
+    };
+    let Ok(crop) = serde_json::from_value::<Crop>(crop_value.clone()) else {
+        return full;
+    };
+
+    let x = crop.x.round() as u32;
+    let y = crop.y.round() as u32;
+    let width = crop.width.round() as u32;
+    let height = crop.height.round() as u32;
+    if width == 0 || height == 0 || x >= image_width || y >= image_height {
+        return full;
+    }
+
+    let width = (image_width - x).min(width);
+    let height = (image_height - y).min(height);
+    if width == 0 || height == 0 {
+        full
+    } else {
+        GeometryCropRect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
+struct GeometryWarpContext<'a> {
+    source: GeometryPixelSource<'a>,
+    width: u32,
+    height: u32,
+    step_vec_x: NaVector3<f32>,
+    step_vec_y: NaVector3<f32>,
+    origin_vec: NaVector3<f32>,
+    cx: f32,
+    cy: f32,
+    half_diagonal: f64,
+    max_radius_sq_inv: f64,
+    params: GeometryParams,
+    k_distortion: f64,
+    lens_dist_k1: f64,
+    lens_dist_k2: f64,
+    lens_dist_k3: f64,
+    lens_distortion_amount: f64,
+    has_lens_correction: bool,
+    is_ptlens: bool,
+    tca_vr: f32,
+    tca_vb: f32,
+    has_tca: bool,
+    vig_k1: f64,
+    vig_k2: f64,
+    vig_k3: f64,
+    lens_vignette_amount: f64,
+    has_vignetting: bool,
+}
+
+impl<'a> GeometryWarpContext<'a> {
+    fn new(image: &'a DynamicImage, params: GeometryParams) -> Self {
+        let (width, height) = image.dimensions();
+        let source = GeometryPixelSource::new(image);
+        let (forward_transform, cx, cy, half_diagonal) =
+            build_transform_matrices(&params, width as f32, height as f32);
+        let inv = forward_transform
+            .try_inverse()
+            .unwrap_or(NaMatrix3::identity());
+
+        let step_vec_x = NaVector3::new(inv[(0, 0)], inv[(1, 0)], inv[(2, 0)]);
+        let step_vec_y = NaVector3::new(inv[(0, 1)], inv[(1, 1)], inv[(2, 1)]);
+        let origin_vec = NaVector3::new(inv[(0, 2)], inv[(1, 2)], inv[(2, 2)]);
+        let max_radius_sq_inv = 1.0 / ((cx * cx + cy * cy) as f64);
+        let k_distortion = (params.distortion as f64 / 100.0) * 2.5;
+        let lens_dist_k1 = params.lens_dist_k1 as f64;
+        let lens_dist_k2 = params.lens_dist_k2 as f64;
+        let lens_dist_k3 = params.lens_dist_k3 as f64;
+        let lens_distortion_amount = (params.lens_distortion_amount as f64) * 2.5;
+        let has_lens_correction = params.lens_distortion_enabled
+            && (lens_dist_k1.abs() > 1e-6
+                || lens_dist_k2.abs() > 1e-6
+                || lens_dist_k3.abs() > 1e-6);
+        let is_ptlens = params.lens_model == 1;
+        let tca_vr = if (params.tca_vr - 1.0).abs() > 1e-5 {
+            params.tca_vr + (1.0 - params.tca_vr) * (1.0 - params.lens_tca_amount)
+        } else {
+            1.0
+        };
+        let tca_vb = if (params.tca_vb - 1.0).abs() > 1e-5 {
+            params.tca_vb + (1.0 - params.tca_vb) * (1.0 - params.lens_tca_amount)
+        } else {
+            1.0
+        };
+        let has_tca =
+            params.lens_tca_enabled && ((tca_vr - 1.0).abs() > 1e-5 || (tca_vb - 1.0).abs() > 1e-5);
+        let vig_k1 = params.vig_k1 as f64;
+        let vig_k2 = params.vig_k2 as f64;
+        let vig_k3 = params.vig_k3 as f64;
+        let lens_vignette_amount = (params.lens_vignette_amount as f64) * 0.8;
+        let has_vignetting = params.lens_vignette_enabled
+            && (vig_k1.abs() > 1e-6 || vig_k2.abs() > 1e-6 || vig_k3.abs() > 1e-6)
+            && lens_vignette_amount > 0.01;
+
+        Self {
+            source,
+            width,
+            height,
+            step_vec_x,
+            step_vec_y,
+            origin_vec,
+            cx,
+            cy,
+            half_diagonal,
+            max_radius_sq_inv,
+            params,
+            k_distortion,
+            lens_dist_k1,
+            lens_dist_k2,
+            lens_dist_k3,
+            lens_distortion_amount,
+            has_lens_correction,
+            is_ptlens,
+            tca_vr,
+            tca_vb,
+            has_tca,
+            vig_k1,
+            vig_k2,
+            vig_k3,
+            lens_vignette_amount,
+            has_vignetting,
+        }
+    }
+
+    fn sample_context(&self) -> GeometrySampleContext<'_> {
+        GeometrySampleContext {
+            src_raw: self.source.raw(),
+            src_width: self.width as usize,
+            src_height: self.height as usize,
+            src_channels: self.source.channels(),
+            cx: self.cx,
+            cy: self.cy,
+        }
+    }
+
+    fn row_start(&self, y: u32, x_offset: u32) -> NaVector3<f32> {
+        let mut current = self.origin_vec + self.step_vec_y * y as f32;
+        // Match the materialized implementation's repeated f32 addition so a cropped
+        // streamed row is bit-identical to slicing the corresponding full output row.
+        for _ in 0..x_offset {
+            current += self.step_vec_x;
+        }
+        current
+    }
+
+    fn sample_pixel(
+        &self,
+        sample_context: &GeometrySampleContext<'_>,
+        current_vec: NaVector3<f32>,
+        pixel: &mut [f32; 4],
+    ) {
+        if current_vec.z.abs() <= 1e-6 {
+            return;
+        }
+
+        let inv_z = 1.0 / current_vec.z;
+        let mut src_x = current_vec.x * inv_z;
+        let mut src_y = current_vec.y * inv_z;
+        let (unprojected_x, unprojected_y) = unproject_geometry_point(
+            src_x as f64,
+            src_y as f64,
+            self.cx as f64,
+            self.cy as f64,
+            self.half_diagonal,
+            self.params.projection,
+        );
+        src_x = unprojected_x as f32;
+        src_y = unprojected_y as f32;
+
+        if self.has_lens_correction {
+            let dx = (src_x - self.cx) as f64;
+            let dy = (src_y - self.cy) as f64;
+            let ru = (dx * dx + dy * dy).sqrt();
+            if ru > 1e-6 {
+                let ru_norm = ru / self.half_diagonal;
+                let ru_norm2 = ru_norm * ru_norm;
+                let rd_norm = if self.is_ptlens {
+                    let d = 1.0 - self.lens_dist_k1 - self.lens_dist_k2 - self.lens_dist_k3;
+                    ru_norm
+                        * (self.lens_dist_k1 * ru_norm2 * ru_norm
+                            + self.lens_dist_k2 * ru_norm2
+                            + self.lens_dist_k3 * ru_norm
+                            + d)
+                } else {
+                    ru_norm
+                        * (1.0
+                            + self.lens_dist_k1 * ru_norm2
+                            + self.lens_dist_k2 * (ru_norm2 * ru_norm2)
+                            + self.lens_dist_k3 * (ru_norm2 * ru_norm2 * ru_norm2))
+                };
+                let effective_r_norm = ru_norm + (rd_norm - ru_norm) * self.lens_distortion_amount;
+                let scale = effective_r_norm / ru_norm;
+                src_x = self.cx + (dx * scale) as f32;
+                src_y = self.cy + (dy * scale) as f32;
+            }
+        }
+
+        if self.k_distortion.abs() > 1e-5 {
+            let dx = (src_x - self.cx) as f64;
+            let dy = (src_y - self.cy) as f64;
+            let r2_norm = (dx * dx + dy * dy) * self.max_radius_sq_inv;
+            let factor = 1.0 + self.k_distortion * r2_norm;
+            src_x = self.cx + (dx * factor) as f32;
+            src_y = self.cy + (dy * factor) as f32;
+        }
+
+        if self.has_tca {
+            interpolate_pixel_with_tca(
+                sample_context,
+                src_x,
+                src_y,
+                self.tca_vr,
+                self.tca_vb,
+                pixel,
+            );
+        } else {
+            interpolate_geometry_pixel(sample_context, src_x, src_y, pixel);
+        }
+
+        if self.has_vignetting {
+            let dx = (src_x - self.cx) as f64;
+            let dy = (src_y - self.cy) as f64;
+            let ru_norm = (dx * dx + dy * dy).sqrt() / self.half_diagonal;
+            let ru_norm2 = ru_norm * ru_norm;
+            let vignette_factor = 1.0
+                + self.vig_k1 * ru_norm2
+                + self.vig_k2 * (ru_norm2 * ru_norm2)
+                + self.vig_k3 * (ru_norm2 * ru_norm2 * ru_norm2);
+            if vignette_factor > 1e-6 {
+                let correction_gain = 1.0 / vignette_factor;
+                let final_gain = 1.0 + (correction_gain - 1.0) * self.lens_vignette_amount;
+                pixel[0] *= final_gain as f32;
+                pixel[1] *= final_gain as f32;
+                pixel[2] *= final_gain as f32;
+            }
+        }
+    }
+
+    fn validate_row(&self, y: u32, x_offset: u32, width: usize) -> Result<(), String> {
+        if y >= self.height || x_offset > self.width || width > (self.width - x_offset) as usize {
+            return Err(format!(
+                "Geometry output row x={} width={} y={} is outside {}x{}",
+                x_offset, width, y, self.width, self.height
+            ));
+        }
+        Ok(())
+    }
+
+    fn write_rgba32f_row(&self, y: u32, x_offset: u32, output: &mut [f32]) -> Result<(), String> {
+        if !output.len().is_multiple_of(4) {
+            return Err("Geometry RGBA32F row must contain complete pixels".to_string());
+        }
+        let width = output.len() / 4;
+        self.validate_row(y, x_offset, width)?;
+        output.fill(0.0);
+        let sample_context = self.sample_context();
+        let mut current_vec = self.row_start(y, x_offset);
+        for pixel in output.chunks_exact_mut(4) {
+            let pixel: &mut [f32; 4] = pixel
+                .try_into()
+                .expect("RGBA32F row chunks always contain four samples");
+            self.sample_pixel(&sample_context, current_vec, pixel);
+            current_vec += self.step_vec_x;
+        }
+        Ok(())
+    }
+
+    fn write_rgba16f_row(
+        &self,
+        y: u32,
+        x_offset: u32,
+        width: usize,
+        output: &mut [f16],
+    ) -> Result<(), String> {
+        let samples = width.checked_mul(4).ok_or_else(|| {
+            "Geometry RGBA16F row exceeds the addressable buffer size".to_string()
+        })?;
+        if output.len() < samples {
+            return Err("Geometry RGBA16F row staging buffer is too small".to_string());
+        }
+        self.validate_row(y, x_offset, width)?;
+        let sample_context = self.sample_context();
+        let mut current_vec = self.row_start(y, x_offset);
+        for output_pixel in output[..samples].chunks_exact_mut(4) {
+            let mut pixel = [0.0_f32; 4];
+            self.sample_pixel(&sample_context, current_vec, &mut pixel);
+            for (output, value) in output_pixel.iter_mut().zip(pixel) {
+                *output = f16::from_f32(value);
+            }
+            current_vec += self.step_vec_x;
+        }
+        Ok(())
+    }
+}
+
+/// A borrowed, row-addressable geometry result for the full-resolution export path.
+///
+/// The source must already use float RGB/RGBA storage. Crop is fused by selecting a
+/// contiguous rectangle from the virtual full-canvas warp; transforms that require a
+/// second resampling pass are deliberately handled by the materialized fallback.
+pub struct GeometryWarpRows<'a> {
+    context: GeometryWarpContext<'a>,
+    crop: GeometryCropRect,
+    mask_crop_offset: (f32, f32),
+}
+
+impl<'a> GeometryWarpRows<'a> {
+    pub fn try_new_borrowed(
+        image: &'a DynamicImage,
+        params: GeometryParams,
+        crop_value: &Value,
+    ) -> Option<Self> {
+        if !matches!(
+            image,
+            DynamicImage::ImageRgb32F(_) | DynamicImage::ImageRgba32F(_)
+        ) {
+            return None;
+        }
+        let (width, height) = image.dimensions();
+        let mask_crop_offset = serde_json::from_value::<Crop>(crop_value.clone())
+            .map(|crop| (crop.x as f32, crop.y as f32))
+            .unwrap_or((0.0, 0.0));
+        Some(Self {
+            context: GeometryWarpContext::new(image, params),
+            crop: resolve_geometry_crop_rect(width, height, crop_value),
+            mask_crop_offset,
+        })
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.crop.width, self.crop.height)
+    }
+
+    pub fn crop_offset(&self) -> (f32, f32) {
+        self.mask_crop_offset
+    }
+
+    pub fn write_rgba16f_row(&self, y: u32, output: &mut [f16]) -> Result<(), String> {
+        if y >= self.crop.height {
+            return Err(format!(
+                "Geometry output row {} is outside cropped height {}",
+                y, self.crop.height
+            ));
+        }
+        self.context.write_rgba16f_row(
+            self.crop.y + y,
+            self.crop.x,
+            self.crop.width as usize,
+            output,
+        )
+    }
+
+    pub fn materialized_output_bytes(&self) -> usize {
+        (self.crop.width as usize)
+            .saturating_mul(self.crop.height as usize)
+            .saturating_mul(4)
+            .saturating_mul(size_of::<f32>())
+    }
+
+    pub fn materialize(&self) -> DynamicImage {
+        let row_samples = self.crop.width as usize * 4;
+        let mut output = vec![0.0_f32; row_samples * self.crop.height as usize];
+        output
+            .par_chunks_exact_mut(row_samples)
+            .enumerate()
+            .for_each(|(y, row)| {
+                self.context
+                    .write_rgba32f_row(self.crop.y + y as u32, self.crop.x, row)
+                    .expect("cropped geometry output row must fit the source canvas");
+            });
+        DynamicImage::ImageRgba32F(
+            Rgba32FImage::from_vec(self.crop.width, self.crop.height, output)
+                .expect("geometry output dimensions must match the allocated buffer"),
+        )
+    }
+}
+
 pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> DynamicImage {
     let (width, height) = image.dimensions();
-    let source = GeometryPixelSource::new(image);
-    let buffer_plan = GeometryWarpBufferPlan::new(width, height, source.conversion_bytes())
+    let context = GeometryWarpContext::new(image, params);
+    let buffer_plan = GeometryWarpBufferPlan::new(width, height, context.source.conversion_bytes())
         .expect("geometry warp dimensions exceed the addressable buffer size");
     log::debug!(
         "geometry warp buffers: output={} B source_conversion={} B transient={} B",
@@ -809,156 +1211,14 @@ pub fn warp_image_geometry(image: &DynamicImage, params: GeometryParams) -> Dyna
         buffer_plan.transient_bytes()
     );
     let mut out_buffer = vec![0.0f32; buffer_plan.output_samples];
-
-    let (forward_transform, cx, cy, half_diagonal) =
-        build_transform_matrices(&params, width as f32, height as f32);
-    let inv = forward_transform
-        .try_inverse()
-        .unwrap_or(NaMatrix3::identity());
-
-    let step_vec_x = NaVector3::new(inv[(0, 0)], inv[(1, 0)], inv[(2, 0)]);
-    let step_vec_y = NaVector3::new(inv[(0, 1)], inv[(1, 1)], inv[(2, 1)]);
-    let origin_vec = NaVector3::new(inv[(0, 2)], inv[(1, 2)], inv[(2, 2)]);
-
-    let max_radius_sq_inv = 1.0 / ((cx * cx + cy * cy) as f64);
-    let hd = half_diagonal;
-
-    let k_distortion = (params.distortion as f64 / 100.0) * 2.5;
-    let lk1 = params.lens_dist_k1 as f64;
-    let lk2 = params.lens_dist_k2 as f64;
-    let lk3 = params.lens_dist_k3 as f64;
-    let lens_dist_amt = (params.lens_distortion_amount as f64) * 2.5;
-
-    let has_lens_correction = params.lens_distortion_enabled
-        && (lk1.abs() > 1e-6 || lk2.abs() > 1e-6 || lk3.abs() > 1e-6);
-    let is_ptlens = params.lens_model == 1;
-
-    let vr = if (params.tca_vr - 1.0).abs() > 1e-5 {
-        params.tca_vr + (1.0 - params.tca_vr) * (1.0 - params.lens_tca_amount)
-    } else {
-        1.0
-    };
-    let vb = if (params.tca_vb - 1.0).abs() > 1e-5 {
-        params.tca_vb + (1.0 - params.tca_vb) * (1.0 - params.lens_tca_amount)
-    } else {
-        1.0
-    };
-    let has_tca = params.lens_tca_enabled && ((vr - 1.0).abs() > 1e-5 || (vb - 1.0).abs() > 1e-5);
-
-    let vk1 = params.vig_k1 as f64;
-    let vk2 = params.vig_k2 as f64;
-    let vk3 = params.vig_k3 as f64;
-    let lens_vig_amt = (params.lens_vignette_amount as f64) * 0.8;
-    let has_vignetting = params.lens_vignette_enabled
-        && (vk1.abs() > 1e-6 || vk2.abs() > 1e-6 || vk3.abs() > 1e-6)
-        && lens_vig_amt > 0.01;
-
     let width_usize = width as usize;
-    let height_usize = height as usize;
-    let sample_context = GeometrySampleContext {
-        src_raw: source.raw(),
-        src_width: width_usize,
-        src_height: height_usize,
-        src_channels: source.channels(),
-        cx,
-        cy,
-    };
-
     out_buffer
         .par_chunks_exact_mut(width_usize * 4)
         .enumerate()
         .for_each(|(y, row_pixel_data)| {
-            let y_f = y as f32;
-            let mut current_vec = origin_vec + (step_vec_y * y_f);
-
-            for pixel in row_pixel_data.chunks_exact_mut(4) {
-                if current_vec.z.abs() > 1e-6 {
-                    let inv_z = 1.0 / current_vec.z;
-                    let mut src_x = current_vec.x * inv_z;
-                    let mut src_y = current_vec.y * inv_z;
-
-                    let (unprojected_x, unprojected_y) = unproject_geometry_point(
-                        src_x as f64,
-                        src_y as f64,
-                        cx as f64,
-                        cy as f64,
-                        hd,
-                        params.projection,
-                    );
-                    src_x = unprojected_x as f32;
-                    src_y = unprojected_y as f32;
-
-                    if has_lens_correction {
-                        let dx = (src_x - cx) as f64;
-                        let dy = (src_y - cy) as f64;
-                        let ru = (dx * dx + dy * dy).sqrt();
-
-                        if ru > 1e-6 {
-                            let ru_norm = ru / hd;
-                            let ru_norm2 = ru_norm * ru_norm;
-
-                            let rd_norm = if is_ptlens {
-                                let a = lk1;
-                                let b = lk2;
-                                let c = lk3;
-                                let d = 1.0 - a - b - c;
-                                ru_norm * (a * ru_norm2 * ru_norm + b * ru_norm2 + c * ru_norm + d)
-                            } else {
-                                ru_norm
-                                    * (1.0
-                                        + lk1 * ru_norm2
-                                        + lk2 * (ru_norm2 * ru_norm2)
-                                        + lk3 * (ru_norm2 * ru_norm2 * ru_norm2))
-                            };
-
-                            let effective_r_norm = ru_norm + (rd_norm - ru_norm) * lens_dist_amt;
-                            let scale = effective_r_norm / ru_norm;
-
-                            src_x = cx + (dx * scale) as f32;
-                            src_y = cy + (dy * scale) as f32;
-                        }
-                    }
-
-                    if k_distortion.abs() > 1e-5 {
-                        let dx = (src_x - cx) as f64;
-                        let dy = (src_y - cy) as f64;
-                        let r2_norm = (dx * dx + dy * dy) * max_radius_sq_inv;
-                        let f = 1.0 + k_distortion * r2_norm;
-
-                        src_x = cx + (dx * f) as f32;
-                        src_y = cy + (dy * f) as f32;
-                    }
-
-                    if has_tca {
-                        interpolate_pixel_with_tca(&sample_context, src_x, src_y, vr, vb, pixel);
-                    } else {
-                        interpolate_geometry_pixel(&sample_context, src_x, src_y, pixel);
-                    }
-
-                    if has_vignetting {
-                        let dx = (src_x - cx) as f64;
-                        let dy = (src_y - cy) as f64;
-                        let ru = (dx * dx + dy * dy).sqrt();
-                        let ru_norm = ru / hd;
-                        let ru_norm2 = ru_norm * ru_norm;
-
-                        let v_factor = 1.0
-                            + vk1 * ru_norm2
-                            + vk2 * (ru_norm2 * ru_norm2)
-                            + vk3 * (ru_norm2 * ru_norm2 * ru_norm2);
-
-                        if v_factor > 1e-6 {
-                            let correction_gain = 1.0 / v_factor;
-                            let final_gain = 1.0 + (correction_gain - 1.0) * lens_vig_amt;
-
-                            pixel[0] *= final_gain as f32;
-                            pixel[1] *= final_gain as f32;
-                            pixel[2] *= final_gain as f32;
-                        }
-                    }
-                }
-                current_vec += step_vec_x;
-            }
+            context
+                .write_rgba32f_row(y as u32, 0, row_pixel_data)
+                .expect("full geometry output row must fit the source canvas");
         });
 
     let out_img = Rgba32FImage::from_vec(width, height, out_buffer).unwrap();
@@ -1410,32 +1670,12 @@ pub fn apply_rotation<'a>(
 
 pub fn apply_crop<'a>(image: impl IntoCowImage<'a>, crop_value: &Value) -> Cow<'a, DynamicImage> {
     let image = image.into_cow();
-    if crop_value.is_null() {
+    let (image_width, image_height) = image.dimensions();
+    let crop = resolve_geometry_crop_rect(image_width, image_height, crop_value);
+    if crop.x == 0 && crop.y == 0 && crop.width == image_width && crop.height == image_height {
         return image;
     }
-
-    if let Ok(crop) = serde_json::from_value::<Crop>(crop_value.clone()) {
-        let x = crop.x.round() as u32;
-        let y = crop.y.round() as u32;
-        let width = crop.width.round() as u32;
-        let height = crop.height.round() as u32;
-
-        if width > 0 && height > 0 {
-            let (img_w, img_h) = image.dimensions();
-            if x < img_w && y < img_h {
-                let new_width = (img_w - x).min(width);
-                let new_height = (img_h - y).min(height);
-
-                if new_width > 0 && new_height > 0 {
-                    if x == 0 && y == 0 && new_width == img_w && new_height == img_h {
-                        return image;
-                    }
-                    return Cow::Owned(image.crop_imm(x, y, new_width, new_height));
-                }
-            }
-        }
-    }
-    image
+    Cow::Owned(image.crop_imm(crop.x, crop.y, crop.width, crop.height))
 }
 
 pub fn apply_flip<'a>(
@@ -3910,6 +4150,64 @@ mod geometry_transform_tests {
     }
 
     #[test]
+    fn cropped_geometry_rows_match_the_materialized_rgba16f_pixels() {
+        let source = coordinate_gradient(161, 121);
+        let params = GeometryParams {
+            distortion: 12.0,
+            projection: 24.0,
+            vertical: 13.0,
+            horizontal: -9.0,
+            rotate: 3.5,
+            aspect: 4.0,
+            scale: 97.0,
+            x_offset: 1.5,
+            y_offset: -2.0,
+            lens_dist_k1: 0.012,
+            lens_dist_k2: -0.003,
+            tca_vr: 1.0015,
+            tca_vb: 0.998,
+            vig_k1: -0.08,
+            ..GeometryParams::default()
+        };
+        let crop = serde_json::json!({
+            "unit": "px",
+            "x": 17.4,
+            "y": 11.4,
+            "width": 101.2,
+            "height": 73.2
+        });
+        let materialized = apply_crop(warp_image_geometry(&source, params), &crop).into_owned();
+        let materialized = materialized
+            .as_rgba32f()
+            .expect("materialized geometry crop must remain RGBA32F");
+        let rows = GeometryWarpRows::try_new_borrowed(&source, params, &crop)
+            .expect("RGB32F geometry source must support row streaming");
+
+        assert_eq!(rows.dimensions(), materialized.dimensions());
+        assert_eq!(rows.crop_offset(), (17.4, 11.4));
+        assert_eq!(
+            rows.materialize()
+                .as_rgba32f()
+                .expect("fallback must materialize RGBA32F")
+                .as_raw(),
+            materialized.as_raw()
+        );
+        let width = rows.dimensions().0 as usize;
+        let mut streamed = vec![f16::ZERO; width * 4];
+        for y in 0..rows.dimensions().1 {
+            rows.write_rgba16f_row(y, &mut streamed)
+                .expect("write cropped geometry row");
+            let start = y as usize * width * 4;
+            let expected = materialized.as_raw()[start..start + width * 4]
+                .iter()
+                .copied()
+                .map(f16::from_f32)
+                .collect::<Vec<_>>();
+            assert_eq!(streamed, expected, "streamed geometry row {y}");
+        }
+    }
+
+    #[test]
     fn geometry_buffer_plan_removes_one_60mp_rgba32f_frame() {
         const WIDTH: u32 = 9_504;
         const HEIGHT: u32 = 6_336;
@@ -3925,6 +4223,14 @@ mod geometry_transform_tests {
         assert_eq!(
             staged.transient_bytes() - borrowed.transient_bytes(),
             RGBA32F_BYTES
+        );
+
+        let upload = crate::render_strategy::GpuInputUploadPlan::new(WIDTH, HEIGHT)
+            .expect("60MP GPU input upload plan");
+        assert_eq!(upload.max_staging_bytes, 4_866_048);
+        assert_eq!(
+            borrowed.output_rgba32f_bytes - upload.max_staging_bytes,
+            958_611_456
         );
     }
 
@@ -4028,6 +4334,156 @@ mod geometry_transform_tests {
         std::hint::black_box(source);
         std::hint::black_box(staged_source);
         std::hint::black_box(output);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP streamed geometry output benchmark"]
+    fn synthetic_60mp_geometry_output_harness() {
+        use rayon::prelude::*;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::time::{Duration, Instant};
+
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode = std::env::var("RAW_EDITOR_GEOMETRY_OUTPUT_BENCH_MODE")
+            .unwrap_or_else(|_| "streamed".to_string());
+        assert!(matches!(mode.as_str(), "materialized" | "streamed"));
+
+        let source = DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(width, height, |x, y| {
+            image::Rgb([
+                (x % 1024) as f32 / 1023.0,
+                (y % 1024) as f32 / 1023.0,
+                (x.wrapping_mul(17).wrapping_add(y * 13) % 1024) as f32 / 1023.0,
+            ])
+        }));
+        let params = GeometryParams {
+            projection: 18.0,
+            vertical: 11.0,
+            horizontal: -7.0,
+            rotate: 2.0,
+            ..GeometryParams::default()
+        };
+        let upload_plan = crate::render_strategy::GpuInputUploadPlan::new(width, height)
+            .expect("geometry output upload plan");
+        let padded_row_samples = upload_plan.padded_bytes_per_row as usize / size_of::<f16>();
+        let max_staging_samples = upload_plan.max_staging_bytes / size_of::<f16>();
+        let mut staging = vec![f16::ZERO; max_staging_samples];
+
+        let pid = sysinfo::get_current_pid().expect("resolve geometry output benchmark process");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read geometry output benchmark baseline")
+            .memory();
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let started = Instant::now();
+        let materialized = (mode == "materialized").then(|| warp_image_geometry(&source, params));
+        let streamed = (mode == "streamed").then(|| {
+            GeometryWarpRows::try_new_borrowed(&source, params, &Value::Null)
+                .expect("stream benchmark uses borrowed RGB32F")
+        });
+        let pixel_count = width as usize * height as usize;
+        let sample_stride = (pixel_count / 4_096).max(1);
+        let mut next_sample = 0_usize;
+        let mut sample_hash = 0xcbf2_9ce4_8422_2325_u64;
+
+        for band_start in
+            (0..height).step_by(crate::render_strategy::GPU_INPUT_UPLOAD_BAND_ROWS as usize)
+        {
+            let band_height = (height - band_start).min(upload_plan.band_rows);
+            let band_samples = padded_row_samples * band_height as usize;
+            staging[..band_samples].fill(f16::ZERO);
+            if let Some(output) = materialized.as_ref() {
+                let source = output
+                    .as_rgba32f()
+                    .expect("materialized geometry output must be RGBA32F")
+                    .as_raw();
+                staging[..band_samples]
+                    .par_chunks_exact_mut(padded_row_samples)
+                    .enumerate()
+                    .for_each(|(row, output)| {
+                        let source_row = (band_start as usize + row) * width as usize * 4;
+                        for (output, value) in output[..width as usize * 4]
+                            .iter_mut()
+                            .zip(&source[source_row..source_row + width as usize * 4])
+                        {
+                            *output = f16::from_f32(*value);
+                        }
+                    });
+            } else {
+                let rows = streamed.as_ref().expect("streamed geometry rows");
+                staging[..band_samples]
+                    .par_chunks_exact_mut(padded_row_samples)
+                    .enumerate()
+                    .try_for_each(|(row, output)| {
+                        rows.write_rgba16f_row(band_start + row as u32, output)
+                    })
+                    .expect("stream geometry band");
+            }
+
+            let band_first_pixel = band_start as usize * width as usize;
+            let band_end_pixel = band_first_pixel + band_height as usize * width as usize;
+            while next_sample < band_end_pixel {
+                if next_sample >= band_first_pixel {
+                    let local = next_sample - band_first_pixel;
+                    let row = local / width as usize;
+                    let column = local % width as usize;
+                    let offset = row * padded_row_samples + column * 4;
+                    for channel in &staging[offset..offset + 4] {
+                        sample_hash = (sample_hash ^ u64::from(channel.to_bits()))
+                            .wrapping_mul(0x0000_0100_0000_01b3);
+                    }
+                }
+                next_sample = next_sample.saturating_add(sample_stride);
+            }
+        }
+
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(20));
+        running.store(false, Ordering::Relaxed);
+        sampler.join().expect("join geometry output RSS sampler");
+
+        let pixels = u64::from(width) * u64::from(height);
+        let rgba32f_output_bytes = pixels * 4 * size_of::<f32>() as u64;
+        let peak_rss = peak_rss.load(Ordering::Relaxed);
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"rgba32fOutputBytes\":{},\"maxUploadStagingBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss,
+            peak_rss.saturating_sub(baseline_rss),
+            rgba32f_output_bytes,
+            upload_plan.max_staging_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(&source);
+        std::hint::black_box(&materialized);
+        std::hint::black_box(&streamed);
+        std::hint::black_box(&staging);
     }
 
     fn absolute_difference(left: &DynamicImage, right: &DynamicImage) -> f64 {

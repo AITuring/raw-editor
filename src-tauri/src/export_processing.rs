@@ -60,9 +60,9 @@ use crate::image_loader::{
     composite_patches_on_image, load_and_composite, load_base_image_from_bytes,
 };
 use crate::image_processing::{
-    AllAdjustments, Crop, GpuContext, RenderRequest, downscale_f32_image,
-    get_all_adjustments_from_json, get_or_init_gpu_context, process_and_get_dynamic_image,
-    resolve_tonemapper_override_from_handle,
+    AllAdjustments, Crop, GeometryWarpRows, GpuContext, RenderRequest, downscale_f32_image,
+    get_all_adjustments_from_json, get_geometry_params_from_json, get_or_init_gpu_context,
+    is_geometry_identity, process_and_get_dynamic_image, resolve_tonemapper_override_from_handle,
 };
 use crate::lut_processing::{
     Lut, convert_image_to_cube_lut, generate_identity_lut_image, get_or_load_lut,
@@ -637,12 +637,51 @@ impl Drop for ExportTaskGuard {
     }
 }
 
+enum PreparedExportSource<'a> {
+    Materialized(Cow<'a, DynamicImage>),
+    StreamedGeometry(Box<GeometryWarpRows<'a>>),
+}
+
+impl PreparedExportSource<'_> {
+    fn dimensions(&self) -> (u32, u32) {
+        match self {
+            Self::Materialized(image) => image.dimensions(),
+            Self::StreamedGeometry(rows) => rows.dimensions(),
+        }
+    }
+
+    fn gpu_input(&self) -> &dyn crate::gpu_processing::GpuInputSource {
+        match self {
+            Self::Materialized(image) => image.as_ref(),
+            Self::StreamedGeometry(rows) => rows.as_ref(),
+        }
+    }
+}
+
 struct PreparedExportRender<'a> {
-    image: Cow<'a, DynamicImage>,
+    source: PreparedExportSource<'a>,
     mask_bitmaps: Vec<SharedMaskBitmap>,
     adjustments: AllAdjustments,
     lut: Option<Arc<Lut>>,
     unique_hash: u64,
+}
+
+fn can_stream_geometry_output(
+    adjustments: &Value,
+    geometry_params: &crate::image_processing::GeometryParams,
+    masks: &[MaskDefinition],
+) -> bool {
+    !is_geometry_identity(geometry_params)
+        && !matches!(adjustments["orientationSteps"].as_u64().unwrap_or(0), 1..=3)
+        && !adjustments["flipHorizontal"].as_bool().unwrap_or(false)
+        && !adjustments["flipVertical"].as_bool().unwrap_or(false)
+        && adjustments["rotation"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .rem_euclid(360.0)
+            == 0.0
+        && !adjustments["lensBlurEnabled"].as_bool().unwrap_or(false)
+        && !masks.iter().any(MaskDefinition::requires_warped_image)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -655,9 +694,38 @@ fn prepare_export_render<'a>(
     debug_tag: &str,
     app_handle: &tauri::AppHandle,
 ) -> PreparedExportRender<'a> {
-    let (transformed_image, unscaled_crop_offset) =
-        apply_all_transformations(Cow::Borrowed(base_image), js_adjustments);
-    let (img_w, img_h) = transformed_image.dimensions();
+    let mask_definitions: Vec<MaskDefinition> = js_adjustments
+        .get("masks")
+        .and_then(|m| serde_json::from_value(m.clone()).ok())
+        .unwrap_or_default();
+    let geometry_params = get_geometry_params_from_json(js_adjustments);
+    let can_stream_geometry =
+        can_stream_geometry_output(js_adjustments, &geometry_params, &mask_definitions);
+
+    let streamed_geometry = can_stream_geometry.then(|| {
+        GeometryWarpRows::try_new_borrowed(base_image, geometry_params, &js_adjustments["crop"])
+    });
+    let (source, unscaled_crop_offset) = match streamed_geometry.flatten() {
+        Some(rows) => {
+            let saved_bytes = rows.materialized_output_bytes();
+            let crop_offset = rows.crop_offset();
+            log::info!(
+                "[{}] streaming geometry rows directly to GPU input (avoiding {} B RGBA32F output)",
+                debug_tag,
+                saved_bytes
+            );
+            (
+                PreparedExportSource::StreamedGeometry(Box::new(rows)),
+                crop_offset,
+            )
+        }
+        None => {
+            let (image, crop_offset) =
+                apply_all_transformations(Cow::Borrowed(base_image), js_adjustments);
+            (PreparedExportSource::Materialized(image), crop_offset)
+        }
+    };
+    let (img_w, img_h) = source.dimensions();
     log::info!(
         "[{}] tier={} source={}x{}",
         debug_tag,
@@ -665,11 +733,6 @@ fn prepare_export_render<'a>(
         img_w,
         img_h
     );
-
-    let mask_definitions: Vec<MaskDefinition> = js_adjustments
-        .get("masks")
-        .and_then(|m| serde_json::from_value(m.clone()).ok())
-        .unwrap_or_default();
 
     let warped_image = resolve_warped_image_for_masks(state, js_adjustments, &mask_definitions);
     let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
@@ -697,7 +760,7 @@ fn prepare_export_render<'a>(
     let unique_hash = calculate_full_job_hash(path, js_adjustments);
 
     PreparedExportRender {
-        image: transformed_image,
+        source,
         mask_bitmaps,
         adjustments: all_adjustments,
         lut,
@@ -729,7 +792,7 @@ fn process_image_for_export_pipeline(
     process_and_get_dynamic_image(
         context,
         state,
-        prepared.image.as_ref(),
+        prepared.source.gpu_input(),
         prepared.unique_hash,
         RenderRequest {
             adjustments: prepared.adjustments,
@@ -1976,7 +2039,7 @@ fn process_and_save_streaming_export(
         "process_and_save_streaming_export",
         app_handle,
     );
-    let (source_width, source_height) = prepared.image.dimensions();
+    let (source_width, source_height) = prepared.source.dimensions();
     let (target_width, target_height) = export_settings
         .resize
         .as_ref()
@@ -2012,7 +2075,7 @@ fn process_and_save_streaming_export(
     let mut temporary = create_temporary_export(output_path)?;
 
     let PreparedExportRender {
-        image,
+        source,
         mask_bitmaps,
         adjustments,
         lut,
@@ -2045,7 +2108,7 @@ fn process_and_save_streaming_export(
                     let rendered_dimensions = process_and_stream_rgba_rows(
                         context,
                         state,
-                        image.as_ref(),
+                        source.gpu_input(),
                         unique_hash,
                         RenderRequest {
                             adjustments,
@@ -3432,6 +3495,50 @@ mod tests {
                 ((x * 11 + y * 7) % 256) as u8,
             ])
         }))
+    }
+
+    #[test]
+    fn geometry_output_streaming_uses_only_single_resample_export_paths() {
+        let adjustments = serde_json::json!({
+            "transformVertical": 18.0,
+            "crop": { "unit": "px", "x": 4.0, "y": 3.0, "width": 80.0, "height": 60.0 }
+        });
+        let params = get_geometry_params_from_json(&adjustments);
+        assert!(can_stream_geometry_output(&adjustments, &params, &[]));
+
+        for incompatible in [
+            serde_json::json!({ "transformVertical": 18.0, "rotation": 0.5 }),
+            serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 1 }),
+            serde_json::json!({ "transformVertical": 18.0, "flipHorizontal": true }),
+            serde_json::json!({ "transformVertical": 18.0, "lensBlurEnabled": true }),
+        ] {
+            let params = get_geometry_params_from_json(&incompatible);
+            assert!(!can_stream_geometry_output(&incompatible, &params, &[]));
+        }
+
+        let color_mask: MaskDefinition = serde_json::from_value(serde_json::json!({
+            "id": "color-mask",
+            "name": "Color",
+            "visible": true,
+            "invert": false,
+            "opacity": 100.0,
+            "adjustments": null,
+            "subMasks": [{
+                "id": "color",
+                "type": "color",
+                "visible": true,
+                "invert": false,
+                "opacity": 100.0,
+                "mode": "additive",
+                "parameters": {}
+            }]
+        }))
+        .expect("color mask fixture");
+        assert!(!can_stream_geometry_output(
+            &adjustments,
+            &params,
+            &[color_mask]
+        ));
     }
 
     fn encode_streaming_fixture(

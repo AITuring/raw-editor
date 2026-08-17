@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use half::f16;
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba};
+use rayon::prelude::*;
 use std::num::NonZero;
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
@@ -10,7 +11,7 @@ use tauri::Manager;
 use wgpu::util::{DeviceExt, TextureDataOrder};
 
 use crate::app_state::SharedMaskBitmap;
-use crate::image_processing::{AllAdjustments, GpuContext, MAX_MASKS};
+use crate::image_processing::{AllAdjustments, GeometryWarpRows, GpuContext, MAX_MASKS};
 use crate::lut_processing::Lut;
 use crate::render_strategy::{
     GPU_INPUT_UPLOAD_BAND_ROWS, GPU_TILE_OVERLAP, GPU_TILE_SIZE, GpuInputUploadPlan,
@@ -32,6 +33,14 @@ pub struct RenderRequest<'a> {
     pub mask_bitmaps: &'a [SharedMaskBitmap],
     pub lut: Option<Arc<Lut>>,
     pub roi: Option<Roi>,
+}
+
+pub trait GpuInputSource: Sync {
+    fn dimensions(&self) -> (u32, u32);
+    fn write_rgba_f16_row(&self, y: u32, output: &mut [f16]) -> Result<(), String>;
+    fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
+        None
+    }
 }
 
 type RgbaRowSink<'a> = dyn FnMut(&[u8]) -> Result<(), String> + 'a;
@@ -656,12 +665,54 @@ fn write_rgba_f16_row(
     Ok(())
 }
 
-fn upload_image_to_texture_bounded(
+impl GpuInputSource for DynamicImage {
+    fn dimensions(&self) -> (u32, u32) {
+        GenericImageView::dimensions(self)
+    }
+
+    fn write_rgba_f16_row(&self, y: u32, output: &mut [f16]) -> Result<(), String> {
+        write_rgba_f16_row(self, y, output, self.width() as usize)
+    }
+
+    fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
+        Some(self.clone())
+    }
+}
+
+impl GpuInputSource for Arc<DynamicImage> {
+    fn dimensions(&self) -> (u32, u32) {
+        GenericImageView::dimensions(self.as_ref())
+    }
+
+    fn write_rgba_f16_row(&self, y: u32, output: &mut [f16]) -> Result<(), String> {
+        write_rgba_f16_row(self.as_ref(), y, output, self.width() as usize)
+    }
+
+    fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
+        Some(self.as_ref().clone())
+    }
+}
+
+impl GpuInputSource for GeometryWarpRows<'_> {
+    fn dimensions(&self) -> (u32, u32) {
+        GeometryWarpRows::dimensions(self)
+    }
+
+    fn write_rgba_f16_row(&self, y: u32, output: &mut [f16]) -> Result<(), String> {
+        self.write_rgba16f_row(y, output)
+    }
+
+    fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
+        Some(self.materialize())
+    }
+}
+
+fn upload_source_to_texture_bounded(
     queue: &wgpu::Queue,
     texture: &wgpu::Texture,
-    image: &DynamicImage,
+    source: &dyn GpuInputSource,
 ) -> Result<GpuInputUploadPlan, String> {
-    let (width, height) = image.dimensions();
+    let (width, height) = source.dimensions();
     let plan = GpuInputUploadPlan::new(width, height)
         .ok_or_else(|| format!("Cannot upload invalid GPU input dimensions {width}x{height}"))?;
     let padded_row_samples = plan.padded_bytes_per_row as usize / std::mem::size_of::<f16>();
@@ -674,15 +725,12 @@ fn upload_image_to_texture_bounded(
             .checked_mul(band_height as usize)
             .ok_or_else(|| "GPU input band exceeds the addressable buffer size".to_string())?;
         staging[..band_samples].fill(f16::ZERO);
-        for row in 0..band_height {
-            let row_start = row as usize * padded_row_samples;
-            write_rgba_f16_row(
-                image,
-                band_start + row,
-                &mut staging[row_start..row_start + padded_row_samples],
-                width as usize,
-            )?;
-        }
+        staging[..band_samples]
+            .par_chunks_exact_mut(padded_row_samples)
+            .enumerate()
+            .try_for_each(|(row, output)| {
+                source.write_rgba_f16_row(band_start + row as u32, output)
+            })?;
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -1996,7 +2044,7 @@ impl GpuProcessor {
 fn lock_gpu_resources<'a>(
     context: &GpuContext,
     state: &'a AppState,
-    base_image: &DynamicImage,
+    base_image: &dyn GpuInputSource,
     transform_hash: u64,
     output_to_display: bool,
 ) -> Result<LockedGpuResources<'a>, String> {
@@ -2075,7 +2123,7 @@ fn lock_gpu_resources<'a>(
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let upload_plan = upload_image_to_texture_bounded(queue, &texture, base_image)?;
+        let upload_plan = upload_source_to_texture_bounded(queue, &texture, base_image)?;
         log::debug!(
             "GPU input upload {}x{} uses {} row bands of at most {} B (saved {} B vs padded full-frame staging)",
             upload_plan.width,
@@ -2101,7 +2149,7 @@ fn lock_gpu_resources<'a>(
 pub fn process_and_get_dynamic_image(
     context: &GpuContext,
     state: &tauri::State<AppState>,
-    base_image: &DynamicImage,
+    base_image: &dyn GpuInputSource,
     transform_hash: u64,
     request: RenderRequest,
     caller_id: &str,
@@ -2124,7 +2172,7 @@ pub fn process_and_get_dynamic_image(
 pub fn process_and_get_dynamic_image_with_analytics(
     context: &GpuContext,
     state: &tauri::State<AppState>,
-    base_image: &DynamicImage,
+    base_image: &dyn GpuInputSource,
     transform_hash: u64,
     request: RenderRequest,
     caller_id: &str,
@@ -2146,7 +2194,7 @@ pub fn process_and_get_dynamic_image_with_analytics(
 pub fn process_and_stream_rgba_rows(
     context: &GpuContext,
     state: &tauri::State<AppState>,
-    base_image: &DynamicImage,
+    base_image: &dyn GpuInputSource,
     transform_hash: u64,
     request: RenderRequest,
     caller_id: &str,
@@ -2231,7 +2279,7 @@ pub fn reclaim_gpu_resources_after_export(context: &GpuContext, state: &AppState
 fn process_and_get_dynamic_image_inner(
     context: &GpuContext,
     state: &tauri::State<AppState>,
-    base_image: &DynamicImage,
+    base_image: &dyn GpuInputSource,
     transform_hash: u64,
     request: RenderRequest,
     caller_id: &str,
@@ -2251,7 +2299,15 @@ fn process_and_get_dynamic_image_inner(
             height,
             max_dim
         );
-        return Ok(Arc::new(base_image.clone()));
+        return base_image
+            .materialize_cpu_fallback()
+            .map(Arc::new)
+            .ok_or_else(|| {
+                format!(
+                    "Cannot fall back to a materialized image for streamed GPU input {}x{}",
+                    width, height
+                )
+            });
     }
 
     let (processor_lock, cache_lock) = lock_gpu_resources(
