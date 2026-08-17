@@ -806,6 +806,79 @@ struct GeometryCropRect {
     height: u32,
 }
 
+const GEOMETRY_ROW_CHECKPOINT_COLUMNS: u32 = 64;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GeometryOrthogonalTransform {
+    source_width: u32,
+    source_height: u32,
+    orientation_steps: u8,
+    flip_horizontal: bool,
+    flip_vertical: bool,
+}
+
+impl GeometryOrthogonalTransform {
+    fn new(
+        source_width: u32,
+        source_height: u32,
+        orientation_steps: u8,
+        flip_horizontal: bool,
+        flip_vertical: bool,
+    ) -> Self {
+        Self {
+            source_width,
+            source_height,
+            orientation_steps: match orientation_steps {
+                1..=3 => orientation_steps,
+                _ => 0,
+            },
+            flip_horizontal,
+            flip_vertical,
+        }
+    }
+
+    fn dimensions(self) -> (u32, u32) {
+        if self.swaps_axes() {
+            (self.source_height, self.source_width)
+        } else {
+            (self.source_width, self.source_height)
+        }
+    }
+
+    fn swaps_axes(self) -> bool {
+        matches!(self.orientation_steps, 1 | 3)
+    }
+
+    fn is_identity(self) -> bool {
+        self.orientation_steps == 0 && !self.flip_horizontal && !self.flip_vertical
+    }
+
+    fn map_output_to_geometry(self, output_x: u32, output_y: u32) -> (u32, u32) {
+        let (output_width, output_height) = self.dimensions();
+        debug_assert!(output_x < output_width && output_y < output_height);
+        let oriented_x = if self.flip_horizontal {
+            output_width - output_x - 1
+        } else {
+            output_x
+        };
+        let oriented_y = if self.flip_vertical {
+            output_height - output_y - 1
+        } else {
+            output_y
+        };
+
+        match self.orientation_steps {
+            1 => (oriented_y, self.source_height - oriented_x - 1),
+            2 => (
+                self.source_width - oriented_x - 1,
+                self.source_height - oriented_y - 1,
+            ),
+            3 => (self.source_width - oriented_y - 1, oriented_x),
+            _ => (oriented_x, oriented_y),
+        }
+    }
+}
+
 fn resolve_geometry_crop_rect(
     image_width: u32,
     image_height: u32,
@@ -1096,6 +1169,18 @@ impl<'a> GeometryWarpContext<'a> {
         width: usize,
         output: &mut [f16],
     ) -> Result<(), String> {
+        let current_vec = self.row_start(y, x_offset);
+        self.write_rgba16f_row_from_current(y, x_offset, width, output, current_vec)
+    }
+
+    fn write_rgba16f_row_from_current(
+        &self,
+        y: u32,
+        x_offset: u32,
+        width: usize,
+        output: &mut [f16],
+        mut current_vec: NaVector3<f32>,
+    ) -> Result<(), String> {
         let samples = width.checked_mul(4).ok_or_else(|| {
             "Geometry RGBA16F row exceeds the addressable buffer size".to_string()
         })?;
@@ -1104,7 +1189,6 @@ impl<'a> GeometryWarpContext<'a> {
         }
         self.validate_row(y, x_offset, width)?;
         let sample_context = self.sample_context();
-        let mut current_vec = self.row_start(y, x_offset);
         for output_pixel in output[..samples].chunks_exact_mut(4) {
             let mut pixel = [0.0_f32; 4];
             self.sample_pixel(&sample_context, current_vec, &mut pixel);
@@ -1117,21 +1201,76 @@ impl<'a> GeometryWarpContext<'a> {
     }
 }
 
-/// A borrowed, row-addressable geometry result for the full-resolution export path.
+struct GeometryRowCheckpoints {
+    checkpoints_per_row: usize,
+    current_vectors: Vec<NaVector3<f32>>,
+}
+
+impl GeometryRowCheckpoints {
+    fn new(context: &GeometryWarpContext<'_>) -> Option<Self> {
+        let checkpoints_per_row =
+            (context.width as usize).div_ceil(GEOMETRY_ROW_CHECKPOINT_COLUMNS as usize);
+        let checkpoint_count = (context.height as usize).checked_mul(checkpoints_per_row)?;
+        let mut current_vectors = vec![NaVector3::zeros(); checkpoint_count];
+
+        current_vectors
+            .par_chunks_exact_mut(checkpoints_per_row)
+            .enumerate()
+            .for_each(|(y, checkpoints)| {
+                let mut current_vec = context.row_start(y as u32, 0);
+                for x in 0..context.width {
+                    if x.is_multiple_of(GEOMETRY_ROW_CHECKPOINT_COLUMNS) {
+                        checkpoints[(x / GEOMETRY_ROW_CHECKPOINT_COLUMNS) as usize] = current_vec;
+                    }
+                    current_vec += context.step_vec_x;
+                }
+            });
+
+        Some(Self {
+            checkpoints_per_row,
+            current_vectors,
+        })
+    }
+
+    fn row_start(&self, context: &GeometryWarpContext<'_>, y: u32, x: u32) -> NaVector3<f32> {
+        let checkpoint_column = x / GEOMETRY_ROW_CHECKPOINT_COLUMNS;
+        let checkpoint_x = checkpoint_column * GEOMETRY_ROW_CHECKPOINT_COLUMNS;
+        let checkpoint_index = y as usize * self.checkpoints_per_row + checkpoint_column as usize;
+        let mut current_vec = self.current_vectors[checkpoint_index];
+        for _ in checkpoint_x..x {
+            current_vec += context.step_vec_x;
+        }
+        current_vec
+    }
+
+    fn allocated_bytes(&self) -> usize {
+        self.current_vectors
+            .capacity()
+            .saturating_mul(size_of::<NaVector3<f32>>())
+    }
+}
+
+/// A borrowed, row/band-addressable geometry result for the full-resolution export path.
 ///
-/// The source must already use float RGB/RGBA storage. Crop is fused by selecting a
-/// contiguous rectangle from the virtual full-canvas warp; transforms that require a
-/// second resampling pass are deliberately handled by the materialized fallback.
+/// The source must already use float RGB/RGBA storage. Orthogonal orientation and flips are
+/// applied as exact coordinate permutations before the transformed crop is selected. Fine
+/// rotation and other transforms that require a second resampling pass deliberately use the
+/// materialized fallback.
 pub struct GeometryWarpRows<'a> {
     context: GeometryWarpContext<'a>,
+    transform: GeometryOrthogonalTransform,
     crop: GeometryCropRect,
     mask_crop_offset: (f32, f32),
+    row_checkpoints: Option<GeometryRowCheckpoints>,
 }
 
 impl<'a> GeometryWarpRows<'a> {
-    pub fn try_new_borrowed(
+    pub fn try_new_transformed_borrowed(
         image: &'a DynamicImage,
         params: GeometryParams,
+        orientation_steps: u8,
+        flip_horizontal: bool,
+        flip_vertical: bool,
         crop_value: &Value,
     ) -> Option<Self> {
         if !matches!(
@@ -1144,10 +1283,26 @@ impl<'a> GeometryWarpRows<'a> {
         let mask_crop_offset = serde_json::from_value::<Crop>(crop_value.clone())
             .map(|crop| (crop.x as f32, crop.y as f32))
             .unwrap_or((0.0, 0.0));
+        let context = GeometryWarpContext::new(image, params);
+        let transform = GeometryOrthogonalTransform::new(
+            width,
+            height,
+            orientation_steps,
+            flip_horizontal,
+            flip_vertical,
+        );
+        let (output_width, output_height) = transform.dimensions();
+        let row_checkpoints = if transform.swaps_axes() {
+            Some(GeometryRowCheckpoints::new(&context)?)
+        } else {
+            None
+        };
         Some(Self {
-            context: GeometryWarpContext::new(image, params),
-            crop: resolve_geometry_crop_rect(width, height, crop_value),
+            context,
+            transform,
+            crop: resolve_geometry_crop_rect(output_width, output_height, crop_value),
             mask_crop_offset,
+            row_checkpoints,
         })
     }
 
@@ -1166,12 +1321,144 @@ impl<'a> GeometryWarpRows<'a> {
                 y, self.crop.height
             ));
         }
-        self.context.write_rgba16f_row(
-            self.crop.y + y,
-            self.crop.x,
-            self.crop.width as usize,
-            output,
-        )
+        let width = self.crop.width as usize;
+        let samples = width.checked_mul(4).ok_or_else(|| {
+            "Geometry RGBA16F row exceeds the addressable buffer size".to_string()
+        })?;
+        if output.len() < samples {
+            return Err("Geometry RGBA16F row staging buffer is too small".to_string());
+        }
+
+        let output_y = self.crop.y + y;
+        if self.transform.swaps_axes() {
+            let sample_context = self.context.sample_context();
+            for (x, output_pixel) in output[..samples].chunks_exact_mut(4).enumerate() {
+                let (geometry_x, geometry_y) = self
+                    .transform
+                    .map_output_to_geometry(self.crop.x + x as u32, output_y);
+                let current_vec = self.exact_row_start(geometry_y, geometry_x);
+                let mut pixel = [0.0_f32; 4];
+                self.context
+                    .sample_pixel(&sample_context, current_vec, &mut pixel);
+                for (output, value) in output_pixel.iter_mut().zip(pixel) {
+                    *output = f16::from_f32(value);
+                }
+            }
+            return Ok(());
+        }
+
+        let (first_geometry_x, geometry_y) =
+            self.transform.map_output_to_geometry(self.crop.x, output_y);
+        let (last_geometry_x, last_geometry_y) = self
+            .transform
+            .map_output_to_geometry(self.crop.x + self.crop.width - 1, output_y);
+        debug_assert_eq!(geometry_y, last_geometry_y);
+        let geometry_x = first_geometry_x.min(last_geometry_x);
+        self.context
+            .write_rgba16f_row(geometry_y, geometry_x, width, output)?;
+        if first_geometry_x > last_geometry_x {
+            reverse_rgba16f_pixels(&mut output[..samples]);
+        }
+        Ok(())
+    }
+
+    pub fn write_rgba16f_band(
+        &self,
+        y: u32,
+        rows: u32,
+        row_stride_samples: usize,
+        output: &mut [f16],
+    ) -> Result<(), String> {
+        if rows == 0 {
+            return Ok(());
+        }
+        if y >= self.crop.height || rows > self.crop.height - y {
+            return Err(format!(
+                "Geometry output band y={} rows={} is outside cropped height {}",
+                y, rows, self.crop.height
+            ));
+        }
+        let row_samples = (self.crop.width as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "Geometry output row exceeds the addressable buffer size".to_string())?;
+        if row_stride_samples < row_samples {
+            return Err("Geometry output band stride is smaller than one RGBA row".to_string());
+        }
+        let output_samples = row_stride_samples
+            .checked_mul(rows as usize)
+            .ok_or_else(|| {
+                "Geometry output band exceeds the addressable buffer size".to_string()
+            })?;
+        if output.len() < output_samples {
+            return Err("Geometry output band staging buffer is too small".to_string());
+        }
+
+        if !self.transform.swaps_axes() {
+            return output[..output_samples]
+                .par_chunks_exact_mut(row_stride_samples)
+                .enumerate()
+                .try_for_each(|(row, output)| self.write_rgba16f_row(y + row as u32, output));
+        }
+
+        let output_x_first = self.crop.x;
+        let output_x_last = self.crop.x + self.crop.width - 1;
+        let output_y_first = self.crop.y + y;
+        let output_y_last = output_y_first + rows - 1;
+        let (geometry_x_first, geometry_y_first) = self
+            .transform
+            .map_output_to_geometry(output_x_first, output_y_first);
+        let (geometry_x_last, _) = self
+            .transform
+            .map_output_to_geometry(output_x_first, output_y_last);
+        let (_, geometry_y_last) = self
+            .transform
+            .map_output_to_geometry(output_x_last, output_y_first);
+        let geometry_x = geometry_x_first.min(geometry_x_last);
+        let geometry_y = geometry_y_first.min(geometry_y_last);
+        debug_assert_eq!(geometry_x_first.abs_diff(geometry_x_last) + 1, rows);
+        debug_assert_eq!(
+            geometry_y_first.abs_diff(geometry_y_last) + 1,
+            self.crop.width
+        );
+
+        let tile_row_samples = (rows as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "Geometry transpose tile row is too large".to_string())?;
+        let tile_samples = (self.crop.width as usize)
+            .checked_mul(tile_row_samples)
+            .ok_or_else(|| "Geometry transpose tile is too large".to_string())?;
+        let mut tile = vec![f16::ZERO; tile_samples];
+        tile.par_chunks_exact_mut(tile_row_samples)
+            .enumerate()
+            .try_for_each(|(row, output)| {
+                let geometry_y = geometry_y + row as u32;
+                let current_vec = self.exact_row_start(geometry_y, geometry_x);
+                self.context.write_rgba16f_row_from_current(
+                    geometry_y,
+                    geometry_x,
+                    rows as usize,
+                    output,
+                    current_vec,
+                )
+            })?;
+
+        output[..output_samples]
+            .par_chunks_exact_mut(row_stride_samples)
+            .enumerate()
+            .for_each(|(band_row, output)| {
+                let output_y = output_y_first + band_row as u32;
+                for output_x in 0..self.crop.width {
+                    let (geometry_pixel_x, geometry_pixel_y) = self
+                        .transform
+                        .map_output_to_geometry(self.crop.x + output_x, output_y);
+                    let tile_pixel = (geometry_pixel_y - geometry_y) as usize * tile_row_samples
+                        + (geometry_pixel_x - geometry_x) as usize * 4;
+                    let output_pixel = output_x as usize * 4;
+                    output[output_pixel..output_pixel + 4]
+                        .copy_from_slice(&tile[tile_pixel..tile_pixel + 4]);
+                }
+            });
+        Ok(())
     }
 
     pub fn materialized_output_bytes(&self) -> usize {
@@ -1181,7 +1468,61 @@ impl<'a> GeometryWarpRows<'a> {
             .saturating_mul(size_of::<f32>())
     }
 
+    pub fn checkpoint_bytes(&self) -> usize {
+        self.row_checkpoints
+            .as_ref()
+            .map_or(0, GeometryRowCheckpoints::allocated_bytes)
+    }
+
+    pub fn max_band_scratch_bytes(&self, band_rows: u32) -> usize {
+        if !self.transform.swaps_axes() {
+            return 0;
+        }
+        (self.crop.width as usize)
+            .saturating_mul(self.crop.height.min(band_rows) as usize)
+            .saturating_mul(4)
+            .saturating_mul(size_of::<f16>())
+    }
+
     pub fn materialize(&self) -> DynamicImage {
+        if !self.transform.is_identity() {
+            let row_samples = self.context.width as usize * 4;
+            let mut output = vec![0.0_f32; row_samples * self.context.height as usize];
+            output
+                .par_chunks_exact_mut(row_samples)
+                .enumerate()
+                .for_each(|(y, row)| {
+                    self.context
+                        .write_rgba32f_row(y as u32, 0, row)
+                        .expect("full geometry output row must fit the source canvas");
+                });
+            let warped = DynamicImage::ImageRgba32F(
+                Rgba32FImage::from_vec(self.context.width, self.context.height, output)
+                    .expect("geometry output dimensions must match the allocated buffer"),
+            );
+            let rotated = apply_coarse_rotation(warped, self.transform.orientation_steps);
+            let flipped = apply_flip(
+                rotated,
+                self.transform.flip_horizontal,
+                self.transform.flip_vertical,
+            );
+            let transformed = flipped.into_owned();
+            let (transformed_width, transformed_height) = transformed.dimensions();
+            if self.crop.x == 0
+                && self.crop.y == 0
+                && self.crop.width == transformed_width
+                && self.crop.height == transformed_height
+            {
+                return transformed;
+            }
+            return transformed.crop_imm(
+                self.crop.x,
+                self.crop.y,
+                self.crop.width,
+                self.crop.height,
+            );
+        }
+
         let row_samples = self.crop.width as usize * 4;
         let mut output = vec![0.0_f32; row_samples * self.crop.height as usize];
         output
@@ -1196,6 +1537,24 @@ impl<'a> GeometryWarpRows<'a> {
             Rgba32FImage::from_vec(self.crop.width, self.crop.height, output)
                 .expect("geometry output dimensions must match the allocated buffer"),
         )
+    }
+
+    fn exact_row_start(&self, y: u32, x: u32) -> NaVector3<f32> {
+        self.row_checkpoints.as_ref().map_or_else(
+            || self.context.row_start(y, x),
+            |checkpoints| checkpoints.row_start(&self.context, y, x),
+        )
+    }
+}
+
+fn reverse_rgba16f_pixels(row: &mut [f16]) {
+    debug_assert!(row.len().is_multiple_of(4));
+    let width = row.len() / 4;
+    for left in 0..width / 2 {
+        let right = width - left - 1;
+        for channel in 0..4 {
+            row.swap(left * 4 + channel, right * 4 + channel);
+        }
     }
 }
 
@@ -4180,8 +4539,9 @@ mod geometry_transform_tests {
         let materialized = materialized
             .as_rgba32f()
             .expect("materialized geometry crop must remain RGBA32F");
-        let rows = GeometryWarpRows::try_new_borrowed(&source, params, &crop)
-            .expect("RGB32F geometry source must support row streaming");
+        let rows =
+            GeometryWarpRows::try_new_transformed_borrowed(&source, params, 0, false, false, &crop)
+                .expect("RGB32F geometry source must support row streaming");
 
         assert_eq!(rows.dimensions(), materialized.dimensions());
         assert_eq!(rows.crop_offset(), (17.4, 11.4));
@@ -4204,6 +4564,136 @@ mod geometry_transform_tests {
                 .map(f16::from_f32)
                 .collect::<Vec<_>>();
             assert_eq!(streamed, expected, "streamed geometry row {y}");
+        }
+    }
+
+    #[test]
+    fn orthogonal_geometry_bands_match_materialized_transform_crop_pixels() {
+        let source = coordinate_gradient(37, 23);
+        let params = GeometryParams {
+            distortion: 9.0,
+            projection: 17.0,
+            vertical: 8.0,
+            horizontal: -6.0,
+            rotate: 2.5,
+            aspect: 3.0,
+            scale: 98.0,
+            x_offset: 0.75,
+            y_offset: -1.25,
+            lens_dist_k1: 0.01,
+            lens_dist_k2: -0.002,
+            tca_vr: 1.001,
+            tca_vb: 0.999,
+            vig_k1: -0.06,
+            ..GeometryParams::default()
+        };
+
+        for orientation_steps in 0_u8..4 {
+            let (transformed_width, transformed_height) = if orientation_steps % 2 == 1 {
+                (source.height(), source.width())
+            } else {
+                source.dimensions()
+            };
+            let crop = serde_json::json!({
+                "unit": "px",
+                "x": 2.0,
+                "y": 1.0,
+                "width": transformed_width - 4,
+                "height": transformed_height - 3
+            });
+
+            for (flip_horizontal, flip_vertical) in
+                [(false, false), (true, false), (false, true), (true, true)]
+            {
+                let warped = warp_image_geometry(&source, params);
+                let rotated = apply_coarse_rotation(warped, orientation_steps);
+                let flipped = apply_flip(rotated, flip_horizontal, flip_vertical);
+                let expected = apply_crop(flipped, &crop).into_owned();
+                let expected = expected
+                    .as_rgba32f()
+                    .expect("orthogonal materialized output must remain RGBA32F");
+                let rows = GeometryWarpRows::try_new_transformed_borrowed(
+                    &source,
+                    params,
+                    orientation_steps,
+                    flip_horizontal,
+                    flip_vertical,
+                    &crop,
+                )
+                .expect("orthogonal RGB32F geometry source must stream");
+
+                assert_eq!(rows.dimensions(), expected.dimensions());
+                assert_eq!(
+                    rows.materialize()
+                        .as_rgba32f()
+                        .expect("fallback must preserve RGBA32F")
+                        .as_raw(),
+                    expected.as_raw()
+                );
+                assert_eq!(rows.checkpoint_bytes() > 0, orientation_steps % 2 == 1);
+
+                let (width, height) = rows.dimensions();
+                let row_samples = width as usize * 4;
+                let row_stride_samples = row_samples + 8;
+                let sentinel = f16::from_f32(-1.0);
+                let mut streamed = vec![sentinel; row_stride_samples * height as usize];
+                if orientation_steps == 1 && !flip_horizontal && !flip_vertical {
+                    assert!(
+                        rows.write_rgba16f_band(0, 0, row_stride_samples, &mut [])
+                            .is_ok()
+                    );
+                    assert!(
+                        rows.write_rgba16f_band(height, 1, row_stride_samples, &mut streamed)
+                            .is_err()
+                    );
+                    assert!(
+                        rows.write_rgba16f_band(0, 1, row_samples - 1, &mut streamed)
+                            .is_err()
+                    );
+                    assert!(
+                        rows.write_rgba16f_band(
+                            0,
+                            1,
+                            row_stride_samples,
+                            &mut streamed[..row_stride_samples - 1],
+                        )
+                        .is_err()
+                    );
+                }
+                for band_y in (0..height).step_by(3) {
+                    let band_rows = (height - band_y).min(3);
+                    let start = band_y as usize * row_stride_samples;
+                    let end = start + band_rows as usize * row_stride_samples;
+                    rows.write_rgba16f_band(
+                        band_y,
+                        band_rows,
+                        row_stride_samples,
+                        &mut streamed[start..end],
+                    )
+                    .expect("write transformed geometry band");
+                }
+
+                for y in 0..height as usize {
+                    let expected_start = y * row_samples;
+                    let expected_row = expected.as_raw()
+                        [expected_start..expected_start + row_samples]
+                        .iter()
+                        .copied()
+                        .map(f16::from_f32)
+                        .collect::<Vec<_>>();
+                    let streamed_start = y * row_stride_samples;
+                    assert_eq!(
+                        &streamed[streamed_start..streamed_start + row_samples],
+                        expected_row,
+                        "orientation={orientation_steps} flip_h={flip_horizontal} flip_v={flip_vertical} row={y}"
+                    );
+                    assert!(
+                        streamed[streamed_start + row_samples..streamed_start + row_stride_samples]
+                            .iter()
+                            .all(|sample| *sample == sentinel)
+                    );
+                }
+            }
         }
     }
 
@@ -4339,6 +4829,34 @@ mod geometry_transform_tests {
     #[test]
     #[ignore = "manual deterministic 60MP streamed geometry output benchmark"]
     fn synthetic_60mp_geometry_output_harness() {
+        run_geometry_output_benchmark(
+            "geometry",
+            "RAW_EDITOR_GEOMETRY_OUTPUT_BENCH_MODE",
+            0,
+            false,
+            false,
+        );
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP orthogonal streamed geometry output benchmark"]
+    fn synthetic_60mp_orthogonal_geometry_output_harness() {
+        run_geometry_output_benchmark(
+            "orthogonal",
+            "RAW_EDITOR_ORTHOGONAL_GEOMETRY_OUTPUT_BENCH_MODE",
+            1,
+            true,
+            false,
+        );
+    }
+
+    fn run_geometry_output_benchmark(
+        benchmark: &str,
+        mode_environment: &str,
+        orientation_steps: u8,
+        flip_horizontal: bool,
+        flip_vertical: bool,
+    ) {
         use rayon::prelude::*;
         use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         use std::time::{Duration, Instant};
@@ -4351,8 +4869,7 @@ mod geometry_transform_tests {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(6_336_u32);
-        let mode = std::env::var("RAW_EDITOR_GEOMETRY_OUTPUT_BENCH_MODE")
-            .unwrap_or_else(|_| "streamed".to_string());
+        let mode = std::env::var(mode_environment).unwrap_or_else(|_| "streamed".to_string());
         assert!(matches!(mode.as_str(), "materialized" | "streamed"));
 
         let source = DynamicImage::ImageRgb32F(Rgb32FImage::from_fn(width, height, |x, y| {
@@ -4369,8 +4886,17 @@ mod geometry_transform_tests {
             rotate: 2.0,
             ..GeometryParams::default()
         };
-        let upload_plan = crate::render_strategy::GpuInputUploadPlan::new(width, height)
-            .expect("geometry output upload plan");
+        let transform = GeometryOrthogonalTransform::new(
+            width,
+            height,
+            orientation_steps,
+            flip_horizontal,
+            flip_vertical,
+        );
+        let (output_width, output_height) = transform.dimensions();
+        let upload_plan =
+            crate::render_strategy::GpuInputUploadPlan::new(output_width, output_height)
+                .expect("geometry output upload plan");
         let padded_row_samples = upload_plan.padded_bytes_per_row as usize / size_of::<f16>();
         let max_staging_samples = upload_plan.max_staging_bytes / size_of::<f16>();
         let mut staging = vec![f16::ZERO; max_staging_samples];
@@ -4398,20 +4924,31 @@ mod geometry_transform_tests {
         });
 
         let started = Instant::now();
-        let materialized = (mode == "materialized").then(|| warp_image_geometry(&source, params));
-        let streamed = (mode == "streamed").then(|| {
-            GeometryWarpRows::try_new_borrowed(&source, params, &Value::Null)
-                .expect("stream benchmark uses borrowed RGB32F")
+        let materialized = (mode == "materialized").then(|| {
+            let warped = warp_image_geometry(&source, params);
+            let rotated = apply_coarse_rotation(warped, orientation_steps);
+            apply_flip(rotated, flip_horizontal, flip_vertical).into_owned()
         });
-        let pixel_count = width as usize * height as usize;
+        let streamed = (mode == "streamed").then(|| {
+            GeometryWarpRows::try_new_transformed_borrowed(
+                &source,
+                params,
+                orientation_steps,
+                flip_horizontal,
+                flip_vertical,
+                &Value::Null,
+            )
+            .expect("stream benchmark uses borrowed RGB32F")
+        });
+        let pixel_count = output_width as usize * output_height as usize;
         let sample_stride = (pixel_count / 4_096).max(1);
         let mut next_sample = 0_usize;
         let mut sample_hash = 0xcbf2_9ce4_8422_2325_u64;
 
         for band_start in
-            (0..height).step_by(crate::render_strategy::GPU_INPUT_UPLOAD_BAND_ROWS as usize)
+            (0..output_height).step_by(crate::render_strategy::GPU_INPUT_UPLOAD_BAND_ROWS as usize)
         {
-            let band_height = (height - band_start).min(upload_plan.band_rows);
+            let band_height = (output_height - band_start).min(upload_plan.band_rows);
             let band_samples = padded_row_samples * band_height as usize;
             staging[..band_samples].fill(f16::ZERO);
             if let Some(output) = materialized.as_ref() {
@@ -4423,32 +4960,32 @@ mod geometry_transform_tests {
                     .par_chunks_exact_mut(padded_row_samples)
                     .enumerate()
                     .for_each(|(row, output)| {
-                        let source_row = (band_start as usize + row) * width as usize * 4;
-                        for (output, value) in output[..width as usize * 4]
+                        let source_row = (band_start as usize + row) * output_width as usize * 4;
+                        for (output, value) in output[..output_width as usize * 4]
                             .iter_mut()
-                            .zip(&source[source_row..source_row + width as usize * 4])
+                            .zip(&source[source_row..source_row + output_width as usize * 4])
                         {
                             *output = f16::from_f32(*value);
                         }
                     });
             } else {
                 let rows = streamed.as_ref().expect("streamed geometry rows");
-                staging[..band_samples]
-                    .par_chunks_exact_mut(padded_row_samples)
-                    .enumerate()
-                    .try_for_each(|(row, output)| {
-                        rows.write_rgba16f_row(band_start + row as u32, output)
-                    })
-                    .expect("stream geometry band");
+                rows.write_rgba16f_band(
+                    band_start,
+                    band_height,
+                    padded_row_samples,
+                    &mut staging[..band_samples],
+                )
+                .expect("stream geometry band");
             }
 
-            let band_first_pixel = band_start as usize * width as usize;
-            let band_end_pixel = band_first_pixel + band_height as usize * width as usize;
+            let band_first_pixel = band_start as usize * output_width as usize;
+            let band_end_pixel = band_first_pixel + band_height as usize * output_width as usize;
             while next_sample < band_end_pixel {
                 if next_sample >= band_first_pixel {
                     let local = next_sample - band_first_pixel;
-                    let row = local / width as usize;
-                    let column = local % width as usize;
+                    let row = local / output_width as usize;
+                    let column = local % output_width as usize;
                     let offset = row * padded_row_samples + column * 4;
                     for channel in &staging[offset..offset + 4] {
                         sample_hash = (sample_hash ^ u64::from(channel.to_bits()))
@@ -4466,18 +5003,45 @@ mod geometry_transform_tests {
 
         let pixels = u64::from(width) * u64::from(height);
         let rgba32f_output_bytes = pixels * 4 * size_of::<f32>() as u64;
+        let checkpoint_bytes = streamed
+            .as_ref()
+            .map_or(0, GeometryWarpRows::checkpoint_bytes);
+        let band_scratch_bytes = streamed
+            .as_ref()
+            .map_or(0, |rows| rows.max_band_scratch_bytes(upload_plan.band_rows));
+        let materialized_geometry_bytes = if transform.is_identity() {
+            rgba32f_output_bytes
+        } else {
+            rgba32f_output_bytes.saturating_mul(2)
+        };
+        let logical_cpu_peak_bytes = if mode == "materialized" {
+            materialized_geometry_bytes.saturating_add(upload_plan.max_staging_bytes as u64)
+        } else {
+            (upload_plan.max_staging_bytes as u64)
+                .saturating_add(checkpoint_bytes as u64)
+                .saturating_add(band_scratch_bytes as u64)
+        };
         let peak_rss = peak_rss.load(Ordering::Relaxed);
         println!(
-            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"rgba32fOutputBytes\":{},\"maxUploadStagingBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            "{{\"benchmark\":\"{}\",\"mode\":\"{}\",\"sourceWidth\":{},\"sourceHeight\":{},\"outputWidth\":{},\"outputHeight\":{},\"orientationSteps\":{},\"flipHorizontal\":{},\"flipVertical\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"rgba32fOutputBytes\":{},\"maxUploadStagingBytes\":{},\"checkpointBytes\":{},\"maxBandScratchBytes\":{},\"logicalCpuPeakBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            benchmark,
             mode,
             width,
             height,
+            output_width,
+            output_height,
+            orientation_steps,
+            flip_horizontal,
+            flip_vertical,
             elapsed.as_millis(),
             baseline_rss,
             peak_rss,
             peak_rss.saturating_sub(baseline_rss),
             rgba32f_output_bytes,
             upload_plan.max_staging_bytes,
+            checkpoint_bytes,
+            band_scratch_bytes,
+            logical_cpu_peak_bytes,
             sample_hash,
         );
         std::hint::black_box(&source);

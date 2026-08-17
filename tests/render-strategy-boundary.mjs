@@ -88,6 +88,7 @@ assert.match(gpuProcessing, /reclaim_gpu_resources_after_export/);
 assert.match(gpuProcessing, /GpuProcessorTexturePlan::new/);
 assert.match(gpuProcessing, /GpuInputUploadPlan::new/);
 assert.match(gpuProcessing, /trait GpuInputSource: Sync/);
+assert.match(gpuProcessing, /fn write_rgba_f16_band\(/);
 assert.match(gpuProcessing, /impl GpuInputSource for GeometryWarpRows/);
 assert.match(gpuProcessing, /materialize_cpu_fallback/);
 assert.match(gpuProcessing, /upload_source_to_texture_bounded/);
@@ -120,8 +121,11 @@ assert.match(imageProcessing, /DynamicImage::ImageRgb32F\(source\) => Self::Rgb3
 assert.match(imageProcessing, /DynamicImage::ImageRgba32F\(source\) => Self::Rgba32F/);
 assert.match(imageProcessing, /GeometryWarpBufferPlan::new/);
 assert.match(imageProcessing, /struct GeometryWarpContext/);
+assert.match(imageProcessing, /struct GeometryRowCheckpoints/);
+assert.match(imageProcessing, /GEOMETRY_ROW_CHECKPOINT_COLUMNS: u32 = 64/);
 assert.match(imageProcessing, /pub struct GeometryWarpRows/);
 assert.match(imageProcessing, /pub fn write_rgba16f_row/);
+assert.match(imageProcessing, /pub fn write_rgba16f_band/);
 assert.match(imageProcessing, /context\s*\.write_rgba32f_row/);
 const geometryWarpStart = imageProcessing.indexOf('pub fn warp_image_geometry(');
 const geometryWarpEnd = imageProcessing.indexOf('\npub fn unwarp_image_geometry(', geometryWarpStart);
@@ -134,7 +138,7 @@ assert.doesNotMatch(
 assert.match(exportProcessing, /enum PreparedExportSource/);
 assert.match(exportProcessing, /StreamedGeometry\(Box<GeometryWarpRows/);
 assert.match(exportProcessing, /fn can_stream_geometry_output/);
-assert.match(exportProcessing, /GeometryWarpRows::try_new_borrowed/);
+assert.match(exportProcessing, /GeometryWarpRows::try_new_transformed_borrowed/);
 assert.match(exportProcessing, /prepared\.source\.gpu_input\(\)/);
 
 assert.match(exportProcessing, /supports_streaming_export/);
@@ -192,6 +196,9 @@ const geometryRgba32fBytes = pixels * 4 * 4;
 const rawRgb32fBytes = pixels * 3 * 4;
 const gpuRgba16fFullUploadBytes = pixels * 4 * 2;
 const gpuRgba16fUploadBandBytes = Math.ceil((9504 * 8) / 256) * 256 * 64;
+const rotatedGpuRgba16fUploadBandBytes = Math.ceil((6336 * 8) / 256) * 256 * 64;
+const geometryCheckpointBytes = 6336 * Math.ceil(9504 / 64) * 3 * 4;
+const rotatedGeometryTransposeBytes = 6336 * 64 * 4 * 2;
 const activeMaskFullTextureBytes = pixels;
 const activeMaskTileTextureBytes = (2048 + 128 * 2) ** 2;
 const maskGenerationTileBytes = 2048 ** 2;
@@ -215,6 +222,11 @@ assert.equal(gpuRgba16fUploadBandBytes, 4_866_048);
 assert.equal(gpuRgba16fFullUploadBytes - gpuRgba16fUploadBandBytes, 476_872_704);
 assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes, 968_343_552);
 assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes - gpuRgba16fUploadBandBytes, geometryRgba32fBytes);
+assert.equal(rotatedGpuRgba16fUploadBandBytes, 3_244_032);
+assert.equal(geometryCheckpointBytes, 11_328_768);
+assert.equal(rotatedGeometryTransposeBytes, 3_244_032);
+assert.equal(geometryRgba32fBytes * 2 + rotatedGpuRgba16fUploadBandBytes, 1_930_199_040);
+assert.equal(rotatedGpuRgba16fUploadBandBytes + geometryCheckpointBytes + rotatedGeometryTransposeBytes, 17_816_832);
 assert.equal(activeMaskFullTextureBytes, 60_217_344);
 assert.equal(activeMaskTileTextureBytes, 5_308_416);
 assert.equal(activeMaskFullTextureBytes - activeMaskTileTextureBytes, 54_908_928);
@@ -233,7 +245,11 @@ assert.match(packageJson.scripts['synthetic-range-mask:bench'], /synthetic_60mp_
 assert.match(packageJson.scripts['synthetic-ai-mask:bench'], /synthetic_60mp_ai_mask_overlap_scratch/);
 assert.match(packageJson.scripts['synthetic-raw-handoff:bench'], /synthetic_60mp_raw_rgb_handoff/);
 assert.match(packageJson.scripts['synthetic-geometry-output:bench'], /synthetic_60mp_geometry_output/);
+assert.match(
+  packageJson.scripts['synthetic-orthogonal-geometry-output:bench'],
+  /synthetic_60mp_orthogonal_geometry_output/,
+);
 
 console.log(
-  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, row-streamed geometry output, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, row/band-streamed orthogonal geometry output, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

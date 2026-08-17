@@ -672,9 +672,6 @@ fn can_stream_geometry_output(
     masks: &[MaskDefinition],
 ) -> bool {
     !is_geometry_identity(geometry_params)
-        && !matches!(adjustments["orientationSteps"].as_u64().unwrap_or(0), 1..=3)
-        && !adjustments["flipHorizontal"].as_bool().unwrap_or(false)
-        && !adjustments["flipVertical"].as_bool().unwrap_or(false)
         && adjustments["rotation"]
             .as_f64()
             .unwrap_or(0.0)
@@ -702,17 +699,32 @@ fn prepare_export_render<'a>(
     let can_stream_geometry =
         can_stream_geometry_output(js_adjustments, &geometry_params, &mask_definitions);
 
+    let orientation_steps = js_adjustments["orientationSteps"].as_u64().unwrap_or(0) as u8;
+    let flip_horizontal = js_adjustments["flipHorizontal"].as_bool().unwrap_or(false);
+    let flip_vertical = js_adjustments["flipVertical"].as_bool().unwrap_or(false);
     let streamed_geometry = can_stream_geometry.then(|| {
-        GeometryWarpRows::try_new_borrowed(base_image, geometry_params, &js_adjustments["crop"])
+        GeometryWarpRows::try_new_transformed_borrowed(
+            base_image,
+            geometry_params,
+            orientation_steps,
+            flip_horizontal,
+            flip_vertical,
+            &js_adjustments["crop"],
+        )
     });
     let (source, unscaled_crop_offset) = match streamed_geometry.flatten() {
         Some(rows) => {
             let saved_bytes = rows.materialized_output_bytes();
+            let checkpoint_bytes = rows.checkpoint_bytes();
+            let band_scratch_bytes =
+                rows.max_band_scratch_bytes(crate::render_strategy::GPU_INPUT_UPLOAD_BAND_ROWS);
             let crop_offset = rows.crop_offset();
             log::info!(
-                "[{}] streaming geometry rows directly to GPU input (avoiding {} B RGBA32F output)",
+                "[{}] streaming transformed geometry bands directly to GPU input (avoiding {} B RGBA32F output; checkpoints={} B, transpose_scratch<={} B)",
                 debug_tag,
-                saved_bytes
+                saved_bytes,
+                checkpoint_bytes,
+                band_scratch_bytes,
             );
             (
                 PreparedExportSource::StreamedGeometry(Box::new(rows)),
@@ -3498,7 +3510,7 @@ mod tests {
     }
 
     #[test]
-    fn geometry_output_streaming_uses_only_single_resample_export_paths() {
+    fn geometry_output_streaming_supports_orthogonal_post_transforms_only() {
         let adjustments = serde_json::json!({
             "transformVertical": 18.0,
             "crop": { "unit": "px", "x": 4.0, "y": 3.0, "width": 80.0, "height": 60.0 }
@@ -3506,10 +3518,18 @@ mod tests {
         let params = get_geometry_params_from_json(&adjustments);
         assert!(can_stream_geometry_output(&adjustments, &params, &[]));
 
+        for compatible in [
+            serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 1 }),
+            serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 2, "flipHorizontal": true }),
+            serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 3, "flipVertical": true }),
+            serde_json::json!({ "transformVertical": 18.0, "flipHorizontal": true, "flipVertical": true }),
+        ] {
+            let params = get_geometry_params_from_json(&compatible);
+            assert!(can_stream_geometry_output(&compatible, &params, &[]));
+        }
+
         for incompatible in [
             serde_json::json!({ "transformVertical": 18.0, "rotation": 0.5 }),
-            serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 1 }),
-            serde_json::json!({ "transformVertical": 18.0, "flipHorizontal": true }),
             serde_json::json!({ "transformVertical": 18.0, "lensBlurEnabled": true }),
         ] {
             let params = get_geometry_params_from_json(&incompatible);

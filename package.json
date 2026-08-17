@@ -32,6 +32,7 @@
     "synthetic-webp:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_webp_output_harness -- --ignored --nocapture",
     "synthetic-geometry:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_geometry_source_harness -- --ignored --nocapture",
     "synthetic-geometry-output:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_geometry_output_harness -- --ignored --nocapture",
+    "synthetic-orthogonal-geometry-output:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_orthogonal_geometry_output_harness -- --ignored --nocapture",
     "synthetic-mask:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_mask_cache_ownership_harness -- --ignored --nocapture",
     "synthetic-mask-compose:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_mask_composition_scratch_harness -- --ignored --nocapture",
     "synthetic-range-mask:bench": "cargo test --manifest-path src-tauri/Cargo.toml synthetic_60mp_range_mask_overlap_scratch_harness -- --ignored --nocapture",

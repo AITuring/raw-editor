@@ -38,6 +38,40 @@ pub struct RenderRequest<'a> {
 pub trait GpuInputSource: Sync {
     fn dimensions(&self) -> (u32, u32);
     fn write_rgba_f16_row(&self, y: u32, output: &mut [f16]) -> Result<(), String>;
+    fn write_rgba_f16_band(
+        &self,
+        y: u32,
+        rows: u32,
+        row_stride_samples: usize,
+        output: &mut [f16],
+    ) -> Result<(), String> {
+        let (width, height) = self.dimensions();
+        if rows == 0 {
+            return Ok(());
+        }
+        if y >= height || rows > height - y {
+            return Err(format!(
+                "GPU input band y={} rows={} is outside source height {}",
+                y, rows, height
+            ));
+        }
+        let row_samples = (width as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "GPU input row exceeds the addressable buffer size".to_string())?;
+        if row_stride_samples < row_samples {
+            return Err("GPU input band stride is smaller than one RGBA row".to_string());
+        }
+        let required_samples = row_stride_samples
+            .checked_mul(rows as usize)
+            .ok_or_else(|| "GPU input band exceeds the addressable buffer size".to_string())?;
+        if output.len() < required_samples {
+            return Err("GPU input band staging buffer is too small".to_string());
+        }
+        output[..required_samples]
+            .par_chunks_exact_mut(row_stride_samples)
+            .enumerate()
+            .try_for_each(|(row, output)| self.write_rgba_f16_row(y + row as u32, output))
+    }
     fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
         None
     }
@@ -702,6 +736,16 @@ impl GpuInputSource for GeometryWarpRows<'_> {
         self.write_rgba16f_row(y, output)
     }
 
+    fn write_rgba_f16_band(
+        &self,
+        y: u32,
+        rows: u32,
+        row_stride_samples: usize,
+        output: &mut [f16],
+    ) -> Result<(), String> {
+        self.write_rgba16f_band(y, rows, row_stride_samples, output)
+    }
+
     fn materialize_cpu_fallback(&self) -> Option<DynamicImage> {
         Some(self.materialize())
     }
@@ -725,12 +769,12 @@ fn upload_source_to_texture_bounded(
             .checked_mul(band_height as usize)
             .ok_or_else(|| "GPU input band exceeds the addressable buffer size".to_string())?;
         staging[..band_samples].fill(f16::ZERO);
-        staging[..band_samples]
-            .par_chunks_exact_mut(padded_row_samples)
-            .enumerate()
-            .try_for_each(|(row, output)| {
-                source.write_rgba_f16_row(band_start + row as u32, output)
-            })?;
+        source.write_rgba_f16_band(
+            band_start,
+            band_height,
+            padded_row_samples,
+            &mut staging[..band_samples],
+        )?;
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
