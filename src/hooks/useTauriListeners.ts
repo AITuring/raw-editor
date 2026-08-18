@@ -273,6 +273,45 @@ export function useTauriListeners({
           }));
         }
       }),
+      listen('image-stack-progress', (event: any) => {
+        if (isEffectActive) {
+          useUIStore.getState().setUI((state) => {
+            if (state.imageStackModalState.finalImageBase64 || state.imageStackModalState.error) return state;
+            return {
+              imageStackModalState: {
+                ...state.imageStackModalState,
+                progressMessage: String(event.payload ?? ''),
+              },
+            };
+          });
+        }
+      }),
+      listen('image-stack-complete', (event: any) => {
+        if (isEffectActive) {
+          useUIStore.getState().setUI((state) => ({
+            imageStackModalState: {
+              ...state.imageStackModalState,
+              error: null,
+              finalImageBase64: event.payload?.base64 ?? null,
+              isProcessing: false,
+              progressMessage: null,
+            },
+          }));
+        }
+      }),
+      listen('image-stack-error', (event: any) => {
+        if (isEffectActive) {
+          useUIStore.getState().setUI((state) => ({
+            imageStackModalState: {
+              ...state.imageStackModalState,
+              error: String(event.payload),
+              finalImageBase64: null,
+              isProcessing: false,
+              progressMessage: null,
+            },
+          }));
+        }
+      }),
       listen('hdr-progress', (event: any) => {
         if (isEffectActive) {
           useUIStore.getState().setUI((state) => ({

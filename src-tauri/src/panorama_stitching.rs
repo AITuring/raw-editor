@@ -1,9 +1,9 @@
-use crate::app_settings::load_settings;
+use crate::app_settings::load_settings_for_runtime;
 use crate::app_state::AppState;
 use crate::file_management::parse_virtual_path;
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
-use image::{DynamicImage, GenericImageView, GrayImage, Rgb32FImage};
+use image::{DynamicImage, GenericImageView, Rgb32FImage};
 use nalgebra::Matrix3;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -11,14 +11,19 @@ use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 use std::time::Instant;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_cpu_default_raw_processing;
+use crate::panorama_utils::stitching::{Projection, project_point};
 use crate::panorama_utils::{processing, stitching};
 
 pub const BRIEF_DESCRIPTOR_SIZE: usize = 256;
 pub type Descriptor = [u8; BRIEF_DESCRIPTOR_SIZE / 8];
+const FULL_RES_RANSAC_INLIER_THRESHOLD: f64 = 12.0;
+const FULL_RES_REFINEMENT_THRESHOLD: f64 = 8.0;
+const MATCH_REFINE_PATCH_RADIUS: i32 = 6;
+const MATCH_REFINE_SEARCH_RADIUS: i32 = 10;
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPoint {
@@ -41,7 +46,6 @@ pub struct ImageInfo {
     pub id: usize,
     pub filename: String,
     pub image: Rgb32FImage,
-    pub low_detail_mask: GrayImage,
     pub scale_factor: f64,
     pub features: Vec<Feature>,
 }
@@ -50,6 +54,45 @@ pub struct ImageInfo {
 pub struct MatchInfo {
     pub homography: Matrix3<f64>,
     pub inliers: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlignmentMode {
+    Auto,
+    Perspective,
+    Cylindrical,
+    Spherical,
+    Position,
+}
+
+impl AlignmentMode {
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "perspective" => Self::Perspective,
+            "cylindrical" => Self::Cylindrical,
+            "spherical" => Self::Spherical,
+            "position" => Self::Position,
+            _ => Self::Auto,
+        }
+    }
+
+    fn projection_for(self, blend_mode: BlendMode) -> Projection {
+        match self {
+            Self::Cylindrical => Projection::Cylindrical,
+            Self::Spherical => Projection::Spherical,
+            Self::Perspective | Self::Position => Projection::Planar,
+            Self::Auto => match blend_mode {
+                BlendMode::Panorama => Projection::Planar,
+                BlendMode::FocusStack => Projection::Planar,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendMode {
+    Panorama,
+    FocusStack,
 }
 
 #[tauri::command]
@@ -70,7 +113,13 @@ pub async fn stitch_panorama(
     let panorama_result_handle = state.panorama_result.clone();
 
     let task = tokio::task::spawn_blocking(move || {
-        let panorama_result = stitch_images(source_paths, app_handle.clone());
+        let panorama_result = stitch_images_with_options(
+            source_paths,
+            app_handle.clone(),
+            AlignmentMode::Auto,
+            BlendMode::Panorama,
+            "panorama-progress",
+        );
 
         match panorama_result {
             Ok(panorama_image) => {
@@ -173,21 +222,27 @@ pub async fn save_panorama(
     Ok(output_path.to_string_lossy().to_string())
 }
 
-fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<DynamicImage, String> {
+pub(crate) fn stitch_images_with_options<R: Runtime>(
+    image_paths: Vec<String>,
+    app_handle: AppHandle<R>,
+    alignment_mode: AlignmentMode,
+    blend_mode: BlendMode,
+    progress_event: &str,
+) -> Result<DynamicImage, String> {
     if image_paths.len() < 2 {
         return Err("At least two images are required for a panorama.".to_string());
     }
 
-    let _ = app_handle.emit("panorama-progress", "Starting panorama process...");
+    let _ = app_handle.emit(progress_event, "Starting image alignment process...");
     println!(
         "Starting panorama stitching process for {} images...",
         image_paths.len()
     );
 
-    let settings = load_settings(app_handle.clone()).unwrap_or_default();
+    let settings = load_settings_for_runtime(&app_handle).unwrap_or_default();
 
     let start_time = Instant::now();
-    let _ = app_handle.emit("panorama-progress", "Loading and preparing images...");
+    let _ = app_handle.emit(progress_event, "Loading and preparing images...");
     println!("Loading and preparing images (in parallel)...");
     let brief_pairs = processing::generate_brief_pairs();
 
@@ -196,7 +251,7 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
         .enumerate()
         .map(|(i, filename)| {
             let _ = app_handle.emit(
-                "panorama-progress",
+                progress_event,
                 format!(
                     "Processing '{}'",
                     Path::new(filename)
@@ -238,8 +293,6 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
                 image::imageops::FilterType::Triangle,
             );
 
-            let low_detail_mask = processing::generate_low_detail_mask(&gray_full);
-
             let features = processing::find_features(&gray_small, &brief_pairs);
             println!("    Found {} features in '{}'", features.len(), filename);
 
@@ -247,7 +300,6 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
                 id: i,
                 filename: filename.to_string(),
                 image: image_f32,
-                low_detail_mask,
                 scale_factor,
                 features,
             })
@@ -265,8 +317,9 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
     );
 
     let start_time = Instant::now();
-    let _ = app_handle.emit("panorama-progress", "Finding image matches...");
+    let _ = app_handle.emit(progress_event, "Finding image matches...");
     println!("Finding all pairwise matches (in parallel)...");
+    let projection = alignment_mode.projection_for(blend_mode);
     let mut pairwise_matches: HashMap<(usize, usize), MatchInfo> = HashMap::new();
 
     let pairs_to_check: Vec<(usize, usize)> = (0..image_data.len())
@@ -287,10 +340,58 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
             let keypoints1: Vec<KeyPoint> = features1.iter().map(|f| f.keypoint).collect();
             let keypoints2: Vec<KeyPoint> = features2.iter().map(|f| f.keypoint).collect();
 
-            if let Some((_h_small, inliers)) =
-                processing::find_homography_ransac(&initial_matches, &keypoints1, &keypoints2)
-                && inliers.len() >= processing::MIN_INLIERS_FOR_CONNECTION
-            {
+            let projected_points1: Vec<nalgebra::Point2<f64>> = keypoints1
+                .iter()
+                .map(|point| {
+                    project_point(
+                        &image_data[i],
+                        point.x as f64 * image_data[i].scale_factor,
+                        point.y as f64 * image_data[i].scale_factor,
+                        projection,
+                    )
+                    .expect("projection should produce finite feature coordinates")
+                })
+                .collect();
+            let projected_points2: Vec<nalgebra::Point2<f64>> = keypoints2
+                .iter()
+                .map(|point| {
+                    project_point(
+                        &image_data[j],
+                        point.x as f64 * image_data[j].scale_factor,
+                        point.y as f64 * image_data[j].scale_factor,
+                        projection,
+                    )
+                    .expect("projection should produce finite feature coordinates")
+                })
+                .collect();
+            let projected_match_points: Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> =
+                initial_matches
+                    .iter()
+                    .map(|m| (projected_points1[m.index1], projected_points2[m.index2]))
+                    .collect();
+            let (h_projected, projected_inlier_indices) =
+                processing::find_homography_ransac_points(
+                    &projected_match_points,
+                    FULL_RES_RANSAC_INLIER_THRESHOLD,
+                )?;
+            let mut inlier_points: Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> =
+                projected_inlier_indices
+                    .iter()
+                    .map(|&index| {
+                        let matched = initial_matches[index];
+                        refine_match_point_from_homography(
+                            &image_data[i],
+                            &image_data[j],
+                            keypoints1[matched.index1],
+                            keypoints2[matched.index2],
+                            projection,
+                            &h_projected,
+                        )
+                        .unwrap_or(projected_match_points[index])
+                    })
+                    .collect();
+            if let Some(h_refined) = refine_homography_inliers(&mut inlier_points) {
+                let inlier_count = inlier_points.len();
                 println!(
                     "  - Good match found: '{}' <-> '{}' ({} inliers)",
                     Path::new(&image_data[i].filename)
@@ -301,35 +402,32 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy(),
-                    inliers.len()
+                    inlier_count
                 );
-
-                let inlier_points: Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> = inliers
-                    .iter()
-                    .map(|m| {
-                        let p1 = keypoints1[m.index1];
-                        let p2 = keypoints2[m.index2];
-                        (
-                            nalgebra::Point2::new(p1.x as f64, p1.y as f64),
-                            nalgebra::Point2::new(p2.x as f64, p2.y as f64),
-                        )
-                    })
-                    .collect();
-
-                if let Some(h_refined) = processing::compute_homography(&inlier_points) {
-                    let s1 = image_data[i].scale_factor;
-                    let s2 = image_data[j].scale_factor;
-                    let scale_mat_i_inv =
-                        Matrix3::new(1.0 / s1, 0.0, 0.0, 0.0, 1.0 / s1, 0.0, 0.0, 0.0, 1.0);
-                    let scale_mat_j = Matrix3::new(s2, 0.0, 0.0, 0.0, s2, 0.0, 0.0, 0.0, 1.0);
-                    let h_full = scale_mat_j * h_refined * scale_mat_i_inv;
-
-                    let match_info = MatchInfo {
-                        homography: h_full,
-                        inliers: inliers.len(),
-                    };
-                    return Some(((i, j), match_info));
-                }
+                let reprojection_error = symmetric_reprojection_rmse(&h_refined, &inlier_points);
+                println!(
+                    "  - Refined match: '{}' <-> '{}' ({} inliers, {:.3}px symmetric RMS)",
+                    Path::new(&image_data[i].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    Path::new(&image_data[j].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    inlier_count,
+                    reprojection_error
+                );
+                let h_full = if alignment_mode == AlignmentMode::Position {
+                    estimate_translation(&inlier_points)
+                } else {
+                    h_refined
+                };
+                let match_info = MatchInfo {
+                    homography: h_full,
+                    inliers: inlier_count,
+                };
+                return Some(((i, j), match_info));
             }
             None
         })
@@ -351,7 +449,7 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
     }
 
     let start_time = Instant::now();
-    let _ = app_handle.emit("panorama-progress", "Determining stitching order...");
+    let _ = app_handle.emit(progress_event, "Determining stitching order...");
     println!("Determining stitching order...");
     let (ordered_indices, global_homographies) =
         build_stitching_order(&image_data, &pairwise_matches);
@@ -372,7 +470,7 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
         .collect();
     println!("Stitching order determined: {:?}", ordered_filenames);
     let _ = app_handle.emit(
-        "panorama-progress",
+        progress_event,
         format!("Stitching order: {}", ordered_filenames.join(" -> ")),
     );
 
@@ -381,11 +479,15 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
     let unstitched_count = image_data.len() - stitched_images_info.len();
     if unstitched_count > 0 {
         let warning_msg = format!(
-            "Warning: {} image(s) could not be matched and will be excluded.",
+            "{} image(s) could not be aligned with the selected set.",
             unstitched_count
         );
         println!("{}", warning_msg);
-        let _ = app_handle.emit("panorama-warning", warning_msg);
+        let _ = app_handle.emit(progress_event, warning_msg);
+        return Err(format!(
+            "Could not align all selected images; {} image(s) were not connected.",
+            unstitched_count
+        ));
     }
     println!(
         "Global homography calculation completed in {:.2?}\n",
@@ -393,20 +495,222 @@ fn stitch_images(image_paths: Vec<String>, app_handle: AppHandle) -> Result<Dyna
     );
 
     let start_time = Instant::now();
-    let _ = app_handle.emit("panorama-progress", "Warping and blending images...");
+    let _ = app_handle.emit(progress_event, "Warping and blending images...");
     println!("Warping and blending full-resolution images with progressive optimal seams...");
 
-    let panorama = stitching::progressive_seam_stitcher(
-        &stitched_images_info,
-        &global_homographies,
-        app_handle.clone(),
-    );
+    let panorama = match blend_mode {
+        BlendMode::Panorama => stitching::progressive_seam_stitcher(
+            &stitched_images_info,
+            &global_homographies,
+            projection,
+            app_handle.clone(),
+            progress_event,
+        ),
+        BlendMode::FocusStack => stitching::focus_stack_stitcher(
+            &stitched_images_info,
+            &global_homographies,
+            projection,
+            app_handle.clone(),
+            progress_event,
+        ),
+    };
 
     println!("Stitching completed in {:.2?}\n", start_time.elapsed());
 
-    let _ = app_handle.emit("panorama-progress", "Finalizing panorama...");
+    let _ = app_handle.emit(progress_event, "Finalizing image result...");
 
     Ok(DynamicImage::ImageRgb32F(panorama))
+}
+
+fn estimate_translation(points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Matrix3<f64> {
+    let mut dx: Vec<f64> = points.iter().map(|(a, b)| b.x - a.x).collect();
+    let mut dy: Vec<f64> = points.iter().map(|(a, b)| b.y - a.y).collect();
+    dx.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    dy.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = |values: &[f64]| values[values.len() / 2];
+    Matrix3::new(1.0, 0.0, median(&dx), 0.0, 1.0, median(&dy), 0.0, 0.0, 1.0)
+}
+
+fn refine_match_point_from_homography(
+    image1: &ImageInfo,
+    image2: &ImageInfo,
+    keypoint1: KeyPoint,
+    keypoint2: KeyPoint,
+    projection: Projection,
+    homography: &Matrix3<f64>,
+) -> Option<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> {
+    let source_x = (keypoint1.x as f64 * image1.scale_factor).round() as i32;
+    let source_y = (keypoint1.y as f64 * image1.scale_factor).round() as i32;
+    let fallback_target_x = (keypoint2.x as f64 * image2.scale_factor).round() as i32;
+    let fallback_target_y = (keypoint2.y as f64 * image2.scale_factor).round() as i32;
+    let (target_x, target_y) = if projection == Projection::Planar {
+        let predicted = homography * nalgebra::Point3::new(source_x as f64, source_y as f64, 1.0);
+        if predicted.z.abs() < 1e-8 {
+            (fallback_target_x, fallback_target_y)
+        } else {
+            (
+                (predicted.x / predicted.z).round() as i32,
+                (predicted.y / predicted.z).round() as i32,
+            )
+        }
+    } else {
+        (fallback_target_x, fallback_target_y)
+    };
+    let mut best_score = f64::NEG_INFINITY;
+    let mut best_target = None;
+
+    for dy in -MATCH_REFINE_SEARCH_RADIUS..=MATCH_REFINE_SEARCH_RADIUS {
+        for dx in -MATCH_REFINE_SEARCH_RADIUS..=MATCH_REFINE_SEARCH_RADIUS {
+            let candidate_x = target_x + dx;
+            let candidate_y = target_y + dy;
+            let score = patch_ncc(
+                &image1.image,
+                &image2.image,
+                source_x,
+                source_y,
+                candidate_x,
+                candidate_y,
+                MATCH_REFINE_PATCH_RADIUS,
+            );
+            if score > best_score {
+                best_score = score;
+                best_target = Some((candidate_x, candidate_y));
+            }
+        }
+    }
+
+    let (best_x, best_y) = best_target?;
+    if !best_score.is_finite() {
+        return None;
+    }
+    let source = project_point(image1, source_x as f64, source_y as f64, projection)?;
+    let target = project_point(image2, best_x as f64, best_y as f64, projection)?;
+    Some((source, target))
+}
+
+fn patch_ncc(
+    image1: &Rgb32FImage,
+    image2: &Rgb32FImage,
+    center1_x: i32,
+    center1_y: i32,
+    center2_x: i32,
+    center2_y: i32,
+    radius: i32,
+) -> f64 {
+    let mut values1 = Vec::with_capacity(((radius * 2 + 1) * (radius * 2 + 1)) as usize);
+    let mut values2 = Vec::with_capacity(values1.capacity());
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let Some(value1) = luma_at(image1, center1_x + dx, center1_y + dy) else {
+                return f64::NEG_INFINITY;
+            };
+            let Some(value2) = luma_at(image2, center2_x + dx, center2_y + dy) else {
+                return f64::NEG_INFINITY;
+            };
+            values1.push(value1);
+            values2.push(value2);
+        }
+    }
+
+    let mean1 = values1.iter().sum::<f64>() / values1.len() as f64;
+    let mean2 = values2.iter().sum::<f64>() / values2.len() as f64;
+    let mut covariance = 0.0;
+    let mut variance1 = 0.0;
+    let mut variance2 = 0.0;
+    for (value1, value2) in values1.iter().zip(values2.iter()) {
+        let centered1 = value1 - mean1;
+        let centered2 = value2 - mean2;
+        covariance += centered1 * centered2;
+        variance1 += centered1 * centered1;
+        variance2 += centered2 * centered2;
+    }
+    if variance1 <= f64::EPSILON || variance2 <= f64::EPSILON {
+        f64::NEG_INFINITY
+    } else {
+        covariance / (variance1 * variance2).sqrt()
+    }
+}
+
+fn luma_at(image: &Rgb32FImage, x: i32, y: i32) -> Option<f64> {
+    if x < 0 || y < 0 || x >= image.width() as i32 || y >= image.height() as i32 {
+        return None;
+    }
+    let pixel = image.get_pixel(x as u32, y as u32);
+    Some((pixel[0] as f64 * 0.299) + (pixel[1] as f64 * 0.587) + (pixel[2] as f64 * 0.114))
+}
+
+fn refine_homography_inliers(
+    points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
+) -> Option<Matrix3<f64>> {
+    if points.len() < processing::MIN_INLIERS_FOR_CONNECTION {
+        return None;
+    }
+
+    let mut homography = processing::compute_homography(points)?;
+    for _ in 0..3 {
+        let Some(inverse) = homography.try_inverse() else {
+            break;
+        };
+        let refined_points: Vec<_> = points
+            .iter()
+            .copied()
+            .filter(|(source, target)| {
+                symmetric_point_error(&homography, &inverse, *source, *target)
+                    <= FULL_RES_REFINEMENT_THRESHOLD
+            })
+            .collect();
+        if refined_points.len() < processing::MIN_INLIERS_FOR_CONNECTION
+            || refined_points.len() == points.len()
+        {
+            break;
+        }
+        *points = refined_points;
+        homography = processing::compute_homography(points)?;
+    }
+    Some(homography)
+}
+
+fn symmetric_point_error(
+    homography: &Matrix3<f64>,
+    inverse: &Matrix3<f64>,
+    source: nalgebra::Point2<f64>,
+    target: nalgebra::Point2<f64>,
+) -> f64 {
+    let forward = homography * nalgebra::Point3::new(source.x, source.y, 1.0);
+    let reverse = inverse * nalgebra::Point3::new(target.x, target.y, 1.0);
+    if forward.z.abs() < 1e-8 || reverse.z.abs() < 1e-8 {
+        return f64::INFINITY;
+    }
+    let forward_point = nalgebra::Point2::new(forward.x / forward.z, forward.y / forward.z);
+    let reverse_point = nalgebra::Point2::new(reverse.x / reverse.z, reverse.y / reverse.z);
+    ((forward_point - target).norm_squared() + (reverse_point - source).norm_squared()).sqrt()
+}
+
+fn symmetric_reprojection_rmse(
+    homography: &Matrix3<f64>,
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+) -> f64 {
+    let Some(inverse) = homography.try_inverse() else {
+        return f64::INFINITY;
+    };
+    let sum_squared_error = points
+        .iter()
+        .filter_map(|(source, target)| {
+            let forward = homography * nalgebra::Point3::new(source.x, source.y, 1.0);
+            let reverse = inverse * nalgebra::Point3::new(target.x, target.y, 1.0);
+            if forward.z.abs() < 1e-8 || reverse.z.abs() < 1e-8 {
+                return None;
+            }
+            let forward_point = nalgebra::Point2::new(forward.x / forward.z, forward.y / forward.z);
+            let reverse_point = nalgebra::Point2::new(reverse.x / reverse.z, reverse.y / reverse.z);
+            Some((forward_point - target).norm_squared() + (reverse_point - source).norm_squared())
+        })
+        .sum::<f64>();
+    if points.is_empty() {
+        f64::INFINITY
+    } else {
+        (sum_squared_error / (points.len() as f64 * 2.0)).sqrt()
+    }
 }
 
 struct Dsu {
@@ -516,4 +820,67 @@ fn build_stitching_order(
     }
 
     (ordered_indices, global_homographies)
+}
+
+#[cfg(test)]
+mod acceptance_tests {
+    use super::*;
+    use image::ImageFormat;
+    use std::path::PathBuf;
+
+    #[test]
+    #[ignore = "requires the real three-image fixture and writes a large temporary output"]
+    fn real_three_image_panorama_fixture() {
+        let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../src/assets/test")
+            .canonicalize()
+            .expect("test fixture directory must exist");
+        let paths = ["DSC01721_1.tif", "DSC01700.tif", "DSC01728.tif"]
+            .iter()
+            .map(|name| fixture_root.join(name).to_string_lossy().into_owned())
+            .collect();
+        let alignment_name = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_ALIGNMENT")
+            .unwrap_or_else(|_| "auto".to_string())
+            .to_ascii_lowercase();
+        let alignment_mode = AlignmentMode::from_wire(&alignment_name);
+
+        let app = tauri::test::mock_app();
+        crate::sidecar_storage::initialize(
+            PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
+        )
+        .expect("test sidecar storage should initialize once");
+        let result = stitch_images_with_options(
+            paths,
+            app.handle().clone(),
+            alignment_mode,
+            BlendMode::Panorama,
+            "test-image-stack-progress",
+        )
+        .expect("the three real overlapping images should stitch");
+
+        assert!(result.width() > 0 && result.height() > 0);
+        let output_path = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_OUTPUT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "/private/tmp/raw-editor-three-image-panorama-{alignment_name}.tiff"
+                ))
+            });
+        result
+            .save_with_format(&output_path, ImageFormat::Tiff)
+            .expect("full-resolution TIFF result should be writable");
+
+        let preview = crate::image_processing::downscale_f32_image(&result, 1800, 1800);
+        let preview_path = output_path.with_extension("jpg");
+        preview
+            .save_with_format(&preview_path, ImageFormat::Jpeg)
+            .expect("panorama preview should be writable");
+        println!(
+            "three-image panorama result: {}x{}\nfull: {}\npreview: {}",
+            result.width(),
+            result.height(),
+            output_path.display(),
+            preview_path.display()
+        );
+    }
 }

@@ -362,6 +362,8 @@ function App() {
   const {
     handleStartPanorama,
     handleSavePanorama,
+    handleStartImageStack,
+    handleSaveImageStack,
     handleStartHdr,
     handleSaveHdr,
     handleApplyDenoise,
@@ -917,6 +919,8 @@ function App() {
           handleImageSelect={handleImageSelect}
           handleSavePanorama={handleSavePanorama}
           handleStartPanorama={handleStartPanorama}
+          handleStartImageStack={handleStartImageStack}
+          handleSaveImageStack={handleSaveImageStack}
           handleSaveHdr={handleSaveHdr}
           handleStartHdr={handleStartHdr}
           refreshImageList={handleLibraryRefresh}

@@ -13,6 +13,7 @@ import {
   FolderInput,
   FolderPlus,
   Images,
+  Layers3,
   LayoutTemplate,
   Redo,
   RefreshCw,
@@ -230,6 +231,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
               },
             },
             { disabled: true, icon: SquaresUnite, label: t('contextMenus.editor.stitchPanorama') },
+            { disabled: true, icon: Layers3, label: t('contextMenus.editor.imageStack') },
             { disabled: true, icon: Images, label: t('contextMenus.editor.mergeHdr') },
             {
               icon: LayoutTemplate,
@@ -421,6 +423,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
       const cullLabel = t('contextMenus.thumbnail.cullImage', { count: selectionCount });
       const collageLabel = t('contextMenus.thumbnail.collage', { count: selectionCount });
       const stitchLabel = t('contextMenus.editor.stitchPanorama');
+      const imageStackLabel = t('contextMenus.editor.imageStack');
       const conversionLabel = t('contextMenus.thumbnail.convertNegative', { count: selectionCount });
       const denoiseLabel = t('contextMenus.thumbnail.denoise', { count: selectionCount });
       const mergeLabel = t('contextMenus.editor.mergeHdr');
@@ -593,6 +596,25 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
                     isProcessing: false,
                     progressMessage: null,
                     stitchingSourcePaths: finalSelection,
+                  },
+                });
+              },
+            },
+            {
+              disabled: selectionCount < 2 || selectionCount > 30,
+              icon: Layers3,
+              label: imageStackLabel,
+              onClick: () => {
+                setUI({
+                  imageStackModalState: {
+                    error: null,
+                    finalImageBase64: null,
+                    isOpen: true,
+                    isProcessing: false,
+                    progressMessage: null,
+                    sourcePaths: finalSelection,
+                    blendMode: 'focus',
+                    alignmentMode: 'auto',
                   },
                 });
               },

@@ -17,13 +17,21 @@ import ConfirmModal from './ConfirmModal';
 import ImportSettingsModal from './ImportSettingsModal';
 import CullingModal from './CullingModal';
 import CollageModal from './CollageModal';
+import ImageStackModal from './ImageStackModal';
 import { AppSettings, AlbumItem, AlbumGroup } from '../ui/AppProperties';
 import { CopyPasteSettings } from '../../utils/adjustments';
+import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/useUIStore';
 
 export interface AppModalsProps {
   handleImageSelect: (path: string) => void;
   handleSavePanorama: () => Promise<string>;
   handleStartPanorama: (paths: string[]) => void;
+  handleSaveImageStack: (blendMode: ImageStackBlendMode) => Promise<string>;
+  handleStartImageStack: (
+    paths: string[],
+    blendMode: ImageStackBlendMode,
+    alignmentMode: ImageStackAlignmentMode,
+  ) => void;
   handleSaveHdr: () => Promise<string>;
   handleStartHdr: (paths: string[]) => void;
   refreshImageList: () => Promise<void>;
@@ -66,6 +74,7 @@ export default function AppModals(props: AppModalsProps) {
     albumActionTarget,
     confirmModalState,
     panoramaModalState,
+    imageStackModalState,
     hdrModalState,
     negativeModalState,
     denoiseModalState,
@@ -88,6 +97,7 @@ export default function AppModals(props: AppModalsProps) {
       albumActionTarget: state.albumActionTarget,
       confirmModalState: state.confirmModalState,
       panoramaModalState: state.panoramaModalState,
+      imageStackModalState: state.imageStackModalState,
       hdrModalState: state.hdrModalState,
       negativeModalState: state.negativeModalState,
       denoiseModalState: state.denoiseModalState,
@@ -173,6 +183,44 @@ export default function AppModals(props: AppModalsProps) {
         onSave={props.handleSavePanorama}
         onStitch={() => props.handleStartPanorama(panoramaModalState.stitchingSourcePaths)}
         progressMessage={panoramaModalState.progressMessage}
+      />
+      <ImageStackModal
+        error={imageStackModalState.error}
+        finalImageBase64={imageStackModalState.finalImageBase64}
+        initialAlignmentMode={imageStackModalState.alignmentMode}
+        initialBlendMode={imageStackModalState.blendMode}
+        isOpen={imageStackModalState.isOpen}
+        isProcessing={imageStackModalState.isProcessing}
+        onClose={() =>
+          setUI({
+            imageStackModalState: {
+              isOpen: false,
+              isProcessing: false,
+              progressMessage: null,
+              finalImageBase64: null,
+              error: null,
+              sourcePaths: [],
+              blendMode: 'focus',
+              alignmentMode: 'auto',
+            },
+          })
+        }
+        onChange={() =>
+          setUI((state) => ({
+            imageStackModalState: {
+              ...state.imageStackModalState,
+              error: null,
+              finalImageBase64: null,
+              progressMessage: null,
+            },
+          }))
+        }
+        onOpenFile={(path: string) => props.handleImageSelect(path)}
+        onProcess={props.handleStartImageStack}
+        onSave={props.handleSaveImageStack}
+        progressMessage={imageStackModalState.progressMessage}
+        sourcePaths={imageStackModalState.sourcePaths}
+        thumbnails={thumbnails}
       />
       <HdrModal
         error={hdrModalState.error}

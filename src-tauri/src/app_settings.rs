@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::app_state::AppState;
 use crate::export_processing::DEFAULT_WATERMARK_PATH;
@@ -617,6 +617,12 @@ impl Default for AppSettings {
 }
 
 pub fn get_settings_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    get_settings_path_for_runtime(app_handle)
+}
+
+pub(crate) fn get_settings_path_for_runtime<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> Result<PathBuf, String> {
     let settings_dir = app_handle
         .path()
         .app_data_dir()
@@ -631,7 +637,13 @@ pub fn get_settings_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn load_settings(app_handle: AppHandle) -> Result<AppSettings, String> {
-    let path = get_settings_path(&app_handle)?;
+    load_settings_for_runtime(&app_handle)
+}
+
+pub(crate) fn load_settings_for_runtime<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> Result<AppSettings, String> {
+    let path = get_settings_path_for_runtime(app_handle)?;
 
     let mut settings: AppSettings = if path.exists() {
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;

@@ -162,6 +162,7 @@ pub struct AppState {
     pub export_task_token: Arc<Mutex<Option<Arc<AtomicBool>>>>,
     pub hdr_result: Arc<Mutex<Option<DynamicImage>>>,
     pub panorama_result: Arc<Mutex<Option<DynamicImage>>>,
+    pub image_stack_result: Arc<Mutex<Option<DynamicImage>>>,
     pub denoise_result: Arc<Mutex<Option<DynamicImage>>>,
     pub indexing_task_handle: Mutex<Option<JoinHandle<()>>>,
     pub lut_cache: Mutex<BudgetedCache<String, Arc<Lut>>>,

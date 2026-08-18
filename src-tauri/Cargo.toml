@@ -106,6 +106,7 @@ hex = "0.4"
 
 [dev-dependencies]
 naga = { version = "30.0.0", features = ["wgsl-in"] }
+tauri = { version = "2.11", features = ["test"] }
 
 [profile.dev]
 opt-level = 2

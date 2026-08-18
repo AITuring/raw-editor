@@ -59,6 +59,21 @@ export function useAndroidBackHandler() {
         });
         return;
       }
+      if (ui.imageStackModalState.isOpen) {
+        ui.setUI({
+          imageStackModalState: {
+            isOpen: false,
+            isProcessing: false,
+            progressMessage: null,
+            finalImageBase64: null,
+            error: null,
+            sourcePaths: [],
+            blendMode: 'focus',
+            alignmentMode: 'auto',
+          },
+        });
+        return;
+      }
       if (ui.hdrModalState.isOpen) {
         ui.setUI({
           hdrModalState: {
@@ -91,7 +106,9 @@ export function useAndroidBackHandler() {
         return;
       }
 
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+      );
     };
 
     return () => {

@@ -4,19 +4,17 @@ use imageproc::corners::{Corner, corners_fast9};
 use imageproc::filter::gaussian_blur_f32;
 use nalgebra::{Matrix3, Point2, SVD};
 use rand::prelude::*;
-use rand::rng;
 use rayon::prelude::*;
 
-const MAX_PROCESSING_DIMENSION: u32 = 1600;
+const MAX_PROCESSING_DIMENSION: u32 = 2400;
 const FAST_THRESHOLD: u8 = 15;
 const NON_MAXIMA_SUPPRESSION_RADIUS: f32 = 15.0;
 const BRIEF_PATCH_SIZE: u32 = 32;
 const MATCH_RATIO_THRESHOLD: f32 = 0.8;
 const RANSAC_ITERATIONS: usize = 2500;
 const RANSAC_INLIER_THRESHOLD: f64 = 5.0;
+const MAX_FEATURES: usize = 2000;
 pub const MIN_INLIERS_FOR_CONNECTION: usize = 15;
-const LOW_DETAIL_WINDOW_RADIUS: u32 = 16;
-const LOW_DETAIL_VARIANCE_THRESHOLD: f64 = 60.0;
 
 pub fn calculate_downscale_dimensions(width: u32, height: u32) -> (u32, u32, f64) {
     calculate_downscale_dimensions_capped(width, height, MAX_PROCESSING_DIMENSION)
@@ -81,7 +79,7 @@ pub fn find_features_tuned(
     let corners = corners_fast9(&blurred_img_u8, fast_threshold);
     let keypoints = non_maximal_suppression(&corners, non_maxima_suppression_radius);
     let blurred_img_f32 = gaussian_blur_f32(&convert_gray_u8_to_f32(img), 2.0);
-    let features: Vec<Feature> = keypoints
+    let mut features: Vec<Feature> = keypoints
         .par_iter()
         .filter_map(|kp| {
             compute_brief_descriptor(&blurred_img_f32, kp, BRIEF_PATCH_SIZE, brief_pairs).map(
@@ -92,6 +90,7 @@ pub fn find_features_tuned(
             )
         })
         .collect();
+    features.truncate(MAX_FEATURES);
     features
 }
 
@@ -151,19 +150,37 @@ fn compute_brief_descriptor(
 ) -> Option<Descriptor> {
     let mut descriptor = [0u8; BRIEF_DESCRIPTOR_SIZE / 8];
     let (width, height) = img.dimensions();
-    let half_patch_size = patch_size / 2;
-    if kp.x < half_patch_size
-        || kp.x >= width - half_patch_size
-        || kp.y < half_patch_size
-        || kp.y >= height - half_patch_size
+    let max_pair_radius = (pairs
+        .iter()
+        .flat_map(|pair| [pair.0, pair.1])
+        .map(|point| ((point.x * point.x + point.y * point.y) as f32).sqrt())
+        .fold(0.0f32, f32::max)
+        .ceil() as i32)
+        .max((patch_size / 2) as i32)
+        + 1;
+    if width <= (max_pair_radius * 2) as u32
+        || height <= (max_pair_radius * 2) as u32
+        || kp.x < max_pair_radius as u32
+        || kp.y < max_pair_radius as u32
+        || kp.x + max_pair_radius as u32 >= width
+        || kp.y + max_pair_radius as u32 >= height
     {
         return None;
     }
+    let orientation = estimate_patch_orientation(img, kp, (patch_size / 2) as i32);
+    let (sin_theta, cos_theta) = orientation.sin_cos();
     for (i, pair) in pairs.iter().enumerate() {
-        let p1_x = (kp.x as i32 + pair.0.x) as u32;
-        let p1_y = (kp.y as i32 + pair.0.y) as u32;
-        let p2_x = (kp.x as i32 + pair.1.x) as u32;
-        let p2_y = (kp.y as i32 + pair.1.y) as u32;
+        let rotate = |point: nalgebra::Point2<i32>| {
+            let x = point.x as f32 * cos_theta - point.y as f32 * sin_theta;
+            let y = point.x as f32 * sin_theta + point.y as f32 * cos_theta;
+            (x.round() as i32, y.round() as i32)
+        };
+        let (p1_dx, p1_dy) = rotate(pair.0);
+        let (p2_dx, p2_dy) = rotate(pair.1);
+        let p1_x = (kp.x as i32 + p1_dx) as u32;
+        let p1_y = (kp.y as i32 + p1_dy) as u32;
+        let p2_x = (kp.x as i32 + p2_dx) as u32;
+        let p2_y = (kp.y as i32 + p2_dy) as u32;
         let intensity1 = img.get_pixel(p1_x, p1_y)[0];
         let intensity2 = img.get_pixel(p2_x, p2_y)[0];
         if intensity1 < intensity2 {
@@ -173,6 +190,31 @@ fn compute_brief_descriptor(
         }
     }
     Some(descriptor)
+}
+
+fn estimate_patch_orientation(
+    img: &ImageBuffer<Luma<f32>, Vec<f32>>,
+    kp: &KeyPoint,
+    radius: i32,
+) -> f32 {
+    let mut moment_x = 0.0f32;
+    let mut moment_y = 0.0f32;
+    let center_x = kp.x as i32;
+    let center_y = kp.y as i32;
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let x = (center_x + dx) as u32;
+            let y = (center_y + dy) as u32;
+            let intensity = img.get_pixel(x, y)[0];
+            moment_x += dx as f32 * intensity;
+            moment_y += dy as f32 * intensity;
+        }
+    }
+    if moment_x.abs() + moment_y.abs() < f32::EPSILON {
+        0.0
+    } else {
+        moment_y.atan2(moment_x)
+    }
 }
 
 fn hamming_distance(d1: &Descriptor, d2: &Descriptor) -> u32 {
@@ -186,10 +228,9 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
     if features1.is_empty() || features2.is_empty() {
         return Vec::new();
     }
-    features1
+    let best_for_first: Vec<(usize, u32, u32)> = features1
         .par_iter()
-        .enumerate()
-        .filter_map(|(i, f1)| {
+        .map(|f1| {
             let mut best_dist = u32::MAX;
             let mut second_best_dist = u32::MAX;
             let mut best_idx = 0;
@@ -203,13 +244,34 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
                     second_best_dist = dist;
                 }
             }
+            (best_idx, best_dist, second_best_dist)
+        })
+        .collect();
+    let best_for_second: Vec<usize> = features2
+        .par_iter()
+        .map(|f2| {
+            let mut best_dist = u32::MAX;
+            let mut best_idx = 0;
+            for (i, f1) in features1.iter().enumerate() {
+                let dist = hamming_distance(&f2.descriptor, &f1.descriptor);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_idx = i;
+                }
+            }
+            best_idx
+        })
+        .collect();
+
+    best_for_first
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index1, (index2, best_dist, second_best_dist))| {
             if second_best_dist > 0
                 && (best_dist as f32 / second_best_dist as f32) < MATCH_RATIO_THRESHOLD
+                && best_for_second[index2] == index1
             {
-                Some(Match {
-                    index1: i,
-                    index2: best_idx,
-                })
+                Some(Match { index1, index2 })
             } else {
                 None
             }
@@ -222,10 +284,6 @@ pub fn find_homography_ransac(
     keypoints1: &[KeyPoint],
     keypoints2: &[KeyPoint],
 ) -> Option<(Matrix3<f64>, Vec<Match>)> {
-    let mut rng = rng();
-    let mut best_h: Option<Matrix3<f64>> = None;
-    let mut best_inliers: Vec<Match> = Vec::new();
-
     let points: Vec<(Point2<f64>, Point2<f64>)> = matches
         .iter()
         .map(|m| {
@@ -238,11 +296,30 @@ pub fn find_homography_ransac(
         })
         .collect();
 
+    let (homography, inlier_indices) =
+        find_homography_ransac_points(&points, RANSAC_INLIER_THRESHOLD)?;
+    let inliers = inlier_indices
+        .into_iter()
+        .map(|index| matches[index])
+        .collect();
+    Some((homography, inliers))
+}
+
+pub fn find_homography_ransac_points(
+    points: &[(Point2<f64>, Point2<f64>)],
+    inlier_threshold: f64,
+) -> Option<(Matrix3<f64>, Vec<usize>)> {
+    let mut rng = StdRng::seed_from_u64(
+        0x9E37_79B9_7F4A_7C15u64 ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93),
+    );
+    let mut best_h: Option<Matrix3<f64>> = None;
+    let mut best_inliers: Vec<usize> = Vec::new();
+
     if points.len() < 4 {
         return None;
     }
 
-    let ransac_inlier_threshold_sq = RANSAC_INLIER_THRESHOLD.powi(2);
+    let ransac_inlier_threshold_sq = inlier_threshold.powi(2);
 
     for _ in 0..RANSAC_ITERATIONS {
         let sample_indices: Vec<usize> = (0..points.len()).collect();
@@ -266,11 +343,13 @@ pub fn find_homography_ransac(
         }
 
         if let Some(h) = compute_homography(&sample_points) {
-            let current_inliers: Vec<Match> = matches
+            let Some(h_inverse) = h.try_inverse() else {
+                continue;
+            };
+            let current_inliers: Vec<usize> = points
                 .par_iter()
                 .enumerate()
-                .filter_map(|(i, m)| {
-                    let (p1, p2) = points[i];
+                .filter_map(|(i, (p1, p2))| {
                     let p1_h = nalgebra::Point3::new(p1.x, p1.y, 1.0);
                     let p2_h_transformed = h * p1_h;
                     if p2_h_transformed.z.abs() < 1e-8 {
@@ -282,8 +361,20 @@ pub fn find_homography_ransac(
                     );
                     let dist_sq =
                         (p2.x - p2_transformed.x).powi(2) + (p2.y - p2_transformed.y).powi(2);
-                    if dist_sq < ransac_inlier_threshold_sq {
-                        Some(*m)
+                    let p1_h_transformed = h_inverse * nalgebra::Point3::new(p2.x, p2.y, 1.0);
+                    if p1_h_transformed.z.abs() < 1e-8 {
+                        return None;
+                    }
+                    let p1_transformed = Point2::new(
+                        p1_h_transformed.x / p1_h_transformed.z,
+                        p1_h_transformed.y / p1_h_transformed.z,
+                    );
+                    let reverse_dist_sq =
+                        (p1.x - p1_transformed.x).powi(2) + (p1.y - p1_transformed.y).powi(2);
+                    if dist_sq < ransac_inlier_threshold_sq
+                        && reverse_dist_sq < ransac_inlier_threshold_sq
+                    {
+                        Some(i)
                     } else {
                         None
                     }
@@ -313,8 +404,12 @@ pub fn compute_homography(points: &[(Point2<f64>, Point2<f64>)]) -> Option<Matri
     if points.len() < 4 {
         return None;
     }
+    let source_points: Vec<Point2<f64>> = points.iter().map(|(source, _)| *source).collect();
+    let target_points: Vec<Point2<f64>> = points.iter().map(|(_, target)| *target).collect();
+    let (normalized_source, source_transform) = normalize_points(&source_points)?;
+    let (normalized_target, target_transform) = normalize_points(&target_points)?;
     let mut a_rows = Vec::with_capacity(points.len() * 2);
-    for (p1, p2) in points {
+    for (p1, p2) in normalized_source.iter().zip(normalized_target.iter()) {
         let (x, y) = (p1.x, p1.y);
         let (xp, yp) = (p2.x, p2.y);
         a_rows.push(nalgebra::RowDVector::from_vec(vec![
@@ -344,7 +439,56 @@ pub fn compute_homography(points: &[(Point2<f64>, Point2<f64>)]) -> Option<Matri
     let svd = SVD::new(a, true, true);
     let v_t = svd.v_t.expect("SVD failed to compute V_t");
     let h_vec = v_t.row(v_t.nrows() - 1).transpose();
-    Some(Matrix3::from_iterator(h_vec.iter().cloned()).transpose())
+    let normalized_h = Matrix3::from_iterator(h_vec.iter().cloned()).transpose();
+    let denormalized_h = target_transform
+        .try_inverse()
+        .unwrap_or_else(Matrix3::identity)
+        * normalized_h
+        * source_transform;
+    let scale = denormalized_h[(2, 2)];
+    if scale.abs() < 1e-12 {
+        Some(denormalized_h)
+    } else {
+        Some(denormalized_h / scale)
+    }
+}
+
+fn normalize_points(points: &[Point2<f64>]) -> Option<(Vec<Point2<f64>>, Matrix3<f64>)> {
+    if points.is_empty() {
+        return None;
+    }
+    let centroid = points
+        .iter()
+        .fold(Point2::new(0.0, 0.0), |sum, point| sum + point.coords)
+        / points.len() as f64;
+    let mean_distance = points
+        .iter()
+        .map(|point| (point - centroid).norm())
+        .sum::<f64>()
+        / points.len() as f64;
+    if mean_distance < 1e-12 {
+        return None;
+    }
+    let scale = 2.0f64.sqrt() / mean_distance;
+    let transform = Matrix3::new(
+        scale,
+        0.0,
+        -scale * centroid.x,
+        0.0,
+        scale,
+        -scale * centroid.y,
+        0.0,
+        0.0,
+        1.0,
+    );
+    let normalized = points
+        .iter()
+        .map(|point| {
+            let transformed = transform * nalgebra::Point3::new(point.x, point.y, 1.0);
+            Point2::new(transformed.x, transformed.y)
+        })
+        .collect();
+    Some((normalized, transform))
 }
 
 fn convert_gray_u8_to_f32(img: &GrayImage) -> ImageBuffer<Luma<f32>, Vec<f32>> {
@@ -354,98 +498,38 @@ fn convert_gray_u8_to_f32(img: &GrayImage) -> ImageBuffer<Luma<f32>, Vec<f32>> {
     })
 }
 
-fn build_integral_images(gray: &GrayImage) -> (Vec<u64>, Vec<u128>) {
-    let (width, height) = gray.dimensions();
-    let mut sat = vec![0u64; (width * height) as usize];
-    let mut sat_sq = vec![0u128; (width * height) as usize];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    for y in 0..height {
-        let mut row_sum = 0u64;
-        let mut row_sum_sq = 0u128;
-        for x in 0..width {
-            let pixel_val = gray.get_pixel(x, y)[0] as u64;
-            let pixel_val_sq = pixel_val as u128 * pixel_val as u128;
-            row_sum += pixel_val;
-            row_sum_sq += pixel_val_sq;
+    fn apply_homography(h: &Matrix3<f64>, point: Point2<f64>) -> Point2<f64> {
+        let transformed = h * nalgebra::Point3::new(point.x, point.y, 1.0);
+        Point2::new(transformed.x / transformed.z, transformed.y / transformed.z)
+    }
 
-            let idx = (y * width + x) as usize;
-            let above_idx = if y > 0 {
-                ((y - 1) * width + x) as usize
-            } else {
-                usize::MAX
-            };
+    #[test]
+    fn normalized_homography_remains_stable_at_full_resolution_coordinates() {
+        let expected = Matrix3::new(
+            1.08, 0.015, 1800.0, -0.012, 0.97, -620.0, 0.0000012, -0.0000008, 1.0,
+        );
+        let source = [
+            Point2::new(120.0, 80.0),
+            Point2::new(8800.0, 120.0),
+            Point2::new(9000.0, 5800.0),
+            Point2::new(160.0, 6000.0),
+            Point2::new(4200.0, 3000.0),
+            Point2::new(7200.0, 4400.0),
+        ];
+        let pairs: Vec<_> = source
+            .iter()
+            .copied()
+            .map(|point| (point, apply_homography(&expected, point)))
+            .collect();
 
-            sat[idx] = row_sum
-                + if above_idx != usize::MAX {
-                    sat[above_idx]
-                } else {
-                    0
-                };
-            sat_sq[idx] = row_sum_sq
-                + if above_idx != usize::MAX {
-                    sat_sq[above_idx]
-                } else {
-                    0
-                };
+        let fitted = compute_homography(&pairs).expect("six non-collinear points should fit");
+        for (source_point, target_point) in pairs {
+            let fitted_point = apply_homography(&fitted, source_point);
+            assert!((fitted_point - target_point).norm() < 1e-5);
         }
     }
-    (sat, sat_sq)
-}
-
-pub fn generate_low_detail_mask(gray_full: &GrayImage) -> GrayImage {
-    println!("    - Generating low-detail mask...");
-    let (width, height) = gray_full.dimensions();
-    let mut mask = GrayImage::new(width, height);
-    let (sat, sat_sq) = build_integral_images(gray_full);
-    let r = LOW_DETAIL_WINDOW_RADIUS as i32;
-
-    let get_sat_val = |s: &Vec<u64>, x: i32, y: i32| -> u64 {
-        if x < 0 || y < 0 {
-            0
-        } else {
-            s[(y as u32 * width + x as u32) as usize]
-        }
-    };
-    let get_sat_sq_val = |s: &Vec<u128>, x: i32, y: i32| -> u128 {
-        if x < 0 || y < 0 {
-            0
-        } else {
-            s[(y as u32 * width + x as u32) as usize]
-        }
-    };
-
-    mask.par_chunks_mut(width as usize)
-        .enumerate()
-        .for_each(|(y, row)| {
-            for x in 0..width as i32 {
-                let x1 = x - r - 1;
-                let y1 = y as i32 - r - 1;
-                let x2 = (x + r).min(width as i32 - 1);
-                let y2 = (y as i32 + r).min(height as i32 - 1);
-
-                let n_x = (x2 - (x1 + 1) + 1) as f64;
-                let n_y = (y2 - (y1 + 1) + 1) as f64;
-                let n = n_x * n_y;
-                if n < 1.0 {
-                    continue;
-                }
-
-                let sum = get_sat_val(&sat, x2, y2) + get_sat_val(&sat, x1, y1)
-                    - get_sat_val(&sat, x2, y1)
-                    - get_sat_val(&sat, x1, y2);
-                let sum_sq = get_sat_sq_val(&sat_sq, x2, y2) + get_sat_sq_val(&sat_sq, x1, y1)
-                    - get_sat_sq_val(&sat_sq, x2, y1)
-                    - get_sat_sq_val(&sat_sq, x1, y2);
-
-                let mean = sum as f64 / n;
-                let variance = (sum_sq as f64 / n) - mean.powi(2);
-
-                if variance < LOW_DETAIL_VARIANCE_THRESHOLD {
-                    row[x as usize] = 255;
-                } else {
-                    row[x as usize] = 0;
-                }
-            }
-        });
-    mask
 }

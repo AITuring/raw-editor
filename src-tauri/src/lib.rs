@@ -24,6 +24,7 @@ mod gpu_processing;
 mod hdr_deghosting;
 mod image_loader;
 mod image_processing;
+mod image_stack;
 mod inpainting;
 mod launch_request;
 mod lens_blur;
@@ -2283,6 +2284,7 @@ pub fn run() {
             export_task_token: Arc::new(Mutex::new(None)),
             hdr_result: Arc::new(Mutex::new(None)),
             panorama_result: Arc::new(Mutex::new(None)),
+            image_stack_result: Arc::new(Mutex::new(None)),
             denoise_result: Arc::new(Mutex::new(None)),
             indexing_task_handle: Mutex::new(None),
             lut_cache: Mutex::new(BudgetedCache::new(
@@ -2363,6 +2365,8 @@ pub fn run() {
             denoising::save_denoised_image,
             image_loader::load_image,
             image_loader::is_image_cached,
+            image_stack::process_image_stack,
+            image_stack::save_image_stack,
             panorama_stitching::stitch_panorama,
             panorama_stitching::save_panorama,
             export_processing::export_images,
