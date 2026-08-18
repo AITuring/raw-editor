@@ -5,6 +5,7 @@ use imageproc::filter::gaussian_blur_f32;
 use nalgebra::{Matrix3, Point2, SVD};
 use rand::prelude::*;
 use rayon::prelude::*;
+use std::collections::HashMap;
 
 const MAX_PROCESSING_DIMENSION: u32 = 2400;
 const FAST_THRESHOLD: u8 = 15;
@@ -99,26 +100,35 @@ fn non_maximal_suppression(corners: &[Corner], radius: f32) -> Vec<KeyPoint> {
     sorted_corners.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
     let mut result = Vec::new();
     let radius_sq = radius * radius;
-    let mut is_suppressed_grid = vec![false; sorted_corners.len()];
-    for i in 0..sorted_corners.len() {
-        if is_suppressed_grid[i] {
-            continue;
-        }
-        let corner_i = sorted_corners[i];
-        result.push(KeyPoint {
-            x: corner_i.x,
-            y: corner_i.y,
+    let cell_size = radius.max(1.0);
+    let mut accepted_by_cell: HashMap<(i32, i32), Vec<KeyPoint>> = HashMap::new();
+
+    for corner in sorted_corners {
+        let cell_x = (corner.x as f32 / cell_size).floor() as i32;
+        let cell_y = (corner.y as f32 / cell_size).floor() as i32;
+        let is_suppressed = (-1..=1).any(|cell_dy| {
+            (-1..=1).any(|cell_dx| {
+                accepted_by_cell
+                    .get(&(cell_x + cell_dx, cell_y + cell_dy))
+                    .is_some_and(|accepted| {
+                        accepted.iter().any(|point| {
+                            let dx = point.x as f32 - corner.x as f32;
+                            let dy = point.y as f32 - corner.y as f32;
+                            dx * dx + dy * dy < radius_sq
+                        })
+                    })
+            })
         });
-        for j in (i + 1)..sorted_corners.len() {
-            if is_suppressed_grid[j] {
-                continue;
-            }
-            let corner_j = sorted_corners[j];
-            let dx = corner_i.x as f32 - corner_j.x as f32;
-            let dy = corner_i.y as f32 - corner_j.y as f32;
-            if dx * dx + dy * dy < radius_sq {
-                is_suppressed_grid[j] = true;
-            }
+        if !is_suppressed {
+            let point = KeyPoint {
+                x: corner.x,
+                y: corner.y,
+            };
+            result.push(point);
+            accepted_by_cell
+                .entry((cell_x, cell_y))
+                .or_default()
+                .push(point);
         }
     }
     result

@@ -289,6 +289,7 @@ function App() {
     handleSelectSubfolder,
     handleSelectAlbum,
     handleOpenImage,
+    handlePickWorkflowImages,
     handleOpenImagePaths,
     handleOpenFolder,
     handleContinueSession,
@@ -296,6 +297,26 @@ function App() {
     clearThumbnailQueue,
     refs: navigationRefs,
   });
+
+  const handleOpenMultiImageWorkflow = useCallback(async () => {
+    const title = i18n.t('modals.imageStack.title');
+    const paths = await handlePickWorkflowImages(title);
+    if (paths.length === 0) return;
+
+    requestThumbnails(paths);
+    setUI({
+      imageStackModalState: {
+        error: null,
+        finalImageBase64: null,
+        isOpen: true,
+        isProcessing: false,
+        progressMessage: null,
+        sourcePaths: paths,
+        blendMode: 'focus',
+        alignmentMode: 'auto',
+      },
+    });
+  }, [handlePickWorkflowImages, requestThumbnails, setUI]);
 
   const {
     externalEditSession,
@@ -860,6 +881,7 @@ function App() {
                     handleContinueSession={handleContinueSession}
                     handleGoHome={handleGoHome}
                     handleOpenImage={handleOpenImage}
+                    handleOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
                     handleOpenFolder={handleOpenFolder}
                     handleImportClick={handleImportClick}
                     handleLibraryRefresh={handleLibraryRefresh}

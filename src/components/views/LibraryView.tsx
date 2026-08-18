@@ -31,6 +31,7 @@ interface LibraryViewProps {
   handleContinueSession: (...args: any) => void;
   handleGoHome: (...args: any) => void;
   handleOpenImage: (...args: any) => void;
+  handleOpenMultiImageWorkflow: () => void;
   handleOpenFolder: (...args: any) => void;
   handleImportClick: (path: string) => void;
   handleLibraryRefresh: () => Promise<void>;
@@ -59,6 +60,7 @@ export default function LibraryView({
   handleContinueSession,
   handleGoHome,
   handleOpenImage,
+  handleOpenMultiImageWorkflow,
   handleOpenFolder,
   handleImportClick,
   handleLibraryRefresh,
@@ -140,6 +142,7 @@ export default function LibraryView({
           onImportClick={() => handleImportClick(currentFolderPath as string)}
           onLibraryRefresh={handleLibraryRefresh}
           onOpenImage={handleOpenImage}
+          onOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
           onOpenFolder={handleOpenFolder}
           onSettingsChange={handleSettingsChange}
           onThumbnailAspectRatioChange={setThumbnailAspectRatio}

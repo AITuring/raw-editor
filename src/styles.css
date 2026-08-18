@@ -2746,6 +2746,42 @@
   }
 }
 
+.splash-actions-container {
+  container-type: inline-size;
+}
+
+.splash-action-grid {
+  display: grid;
+  grid-template-areas:
+    'folder image settings'
+    'stack stack stack';
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.splash-action-folder {
+  grid-area: folder;
+}
+
+.splash-action-image {
+  grid-area: image;
+}
+
+.splash-action-stack {
+  grid-area: stack;
+}
+
+.splash-action-settings {
+  grid-area: settings;
+}
+
+@container (min-width: 500px) {
+  .splash-action-grid {
+    grid-template-areas: 'folder image stack settings';
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+  }
+}
+
 @media (max-width: 1120px) {
   .editor-workflow-summary,
   .editor-zoom-control > :first-child {

@@ -1,4 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { CollisionDetection, DragEndEvent } from '@dnd-kit/core';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowDown,
@@ -7,6 +19,7 @@ import {
   Cylinder,
   Expand,
   Globe2,
+  GripVertical,
   Layers3,
   Loader2,
   Move,
@@ -20,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
 import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/useUIStore';
+import ImageStackResultPreview from './ImageStackResultPreview';
 
 interface ImageStackModalProps {
   error: string | null;
@@ -81,6 +95,135 @@ const ALIGNMENT_OPTIONS: Array<{
   },
 ];
 
+const closestLayerCenter: CollisionDetection = (args) =>
+  closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((container) => container.id !== args.active.id),
+  });
+
+interface SourceLayerItemProps {
+  count: number;
+  disabled: boolean;
+  dragLabel: string;
+  index: number;
+  moveDownLabel: string;
+  moveUpLabel: string;
+  onMove(index: number, direction: -1 | 1): void;
+  path: string;
+  thumbnail?: string;
+}
+
+function SourceLayerItem({
+  count,
+  disabled,
+  dragLabel,
+  index,
+  moveDownLabel,
+  moveUpLabel,
+  onMove,
+  path,
+  thumbnail,
+}: SourceLayerItemProps) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef: setDraggableNodeRef,
+    transform,
+  } = useDraggable({
+    disabled,
+    id: path,
+  });
+  const { isOver, setNodeRef: setDroppableNodeRef } = useDroppable({
+    disabled,
+    id: path,
+  });
+
+  const setCombinedRef = useCallback(
+    (node: HTMLLIElement | null) => {
+      setDraggableNodeRef(node);
+      setDroppableNodeRef(node);
+    },
+    [setDraggableNodeRef, setDroppableNodeRef],
+  );
+
+  const style: CSSProperties = {
+    opacity: isDragging ? 0.42 : 1,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  };
+
+  return (
+    <li
+      className={`relative flex min-h-14 items-center gap-1.5 rounded-lg border bg-bg-primary/30 px-1.5 py-1.5 transition-[border-color,background-color,box-shadow,opacity] ${
+        isOver && !isDragging
+          ? 'border-accent bg-accent/8 shadow-[inset_3px_0_0_var(--color-accent)]'
+          : 'border-border-color hover:bg-card-active/65'
+      }`}
+      ref={setCombinedRef}
+      style={style}
+    >
+      <div
+        {...listeners}
+        className={`flex min-w-0 flex-1 touch-none items-center gap-1.5 ${
+          disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        }`}
+      >
+        <button
+          {...attributes}
+          aria-label={dragLabel}
+          className="flex h-10 w-7 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-35"
+          disabled={disabled}
+          type="button"
+        >
+          <GripVertical aria-hidden="true" size={15} />
+        </button>
+        <span className="w-4 shrink-0 text-center text-[10px] font-semibold tabular-nums text-text-secondary">
+          {index + 1}
+        </span>
+        <div className="h-10 w-12 shrink-0 overflow-hidden rounded-md bg-bg-primary ring-1 ring-inset ring-border-color/60">
+          {thumbnail ? (
+            <img
+              alt={getDisplayName(path)}
+              className="h-full w-full object-cover"
+              draggable={false}
+              height={40}
+              loading="lazy"
+              src={thumbnail}
+              width={48}
+            />
+          ) : (
+            <div className="h-full w-full bg-card-active" />
+          )}
+        </div>
+        <span className="min-w-0 flex-1 truncate text-xs text-text-primary" title={getDisplayName(path)}>
+          {getDisplayName(path)}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <button
+          aria-label={moveUpLabel}
+          className="flex h-8 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-20"
+          disabled={index === 0 || disabled}
+          onClick={() => onMove(index, -1)}
+          type="button"
+        >
+          <ArrowUp aria-hidden="true" size={13} />
+        </button>
+        <button
+          aria-label={moveDownLabel}
+          className="flex h-8 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-20"
+          disabled={index === count - 1 || disabled}
+          onClick={() => onMove(index, 1)}
+          type="button"
+        >
+          <ArrowDown aria-hidden="true" size={13} />
+        </button>
+      </div>
+    </li>
+  );
+}
+
 export default function ImageStackModal({
   error,
   finalImageBase64,
@@ -105,9 +248,15 @@ export default function ImageStackModal({
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [show, setShow] = useState(false);
-  const mouseDownTarget = useRef<EventTarget | null>(null);
+  const [isPreviewFocused, setIsPreviewFocused] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const layerSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor),
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -115,6 +264,7 @@ export default function ImageStackModal({
     setBlendMode(initialBlendMode);
     setAlignmentMode(initialAlignmentMode);
     setSavedPath(null);
+    setIsPreviewFocused(false);
     setIsMounted(true);
     const timer = window.setTimeout(() => setShow(true), 10);
     return () => window.clearTimeout(timer);
@@ -134,16 +284,23 @@ export default function ImageStackModal({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!finalImageBase64) setIsPreviewFocused(false);
+  }, [finalImageBase64]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isProcessing && !isSaving) {
+      if (event.key === 'Escape' && isPreviewFocused) {
+        event.preventDefault();
+        setIsPreviewFocused(false);
+      } else if (event.key === 'Escape' && !isProcessing && !isSaving) {
         event.preventDefault();
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isProcessing, isSaving, onClose]);
+  }, [isOpen, isPreviewFocused, isProcessing, isSaving, onClose]);
 
   const selectedAlignment = useMemo(
     () => ALIGNMENT_OPTIONS.find((option) => option.value === alignmentMode) || ALIGNMENT_OPTIONS[0],
@@ -165,6 +322,23 @@ export default function ImageStackModal({
       onChange();
     },
     [onChange],
+  );
+
+  const handleLayerDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      if (!over || active.id === over.id || isProcessing) return;
+      const activeIndex = orderedPaths.indexOf(String(active.id));
+      const overIndex = orderedPaths.indexOf(String(over.id));
+      if (activeIndex < 0 || overIndex < 0) return;
+
+      const next = [...orderedPaths];
+      const [movedPath] = next.splice(activeIndex, 1);
+      next.splice(overIndex, 0, movedPath);
+      setOrderedPaths(next);
+      setSavedPath(null);
+      onChange();
+    },
+    [isProcessing, onChange, orderedPaths],
   );
 
   const handleProcess = () => {
@@ -189,50 +363,34 @@ export default function ImageStackModal({
   if (!isMounted) return null;
 
   const canProcess = orderedPaths.length >= 2 && !isProcessing && !isSaving;
+  const SelectedAlignmentIcon = selectedAlignment.icon;
 
   return (
     <div
       aria-modal="true"
       aria-describedby="image-stack-description"
       aria-labelledby="image-stack-title"
-      className={`fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/55 p-3 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none sm:p-6 ${
+      className={`fixed inset-0 z-50 overflow-hidden bg-surface transition-opacity duration-150 motion-reduce:transition-none ${
         show ? 'opacity-100' : 'opacity-0'
       }`}
-      onMouseDown={(event) => {
-        mouseDownTarget.current = event.target;
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && mouseDownTarget.current === event.currentTarget && !isProcessing) {
-          onClose();
-        }
-        mouseDownTarget.current = null;
-      }}
       role="dialog"
     >
       <motion.div
-        animate={
-          shouldReduceMotion
-            ? { opacity: show ? 1 : 0 }
-            : show
-              ? { opacity: 1, scale: 1, y: 0 }
-              : { opacity: 0, scale: 0.97, y: 12 }
-        }
-        className="flex max-h-[min(900px,calc(100dvh-24px))] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border-color bg-surface shadow-2xl sm:max-h-[min(900px,calc(100dvh-48px))]"
+        animate={shouldReduceMotion ? { opacity: show ? 1 : 0 } : { opacity: show ? 1 : 0, y: show ? 0 : 6 }}
+        className="flex h-dvh w-full flex-col overflow-hidden bg-surface"
         initial={false}
-        onClick={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
-        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border-color px-4 py-3 sm:px-6">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border-color bg-surface px-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
-              <Layers3 aria-hidden="true" size={20} />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+              <Layers3 aria-hidden="true" size={18} />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-text-primary sm:text-lg" id="image-stack-title">
+              <h2 className="truncate text-sm font-semibold text-text-primary" id="image-stack-title">
                 {t('modals.imageStack.title')}
               </h2>
-              <p className="truncate text-xs text-text-secondary" id="image-stack-description">
+              <p className="truncate text-[11px] text-text-secondary" id="image-stack-description">
                 {t('modals.imageStack.subtitle')}
               </p>
             </div>
@@ -249,250 +407,78 @@ export default function ImageStackModal({
           </button>
         </header>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="min-h-0 overscroll-contain overflow-y-auto border-b border-border-color bg-bg-primary/35 p-4 lg:border-b-0 lg:border-r sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.sourceLayers')}</h3>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {t('modals.imageStack.sourceCount', { count: orderedPaths.length })}
-                </p>
-              </div>
-              <span className="rounded-full bg-card-active px-2 py-1 text-[11px] font-medium text-text-secondary">
-                {t('modals.imageStack.orderHint')}
-              </span>
-            </div>
-
-            <ol className="space-y-2" aria-label={t('modals.imageStack.sourceLayers')}>
-              {orderedPaths.map((path, index) => (
-                <li
-                  className="flex items-center gap-2 rounded-xl border border-border-color bg-surface px-2 py-2"
-                  key={`${path}-${index}`}
-                >
-                  <span className="w-5 shrink-0 text-center text-[11px] font-semibold text-text-secondary">
-                    {index + 1}
-                  </span>
-                  <div className="h-11 w-14 shrink-0 overflow-hidden rounded-lg bg-bg-primary">
-                    {thumbnails[path] ? (
-                      <img
-                        alt={getDisplayName(path)}
-                        className="h-full w-full object-cover"
-                        height={44}
-                        loading="lazy"
-                        src={thumbnails[path]}
-                        width={56}
-                      />
-                    ) : (
-                      <div className="h-full w-full bg-card-active" />
-                    )}
+        <div
+          className={`grid min-h-0 flex-1 ${
+            isPreviewFocused ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_clamp(304px,24vw,368px)]'
+          }`}
+        >
+          <main className="relative min-h-0 overflow-hidden bg-[#101010]">
+            <section className="relative h-full min-h-0 overflow-hidden">
+              <div className="flex h-full min-h-0 items-center justify-center">
+                {error ? (
+                  <div className="max-w-md p-6 text-center">
+                    <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-status-error/15 text-status-error">
+                      <X aria-hidden="true" size={22} />
+                    </div>
+                    <h3 className="text-sm font-semibold text-white" id="image-stack-error-title">
+                      {t('modals.imageStack.failed')}
+                    </h3>
+                    <p className="mt-2 break-words rounded-lg bg-black/35 p-3 text-xs leading-relaxed text-white/65">
+                      <span aria-live="assertive">{error}</span>
+                    </p>
                   </div>
-                  <span className="min-w-0 flex-1 truncate text-xs text-text-primary" title={getDisplayName(path)}>
-                    {getDisplayName(path)}
-                  </span>
-                  <div className="flex shrink-0 flex-col gap-0.5">
-                    <button
-                      aria-label={t('modals.imageStack.moveUp', { number: index + 1 })}
-                      className="rounded p-1 text-text-secondary hover:bg-card-active hover:text-text-primary disabled:opacity-25"
-                      disabled={index === 0 || isProcessing}
-                      onClick={() => movePath(index, -1)}
-                      type="button"
-                    >
-                      <ArrowUp aria-hidden="true" size={13} />
-                    </button>
-                    <button
-                      aria-label={t('modals.imageStack.moveDown', { number: index + 1 })}
-                      className="rounded p-1 text-text-secondary hover:bg-card-active hover:text-text-primary disabled:opacity-25"
-                      disabled={index === orderedPaths.length - 1 || isProcessing}
-                      onClick={() => movePath(index, 1)}
-                      type="button"
-                    >
-                      <ArrowDown aria-hidden="true" size={13} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-
-            <div className="mt-5 rounded-xl border border-border-color bg-surface/70 p-3 text-xs leading-relaxed text-text-secondary">
-              {t('modals.imageStack.sourceHint')}
-            </div>
-          </aside>
-
-          <main className="min-h-0 overscroll-contain overflow-y-auto p-4 sm:p-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-              <section className="min-h-[300px] overflow-hidden rounded-2xl border border-border-color bg-[#101010] sm:min-h-[430px]">
-                <div className="flex h-full min-h-[300px] items-center justify-center p-3 sm:min-h-[430px]">
-                  {error ? (
-                    <div className="max-w-md text-center">
-                      <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-status-error/15 text-status-error">
-                        <X aria-hidden="true" size={22} />
-                      </div>
-                      <h3 className="text-sm font-semibold text-text-primary" id="image-stack-error-title">
-                        {t('modals.imageStack.failed')}
-                      </h3>
-                      <p className="mt-2 break-words rounded-lg bg-black/25 p-3 text-xs leading-relaxed text-text-secondary">
-                        <span aria-live="assertive">{error}</span>
-                      </p>
-                    </div>
-                  ) : finalImageBase64 ? (
-                    <div className="relative flex h-full w-full items-center justify-center">
-                      <img
-                        alt={t('modals.imageStack.resultAlt')}
-                        className="max-h-[520px] max-w-full object-contain"
-                        height={520}
-                        src={finalImageBase64}
-                        width={900}
-                      />
-                      <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] text-white/85 backdrop-blur-sm">
-                        {blendMode === 'focus'
-                          ? t('modals.imageStack.focusStackResult')
-                          : t('modals.imageStack.panoramaResult')}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="relative flex h-full w-full max-w-2xl items-center justify-center">
-                      {orderedPaths.slice(0, 5).map((path, index) => (
-                        <div
-                          className="absolute h-[68%] w-[64%] overflow-hidden rounded-xl border border-white/20 bg-[#1c1c1c] shadow-2xl"
-                          key={`${path}-preview-${index}`}
-                          style={{
-                            transform: `translate(${(index - 2) * 18}px, ${(2 - index) * 10}px) rotate(${(index - 2) * 1.8}deg)`,
-                            zIndex: index,
-                          }}
-                        >
-                          {thumbnails[path] ? (
-                            <img
-                              alt={getDisplayName(path)}
-                              className="h-full w-full object-cover opacity-90"
-                              height={360}
-                              loading="lazy"
-                              src={thumbnails[path]}
-                              width={520}
-                            />
-                          ) : (
-                            <div className="h-full w-full bg-card-active" />
-                          )}
-                        </div>
-                      ))}
-                      <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/65 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm">
-                        {t('modals.imageStack.readyToProcess')}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-border-color bg-bg-primary/30 p-4">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.workflow')}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                    {t('modals.imageStack.workflowHint')}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('modals.imageStack.workflow')}>
-                  <button
-                    aria-pressed={blendMode === 'focus'}
-                    className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                ) : finalImageBase64 ? (
+                  <ImageStackResultPreview
+                    alignmentLabel={translateAlignment(selectedAlignment.labelKey)}
+                    alt={t('modals.imageStack.resultAlt')}
+                    isFocused={isPreviewFocused}
+                    modeLabel={
                       blendMode === 'focus'
-                        ? 'border-accent bg-accent/10 text-text-primary'
-                        : 'border-border-color bg-surface text-text-secondary hover:bg-card-active'
-                    }`}
-                    disabled={isProcessing}
-                    onClick={() => {
-                      setBlendMode('focus');
-                      setSavedPath(null);
-                      onChange();
-                    }}
-                    type="button"
-                  >
-                    <Layers3 aria-hidden="true" size={18} />
-                    <span className="mt-2 block text-xs font-semibold">{t('modals.imageStack.focusStack')}</span>
-                    <span className="mt-1 block text-[11px] leading-relaxed opacity-75">
-                      {t('modals.imageStack.focusStackDescription')}
-                    </span>
-                  </button>
-                  <button
-                    aria-pressed={blendMode === 'panorama'}
-                    className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                      blendMode === 'panorama'
-                        ? 'border-accent bg-accent/10 text-text-primary'
-                        : 'border-border-color bg-surface text-text-secondary hover:bg-card-active'
-                    }`}
-                    disabled={isProcessing}
-                    onClick={() => {
-                      setBlendMode('panorama');
-                      setSavedPath(null);
-                      onChange();
-                    }}
-                    type="button"
-                  >
-                    <Expand aria-hidden="true" size={18} />
-                    <span className="mt-2 block text-xs font-semibold">{t('modals.imageStack.panorama')}</span>
-                    <span className="mt-1 block text-[11px] leading-relaxed opacity-75">
-                      {t('modals.imageStack.panoramaDescription')}
-                    </span>
-                  </button>
-                </div>
-
-                <div className="mt-5 border-t border-border-color pt-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.alignment')}</h3>
-                      <p className="mt-1 text-xs text-text-secondary">{t('modals.imageStack.alignmentHint')}</p>
+                        ? t('modals.imageStack.focusStackResult')
+                        : t('modals.imageStack.panoramaResult')
+                    }
+                    onFocusedChange={setIsPreviewFocused}
+                    src={finalImageBase64}
+                  />
+                ) : (
+                  <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+                    {orderedPaths.slice(0, 5).map((path, index) => (
+                      <div
+                        className="absolute h-[70%] max-h-[720px] w-[68%] max-w-[1040px] overflow-hidden rounded-lg border border-white/20 bg-[#1c1c1c] shadow-2xl"
+                        key={`${path}-preview-${index}`}
+                        style={{
+                          transform: `translate(${(index - 2) * 18}px, ${(2 - index) * 10}px) rotate(${(index - 2) * 1.5}deg)`,
+                          zIndex: index,
+                        }}
+                      >
+                        {thumbnails[path] ? (
+                          <img
+                            alt={getDisplayName(path)}
+                            className="h-full w-full object-cover opacity-90"
+                            draggable={false}
+                            height={720}
+                            loading="lazy"
+                            src={thumbnails[path]}
+                            width={1040}
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-card-active" />
+                        )}
+                      </div>
+                    ))}
+                    <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-md bg-black/70 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm">
+                      {t('modals.imageStack.readyToProcess')}
                     </div>
-                    <span className="rounded-full bg-card-active px-2 py-1 text-[11px] text-text-secondary">
-                      {translateAlignment(selectedAlignment.labelKey)}
-                    </span>
                   </div>
-                  <div className="space-y-1.5" role="radiogroup" aria-label={t('modals.imageStack.alignment')}>
-                    {ALIGNMENT_OPTIONS.map((option) => {
-                      const Icon = option.icon;
-                      const isSelected = option.value === alignmentMode;
-                      return (
-                        <button
-                          aria-checked={isSelected}
-                          className={`flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                            isSelected
-                              ? 'border-accent bg-accent/10 text-text-primary'
-                              : 'border-transparent text-text-secondary hover:border-border-color hover:bg-card-active'
-                          }`}
-                          disabled={isProcessing}
-                          key={option.value}
-                          onClick={() => {
-                            setAlignmentMode(option.value);
-                            setSavedPath(null);
-                            onChange();
-                          }}
-                          role="radio"
-                          type="button"
-                        >
-                          <span
-                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                              isSelected ? 'bg-accent text-white' : 'bg-card-active'
-                            }`}
-                          >
-                            <Icon aria-hidden="true" size={15} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium">{translateAlignment(option.labelKey)}</span>
-                            <span className="mt-0.5 block truncate text-[10px] opacity-70">
-                              {translateAlignment(option.descriptionKey)}
-                            </span>
-                          </span>
-                          {isSelected && <Check aria-hidden="true" className="shrink-0 text-accent" size={15} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-            </div>
+                )}
+              </div>
+            </section>
 
             <AnimatePresence initial={false} mode="wait">
               {isProcessing && (
                 <motion.div
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-4 rounded-xl border border-border-color bg-bg-primary/40 p-3"
+                  className="absolute left-1/2 top-4 z-30 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-xl border border-white/15 bg-black/75 p-3 text-white shadow-2xl backdrop-blur-md"
                   exit={{ opacity: 0, y: -4 }}
                   initial={{ opacity: 0, y: 4 }}
                   role="status"
@@ -508,7 +494,7 @@ export default function ImageStackModal({
             {savedPath && (
               <div
                 aria-live="polite"
-                className="mt-4 flex items-center gap-2 rounded-xl border border-status-success/30 bg-status-success/10 px-3 py-2 text-xs text-status-success"
+                className="absolute left-1/2 top-4 z-30 flex w-[min(520px,calc(100%-32px))] -translate-x-1/2 items-center gap-2 rounded-xl border border-status-success/35 bg-black/80 px-3 py-2 text-xs text-status-success shadow-2xl backdrop-blur-md"
                 role="status"
               >
                 <Check aria-hidden="true" size={15} />
@@ -523,13 +509,167 @@ export default function ImageStackModal({
               </div>
             )}
           </main>
+
+          {!isPreviewFocused && (
+            <aside className="min-h-0 overscroll-contain overflow-y-auto border-l border-border-color bg-surface">
+              <section className="p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.sourceLayers')}</h3>
+                    <p className="mt-0.5 text-xs text-text-secondary">
+                      {t('modals.imageStack.sourceCount', { count: orderedPaths.length })}
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
+                    {t('modals.imageStack.orderHint')}
+                  </span>
+                </div>
+
+                <DndContext
+                  collisionDetection={closestLayerCenter}
+                  id="image-stack-layers-dnd"
+                  onDragEnd={handleLayerDragEnd}
+                  sensors={layerSensors}
+                >
+                  <ol className="space-y-1.5" aria-label={t('modals.imageStack.sourceLayers')}>
+                    {orderedPaths.map((path, index) => (
+                      <SourceLayerItem
+                        count={orderedPaths.length}
+                        disabled={isProcessing || isSaving}
+                        dragLabel={t('modals.imageStack.dragLayer', { number: index + 1 })}
+                        index={index}
+                        key={path}
+                        moveDownLabel={t('modals.imageStack.moveDown', { number: index + 1 })}
+                        moveUpLabel={t('modals.imageStack.moveUp', { number: index + 1 })}
+                        onMove={movePath}
+                        path={path}
+                        thumbnail={thumbnails[path]}
+                      />
+                    ))}
+                  </ol>
+                </DndContext>
+
+                <p className="mt-3 border-t border-border-color pt-3 text-[11px] leading-relaxed text-text-secondary">
+                  {t('modals.imageStack.sourceHint')}
+                </p>
+              </section>
+
+              <section className="border-t border-border-color p-4">
+                <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.workflow')}</h3>
+                <div
+                  className="mt-2 grid grid-cols-2 rounded-lg border border-border-color bg-bg-primary/45 p-1"
+                  role="group"
+                  aria-label={t('modals.imageStack.workflow')}
+                >
+                  <button
+                    aria-pressed={blendMode === 'focus'}
+                    className={`flex h-10 items-center justify-center gap-2 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                      blendMode === 'focus'
+                        ? 'bg-surface text-text-primary shadow-sm'
+                        : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
+                    }`}
+                    disabled={isProcessing}
+                    onClick={() => {
+                      setBlendMode('focus');
+                      setSavedPath(null);
+                      onChange();
+                    }}
+                    type="button"
+                  >
+                    <Layers3 aria-hidden="true" size={16} />
+                    <span>{t('modals.imageStack.focusStack')}</span>
+                    {blendMode === 'focus' && <Check aria-hidden="true" className="text-accent" size={14} />}
+                  </button>
+                  <button
+                    aria-pressed={blendMode === 'panorama'}
+                    className={`flex h-10 items-center justify-center gap-2 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                      blendMode === 'panorama'
+                        ? 'bg-surface text-text-primary shadow-sm'
+                        : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
+                    }`}
+                    disabled={isProcessing}
+                    onClick={() => {
+                      setBlendMode('panorama');
+                      setSavedPath(null);
+                      onChange();
+                    }}
+                    type="button"
+                  >
+                    <Expand aria-hidden="true" size={16} />
+                    <span>{t('modals.imageStack.panorama')}</span>
+                    {blendMode === 'panorama' && <Check aria-hidden="true" className="text-accent" size={14} />}
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
+                  {blendMode === 'focus'
+                    ? t('modals.imageStack.focusStackDescription')
+                    : t('modals.imageStack.panoramaDescription')}
+                </p>
+              </section>
+
+              <section className="border-t border-border-color p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3
+                    className="text-sm font-semibold text-text-primary"
+                    data-tooltip={t('modals.imageStack.alignmentHint')}
+                  >
+                    {t('modals.imageStack.alignment')}
+                  </h3>
+                  <span className="flex items-center gap-1.5 rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
+                    <SelectedAlignmentIcon aria-hidden="true" size={12} />
+                    {translateAlignment(selectedAlignment.labelKey)}
+                  </span>
+                </div>
+                <div
+                  className="mt-2 grid grid-cols-2 gap-1.5"
+                  role="radiogroup"
+                  aria-label={t('modals.imageStack.alignment')}
+                >
+                  {ALIGNMENT_OPTIONS.map((option) => {
+                    const Icon = option.icon;
+                    const isSelected = option.value === alignmentMode;
+                    return (
+                      <button
+                        aria-checked={isSelected}
+                        className={`flex h-11 min-w-0 items-center gap-2 rounded-lg border px-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                          isSelected
+                            ? 'border-accent bg-accent/10 text-text-primary'
+                            : 'border-border-color/60 text-text-secondary hover:border-border-color hover:bg-card-active hover:text-text-primary'
+                        }`}
+                        data-tooltip={translateAlignment(option.descriptionKey)}
+                        disabled={isProcessing}
+                        key={option.value}
+                        onClick={() => {
+                          setAlignmentMode(option.value);
+                          setSavedPath(null);
+                          onChange();
+                        }}
+                        role="radio"
+                        type="button"
+                      >
+                        <Icon aria-hidden="true" className="shrink-0" size={15} />
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                          {translateAlignment(option.labelKey)}
+                        </span>
+                        {isSelected && <Check aria-hidden="true" className="shrink-0 text-accent" size={13} />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-text-secondary">
+                  <SelectedAlignmentIcon aria-hidden="true" className="mt-0.5 shrink-0" size={13} />
+                  <span>{translateAlignment(selectedAlignment.descriptionKey)}</span>
+                </p>
+              </section>
+            </aside>
+          )}
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border-color bg-bg-primary/25 px-4 py-3 sm:px-6">
+        <footer className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-border-color bg-surface px-4">
           <p className="text-xs text-text-secondary">
             {t('modals.imageStack.selectedSummary', { count: orderedPaths.length })}
           </p>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex justify-end gap-2">
             <button
               className="rounded-lg px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary disabled:opacity-40"
               disabled={isProcessing || isSaving}

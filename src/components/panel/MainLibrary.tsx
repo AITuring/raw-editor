@@ -12,6 +12,7 @@ import {
   Settings,
   Search,
   LayoutGrid,
+  Layers3,
   Columns,
   SlidersHorizontal,
   Rows3,
@@ -78,6 +79,7 @@ interface MainLibraryProps {
   onImportClick(): void;
   onLibraryRefresh(): void;
   onOpenImage(): void;
+  onOpenMultiImageWorkflow(): void;
   onOpenFolder(): void;
   onSettingsChange(settings: AppSettings): Promise<void>;
   onThumbnailAspectRatioChange(aspectRatio: ThumbnailAspectRatio): void;
@@ -458,44 +460,59 @@ export default function MainLibrary(props: MainLibraryProps) {
                         t('library.splash.descriptionDesktop')
                       )}
                     </Text>
-                    <div className="flex flex-col w-full gap-4 relative z-10">
+                    <div className="splash-actions-container relative z-10 flex w-full flex-col gap-4">
                       {hasLastPath && (
                         <Button
-                          className="rounded-md h-11 w-full flex justify-center items-center shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                          className="flex h-11 w-full justify-center rounded-md shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
                           onClick={props.onContinueSession}
                           size="lg"
                         >
-                          <RefreshCw size={20} className="mr-2" /> {t('library.splash.continueSession')}
+                          <RefreshCw aria-hidden="true" className="shrink-0" size={20} />
+                          <span className="truncate">{t('library.splash.continueSession')}</span>
                         </Button>
                       )}
-                      <div className="flex items-center gap-2">
+                      <div className={props.isAndroid ? 'flex items-center gap-2' : 'splash-action-grid'}>
                         <Button
-                          className={`rounded-md grow flex justify-center items-center shadow-md h-11 transition-transform duration-200 hover:scale-[1.01] active:scale-[.98] ${
+                          className={`splash-action-folder flex h-11 min-w-0 justify-center rounded-md shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98] ${
                             hasLastPath ? 'bg-surface text-text-primary' : ''
                           }`}
                           onClick={props.onOpenFolder}
                           size="lg"
                         >
-                          <Folder size={20} className="mr-2" />
-                          {props.isAndroid
-                            ? t('library.splash.openLibrary')
-                            : hasLastPath
-                              ? t('library.splash.addFolder')
-                              : t('library.splash.openFolder')}
+                          <Folder aria-hidden="true" className="shrink-0" size={20} />
+                          <span className="truncate">
+                            {props.isAndroid
+                              ? t('library.splash.openLibrary')
+                              : hasLastPath
+                                ? t('library.splash.addFolder')
+                                : t('library.splash.openFolder')}
+                          </span>
                         </Button>
                         {!props.isAndroid && (
                           <Button
-                            className="rounded-md grow flex justify-center items-center bg-surface text-text-primary shadow-md h-11 transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                            className="splash-action-image flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
                             onClick={props.onOpenImage}
                             size="lg"
                           >
-                            <ImagePlus aria-hidden="true" size={20} className="mr-2" />
-                            {t('library.splash.openImage')}
+                            <ImagePlus aria-hidden="true" className="shrink-0" size={20} />
+                            <span className="truncate">{t('library.splash.openImage')}</span>
+                          </Button>
+                        )}
+                        {!props.isAndroid && (
+                          <Button
+                            className="splash-action-stack flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
+                            data-tooltip={t('library.splash.multiImageSelectionHint')}
+                            onClick={props.onOpenMultiImageWorkflow}
+                            size="lg"
+                            type="button"
+                          >
+                            <Layers3 aria-hidden="true" className="shrink-0" size={20} />
+                            <span className="truncate">{t('modals.imageStack.title')}</span>
                           </Button>
                         )}
                         <Button
                           aria-label={t('settings.general.title')}
-                          className="px-3 bg-surface text-text-primary shadow-md h-11 transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
+                          className="splash-action-settings h-11 w-11 shrink-0 bg-surface px-0 text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
                           onClick={() => setUI({ isSettingsOpen: true })}
                           size="lg"
                           data-tooltip={t('settings.general.title')}

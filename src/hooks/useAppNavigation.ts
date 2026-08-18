@@ -551,6 +551,39 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     }
   }, [handleOpenImagePaths]);
 
+  const handlePickWorkflowImages = useCallback(async (title: string): Promise<string[]> => {
+    try {
+      const supportedTypes = await loadSupportedImageTypes();
+      const rawExtensions = normalizeExtensions(supportedTypes.raw);
+      const nonRawExtensions = normalizeExtensions(supportedTypes.nonRaw);
+      const allExtensions = Array.from(new Set([...rawExtensions, ...nonRawExtensions]));
+      const selected = await open({
+        defaultPath: await homeDir(),
+        filters: [
+          { name: i18n.t('library.import.allSupportedImages'), extensions: allExtensions },
+          { name: 'RAW', extensions: rawExtensions },
+          { name: 'JPEG / PNG / TIFF', extensions: nonRawExtensions },
+        ],
+        multiple: true,
+        title,
+      });
+
+      const paths = Array.isArray(selected) ? selected : typeof selected === 'string' ? [selected] : [];
+      if (paths.length === 0) return [];
+
+      if (paths.length < 2 || paths.length > 30) {
+        toast.info(i18n.t('library.splash.multiImageSelectionHint'));
+        return [];
+      }
+
+      return paths;
+    } catch (error) {
+      console.error('Failed to open multi-image workflow dialog:', error);
+      toast.error(i18n.t('library.import.openFailed'));
+      return [];
+    }
+  }, []);
+
   const handleOpenFolder = async () => {
     const { osPlatform, appSettings, handleSettingsChange } = useSettingsStore.getState();
     const { rootPaths, folderTrees, setLibrary } = useLibraryStore.getState();
@@ -708,6 +741,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     handleSelectSubfolder,
     handleSelectAlbum,
     handleOpenImage,
+    handlePickWorkflowImages,
     handleOpenImagePaths,
     handleOpenFolder,
     handleContinueSession,

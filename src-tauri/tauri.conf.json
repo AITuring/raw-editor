@@ -27,7 +27,7 @@
       "capabilities": ["default"],
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPCACHE/thumbnails/*", "$APPDATA/watermarks/*"]
+        "scope": ["$APPCACHE/thumbnails/*", "$APPCACHE/image-stack-previews/*", "$APPDATA/watermarks/*"]
       }
     },
     "macOSPrivateApi": true

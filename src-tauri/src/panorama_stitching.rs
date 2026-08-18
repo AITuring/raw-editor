@@ -5,6 +5,7 @@ use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
 use image::{DynamicImage, GenericImageView, Rgb32FImage};
 use nalgebra::Matrix3;
+use rand::prelude::*;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
@@ -24,6 +25,9 @@ const FULL_RES_RANSAC_INLIER_THRESHOLD: f64 = 12.0;
 const FULL_RES_REFINEMENT_THRESHOLD: f64 = 8.0;
 const MATCH_REFINE_PATCH_RADIUS: i32 = 6;
 const MATCH_REFINE_SEARCH_RADIUS: i32 = 10;
+const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
+const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
+const FOCUS_MODEL_MIN_INLIERS: usize = 8;
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPoint {
@@ -386,6 +390,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             keypoints2[matched.index2],
                             projection,
                             &h_projected,
+                            blend_mode == BlendMode::FocusStack,
                         )
                         .unwrap_or(projected_match_points[index])
                     })
@@ -420,6 +425,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 );
                 let h_full = if alignment_mode == AlignmentMode::Position {
                     estimate_translation(&inlier_points)
+                } else if blend_mode == BlendMode::FocusStack {
+                    select_focus_stack_transform(
+                        &h_refined,
+                        &inlier_points,
+                        image_data[i].image.dimensions(),
+                        alignment_mode,
+                    )
                 } else {
                     h_refined
                 };
@@ -531,6 +543,364 @@ fn estimate_translation(points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)
     Matrix3::new(1.0, 0.0, median(&dx), 0.0, 1.0, median(&dy), 0.0, 0.0, 1.0)
 }
 
+fn estimate_similarity(
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+) -> Option<Matrix3<f64>> {
+    if points.len() < 2 {
+        return None;
+    }
+    let count = points.len() as f64;
+    let source_center = points
+        .iter()
+        .fold(nalgebra::Vector2::zeros(), |sum, (source, _)| {
+            sum + source.coords
+        })
+        / count;
+    let target_center = points
+        .iter()
+        .fold(nalgebra::Vector2::zeros(), |sum, (_, target)| {
+            sum + target.coords
+        })
+        / count;
+
+    let mut denominator = 0.0;
+    let mut dot = 0.0;
+    let mut cross = 0.0;
+    for (source, target) in points {
+        let source_delta = source.coords - source_center;
+        let target_delta = target.coords - target_center;
+        denominator += source_delta.norm_squared();
+        dot += source_delta.x * target_delta.x + source_delta.y * target_delta.y;
+        cross += source_delta.x * target_delta.y - source_delta.y * target_delta.x;
+    }
+    if denominator <= f64::EPSILON {
+        return None;
+    }
+    let a = dot / denominator;
+    let b = cross / denominator;
+    let translation_x = target_center.x - a * source_center.x + b * source_center.y;
+    let translation_y = target_center.y - b * source_center.x - a * source_center.y;
+    let transform = Matrix3::new(a, -b, translation_x, b, a, translation_y, 0.0, 0.0, 1.0);
+    transform
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(transform)
+}
+
+fn estimate_affine(
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+) -> Option<Matrix3<f64>> {
+    if points.len() < 3 {
+        return None;
+    }
+    let mut design_data = Vec::with_capacity(points.len() * 3);
+    let mut target_x = Vec::with_capacity(points.len());
+    let mut target_y = Vec::with_capacity(points.len());
+    for (source, target) in points {
+        design_data.extend_from_slice(&[source.x, source.y, 1.0]);
+        target_x.push(target.x);
+        target_y.push(target.y);
+    }
+    let design = nalgebra::DMatrix::from_row_slice(points.len(), 3, &design_data);
+    let decomposition = design.svd(true, true);
+    let x_solution = decomposition
+        .solve(&nalgebra::DVector::from_vec(target_x), 1e-10)
+        .ok()?;
+    let y_solution = decomposition
+        .solve(&nalgebra::DVector::from_vec(target_y), 1e-10)
+        .ok()?;
+    let transform = Matrix3::new(
+        x_solution[0],
+        x_solution[1],
+        x_solution[2],
+        y_solution[0],
+        y_solution[1],
+        y_solution[2],
+        0.0,
+        0.0,
+        1.0,
+    );
+    transform
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(transform)
+}
+
+fn transformed_point(
+    transform: &Matrix3<f64>,
+    point: nalgebra::Point2<f64>,
+) -> Option<nalgebra::Point2<f64>> {
+    let mapped = transform * nalgebra::Point3::new(point.x, point.y, 1.0);
+    if mapped.z.abs() < 1e-8 {
+        return None;
+    }
+    let mapped = nalgebra::Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+    (mapped.x.is_finite() && mapped.y.is_finite()).then_some(mapped)
+}
+
+fn transform_is_stable_for_focus_stack(transform: &Matrix3<f64>, dimensions: (u32, u32)) -> bool {
+    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
+    if width <= 1.0 || height <= 1.0 || transform.try_inverse().is_none() {
+        return false;
+    }
+    let source_corners = [
+        nalgebra::Point2::new(0.0, 0.0),
+        nalgebra::Point2::new(width, 0.0),
+        nalgebra::Point2::new(width, height),
+        nalgebra::Point2::new(0.0, height),
+    ];
+    let Some(corners) = source_corners
+        .into_iter()
+        .map(|point| transformed_point(transform, point))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+
+    let top = (corners[1] - corners[0]).norm() / width;
+    let right = (corners[2] - corners[1]).norm() / height;
+    let bottom = (corners[2] - corners[3]).norm() / width;
+    let left = (corners[3] - corners[0]).norm() / height;
+    let edge_scales = [top, right, bottom, left];
+    if edge_scales
+        .iter()
+        .any(|scale| !scale.is_finite() || *scale < 0.65 || *scale > 1.45)
+    {
+        return false;
+    }
+    let min_scale = edge_scales.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_scale = edge_scales
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    if max_scale / min_scale > 1.18 {
+        return false;
+    }
+
+    let top_vector = corners[1] - corners[0];
+    let left_vector = corners[3] - corners[0];
+    let orthogonality = top_vector.dot(&left_vector) / (top_vector.norm() * left_vector.norm());
+    if !orthogonality.is_finite() || orthogonality.abs() > 0.22 {
+        return false;
+    }
+
+    let signed_double_area = corners
+        .iter()
+        .zip(corners.iter().cycle().skip(1))
+        .take(4)
+        .map(|(a, b)| a.x * b.y - b.x * a.y)
+        .sum::<f64>();
+    let area_ratio = signed_double_area / (2.0 * width * height);
+    area_ratio.is_finite() && (0.5..=2.0).contains(&area_ratio)
+}
+
+fn median_symmetric_error(
+    transform: &Matrix3<f64>,
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+) -> f64 {
+    let Some(inverse) = transform.try_inverse() else {
+        return f64::INFINITY;
+    };
+    let mut errors: Vec<f64> = points
+        .iter()
+        .map(|(source, target)| symmetric_point_error(transform, &inverse, *source, *target))
+        .filter(|error| error.is_finite())
+        .collect();
+    if errors.is_empty() {
+        return f64::INFINITY;
+    }
+    errors.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    errors[errors.len() / 2]
+}
+
+#[derive(Debug, Clone)]
+struct RobustTransformFit {
+    transform: Matrix3<f64>,
+    inlier_indices: Vec<usize>,
+    median_error: f64,
+}
+
+fn symmetric_inlier_indices(
+    transform: &Matrix3<f64>,
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+    threshold: f64,
+) -> Vec<usize> {
+    let Some(inverse) = transform.try_inverse() else {
+        return Vec::new();
+    };
+    points
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (source, target))| {
+            (symmetric_point_error(transform, &inverse, *source, *target) <= threshold)
+                .then_some(index)
+        })
+        .collect()
+}
+
+fn robust_transform_fit<F>(
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+    sample_size: usize,
+    seed: u64,
+    estimator: F,
+) -> Option<RobustTransformFit>
+where
+    F: Fn(&[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Option<Matrix3<f64>>,
+{
+    if points.len() < sample_size {
+        return None;
+    }
+
+    let mut rng =
+        StdRng::seed_from_u64(seed ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93));
+    let all_indices: Vec<usize> = (0..points.len()).collect();
+    let mut best_transform = None;
+    let mut best_inliers = Vec::new();
+    let mut best_median = f64::INFINITY;
+
+    let iterations = if points.len() == sample_size {
+        1
+    } else {
+        FOCUS_MODEL_RANSAC_ITERATIONS
+    };
+    for _ in 0..iterations {
+        let sample_indices: Vec<usize> =
+            all_indices.sample(&mut rng, sample_size).copied().collect();
+        if sample_indices.len() != sample_size {
+            continue;
+        }
+        let sample: Vec<_> = sample_indices.iter().map(|&index| points[index]).collect();
+        let Some(transform) = estimator(&sample) else {
+            continue;
+        };
+        let inlier_indices =
+            symmetric_inlier_indices(&transform, points, FOCUS_MODEL_INLIER_THRESHOLD);
+        if inlier_indices.len() < sample_size {
+            continue;
+        }
+        let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
+        let median = median_symmetric_error(&transform, &inlier_points);
+        if inlier_indices.len() > best_inliers.len()
+            || (inlier_indices.len() == best_inliers.len() && median < best_median)
+        {
+            best_transform = Some(transform);
+            best_inliers = inlier_indices;
+            best_median = median;
+        }
+    }
+
+    let mut transform = best_transform?;
+    let mut inlier_indices = best_inliers;
+    for _ in 0..4 {
+        let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
+        let Some(refitted) = estimator(&inlier_points) else {
+            break;
+        };
+        let refitted_inliers =
+            symmetric_inlier_indices(&refitted, points, FOCUS_MODEL_INLIER_THRESHOLD);
+        if refitted_inliers.len() < sample_size {
+            break;
+        }
+        transform = refitted;
+        if refitted_inliers == inlier_indices {
+            break;
+        }
+        inlier_indices = refitted_inliers;
+    }
+
+    let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
+    Some(RobustTransformFit {
+        transform,
+        inlier_indices,
+        median_error: median_symmetric_error(&transform, &inlier_points),
+    })
+}
+
+fn focus_fit_is_competitive(candidate: &RobustTransformFit, selected: &RobustTransformFit) -> bool {
+    if candidate.inlier_indices.len() < FOCUS_MODEL_MIN_INLIERS {
+        return false;
+    }
+    let retains_consensus = candidate.inlier_indices.len() + 2 >= selected.inlier_indices.len();
+    let materially_more_precise = candidate.median_error + 0.35 < selected.median_error
+        && candidate.median_error <= selected.median_error * 0.82;
+    candidate.inlier_indices.len() > selected.inlier_indices.len()
+        || (retains_consensus && materially_more_precise)
+}
+
+fn select_focus_stack_transform(
+    projective: &Matrix3<f64>,
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+    source_dimensions: (u32, u32),
+    alignment_mode: AlignmentMode,
+) -> Matrix3<f64> {
+    let translation = estimate_translation(points);
+    let translation_inliers =
+        symmetric_inlier_indices(&translation, points, FOCUS_MODEL_INLIER_THRESHOLD);
+    let translation_points: Vec<_> = translation_inliers
+        .iter()
+        .map(|&index| points[index])
+        .collect();
+    let mut selected = RobustTransformFit {
+        transform: translation,
+        inlier_indices: translation_inliers,
+        median_error: median_symmetric_error(&translation, &translation_points),
+    };
+    let mut selected_name = "translation";
+
+    let similarity = robust_transform_fit(points, 2, 0xA24B_AED4_963E_E407, estimate_similarity);
+    if let Some(model) = similarity.as_ref() {
+        if transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+            && focus_fit_is_competitive(model, &selected)
+        {
+            selected = model.clone();
+            selected_name = "similarity";
+        }
+    }
+
+    let affine = robust_transform_fit(points, 3, 0x9FB2_1C65_1E98_DF25, estimate_affine);
+    if let Some(model) = affine.as_ref() {
+        if transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+            && focus_fit_is_competitive(model, &selected)
+        {
+            selected = model.clone();
+            selected_name = "affine";
+        }
+    }
+
+    let projective_error = median_symmetric_error(projective, points);
+    let allow_projective = matches!(
+        alignment_mode,
+        AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
+    );
+    if allow_projective
+        && transform_is_stable_for_focus_stack(projective, source_dimensions)
+        && projective_error + 0.75 < selected.median_error
+        && projective_error <= selected.median_error * 0.72
+    {
+        selected.transform = *projective;
+        selected.inlier_indices = (0..points.len()).collect();
+        selected.median_error = projective_error;
+        selected_name = "projective";
+    }
+
+    let similarity_summary = similarity
+        .as_ref()
+        .map(|fit| format!("{:.3}px/{}", fit.median_error, fit.inlier_indices.len()))
+        .unwrap_or_else(|| "n/a".to_string());
+    let affine_summary = affine
+        .as_ref()
+        .map(|fit| format!("{:.3}px/{}", fit.median_error, fit.inlier_indices.len()))
+        .unwrap_or_else(|| "n/a".to_string());
+    println!(
+        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{})",
+        selected.median_error,
+        selected.inlier_indices.len(),
+        projective_error,
+        points.len()
+    );
+    selected.transform
+}
+
 fn refine_match_point_from_homography(
     image1: &ImageInfo,
     image2: &ImageInfo,
@@ -538,12 +908,13 @@ fn refine_match_point_from_homography(
     keypoint2: KeyPoint,
     projection: Projection,
     homography: &Matrix3<f64>,
+    prefer_feature_center: bool,
 ) -> Option<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> {
     let source_x = (keypoint1.x as f64 * image1.scale_factor).round() as i32;
     let source_y = (keypoint1.y as f64 * image1.scale_factor).round() as i32;
     let fallback_target_x = (keypoint2.x as f64 * image2.scale_factor).round() as i32;
     let fallback_target_y = (keypoint2.y as f64 * image2.scale_factor).round() as i32;
-    let (target_x, target_y) = if projection == Projection::Planar {
+    let (target_x, target_y) = if projection == Projection::Planar && !prefer_feature_center {
         let predicted = homography * nalgebra::Point3::new(source_x as f64, source_y as f64, 1.0);
         if predicted.z.abs() < 1e-8 {
             (fallback_target_x, fallback_target_y)
@@ -583,8 +954,66 @@ fn refine_match_point_from_homography(
     if !best_score.is_finite() {
         return None;
     }
+    let subpixel_offset = |negative: f64, center: f64, positive: f64| {
+        if !negative.is_finite() || !center.is_finite() || !positive.is_finite() {
+            return 0.0;
+        }
+        let denominator = negative - 2.0 * center + positive;
+        if denominator.abs() < 1e-8 {
+            0.0
+        } else {
+            (0.5 * (negative - positive) / denominator).clamp(-1.0, 1.0)
+        }
+    };
+    let subpixel_x = subpixel_offset(
+        patch_ncc(
+            &image1.image,
+            &image2.image,
+            source_x,
+            source_y,
+            best_x - 1,
+            best_y,
+            MATCH_REFINE_PATCH_RADIUS,
+        ),
+        best_score,
+        patch_ncc(
+            &image1.image,
+            &image2.image,
+            source_x,
+            source_y,
+            best_x + 1,
+            best_y,
+            MATCH_REFINE_PATCH_RADIUS,
+        ),
+    );
+    let subpixel_y = subpixel_offset(
+        patch_ncc(
+            &image1.image,
+            &image2.image,
+            source_x,
+            source_y,
+            best_x,
+            best_y - 1,
+            MATCH_REFINE_PATCH_RADIUS,
+        ),
+        best_score,
+        patch_ncc(
+            &image1.image,
+            &image2.image,
+            source_x,
+            source_y,
+            best_x,
+            best_y + 1,
+            MATCH_REFINE_PATCH_RADIUS,
+        ),
+    );
     let source = project_point(image1, source_x as f64, source_y as f64, projection)?;
-    let target = project_point(image2, best_x as f64, best_y as f64, projection)?;
+    let target = project_point(
+        image2,
+        best_x as f64 + subpixel_x,
+        best_y as f64 + subpixel_y,
+        projection,
+    )?;
     Some((source, target))
 }
 
@@ -823,6 +1252,56 @@ fn build_stitching_order(
 }
 
 #[cfg(test)]
+mod alignment_tests {
+    use super::*;
+    use nalgebra::Point2;
+
+    #[test]
+    fn robust_affine_fit_rejects_false_correspondences() {
+        let expected = Matrix3::new(1.012, -0.008, 420.0, 0.006, 0.994, -730.0, 0.0, 0.0, 1.0);
+        let mut points = Vec::new();
+        for row in 0..5 {
+            for column in 0..6 {
+                let source = Point2::new(
+                    300.0 + column as f64 * 1_420.0,
+                    240.0 + row as f64 * 1_080.0,
+                );
+                let mut target = transformed_point(&expected, source).unwrap();
+                target.x += ((row * 7 + column * 3) as f64).sin() * 0.18;
+                target.y += ((row * 5 + column * 11) as f64).cos() * 0.18;
+                points.push((source, target));
+            }
+        }
+        for index in 0..12 {
+            points.push((
+                Point2::new(index as f64 * 613.0, index as f64 * 277.0),
+                Point2::new(8_000.0 - index as f64 * 193.0, 900.0 + index as f64 * 421.0),
+            ));
+        }
+
+        let fit = robust_transform_fit(&points, 3, 42, estimate_affine)
+            .expect("the inlier grid should produce an affine consensus");
+        assert!(fit.inlier_indices.len() >= 29);
+        assert!(fit.median_error < 0.5);
+        let probe = Point2::new(4_500.0, 2_900.0);
+        let expected_probe = transformed_point(&expected, probe).unwrap();
+        let actual_probe = transformed_point(&fit.transform, probe).unwrap();
+        assert!((actual_probe - expected_probe).norm() < 0.5);
+    }
+
+    #[test]
+    fn focus_stack_stability_rejects_extrapolated_projective_warp() {
+        let stable = Matrix3::new(1.01, -0.01, 180.0, 0.01, 1.01, -90.0, 0.0, 0.0, 1.0);
+        let unstable = Matrix3::new(1.0, 0.0, 180.0, 0.0, 1.0, -90.0, 0.000_18, -0.000_12, 1.0);
+        assert!(transform_is_stable_for_focus_stack(&stable, (9_504, 6_336)));
+        assert!(!transform_is_stable_for_focus_stack(
+            &unstable,
+            (9_504, 6_336)
+        ));
+    }
+}
+
+#[cfg(test)]
 mod acceptance_tests {
     use super::*;
     use image::ImageFormat;
@@ -877,6 +1356,61 @@ mod acceptance_tests {
             .expect("panorama preview should be writable");
         println!(
             "three-image panorama result: {}x{}\nfull: {}\npreview: {}",
+            result.width(),
+            result.height(),
+            output_path.display(),
+            preview_path.display()
+        );
+    }
+
+    #[test]
+    #[ignore = "requires user-provided focus-stack paths and writes a large temporary output"]
+    fn real_focus_stack_fixture_from_env() {
+        let encoded_paths = std::env::var_os("RAW_EDITOR_FOCUS_STACK_PATHS")
+            .expect("RAW_EDITOR_FOCUS_STACK_PATHS must contain platform-separated image paths");
+        let paths: Vec<String> = std::env::split_paths(&encoded_paths)
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            paths.len() >= 2,
+            "at least two focus-stack paths are required"
+        );
+
+        let alignment_name = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_ALIGNMENT")
+            .unwrap_or_else(|_| "auto".to_string())
+            .to_ascii_lowercase();
+        let alignment_mode = AlignmentMode::from_wire(&alignment_name);
+        let app = tauri::test::mock_app();
+        crate::sidecar_storage::initialize(
+            PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
+        )
+        .expect("test sidecar storage should initialize once");
+        let result = stitch_images_with_options(
+            paths,
+            app.handle().clone(),
+            alignment_mode,
+            BlendMode::FocusStack,
+            "test-image-stack-progress",
+        )
+        .expect("the provided focus-stack images should align and blend");
+
+        let output_path = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_OUTPUT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "/private/tmp/raw-editor-focus-stack-{alignment_name}.tiff"
+                ))
+            });
+        result
+            .save_with_format(&output_path, ImageFormat::Tiff)
+            .expect("full-resolution TIFF result should be writable");
+        let preview = crate::image_processing::downscale_f32_image(&result, 1800, 1800);
+        let preview_path = output_path.with_extension("jpg");
+        preview
+            .save_with_format(&preview_path, ImageFormat::Jpeg)
+            .expect("focus-stack preview should be writable");
+        println!(
+            "focus-stack result: {}x{}\nfull: {}\npreview: {}",
             result.width(),
             result.height(),
             output_path.display(),

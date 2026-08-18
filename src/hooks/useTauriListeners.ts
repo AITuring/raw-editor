@@ -288,11 +288,16 @@ export function useTauriListeners({
       }),
       listen('image-stack-complete', (event: any) => {
         if (isEffectActive) {
+          const previewPath = event.payload?.previewPath;
+          const previewSource =
+            typeof previewPath === 'string' && previewPath.length > 0
+              ? convertFileSrc(previewPath.replace(/\\/g, '/'))
+              : (event.payload?.base64 ?? null);
           useUIStore.getState().setUI((state) => ({
             imageStackModalState: {
               ...state.imageStackModalState,
               error: null,
-              finalImageBase64: event.payload?.base64 ?? null,
+              finalImageBase64: previewSource,
               isProcessing: false,
               progressMessage: null,
             },
