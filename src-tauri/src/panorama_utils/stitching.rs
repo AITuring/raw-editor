@@ -7,6 +7,9 @@ use std::path::Path;
 use tauri::{AppHandle, Emitter, Runtime};
 
 const PANORAMA_BLEND_BANDS: usize = 9;
+const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 1536;
+const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
+const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -833,27 +836,6 @@ fn luminance(pixel: &Rgb<f32>) -> f32 {
     pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114
 }
 
-fn focus_score_at(image: &Rgb32FImage, x: f64, y: f64) -> f32 {
-    let mut sum = 0.0f32;
-    let mut sum_squared = 0.0f32;
-    for dy in -1..=1 {
-        for dx in -1..=1 {
-            let value = luminance(&get_interpolated_pixel(image, x + dx as f64, y + dy as f64));
-            sum += value;
-            sum_squared += value * value;
-        }
-    }
-    let mean = sum / 9.0;
-    let variance = (sum_squared / 9.0 - mean * mean).max(0.0);
-    let center = luminance(&get_interpolated_pixel(image, x, y));
-    let left = luminance(&get_interpolated_pixel(image, x - 1.0, y));
-    let right = luminance(&get_interpolated_pixel(image, x + 1.0, y));
-    let top = luminance(&get_interpolated_pixel(image, x, y - 1.0));
-    let bottom = luminance(&get_interpolated_pixel(image, x, y + 1.0));
-    let laplacian = (4.0 * center - left - right - top - bottom).abs();
-    variance + laplacian * 0.25
-}
-
 fn render_focus_layer(
     image: &ImageInfo,
     homography: &Matrix3<f64>,
@@ -862,18 +844,16 @@ fn render_focus_layer(
     offset_y: f64,
     out_width: u32,
     out_height: u32,
-) -> (Rgb32FImage, GrayImage, Vec<f32>) {
+) -> (Rgb32FImage, GrayImage) {
     let inverse = homography.try_inverse().unwrap_or_else(Matrix3::identity);
     let mut pixels = vec![0.0f32; out_width as usize * out_height as usize * 3];
     let mut mask = vec![0u8; out_width as usize * out_height as usize];
-    let mut focus = vec![0.0f32; out_width as usize * out_height as usize];
 
     pixels
         .par_chunks_mut(out_width as usize * 3)
         .zip(mask.par_chunks_mut(out_width as usize))
-        .zip(focus.par_chunks_mut(out_width as usize))
         .enumerate()
-        .for_each(|(y, ((row, mask_row), focus_row))| {
+        .for_each(|(y, (row, mask_row))| {
             for x in 0..out_width {
                 let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
                 let Some(source) = map_target_to_source(&inverse, target, image, projection) else {
@@ -890,7 +870,6 @@ fn render_focus_layer(
                 let start = x as usize * 3;
                 row[start..start + 3].copy_from_slice(&pixel.0);
                 mask_row[x as usize] = 255;
-                focus_row[x as usize] = focus_score_at(&image.image, source.x, source.y);
             }
         });
 
@@ -899,8 +878,212 @@ fn render_focus_layer(
             .expect("focus layer buffer dimensions must match"),
         GrayImage::from_raw(out_width, out_height, mask)
             .expect("focus layer mask dimensions must match"),
-        focus,
     )
+}
+
+fn focus_analysis_dimensions(width: u32, height: u32) -> (u32, u32) {
+    let longest_side = width.max(height).max(1);
+    if longest_side <= FOCUS_ANALYSIS_MAX_DIMENSION {
+        return (width.max(1), height.max(1));
+    }
+    let scale = FOCUS_ANALYSIS_MAX_DIMENSION as f64 / longest_side as f64;
+    (
+        (width as f64 * scale).round().max(1.0) as u32,
+        (height as f64 * scale).round().max(1.0) as u32,
+    )
+}
+
+fn box_blur_focus_map(source: &[f32], width: u32, height: u32, radius: usize) -> Vec<f32> {
+    if radius == 0 || width == 0 || height == 0 {
+        return source.to_vec();
+    }
+    let width = width as usize;
+    let height = height as usize;
+    let window_size = radius * 2 + 1;
+    let divisor = window_size as f32;
+    let mut horizontal = vec![0.0f32; source.len()];
+    horizontal
+        .par_chunks_mut(width)
+        .zip(source.par_chunks(width))
+        .for_each(|(output_row, source_row)| {
+            let mut sum = 0.0f32;
+            for offset in 0..window_size {
+                sum += source_row[offset.saturating_sub(radius).min(width - 1)];
+            }
+            output_row[0] = sum / divisor;
+            for (x, output) in output_row.iter_mut().enumerate().skip(1) {
+                let add_x = (x + radius).min(width - 1);
+                let remove_x = x.saturating_sub(radius + 1);
+                sum += source_row[add_x] - source_row[remove_x];
+                *output = sum / divisor;
+            }
+        });
+
+    let mut output = vec![0.0f32; source.len()];
+    for x in 0..width {
+        let mut sum = 0.0f32;
+        for offset in 0..window_size {
+            let y = offset.saturating_sub(radius).min(height - 1);
+            sum += horizontal[y * width + x];
+        }
+        output[x] = sum / divisor;
+        for y in 1..height {
+            let add_y = (y + radius).min(height - 1);
+            let remove_y = y.saturating_sub(radius + 1);
+            sum += horizontal[add_y * width + x] - horizontal[remove_y * width + x];
+            output[y * width + x] = sum / divisor;
+        }
+    }
+    output
+}
+
+fn focus_score_map(image: &Rgb32FImage, mask: &GrayImage) -> Vec<f32> {
+    let (width, height) = image.dimensions();
+    let pixel_count = width as usize * height as usize;
+    let mut luminance_map = vec![0.0f32; pixel_count];
+    luminance_map
+        .par_iter_mut()
+        .zip(image.as_raw().par_chunks(3))
+        .for_each(|(output, pixel)| {
+            *output = pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114;
+        });
+
+    let mut raw_score = vec![0.0f32; pixel_count];
+    if width >= 3 && height >= 3 {
+        raw_score
+            .par_chunks_mut(width as usize)
+            .enumerate()
+            .for_each(|(y, row)| {
+                if y == 0 || y + 1 >= height as usize {
+                    return;
+                }
+                for (x, output) in row.iter_mut().enumerate().take(width as usize - 1).skip(1) {
+                    let index = y * width as usize + x;
+                    if mask.as_raw()[index] == 0
+                        || mask.as_raw()[index - 1] == 0
+                        || mask.as_raw()[index + 1] == 0
+                        || mask.as_raw()[index - width as usize] == 0
+                        || mask.as_raw()[index + width as usize] == 0
+                    {
+                        continue;
+                    }
+                    *output = (4.0 * luminance_map[index]
+                        - luminance_map[index - 1]
+                        - luminance_map[index + 1]
+                        - luminance_map[index - width as usize]
+                        - luminance_map[index + width as usize])
+                        .abs();
+                }
+            });
+    }
+
+    // Focus ownership is decided on a bounded analysis canvas. An approximately
+    // 8px window at 1536px suppresses sensor/JPEG noise and texture-scale flips,
+    // while the final pixels still come from the full-resolution aligned layer.
+    let radius = ((width.max(height) as f32 / 192.0).round() as usize).clamp(1, 8);
+    box_blur_focus_map(&raw_score, width, height, radius)
+}
+
+fn focus_decision_mask(
+    base_focus: &[f32],
+    candidate_focus: &[f32],
+    base_mask: &GrayImage,
+    candidate_mask: &GrayImage,
+) -> GrayImage {
+    let (width, height) = base_mask.dimensions();
+    let pixel_count = width as usize * height as usize;
+    let mut fine_advantage = vec![0.0f32; pixel_count];
+    fine_advantage
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(index, output)| {
+            let base_valid = base_mask.as_raw()[index] > 0;
+            let candidate_valid = candidate_mask.as_raw()[index] > 0;
+            *output = match (base_valid, candidate_valid) {
+                (false, true) => 1.0,
+                (true, false) => -1.0,
+                (true, true) => {
+                    let base = base_focus[index];
+                    let candidate = candidate_focus[index];
+                    (candidate - base) / (candidate + base + 1e-6)
+                }
+                (false, false) => 0.0,
+            };
+        });
+
+    let coherence_radius = ((width.max(height) as f32 / 96.0).round() as usize).clamp(2, 16);
+    let coarse_advantage = box_blur_focus_map(&fine_advantage, width, height, coherence_radius);
+
+    let sample_step = (pixel_count / 4096).max(1);
+    let mut magnitude_samples = (0..pixel_count)
+        .step_by(sample_step)
+        .filter_map(|index| {
+            (base_mask.as_raw()[index] > 0 || candidate_mask.as_raw()[index] > 0)
+                .then_some(base_focus[index].max(candidate_focus[index]))
+        })
+        .collect::<Vec<_>>();
+    magnitude_samples.sort_unstable_by(f32::total_cmp);
+    let confidence_floor = magnitude_samples
+        .get(((magnitude_samples.len().saturating_sub(1)) as f32 * 0.9) as usize)
+        .copied()
+        .unwrap_or(0.0)
+        * 0.04;
+
+    GrayImage::from_fn(width, height, |x, y| {
+        let index = y as usize * width as usize + x as usize;
+        let base_valid = base_mask.as_raw()[index] > 0;
+        let candidate_valid = candidate_mask.as_raw()[index] > 0;
+        let confident = base_focus[index].max(candidate_focus[index]) > confidence_floor;
+        let fine = fine_advantage[index];
+        let advantage = if fine.abs() > FOCUS_DECISIVE_ADVANTAGE {
+            fine
+        } else {
+            coarse_advantage[index]
+        };
+        let candidate_wins =
+            candidate_valid && (!base_valid || (confident && advantage > FOCUS_CONFIDENCE_MARGIN));
+        image::Luma([if candidate_wins { 255 } else { 0 }])
+    })
+}
+
+fn resize_binary_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
+    image::imageops::resize(
+        mask,
+        width.max(1),
+        height.max(1),
+        image::imageops::FilterType::Nearest,
+    )
+}
+
+fn hard_select_focus_pixels(
+    base: &mut Rgb32FImage,
+    base_mask: &mut GrayImage,
+    candidate: &Rgb32FImage,
+    candidate_mask: &GrayImage,
+    decision_mask: &GrayImage,
+) {
+    debug_assert_eq!(base.dimensions(), candidate.dimensions());
+    debug_assert_eq!(base.dimensions(), base_mask.dimensions());
+    debug_assert_eq!(base.dimensions(), candidate_mask.dimensions());
+    debug_assert_eq!(base.dimensions(), decision_mask.dimensions());
+    let base_pixels: &mut [f32] = base.as_mut();
+    let base_mask_pixels: &mut [u8] = base_mask.as_mut();
+    base_pixels
+        .par_chunks_mut(3)
+        .zip(base_mask_pixels.par_iter_mut())
+        .zip(candidate.as_raw().par_chunks(3))
+        .zip(candidate_mask.as_raw().par_iter())
+        .zip(decision_mask.as_raw().par_iter())
+        .for_each(
+            |((((base_pixel, base_valid), candidate_pixel), candidate_valid), decision)| {
+                if *candidate_valid > 0 && (*base_valid == 0 || *decision > 0) {
+                    base_pixel.copy_from_slice(candidate_pixel);
+                }
+                if *candidate_valid > 0 {
+                    *base_valid = 255;
+                }
+            },
+        );
 }
 
 fn resize_rgb(image: &Rgb32FImage, width: u32, height: u32) -> Rgb32FImage {
@@ -1226,7 +1409,7 @@ pub fn focus_stack_stitcher<R: Runtime>(
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
-    let (mut merged, mut merged_mask, mut merged_focus) = render_focus_layer(
+    let (mut merged, mut merged_mask) = render_focus_layer(
         images[0],
         &global_homographies[&images[0].id],
         projection,
@@ -1235,13 +1418,18 @@ pub fn focus_stack_stitcher<R: Runtime>(
         out_width,
         out_height,
     );
+    let (analysis_width, analysis_height) = focus_analysis_dimensions(out_width, out_height);
+    let mut merged_analysis = resize_rgb(&merged, analysis_width, analysis_height);
+    let mut merged_analysis_mask =
+        resize_binary_mask(&merged_mask, analysis_width, analysis_height);
+    let mut merged_focus = focus_score_map(&merged_analysis, &merged_analysis_mask);
 
     for (index, image) in images.iter().enumerate().skip(1) {
         let _ = app_handle.emit(
             progress_event,
             format!("Focus-stacking image {} of {}", index + 1, images.len()),
         );
-        let (mut candidate, candidate_mask, candidate_focus) = render_focus_layer(
+        let (candidate, candidate_mask) = render_focus_layer(
             image,
             &global_homographies[&image.id],
             projection,
@@ -1250,35 +1438,50 @@ pub fn focus_stack_stitcher<R: Runtime>(
             out_width,
             out_height,
         );
-        let mut blend_mask = GrayImage::new(out_width, out_height);
-        for y in 0..out_height {
-            for x in 0..out_width {
-                let base_valid = merged_mask.get_pixel(x, y)[0] > 0;
-                let candidate_valid = candidate_mask.get_pixel(x, y)[0] > 0;
-                let candidate_wins = candidate_valid
-                    && (!base_valid
-                        || candidate_focus[(y * out_width + x) as usize]
-                            > merged_focus[(y * out_width + x) as usize] * 1.04);
-                blend_mask.put_pixel(x, y, image::Luma([if candidate_wins { 255 } else { 0 }]));
+        let candidate_analysis = resize_rgb(&candidate, analysis_width, analysis_height);
+        let candidate_analysis_mask =
+            resize_binary_mask(&candidate_mask, analysis_width, analysis_height);
+        let candidate_focus = focus_score_map(&candidate_analysis, &candidate_analysis_mask);
+        let analysis_decision = focus_decision_mask(
+            &merged_focus,
+            &candidate_focus,
+            &merged_analysis_mask,
+            &candidate_analysis_mask,
+        );
 
-                // Multiband filtering samples across the mask boundary. Mirror the valid
-                // source into the invalid side so the pyramid never blends against the
-                // zero-filled area outside a warped layer (which otherwise produces a
-                // visible dark/soft rectangle at every source-image edge).
-                if base_valid && !candidate_valid {
-                    *candidate.get_pixel_mut(x, y) = *merged.get_pixel(x, y);
-                } else if candidate_valid && !base_valid {
-                    *merged.get_pixel_mut(x, y) = *candidate.get_pixel(x, y);
-                }
-                if candidate_valid {
-                    merged_mask.put_pixel(x, y, image::Luma([255]));
-                }
-                let focus_index = (y * out_width + x) as usize;
-                merged_focus[focus_index] =
-                    merged_focus[focus_index].max(candidate_focus[focus_index]);
-            }
-        }
-        merged = multiband_blend(merged, candidate, blend_mask, None, 5, true);
+        // Keep the focus score synchronized with the actual selected source. The old
+        // pipeline stored max scores while repeatedly averaging pixels, so later layers
+        // were compared against a score that no longer described the image underneath.
+        merged_focus
+            .par_iter_mut()
+            .zip(candidate_focus.par_iter())
+            .zip(merged_analysis_mask.as_raw().par_iter())
+            .zip(candidate_analysis_mask.as_raw().par_iter())
+            .zip(analysis_decision.as_raw().par_iter())
+            .for_each(
+                |((((base_focus, candidate_focus), base_valid), candidate_valid), decision)| {
+                    if *candidate_valid > 0 && (*base_valid == 0 || *decision > 0) {
+                        *base_focus = *candidate_focus;
+                    }
+                },
+            );
+        hard_select_focus_pixels(
+            &mut merged_analysis,
+            &mut merged_analysis_mask,
+            &candidate_analysis,
+            &candidate_analysis_mask,
+            &analysis_decision,
+        );
+
+        let full_resolution_decision =
+            resize_binary_mask(&analysis_decision, out_width, out_height);
+        hard_select_focus_pixels(
+            &mut merged,
+            &mut merged_mask,
+            &candidate,
+            &candidate_mask,
+            &full_resolution_decision,
+        );
     }
     let cropped = crop_to_valid_rectangle(&merged, &merged_mask);
     if cropped.dimensions() != merged.dimensions() {
@@ -1717,5 +1920,50 @@ mod interpolation_tests {
         assert!(cubic_high - cubic_low > bilinear_high - bilinear_low);
         assert!((0.0..=1.0).contains(&cubic_low));
         assert!((0.0..=1.0).contains(&cubic_high));
+    }
+
+    #[test]
+    fn focus_box_blur_preserves_a_constant_score_map() {
+        let source = vec![3.5f32; 5 * 4];
+        let blurred = box_blur_focus_map(&source, 5, 4, 2);
+
+        assert!(blurred.iter().all(|value| (*value - 3.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn focus_decision_prefers_the_locally_sharper_layer() {
+        let base_focus = vec![0.9, 0.8, 0.1, 0.1];
+        let candidate_focus = vec![0.1, 0.1, 0.8, 0.9];
+        let base_mask = GrayImage::from_pixel(4, 1, image::Luma([255]));
+        let candidate_mask = GrayImage::from_pixel(4, 1, image::Luma([255]));
+
+        let decision =
+            focus_decision_mask(&base_focus, &candidate_focus, &base_mask, &candidate_mask);
+
+        assert_eq!(decision.as_raw(), &[0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn hard_focus_selection_copies_source_pixels_without_averaging() {
+        let mut base =
+            Rgb32FImage::from_raw(3, 1, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]).unwrap();
+        let candidate =
+            Rgb32FImage::from_raw(3, 1, vec![0.0, 0.0, 1.0, 0.2, 0.3, 0.9, 0.7, 0.1, 0.8]).unwrap();
+        let mut base_mask = GrayImage::from_raw(3, 1, vec![255, 255, 0]).unwrap();
+        let candidate_mask = GrayImage::from_pixel(3, 1, image::Luma([255]));
+        let decision = GrayImage::from_raw(3, 1, vec![0, 255, 0]).unwrap();
+
+        hard_select_focus_pixels(
+            &mut base,
+            &mut base_mask,
+            &candidate,
+            &candidate_mask,
+            &decision,
+        );
+
+        assert_eq!(base.get_pixel(0, 0).0, [1.0, 0.0, 0.0]);
+        assert_eq!(base.get_pixel(1, 0).0, [0.2, 0.3, 0.9]);
+        assert_eq!(base.get_pixel(2, 0).0, [0.7, 0.1, 0.8]);
+        assert_eq!(base_mask.as_raw(), &[255, 255, 255]);
     }
 }
