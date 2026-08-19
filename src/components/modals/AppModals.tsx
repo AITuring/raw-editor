@@ -125,6 +125,23 @@ export default function AppModals(props: AppModalsProps) {
     setUI((state) => ({ confirmModalState: { ...state.confirmModalState, isOpen: false } }));
   };
 
+  const closeImageStackModal = () => {
+    setUI({
+      imageStackModalState: {
+        isOpen: false,
+        isProcessing: false,
+        progressMessage: null,
+        finalImageBase64: null,
+        error: null,
+        requestId: null,
+        resultId: null,
+        sourcePaths: [],
+        blendMode: 'focus',
+        alignmentMode: 'auto',
+      },
+    });
+  };
+
   const currentAlbumData = (() => {
     if (!albumActionTarget) return null;
     const { albumTree } = useLibraryStore.getState();
@@ -191,20 +208,7 @@ export default function AppModals(props: AppModalsProps) {
         initialBlendMode={imageStackModalState.blendMode}
         isOpen={imageStackModalState.isOpen}
         isProcessing={imageStackModalState.isProcessing}
-        onClose={() =>
-          setUI({
-            imageStackModalState: {
-              isOpen: false,
-              isProcessing: false,
-              progressMessage: null,
-              finalImageBase64: null,
-              error: null,
-              sourcePaths: [],
-              blendMode: 'focus',
-              alignmentMode: 'auto',
-            },
-          })
-        }
+        onClose={closeImageStackModal}
         onChange={() =>
           setUI((state) => ({
             imageStackModalState: {
@@ -212,10 +216,15 @@ export default function AppModals(props: AppModalsProps) {
               error: null,
               finalImageBase64: null,
               progressMessage: null,
+              requestId: null,
+              resultId: null,
             },
           }))
         }
-        onOpenFile={(path: string) => props.handleImageSelect(path)}
+        onOpenFile={(path: string) => {
+          closeImageStackModal();
+          props.handleImageSelect(path);
+        }}
         onProcess={props.handleStartImageStack}
         onSave={props.handleSaveImageStack}
         progressMessage={imageStackModalState.progressMessage}

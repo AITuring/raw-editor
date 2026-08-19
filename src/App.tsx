@@ -311,6 +311,8 @@ function App() {
         isOpen: true,
         isProcessing: false,
         progressMessage: null,
+        requestId: null,
+        resultId: null,
         sourcePaths: paths,
         blendMode: 'focus',
         alignmentMode: 'auto',

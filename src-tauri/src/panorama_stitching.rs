@@ -1401,18 +1401,18 @@ mod acceptance_tests {
                     "/private/tmp/raw-editor-focus-stack-{alignment_name}.tiff"
                 ))
             });
-        result
-            .save_with_format(&output_path, ImageFormat::Tiff)
-            .expect("full-resolution TIFF result should be writable");
-        let preview = crate::image_processing::downscale_f32_image(&result, 1800, 1800);
+        let canonical = crate::image_stack::canonicalize_image_stack_result(result);
+        crate::image_stack::write_srgb_tiff(&canonical, &output_path)
+            .expect("full-resolution color-managed TIFF result should be writable");
+        let preview = canonical.resize(1800, 1800, image::imageops::FilterType::Lanczos3);
         let preview_path = output_path.with_extension("jpg");
         preview
             .save_with_format(&preview_path, ImageFormat::Jpeg)
             .expect("focus-stack preview should be writable");
         println!(
             "focus-stack result: {}x{}\nfull: {}\npreview: {}",
-            result.width(),
-            result.height(),
+            canonical.width(),
+            canonical.height(),
             output_path.display(),
             preview_path.display()
         );

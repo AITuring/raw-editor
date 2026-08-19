@@ -2285,6 +2285,7 @@ pub fn run() {
             hdr_result: Arc::new(Mutex::new(None)),
             panorama_result: Arc::new(Mutex::new(None)),
             image_stack_result: Arc::new(Mutex::new(None)),
+            image_stack_generation: Arc::new(AtomicUsize::new(0)),
             denoise_result: Arc::new(Mutex::new(None)),
             indexing_task_handle: Mutex::new(None),
             lut_cache: Mutex::new(BudgetedCache::new(

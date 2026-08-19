@@ -288,33 +288,52 @@ export function useTauriListeners({
       }),
       listen('image-stack-complete', (event: any) => {
         if (isEffectActive) {
+          const requestId = event.payload?.requestId;
+          const resultId = event.payload?.resultId;
           const previewPath = event.payload?.previewPath;
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0
               ? convertFileSrc(previewPath.replace(/\\/g, '/'))
               : (event.payload?.base64 ?? null);
-          useUIStore.getState().setUI((state) => ({
-            imageStackModalState: {
-              ...state.imageStackModalState,
-              error: null,
-              finalImageBase64: previewSource,
-              isProcessing: false,
-              progressMessage: null,
-            },
-          }));
+          useUIStore.getState().setUI((state) => {
+            if (
+              typeof requestId !== 'string' ||
+              requestId !== state.imageStackModalState.requestId ||
+              typeof resultId !== 'string' ||
+              !previewSource
+            ) {
+              return state;
+            }
+            return {
+              imageStackModalState: {
+                ...state.imageStackModalState,
+                error: null,
+                finalImageBase64: previewSource,
+                isProcessing: false,
+                progressMessage: null,
+                resultId,
+              },
+            };
+          });
         }
       }),
       listen('image-stack-error', (event: any) => {
         if (isEffectActive) {
-          useUIStore.getState().setUI((state) => ({
-            imageStackModalState: {
-              ...state.imageStackModalState,
-              error: String(event.payload),
-              finalImageBase64: null,
-              isProcessing: false,
-              progressMessage: null,
-            },
-          }));
+          const requestId = event.payload?.requestId;
+          const message = event.payload?.message ?? event.payload;
+          useUIStore.getState().setUI((state) => {
+            if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) return state;
+            return {
+              imageStackModalState: {
+                ...state.imageStackModalState,
+                error: String(message),
+                finalImageBase64: null,
+                isProcessing: false,
+                progressMessage: null,
+                resultId: null,
+              },
+            };
+          });
         }
       }),
       listen('hdr-progress', (event: any) => {

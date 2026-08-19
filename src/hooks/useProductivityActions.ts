@@ -49,6 +49,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
 
   const handleStartImageStack = useCallback(
     (paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode) => {
+      const requestId = crypto.randomUUID();
       setUI((state) => ({
         imageStackModalState: {
           ...state.imageStackModalState,
@@ -56,6 +57,8 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
           error: null,
           finalImageBase64: null,
           progressMessage: 'Starting image alignment process…',
+          requestId,
+          resultId: null,
           sourcePaths: paths,
           blendMode,
           alignmentMode,
@@ -65,10 +68,19 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         paths,
         blendMode,
         alignmentMode,
+        requestId,
       }).catch((err) => {
-        setUI((state) => ({
-          imageStackModalState: { ...state.imageStackModalState, isProcessing: false, error: String(err) },
-        }));
+        setUI((state) => {
+          if (state.imageStackModalState.requestId !== requestId) return state;
+          return {
+            imageStackModalState: {
+              ...state.imageStackModalState,
+              isProcessing: false,
+              error: String(err),
+              resultId: null,
+            },
+          };
+        });
       });
     },
     [setUI],
@@ -82,10 +94,16 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         setUI((state) => ({ imageStackModalState: { ...state.imageStackModalState, error } }));
         throw new Error(error);
       }
+      if (!imageStackModalState.resultId) {
+        const error = 'The visible image-stack preview is not available to save.';
+        setUI((state) => ({ imageStackModalState: { ...state.imageStackModalState, error } }));
+        throw new Error(error);
+      }
       try {
         const savedPath: string = await invoke(Invokes.SaveImageStack, {
           firstPathStr: imageStackModalState.sourcePaths[0],
           blendMode,
+          resultId: imageStackModalState.resultId,
         });
         await refreshImageList();
         return savedPath;

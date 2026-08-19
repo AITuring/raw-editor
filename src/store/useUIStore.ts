@@ -50,6 +50,8 @@ export interface ImageStackModalState {
   isOpen: boolean;
   isProcessing: boolean;
   progressMessage: string | null;
+  requestId: string | null;
+  resultId: string | null;
   sourcePaths: string[];
   blendMode: ImageStackBlendMode;
   alignmentMode: ImageStackAlignmentMode;
@@ -241,6 +243,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     isOpen: false,
     isProcessing: false,
     progressMessage: null,
+    requestId: null,
+    resultId: null,
     sourcePaths: [],
     blendMode: 'focus',
     alignmentMode: 'auto',

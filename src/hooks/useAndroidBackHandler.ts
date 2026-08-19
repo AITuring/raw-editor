@@ -67,6 +67,8 @@ export function useAndroidBackHandler() {
             progressMessage: null,
             finalImageBase64: null,
             error: null,
+            requestId: null,
+            resultId: null,
             sourcePaths: [],
             blendMode: 'focus',
             alignmentMode: 'auto',
