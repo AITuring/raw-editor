@@ -1,8 +1,22 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { useUIStore } from '../store/useUIStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useUIStore';
 import { Invokes } from '../components/ui/AppProperties';
+import i18n from '../i18n';
+
+const getImageStackSuggestedPath = (firstPath: string, blendMode: ImageStackBlendMode) => {
+  const physicalPath = firstPath.split('?vc=')[0];
+  const separatorIndex = Math.max(physicalPath.lastIndexOf('/'), physicalPath.lastIndexOf('\\'));
+  const parent = separatorIndex >= 0 ? physicalPath.slice(0, separatorIndex + 1) : '';
+  const fileName = separatorIndex >= 0 ? physicalPath.slice(separatorIndex + 1) : physicalPath;
+  const extensionIndex = fileName.lastIndexOf('.');
+  const stem = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName || 'image';
+  const suffix = blendMode === 'focus' ? 'FocusStack' : 'Panorama';
+  return `${parent}${stem}_${suffix}.tiff`;
+};
 
 export function useProductivityActions(refreshImageList: () => Promise<void>) {
   const setUI = useUIStore((state) => state.setUI);
@@ -53,6 +67,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
       setUI((state) => ({
         imageStackModalState: {
           ...state.imageStackModalState,
+          detailImageBase64: null,
           isProcessing: true,
           error: null,
           finalImageBase64: null,
@@ -87,7 +102,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
   );
 
   const handleSaveImageStack = useCallback(
-    async (blendMode: ImageStackBlendMode): Promise<string> => {
+    async (blendMode: ImageStackBlendMode): Promise<string | null> => {
       const { imageStackModalState } = useUIStore.getState();
       if (imageStackModalState.sourcePaths.length === 0) {
         const error = 'Source paths for image stack not found.';
@@ -100,12 +115,28 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         throw new Error(error);
       }
       try {
+        const firstPath = imageStackModalState.sourcePaths[0];
+        const outputPath =
+          useSettingsStore.getState().osPlatform === 'android'
+            ? null
+            : await save({
+                title: i18n.t('modals.imageStack.save'),
+                defaultPath: getImageStackSuggestedPath(firstPath, blendMode),
+                filters: [{ name: 'TIFF', extensions: ['tif', 'tiff'] }],
+              });
+        if (useSettingsStore.getState().osPlatform !== 'android' && !outputPath) return null;
+
         const savedPath: string = await invoke(Invokes.SaveImageStack, {
-          firstPathStr: imageStackModalState.sourcePaths[0],
+          firstPathStr: firstPath,
           blendMode,
           resultId: imageStackModalState.resultId,
+          outputPathStr: outputPath,
         });
-        await refreshImageList();
+        try {
+          await refreshImageList();
+        } catch (refreshError) {
+          console.warn('Image stack was saved, but the current library could not be refreshed:', refreshError);
+        }
         return savedPath;
       } catch (err) {
         setUI((state) => ({

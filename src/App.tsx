@@ -305,6 +305,7 @@ function App() {
     requestThumbnails(paths);
     setUI({
       imageStackModalState: {
+        detailImageBase64: null,
         error: null,
         finalImageBase64: null,
         isOpen: true,

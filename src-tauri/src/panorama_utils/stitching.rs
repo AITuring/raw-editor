@@ -144,6 +144,16 @@ fn output_bounds(
     (min_x, max_x, min_y, max_y)
 }
 
+fn pixel_aligned_canvas(minimum: f64, maximum: f64) -> (f64, u32) {
+    // The first image is the global reference and normally has an identity
+    // transform. Keep its samples on integer output coordinates; using the exact
+    // fractional bound as the offset would unnecessarily interpolate every
+    // reference pixel.
+    let offset = (-minimum).ceil();
+    let size = (maximum + offset).ceil().max(1.0) as u32;
+    (offset, size)
+}
+
 fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
 }
@@ -333,10 +343,8 @@ pub fn progressive_seam_stitcher<R: Runtime>(
 
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
 
-    let offset_x = -min_x;
-    let offset_y = -min_y;
-    let out_width = (max_x - min_x).ceil().max(1.0) as u32;
-    let out_height = (max_y - min_y).ceil().max(1.0) as u32;
+    let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
+    let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
     println!("  - Output canvas size: {}x{}", out_width, out_height);
 
     let mut panorama = Rgb32FImage::new(out_width, out_height);
@@ -367,7 +375,7 @@ pub fn progressive_seam_stitcher<R: Runtime>(
                     {
                         continue;
                     }
-                    let color = get_interpolated_pixel(&base_img_info.image, sx, sy);
+                    let color = get_high_quality_interpolated_pixel(&base_img_info.image, sx, sy);
                     let start = x as usize * 3;
                     row_slice[start..start + 3].copy_from_slice(&color.0);
                     mask_row[x as usize] = 255;
@@ -505,7 +513,7 @@ pub fn progressive_seam_stitcher<R: Runtime>(
                                 continue;
                             } else if is_on_add {
                                 let color_to_add = apply_exposure_gain(
-                                    get_interpolated_pixel(img_to_add, sx, sy),
+                                    get_high_quality_interpolated_pixel(img_to_add, sx, sy),
                                     exposure.gain_at(x, y as u32),
                                 );
                                 let start = x as usize * 3;
@@ -553,7 +561,7 @@ pub fn progressive_seam_stitcher<R: Runtime>(
                                 continue;
                             } else if is_on_add {
                                 let color_to_add = apply_exposure_gain(
-                                    get_interpolated_pixel(img_to_add, sx, sy),
+                                    get_high_quality_interpolated_pixel(img_to_add, sx, sy),
                                     exposure.gain_at(x, y as u32),
                                 );
                                 let start = x as usize * 3;
@@ -702,7 +710,11 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
             let candidate_pixel = if let Some(source) = candidate_source {
                 if candidate_valid {
                     apply_exposure_gain(
-                        get_interpolated_pixel(&img_to_add_info.image, source.x, source.y),
+                        get_high_quality_interpolated_pixel(
+                            &img_to_add_info.image,
+                            source.x,
+                            source.y,
+                        ),
                         exposure.gain_at(global_x, global_y),
                     )
                 } else {
@@ -874,7 +886,7 @@ fn render_focus_layer(
                 {
                     continue;
                 }
-                let pixel = get_interpolated_pixel(&image.image, source.x, source.y);
+                let pixel = get_high_quality_interpolated_pixel(&image.image, source.x, source.y);
                 let start = x as usize * 3;
                 row[start..start + 3].copy_from_slice(&pixel.0);
                 mask_row[x as usize] = 255;
@@ -1212,10 +1224,8 @@ pub fn focus_stack_stitcher<R: Runtime>(
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
         return Rgb32FImage::new(0, 0);
     }
-    let offset_x = -min_x;
-    let offset_y = -min_y;
-    let out_width = (max_x - min_x).ceil().max(1.0) as u32;
-    let out_height = (max_y - min_y).ceil().max(1.0) as u32;
+    let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
+    let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
     let (mut merged, mut merged_mask, mut merged_focus) = render_focus_layer(
         images[0],
         &global_homographies[&images[0].id],
@@ -1582,7 +1592,11 @@ pub fn warp_image_homography(
                 let pixel = if mapped.z.abs() < 1e-8 {
                     Rgb([0.0, 0.0, 0.0])
                 } else {
-                    get_interpolated_pixel(source, mapped.x / mapped.z, mapped.y / mapped.z)
+                    get_high_quality_interpolated_pixel(
+                        source,
+                        mapped.x / mapped.z,
+                        mapped.y / mapped.z,
+                    )
                 };
                 let base = x as usize * 3;
                 row[base] = pixel[0];
@@ -1625,4 +1639,83 @@ fn get_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
         final_pixel[1] as f32,
         final_pixel[2] as f32,
     ])
+}
+
+fn cubic_sample(p0: f64, p1: f64, p2: f64, p3: f64, amount: f64) -> f64 {
+    p1 + 0.5
+        * amount
+        * (p2 - p0
+            + amount * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + amount * (3.0 * (p1 - p2) + p3 - p0)))
+}
+
+fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
+    let (width, height) = img.dimensions();
+    if width < 4
+        || height < 4
+        || x < 1.0
+        || y < 1.0
+        || x >= width as f64 - 2.0
+        || y >= height as f64 - 2.0
+    {
+        return get_interpolated_pixel(img, x, y);
+    }
+
+    let x_floor = x.floor() as i32;
+    let y_floor = y.floor() as i32;
+    let amount_x = x - x_floor as f64;
+    let amount_y = y - y_floor as f64;
+    if amount_x.abs() < 1e-9 && amount_y.abs() < 1e-9 {
+        return *img.get_pixel(x_floor as u32, y_floor as u32);
+    }
+
+    let mut output = [0.0f32; 3];
+    for channel in 0..3 {
+        let mut rows = [0.0f64; 4];
+        let mut local_min = f64::INFINITY;
+        let mut local_max = f64::NEG_INFINITY;
+        for (row_index, sample_y) in ((y_floor - 1)..=(y_floor + 2)).enumerate() {
+            let mut samples = [0.0f64; 4];
+            for (column_index, sample_x) in ((x_floor - 1)..=(x_floor + 2)).enumerate() {
+                let value = img.get_pixel(sample_x as u32, sample_y as u32)[channel] as f64;
+                samples[column_index] = value;
+                local_min = local_min.min(value);
+                local_max = local_max.max(value);
+            }
+            rows[row_index] =
+                cubic_sample(samples[0], samples[1], samples[2], samples[3], amount_x);
+        }
+        output[channel] = cubic_sample(rows[0], rows[1], rows[2], rows[3], amount_y)
+            .clamp(local_min, local_max) as f32;
+    }
+    Rgb(output)
+}
+
+#[cfg(test)]
+mod interpolation_tests {
+    use super::*;
+
+    #[test]
+    fn pixel_aligned_canvas_preserves_integer_reference_coordinates() {
+        let (offset, size) = pixel_aligned_canvas(-123.4, 876.2);
+        assert_eq!(offset, 124.0);
+        assert_eq!(size, 1001);
+        assert_eq!(offset.fract(), 0.0);
+        assert!(offset - 123.4 >= 0.0);
+    }
+
+    #[test]
+    fn cubic_warp_sampling_preserves_more_edge_contrast_than_bilinear() {
+        let image = Rgb32FImage::from_fn(8, 8, |x, _| {
+            let value = if x < 4 { 0.0 } else { 1.0 };
+            Rgb([value, value, value])
+        });
+        let bilinear_low = get_interpolated_pixel(&image, 3.25, 3.5)[0];
+        let bilinear_high = get_interpolated_pixel(&image, 3.75, 3.5)[0];
+        let cubic_low = get_high_quality_interpolated_pixel(&image, 3.25, 3.5)[0];
+        let cubic_high = get_high_quality_interpolated_pixel(&image, 3.75, 3.5)[0];
+
+        assert!(cubic_high - cubic_low > bilinear_high - bilinear_low);
+        assert!((0.0..=1.0).contains(&cubic_low));
+        assert!((0.0..=1.0).contains(&cubic_high));
+    }
 }

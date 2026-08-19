@@ -37,6 +37,7 @@ import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/u
 import ImageStackResultPreview from './ImageStackResultPreview';
 
 interface ImageStackModalProps {
+  detailImageBase64: string | null;
   error: string | null;
   finalImageBase64: string | null;
   isOpen: boolean;
@@ -50,7 +51,7 @@ interface ImageStackModalProps {
   onChange(): void;
   onOpenFile(path: string): void;
   onProcess(paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode): void;
-  onSave(blendMode: ImageStackBlendMode): Promise<string>;
+  onSave(blendMode: ImageStackBlendMode): Promise<string | null>;
 }
 
 const getDisplayName = (path: string) => {
@@ -226,6 +227,7 @@ function SourceLayerItem({
 }
 
 export default function ImageStackModal({
+  detailImageBase64,
   error,
   finalImageBase64,
   isOpen,
@@ -353,7 +355,7 @@ export default function ImageStackModal({
     setIsSaving(true);
     try {
       const path = await onSave(blendMode);
-      setSavedPath(path);
+      if (path) setSavedPath(path);
     } catch (saveError) {
       console.error('Failed to save image stack:', saveError);
     } finally {
@@ -443,6 +445,7 @@ export default function ImageStackModal({
                   <ImageStackResultPreview
                     alignmentLabel={translateAlignment(selectedAlignment.labelKey)}
                     alt={t('modals.imageStack.resultAlt')}
+                    detailSrc={detailImageBase64}
                     isFocused={isPreviewFocused}
                     modeLabel={
                       blendMode === 'focus'
@@ -510,7 +513,12 @@ export default function ImageStackModal({
                 role="status"
               >
                 <Check aria-hidden="true" size={15} />
-                <span className="min-w-0 flex-1 truncate">{t('modals.imageStack.savedSuccess')}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{t('modals.imageStack.savedSuccess')}</span>
+                  <span className="block truncate text-[10px] text-white/55" title={savedPath}>
+                    {savedPath}
+                  </span>
+                </span>
                 <button
                   className="font-medium underline underline-offset-2"
                   onClick={() => onOpenFile(savedPath)}

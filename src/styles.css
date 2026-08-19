@@ -2629,6 +2629,42 @@
     backface-visibility: hidden;
   }
 
+  .image-stack-preview-surface {
+    contain: layout paint style;
+    isolation: isolate;
+    overscroll-behavior: contain;
+  }
+
+  .image-stack-preview-stage {
+    contain: layout paint style;
+    backface-visibility: hidden;
+    transform: translate3d(0, 0, 0) scale(1);
+    will-change: transform;
+  }
+
+  .image-stack-preview-image {
+    backface-visibility: hidden;
+    box-shadow: 0 16px 44px rgb(0 0 0 / 32%);
+    transform: translateZ(0);
+  }
+
+  .image-stack-preview-image--detail {
+    visibility: hidden;
+  }
+
+  .image-stack-preview-surface[data-detail-ready='true'][data-interacting='false']
+    .image-stack-preview-image--interaction {
+    visibility: hidden;
+  }
+
+  .image-stack-preview-surface[data-detail-ready='true'][data-interacting='false'] .image-stack-preview-image--detail {
+    visibility: visible;
+  }
+
+  .image-stack-preview-surface[data-interacting='true'] .image-stack-preview-image {
+    box-shadow: none;
+  }
+
   .editor-load-error {
     position: absolute;
     top: 12px;

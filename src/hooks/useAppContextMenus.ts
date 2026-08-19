@@ -607,6 +607,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
               onClick: () => {
                 setUI({
                   imageStackModalState: {
+                    detailImageBase64: null,
                     error: null,
                     finalImageBase64: null,
                     isOpen: true,

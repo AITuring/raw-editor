@@ -62,6 +62,7 @@ export function useAndroidBackHandler() {
       if (ui.imageStackModalState.isOpen) {
         ui.setUI({
           imageStackModalState: {
+            detailImageBase64: null,
             isOpen: false,
             isProcessing: false,
             progressMessage: null,

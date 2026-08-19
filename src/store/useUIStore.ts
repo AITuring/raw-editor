@@ -45,6 +45,7 @@ export type ImageStackBlendMode = 'focus' | 'panorama';
 export type ImageStackAlignmentMode = 'auto' | 'perspective' | 'cylindrical' | 'spherical' | 'position';
 
 export interface ImageStackModalState {
+  detailImageBase64: string | null;
   error: string | null;
   finalImageBase64: string | null;
   isOpen: boolean;
@@ -238,6 +239,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     stitchingSourcePaths: [],
   },
   imageStackModalState: {
+    detailImageBase64: null,
     error: null,
     finalImageBase64: null,
     isOpen: false,

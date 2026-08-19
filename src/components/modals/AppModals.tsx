@@ -26,7 +26,7 @@ export interface AppModalsProps {
   handleImageSelect: (path: string) => void;
   handleSavePanorama: () => Promise<string>;
   handleStartPanorama: (paths: string[]) => void;
-  handleSaveImageStack: (blendMode: ImageStackBlendMode) => Promise<string>;
+  handleSaveImageStack: (blendMode: ImageStackBlendMode) => Promise<string | null>;
   handleStartImageStack: (
     paths: string[],
     blendMode: ImageStackBlendMode,
@@ -128,6 +128,7 @@ export default function AppModals(props: AppModalsProps) {
   const closeImageStackModal = () => {
     setUI({
       imageStackModalState: {
+        detailImageBase64: null,
         isOpen: false,
         isProcessing: false,
         progressMessage: null,
@@ -202,6 +203,7 @@ export default function AppModals(props: AppModalsProps) {
         progressMessage={panoramaModalState.progressMessage}
       />
       <ImageStackModal
+        detailImageBase64={imageStackModalState.detailImageBase64}
         error={imageStackModalState.error}
         finalImageBase64={imageStackModalState.finalImageBase64}
         initialAlignmentMode={imageStackModalState.alignmentMode}
@@ -213,6 +215,7 @@ export default function AppModals(props: AppModalsProps) {
           setUI((state) => ({
             imageStackModalState: {
               ...state.imageStackModalState,
+              detailImageBase64: null,
               error: null,
               finalImageBase64: null,
               progressMessage: null,

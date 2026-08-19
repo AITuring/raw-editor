@@ -291,10 +291,15 @@ export function useTauriListeners({
           const requestId = event.payload?.requestId;
           const resultId = event.payload?.resultId;
           const previewPath = event.payload?.previewPath;
+          const detailPreviewPath = event.payload?.detailPreviewPath;
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0
               ? convertFileSrc(previewPath.replace(/\\/g, '/'))
               : (event.payload?.base64 ?? null);
+          const detailPreviewSource =
+            typeof detailPreviewPath === 'string' && detailPreviewPath.length > 0
+              ? convertFileSrc(detailPreviewPath.replace(/\\/g, '/'))
+              : previewSource;
           useUIStore.getState().setUI((state) => {
             if (
               typeof requestId !== 'string' ||
@@ -307,6 +312,7 @@ export function useTauriListeners({
             return {
               imageStackModalState: {
                 ...state.imageStackModalState,
+                detailImageBase64: detailPreviewSource,
                 error: null,
                 finalImageBase64: previewSource,
                 isProcessing: false,
@@ -326,6 +332,7 @@ export function useTauriListeners({
             return {
               imageStackModalState: {
                 ...state.imageStackModalState,
+                detailImageBase64: null,
                 error: String(message),
                 finalImageBase64: null,
                 isProcessing: false,
