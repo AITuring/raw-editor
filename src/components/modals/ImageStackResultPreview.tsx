@@ -240,9 +240,18 @@ function ImageStackResultPreview({
 
   useEffect(
     () => () => {
-      if (renderFrameRef.current !== null) cancelAnimationFrame(renderFrameRef.current);
-      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-      if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current);
+      if (renderFrameRef.current !== null) {
+        cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = null;
+      }
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+      if (transitionTimerRef.current !== null) {
+        window.clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
     },
     [],
   );

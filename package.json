@@ -23,6 +23,7 @@
     "lint": "eslint . --max-warnings=0",
     "color-contract:check": "node tests/color-contract-boundary.mjs",
     "crop-transform:check": "node tests/crop-transform-contract.mjs",
+    "image-stack-preview:check": "node tests/image-stack-preview-contract.mjs",
     "local-only:check": "node tests/local-only-boundary.mjs",
     "preview-transport:check": "node tests/preview-transport-boundary.mjs",
     "preview-resolution:check": "node tests/preview-resolution.mjs",
