@@ -16,20 +16,9 @@ interface ImageStackResultPreviewProps {
   src: string;
 }
 
-interface PreviewView {
-  fitScale: number;
-  maxZoom: number;
-  panX: number;
-  panY: number;
-  zoom: number;
-}
-
 const MIN_ZOOM = 1;
-const MAX_RENDER_SCALE = 4;
-const ZOOM_FACTOR = 1.25;
-const PREVIEW_PADDING = 24;
-const MAX_CANVAS_DPR = 2;
-const SETTLE_DELAY_MS = 90;
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 0.25;
 
 const clampZoom = (zoom: number, maxZoom: number) => Math.min(maxZoom, Math.max(MIN_ZOOM, zoom));
 
@@ -43,187 +32,47 @@ export default function ImageStackResultPreview({
 }: ImageStackResultPreviewProps) {
   const { t } = useTranslation();
   const [zoom, setZoom] = useState(MIN_ZOOM);
-  const [renderedScale, setRenderedScale] = useState(1);
-  const [availableMaxZoom, setAvailableMaxZoom] = useState(MIN_ZOOM);
+  const [availableMaxZoom, setAvailableMaxZoom] = useState(MAX_ZOOM);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const sourceImageRef = useRef<HTMLImageElement | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const settleTimerRef = useRef<number | null>(null);
-  const isInteractingRef = useRef(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const lastPointerPosition = useRef({ x: 0, y: 0 });
-  const viewRef = useRef<PreviewView>({
-    fitScale: 1,
-    maxZoom: MIN_ZOOM,
-    panX: 0,
-    panY: 0,
-    zoom: MIN_ZOOM,
-  });
-
-  const drawCanvas = useCallback(() => {
-    const viewport = viewportRef.current;
-    const canvas = canvasRef.current;
-    const image = sourceImageRef.current;
-    if (!viewport || !canvas) return;
-
-    const viewportWidth = Math.max(1, viewport.clientWidth);
-    const viewportHeight = Math.max(1, viewport.clientHeight);
-    const dpr = Math.min(MAX_CANVAS_DPR, Math.max(1, window.devicePixelRatio || 1));
-    const backingWidth = Math.max(1, Math.round(viewportWidth * dpr));
-    const backingHeight = Math.max(1, Math.round(viewportHeight * dpr));
-    if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
-      canvas.width = backingWidth;
-      canvas.height = backingHeight;
-    }
-
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context) return;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.fillStyle = '#101010';
-    context.fillRect(0, 0, viewportWidth, viewportHeight);
-    if (!image || !image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) return;
-
-    const padding = Math.min(PREVIEW_PADDING, viewportWidth * 0.04, viewportHeight * 0.04);
-    const fitScale = Math.max(
-      Number.EPSILON,
-      Math.min(
-        Math.max(1, viewportWidth - padding * 2) / image.naturalWidth,
-        Math.max(1, viewportHeight - padding * 2) / image.naturalHeight,
-      ),
-    );
-    const nextMaxZoom = Math.max(MIN_ZOOM, MAX_RENDER_SCALE / fitScale);
-    const view = viewRef.current;
-    view.fitScale = fitScale;
-    view.maxZoom = nextMaxZoom;
-    view.zoom = clampZoom(view.zoom, nextMaxZoom);
-
-    const imageScale = fitScale * view.zoom;
-    const displayWidth = image.naturalWidth * imageScale;
-    const displayHeight = image.naturalHeight * imageScale;
-    const maxPanX = Math.max(0, (displayWidth - viewportWidth) / 2);
-    const maxPanY = Math.max(0, (displayHeight - viewportHeight) / 2);
-    view.panX = Math.min(maxPanX, Math.max(-maxPanX, view.panX));
-    view.panY = Math.min(maxPanY, Math.max(-maxPanY, view.panY));
-
-    const destinationX = (viewportWidth - displayWidth) / 2 + view.panX;
-    const destinationY = (viewportHeight - displayHeight) / 2 + view.panY;
-    const visibleLeft = Math.max(0, destinationX);
-    const visibleTop = Math.max(0, destinationY);
-    const visibleRight = Math.min(viewportWidth, destinationX + displayWidth);
-    const visibleBottom = Math.min(viewportHeight, destinationY + displayHeight);
-
-    if (visibleRight > visibleLeft && visibleBottom > visibleTop) {
-      const sourceX = (visibleLeft - destinationX) / imageScale;
-      const sourceY = (visibleTop - destinationY) / imageScale;
-      const sourceWidth = (visibleRight - visibleLeft) / imageScale;
-      const sourceHeight = (visibleBottom - visibleTop) / imageScale;
-      context.imageSmoothingEnabled = imageScale < 0.999;
-      context.imageSmoothingQuality = isInteractingRef.current ? 'medium' : 'high';
-      context.drawImage(
-        image,
-        sourceX,
-        sourceY,
-        sourceWidth,
-        sourceHeight,
-        visibleLeft,
-        visibleTop,
-        visibleRight - visibleLeft,
-        visibleBottom - visibleTop,
-      );
-    }
-
-    setAvailableMaxZoom((current) => (Math.abs(current - nextMaxZoom) < 0.001 ? current : nextMaxZoom));
-    setRenderedScale((current) => (Math.abs(current - imageScale) < 0.001 ? current : imageScale));
-    setZoom((current) => (Math.abs(current - view.zoom) < 0.001 ? current : view.zoom));
-  }, []);
-
-  const scheduleRender = useCallback(() => {
-    if (animationFrameRef.current !== null) return;
-    animationFrameRef.current = window.requestAnimationFrame(() => {
-      animationFrameRef.current = null;
-      drawCanvas();
-    });
-  }, [drawCanvas]);
-
-  const markInteraction = useCallback(() => {
-    isInteractingRef.current = true;
-    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-    settleTimerRef.current = window.setTimeout(() => {
-      settleTimerRef.current = null;
-      isInteractingRef.current = false;
-      scheduleRender();
-    }, SETTLE_DELAY_MS);
-  }, [scheduleRender]);
 
   const resetView = useCallback(() => {
-    const view = viewRef.current;
-    view.zoom = MIN_ZOOM;
-    view.panX = 0;
-    view.panY = 0;
     setZoom(MIN_ZOOM);
-    scheduleRender();
-  }, [scheduleRender]);
-
-  const updateZoom = useCallback(
-    (nextZoom: number, anchorX = 0, anchorY = 0) => {
-      const view = viewRef.current;
-      const resolvedZoom = clampZoom(nextZoom, view.maxZoom);
-      if (Math.abs(resolvedZoom - view.zoom) < 0.0001) return;
-      const scaleRatio = resolvedZoom / view.zoom;
-      view.panX = anchorX - (anchorX - view.panX) * scaleRatio;
-      view.panY = anchorY - (anchorY - view.panY) * scaleRatio;
-      view.zoom = resolvedZoom;
-      if (resolvedZoom === MIN_ZOOM) {
-        view.panX = 0;
-        view.panY = 0;
-      }
-      markInteraction();
-      scheduleRender();
-    },
-    [markInteraction, scheduleRender],
-  );
+    setPan({ x: 0, y: 0 });
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const image = new Image();
-    image.decoding = 'async';
-    sourceImageRef.current = null;
     resetView();
-    setAvailableMaxZoom(MIN_ZOOM);
-    image.onload = () => {
-      if (cancelled) return;
-      sourceImageRef.current = image;
-      resetView();
-    };
-    image.onerror = () => {
-      if (!cancelled) sourceImageRef.current = null;
-    };
-    image.src = src;
-    return () => {
-      cancelled = true;
-      image.onload = null;
-      image.onerror = null;
-      if (sourceImageRef.current === image) sourceImageRef.current = null;
-    };
+    setAvailableMaxZoom(MAX_ZOOM);
   }, [resetView, src]);
+
+  const updateAvailableMaxZoom = useCallback(() => {
+    const image = imageRef.current;
+    if (!image || !image.complete || image.naturalWidth === 0 || image.clientWidth === 0 || image.clientHeight === 0) {
+      return;
+    }
+    const nativeWidthZoom = image.naturalWidth / image.clientWidth;
+    const nativeHeightZoom = image.naturalHeight / image.clientHeight;
+    const nextMaxZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nativeWidthZoom, nativeHeightZoom));
+    setAvailableMaxZoom(nextMaxZoom);
+    setZoom((current) => Math.min(current, nextMaxZoom));
+    if (nextMaxZoom === MIN_ZOOM) setPan({ x: 0, y: 0 });
+  }, []);
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
-    const observer = new ResizeObserver(scheduleRender);
-    observer.observe(viewport);
-    scheduleRender();
-    return () => observer.disconnect();
-  }, [scheduleRender]);
+    const image = imageRef.current;
+    if (!viewport || !image) return;
 
-  useEffect(
-    () => () => {
-      if (animationFrameRef.current !== null) window.cancelAnimationFrame(animationFrameRef.current);
-      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-    },
-    [],
-  );
+    const observer = new ResizeObserver(updateAvailableMaxZoom);
+    observer.observe(viewport);
+    observer.observe(image);
+    updateAvailableMaxZoom();
+    return () => observer.disconnect();
+  }, [src, updateAvailableMaxZoom]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -231,18 +80,10 @@ export default function ImageStackResultPreview({
     const handleMouseMove = (event: MouseEvent) => {
       const deltaX = event.clientX - lastPointerPosition.current.x;
       const deltaY = event.clientY - lastPointerPosition.current.y;
-      const view = viewRef.current;
-      view.panX += deltaX;
-      view.panY += deltaY;
+      setPan((current) => ({ x: current.x + deltaX, y: current.y + deltaY }));
       lastPointerPosition.current = { x: event.clientX, y: event.clientY };
-      markInteraction();
-      scheduleRender();
     };
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      isInteractingRef.current = false;
-      scheduleRender();
-    };
+    const handleMouseUp = () => setIsDragging(false);
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -250,31 +91,39 @@ export default function ImageStackResultPreview({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, markInteraction, scheduleRender]);
+  }, [isDragging]);
+
+  const updateZoomFromCenter = useCallback(
+    (nextZoom: number) => {
+      const resolvedZoom = clampZoom(nextZoom, availableMaxZoom);
+      setZoom(resolvedZoom);
+      if (resolvedZoom === MIN_ZOOM) setPan({ x: 0, y: 0 });
+    },
+    [availableMaxZoom],
+  );
 
   const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const viewport = viewportRef.current;
-    if (!viewport) return;
+    if (!viewportRef.current) return;
 
-    const normalizedDelta =
-      event.deltaMode === 1
-        ? event.deltaY * 16
-        : event.deltaMode === 2
-          ? event.deltaY * viewport.clientHeight
-          : event.deltaY;
-    const nextZoom = viewRef.current.zoom * Math.exp(-normalizedDelta * 0.0015);
-    const bounds = viewport.getBoundingClientRect();
-    updateZoom(
-      nextZoom,
-      event.clientX - bounds.left - bounds.width / 2,
-      event.clientY - bounds.top - bounds.height / 2,
-    );
+    const nextZoom = clampZoom(zoom - event.deltaY * 0.0015, availableMaxZoom);
+    if (nextZoom === zoom) return;
+
+    const bounds = viewportRef.current.getBoundingClientRect();
+    const pointerX = event.clientX - bounds.left - bounds.width / 2;
+    const pointerY = event.clientY - bounds.top - bounds.height / 2;
+    const scaleRatio = nextZoom / zoom;
+
+    setPan((current) => ({
+      x: pointerX - (pointerX - current.x) * scaleRatio,
+      y: pointerY - (pointerY - current.y) * scaleRatio,
+    }));
+    setZoom(nextZoom);
   };
 
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || viewRef.current.zoom === MIN_ZOOM) return;
+    if (event.button !== 0 || zoom === MIN_ZOOM) return;
     event.preventDefault();
     setIsDragging(true);
     lastPointerPosition.current = { x: event.clientX, y: event.clientY };
@@ -283,17 +132,17 @@ export default function ImageStackResultPreview({
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      updateZoom(viewRef.current.zoom * ZOOM_FACTOR);
+      updateZoomFromCenter(zoom + ZOOM_STEP);
     } else if (event.key === '-') {
       event.preventDefault();
-      updateZoom(viewRef.current.zoom / ZOOM_FACTOR);
+      updateZoomFromCenter(zoom - ZOOM_STEP);
     } else if (event.key === '0') {
       event.preventDefault();
       resetView();
     }
   };
 
-  const zoomPercent = Math.round(renderedScale * 100);
+  const zoomPercent = Math.round(zoom * 100);
 
   return (
     <div
@@ -302,11 +151,7 @@ export default function ImageStackResultPreview({
       className={`relative h-full w-full overflow-hidden select-none bg-[#101010] focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-accent ${
         zoom > MIN_ZOOM ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
       }`}
-      onDoubleClick={() =>
-        viewRef.current.zoom > MIN_ZOOM
-          ? resetView()
-          : updateZoom(Math.min(viewRef.current.maxZoom, 1 / viewRef.current.fitScale))
-      }
+      onDoubleClick={() => (zoom > MIN_ZOOM ? resetView() : updateZoomFromCenter(2))}
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       onWheel={handleWheel}
@@ -314,7 +159,24 @@ export default function ImageStackResultPreview({
       role="region"
       tabIndex={0}
     >
-      <canvas aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" ref={canvasRef} />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 sm:p-6">
+        <div
+          className="flex h-full w-full origin-center items-center justify-center"
+          style={{
+            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+            transition: isDragging ? 'none' : 'transform 100ms cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+        >
+          <img
+            alt={alt}
+            className="block max-h-full max-w-full object-contain shadow-2xl"
+            draggable={false}
+            onLoad={updateAvailableMaxZoom}
+            ref={imageRef}
+            src={src}
+          />
+        </div>
+      </div>
 
       <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">
         <span className="rounded-md border border-white/10 bg-black/65 px-2 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm">
@@ -344,7 +206,7 @@ export default function ImageStackResultPreview({
           className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-35"
           data-tooltip={t('modals.imageStack.zoomOut')}
           disabled={zoom <= MIN_ZOOM}
-          onClick={() => updateZoom(viewRef.current.zoom / ZOOM_FACTOR)}
+          onClick={() => updateZoomFromCenter(zoom - ZOOM_STEP)}
           type="button"
         >
           <ZoomOut aria-hidden="true" size={17} />
@@ -360,7 +222,7 @@ export default function ImageStackResultPreview({
           className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-35"
           data-tooltip={t('modals.imageStack.zoomIn')}
           disabled={zoom >= availableMaxZoom - 0.001}
-          onClick={() => updateZoom(viewRef.current.zoom * ZOOM_FACTOR)}
+          onClick={() => updateZoomFromCenter(zoom + ZOOM_STEP)}
           type="button"
         >
           <ZoomIn aria-hidden="true" size={17} />

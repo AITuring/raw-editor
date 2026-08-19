@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-toastify';
+import { message } from '../ui/messageApi';
 import { Circle, Hexagon, Octagon, Aperture } from 'lucide-react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
@@ -168,7 +168,7 @@ export default function EffectsPanel({
         lensBlurDepthMap: b64,
       }));
     } catch (e: any) {
-      toast.error(`Failed to generate depth map: ${e}`);
+      message.error(`Failed to generate depth map: ${e}`);
       setAdjustments((prev: Partial<Adjustments>) => ({ ...prev, lensBlurEnabled: false }));
     } finally {
       setIsGeneratingDepth(false);

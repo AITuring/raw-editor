@@ -1345,6 +1345,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "Zurück",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "Ebene {{number}} ziehen, um die Reihenfolge zu ändern",

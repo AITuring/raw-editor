@@ -1,8 +1,7 @@
-import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { type PointerEvent as ReactPointerEvent, useState, useEffect, useCallback, useRef } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, TauriEvent } from '@tauri-apps/api/event';
-import { ToastContainer, toast, Slide } from 'react-toastify';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import clsx from 'clsx';
 import { Images } from 'lucide-react';
@@ -12,6 +11,8 @@ import FolderTree from './components/panel/right/FolderTree';
 import SettingsPanel from './components/panel/SettingsPanel';
 import ExportPanel from './components/panel/right/ExportPanel';
 import GlobalTooltip from './components/ui/GlobalTooltip';
+import { MessageHost } from './components/ui/Message';
+import { message } from './components/ui/messageApi';
 import AppModals from './components/modals/AppModals';
 
 import SidePanelArea from './components/panel/SidePanelArea';
@@ -61,7 +62,6 @@ import {
   LibraryViewMode,
   Panel,
   PanelRegion,
-  Theme,
   ThumbnailSize,
   ThumbnailAspectRatio,
 } from './components/ui/AppProperties';
@@ -97,10 +97,9 @@ const insertChildrenIntoTree = (node: any, targetPath: string, newChildren: any[
 function App() {
   const COMPACT_EDITOR_MAX_WIDTH = 900;
 
-  const { appSettings, theme, osPlatform, handleSettingsChange } = useSettingsStore(
+  const { appSettings, osPlatform, handleSettingsChange } = useSettingsStore(
     useShallow((state) => ({
       appSettings: state.appSettings,
-      theme: state.theme,
       osPlatform: state.osPlatform,
       handleSettingsChange: state.handleSettingsChange,
     })),
@@ -484,8 +483,6 @@ function App() {
     return () => window.removeEventListener('contextmenu', handleGlobalContextMenu);
   }, []);
 
-  const isLightTheme = useMemo(() => [Theme.Light, Theme.Snow, Theme.Arctic].includes(theme as Theme), [theme]);
-
   useEffect(() => {
     if (
       (activeRightPanel !== Panel.Masks || !activeMaskContainerId) &&
@@ -652,7 +649,7 @@ function App() {
           pinnedFolderTrees: state.pinnedFolderTrees.map((tree) => insertChildrenIntoTree(tree, path, newChildren)),
         }));
       } catch (err) {
-        toast.error(`Failed to load folder: ${err}`);
+        message.error(`Failed to load folder: ${err}`);
       }
     },
     [expandedFolders, appSettings?.enableFolderImageCounts, setLibrary],
@@ -962,25 +959,7 @@ function App() {
           handleCreateAlbumItem={handleCreateAlbumItem}
           handleRenameAlbumItem={handleRenameAlbumItem}
         />
-        <ToastContainer
-          position="bottom-right"
-          autoClose={5000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable={false}
-          pauseOnHover
-          theme={isLightTheme ? 'light' : 'dark'}
-          transition={Slide}
-          toastClassName={() =>
-            clsx(
-              'relative flex min-h-16 p-4 rounded-lg justify-between overflow-hidden cursor-pointer mb-4',
-              'bg-surface! text-text-primary! border! border-border-color! shadow-2xl! max-w-[420px]!',
-            )
-          }
-        />
+        <MessageHost topOffset={!appSettings?.decorations && !isWindowFullScreen && !isFullScreen ? 48 : 16} />
       </div>
     </>
   );

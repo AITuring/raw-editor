@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
@@ -412,7 +412,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         }
       } catch (err) {
         console.error('Failed to load folder contents:', err);
-        toast.error('Failed to load images from the selected folder.');
+        message.error('Failed to load images from the selected folder.');
       } finally {
         useLibraryStore.getState().setLibrary({ isViewLoading: false });
       }
@@ -455,7 +455,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         });
       } catch (err) {
         console.error('Failed to load album images:', err);
-        toast.error(`Failed to load album: ${err}`);
+        message.error(`Failed to load album: ${err}`);
       } finally {
         setLibrary({ isViewLoading: false });
       }
@@ -478,11 +478,11 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         });
 
         if (validPaths.length === 0) {
-          toast.error(i18n.t('library.import.noSupportedFiles'));
+          message.error(i18n.t('library.import.noSupportedFiles'));
           return;
         }
         if (validPaths.length !== uniquePaths.length) {
-          toast.info(
+          message.info(
             i18n.t('library.import.skippedUnsupported', {
               skipped: uniquePaths.length - validPaths.length,
             }),
@@ -497,7 +497,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
         const files = await invoke<ImageFile[]>(Invokes.GetAlbumImages, { paths: validPaths });
         if (files.length === 0) {
-          toast.error(i18n.t('library.import.noSupportedFiles'));
+          message.error(i18n.t('library.import.noSupportedFiles'));
           return;
         }
 
@@ -517,7 +517,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         await handleImageSelect(firstPath);
       } catch (error) {
         console.error('Failed to open selected image files:', error);
-        toast.error(i18n.t('library.import.openFailed'));
+        message.error(i18n.t('library.import.openFailed'));
       } finally {
         useLibraryStore.getState().setLibrary({ isViewLoading: false });
       }
@@ -547,7 +547,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       }
     } catch (error) {
       console.error('Failed to open image dialog:', error);
-      toast.error(i18n.t('library.import.openFailed'));
+      message.error(i18n.t('library.import.openFailed'));
     }
   }, [handleOpenImagePaths]);
 
@@ -572,14 +572,14 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       if (paths.length === 0) return [];
 
       if (paths.length < 2 || paths.length > 30) {
-        toast.info(i18n.t('library.splash.multiImageSelectionHint'));
+        message.info(i18n.t('library.splash.multiImageSelectionHint'));
         return [];
       }
 
       return paths;
     } catch (error) {
       console.error('Failed to open multi-image workflow dialog:', error);
-      toast.error(i18n.t('library.import.openFailed'));
+      message.error(i18n.t('library.import.openFailed'));
       return [];
     }
   }, []);
@@ -619,7 +619,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
             });
             setLibrary({ folderTrees: [...folderTrees, newTree] });
           } catch (e) {
-            toast.error(`Failed to load folder tree: ${e}`);
+            message.error(`Failed to load folder tree: ${e}`);
           } finally {
             setLibrary({ isTreeLoading: false });
           }
@@ -628,7 +628,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       }
     } catch (err) {
       console.error(isAndroid ? 'Failed to open Android library root:' : 'Failed to open directory dialog:', err);
-      toast.error(isAndroid ? 'Failed to open library.' : 'Failed to open folder selection dialog.');
+      message.error(isAndroid ? 'Failed to open library.' : 'Failed to open folder selection dialog.');
     }
   };
 
@@ -728,7 +728,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
     restore().catch((err) => {
       console.error('Failed to restore session:', err);
-      toast.error('Failed to restore session. A folder may have been moved or deleted.');
+      message.error('Failed to restore session. A folder may have been moved or deleted.');
       handleGoHome();
       useLibraryStore.getState().setLibrary({ isTreeLoading: false });
     });

@@ -1372,6 +1372,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "Volver",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "Arrastra la capa {{number}} para reordenarla",

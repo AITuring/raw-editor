@@ -68,9 +68,6 @@ importers:
       react-konva:
         specifier: ^19.2.5
         version: 19.2.5(@types/react@19.2.18)(konva@10.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      react-toastify:
-        specifier: ^11.1.0
-        version: 11.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-window:
         specifier: ^2.2.7
         version: 2.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -2087,12 +2084,6 @@ packages:
     engines: {node: '>=0.10.0'}
     peerDependencies:
       react: ^19.2.0
-
-  react-toastify@11.1.0:
-    resolution: {integrity: sha512-e9h23x3phN0wbFeB6yovmWp7lobzV4CaCH0LO8nVP6H7Y+3GbcLpIzMm9dJhcp1RXbpyfvjgpfXqO80QAmn7sg==}
-    peerDependencies:
-      react: ^18 || ^19
-      react-dom: ^18 || ^19
 
   react-window@2.3.0:
     resolution: {integrity: sha512-FW6TIpaOH646k51X7yE+LSCWGkt5Pfsnc1fVyq/sCI9h0pTqmMiBXM04pzFKg3Bt7NGkeV6kqbU8d/QjmFS7Ug==}
@@ -4322,12 +4313,6 @@ snapshots:
     dependencies:
       react: 19.2.8
       scheduler: 0.27.0
-
-  react-toastify@11.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
-    dependencies:
-      clsx: 2.1.1
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
 
   react-window@2.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:

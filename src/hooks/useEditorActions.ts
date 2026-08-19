@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import debounce from 'lodash.debounce';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useEditorStore } from '../store/useEditorStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -26,7 +26,7 @@ export const debouncedSetHistory = debounce((newAdj: Adjustments) => {
 export const debouncedSave = debounce((path: string, adjustmentsToSave: Adjustments) => {
   invoke(Invokes.SaveMetadataAndUpdateThumbnail, { path, adjustments: adjustmentsToSave }).catch((err) => {
     console.error('Auto-save failed:', err);
-    toast.error(`Failed to save changes: ${err}`);
+    message.error(`Failed to save changes: ${err}`);
   });
 }, 300);
 
@@ -97,7 +97,7 @@ export function useEditorActions() {
         sectionVisibility: { ...prev.sectionVisibility, ...autoAdjustments.sectionVisibility },
       }));
     } catch (err) {
-      toast.error(`Failed to apply auto adjustments: ${err}`);
+      message.error(`Failed to apply auto adjustments: ${err}`);
     }
   }, [setAdjustments]);
 
@@ -119,7 +119,7 @@ export function useEditorActions() {
           sectionVisibility: { ...(prev.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility), effects: true },
         }));
       } catch (err) {
-        toast.error(`Failed to load LUT: ${err}`);
+        message.error(`Failed to load LUT: ${err}`);
       }
     },
     [setAdjustments],
@@ -169,7 +169,7 @@ export function useEditorActions() {
             setEditor({ adjustments: resetData });
           }
         })
-        .catch((err) => toast.error(`Failed to reset adjustments: ${err}`));
+        .catch((err) => message.error(`Failed to reset adjustments: ${err}`));
     },
     [setEditor],
   );
@@ -194,7 +194,7 @@ export function useEditorActions() {
           sourceAdjustments = INITIAL_ADJUSTMENTS;
         }
       } catch (err) {
-        toast.error(`Failed to load metadata for copying: ${err}`);
+        message.error(`Failed to load metadata for copying: ${err}`);
         return;
       }
     }
@@ -273,7 +273,7 @@ export function useEditorActions() {
             });
           }
         })
-        .catch((err) => toast.error(`Failed to paste adjustments: ${err}`));
+        .catch((err) => message.error(`Failed to paste adjustments: ${err}`));
 
       setProcess({ isPasted: true });
     },

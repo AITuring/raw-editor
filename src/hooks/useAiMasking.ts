@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useEditorStore } from '../store/useEditorStore';
 import { useEditorActions } from './useEditorActions';
 import { Adjustments, AiPatch, MaskContainer, Coord } from '../utils/adjustments';
@@ -83,7 +83,7 @@ export function useAiMasking() {
           ),
         }));
       } catch (err: any) {
-        toast.error(`Cleanup Failed: ${err.message || String(err)}`);
+        message.error(`Cleanup Failed: ${err.message || String(err)}`);
         setAdjustments((prev: Partial<Adjustments>) => ({
           ...prev,
           aiPatches: prev.aiPatches?.map((p: AiPatch) => (p.id === patchId ? { ...p, isLoading: false } : p)),
@@ -135,7 +135,7 @@ export function useAiMasking() {
         }));
         setEditor({ activeAiPatchContainerId: null, activeAiSubMaskId: null });
       } catch (err) {
-        toast.error(`AI Replace Failed: ${err}`);
+        message.error(`AI Replace Failed: ${err}`);
         setAdjustments((prev: Adjustments) => ({
           ...prev,
           aiPatches: prev.aiPatches.map((p: AiPatch) => (p.id === patchId ? { ...p, isLoading: false } : p)),
@@ -221,7 +221,7 @@ export function useAiMasking() {
         }));
         setEditor({ activeAiPatchContainerId: null, activeAiSubMaskId: null });
       } catch (err: any) {
-        toast.error(`Quick Erase Failed: ${err.message || String(err)}`);
+        message.error(`Quick Erase Failed: ${err.message || String(err)}`);
         setAdjustments((prev: Partial<Adjustments>) => ({
           ...prev,
           aiPatches: prev.aiPatches?.map((p: AiPatch) => (p.id === patchId ? { ...p, isLoading: false } : p)),
@@ -296,7 +296,7 @@ export function useAiMasking() {
       patchesSentToBackend.delete(subMaskId);
       updateSubMask(subMaskId, { parameters: mergedParameters });
     } catch (error) {
-      toast.error(`AI Mask Failed: ${error}`);
+      message.error(`AI Mask Failed: ${error}`);
     } finally {
       setEditor({ isGeneratingAiMask: false });
     }
@@ -330,7 +330,7 @@ export function useAiMasking() {
       patchesSentToBackend.delete(subMaskId);
       updateSubMask(subMaskId, { parameters: mergedParameters });
     } catch (error) {
-      toast.error(`AI Depth Mask Failed: ${error}`);
+      message.error(`AI Depth Mask Failed: ${error}`);
     } finally {
       setEditor({ isGeneratingAiMask: false });
     }
@@ -358,7 +358,7 @@ export function useAiMasking() {
       patchesSentToBackend.delete(subMaskId);
       updateSubMask(subMaskId, { parameters: mergedParameters });
     } catch (error) {
-      toast.error(`AI Mask Failed: ${error}`);
+      message.error(`AI Mask Failed: ${error}`);
     } finally {
       setEditor({ isGeneratingAiMask: false });
     }
@@ -386,7 +386,7 @@ export function useAiMasking() {
       patchesSentToBackend.delete(subMaskId);
       updateSubMask(subMaskId, { parameters: mergedParameters });
     } catch (error) {
-      toast.error(`AI Mask Failed: ${error}`);
+      message.error(`AI Mask Failed: ${error}`);
     } finally {
       setEditor({ isGeneratingAiMask: false });
     }

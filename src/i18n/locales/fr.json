@@ -1373,6 +1373,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "Retour",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "Faites glisser le calque {{number}} pour le réorganiser",

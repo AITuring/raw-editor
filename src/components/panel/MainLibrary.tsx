@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import {
   AlertTriangle,
+  ArrowLeft,
   Check,
   Folder,
   FolderInput,
-  Home,
   ImagePlus,
   Loader2,
   RefreshCw,
@@ -556,42 +556,56 @@ export default function MainLibrary(props: MainLibraryProps) {
         onMouseEnter={() => setIsProgressHovered(true)}
         onMouseLeave={() => setIsProgressHovered(false)}
       >
-        <div className="min-w-0">
-          <Text variant={TextVariants.headline}>{t('library.header.title')}</Text>
-          {!props.isAndroid && (
-            <div className="flex items-center gap-2">
-              {props.currentFolderPath ? (
-                <Text className="truncate">{props.currentFolderPath}</Text>
-              ) : props.imageList.length > 0 ? (
-                <Text className="truncate">{t('library.header.selectedFiles', { total: props.imageList.length })}</Text>
-              ) : (
-                <p className="text-sm invisible select-none pointer-events-none h-5 overflow-hidden"></p>
-              )}
-              <div
-                className={`flex items-center gap-2 overflow-hidden transition-[max-width,opacity] duration-300 whitespace-nowrap ${
-                  isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'
-                }`}
-                onTransitionEnd={(e) => {
-                  if (e.propertyName === 'opacity' && !isBusyDelayed) {
-                    setIsBusyLoaderMounted(false);
-                  }
-                }}
-              >
-                {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-status-info shrink-0" />}
-                <div
-                  className={`flex items-center transition-[max-width,opacity] duration-300 ease-out overflow-hidden ${
-                    isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
-                      ? 'max-w-xs opacity-100'
-                      : 'max-w-0 opacity-0'
-                  }`}
-                >
-                  <Text variant={TextVariants.small} color={TextColors.secondary} className="whitespace-nowrap">
-                    ({props.thumbnailProgress?.current ?? 0}/{props.thumbnailProgress?.total ?? 0})
+        <div className="flex min-w-0 items-center gap-3">
+          <Button
+            aria-label={t('library.tooltips.goHome')}
+            className="h-10 shrink-0 rounded-lg border border-border-color/50 bg-surface px-3 text-text-primary shadow-sm hover:bg-card-active"
+            data-tooltip={t('library.tooltips.goHome')}
+            onClick={props.onGoHome}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            <span className="whitespace-nowrap">{t('library.tooltips.goHome')}</span>
+          </Button>
+          <div className="min-w-0">
+            <Text variant={TextVariants.headline}>{t('library.header.title')}</Text>
+            {!props.isAndroid && (
+              <div className="flex items-center gap-2">
+                {props.currentFolderPath ? (
+                  <Text className="truncate">{props.currentFolderPath}</Text>
+                ) : props.imageList.length > 0 ? (
+                  <Text className="truncate">
+                    {t('library.header.selectedFiles', { total: props.imageList.length })}
                   </Text>
+                ) : (
+                  <p className="text-sm invisible select-none pointer-events-none h-5 overflow-hidden"></p>
+                )}
+                <div
+                  className={`flex items-center gap-2 overflow-hidden transition-[max-width,opacity] duration-300 whitespace-nowrap ${
+                    isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'
+                  }`}
+                  onTransitionEnd={(e) => {
+                    if (e.propertyName === 'opacity' && !isBusyDelayed) {
+                      setIsBusyLoaderMounted(false);
+                    }
+                  }}
+                >
+                  {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-status-info shrink-0" />}
+                  <div
+                    className={`flex items-center transition-[max-width,opacity] duration-300 ease-out overflow-hidden ${
+                      isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
+                        ? 'max-w-xs opacity-100'
+                        : 'max-w-0 opacity-0'
+                    }`}
+                  >
+                    <Text variant={TextVariants.small} color={TextColors.secondary} className="whitespace-nowrap">
+                      ({props.thumbnailProgress?.current ?? 0}/{props.thumbnailProgress?.total ?? 0})
+                    </Text>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
           {props.importState.status === Status.Importing && (
@@ -668,15 +682,6 @@ export default function MainLibrary(props: MainLibraryProps) {
                 <ImagePlus aria-hidden="true" className="w-5 h-5" />
               </Button>
             )}
-            <Button
-              aria-label={t('library.tooltips.goHome')}
-              className="h-12 w-12 bg-transparent text-text-primary shadow-none p-0 flex items-center justify-center"
-              onClick={props.onGoHome}
-              data-tooltip={t('library.tooltips.goHome')}
-              type="button"
-            >
-              <Home aria-hidden="true" className="w-5 h-5" />
-            </Button>
           </div>
         </div>
       </header>

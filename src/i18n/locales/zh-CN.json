@@ -1134,7 +1134,7 @@
     },
     "tooltips": {
       "communityPresets": "社区预设",
-      "goHome": "返回首页",
+      "goHome": "返回封面",
       "importImages": "导入图像"
     },
     "viewMode": {
@@ -1354,6 +1354,7 @@
         "spherical": "球面",
         "sphericalDescription": "适合水平、垂直方向都较宽的视野。"
       },
+      "back": "返回",
       "cancel": "取消",
       "close": "关闭",
       "dragLayer": "拖动第 {{number}} 层调整顺序",

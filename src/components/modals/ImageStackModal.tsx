@@ -14,6 +14,7 @@ import type { CollisionDetection, DragEndEvent } from '@dnd-kit/core';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   Check,
   Cylinder,
@@ -293,14 +294,14 @@ export default function ImageStackModal({
       if (event.key === 'Escape' && isPreviewFocused) {
         event.preventDefault();
         setIsPreviewFocused(false);
-      } else if (event.key === 'Escape' && !isProcessing && !isSaving) {
+      } else if (event.key === 'Escape' && !isSaving) {
         event.preventDefault();
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isPreviewFocused, isProcessing, isSaving, onClose]);
+  }, [isOpen, isPreviewFocused, isSaving, onClose]);
 
   const selectedAlignment = useMemo(
     () => ALIGNMENT_OPTIONS.find((option) => option.value === alignmentMode) || ALIGNMENT_OPTIONS[0],
@@ -381,8 +382,20 @@ export default function ImageStackModal({
         initial={false}
         transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
       >
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border-color bg-surface px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border-color bg-surface px-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-3">
+            <button
+              aria-label={t('modals.imageStack.back')}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-40"
+              disabled={isSaving}
+              onClick={onClose}
+              ref={closeButtonRef}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" size={17} />
+              <span className="hidden sm:inline">{t('modals.imageStack.back')}</span>
+            </button>
+            <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border-color" />
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
               <Layers3 aria-hidden="true" size={18} />
             </div>
@@ -398,8 +411,7 @@ export default function ImageStackModal({
           <button
             aria-label={t('modals.imageStack.close')}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-40"
-            disabled={isProcessing || isSaving}
-            ref={closeButtonRef}
+            disabled={isSaving}
             onClick={onClose}
             type="button"
           >
@@ -672,7 +684,7 @@ export default function ImageStackModal({
           <div className="flex justify-end gap-2">
             <button
               className="rounded-lg px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary disabled:opacity-40"
-              disabled={isProcessing || isSaving}
+              disabled={isSaving}
               onClick={onClose}
               type="button"
             >

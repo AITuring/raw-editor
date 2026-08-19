@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
@@ -32,7 +32,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
 
     invoke(Invokes.SetRatingForPaths, { paths: pathsToRate, rating: finalRating }).catch((err) => {
       console.error(err);
-      toast.error(`Failed to apply rating: ${err}`);
+      message.error(`Failed to apply rating: ${err}`);
     });
   }, []);
 
@@ -66,7 +66,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
         }),
       }));
     } catch (err) {
-      toast.error(`Failed to set color label: ${err}`);
+      message.error(`Failed to set color label: ${err}`);
     }
   }, []);
 
@@ -128,7 +128,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
         }
       });
     } catch (err) {
-      toast.error(`Failed to update metadata: ${err}`);
+      message.error(`Failed to update metadata: ${err}`);
     }
   }, []);
 
@@ -323,7 +323,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
       });
       setLibrary({ pinnedFolderTrees: trees });
     } catch (err) {
-      toast.error(`Failed to refresh pinned folders: ${err}`);
+      message.error(`Failed to refresh pinned folders: ${err}`);
     }
   }, []);
 
@@ -391,7 +391,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
         const sortedTree = await invoke(Invokes.GetAlbums);
         setLibrary({ albumTree: sortedTree as AlbumItem[] });
       } catch (err) {
-        toast.error(`Failed to create: ${err}`);
+        message.error(`Failed to create: ${err}`);
       }
     }
   }, []);
@@ -420,7 +420,7 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
         const sortedTree = await invoke(Invokes.GetAlbums);
         setLibrary({ albumTree: sortedTree as AlbumItem[] });
       } catch (err) {
-        toast.error(`Failed to rename: ${err}`);
+        message.error(`Failed to rename: ${err}`);
       }
     }
   }, []);

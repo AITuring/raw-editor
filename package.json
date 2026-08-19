@@ -68,7 +68,6 @@
     "react-i18next": "^17.0.8",
     "react-image-crop": "^11.1.2",
     "react-konva": "^19.2.5",
-    "react-toastify": "^11.1.0",
     "react-window": "^2.2.7",
     "simple-icons": "^16.25.0",
     "uuid": "^14.0.1",

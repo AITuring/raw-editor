@@ -1343,6 +1343,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "뒤로",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "{{number}}번 레이어를 드래그하여 순서 변경",

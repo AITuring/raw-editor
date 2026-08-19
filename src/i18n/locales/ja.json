@@ -1343,6 +1343,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "戻る",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "レイヤー {{number}} をドラッグして並べ替え",

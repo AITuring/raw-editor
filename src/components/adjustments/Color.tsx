@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Loader2, Pipette, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'react-toastify';
+import { message } from '../ui/messageApi';
 import Slider from '../ui/Slider';
 import ColorWheel from '../ui/ColorWheel';
 import { ColorAdjustment, ColorCalibration, HueSatLum, INITIAL_ADJUSTMENTS } from '../../utils/adjustments';
@@ -424,7 +424,7 @@ export default function ColorPanel({
         const activeImagePath = useEditorStore.getState().selectedImage?.path;
         if (whiteBalanceRequestId.current === requestId && activeImagePath === requestedPath) {
           setAdjustments((previous: Adjustments) => ({ ...previous, whiteBalanceMode: previousMode }));
-          toast.error(t('adjustments.color.autoWhiteBalanceFailed', { error: String(error) }));
+          message.error(t('adjustments.color.autoWhiteBalanceFailed', { error: String(error) }));
         }
       } finally {
         if (whiteBalanceRequestId.current === requestId) setWhiteBalanceRequestPath(null);

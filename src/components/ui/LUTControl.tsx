@@ -5,7 +5,7 @@ import { ChevronDown, ImageOff, Upload, X, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useContextMenu } from '../../context/ContextMenuContext';
-import { toast } from 'react-toastify';
+import { message } from './messageApi';
 import Slider from './Slider';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -167,7 +167,7 @@ export default function LUTControl({
           return true;
         });
         if (validPaths.length === 0) {
-          toast.error(t('ui.lut.importFailed'));
+          message.error(t('ui.lut.importFailed'));
           return;
         }
       }
@@ -178,7 +178,7 @@ export default function LUTControl({
       setPreviews({});
     } catch (err) {
       console.error('Failed to import LUTs:', err);
-      toast.error(t('ui.lut.importFailed'));
+      message.error(t('ui.lut.importFailed'));
     }
   };
 

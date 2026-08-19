@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
@@ -88,7 +88,7 @@ export function useFileOperations(
         }
       } catch (err) {
         console.error('Failed to delete files:', err);
-        toast.error(`Failed to delete files: ${err}`);
+        message.error(`Failed to delete files: ${err}`);
       }
     },
     [refreshImageList, handleBackToLibrary, sortedImageList, handleImageSelect],
@@ -147,7 +147,7 @@ export function useFileOperations(
           await invoke(Invokes.CreateFolder, { path: `${folderActionTarget}/${folderName.trim()}` });
           await refreshAllFolderTrees();
         } catch (err) {
-          toast.error(`Failed to create folder: ${err}`);
+          message.error(`Failed to create folder: ${err}`);
         }
       }
     },
@@ -200,7 +200,7 @@ export function useFileOperations(
 
           await refreshAllFolderTrees();
         } catch (err) {
-          toast.error(`Failed to rename folder: ${err}`);
+          message.error(`Failed to rename folder: ${err}`);
         }
       }
     },
@@ -242,7 +242,7 @@ export function useFileOperations(
 
           setLibrary({ multiSelectedPaths: newPaths });
         } catch (err) {
-          toast.error(`Failed to rename files: ${err}`);
+          message.error(`Failed to rename files: ${err}`);
         }
       }
       setUI({ renameTargetPaths: [] });
@@ -342,7 +342,7 @@ export function useFileOperations(
 
           if (invalidExtensions.size > 0) {
             const extList = Array.from(invalidExtensions).join(', ');
-            toast.error(`Unsupported file format(s) detected: ${extList}`);
+            message.error(`Unsupported file format(s) detected: ${extList}`);
             return;
           }
 
@@ -384,7 +384,7 @@ export function useFileOperations(
         }
         await refreshImageList();
       } catch (err) {
-        toast.error(`Failed to ${mode} files: ${err}`);
+        message.error(`Failed to ${mode} files: ${err}`);
       }
     },
     [refreshImageList, refreshAllFolderTrees],

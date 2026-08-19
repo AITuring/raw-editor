@@ -2746,6 +2746,120 @@
   }
 }
 
+@layer components {
+  .app-message-host {
+    position: fixed;
+    right: 0;
+    left: 0;
+    z-index: 2000;
+    display: flex;
+    max-height: calc(100dvh - 24px);
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    padding-inline: 12px;
+    pointer-events: none;
+  }
+
+  .app-message {
+    --app-message-tone: var(--app-status-info);
+
+    display: inline-flex;
+    width: fit-content;
+    max-width: min(520px, calc(100vw - 24px));
+    min-height: 40px;
+    align-items: flex-start;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--app-border-color) 84%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 96%, var(--app-surface));
+    padding: 10px 14px;
+    color: var(--app-text-primary);
+    box-shadow:
+      0 10px 28px rgb(0 0 0 / 20%),
+      0 2px 7px rgb(0 0 0 / 12%);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 19px;
+    text-align: start;
+    pointer-events: auto;
+    user-select: text;
+    animation: app-message-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .app-message[data-closing='true'] {
+    pointer-events: none;
+    animation: app-message-exit 140ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  }
+
+  .app-message[data-type='success'] {
+    --app-message-tone: var(--app-status-success);
+  }
+
+  .app-message[data-type='warning'] {
+    --app-message-tone: var(--app-status-warning);
+  }
+
+  .app-message[data-type='error'] {
+    --app-message-tone: var(--app-status-error);
+  }
+
+  .app-message__icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.5px;
+    border-radius: 50%;
+    background: var(--app-message-tone);
+    color: var(--app-bg-secondary);
+  }
+
+  .app-message__icon--loading {
+    background: transparent;
+    color: var(--app-message-tone);
+    animation: app-message-spin 800ms linear infinite;
+  }
+
+  .app-message__content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @keyframes app-message-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -8px, 0) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes app-message-exit {
+    from {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    to {
+      opacity: 0;
+      transform: translate3d(0, -6px, 0) scale(0.98);
+    }
+  }
+
+  @keyframes app-message-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
 .splash-actions-container {
   container-type: inline-size;
 }

@@ -1134,7 +1134,7 @@
     },
     "tooltips": {
       "communityPresets": "社群預設",
-      "goHome": "返回首頁",
+      "goHome": "返回封面",
       "importImages": "匯入影像"
     },
     "viewMode": {
@@ -1354,6 +1354,7 @@
         "spherical": "Spherical",
         "sphericalDescription": "For wide fields with both horizontal and vertical movement."
       },
+      "back": "返回",
       "cancel": "Cancel",
       "close": "Close",
       "dragLayer": "拖曳第 {{number}} 層調整順序",

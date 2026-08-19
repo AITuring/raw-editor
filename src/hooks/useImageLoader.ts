@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { toast } from 'react-toastify';
+import { message } from '../components/ui/messageApi';
 import { useEditorStore } from '../store/useEditorStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -125,7 +125,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
         } catch (err) {
           if (isEffectActive) {
             console.error('Failed to load image:', err);
-            toast.error(`Failed to load image: ${err}`);
+            message.error(`Failed to load image: ${err}`);
             setEditor((state) =>
               state.selectedImage?.path === selectedImage.path ? { imageLoadError: String(err) } : {},
             );

@@ -13,10 +13,10 @@ use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
-// Result inspection is a core part of the stacking workflow. Keep enough source
-// pixels for meaningful 1:1-style zooming instead of stretching a small proxy.
-const PREVIEW_MAX_LONG_SIDE: u32 = 16_384;
-const PREVIEW_MAX_PIXELS: u64 = 140_000_000;
+// Keep the UI proxy comfortably inside desktop WebView image-decoding budgets.
+// The full-resolution result remains in AppState and is used for TIFF export.
+const PREVIEW_MAX_LONG_SIDE: u32 = 8_192;
+const PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const PREVIEW_JPEG_QUALITY: u8 = 98;
 
 fn resolve_blend_mode(value: &str) -> BlendMode {
@@ -241,13 +241,13 @@ mod tests {
 
         let (wide_width, wide_height) = preview_dimensions(20_000, 2_000);
         assert_eq!(wide_width, PREVIEW_MAX_LONG_SIDE);
-        assert_eq!(wide_height, 1_638);
+        assert_eq!(wide_height, 819);
 
         let (large_width, large_height) = preview_dimensions(8_256, 5_504);
         assert!(large_width <= PREVIEW_MAX_LONG_SIDE);
         assert!(large_width as u64 * large_height as u64 <= PREVIEW_MAX_PIXELS + 10_000);
 
-        assert_eq!(preview_dimensions(9_305, 12_618), (9_305, 12_618));
+        assert_eq!(preview_dimensions(9_305, 12_618), (4_858, 6_587));
     }
 
     #[test]

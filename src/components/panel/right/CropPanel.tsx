@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'react-toastify';
+import { message } from '../../ui/messageApi';
 import { Adjustments, INITIAL_ADJUSTMENTS } from '../../../utils/adjustments';
 import clsx from 'clsx';
 import { Invokes, Orientation, Panel } from '../../ui/AppProperties';
@@ -711,14 +711,14 @@ export default function CropPanel() {
       if (requestId !== autoStraightenRequestRef.current || selectedImagePathRef.current !== imagePath) return;
 
       if (!result.detected) {
-        toast.info(t('editor.crop.autoStraightenNoLines'));
+        message.info(t('editor.crop.autoStraightenNoLines'));
         return;
       }
 
       setAdjustments((prev: Adjustments) => ({ ...prev, rotation: result.angle }));
     } catch (error) {
       if (requestId === autoStraightenRequestRef.current) {
-        toast.error(t('editor.crop.autoStraightenFailed', { error: String(error) }));
+        message.error(t('editor.crop.autoStraightenFailed', { error: String(error) }));
       }
     } finally {
       if (requestId === autoStraightenRequestRef.current) {
@@ -804,7 +804,7 @@ export default function CropPanel() {
         if (requestId !== uprightRequestRef.current || selectedImagePathRef.current !== imagePath) return;
 
         if (!result.detected) {
-          toast.info(t('editor.crop.autoStraightenNoLines'));
+          message.info(t('editor.crop.autoStraightenNoLines'));
           return;
         }
 
@@ -818,7 +818,7 @@ export default function CropPanel() {
         setEditor({ uprightMode: mode });
       } catch (error) {
         if (requestId === uprightRequestRef.current) {
-          toast.error(t('editor.crop.autoStraightenFailed', { error: String(error) }));
+          message.error(t('editor.crop.autoStraightenFailed', { error: String(error) }));
         }
       } finally {
         if (requestId === uprightRequestRef.current) setIsAnalyzingUpright(false);
