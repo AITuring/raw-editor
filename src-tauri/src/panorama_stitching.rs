@@ -60,6 +60,18 @@ pub struct MatchInfo {
     pub inliers: usize,
 }
 
+fn canonical_match_direction(
+    images: &[ImageInfo],
+    first: usize,
+    second: usize,
+) -> (usize, usize, bool) {
+    if images[first].filename <= images[second].filename {
+        (first, second, false)
+    } else {
+        (second, first, true)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignmentMode {
     Auto,
@@ -333,8 +345,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let match_results: Vec<Option<((usize, usize), MatchInfo)>> = pairs_to_check
         .par_iter()
         .map(|&(i, j)| {
-            let features1 = &image_data[i].features;
-            let features2 = &image_data[j].features;
+            // Focus-stack matching is not perfectly symmetric: the ratio test and
+            // local NCC search are evaluated from source to target. Use a stable
+            // path-based direction, then convert back to the (i, j) key orientation.
+            // Otherwise changing import order can produce a different transform graph
+            // and expose defocus halos at object silhouettes. Keep panorama matching's
+            // established direction unchanged.
+            let (source_index, target_index, invert_for_storage) =
+                if blend_mode == BlendMode::FocusStack {
+                    canonical_match_direction(&image_data, i, j)
+                } else {
+                    (i, j, false)
+                };
+            let source_image = &image_data[source_index];
+            let target_image = &image_data[target_index];
+            let features1 = &source_image.features;
+            let features2 = &target_image.features;
 
             let initial_matches = processing::match_features(features1, features2);
             if initial_matches.len() < processing::MIN_INLIERS_FOR_CONNECTION {
@@ -348,9 +374,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 .iter()
                 .map(|point| {
                     project_point(
-                        &image_data[i],
-                        point.x as f64 * image_data[i].scale_factor,
-                        point.y as f64 * image_data[i].scale_factor,
+                        source_image,
+                        point.x as f64 * source_image.scale_factor,
+                        point.y as f64 * source_image.scale_factor,
                         projection,
                     )
                     .expect("projection should produce finite feature coordinates")
@@ -360,9 +386,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 .iter()
                 .map(|point| {
                     project_point(
-                        &image_data[j],
-                        point.x as f64 * image_data[j].scale_factor,
-                        point.y as f64 * image_data[j].scale_factor,
+                        target_image,
+                        point.x as f64 * target_image.scale_factor,
+                        point.y as f64 * target_image.scale_factor,
                         projection,
                     )
                     .expect("projection should produce finite feature coordinates")
@@ -384,8 +410,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     .map(|&index| {
                         let matched = initial_matches[index];
                         refine_match_point_from_homography(
-                            &image_data[i],
-                            &image_data[j],
+                            source_image,
+                            target_image,
                             keypoints1[matched.index1],
                             keypoints2[matched.index2],
                             projection,
@@ -399,11 +425,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 let inlier_count = inlier_points.len();
                 println!(
                     "  - Good match found: '{}' <-> '{}' ({} inliers)",
-                    Path::new(&image_data[i].filename)
+                    Path::new(&source_image.filename)
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy(),
-                    Path::new(&image_data[j].filename)
+                    Path::new(&target_image.filename)
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy(),
@@ -412,11 +438,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 let reprojection_error = symmetric_reprojection_rmse(&h_refined, &inlier_points);
                 println!(
                     "  - Refined match: '{}' <-> '{}' ({} inliers, {:.3}px symmetric RMS)",
-                    Path::new(&image_data[i].filename)
+                    Path::new(&source_image.filename)
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy(),
-                    Path::new(&image_data[j].filename)
+                    Path::new(&target_image.filename)
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy(),
@@ -429,14 +455,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     select_focus_stack_transform(
                         &h_refined,
                         &inlier_points,
-                        image_data[i].image.dimensions(),
+                        source_image.image.dimensions(),
                         alignment_mode,
                     )
                 } else {
                     h_refined
                 };
+                let stored_homography = if invert_for_storage {
+                    h_full.try_inverse()?
+                } else {
+                    h_full
+                };
                 let match_info = MatchInfo {
-                    homography: h_full,
+                    homography: stored_homography,
                     inliers: inlier_count,
                 };
                 return Some(((i, j), match_info));
@@ -1191,7 +1222,30 @@ fn build_stitching_order(
     for (&(i, j), m) in matches {
         edges.push((m.inliers, i, j));
     }
-    edges.sort_by_key(|&(inliers, _, _)| std::cmp::Reverse(inliers));
+    edges.sort_by(|left, right| {
+        let left_names = {
+            let first = images[left.1].filename.as_str();
+            let second = images[left.2].filename.as_str();
+            if first <= second {
+                (first, second)
+            } else {
+                (second, first)
+            }
+        };
+        let right_names = {
+            let first = images[right.1].filename.as_str();
+            let second = images[right.2].filename.as_str();
+            if first <= second {
+                (first, second)
+            } else {
+                (second, first)
+            }
+        };
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left_names.cmp(&right_names))
+    });
 
     let mut mst_adj: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut dsu = Dsu::new(n);
@@ -1211,7 +1265,17 @@ fn build_stitching_order(
 
     let start_node = (0..n)
         .filter(|i| mst_adj.contains_key(i))
-        .min_by_key(|&i| mst_adj.get(&i).map_or(usize::MAX, |v| v.len()))
+        .min_by(|&left, &right| {
+            mst_adj
+                .get(&left)
+                .map_or(usize::MAX, |neighbors| neighbors.len())
+                .cmp(
+                    &mst_adj
+                        .get(&right)
+                        .map_or(usize::MAX, |neighbors| neighbors.len()),
+                )
+                .then_with(|| images[left].filename.cmp(&images[right].filename))
+        })
         .unwrap_or_else(|| mst_adj.keys().next().copied().unwrap_or(0));
 
     let mut ordered_indices = Vec::new();
@@ -1255,6 +1319,74 @@ fn build_stitching_order(
 mod alignment_tests {
     use super::*;
     use nalgebra::Point2;
+
+    fn test_image(id: usize, filename: &str) -> ImageInfo {
+        ImageInfo {
+            id,
+            filename: filename.to_string(),
+            image: Rgb32FImage::new(1, 1),
+            scale_factor: 1.0,
+            features: Vec::new(),
+        }
+    }
+
+    fn identity_match(inliers: usize) -> MatchInfo {
+        MatchInfo {
+            homography: Matrix3::identity(),
+            inliers,
+        }
+    }
+
+    #[test]
+    fn canonical_match_direction_is_independent_of_import_order() {
+        let reversed = vec![test_image(0, "z.jpg"), test_image(1, "a.jpg")];
+        let (source, target, invert_for_storage) = canonical_match_direction(&reversed, 0, 1);
+
+        assert_eq!(reversed[source].filename, "a.jpg");
+        assert_eq!(reversed[target].filename, "z.jpg");
+        assert!(invert_for_storage);
+
+        let forward = vec![test_image(0, "a.jpg"), test_image(1, "z.jpg")];
+        let (source, target, invert_for_storage) = canonical_match_direction(&forward, 0, 1);
+
+        assert_eq!((source, target), (0, 1));
+        assert_eq!(forward[source].filename, "a.jpg");
+        assert_eq!(forward[target].filename, "z.jpg");
+        assert!(!invert_for_storage);
+    }
+
+    #[test]
+    fn stitching_order_uses_stable_filenames_for_equivalent_graphs() {
+        let first_images = vec![
+            test_image(0, "c.jpg"),
+            test_image(1, "a.jpg"),
+            test_image(2, "b.jpg"),
+        ];
+        let first_matches =
+            HashMap::from([((1, 2), identity_match(30)), ((0, 2), identity_match(20))]);
+        let (first_order, _) = build_stitching_order(&first_images, &first_matches);
+
+        let second_images = vec![
+            test_image(0, "b.jpg"),
+            test_image(1, "c.jpg"),
+            test_image(2, "a.jpg"),
+        ];
+        let second_matches =
+            HashMap::from([((0, 2), identity_match(30)), ((0, 1), identity_match(20))]);
+        let (second_order, _) = build_stitching_order(&second_images, &second_matches);
+
+        let first_names = first_order
+            .iter()
+            .map(|&index| first_images[index].filename.as_str())
+            .collect::<Vec<_>>();
+        let second_names = second_order
+            .iter()
+            .map(|&index| second_images[index].filename.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(first_names, vec!["a.jpg", "b.jpg", "c.jpg"]);
+        assert_eq!(second_names, first_names);
+    }
 
     #[test]
     fn robust_affine_fit_rejects_false_correspondences() {

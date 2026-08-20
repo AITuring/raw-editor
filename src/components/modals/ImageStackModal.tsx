@@ -33,7 +33,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
-import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
 
 interface ImageStackModalProps {
@@ -51,7 +51,7 @@ interface ImageStackModalProps {
   onChange(): void;
   onOpenFile(path: string): void;
   onProcess(paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode): void;
-  onSave(blendMode: ImageStackBlendMode): Promise<string | null>;
+  onSave(blendMode: ImageStackBlendMode, exportFormat: ImageStackExportFormat): Promise<string | null>;
 }
 
 const getDisplayName = (path: string) => {
@@ -95,6 +95,12 @@ const ALIGNMENT_OPTIONS: Array<{
     labelKey: 'position',
     descriptionKey: 'positionDescription',
   },
+];
+
+const EXPORT_FORMAT_OPTIONS: Array<{ value: ImageStackExportFormat; label: string }> = [
+  { value: 'tiff', label: 'TIFF' },
+  { value: 'png', label: 'PNG' },
+  { value: 'jpeg', label: 'JPG' },
 ];
 
 const closestLayerCenter: CollisionDetection = (args) =>
@@ -247,6 +253,7 @@ export default function ImageStackModal({
   const [orderedPaths, setOrderedPaths] = useState<string[]>(sourcePaths);
   const [blendMode, setBlendMode] = useState<ImageStackBlendMode>(initialBlendMode);
   const [alignmentMode, setAlignmentMode] = useState<ImageStackAlignmentMode>(initialAlignmentMode);
+  const [exportFormat, setExportFormat] = useState<ImageStackExportFormat>('tiff');
   const [isSaving, setIsSaving] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -266,6 +273,7 @@ export default function ImageStackModal({
     setOrderedPaths(sourcePaths);
     setBlendMode(initialBlendMode);
     setAlignmentMode(initialAlignmentMode);
+    setExportFormat('tiff');
     setSavedPath(null);
     setIsPreviewFocused(false);
     setIsMounted(true);
@@ -354,7 +362,7 @@ export default function ImageStackModal({
     if (isSaving || savedPath || !finalImageBase64) return;
     setIsSaving(true);
     try {
-      const path = await onSave(blendMode);
+      const path = await onSave(blendMode, exportFormat);
       if (path) setSavedPath(path);
     } catch (saveError) {
       console.error('Failed to save image stack:', saveError);
@@ -713,14 +721,39 @@ export default function ImageStackModal({
               {finalImageBase64 ? t('modals.imageStack.realign') : t('modals.imageStack.start')}
             </Button>
             {finalImageBase64 && (
-              <Button disabled={isSaving || isProcessing || Boolean(savedPath)} onClick={handleSave}>
-                {isSaving ? (
-                  <Loader2 aria-hidden="true" className="animate-spin" size={15} />
-                ) : (
-                  <Save aria-hidden="true" size={15} />
-                )}
-                {t('modals.imageStack.save')}
-              </Button>
+              <>
+                <div
+                  aria-label={t('modals.imageStack.save')}
+                  className="flex h-9 items-center rounded-lg border border-border-color bg-bg-primary/45 p-0.5"
+                  role="radiogroup"
+                >
+                  {EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <button
+                      aria-checked={exportFormat === option.value}
+                      className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                        exportFormat === option.value
+                          ? 'bg-surface text-text-primary shadow-sm'
+                          : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
+                      }`}
+                      disabled={isSaving || isProcessing || Boolean(savedPath)}
+                      key={option.value}
+                      onClick={() => setExportFormat(option.value)}
+                      role="radio"
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <Button disabled={isSaving || isProcessing || Boolean(savedPath)} onClick={handleSave}>
+                  {isSaving ? (
+                    <Loader2 aria-hidden="true" className="animate-spin" size={15} />
+                  ) : (
+                    <Save aria-hidden="true" size={15} />
+                  )}
+                  {t('modals.imageStack.save')}
+                </Button>
+              </>
             )}
           </div>
         </footer>

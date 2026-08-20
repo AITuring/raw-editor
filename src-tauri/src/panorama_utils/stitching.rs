@@ -10,6 +10,8 @@ const PANORAMA_BLEND_BANDS: usize = 9;
 const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 1536;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
+const FOCUS_EDGE_PROTECTION_AT_1024: f32 = 12.0;
+const FOCUS_EDGE_CLAIM_THRESHOLD: f32 = 0.08;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -1029,6 +1031,36 @@ fn focus_decision_mask(
         .unwrap_or(0.0)
         * 0.04;
 
+    // A defocused subject spills contrast beyond its true silhouette. That halo can
+    // look locally sharper than the clean background in the focused layer, leaving
+    // detached slivers around depth discontinuities even with hard pixel selection.
+    // Let decisive, valid structure claim a small adjacent ambiguous band so the
+    // focused silhouette also supplies the clean pixels immediately around it.
+    let mut strong_base = vec![0.0f32; pixel_count];
+    let mut strong_candidate = vec![0.0f32; pixel_count];
+    strong_base
+        .par_iter_mut()
+        .zip(strong_candidate.par_iter_mut())
+        .enumerate()
+        .for_each(|(index, (base_claim, candidate_claim))| {
+            let both_valid = base_mask.as_raw()[index] > 0 && candidate_mask.as_raw()[index] > 0;
+            let confident = base_focus[index].max(candidate_focus[index]) > confidence_floor;
+            if !both_valid || !confident {
+                return;
+            }
+            let advantage = fine_advantage[index];
+            if advantage < -FOCUS_DECISIVE_ADVANTAGE {
+                *base_claim = 1.0;
+            } else if advantage > FOCUS_DECISIVE_ADVANTAGE {
+                *candidate_claim = 1.0;
+            }
+        });
+    let protection_radius = ((width.max(height) as f32 / 1024.0) * FOCUS_EDGE_PROTECTION_AT_1024)
+        .round()
+        .max(1.0) as usize;
+    let base_claim = box_blur_focus_map(&strong_base, width, height, protection_radius);
+    let candidate_claim = box_blur_focus_map(&strong_candidate, width, height, protection_radius);
+
     GrayImage::from_fn(width, height, |x, y| {
         let index = y as usize * width as usize + x as usize;
         let base_valid = base_mask.as_raw()[index] > 0;
@@ -1040,8 +1072,22 @@ fn focus_decision_mask(
         } else {
             coarse_advantage[index]
         };
-        let candidate_wins =
-            candidate_valid && (!base_valid || (confident && advantage > FOCUS_CONFIDENCE_MARGIN));
+        let nearby_base_claim = base_claim[index];
+        let nearby_candidate_claim = candidate_claim[index];
+        let structural_winner = if nearby_candidate_claim > FOCUS_EDGE_CLAIM_THRESHOLD
+            && nearby_candidate_claim > nearby_base_claim
+        {
+            Some(true)
+        } else if nearby_base_claim > FOCUS_EDGE_CLAIM_THRESHOLD
+            && nearby_base_claim > nearby_candidate_claim
+        {
+            Some(false)
+        } else {
+            None
+        };
+        let candidate_wins = candidate_valid
+            && (!base_valid
+                || structural_winner.unwrap_or(confident && advantage > FOCUS_CONFIDENCE_MARGIN));
         image::Luma([if candidate_wins { 255 } else { 0 }])
     })
 }
@@ -1941,6 +1987,36 @@ mod interpolation_tests {
             focus_decision_mask(&base_focus, &candidate_focus, &base_mask, &candidate_mask);
 
         assert_eq!(decision.as_raw(), &[0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn focus_decision_extends_clear_structure_over_an_adjacent_halo() {
+        let base_focus = vec![0.9, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2];
+        let candidate_focus = vec![0.1, 0.1, 0.1, 0.8, 0.8, 0.22, 0.2];
+        let base_mask = GrayImage::from_pixel(7, 1, image::Luma([255]));
+        let candidate_mask = GrayImage::from_pixel(7, 1, image::Luma([255]));
+
+        let decision =
+            focus_decision_mask(&base_focus, &candidate_focus, &base_mask, &candidate_mask);
+
+        assert_eq!(decision.as_raw()[2], 0);
+        assert_eq!(decision.as_raw()[4], 255);
+        assert_eq!(decision.as_raw()[5], 255);
+    }
+
+    #[test]
+    fn focus_decision_protects_base_structure_symmetrically() {
+        let base_focus = vec![0.1, 0.1, 0.8, 0.8, 0.22, 0.2, 0.2];
+        let candidate_focus = vec![0.9, 0.9, 0.1, 0.1, 0.2, 0.2, 0.2];
+        let base_mask = GrayImage::from_pixel(7, 1, image::Luma([255]));
+        let candidate_mask = GrayImage::from_pixel(7, 1, image::Luma([255]));
+
+        let decision =
+            focus_decision_mask(&base_focus, &candidate_focus, &base_mask, &candidate_mask);
+
+        assert_eq!(decision.as_raw()[0], 255);
+        assert_eq!(decision.as_raw()[2], 0);
+        assert_eq!(decision.as_raw()[4], 0);
     }
 
     #[test]

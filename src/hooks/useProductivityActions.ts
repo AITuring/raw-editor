@@ -3,11 +3,24 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../store/useUIStore';
 import { Invokes } from '../components/ui/AppProperties';
 import i18n from '../i18n';
 
-const getImageStackSuggestedPath = (firstPath: string, blendMode: ImageStackBlendMode) => {
+const IMAGE_STACK_EXPORT_FORMATS: Record<
+  ImageStackExportFormat,
+  { extension: string; filterName: string; extensions: string[] }
+> = {
+  tiff: { extension: 'tiff', filterName: 'TIFF (16-bit)', extensions: ['tif', 'tiff'] },
+  png: { extension: 'png', filterName: 'PNG (16-bit)', extensions: ['png'] },
+  jpeg: { extension: 'jpg', filterName: 'JPEG', extensions: ['jpg', 'jpeg'] },
+};
+
+const getImageStackSuggestedPath = (
+  firstPath: string,
+  blendMode: ImageStackBlendMode,
+  exportFormat: ImageStackExportFormat,
+) => {
   const physicalPath = firstPath.split('?vc=')[0];
   const separatorIndex = Math.max(physicalPath.lastIndexOf('/'), physicalPath.lastIndexOf('\\'));
   const parent = separatorIndex >= 0 ? physicalPath.slice(0, separatorIndex + 1) : '';
@@ -15,7 +28,7 @@ const getImageStackSuggestedPath = (firstPath: string, blendMode: ImageStackBlen
   const extensionIndex = fileName.lastIndexOf('.');
   const stem = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName || 'image';
   const suffix = blendMode === 'focus' ? 'FocusStack' : 'Panorama';
-  return `${parent}${stem}_${suffix}.tiff`;
+  return `${parent}${stem}_${suffix}.${IMAGE_STACK_EXPORT_FORMATS[exportFormat].extension}`;
 };
 
 export function useProductivityActions(refreshImageList: () => Promise<void>) {
@@ -102,7 +115,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
   );
 
   const handleSaveImageStack = useCallback(
-    async (blendMode: ImageStackBlendMode): Promise<string | null> => {
+    async (blendMode: ImageStackBlendMode, exportFormat: ImageStackExportFormat): Promise<string | null> => {
       const { imageStackModalState } = useUIStore.getState();
       if (imageStackModalState.sourcePaths.length === 0) {
         const error = 'Source paths for image stack not found.';
@@ -116,19 +129,21 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
       }
       try {
         const firstPath = imageStackModalState.sourcePaths[0];
+        const format = IMAGE_STACK_EXPORT_FORMATS[exportFormat];
         const outputPath =
           useSettingsStore.getState().osPlatform === 'android'
             ? null
             : await save({
                 title: i18n.t('modals.imageStack.save'),
-                defaultPath: getImageStackSuggestedPath(firstPath, blendMode),
-                filters: [{ name: 'TIFF', extensions: ['tif', 'tiff'] }],
+                defaultPath: getImageStackSuggestedPath(firstPath, blendMode, exportFormat),
+                filters: [{ name: format.filterName, extensions: format.extensions }],
               });
         if (useSettingsStore.getState().osPlatform !== 'android' && !outputPath) return null;
 
         const savedPath: string = await invoke(Invokes.SaveImageStack, {
           firstPathStr: firstPath,
           blendMode,
+          outputFormat: exportFormat,
           resultId: imageStackModalState.resultId,
           outputPathStr: outputPath,
         });

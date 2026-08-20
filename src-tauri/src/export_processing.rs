@@ -1627,7 +1627,7 @@ where
 }
 
 #[cfg(not(target_os = "android"))]
-fn encode_streaming_jpeg<F>(
+pub(crate) fn encode_streaming_jpeg<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,

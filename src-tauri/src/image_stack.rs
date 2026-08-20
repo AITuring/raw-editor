@@ -1,10 +1,11 @@
 use crate::app_state::AppState;
 use crate::file_management::parse_virtual_path;
 use crate::panorama_stitching::{AlignmentMode, BlendMode, stitch_images_with_options};
-use image::codecs::jpeg::JpegEncoder;
+use image::codecs::jpeg::{JpegDecoder, JpegEncoder};
+use image::codecs::png::{PngDecoder, PngEncoder};
 use image::codecs::tiff::{TiffDecoder, TiffEncoder};
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageDecoder, ImageEncoder, RgbImage};
+use image::{ColorType, DynamicImage, GenericImageView, ImageDecoder, ImageEncoder, RgbImage};
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Seek, Write};
@@ -22,11 +23,64 @@ const PREVIEW_JPEG_QUALITY: u8 = 92;
 const DETAIL_PREVIEW_MAX_LONG_SIDE: u32 = 8_192;
 const DETAIL_PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
+const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
 
 fn resolve_blend_mode(value: &str) -> BlendMode {
     match value {
         "focus" => BlendMode::FocusStack,
         _ => BlendMode::Panorama,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImageStackOutputFormat {
+    Tiff,
+    Png,
+    Jpeg,
+}
+
+impl ImageStackOutputFormat {
+    fn from_wire(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "tif" | "tiff" => Ok(Self::Tiff),
+            "png" => Ok(Self::Png),
+            "jpg" | "jpeg" => Ok(Self::Jpeg),
+            _ => Err(format!(
+                "Unsupported image-stack output format '{value}'. Choose TIFF, PNG, or JPEG."
+            )),
+        }
+    }
+
+    fn from_extension(extension: &str) -> Option<Self> {
+        match extension.to_ascii_lowercase().as_str() {
+            "tif" | "tiff" => Some(Self::Tiff),
+            "png" => Some(Self::Png),
+            "jpg" | "jpeg" => Some(Self::Jpeg),
+            _ => None,
+        }
+    }
+
+    fn canonical_extension(self) -> &'static str {
+        match self {
+            Self::Tiff => "tiff",
+            Self::Png => "png",
+            Self::Jpeg => "jpg",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Tiff => "TIFF",
+            Self::Png => "PNG",
+            Self::Jpeg => "JPEG",
+        }
+    }
+
+    fn encoded_color_type(self) -> ColorType {
+        match self {
+            Self::Tiff | Self::Png => ColorType::Rgb16,
+            Self::Jpeg => ColorType::Rgb8,
+        }
     }
 }
 
@@ -68,17 +122,188 @@ pub(crate) fn canonicalize_image_stack_result(image: DynamicImage) -> DynamicIma
     DynamicImage::ImageRgb16(image.to_rgb16())
 }
 
-fn encode_srgb_tiff<W: Write + Seek>(image: &DynamicImage, writer: W) -> Result<(), String> {
-    let mut encoder = TiffEncoder::new(writer);
-    encoder
-        .set_icc_profile(crate::color_management::srgb_v4_profile().to_vec())
-        .map_err(|error| format!("Failed to attach the image-stack TIFF color profile: {error}"))?;
-    image
-        .write_with_encoder(encoder)
-        .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
+fn encode_srgb_image_stack<W: Write + Seek>(
+    image: &DynamicImage,
+    writer: W,
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
+    let profile = crate::color_management::srgb_v4_profile().to_vec();
+    match output_format {
+        ImageStackOutputFormat::Tiff => {
+            let mut encoder = TiffEncoder::new(writer);
+            encoder.set_icc_profile(profile).map_err(|error| {
+                format!("Failed to attach the image-stack TIFF color profile: {error}")
+            })?;
+            image
+                .write_with_encoder(encoder)
+                .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
+        }
+        ImageStackOutputFormat::Png => {
+            let mut encoder = PngEncoder::new(writer);
+            encoder.set_icc_profile(profile).map_err(|error| {
+                format!("Failed to attach the image-stack PNG color profile: {error}")
+            })?;
+            image
+                .write_with_encoder(encoder)
+                .map_err(|error| format!("Failed to encode image-stack PNG: {error}"))
+        }
+        ImageStackOutputFormat::Jpeg => {
+            let mut encoder = JpegEncoder::new_with_quality(writer, IMAGE_STACK_JPEG_QUALITY);
+            encoder.set_icc_profile(profile).map_err(|error| {
+                format!("Failed to attach the image-stack JPEG color profile: {error}")
+            })?;
+            encoder
+                .encode_image(&image.to_rgb8())
+                .map_err(|error| format!("Failed to encode image-stack JPEG: {error}"))
+        }
+    }
 }
 
-pub(crate) fn write_srgb_tiff(image: &DynamicImage, output_path: &Path) -> Result<(), String> {
+#[cfg(test)]
+fn encode_srgb_tiff<W: Write + Seek>(image: &DynamicImage, writer: W) -> Result<(), String> {
+    encode_srgb_image_stack(image, writer, ImageStackOutputFormat::Tiff)
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_srgb_jpeg_streaming(image: &DynamicImage, output: &mut File) -> Result<(), String> {
+    let rgb16 = image
+        .as_rgb16()
+        .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
+    let (width, height) = rgb16.dimensions();
+    let source_row_samples = (width as usize)
+        .checked_mul(3)
+        .ok_or_else(|| "The image-stack JPEG row is too wide to encode.".to_string())?;
+    let rgba_row_bytes = (width as usize)
+        .checked_mul(4)
+        .ok_or_else(|| "The image-stack JPEG row is too wide to encode.".to_string())?;
+    let mut rgba_row = vec![0_u8; rgba_row_bytes];
+
+    crate::export_processing::encode_streaming_jpeg(
+        output,
+        width,
+        height,
+        IMAGE_STACK_JPEG_QUALITY,
+        None,
+        |sink| {
+            for source_row in rgb16.as_raw().chunks_exact(source_row_samples) {
+                for (source, target) in source_row.chunks_exact(3).zip(rgba_row.chunks_exact_mut(4))
+                {
+                    target[0] = ((u32::from(source[0]) + 128) / 257) as u8;
+                    target[1] = ((u32::from(source[1]) + 128) / 257) as u8;
+                    target[2] = ((u32::from(source[2]) + 128) / 257) as u8;
+                    target[3] = 255;
+                }
+                sink(&rgba_row)?;
+            }
+            Ok(())
+        },
+    )
+}
+
+fn encode_image_stack_file(
+    image: &DynamicImage,
+    output: &mut File,
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
+    #[cfg(not(target_os = "android"))]
+    if output_format == ImageStackOutputFormat::Jpeg {
+        encode_srgb_jpeg_streaming(image, output)?;
+        return output
+            .flush()
+            .map_err(|error| format!("Failed to finish writing the image-stack JPEG: {error}"));
+    }
+
+    let mut writer = BufWriter::new(output);
+    encode_srgb_image_stack(image, &mut writer, output_format)?;
+    writer.flush().map_err(|error| {
+        format!(
+            "Failed to finish writing the image-stack {}: {error}",
+            output_format.label()
+        )
+    })
+}
+
+fn validate_image_stack_decoder<D: ImageDecoder>(
+    mut decoder: D,
+    dimensions: (u32, u32),
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
+    if decoder.dimensions() != dimensions {
+        return Err(format!(
+            "Saved image-stack dimensions do not match the result (expected {}×{}, found {}×{}).",
+            dimensions.0,
+            dimensions.1,
+            decoder.dimensions().0,
+            decoder.dimensions().1
+        ));
+    }
+    if decoder.color_type() != output_format.encoded_color_type() {
+        return Err(format!(
+            "Saved image-stack {} has an unexpected pixel format ({:?}).",
+            output_format.label(),
+            decoder.color_type()
+        ));
+    }
+    let saved_profile = decoder.icc_profile().map_err(|error| {
+        format!(
+            "Failed to validate the image-stack {} color profile: {error}",
+            output_format.label()
+        )
+    })?;
+    if saved_profile.as_deref() != Some(crate::color_management::srgb_v4_profile()) {
+        return Err(format!(
+            "The saved image-stack {} is missing its sRGB color profile.",
+            output_format.label()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_image_stack_output(
+    output_path: &Path,
+    dimensions: (u32, u32),
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
+    let open = || {
+        File::open(output_path)
+            .map(BufReader::new)
+            .map_err(|error| {
+                format!(
+                    "Failed to reopen the saved image-stack {}: {error}",
+                    output_format.label()
+                )
+            })
+    };
+    match output_format {
+        ImageStackOutputFormat::Tiff => validate_image_stack_decoder(
+            TiffDecoder::new(open()?).map_err(|error| {
+                format!("Failed to validate the saved image-stack TIFF: {error}")
+            })?,
+            dimensions,
+            output_format,
+        ),
+        ImageStackOutputFormat::Png => validate_image_stack_decoder(
+            PngDecoder::new(open()?).map_err(|error| {
+                format!("Failed to validate the saved image-stack PNG: {error}")
+            })?,
+            dimensions,
+            output_format,
+        ),
+        ImageStackOutputFormat::Jpeg => validate_image_stack_decoder(
+            JpegDecoder::new(open()?).map_err(|error| {
+                format!("Failed to validate the saved image-stack JPEG: {error}")
+            })?,
+            dimensions,
+            output_format,
+        ),
+    }
+}
+
+fn write_image_stack_output(
+    image: &DynamicImage,
+    output_path: &Path,
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
     let dimensions = image.dimensions();
     if dimensions.0 == 0 || dimensions.1 == 0 {
         return Err("The image-stack result is empty and cannot be saved.".to_string());
@@ -101,59 +326,47 @@ pub(crate) fn write_srgb_tiff(image: &DynamicImage, output_path: &Path) -> Resul
             output_path.display()
         )
     })?;
-    {
-        let mut writer = BufWriter::new(temporary.as_file_mut());
-        encode_srgb_tiff(image, &mut writer)?;
-        writer
-            .flush()
-            .map_err(|error| format!("Failed to finish writing the image-stack TIFF: {error}"))?;
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| format!("Failed to sync the image-stack TIFF to disk: {error}"))?;
+    encode_image_stack_file(image, temporary.as_file_mut(), output_format)?;
+    temporary.as_file().sync_all().map_err(|error| {
+        format!(
+            "Failed to sync the image-stack {} to disk: {error}",
+            output_format.label()
+        )
+    })?;
 
     let temporary_size = temporary
         .as_file()
         .metadata()
-        .map_err(|error| format!("Failed to inspect the saved image-stack TIFF: {error}"))?
+        .map_err(|error| {
+            format!(
+                "Failed to inspect the saved image-stack {}: {error}",
+                output_format.label()
+            )
+        })?
         .len();
     if temporary_size == 0 {
-        return Err("The encoded image-stack TIFF is empty.".to_string());
-    }
-
-    let mut decoder = TiffDecoder::new(BufReader::new(
-        File::open(temporary.path())
-            .map_err(|error| format!("Failed to reopen the saved image-stack TIFF: {error}"))?,
-    ))
-    .map_err(|error| format!("Failed to validate the saved image-stack TIFF: {error}"))?;
-    if decoder.dimensions() != dimensions {
         return Err(format!(
-            "Saved image-stack dimensions do not match the result (expected {}×{}, found {}×{}).",
-            dimensions.0,
-            dimensions.1,
-            decoder.dimensions().0,
-            decoder.dimensions().1
+            "The encoded image-stack {} is empty.",
+            output_format.label()
         ));
     }
-    let saved_profile = decoder
-        .icc_profile()
-        .map_err(|error| format!("Failed to validate the image-stack color profile: {error}"))?;
-    if saved_profile.as_deref() != Some(crate::color_management::srgb_v4_profile()) {
-        return Err("The saved image-stack TIFF is missing its sRGB color profile.".to_string());
-    }
-    drop(decoder);
+
+    validate_image_stack_output(temporary.path(), dimensions, output_format)?;
 
     let persisted = temporary.persist(output_path).map_err(|error| {
         format!(
-            "Failed to finalize the image-stack TIFF '{}': {}",
+            "Failed to finalize the image-stack {} '{}': {}",
+            output_format.label(),
             output_path.display(),
             error.error
         )
     })?;
-    persisted
-        .sync_all()
-        .map_err(|error| format!("Failed to finalize the image-stack TIFF on disk: {error}"))?;
+    persisted.sync_all().map_err(|error| {
+        format!(
+            "Failed to finalize the image-stack {} on disk: {error}",
+            output_format.label()
+        )
+    })?;
 
     #[cfg(unix)]
     File::open(parent)
@@ -163,19 +376,25 @@ pub(crate) fn write_srgb_tiff(image: &DynamicImage, output_path: &Path) -> Resul
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn write_srgb_tiff(image: &DynamicImage, output_path: &Path) -> Result<(), String> {
+    write_image_stack_output(image, output_path, ImageStackOutputFormat::Tiff)
+}
+
 fn resolve_image_stack_output_path(
     first_path: &Path,
     blend_mode: &str,
     output_path_str: Option<&str>,
+    output_format: ImageStackOutputFormat,
 ) -> Result<PathBuf, String> {
     if let Some(requested_path) = output_path_str.filter(|path| !path.trim().is_empty()) {
         let mut output_path = PathBuf::from(requested_path);
-        let extension = output_path
+        let path_format = output_path
             .extension()
             .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase);
-        if !matches!(extension.as_deref(), Some("tif" | "tiff")) {
-            output_path.set_extension("tiff");
+            .and_then(ImageStackOutputFormat::from_extension);
+        if path_format != Some(output_format) {
+            output_path.set_extension(output_format.canonical_extension());
         }
         return Ok(output_path);
     }
@@ -192,7 +411,10 @@ fn resolve_image_stack_output_path(
     } else {
         "Panorama"
     };
-    Ok(parent.join(format!("{stem}_{suffix}.tiff")))
+    Ok(parent.join(format!(
+        "{stem}_{suffix}.{}",
+        output_format.canonical_extension()
+    )))
 }
 
 struct PreviewFiles {
@@ -395,12 +617,13 @@ mod tests {
     use std::path::Path;
 
     use image::codecs::tiff::TiffDecoder;
-    use image::{DynamicImage, ImageDecoder, Rgb, Rgb32FImage};
+    use image::{DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage};
 
     use super::{
-        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, PREVIEW_MAX_LONG_SIDE,
-        PREVIEW_MAX_PIXELS, canonicalize_image_stack_result, detail_preview_dimensions,
-        encode_srgb_tiff, preview_dimensions, resolve_image_stack_output_path, write_srgb_tiff,
+        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, ImageStackOutputFormat,
+        PREVIEW_MAX_LONG_SIDE, PREVIEW_MAX_PIXELS, canonicalize_image_stack_result,
+        detail_preview_dimensions, encode_srgb_tiff, preview_dimensions,
+        resolve_image_stack_output_path, write_image_stack_output, write_srgb_tiff,
     };
 
     #[test]
@@ -510,15 +733,132 @@ mod tests {
     fn save_path_prefers_the_requested_destination_and_normalizes_the_extension() {
         let source_path = Path::new("/photos/source.jpg");
         assert_eq!(
-            resolve_image_stack_output_path(source_path, "focus", Some("/exports/custom-stack"))
-                .expect("explicit save destination"),
+            resolve_image_stack_output_path(
+                source_path,
+                "focus",
+                Some("/exports/custom-stack"),
+                ImageStackOutputFormat::Png,
+            )
+            .expect("explicit PNG save destination"),
+            Path::new("/exports/custom-stack.png")
+        );
+        assert_eq!(
+            resolve_image_stack_output_path(
+                source_path,
+                "focus",
+                Some("/exports/custom-stack.jpeg"),
+                ImageStackOutputFormat::Jpeg,
+            )
+            .expect("explicit JPEG save destination"),
+            Path::new("/exports/custom-stack.jpeg")
+        );
+        assert_eq!(
+            resolve_image_stack_output_path(
+                source_path,
+                "focus",
+                Some("/exports/custom-stack.png"),
+                ImageStackOutputFormat::Tiff,
+            )
+            .expect("selected format overrides a mismatched extension"),
             Path::new("/exports/custom-stack.tiff")
         );
         assert_eq!(
-            resolve_image_stack_output_path(source_path, "focus", None)
-                .expect("fallback save destination"),
+            resolve_image_stack_output_path(
+                source_path,
+                "focus",
+                None,
+                ImageStackOutputFormat::Tiff,
+            )
+            .expect("fallback TIFF save destination"),
             Path::new("/photos/source_FocusStack.tiff")
         );
+    }
+
+    #[test]
+    fn output_format_accepts_supported_aliases_and_rejects_other_values() {
+        assert_eq!(
+            ImageStackOutputFormat::from_wire("tif"),
+            Ok(ImageStackOutputFormat::Tiff)
+        );
+        assert_eq!(
+            ImageStackOutputFormat::from_wire("JPEG"),
+            Ok(ImageStackOutputFormat::Jpeg)
+        );
+        assert!(ImageStackOutputFormat::from_wire("webp").is_err());
+    }
+
+    #[test]
+    fn atomic_stack_save_supports_tiff_png_and_jpeg() {
+        let directory = tempfile::tempdir().expect("temporary image-stack output directory");
+        let source = DynamicImage::ImageRgb16(ImageBuffer::from_fn(8, 5, |x, y| {
+            Rgb([
+                ((x + 1) * 4_096) as u16,
+                ((y + 1) * 8_192) as u16,
+                ((x + y + 1) * 2_048) as u16,
+            ])
+        }));
+        let expected_lossless_pixels = source.to_rgb16();
+
+        for (format, extension) in [
+            (ImageStackOutputFormat::Tiff, "tiff"),
+            (ImageStackOutputFormat::Png, "png"),
+            (ImageStackOutputFormat::Jpeg, "jpg"),
+        ] {
+            let output_path = directory.path().join(format!("stack-result.{extension}"));
+            fs::write(&output_path, b"stale").expect("seed stale output");
+
+            write_image_stack_output(&source, &output_path, format)
+                .expect("atomic multi-format image-stack save");
+
+            assert!(
+                fs::metadata(&output_path)
+                    .expect("saved output metadata")
+                    .len()
+                    > 5
+            );
+            let decoded = image::open(&output_path).expect("decode saved multi-format output");
+            assert_eq!(decoded.dimensions(), source.dimensions());
+            if format != ImageStackOutputFormat::Jpeg {
+                assert_eq!(decoded.to_rgb16(), expected_lossless_pixels);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires RAW_EDITOR_STACK_EXPORT_SOURCE and RAW_EDITOR_STACK_EXPORT_OUTPUT_DIR"]
+    fn real_stack_export_fixture_from_env() {
+        let source_path = std::env::var_os("RAW_EDITOR_STACK_EXPORT_SOURCE")
+            .map(std::path::PathBuf::from)
+            .expect("RAW_EDITOR_STACK_EXPORT_SOURCE must point to a rendered stack image");
+        let output_dir = std::env::var_os("RAW_EDITOR_STACK_EXPORT_OUTPUT_DIR")
+            .map(std::path::PathBuf::from)
+            .expect("RAW_EDITOR_STACK_EXPORT_OUTPUT_DIR must point to a writable directory");
+        fs::create_dir_all(&output_dir).expect("create real image-stack export output directory");
+
+        let mut reader = image::ImageReader::open(&source_path)
+            .expect("open real image-stack export fixture")
+            .with_guessed_format()
+            .expect("detect real image-stack export fixture format");
+        reader.no_limits();
+        let decoded = reader
+            .decode()
+            .expect("decode real image-stack export fixture");
+        let canonical = if decoded.as_rgb16().is_some() {
+            decoded
+        } else {
+            canonicalize_image_stack_result(decoded)
+        };
+
+        for (format, extension) in [
+            (ImageStackOutputFormat::Tiff, "tiff"),
+            (ImageStackOutputFormat::Png, "png"),
+            (ImageStackOutputFormat::Jpeg, "jpg"),
+        ] {
+            let output_path = output_dir.join(format!("real-stack-export.{extension}"));
+            write_image_stack_output(&canonical, &output_path, format)
+                .expect("export real image-stack fixture");
+            println!("{}", output_path.display());
+        }
     }
 }
 
@@ -526,13 +866,19 @@ mod tests {
 pub async fn save_image_stack(
     first_path_str: String,
     blend_mode: String,
+    output_format: String,
     result_id: String,
     output_path_str: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
     let (first_path, _) = parse_virtual_path(&first_path_str);
-    let output_path =
-        resolve_image_stack_output_path(&first_path, &blend_mode, output_path_str.as_deref())?;
+    let output_format = ImageStackOutputFormat::from_wire(&output_format)?;
+    let output_path = resolve_image_stack_output_path(
+        &first_path,
+        &blend_mode,
+        output_path_str.as_deref(),
+        output_format,
+    )?;
     let output_path_for_task = output_path.clone();
     let sidecar_source = first_path.to_string_lossy().into_owned();
     let result_handle = state.image_stack_result.clone();
@@ -551,7 +897,7 @@ pub async fn save_image_stack(
             );
         }
 
-        write_srgb_tiff(image, &output_path_for_task)?;
+        write_image_stack_output(image, &output_path_for_task, output_format)?;
         *result = None;
         drop(result);
         let _ = crate::exif_processing::write_rrexif_sidecar(

@@ -43,6 +43,7 @@ export interface PanoramaModalState {
 
 export type ImageStackBlendMode = 'focus' | 'panorama';
 export type ImageStackAlignmentMode = 'auto' | 'perspective' | 'cylindrical' | 'spherical' | 'position';
+export type ImageStackExportFormat = 'tiff' | 'png' | 'jpeg';
 
 export interface ImageStackModalState {
   detailImageBase64: string | null;

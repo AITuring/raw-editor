@@ -20,13 +20,16 @@ import CollageModal from './CollageModal';
 import ImageStackModal from './ImageStackModal';
 import { AppSettings, AlbumItem, AlbumGroup } from '../ui/AppProperties';
 import { CopyPasteSettings } from '../../utils/adjustments';
-import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../../store/useUIStore';
 
 export interface AppModalsProps {
   handleImageSelect: (path: string) => void;
   handleSavePanorama: () => Promise<string>;
   handleStartPanorama: (paths: string[]) => void;
-  handleSaveImageStack: (blendMode: ImageStackBlendMode) => Promise<string | null>;
+  handleSaveImageStack: (
+    blendMode: ImageStackBlendMode,
+    exportFormat: ImageStackExportFormat,
+  ) => Promise<string | null>;
   handleStartImageStack: (
     paths: string[],
     blendMode: ImageStackBlendMode,
