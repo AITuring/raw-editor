@@ -87,6 +87,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
           progressMessage: 'Starting image alignment process…',
           requestId,
           resultId: null,
+          resultSize: null,
           sourcePaths: paths,
           blendMode,
           alignmentMode,
@@ -106,6 +107,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
               isProcessing: false,
               error: String(err),
               resultId: null,
+              resultSize: null,
             },
           };
         });

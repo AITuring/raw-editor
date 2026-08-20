@@ -70,6 +70,7 @@ export function useAndroidBackHandler() {
             error: null,
             requestId: null,
             resultId: null,
+            resultSize: null,
             sourcePaths: [],
             blendMode: 'focus',
             alignmentMode: 'auto',

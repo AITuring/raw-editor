@@ -615,6 +615,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
                     progressMessage: null,
                     requestId: null,
                     resultId: null,
+                    resultSize: null,
                     sourcePaths: finalSelection,
                     blendMode: 'focus',
                     alignmentMode: 'auto',

@@ -2,6 +2,16 @@ import { memo, useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Maximize2, Minimize2, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { ImageStackResultSize } from '../../store/useUIStore';
+import {
+  FIT_TRANSFORM_SCALE,
+  MAX_PIXEL_ZOOM,
+  calculateFitPixelZoom,
+  calculateMaxTransformScale,
+  calculatePixelZoom,
+  resolvePixelZoomScale,
+  resolveZoomStep,
+} from '../../utils/imageStackZoom';
 
 interface ImageStackResultPreviewProps {
   alignmentLabel: string;
@@ -10,6 +20,7 @@ interface ImageStackResultPreviewProps {
   isFocused: boolean;
   modeLabel: string;
   onFocusedChange(isFocused: boolean): void;
+  resultSize: ImageStackResultSize | null;
   src: string;
 }
 
@@ -26,14 +37,20 @@ interface PreviewGeometry {
   viewportWidth: number;
 }
 
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 8;
-const ZOOM_STEP = 0.25;
 const TRANSFORM_SETTLE_DELAY_MS = 200;
 const TRANSFORM_ANIMATION_MS = 160;
-const IDENTITY_TRANSFORM: PreviewTransform = { scale: MIN_ZOOM, x: 0, y: 0 };
+const ZOOM_EPSILON = 0.001;
+const IDENTITY_TRANSFORM: PreviewTransform = { scale: FIT_TRANSFORM_SCALE, x: 0, y: 0 };
 
-const clampZoom = (zoom: number, maxZoom: number) => Math.min(maxZoom, Math.max(MIN_ZOOM, zoom));
+const clampTransformScale = (scale: number, maxScale: number) =>
+  Math.min(maxScale, Math.max(FIT_TRANSFORM_SCALE, scale));
+
+const resolvePreviewCursor = (activePointer: number | null, scale: number, maxScale: number) => {
+  if (activePointer !== null) return 'grabbing';
+  if (scale > FIT_TRANSFORM_SCALE + ZOOM_EPSILON) return 'grab';
+  if (maxScale > FIT_TRANSFORM_SCALE + ZOOM_EPSILON) return 'zoom-in';
+  return 'default';
+};
 
 function ImageStackResultPreview({
   alignmentLabel,
@@ -42,6 +59,7 @@ function ImageStackResultPreview({
   isFocused,
   modeLabel,
   onFocusedChange,
+  resultSize,
   src,
 }: ImageStackResultPreviewProps) {
   const { t } = useTranslation();
@@ -59,7 +77,8 @@ function ImageStackResultPreview({
     viewportHeight: 0,
     viewportWidth: 0,
   });
-  const availableMaxZoomRef = useRef(MAX_ZOOM);
+  const fitPixelZoomRef = useRef(1);
+  const maxTransformScaleRef = useRef(MAX_PIXEL_ZOOM);
   const renderFrameRef = useRef<number | null>(null);
   const settleTimerRef = useRef<number | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
@@ -68,14 +87,20 @@ function ImageStackResultPreview({
   const lastPointerPositionRef = useRef({ x: 0, y: 0 });
 
   const updateControls = useCallback((transform: PreviewTransform) => {
-    if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(transform.scale * 100)}%`;
-    if (zoomOutButtonRef.current) zoomOutButtonRef.current.disabled = transform.scale <= MIN_ZOOM + 0.001;
+    const pixelZoom = calculatePixelZoom(transform.scale, fitPixelZoomRef.current);
+    if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(pixelZoom * 100)}%`;
+    if (zoomOutButtonRef.current) {
+      zoomOutButtonRef.current.disabled = transform.scale <= FIT_TRANSFORM_SCALE + ZOOM_EPSILON;
+    }
     if (zoomInButtonRef.current) {
-      zoomInButtonRef.current.disabled = transform.scale >= availableMaxZoomRef.current - 0.001;
+      zoomInButtonRef.current.disabled = transform.scale >= maxTransformScaleRef.current - ZOOM_EPSILON;
     }
     if (viewportRef.current) {
-      viewportRef.current.style.cursor =
-        activePointerRef.current !== null ? 'grabbing' : transform.scale > MIN_ZOOM + 0.001 ? 'grab' : 'zoom-in';
+      viewportRef.current.style.cursor = resolvePreviewCursor(
+        activePointerRef.current,
+        transform.scale,
+        maxTransformScaleRef.current,
+      );
     }
   }, []);
 
@@ -123,14 +148,14 @@ function ImageStackResultPreview({
 
   const clampTransform = useCallback((candidate: PreviewTransform): PreviewTransform => {
     const geometry = geometryRef.current;
-    const scale = clampZoom(candidate.scale, availableMaxZoomRef.current);
+    const scale = clampTransformScale(candidate.scale, maxTransformScaleRef.current);
     if (
       geometry.imageWidth <= 0 ||
       geometry.imageHeight <= 0 ||
       geometry.viewportWidth <= 0 ||
       geometry.viewportHeight <= 0
     ) {
-      return scale <= MIN_ZOOM ? { ...IDENTITY_TRANSFORM } : { ...candidate, scale };
+      return scale <= FIT_TRANSFORM_SCALE ? { ...IDENTITY_TRANSFORM } : { ...candidate, scale };
     }
 
     const maxX = Math.max(0, (geometry.imageWidth * scale - geometry.viewportWidth) / 2);
@@ -169,28 +194,49 @@ function ImageStackResultPreview({
     }
     if (image.clientWidth > 0 && image.clientHeight > 0) {
       const resolutionImage = detailImage?.complete && detailImage.naturalWidth > 0 ? detailImage : image;
-      const nativeWidthZoom = resolutionImage.naturalWidth / image.clientWidth;
-      const nativeHeightZoom = resolutionImage.naturalHeight / image.clientHeight;
-      availableMaxZoomRef.current = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nativeWidthZoom, nativeHeightZoom));
+      const sourceWidth = resultSize?.width ?? resolutionImage.naturalWidth;
+      const sourceHeight = resultSize?.height ?? resolutionImage.naturalHeight;
+      fitPixelZoomRef.current = calculateFitPixelZoom({
+        devicePixelRatio: window.devicePixelRatio || 1,
+        displayHeight: image.clientHeight,
+        displayWidth: image.clientWidth,
+        sourceHeight,
+        sourceWidth,
+      });
+      maxTransformScaleRef.current = calculateMaxTransformScale(fitPixelZoomRef.current);
     }
     applyTransform(transformRef.current);
-  }, [applyTransform]);
+  }, [applyTransform, resultSize?.height, resultSize?.width]);
 
   const resetView = useCallback(() => applyTransform({ ...IDENTITY_TRANSFORM }, true), [applyTransform]);
 
   const updateZoomFromCenter = useCallback(
-    (nextZoom: number, animate = true) => {
+    (nextScale: number, animate = true) => {
       const current = transformRef.current;
-      const scale = clampZoom(nextZoom, availableMaxZoomRef.current);
+      const scale = clampTransformScale(nextScale, maxTransformScaleRef.current);
       const ratio = scale / current.scale;
       applyTransform({ scale, x: current.x * ratio, y: current.y * ratio }, animate);
     },
     [applyTransform],
   );
 
+  const stepZoom = useCallback(
+    (direction: -1 | 1) => {
+      updateZoomFromCenter(
+        resolveZoomStep(transformRef.current.scale, direction, fitPixelZoomRef.current, maxTransformScaleRef.current),
+      );
+    },
+    [updateZoomFromCenter],
+  );
+
+  const zoomToOneHundredPercent = useCallback(() => {
+    updateZoomFromCenter(resolvePixelZoomScale(1, fitPixelZoomRef.current, maxTransformScaleRef.current));
+  }, [updateZoomFromCenter]);
+
   useEffect(() => {
     transformRef.current = { ...IDENTITY_TRANSFORM };
-    availableMaxZoomRef.current = MAX_ZOOM;
+    fitPixelZoomRef.current = 1;
+    maxTransformScaleRef.current = MAX_PIXEL_ZOOM;
     if (viewportRef.current) viewportRef.current.dataset.detailReady = 'false';
     paintTransform(false);
   }, [detailSrc, paintTransform, src]);
@@ -217,7 +263,7 @@ function ImageStackResultPreview({
       const current = transformRef.current;
       const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
       const exponent = Math.max(-0.5, Math.min(0.5, -delta * 0.002));
-      const scale = clampZoom(current.scale * Math.exp(exponent), availableMaxZoomRef.current);
+      const scale = clampTransformScale(current.scale * Math.exp(exponent), maxTransformScaleRef.current);
       if (Math.abs(scale - current.scale) < 0.0001) return;
 
       const bounds = viewport.getBoundingClientRect();
@@ -257,7 +303,13 @@ function ImageStackResultPreview({
   );
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || transformRef.current.scale <= MIN_ZOOM + 0.001) return;
+    if (
+      event.button !== 0 ||
+      transformRef.current.scale <= FIT_TRANSFORM_SCALE + ZOOM_EPSILON ||
+      (event.target instanceof Element && event.target.closest('[data-image-stack-preview-toolbar]'))
+    ) {
+      return;
+    }
     event.preventDefault();
     activePointerRef.current = event.pointerId;
     lastPointerPositionRef.current = { x: event.clientX, y: event.clientY };
@@ -289,10 +341,10 @@ function ImageStackResultPreview({
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      updateZoomFromCenter(transformRef.current.scale + ZOOM_STEP);
+      stepZoom(1);
     } else if (event.key === '-') {
       event.preventDefault();
-      updateZoomFromCenter(transformRef.current.scale - ZOOM_STEP);
+      stepZoom(-1);
     } else if (event.key === '0') {
       event.preventDefault();
       resetView();
@@ -308,9 +360,7 @@ function ImageStackResultPreview({
       data-detail-ready="false"
       data-interacting="false"
       onDoubleClick={() =>
-        transformRef.current.scale > MIN_ZOOM + 0.001
-          ? resetView()
-          : updateZoomFromCenter(Math.min(2, availableMaxZoomRef.current))
+        transformRef.current.scale > FIT_TRANSFORM_SCALE + ZOOM_EPSILON ? resetView() : zoomToOneHundredPercent()
       }
       onKeyDown={handleKeyDown}
       onPointerCancel={handlePointerEnd}
@@ -319,7 +369,7 @@ function ImageStackResultPreview({
       onPointerUp={handlePointerEnd}
       ref={viewportRef}
       role="region"
-      style={{ cursor: transformRef.current.scale > MIN_ZOOM + 0.001 ? 'grab' : 'zoom-in' }}
+      style={{ cursor: 'zoom-in' }}
       tabIndex={0}
     >
       <div
@@ -375,16 +425,16 @@ function ImageStackResultPreview({
       <div
         aria-label={alt}
         className="absolute right-3 bottom-3 z-20 flex h-10 items-center overflow-hidden rounded-lg border border-white/15 bg-black/85 text-white shadow-lg"
+        data-image-stack-preview-toolbar
         onDoubleClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
         role="toolbar"
       >
         <button
           aria-label={t('modals.imageStack.zoomOut')}
-          className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-35"
+          className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 disabled:opacity-35"
           data-tooltip={t('modals.imageStack.zoomOut')}
-          disabled={transformRef.current.scale <= MIN_ZOOM + 0.001}
-          onClick={() => updateZoomFromCenter(transformRef.current.scale - ZOOM_STEP)}
+          disabled={transformRef.current.scale <= FIT_TRANSFORM_SCALE + ZOOM_EPSILON}
+          onClick={() => stepZoom(-1)}
           ref={zoomOutButtonRef}
           type="button"
         >
@@ -394,14 +444,14 @@ function ImageStackResultPreview({
           className="flex h-10 min-w-14 items-center justify-center border-x border-white/10 px-2 text-center text-[11px] font-medium tabular-nums text-white/85"
           ref={zoomLabelRef}
         >
-          {Math.round(transformRef.current.scale * 100)}%
+          {Math.round(calculatePixelZoom(transformRef.current.scale, fitPixelZoomRef.current) * 100)}%
         </span>
         <button
           aria-label={t('modals.imageStack.zoomIn')}
-          className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-35"
+          className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 disabled:opacity-35"
           data-tooltip={t('modals.imageStack.zoomIn')}
-          disabled={transformRef.current.scale >= availableMaxZoomRef.current - 0.001}
-          onClick={() => updateZoomFromCenter(transformRef.current.scale + ZOOM_STEP)}
+          disabled={transformRef.current.scale >= maxTransformScaleRef.current - ZOOM_EPSILON}
+          onClick={() => stepZoom(1)}
           ref={zoomInButtonRef}
           type="button"
         >

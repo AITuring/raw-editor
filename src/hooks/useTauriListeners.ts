@@ -292,6 +292,17 @@ export function useTauriListeners({
           const resultId = event.payload?.resultId;
           const previewPath = event.payload?.previewPath;
           const detailPreviewPath = event.payload?.detailPreviewPath;
+          const sourceWidth = event.payload?.sourceWidth;
+          const sourceHeight = event.payload?.sourceHeight;
+          const resultSize =
+            typeof sourceWidth === 'number' &&
+            Number.isFinite(sourceWidth) &&
+            sourceWidth > 0 &&
+            typeof sourceHeight === 'number' &&
+            Number.isFinite(sourceHeight) &&
+            sourceHeight > 0
+              ? { width: sourceWidth, height: sourceHeight }
+              : null;
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0
               ? convertFileSrc(previewPath.replace(/\\/g, '/'))
@@ -318,6 +329,7 @@ export function useTauriListeners({
                 isProcessing: false,
                 progressMessage: null,
                 resultId,
+                resultSize,
               },
             };
           });
@@ -338,6 +350,7 @@ export function useTauriListeners({
                 isProcessing: false,
                 progressMessage: null,
                 resultId: null,
+                resultSize: null,
               },
             };
           });

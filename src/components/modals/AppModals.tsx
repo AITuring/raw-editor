@@ -139,6 +139,7 @@ export default function AppModals(props: AppModalsProps) {
         error: null,
         requestId: null,
         resultId: null,
+        resultSize: null,
         sourcePaths: [],
         blendMode: 'focus',
         alignmentMode: 'auto',
@@ -213,6 +214,7 @@ export default function AppModals(props: AppModalsProps) {
         initialBlendMode={imageStackModalState.blendMode}
         isOpen={imageStackModalState.isOpen}
         isProcessing={imageStackModalState.isProcessing}
+        resultSize={imageStackModalState.resultSize}
         onClose={closeImageStackModal}
         onChange={() =>
           setUI((state) => ({
@@ -224,6 +226,7 @@ export default function AppModals(props: AppModalsProps) {
               progressMessage: null,
               requestId: null,
               resultId: null,
+              resultSize: null,
             },
           }))
         }

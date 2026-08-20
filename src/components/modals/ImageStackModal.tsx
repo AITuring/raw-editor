@@ -33,7 +33,12 @@ import {
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
-import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../../store/useUIStore';
+import type {
+  ImageStackAlignmentMode,
+  ImageStackBlendMode,
+  ImageStackExportFormat,
+  ImageStackResultSize,
+} from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
 
 interface ImageStackModalProps {
@@ -43,6 +48,7 @@ interface ImageStackModalProps {
   isOpen: boolean;
   isProcessing: boolean;
   progressMessage: string | null;
+  resultSize: ImageStackResultSize | null;
   sourcePaths: string[];
   initialBlendMode: ImageStackBlendMode;
   initialAlignmentMode: ImageStackAlignmentMode;
@@ -239,6 +245,7 @@ export default function ImageStackModal({
   isOpen,
   isProcessing,
   progressMessage,
+  resultSize,
   sourcePaths,
   initialBlendMode,
   initialAlignmentMode,
@@ -461,6 +468,7 @@ export default function ImageStackModal({
                         : t('modals.imageStack.panoramaResult')
                     }
                     onFocusedChange={setIsPreviewFocused}
+                    resultSize={resultSize}
                     src={finalImageBase64}
                   />
                 ) : (

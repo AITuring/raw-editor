@@ -45,6 +45,11 @@ export type ImageStackBlendMode = 'focus' | 'panorama';
 export type ImageStackAlignmentMode = 'auto' | 'perspective' | 'cylindrical' | 'spherical' | 'position';
 export type ImageStackExportFormat = 'tiff' | 'png' | 'jpeg';
 
+export interface ImageStackResultSize {
+  height: number;
+  width: number;
+}
+
 export interface ImageStackModalState {
   detailImageBase64: string | null;
   error: string | null;
@@ -54,6 +59,7 @@ export interface ImageStackModalState {
   progressMessage: string | null;
   requestId: string | null;
   resultId: string | null;
+  resultSize: ImageStackResultSize | null;
   sourcePaths: string[];
   blendMode: ImageStackBlendMode;
   alignmentMode: ImageStackAlignmentMode;
@@ -248,6 +254,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     progressMessage: null,
     requestId: null,
     resultId: null,
+    resultSize: null,
     sourcePaths: [],
     blendMode: 'focus',
     alignmentMode: 'auto',
