@@ -24,6 +24,22 @@ const DETAIL_PREVIEW_MAX_LONG_SIDE: u32 = 8_192;
 const DETAIL_PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
+const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.21.1";
+
+fn validate_image_stack_pipeline_version(value: &str) -> Result<(), String> {
+    if value == IMAGE_STACK_PIPELINE_VERSION {
+        return Ok(());
+    }
+
+    Err(format!(
+        "The image-stack backend is out of date (expected {IMAGE_STACK_PIPELINE_VERSION}, received {}). Fully quit and restart RAW Editor before stacking again.",
+        if value.trim().is_empty() {
+            "no version"
+        } else {
+            value
+        }
+    ))
+}
 
 fn resolve_blend_mode(value: &str) -> BlendMode {
     match value {
@@ -381,6 +397,11 @@ pub(crate) fn write_srgb_tiff(image: &DynamicImage, output_path: &Path) -> Resul
     write_image_stack_output(image, output_path, ImageStackOutputFormat::Tiff)
 }
 
+#[cfg(test)]
+pub(crate) fn write_srgb_jpeg(image: &DynamicImage, output_path: &Path) -> Result<(), String> {
+    write_image_stack_output(image, output_path, ImageStackOutputFormat::Jpeg)
+}
+
 fn resolve_image_stack_output_path(
     first_path: &Path,
     blend_mode: &str,
@@ -512,6 +533,7 @@ pub async fn process_image_stack(
     paths: Vec<String>,
     blend_mode: String,
     alignment_mode: String,
+    pipeline_version: String,
     request_id: String,
     app_handle: AppHandle,
     state: tauri::State<'_, AppState>,
@@ -525,6 +547,7 @@ pub async fn process_image_stack(
     if request_id.trim().is_empty() {
         return Err("Image-stack request ID is missing.".to_string());
     }
+    validate_image_stack_pipeline_version(&pipeline_version)?;
 
     let source_paths: Vec<String> = paths
         .iter()
@@ -583,6 +606,7 @@ pub async fn process_image_stack(
                         "detailPreviewHeight": previews.detail_height,
                         "sourceWidth": source_width,
                         "sourceHeight": source_height,
+                        "pipelineVersion": IMAGE_STACK_PIPELINE_VERSION,
                         "requestId": request_id,
                         "resultId": result_id,
                     }),
@@ -620,11 +644,19 @@ mod tests {
     use image::{DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage};
 
     use super::{
-        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, ImageStackOutputFormat,
-        PREVIEW_MAX_LONG_SIDE, PREVIEW_MAX_PIXELS, canonicalize_image_stack_result,
-        detail_preview_dimensions, encode_srgb_tiff, preview_dimensions,
-        resolve_image_stack_output_path, write_image_stack_output, write_srgb_tiff,
+        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, IMAGE_STACK_PIPELINE_VERSION,
+        ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE, PREVIEW_MAX_PIXELS,
+        canonicalize_image_stack_result, detail_preview_dimensions, encode_srgb_tiff,
+        preview_dimensions, resolve_image_stack_output_path, validate_image_stack_pipeline_version,
+        write_image_stack_output, write_srgb_tiff,
     };
+
+    #[test]
+    fn image_stack_pipeline_version_rejects_stale_frontends() {
+        assert!(validate_image_stack_pipeline_version(IMAGE_STACK_PIPELINE_VERSION).is_ok());
+        assert!(validate_image_stack_pipeline_version("").is_err());
+        assert!(validate_image_stack_pipeline_version("image-stack-legacy").is_err());
+    }
 
     #[test]
     fn preview_dimensions_keep_images_within_the_quality_budget() {

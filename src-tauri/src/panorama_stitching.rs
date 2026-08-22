@@ -1437,6 +1437,7 @@ mod alignment_tests {
 mod acceptance_tests {
     use super::*;
     use image::ImageFormat;
+    use std::fs;
     use std::path::PathBuf;
 
     #[test]
@@ -1537,15 +1538,40 @@ mod acceptance_tests {
         crate::image_stack::write_srgb_tiff(&canonical, &output_path)
             .expect("full-resolution color-managed TIFF result should be writable");
         let preview = canonical.resize(1800, 1800, image::imageops::FilterType::Lanczos3);
-        let preview_path = output_path.with_extension("jpg");
+        let preview_path = output_path.with_extension("preview.jpg");
         preview
             .save_with_format(&preview_path, ImageFormat::Jpeg)
             .expect("focus-stack preview should be writable");
+        let app_jpeg_path = output_path.with_extension("app.jpg");
+        crate::image_stack::write_srgb_jpeg(&canonical, &app_jpeg_path)
+            .expect("full-resolution application JPEG should be writable");
+
+        if let Some(reference_path) =
+            std::env::var_os("RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG").map(PathBuf::from)
+        {
+            let actual = fs::read(&app_jpeg_path)
+                .expect("read the full-resolution application JPEG for comparison");
+            let reference =
+                fs::read(&reference_path).expect("read the user-provided Photoshop reference JPEG");
+            assert!(
+                actual == reference,
+                "application JPEG does not match the Photoshop reference byte for byte: {} ({} bytes) vs {} ({} bytes)",
+                app_jpeg_path.display(),
+                actual.len(),
+                reference_path.display(),
+                reference.len()
+            );
+            println!(
+                "Photoshop parity: byte-identical to {}",
+                reference_path.display()
+            );
+        }
         println!(
-            "focus-stack result: {}x{}\nfull: {}\npreview: {}",
+            "focus-stack result: {}x{}\nfull: {}\napp JPEG: {}\npreview: {}",
             canonical.width(),
             canonical.height(),
             output_path.display(),
+            app_jpeg_path.display(),
             preview_path.display()
         );
     }

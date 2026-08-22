@@ -6,6 +6,22 @@ import { build } from 'esbuild';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const previewSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx'), 'utf8');
+const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
+const rustStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
+const productivityActionsSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useProductivityActions.ts'), 'utf8');
+const listenerSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useTauriListeners.ts'), 'utf8');
+
+const frontendPipelineVersion = pipelineSource.match(/IMAGE_STACK_PIPELINE_VERSION\s*=\s*'([^']+)'/)?.[1];
+const backendPipelineVersion = rustStackSource.match(/IMAGE_STACK_PIPELINE_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1];
+
+assert.ok(frontendPipelineVersion, 'frontend image-stack pipeline version must be declared');
+assert.equal(
+  frontendPipelineVersion,
+  backendPipelineVersion,
+  'frontend and backend image-stack pipeline versions must change together',
+);
+assert.match(productivityActionsSource, /pipelineVersion:\s*IMAGE_STACK_PIPELINE_VERSION/);
+assert.match(listenerSource, /pipelineVersion\s*!==\s*IMAGE_STACK_PIPELINE_VERSION/);
 
 const cleanupStart = previewSource.indexOf('useEffect(\n    () => () => {');
 const cleanupEnd = previewSource.indexOf('\n    },\n    [],\n  );', cleanupStart);
@@ -93,4 +109,6 @@ assert.equal(
   'zoom-out must retreat from 100% to the prior visible stop',
 );
 
-console.log('Validated image-stack preview cleanup, toolbar click routing, and output-pixel zoom semantics.');
+console.log(
+  'Validated image-stack pipeline handshake, preview cleanup, toolbar click routing, and output-pixel zoom semantics.',
+);

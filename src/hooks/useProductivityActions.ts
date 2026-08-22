@@ -6,6 +6,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../store/useUIStore';
 import { Invokes } from '../components/ui/AppProperties';
 import i18n from '../i18n';
+import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
 
 const IMAGE_STACK_EXPORT_FORMATS: Record<
   ImageStackExportFormat,
@@ -97,6 +98,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         paths,
         blendMode,
         alignmentMode,
+        pipelineVersion: IMAGE_STACK_PIPELINE_VERSION,
         requestId,
       }).catch((err) => {
         setUI((state) => {

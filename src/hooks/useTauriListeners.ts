@@ -7,6 +7,7 @@ import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { BASIC_MODE } from '../basic/runtime';
+import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
 
 interface TauriListenerProps {
   refreshAllFolderTrees: () => void;
@@ -292,6 +293,7 @@ export function useTauriListeners({
           const resultId = event.payload?.resultId;
           const previewPath = event.payload?.previewPath;
           const detailPreviewPath = event.payload?.detailPreviewPath;
+          const pipelineVersion = event.payload?.pipelineVersion;
           const sourceWidth = event.payload?.sourceWidth;
           const sourceHeight = event.payload?.sourceHeight;
           const resultSize =
@@ -312,12 +314,25 @@ export function useTauriListeners({
               ? convertFileSrc(detailPreviewPath.replace(/\\/g, '/'))
               : previewSource;
           useUIStore.getState().setUI((state) => {
-            if (
-              typeof requestId !== 'string' ||
-              requestId !== state.imageStackModalState.requestId ||
-              typeof resultId !== 'string' ||
-              !previewSource
-            ) {
+            if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) {
+              return state;
+            }
+            if (pipelineVersion !== IMAGE_STACK_PIPELINE_VERSION) {
+              return {
+                imageStackModalState: {
+                  ...state.imageStackModalState,
+                  detailImageBase64: null,
+                  error:
+                    'The image-stack backend is out of date. Fully quit and restart RAW Editor before stacking again.',
+                  finalImageBase64: null,
+                  isProcessing: false,
+                  progressMessage: null,
+                  resultId: null,
+                  resultSize: null,
+                },
+              };
+            }
+            if (typeof resultId !== 'string' || !previewSource) {
               return state;
             }
             return {
