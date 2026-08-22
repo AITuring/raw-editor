@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 
-import type { InteractivePatch } from '../../../store/useEditorStore';
+import type { InteractivePatch } from '../../store/useEditorStore';
 
 interface ScreenSpacePreviewProps {
   finalPreviewUrl: string | null;

@@ -1,3 +1,4 @@
+/** Output-pixel zoom semantics shared by reusable image previews. */
 export const FIT_TRANSFORM_SCALE = 1;
 export const MAX_PIXEL_ZOOM = 8;
 export const MAX_TRANSFORM_SCALE = 64;

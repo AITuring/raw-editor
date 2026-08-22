@@ -6,9 +6,18 @@ import { build } from 'esbuild';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const previewSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx'), 'utf8');
+const reusablePreviewSource = fs.readFileSync(
+  path.join(repoRoot, 'src/components/preview/ZoomableImagePreview.tsx'),
+  'utf8',
+);
+const previewModuleSource = fs.readFileSync(path.join(repoRoot, 'src/components/preview/index.ts'), 'utf8');
+const reusablePreviewStyleSource = fs.readFileSync(
+  path.join(repoRoot, 'src/components/preview/ZoomableImagePreview.css'),
+  'utf8',
+);
 const editorSource = fs.readFileSync(path.join(repoRoot, 'src/components/panel/Editor.tsx'), 'utf8');
 const screenPreviewSource = fs.readFileSync(
-  path.join(repoRoot, 'src/components/panel/editor/ScreenSpacePreview.tsx'),
+  path.join(repoRoot, 'src/components/preview/ScreenSpacePreview.tsx'),
   'utf8',
 );
 const screenTransformSource = fs.readFileSync(
@@ -32,12 +41,11 @@ assert.equal(
 assert.match(productivityActionsSource, /pipelineVersion:\s*IMAGE_STACK_PIPELINE_VERSION/);
 assert.match(listenerSource, /pipelineVersion\s*!==\s*IMAGE_STACK_PIPELINE_VERSION/);
 
-const cleanupStart = previewSource.indexOf('useEffect(\n    () => () => {');
-const cleanupEnd = previewSource.indexOf('\n    },\n    [],\n  );', cleanupStart);
+const cleanupMatch = reusablePreviewSource.match(/useEffect\(\s*\(\) => \(\) => \{([\s\S]*?)\}\s*,\s*\[\]\s*,?\s*\);/);
 
-assert.ok(cleanupStart >= 0 && cleanupEnd > cleanupStart, 'image-stack preview must keep an explicit unmount cleanup');
+assert.ok(cleanupMatch, 'reusable preview must keep an explicit unmount cleanup');
 
-const cleanup = previewSource.slice(cleanupStart, cleanupEnd);
+const cleanup = cleanupMatch[1];
 
 assert.match(cleanup, /cancelAnimationFrame\(renderFrameRef\.current\)/);
 assert.match(
@@ -55,13 +63,13 @@ for (const timerRef of ['settleTimerRef', 'transitionTimerRef']) {
   );
 }
 
-assert.match(previewSource, /data-image-stack-preview-toolbar/);
-assert.match(previewSource, /closest\('\[data-image-stack-preview-toolbar\]'\)/);
-assert.match(previewSource, /onClick=\{\(\) => stepZoom\(-1\)\}/);
-assert.match(previewSource, /onClick=\{\(\) => stepZoom\(1\)\}/);
+assert.match(reusablePreviewSource, /data-zoomable-image-preview-toolbar/);
+assert.match(reusablePreviewSource, /closest\('\[data-zoomable-image-preview-toolbar\]'\)/);
+assert.match(reusablePreviewSource, /onClick=\{\(\) => stepZoom\(-1\)\}/);
+assert.match(reusablePreviewSource, /onClick=\{\(\) => stepZoom\(1\)\}/);
 
 const bundled = await build({
-  entryPoints: [path.join(repoRoot, 'src/utils/imageStackZoom.ts')],
+  entryPoints: [path.join(repoRoot, 'src/components/preview/imagePreviewZoom.ts')],
   bundle: true,
   format: 'esm',
   platform: 'node',
@@ -165,8 +173,18 @@ assert.equal(
   'the shared settled renderer must allocate the physical screen height represented by 56% output-pixel zoom',
 );
 
-assert.match(previewSource, /import ScreenSpacePreview from '\.\.\/panel\/editor\/ScreenSpacePreview'/);
-assert.match(previewSource, /useScreenSpacePreviewTransform\(\{/);
+assert.match(previewSource, /import \{ ZoomableImagePreview \} from '\.\.\/preview'/);
+assert.match(previewSource, /<ZoomableImagePreview/);
+assert.doesNotMatch(previewSource, /requestAnimationFrame|transformRef|stepZoom/);
+assert.match(previewModuleSource, /export \{ default as ZoomableImagePreview \}/);
+assert.match(previewModuleSource, /ZoomableImagePreviewHandle/);
+assert.match(reusablePreviewSource, /import ScreenSpacePreview from '\.\/ScreenSpacePreview'/);
+assert.match(reusablePreviewSource, /useScreenSpacePreviewTransform\(\{/);
+assert.match(reusablePreviewSource, /children\?: ReactNode/);
+assert.match(reusablePreviewSource, /toolbarEnd\?: ReactNode/);
+assert.match(reusablePreviewSource, /import '\.\/ZoomableImagePreview\.css'/);
+assert.match(reusablePreviewStyleSource, /\.zoomable-image-preview\[data-detail-ready='true'\]/);
+assert.doesNotMatch(reusablePreviewSource, /ImageStack|modals\.imageStack/);
 assert.match(editorSource, /useScreenSpacePreviewTransform\(\{/);
 assert.match(screenPreviewSource, /settled preview has no CSS\s+ \* scale transform at all/);
 assert.match(screenTransformSource, /element\.style\.width = `\$\{geometry\.width\}px`/);
@@ -174,5 +192,5 @@ assert.match(screenTransformSource, /element\.style\.transform = 'none'/);
 assert.match(screenTransformSource, /element\.style\.transform = `matrix\(/);
 
 console.log(
-  'Validated image-stack pipeline handshake, preview cleanup, toolbar click routing, output-pixel zoom semantics, and the shared editor screen-space renderer.',
+  'Validated image-stack pipeline handshake, reusable preview boundaries, cleanup, toolbar routing, output-pixel zoom semantics, and the shared editor renderer.',
 );

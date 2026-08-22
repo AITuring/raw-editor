@@ -17,7 +17,7 @@ import {
 import EditorToolbar from './editor/EditorToolbar';
 import ImageCanvas from './editor/ImageCanvas';
 import PreviewNavigator from './editor/PreviewNavigator';
-import ScreenSpacePreview from './editor/ScreenSpacePreview';
+import { ScreenSpacePreview } from '../preview';
 import { Mask, SubMask } from './right/Masks';
 import { Panel, TransformState, Invokes } from '../ui/AppProperties';
 import { useEditorStore } from '../../store/useEditorStore';
