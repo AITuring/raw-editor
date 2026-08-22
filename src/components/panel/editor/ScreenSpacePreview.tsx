@@ -9,7 +9,7 @@ interface ScreenSpacePreviewProps {
   interactivePatch: InteractivePatch | null;
   isMaxZoom: boolean;
   isSliderDragging: boolean;
-  onProcessedFrameReady(isViewportPatch: boolean): void;
+  onProcessedFrameReady(isViewportPatch: boolean, image?: HTMLImageElement): void;
   showOriginal: boolean;
   thumbnailUrl: string;
   transformedOriginalUrl: string | null;
@@ -131,7 +131,7 @@ const ScreenSpacePreview = forwardRef<HTMLDivElement, ScreenSpacePreviewProps>(
     const handleProcessedFrameLoad = useCallback(
       (event: React.SyntheticEvent<HTMLImageElement>, isViewportPatch: boolean) => {
         const image = event.currentTarget;
-        const notify = () => onProcessedFrameReady(isViewportPatch);
+        const notify = () => onProcessedFrameReady(isViewportPatch, image);
         if (typeof image.decode === 'function') {
           void image.decode().then(notify, notify);
         } else {

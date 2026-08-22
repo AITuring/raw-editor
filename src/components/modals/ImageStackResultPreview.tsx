@@ -2,7 +2,10 @@ import { memo, useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Maximize2, Minimize2, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useScreenSpacePreviewTransform } from '../../hooks/useScreenSpacePreviewTransform';
 import type { ImageStackResultSize } from '../../store/useUIStore';
+import { calculateScreenSpacePreviewGeometry } from '../../utils/previewResolution';
+import ScreenSpacePreview from '../panel/editor/ScreenSpacePreview';
 import {
   FIT_TRANSFORM_SCALE,
   MAX_PIXEL_ZOOM,
@@ -66,7 +69,7 @@ function ImageStackResultPreview({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const detailImageRef = useRef<HTMLImageElement | null>(null);
+  const screenPreviewRef = useRef<HTMLDivElement | null>(null);
   const zoomLabelRef = useRef<HTMLSpanElement | null>(null);
   const zoomInButtonRef = useRef<HTMLButtonElement | null>(null);
   const zoomOutButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -82,9 +85,44 @@ function ImageStackResultPreview({
   const renderFrameRef = useRef<number | null>(null);
   const settleTimerRef = useRef<number | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
+  const screenPreviewReadyFrameRef = useRef<number | null>(null);
   const shouldAnimateNextFrameRef = useRef(false);
   const activePointerRef = useRef<number | null>(null);
   const lastPointerPositionRef = useRef({ x: 0, y: 0 });
+  const detailNaturalSizeRef = useRef({ height: 0, width: 0 });
+
+  const resolveScreenPreviewGeometry = useCallback((transform: PreviewTransform) => {
+    const geometry = geometryRef.current;
+    if (
+      geometry.imageWidth <= 0 ||
+      geometry.imageHeight <= 0 ||
+      geometry.viewportWidth <= 0 ||
+      geometry.viewportHeight <= 0
+    ) {
+      return null;
+    }
+
+    const viewportCenterX = geometry.viewportWidth / 2;
+    const viewportCenterY = geometry.viewportHeight / 2;
+    return calculateScreenSpacePreviewGeometry({
+      imageHeight: geometry.imageHeight,
+      imageOffsetX: (geometry.viewportWidth - geometry.imageWidth) / 2,
+      imageOffsetY: (geometry.viewportHeight - geometry.imageHeight) / 2,
+      imageWidth: geometry.imageWidth,
+      positionX: transform.x + viewportCenterX * (1 - transform.scale),
+      positionY: transform.y + viewportCenterY * (1 - transform.scale),
+      transformScale: transform.scale,
+    });
+  }, []);
+
+  const {
+    bakePreview: bakeScreenPreview,
+    resetBakedPreview: resetBakedScreenPreview,
+    transformPreview: transformScreenPreview,
+  } = useScreenSpacePreviewTransform({
+    previewRef: screenPreviewRef,
+    resolveGeometry: resolveScreenPreviewGeometry,
+  });
 
   const updateControls = useCallback((transform: PreviewTransform) => {
     const pixelZoom = calculatePixelZoom(transform.scale, fitPixelZoomRef.current);
@@ -112,6 +150,7 @@ function ImageStackResultPreview({
       renderFrameRef.current = requestAnimationFrame(() => {
         renderFrameRef.current = null;
         const stage = stageRef.current;
+        const screenPreview = screenPreviewRef.current;
         const transform = transformRef.current;
         if (!stage) return;
 
@@ -120,31 +159,48 @@ function ImageStackResultPreview({
           transitionTimerRef.current = null;
         }
         if (shouldAnimateNextFrameRef.current) {
-          stage.style.transition = `transform ${TRANSFORM_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+          const transition = `transform ${TRANSFORM_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+          stage.style.transition = transition;
+          if (screenPreview) screenPreview.style.transition = transition;
           transitionTimerRef.current = window.setTimeout(() => {
             transitionTimerRef.current = null;
             if (stageRef.current) stageRef.current.style.transition = 'none';
+            if (screenPreviewRef.current) screenPreviewRef.current.style.transition = 'none';
           }, TRANSFORM_ANIMATION_MS);
         } else {
           stage.style.transition = 'none';
+          if (screenPreview) screenPreview.style.transition = 'none';
         }
 
         stage.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+        transformScreenPreview(transform);
         updateControls(transform);
       });
     },
-    [updateControls],
+    [transformScreenPreview, updateControls],
   );
 
-  const scheduleSettle = useCallback(() => {
+  const beginInteraction = useCallback(() => {
     const viewport = viewportRef.current;
-    if (viewport) viewport.dataset.interacting = 'true';
+    if (!viewport || viewport.dataset.interacting === 'true') return;
+    viewport.dataset.interacting = 'true';
+  }, []);
+
+  const settleTransform = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    if (screenPreviewRef.current) screenPreviewRef.current.style.transition = 'none';
+    bakeScreenPreview(transformRef.current);
+    viewport.dataset.interacting = 'false';
+  }, [bakeScreenPreview]);
+
+  const scheduleSettle = useCallback(() => {
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = window.setTimeout(() => {
       settleTimerRef.current = null;
-      if (viewportRef.current) viewportRef.current.dataset.interacting = 'false';
+      settleTransform();
     }, TRANSFORM_SETTLE_DELAY_MS);
-  }, []);
+  }, [settleTransform]);
 
   const clampTransform = useCallback((candidate: PreviewTransform): PreviewTransform => {
     const geometry = geometryRef.current;
@@ -169,11 +225,12 @@ function ImageStackResultPreview({
 
   const applyTransform = useCallback(
     (candidate: PreviewTransform, animate = false) => {
+      beginInteraction();
       transformRef.current = clampTransform(candidate);
       paintTransform(animate);
       scheduleSettle();
     },
-    [clampTransform, paintTransform, scheduleSettle],
+    [beginInteraction, clampTransform, paintTransform, scheduleSettle],
   );
 
   const updateGeometry = useCallback(() => {
@@ -187,15 +244,9 @@ function ImageStackResultPreview({
       viewportHeight: viewport.clientHeight,
       viewportWidth: viewport.clientWidth,
     };
-    const detailImage = detailImageRef.current;
-    if (detailImage) {
-      detailImage.style.width = `${image.clientWidth}px`;
-      detailImage.style.height = `${image.clientHeight}px`;
-    }
     if (image.clientWidth > 0 && image.clientHeight > 0) {
-      const resolutionImage = detailImage?.complete && detailImage.naturalWidth > 0 ? detailImage : image;
-      const sourceWidth = resultSize?.width ?? resolutionImage.naturalWidth;
-      const sourceHeight = resultSize?.height ?? resolutionImage.naturalHeight;
+      const sourceWidth = resultSize?.width ?? (detailNaturalSizeRef.current.width || image.naturalWidth);
+      const sourceHeight = resultSize?.height ?? (detailNaturalSizeRef.current.height || image.naturalHeight);
       fitPixelZoomRef.current = calculateFitPixelZoom({
         devicePixelRatio: window.devicePixelRatio || 1,
         displayHeight: image.clientHeight,
@@ -207,6 +258,27 @@ function ImageStackResultPreview({
     }
     applyTransform(transformRef.current);
   }, [applyTransform, resultSize?.height, resultSize?.width]);
+
+  const handleScreenPreviewReady = useCallback(
+    (_isViewportPatch: boolean, image?: HTMLImageElement) => {
+      if (image && image.naturalWidth > 0 && image.naturalHeight > 0) {
+        detailNaturalSizeRef.current = { height: image.naturalHeight, width: image.naturalWidth };
+      }
+      updateGeometry();
+
+      if (screenPreviewReadyFrameRef.current !== null) {
+        cancelAnimationFrame(screenPreviewReadyFrameRef.current);
+      }
+      screenPreviewReadyFrameRef.current = requestAnimationFrame(() => {
+        screenPreviewReadyFrameRef.current = requestAnimationFrame(() => {
+          screenPreviewReadyFrameRef.current = null;
+          bakeScreenPreview(transformRef.current);
+          if (viewportRef.current) viewportRef.current.dataset.detailReady = 'true';
+        });
+      });
+    },
+    [bakeScreenPreview, updateGeometry],
+  );
 
   const resetView = useCallback(() => applyTransform({ ...IDENTITY_TRANSFORM }, true), [applyTransform]);
 
@@ -237,9 +309,13 @@ function ImageStackResultPreview({
     transformRef.current = { ...IDENTITY_TRANSFORM };
     fitPixelZoomRef.current = 1;
     maxTransformScaleRef.current = MAX_PIXEL_ZOOM;
-    if (viewportRef.current) viewportRef.current.dataset.detailReady = 'false';
+    detailNaturalSizeRef.current = { height: 0, width: 0 };
+    resetBakedScreenPreview();
+    if (viewportRef.current) {
+      viewportRef.current.dataset.detailReady = 'false';
+    }
     paintTransform(false);
-  }, [detailSrc, paintTransform, src]);
+  }, [detailSrc, paintTransform, resetBakedScreenPreview, src]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -298,6 +374,10 @@ function ImageStackResultPreview({
         window.clearTimeout(transitionTimerRef.current);
         transitionTimerRef.current = null;
       }
+      if (screenPreviewReadyFrameRef.current !== null) {
+        cancelAnimationFrame(screenPreviewReadyFrameRef.current);
+        screenPreviewReadyFrameRef.current = null;
+      }
     },
     [],
   );
@@ -311,6 +391,7 @@ function ImageStackResultPreview({
       return;
     }
     event.preventDefault();
+    beginInteraction();
     activePointerRef.current = event.pointerId;
     lastPointerPositionRef.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -336,6 +417,7 @@ function ImageStackResultPreview({
     activePointerRef.current = null;
     event.currentTarget.dataset.dragging = 'false';
     updateControls(transformRef.current);
+    scheduleSettle();
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -373,7 +455,7 @@ function ImageStackResultPreview({
       tabIndex={0}
     >
       <div
-        className="image-stack-preview-stage pointer-events-none absolute inset-0 flex origin-center items-center justify-center p-4 sm:p-6"
+        className="image-stack-preview-stage pointer-events-none absolute inset-0 z-0 flex origin-center items-center justify-center p-4 sm:p-6"
         ref={stageRef}
       >
         <img
@@ -385,26 +467,22 @@ function ImageStackResultPreview({
           ref={imageRef}
           src={src}
         />
-        {detailSrc && detailSrc !== src && (
-          <img
-            alt=""
-            aria-hidden="true"
-            className="image-stack-preview-image image-stack-preview-image--detail absolute top-1/2 left-1/2 object-fill"
-            decoding="async"
-            draggable={false}
-            onError={() => {
-              if (viewportRef.current) viewportRef.current.dataset.detailReady = 'false';
-            }}
-            onLoad={() => {
-              if (viewportRef.current) viewportRef.current.dataset.detailReady = 'true';
-              updateGeometry();
-            }}
-            ref={detailImageRef}
-            src={detailSrc}
-            style={{ transform: 'translate3d(-50%, -50%, 0)' }}
-          />
-        )}
       </div>
+
+      <ScreenSpacePreview
+        finalPreviewUrl={detailSrc}
+        hidden={false}
+        imagePath={detailSrc || src}
+        interactivePatch={null}
+        isMaxZoom={false}
+        isSliderDragging={false}
+        key={detailSrc || src}
+        onProcessedFrameReady={handleScreenPreviewReady}
+        ref={screenPreviewRef}
+        showOriginal={false}
+        thumbnailUrl={src}
+        transformedOriginalUrl={null}
+      />
 
       <div className="pointer-events-none absolute top-3 left-3 z-10 flex flex-wrap gap-1.5">
         <span className="rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[11px] font-medium text-white/90">

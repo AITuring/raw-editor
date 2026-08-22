@@ -6,6 +6,15 @@ import { build } from 'esbuild';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const previewSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx'), 'utf8');
+const editorSource = fs.readFileSync(path.join(repoRoot, 'src/components/panel/Editor.tsx'), 'utf8');
+const screenPreviewSource = fs.readFileSync(
+  path.join(repoRoot, 'src/components/panel/editor/ScreenSpacePreview.tsx'),
+  'utf8',
+);
+const screenTransformSource = fs.readFileSync(
+  path.join(repoRoot, 'src/hooks/useScreenSpacePreviewTransform.ts'),
+  'utf8',
+);
 const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
 const rustStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
 const productivityActionsSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useProductivityActions.ts'), 'utf8');
@@ -64,6 +73,19 @@ const { calculateFitPixelZoom, calculateMaxTransformScale, calculatePixelZoom, r
   `data:text/javascript;base64,${moduleSource}`
 );
 
+const previewGeometryBundle = await build({
+  entryPoints: [path.join(repoRoot, 'src/utils/previewResolution.ts')],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node20',
+  write: false,
+});
+const previewGeometryModuleSource = Buffer.from(previewGeometryBundle.outputFiles[0].contents).toString('base64');
+const { calculateScreenSpacePreviewGeometry } = await import(
+  `data:text/javascript;base64,${previewGeometryModuleSource}`
+);
+
 const sourceWidth = 10013;
 const sourceHeight = 6281;
 const displayWidth = 1000;
@@ -109,6 +131,48 @@ assert.equal(
   'zoom-out must retreat from 100% to the prior visible stop',
 );
 
+const realResultWidth = 6333;
+const realResultHeight = 9501;
+const realFitWidth = 640;
+const realFitHeight = (realFitWidth * realResultHeight) / realResultWidth;
+const realDevicePixelRatio = 2;
+const realFitPixelZoom = calculateFitPixelZoom({
+  devicePixelRatio: realDevicePixelRatio,
+  displayHeight: realFitHeight,
+  displayWidth: realFitWidth,
+  sourceHeight: realResultHeight,
+  sourceWidth: realResultWidth,
+});
+const fiftySixPercentTransformScale = 0.56 / realFitPixelZoom;
+const fiftySixPercentGeometry = calculateScreenSpacePreviewGeometry({
+  imageHeight: realFitHeight,
+  imageOffsetX: 0,
+  imageOffsetY: 0,
+  imageWidth: realFitWidth,
+  positionX: 0,
+  positionY: 0,
+  transformScale: fiftySixPercentTransformScale,
+});
+
+assert.equal(
+  Math.round(fiftySixPercentGeometry.width * realDevicePixelRatio),
+  Math.round(realResultWidth * 0.56),
+  'the shared settled renderer must allocate the physical screen width represented by 56% output-pixel zoom',
+);
+assert.equal(
+  Math.round(fiftySixPercentGeometry.height * realDevicePixelRatio),
+  Math.round(realResultHeight * 0.56),
+  'the shared settled renderer must allocate the physical screen height represented by 56% output-pixel zoom',
+);
+
+assert.match(previewSource, /import ScreenSpacePreview from '\.\.\/panel\/editor\/ScreenSpacePreview'/);
+assert.match(previewSource, /useScreenSpacePreviewTransform\(\{/);
+assert.match(editorSource, /useScreenSpacePreviewTransform\(\{/);
+assert.match(screenPreviewSource, /settled preview has no CSS\s+ \* scale transform at all/);
+assert.match(screenTransformSource, /element\.style\.width = `\$\{geometry\.width\}px`/);
+assert.match(screenTransformSource, /element\.style\.transform = 'none'/);
+assert.match(screenTransformSource, /element\.style\.transform = `matrix\(/);
+
 console.log(
-  'Validated image-stack pipeline handshake, preview cleanup, toolbar click routing, and output-pixel zoom semantics.',
+  'Validated image-stack pipeline handshake, preview cleanup, toolbar click routing, output-pixel zoom semantics, and the shared editor screen-space renderer.',
 );

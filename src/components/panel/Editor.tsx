@@ -26,11 +26,11 @@ import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
 import { useImageObjectUrl } from '../../hooks/useImageObjectUrl';
+import { useScreenSpacePreviewTransform } from '../../hooks/useScreenSpacePreviewTransform';
 import { createImageObjectUrl } from '../../utils/imageObjectUrl';
 import {
   calculateNormalizedPreviewViewport,
   calculateScreenSpacePreviewGeometry,
-  ScreenSpacePreviewGeometry,
   snapImageTranslationToDevicePixels,
 } from '../../utils/previewResolution';
 import { BASIC_MODE } from '../../basic/runtime';
@@ -151,7 +151,6 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const screenPreviewRef = useRef<HTMLDivElement>(null);
-  const bakedScreenPreviewGeometryRef = useRef<ScreenSpacePreviewGeometry | null>(null);
   const navigatorViewportRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
   const transformStateRef = useRef<TransformState>(transformState);
@@ -445,6 +444,15 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     });
   }, []);
 
+  const {
+    bakePreview: bakeScreenPreview,
+    resetBakedPreview: resetBakedScreenPreview,
+    transformPreview: transformScreenPreview,
+  } = useScreenSpacePreviewTransform({
+    previewRef: screenPreviewRef,
+    resolveGeometry: getScreenPreviewGeometry,
+  });
+
   const updatePreviewNavigator = useCallback(
     (state: TransformState) => {
       const container = imageContainerRef.current;
@@ -465,43 +473,6 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       }
     },
     [getScreenPreviewGeometry],
-  );
-
-  const bakeScreenPreview = useCallback(
-    (state: TransformState) => {
-      const element = screenPreviewRef.current;
-      const geometry = getScreenPreviewGeometry(state);
-      if (!element || !geometry) return;
-
-      element.style.left = `${geometry.left}px`;
-      element.style.top = `${geometry.top}px`;
-      element.style.width = `${geometry.width}px`;
-      element.style.height = `${geometry.height}px`;
-      element.style.transform = 'none';
-      element.style.transformOrigin = '0 0';
-      bakedScreenPreviewGeometryRef.current = geometry;
-    },
-    [getScreenPreviewGeometry],
-  );
-
-  const transformScreenPreview = useCallback(
-    (state: TransformState) => {
-      const element = screenPreviewRef.current;
-      const current = getScreenPreviewGeometry(state);
-      const baked = bakedScreenPreviewGeometryRef.current;
-      if (!element || !current) return;
-
-      if (!baked || baked.width <= 0 || baked.height <= 0) {
-        bakeScreenPreview(state);
-        return;
-      }
-
-      const scale = current.width / baked.width;
-      const translateX = current.left - baked.left;
-      const translateY = current.top - baked.top;
-      element.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${translateX}, ${translateY})`;
-    },
-    [bakeScreenPreview, getScreenPreviewGeometry],
   );
 
   const handleScreenPreviewReady = useCallback(
@@ -527,7 +498,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   );
 
   useLayoutEffect(() => {
-    bakedScreenPreviewGeometryRef.current = null;
+    resetBakedScreenPreview();
     bakeScreenPreview(transformStateRef.current);
     updatePreviewNavigator(transformStateRef.current);
   }, [
@@ -536,6 +507,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     imageRenderSize.offsetX,
     imageRenderSize.offsetY,
     imageRenderSize.width,
+    resetBakedScreenPreview,
     selectedImage?.path,
     updatePreviewNavigator,
   ]);
