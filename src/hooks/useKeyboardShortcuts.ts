@@ -358,7 +358,11 @@ export const useKeyboardShortcuts = ({
         shouldFire: () => true,
         execute: (e: any, s: any) => {
           e.preventDefault();
-          s.ui.setRightPanel(Panel.Export);
+          if (s.ui.activeView === 'editor' && s.editor.selectedImage) {
+            s.ui.setUI({ isEditorExportDialogOpen: true });
+          } else {
+            s.ui.setRightPanel(Panel.Export);
+          }
         },
       },
       toggle_library_exif: {

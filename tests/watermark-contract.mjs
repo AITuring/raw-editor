@@ -49,6 +49,10 @@ assert.match(rustExport, /import_watermark_image_impl/);
 assert.match(rustExport, /persist_noclobber/);
 assert.match(rustExport, /bundled_default_watermark_matches_the_reference_asset/);
 assert.match(rustLib, /export_processing::import_watermark_image/);
-assert.deepEqual(assetProtocolScope, ['$APPCACHE/thumbnails/*', '$APPDATA/watermarks/*']);
+assert.deepEqual(assetProtocolScope, [
+  '$APPCACHE/thumbnails/*',
+  '$APPCACHE/image-stack-previews/*',
+  '$APPDATA/watermarks/*',
+]);
 
 console.log('Validated the referenced default watermark asset, picker flow, preview, and Rust export contract.');

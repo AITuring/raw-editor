@@ -101,14 +101,22 @@ pub struct ExportSettings {
     pub resize: Option<ResizeOptions>,
     pub keep_metadata: bool,
     #[serde(default)]
+    pub metadata_overrides: Option<exif_processing::ExportMetadataOverrides>,
+    #[serde(default)]
     pub preserve_timestamps: bool,
     pub strip_gps: bool,
+    #[serde(default = "default_embed_color_profile")]
+    pub embed_color_profile: bool,
     pub filename_template: Option<String>,
     pub watermark: Option<WatermarkSettings>,
     #[serde(default)]
     pub export_masks: bool,
     #[serde(default)]
     pub preserve_folders: bool,
+}
+
+const fn default_embed_color_profile() -> bool {
+    true
 }
 
 #[derive(Clone)]
@@ -118,6 +126,25 @@ pub(crate) enum ExportAdjustmentsMode {
         active_adjustments: Option<Value>,
     },
     GlobalOverride(Value),
+}
+
+impl ExportAdjustmentsMode {
+    fn normalize_active_path(self) -> Self {
+        match self {
+            Self::UseSidecars {
+                active_path,
+                active_adjustments,
+            } => Self::UseSidecars {
+                active_path: active_path.map(|path| {
+                    path.rsplit_once("?vc=")
+                        .map(|(physical_path, _)| physical_path.to_string())
+                        .unwrap_or(path)
+                }),
+                active_adjustments,
+            },
+            Self::GlobalOverride(adjustments) => Self::GlobalOverride(adjustments),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -383,7 +410,7 @@ fn apply_watermark(
     Ok(())
 }
 
-fn calculate_resize_target(
+pub(crate) fn calculate_resize_target(
     current_w: u32,
     current_h: u32,
     resize_opts: &ResizeOptions,
@@ -479,7 +506,7 @@ fn relative_export_dir_for_preserved_folders(
         })
 }
 
-fn apply_export_resize_and_watermark(
+pub(crate) fn apply_export_resize_and_watermark(
     mut image: DynamicImage,
     export_settings: &ExportSettings,
 ) -> Result<DynamicImage, String> {
@@ -851,7 +878,12 @@ fn save_image_with_metadata(
         );
     }
 
-    let mut image_bytes = encode_image_to_bytes(image, &extension, export_settings.jpeg_quality)?;
+    let mut image_bytes = encode_image_to_bytes_with_profile(
+        image,
+        &extension,
+        export_settings.jpeg_quality,
+        export_settings.embed_color_profile,
+    )?;
     ensure_export_not_cancelled(cancellation_token)?;
 
     exif_processing::write_image_with_metadata(
@@ -860,6 +892,7 @@ fn save_image_with_metadata(
         &extension,
         export_settings.keep_metadata,
         export_settings.strip_gps,
+        export_settings.metadata_overrides.as_ref(),
     )?;
     ensure_export_not_cancelled(cancellation_token)?;
 
@@ -1632,6 +1665,7 @@ pub(crate) fn encode_streaming_jpeg<F>(
     width: u32,
     height: u32,
     jpeg_quality: u8,
+    embed_color_profile: bool,
     export_exif: Option<&[u8]>,
     render_rows: F,
 ) -> Result<(), String>
@@ -1656,23 +1690,25 @@ where
             .map_err(|error| format!("Failed to configure streaming JPEG encoder: {error}"))?;
         const ICC_MARKER_OVERHEAD: usize = 14;
         const MAX_MARKER_PAYLOAD: usize = 65_533;
-        let icc_profile = srgb_v4_profile();
-        // mozjpeg 0.10.13 numbers helper-generated ICC chunks from zero, while
-        // the JPEG ICC convention and image decoders require one-based indices.
-        let icc_chunk_size = MAX_MARKER_PAYLOAD - ICC_MARKER_OVERHEAD;
-        let icc_chunk_count = icc_profile.len().div_ceil(icc_chunk_size);
-        let icc_chunk_count = u8::try_from(icc_chunk_count)
-            .map_err(|_| "Bundled ICC profile requires too many JPEG markers".to_string())?;
-        for (chunk_index, chunk) in icc_profile.chunks(icc_chunk_size).enumerate() {
-            let mut marker = Vec::with_capacity(ICC_MARKER_OVERHEAD + chunk.len());
-            marker.extend_from_slice(b"ICC_PROFILE\0");
-            marker.push(
-                u8::try_from(chunk_index + 1)
-                    .map_err(|_| "Bundled ICC profile chunk index overflow".to_string())?,
-            );
-            marker.push(icc_chunk_count);
-            marker.extend_from_slice(chunk);
-            encoder.write_marker(MozjpegMarker::APP(2), &marker);
+        if embed_color_profile {
+            let icc_profile = srgb_v4_profile();
+            // mozjpeg 0.10.13 numbers helper-generated ICC chunks from zero, while
+            // the JPEG ICC convention and image decoders require one-based indices.
+            let icc_chunk_size = MAX_MARKER_PAYLOAD - ICC_MARKER_OVERHEAD;
+            let icc_chunk_count = icc_profile.len().div_ceil(icc_chunk_size);
+            let icc_chunk_count = u8::try_from(icc_chunk_count)
+                .map_err(|_| "Bundled ICC profile requires too many JPEG markers".to_string())?;
+            for (chunk_index, chunk) in icc_profile.chunks(icc_chunk_size).enumerate() {
+                let mut marker = Vec::with_capacity(ICC_MARKER_OVERHEAD + chunk.len());
+                marker.extend_from_slice(b"ICC_PROFILE\0");
+                marker.push(
+                    u8::try_from(chunk_index + 1)
+                        .map_err(|_| "Bundled ICC profile chunk index overflow".to_string())?,
+                );
+                marker.push(icc_chunk_count);
+                marker.extend_from_slice(chunk);
+                encoder.write_marker(MozjpegMarker::APP(2), &marker);
+            }
         }
         if let Some(tiff_payload) = export_exif {
             const EXIF_HEADER: &[u8] = b"Exif\0\0";
@@ -1721,6 +1757,7 @@ fn encode_streaming_png<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    embed_color_profile: bool,
     export_exif: Option<&[u8]>,
     render_rows: F,
 ) -> Result<(), String>
@@ -1730,7 +1767,7 @@ where
     let mut info = PngInfo::with_size(width, height);
     info.color_type = PngColorType::Rgba;
     info.bit_depth = BitDepth::Eight;
-    info.icc_profile = Some(Cow::Owned(srgb_v4_profile().to_vec()));
+    info.icc_profile = embed_color_profile.then(|| Cow::Owned(srgb_v4_profile().to_vec()));
     info.exif_metadata = export_exif.map(|metadata| Cow::Owned(metadata.to_vec()));
     let writer = BufWriter::new(output);
     let encoder = PngStreamEncoder::with_info(writer, info)
@@ -1844,6 +1881,7 @@ fn encode_streaming_tiff<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
     render_rows: F,
 ) -> Result<(), String>
@@ -1925,10 +1963,12 @@ where
             .write_tag(TiffTag::GpsDirectory, gps_directory.offset)
             .map_err(|error| format!("Failed to link TIFF GPS metadata: {error}"))?;
     }
-    image
-        .encoder()
-        .write_tag(TiffTag::IccProfile, srgb_v4_profile())
-        .map_err(|error| format!("Failed to attach TIFF ICC profile: {error}"))?;
+    if embed_color_profile {
+        image
+            .encoder()
+            .write_tag(TiffTag::IccProfile, srgb_v4_profile())
+            .map_err(|error| format!("Failed to attach TIFF ICC profile: {error}"))?;
+    }
     image
         .rows_per_strip(ROWS_PER_STRIP.min(height).max(1))
         .map_err(|error| format!("Failed to configure TIFF strips: {error}"))?;
@@ -1979,6 +2019,109 @@ where
 }
 
 #[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgb16_tiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgb16: &[u16],
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    let expected_samples = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(3))
+        .ok_or_else(|| {
+            "The RGB16 TIFF dimensions exceed the addressable sample count".to_string()
+        })?;
+    if rgb16.len() != expected_samples {
+        return Err(format!(
+            "RGB16 TIFF received {} samples; expected {expected_samples}",
+            rgb16.len()
+        ));
+    }
+
+    let mut encoder = StreamingTiffEncoder::new(output)
+        .map_err(|error| format!("Failed to start RGB16 TIFF encoder: {error}"))?;
+    let interoperability_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::INTEROP) => {
+            let mut directory = encoder.extra_directory().map_err(|error| {
+                format!("Failed to start TIFF interoperability metadata: {error}")
+            })?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::INTEROP)?;
+            Some(directory.finish_with_offsets().map_err(|error| {
+                format!("Failed to finish TIFF interoperability metadata: {error}")
+            })?)
+        }
+        _ => None,
+    };
+    let exif_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::EXIF) => {
+            let mut directory = encoder
+                .extra_directory()
+                .map_err(|error| format!("Failed to start TIFF EXIF metadata: {error}"))?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::EXIF)?;
+            if let Some(interoperability_directory) = interoperability_directory {
+                directory
+                    .write_tag(TiffTag::Unknown(0xa005), interoperability_directory.offset)
+                    .map_err(|error| {
+                        format!("Failed to link TIFF interoperability metadata: {error}")
+                    })?;
+            }
+            Some(
+                directory
+                    .finish_with_offsets()
+                    .map_err(|error| format!("Failed to finish TIFF EXIF metadata: {error}"))?,
+            )
+        }
+        _ => None,
+    };
+    let gps_directory = match export_metadata {
+        Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::GPS) => {
+            let mut directory = encoder
+                .extra_directory()
+                .map_err(|error| format!("Failed to start TIFF GPS metadata: {error}"))?;
+            write_tiff_metadata_group(&mut directory, metadata, ExifTagGroup::GPS)?;
+            Some(
+                directory
+                    .finish_with_offsets()
+                    .map_err(|error| format!("Failed to finish TIFF GPS metadata: {error}"))?,
+            )
+        }
+        _ => None,
+    };
+
+    let mut image = encoder
+        .new_image::<RGB16>(width, height)
+        .map_err(|error| format!("Failed to configure RGB16 TIFF image: {error}"))?;
+    if let Some(metadata) = export_metadata
+        && has_writable_tiff_metadata_group(metadata, ExifTagGroup::GENERIC)
+    {
+        write_tiff_metadata_group(image.encoder(), metadata, ExifTagGroup::GENERIC)?;
+    }
+    if let Some(exif_directory) = exif_directory {
+        image
+            .encoder()
+            .write_tag(TiffTag::ExifDirectory, exif_directory.offset)
+            .map_err(|error| format!("Failed to link TIFF EXIF metadata: {error}"))?;
+    }
+    if let Some(gps_directory) = gps_directory {
+        image
+            .encoder()
+            .write_tag(TiffTag::GpsDirectory, gps_directory.offset)
+            .map_err(|error| format!("Failed to link TIFF GPS metadata: {error}"))?;
+    }
+    if embed_color_profile {
+        image
+            .encoder()
+            .write_tag(TiffTag::IccProfile, srgb_v4_profile())
+            .map_err(|error| format!("Failed to attach TIFF ICC profile: {error}"))?;
+    }
+    image
+        .write_data(rgb16)
+        .map_err(|error| format!("Failed to encode RGB16 TIFF pixels: {error}"))
+}
+
+#[cfg(not(target_os = "android"))]
 #[derive(Clone, Copy)]
 enum StreamingExportMetadata<'a> {
     None,
@@ -1987,12 +2130,14 @@ enum StreamingExportMetadata<'a> {
 }
 
 #[cfg(not(target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
 fn encode_streaming_rgba_rows<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
     output_format: &str,
     jpeg_quality: u8,
+    embed_color_profile: bool,
     export_metadata: StreamingExportMetadata<'_>,
     render_rows: F,
 ) -> Result<(), String>
@@ -2005,21 +2150,43 @@ where
                 StreamingExportMetadata::ExifTiffPayload(payload) => Some(payload),
                 _ => None,
             };
-            encode_streaming_jpeg(output, width, height, jpeg_quality, exif, render_rows)
+            encode_streaming_jpeg(
+                output,
+                width,
+                height,
+                jpeg_quality,
+                embed_color_profile,
+                exif,
+                render_rows,
+            )
         }
         "png" => {
             let exif = match export_metadata {
                 StreamingExportMetadata::ExifTiffPayload(payload) => Some(payload),
                 _ => None,
             };
-            encode_streaming_png(output, width, height, exif, render_rows)
+            encode_streaming_png(
+                output,
+                width,
+                height,
+                embed_color_profile,
+                exif,
+                render_rows,
+            )
         }
         "tif" | "tiff" => {
             let metadata = match export_metadata {
                 StreamingExportMetadata::TiffDirectories(metadata) => Some(metadata),
                 _ => None,
             };
-            encode_streaming_tiff(output, width, height, metadata, render_rows)
+            encode_streaming_tiff(
+                output,
+                width,
+                height,
+                embed_color_profile,
+                metadata,
+                render_rows,
+            )
         }
         _ => Err(format!(
             "Unsupported streaming export format: {output_format}"
@@ -2066,6 +2233,7 @@ fn process_and_save_streaming_export(
             output_format,
             export_settings.keep_metadata,
             export_settings.strip_gps,
+            export_settings.metadata_overrides.as_ref(),
         )?
     };
     let export_tiff_metadata = if is_tiff_output {
@@ -2073,6 +2241,7 @@ fn process_and_save_streaming_export(
             path,
             export_settings.keep_metadata,
             export_settings.strip_gps,
+            export_settings.metadata_overrides.as_ref(),
         )?
     } else {
         None
@@ -2099,6 +2268,7 @@ fn process_and_save_streaming_export(
         target_height,
         output_format,
         export_settings.jpeg_quality,
+        export_settings.embed_color_profile,
         streaming_metadata,
         |encoder_sink| {
             let mut checked_encoder_sink = |row: &[u8]| -> Result<(), String> {
@@ -2224,10 +2394,20 @@ fn encode_grayscale_to_png(bitmap: &GrayImage) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
+#[cfg(test)]
 pub(crate) fn encode_image_to_bytes(
     image: &DynamicImage,
     output_format: &str,
     jpeg_quality: u8,
+) -> Result<Vec<u8>, String> {
+    encode_image_to_bytes_with_profile(image, output_format, jpeg_quality, true)
+}
+
+fn encode_image_to_bytes_with_profile(
+    image: &DynamicImage,
+    output_format: &str,
+    jpeg_quality: u8,
+    embed_color_profile: bool,
 ) -> Result<Vec<u8>, String> {
     let mut image_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut image_bytes);
@@ -2236,7 +2416,11 @@ pub(crate) fn encode_image_to_bytes(
         "jxl" => {
             let (width, height) = image.dimensions();
             let has_alpha = image.color().has_alpha();
-            let metadata = JxlImageMetadata::new().with_icc_profile(srgb_v4_profile());
+            let metadata = if embed_color_profile {
+                JxlImageMetadata::new().with_icc_profile(srgb_v4_profile())
+            } else {
+                JxlImageMetadata::new()
+            };
 
             let jxl_data = if jpeg_quality == 100 {
                 if has_alpha {
@@ -2281,20 +2465,26 @@ pub(crate) fn encode_image_to_bytes(
             let encoder = webp::Encoder::from_image(image)
                 .map_err(|_| "Failed to create WebP encoder".to_string())?;
             let webp_mem = encoder.encode(jpeg_quality as f32);
-            return embed_icc_in_webp(
-                webp_mem.as_ref(),
-                srgb_v4_profile(),
-                image.width(),
-                image.height(),
-                image.color().has_alpha(),
-            );
+            return if embed_color_profile {
+                embed_icc_in_webp(
+                    webp_mem.as_ref(),
+                    srgb_v4_profile(),
+                    image.width(),
+                    image.height(),
+                    image.color().has_alpha(),
+                )
+            } else {
+                Ok(webp_mem.to_vec())
+            };
         }
         "jpg" | "jpeg" => {
             let rgb_image = image.to_rgb8();
             let mut encoder = JpegEncoder::new_with_quality(&mut cursor, jpeg_quality);
-            encoder
-                .set_icc_profile(srgb_v4_profile().to_vec())
-                .map_err(|e| format!("Failed to attach JPEG ICC profile: {e}"))?;
+            if embed_color_profile {
+                encoder
+                    .set_icc_profile(srgb_v4_profile().to_vec())
+                    .map_err(|e| format!("Failed to attach JPEG ICC profile: {e}"))?;
+            }
             rgb_image
                 .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
@@ -2307,18 +2497,22 @@ pub(crate) fn encode_image_to_bytes(
             };
 
             let mut encoder = PngEncoder::new(&mut cursor);
-            encoder
-                .set_icc_profile(srgb_v4_profile().to_vec())
-                .map_err(|e| format!("Failed to attach PNG ICC profile: {e}"))?;
+            if embed_color_profile {
+                encoder
+                    .set_icc_profile(srgb_v4_profile().to_vec())
+                    .map_err(|e| format!("Failed to attach PNG ICC profile: {e}"))?;
+            }
             image_to_encode
                 .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
         }
         "tiff" => {
             let mut encoder = TiffEncoder::new(&mut cursor);
-            encoder
-                .set_icc_profile(srgb_v4_profile().to_vec())
-                .map_err(|e| format!("Failed to attach TIFF ICC profile: {e}"))?;
+            if embed_color_profile {
+                encoder
+                    .set_icc_profile(srgb_v4_profile().to_vec())
+                    .map_err(|e| format!("Failed to attach TIFF ICC profile: {e}"))?;
+            }
             DynamicImage::ImageRgb16(image.to_rgb16())
                 .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
@@ -2623,6 +2817,9 @@ pub(crate) async fn export_images_impl(
     app_handle: tauri::AppHandle,
     completion_tx: Option<tokio::sync::oneshot::Sender<Result<(), usize>>>,
 ) -> Result<(), String> {
+    // The editor can select a virtual copy (`?vc=N`), while each worker compares the
+    // physical source path. Normalize once so the visible edit is always the one exported.
+    let adjustments_mode = adjustments_mode.normalize_active_path();
     let cancellation_token = register_export_task(&state.export_task_token)?;
     let task_guard = ExportTaskGuard::with_app_handle(
         Arc::clone(&state.export_task_token),
@@ -3054,9 +3251,17 @@ pub async fn export_images(
     output_format: String,
     current_edit_path: Option<String>,
     current_edit_adjustments: Option<Value>,
+    wait_for_completion: Option<bool>,
     state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let (completion_tx, completion_rx) = if wait_for_completion.unwrap_or(false) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
+
     export_images_impl(
         paths,
         output_folder_or_file,
@@ -3070,9 +3275,18 @@ pub async fn export_images(
         },
         state,
         app_handle,
-        None,
+        completion_tx,
     )
-    .await
+    .await?;
+
+    match completion_rx {
+        Some(rx) => match rx.await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error_count)) => Err(format!("Export completed with {error_count} error(s).")),
+            Err(_) => Err("Export task ended before reporting completion.".to_string()),
+        },
+        None => Ok(()),
+    }
 }
 
 pub async fn run_headless_export(
@@ -3122,8 +3336,10 @@ pub async fn run_headless_export(
         jpeg_quality: session.quality,
         resize: None,
         keep_metadata: session.keep_metadata,
+        metadata_overrides: None,
         preserve_timestamps: true,
         strip_gps: false,
+        embed_color_profile: true,
         filename_template: None,
         watermark: None,
         export_masks: false,
@@ -3313,10 +3529,11 @@ pub async fn estimate_export_sizes(
             "estimate_export_size",
         )?;
 
-        let preview_bytes = encode_image_to_bytes(
+        let preview_bytes = encode_image_to_bytes_with_profile(
             &processed_preview,
             &output_format,
             export_settings.jpeg_quality,
+            export_settings.embed_color_profile,
         )?;
         let preview_byte_size = preview_bytes.len();
 
@@ -3451,10 +3668,11 @@ pub async fn estimate_export_sizes(
             "estimate_batch_export_size",
         )?;
 
-        let preview_bytes = encode_image_to_bytes(
+        let preview_bytes = encode_image_to_bytes_with_profile(
             &processed_preview,
             &output_format,
             export_settings.jpeg_quality,
+            export_settings.embed_color_profile,
         )?;
         let single_image_estimated_size = preview_bytes.len();
 
@@ -3507,6 +3725,29 @@ mod tests {
                 ((x * 11 + y * 7) % 256) as u8,
             ])
         }))
+    }
+
+    #[test]
+    fn export_adjustment_mode_normalizes_virtual_copy_paths() {
+        let mode = ExportAdjustmentsMode::UseSidecars {
+            active_path: Some("/photos/source.jpg?vc=3".to_string()),
+            active_adjustments: Some(serde_json::json!({ "exposure": 1.0 })),
+        }
+        .normalize_active_path();
+
+        match mode {
+            ExportAdjustmentsMode::UseSidecars {
+                active_path,
+                active_adjustments,
+            } => {
+                assert_eq!(active_path.as_deref(), Some("/photos/source.jpg"));
+                assert_eq!(
+                    active_adjustments,
+                    Some(serde_json::json!({ "exposure": 1.0 }))
+                );
+            }
+            ExportAdjustmentsMode::GlobalOverride(_) => panic!("unexpected global override"),
+        }
     }
 
     #[test]
@@ -3620,6 +3861,7 @@ mod tests {
             height,
             output_format,
             jpeg_quality,
+            true,
             export_metadata,
             |sink| {
                 for row in rgba.as_raw().chunks_exact(row_bytes) {
@@ -3898,6 +4140,10 @@ mod tests {
         let mut source_metadata = Metadata::new();
         source_metadata.set_tag(ExifTag::Make("Bounded Camera".to_string()));
         source_metadata.set_tag(ExifTag::Model("Synthetic 60MP".to_string()));
+        source_metadata.set_tag(ExifTag::Artist("Original Artist".to_string()));
+        source_metadata.set_tag(ExifTag::ImageDescription(
+            "Museum export fixture".to_string(),
+        ));
         source_metadata.set_tag(ExifTag::DateTimeOriginal("2026:08:10 12:34:56".to_string()));
         source_metadata.set_tag(ExifTag::GPSLatitudeRef("N".to_string()));
         source_metadata.set_tag(ExifTag::GPSLatitude(vec![
@@ -3924,7 +4170,7 @@ mod tests {
         let source_path = source_path.to_string_lossy();
 
         let retained =
-            exif_processing::export_metadata_tiff_payload(&source_path, "jpeg", true, false)
+            exif_processing::export_metadata_tiff_payload(&source_path, "jpeg", true, false, None)
                 .expect("build retained EXIF")
                 .expect("retained EXIF must exist");
         let jpeg = encode_streaming_fixture_with_exif(&image, "jpeg", 92, Some(&retained))
@@ -3939,6 +4185,10 @@ mod tests {
             ascii_tag(&jpeg_exif, exif::Tag::Make).as_deref(),
             Some("Bounded Camera")
         );
+        assert_eq!(
+            ascii_tag(&jpeg_exif, exif::Tag::ImageDescription).as_deref(),
+            Some("Museum export fixture")
+        );
         assert!(
             jpeg_exif
                 .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
@@ -3946,8 +4196,32 @@ mod tests {
             "JPEG must retain GPS when stripGps is false"
         );
 
+        let cleared_metadata = exif_processing::export_metadata_tiff_payload(
+            &source_path,
+            "jpeg",
+            true,
+            false,
+            Some(&exif_processing::ExportMetadataOverrides {
+                artist: Some(String::new()),
+                contact: None,
+                copyright: None,
+                description: None,
+            }),
+        )
+        .expect("build EXIF with an explicit cleared artist")
+        .expect("cleared EXIF must still contain retained metadata");
+        let cleared_jpeg =
+            encode_streaming_fixture_with_exif(&image, "jpeg", 92, Some(&cleared_metadata))
+                .expect("stream JPEG with cleared artist");
+        assert!(
+            read_export_exif(&cleared_jpeg)
+                .get_field(exif::Tag::Artist, exif::In::PRIMARY)
+                .is_none(),
+            "an empty editable artist field must remove the retained source artist"
+        );
+
         let stripped =
-            exif_processing::export_metadata_tiff_payload(&source_path, "png", true, true)
+            exif_processing::export_metadata_tiff_payload(&source_path, "png", true, true, None)
                 .expect("build stripped EXIF")
                 .expect("stripped EXIF must exist");
         let png = encode_streaming_fixture_with_exif(&image, "png", 92, Some(&stripped))
@@ -3974,7 +4248,7 @@ mod tests {
         );
 
         let retained_tiff_metadata =
-            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, false)
+            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, false, None)
                 .expect("build retained TIFF metadata")
                 .expect("retained TIFF metadata must exist");
         let tiff =
@@ -4017,6 +4291,7 @@ mod tests {
             &tiff_source_path.to_string_lossy(),
             true,
             false,
+            None,
         )
         .expect("copy TIFF source metadata")
         .expect("copied TIFF metadata must exist");
@@ -4036,7 +4311,7 @@ mod tests {
         );
 
         let stripped_tiff_metadata =
-            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, true)
+            exif_processing::export_metadata_for_streaming_tiff(&source_path, true, true, None)
                 .expect("build stripped TIFF metadata")
                 .expect("stripped TIFF metadata must exist");
         let stripped_tiff =
@@ -4111,6 +4386,7 @@ mod tests {
             3,
             "png",
             90,
+            true,
             StreamingExportMetadata::None,
             |sink| {
                 sink(&[0; 4 * 4])?;
@@ -4128,6 +4404,7 @@ mod tests {
             1,
             "png",
             90,
+            true,
             StreamingExportMetadata::None,
             |sink| {
                 sink(&[0; 4 * 4])?;
@@ -4148,6 +4425,7 @@ mod tests {
             1,
             "jpeg",
             90,
+            true,
             StreamingExportMetadata::None,
             |_| Ok(()),
         )
@@ -4158,8 +4436,10 @@ mod tests {
             jpeg_quality: 90,
             resize: None,
             keep_metadata: false,
+            metadata_overrides: None,
             preserve_timestamps: false,
             strip_gps: false,
+            embed_color_profile: true,
             filename_template: None,
             watermark: None,
             export_masks: false,
@@ -4200,8 +4480,10 @@ mod tests {
                 dont_enlarge: false,
             }),
             keep_metadata: false,
+            metadata_overrides: None,
             preserve_timestamps: false,
             strip_gps: false,
+            embed_color_profile: true,
             filename_template: None,
             watermark: None,
             export_masks: false,
@@ -4321,8 +4603,10 @@ mod tests {
             jpeg_quality: 92,
             resize: None,
             keep_metadata: false,
+            metadata_overrides: None,
             preserve_timestamps: false,
             strip_gps: false,
+            embed_color_profile: true,
             filename_template: None,
             watermark: Some(WatermarkSettings {
                 path: watermark_path.to_string_lossy().into_owned(),
@@ -4599,6 +4883,7 @@ mod tests {
             target_height,
             &output_format,
             92,
+            true,
             if let Some(metadata) = benchmark_metadata.as_ref().filter(|_| is_tiff_output) {
                 StreamingExportMetadata::TiffDirectories(metadata)
             } else if let Some(payload) = export_exif.as_deref() {
@@ -4669,8 +4954,10 @@ mod tests {
             jpeg_quality: 90,
             resize: None,
             keep_metadata: false,
+            metadata_overrides: None,
             preserve_timestamps: false,
             strip_gps: false,
+            embed_color_profile: true,
             filename_template: None,
             watermark: None,
             export_masks: false,

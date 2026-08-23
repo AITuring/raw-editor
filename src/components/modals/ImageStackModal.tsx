@@ -33,13 +33,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
-import type {
-  ImageStackAlignmentMode,
-  ImageStackBlendMode,
-  ImageStackExportFormat,
-  ImageStackResultSize,
-} from '../../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackResultSize } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
+import ExportImageDialog from '../../features/export/ExportImageDialog';
+import type { ExportDialogSettings } from '../../features/export/exportDialog';
 
 interface ImageStackModalProps {
   detailImageBase64: string | null;
@@ -49,6 +46,7 @@ interface ImageStackModalProps {
   isProcessing: boolean;
   progressMessage: string | null;
   resultSize: ImageStackResultSize | null;
+  sourceMetadata?: Record<string, unknown> | null;
   sourcePaths: string[];
   initialBlendMode: ImageStackBlendMode;
   initialAlignmentMode: ImageStackAlignmentMode;
@@ -57,7 +55,7 @@ interface ImageStackModalProps {
   onChange(): void;
   onOpenFile(path: string): void;
   onProcess(paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode): void;
-  onSave(blendMode: ImageStackBlendMode, exportFormat: ImageStackExportFormat): Promise<string | null>;
+  onSave(blendMode: ImageStackBlendMode, settings: ExportDialogSettings): Promise<string | null>;
 }
 
 const getDisplayName = (path: string) => {
@@ -101,12 +99,6 @@ const ALIGNMENT_OPTIONS: Array<{
     labelKey: 'position',
     descriptionKey: 'positionDescription',
   },
-];
-
-const EXPORT_FORMAT_OPTIONS: Array<{ value: ImageStackExportFormat; label: string }> = [
-  { value: 'tiff', label: 'TIFF' },
-  { value: 'png', label: 'PNG' },
-  { value: 'jpeg', label: 'JPG' },
 ];
 
 const closestLayerCenter: CollisionDetection = (args) =>
@@ -246,6 +238,7 @@ export default function ImageStackModal({
   isProcessing,
   progressMessage,
   resultSize,
+  sourceMetadata = null,
   sourcePaths,
   initialBlendMode,
   initialAlignmentMode,
@@ -260,7 +253,7 @@ export default function ImageStackModal({
   const [orderedPaths, setOrderedPaths] = useState<string[]>(sourcePaths);
   const [blendMode, setBlendMode] = useState<ImageStackBlendMode>(initialBlendMode);
   const [alignmentMode, setAlignmentMode] = useState<ImageStackAlignmentMode>(initialAlignmentMode);
-  const [exportFormat, setExportFormat] = useState<ImageStackExportFormat>('tiff');
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -280,7 +273,7 @@ export default function ImageStackModal({
     setOrderedPaths(sourcePaths);
     setBlendMode(initialBlendMode);
     setAlignmentMode(initialAlignmentMode);
-    setExportFormat('tiff');
+    setIsExportDialogOpen(false);
     setSavedPath(null);
     setIsPreviewFocused(false);
     setIsMounted(true);
@@ -308,6 +301,7 @@ export default function ImageStackModal({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isExportDialogOpen) return;
       if (event.key === 'Escape' && isPreviewFocused) {
         event.preventDefault();
         setIsPreviewFocused(false);
@@ -318,7 +312,7 @@ export default function ImageStackModal({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isPreviewFocused, isSaving, onClose]);
+  }, [isExportDialogOpen, isOpen, isPreviewFocused, isSaving, onClose]);
 
   const selectedAlignment = useMemo(
     () => ALIGNMENT_OPTIONS.find((option) => option.value === alignmentMode) || ALIGNMENT_OPTIONS[0],
@@ -365,18 +359,32 @@ export default function ImageStackModal({
     onProcess(orderedPaths, blendMode, alignmentMode);
   };
 
-  const handleSave = async () => {
-    if (isSaving || savedPath || !finalImageBase64) return;
+  const handleExport = async (settings: ExportDialogSettings) => {
+    if (isSaving || savedPath || !finalImageBase64) return null;
     setIsSaving(true);
     try {
-      const path = await onSave(blendMode, exportFormat);
-      if (path) setSavedPath(path);
+      return await onSave(blendMode, settings);
     } catch (saveError) {
       console.error('Failed to save image stack:', saveError);
+      throw saveError;
     } finally {
       setIsSaving(false);
     }
   };
+
+  const exportSource = useMemo(
+    () =>
+      finalImageBase64 && resultSize
+        ? {
+            detailPreviewSrc: detailImageBase64,
+            fileName: getDisplayName(orderedPaths[0] || 'image'),
+            height: resultSize.height,
+            previewSrc: finalImageBase64,
+            width: resultSize.width,
+          }
+        : null,
+    [detailImageBase64, finalImageBase64, orderedPaths, resultSize],
+  );
 
   if (!isMounted) return null;
 
@@ -729,43 +737,30 @@ export default function ImageStackModal({
               {finalImageBase64 ? t('modals.imageStack.realign') : t('modals.imageStack.start')}
             </Button>
             {finalImageBase64 && (
-              <>
-                <div
-                  aria-label={t('modals.imageStack.save')}
-                  className="flex h-9 items-center rounded-lg border border-border-color bg-bg-primary/45 p-0.5"
-                  role="radiogroup"
-                >
-                  {EXPORT_FORMAT_OPTIONS.map((option) => (
-                    <button
-                      aria-checked={exportFormat === option.value}
-                      className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
-                        exportFormat === option.value
-                          ? 'bg-surface text-text-primary shadow-sm'
-                          : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
-                      }`}
-                      disabled={isSaving || isProcessing || Boolean(savedPath)}
-                      key={option.value}
-                      onClick={() => setExportFormat(option.value)}
-                      role="radio"
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <Button disabled={isSaving || isProcessing || Boolean(savedPath)} onClick={handleSave}>
-                  {isSaving ? (
-                    <Loader2 aria-hidden="true" className="animate-spin" size={15} />
-                  ) : (
-                    <Save aria-hidden="true" size={15} />
-                  )}
-                  {t('modals.imageStack.save')}
-                </Button>
-              </>
+              <Button
+                disabled={isSaving || isProcessing || Boolean(savedPath)}
+                onClick={() => setIsExportDialogOpen(true)}
+              >
+                {isSaving ? (
+                  <Loader2 aria-hidden="true" className="animate-spin" size={15} />
+                ) : (
+                  <Save aria-hidden="true" size={15} />
+                )}
+                {t('modals.imageStack.save')}
+              </Button>
             )}
           </div>
         </footer>
       </motion.div>
+      <ExportImageDialog
+        initialFormat="tiff"
+        isOpen={isExportDialogOpen}
+        metadata={sourceMetadata}
+        onClose={() => setIsExportDialogOpen(false)}
+        onExport={handleExport}
+        onExported={setSavedPath}
+        source={exportSource}
+      />
     </div>
   );
 }

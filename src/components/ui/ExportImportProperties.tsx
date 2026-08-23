@@ -34,9 +34,11 @@ export const FILENAME_VARIABLES: Array<string> = [
 ];
 
 export interface ExportSettings {
+  embedColorProfile?: boolean;
   filenameTemplate: string | null;
   jpegQuality: number;
   keepMetadata: boolean;
+  metadataOverrides?: ExportMetadataOverrides | null;
   preserveTimestamps: boolean;
   resize: {
     mode: string;
@@ -47,6 +49,13 @@ export interface ExportSettings {
   watermark: WatermarkSettings | null;
   exportMasks?: boolean;
   preserveFolders?: boolean;
+}
+
+export interface ExportMetadataOverrides {
+  artist?: string | null;
+  contact?: string | null;
+  copyright?: string | null;
+  description?: string | null;
 }
 
 export enum WatermarkAnchor {

@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::export_processing::ExportSettings;
 use crate::file_management::parse_virtual_path;
 use crate::panorama_stitching::{AlignmentMode, BlendMode, stitch_images_with_options};
 use image::codecs::jpeg::{JpegDecoder, JpegEncoder};
@@ -23,6 +24,7 @@ const PREVIEW_JPEG_QUALITY: u8 = 92;
 const DETAIL_PREVIEW_MAX_LONG_SIDE: u32 = 8_192;
 const DETAIL_PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
+#[cfg(test)]
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
 const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.21.1";
 
@@ -142,32 +144,51 @@ fn encode_srgb_image_stack<W: Write + Seek>(
     image: &DynamicImage,
     writer: W,
     output_format: ImageStackOutputFormat,
+    jpeg_quality: u8,
+    embed_color_profile: bool,
+    export_exif: Option<&[u8]>,
 ) -> Result<(), String> {
     let profile = crate::color_management::srgb_v4_profile().to_vec();
     match output_format {
         ImageStackOutputFormat::Tiff => {
             let mut encoder = TiffEncoder::new(writer);
-            encoder.set_icc_profile(profile).map_err(|error| {
-                format!("Failed to attach the image-stack TIFF color profile: {error}")
-            })?;
+            if embed_color_profile {
+                encoder.set_icc_profile(profile).map_err(|error| {
+                    format!("Failed to attach the image-stack TIFF color profile: {error}")
+                })?;
+            }
             image
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
         }
         ImageStackOutputFormat::Png => {
             let mut encoder = PngEncoder::new(writer);
-            encoder.set_icc_profile(profile).map_err(|error| {
-                format!("Failed to attach the image-stack PNG color profile: {error}")
-            })?;
+            if embed_color_profile {
+                encoder.set_icc_profile(profile).map_err(|error| {
+                    format!("Failed to attach the image-stack PNG color profile: {error}")
+                })?;
+            }
+            if let Some(exif) = export_exif {
+                encoder.set_exif_metadata(exif.to_vec()).map_err(|error| {
+                    format!("Failed to attach image-stack PNG metadata: {error}")
+                })?;
+            }
             image
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack PNG: {error}"))
         }
         ImageStackOutputFormat::Jpeg => {
-            let mut encoder = JpegEncoder::new_with_quality(writer, IMAGE_STACK_JPEG_QUALITY);
-            encoder.set_icc_profile(profile).map_err(|error| {
-                format!("Failed to attach the image-stack JPEG color profile: {error}")
-            })?;
+            let mut encoder = JpegEncoder::new_with_quality(writer, jpeg_quality.clamp(1, 100));
+            if embed_color_profile {
+                encoder.set_icc_profile(profile).map_err(|error| {
+                    format!("Failed to attach the image-stack JPEG color profile: {error}")
+                })?;
+            }
+            if let Some(exif) = export_exif {
+                encoder.set_exif_metadata(exif.to_vec()).map_err(|error| {
+                    format!("Failed to attach image-stack JPEG metadata: {error}")
+                })?;
+            }
             encoder
                 .encode_image(&image.to_rgb8())
                 .map_err(|error| format!("Failed to encode image-stack JPEG: {error}"))
@@ -177,11 +198,17 @@ fn encode_srgb_image_stack<W: Write + Seek>(
 
 #[cfg(test)]
 fn encode_srgb_tiff<W: Write + Seek>(image: &DynamicImage, writer: W) -> Result<(), String> {
-    encode_srgb_image_stack(image, writer, ImageStackOutputFormat::Tiff)
+    encode_srgb_image_stack(image, writer, ImageStackOutputFormat::Tiff, 95, true, None)
 }
 
 #[cfg(not(target_os = "android"))]
-fn encode_srgb_jpeg_streaming(image: &DynamicImage, output: &mut File) -> Result<(), String> {
+fn encode_srgb_jpeg_streaming(
+    image: &DynamicImage,
+    output: &mut File,
+    jpeg_quality: u8,
+    embed_color_profile: bool,
+    export_exif: Option<&[u8]>,
+) -> Result<(), String> {
     let rgb16 = image
         .as_rgb16()
         .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
@@ -198,8 +225,9 @@ fn encode_srgb_jpeg_streaming(image: &DynamicImage, output: &mut File) -> Result
         output,
         width,
         height,
-        IMAGE_STACK_JPEG_QUALITY,
-        None,
+        jpeg_quality,
+        embed_color_profile,
+        export_exif,
         |sink| {
             for source_row in rgb16.as_raw().chunks_exact(source_row_samples) {
                 for (source, target) in source_row.chunks_exact(3).zip(rgba_row.chunks_exact_mut(4))
@@ -220,17 +248,65 @@ fn encode_image_stack_file(
     image: &DynamicImage,
     output: &mut File,
     output_format: ImageStackOutputFormat,
+    export_settings: &ExportSettings,
+    source_path: &str,
 ) -> Result<(), String> {
+    let export_exif = if output_format == ImageStackOutputFormat::Tiff {
+        None
+    } else {
+        crate::exif_processing::export_metadata_tiff_payload(
+            source_path,
+            output_format.canonical_extension(),
+            export_settings.keep_metadata,
+            export_settings.strip_gps,
+            export_settings.metadata_overrides.as_ref(),
+        )?
+    };
+
     #[cfg(not(target_os = "android"))]
     if output_format == ImageStackOutputFormat::Jpeg {
-        encode_srgb_jpeg_streaming(image, output)?;
+        encode_srgb_jpeg_streaming(
+            image,
+            output,
+            export_settings.jpeg_quality,
+            export_settings.embed_color_profile,
+            export_exif.as_deref(),
+        )?;
         return output
             .flush()
             .map_err(|error| format!("Failed to finish writing the image-stack JPEG: {error}"));
     }
 
+    #[cfg(not(target_os = "android"))]
+    if output_format == ImageStackOutputFormat::Tiff {
+        let metadata = crate::exif_processing::export_metadata_for_streaming_tiff(
+            source_path,
+            export_settings.keep_metadata,
+            export_settings.strip_gps,
+            export_settings.metadata_overrides.as_ref(),
+        )?;
+        let rgb16 = image
+            .as_rgb16()
+            .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
+        return crate::export_processing::encode_rgb16_tiff_with_metadata(
+            output,
+            rgb16.width(),
+            rgb16.height(),
+            rgb16.as_raw(),
+            export_settings.embed_color_profile,
+            metadata.as_ref(),
+        );
+    }
+
     let mut writer = BufWriter::new(output);
-    encode_srgb_image_stack(image, &mut writer, output_format)?;
+    encode_srgb_image_stack(
+        image,
+        &mut writer,
+        output_format,
+        export_settings.jpeg_quality,
+        export_settings.embed_color_profile,
+        export_exif.as_deref(),
+    )?;
     writer.flush().map_err(|error| {
         format!(
             "Failed to finish writing the image-stack {}: {error}",
@@ -243,6 +319,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
     mut decoder: D,
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
+    expect_color_profile: bool,
 ) -> Result<(), String> {
     if decoder.dimensions() != dimensions {
         return Err(format!(
@@ -266,9 +343,16 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
             output_format.label()
         )
     })?;
-    if saved_profile.as_deref() != Some(crate::color_management::srgb_v4_profile()) {
+    if expect_color_profile {
+        if saved_profile.as_deref() != Some(crate::color_management::srgb_v4_profile()) {
+            return Err(format!(
+                "The saved image-stack {} is missing its sRGB color profile.",
+                output_format.label()
+            ));
+        }
+    } else if saved_profile.is_some() {
         return Err(format!(
-            "The saved image-stack {} is missing its sRGB color profile.",
+            "The saved image-stack {} contains a color profile even though embedding was disabled.",
             output_format.label()
         ));
     }
@@ -279,6 +363,7 @@ fn validate_image_stack_output(
     output_path: &Path,
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
+    expect_color_profile: bool,
 ) -> Result<(), String> {
     let open = || {
         File::open(output_path)
@@ -297,6 +382,7 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            expect_color_profile,
         ),
         ImageStackOutputFormat::Png => validate_image_stack_decoder(
             PngDecoder::new(open()?).map_err(|error| {
@@ -304,6 +390,7 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            expect_color_profile,
         ),
         ImageStackOutputFormat::Jpeg => validate_image_stack_decoder(
             JpegDecoder::new(open()?).map_err(|error| {
@@ -311,15 +398,45 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            expect_color_profile,
         ),
     }
 }
 
-fn write_image_stack_output(
+#[cfg(test)]
+fn default_image_stack_export_settings() -> ExportSettings {
+    ExportSettings {
+        jpeg_quality: IMAGE_STACK_JPEG_QUALITY,
+        resize: None,
+        keep_metadata: false,
+        metadata_overrides: None,
+        preserve_timestamps: false,
+        strip_gps: true,
+        embed_color_profile: true,
+        filename_template: None,
+        watermark: None,
+        export_masks: false,
+        preserve_folders: false,
+    }
+}
+
+fn write_image_stack_output_with_settings(
     image: &DynamicImage,
     output_path: &Path,
     output_format: ImageStackOutputFormat,
+    export_settings: &ExportSettings,
+    source_path: &str,
 ) -> Result<(), String> {
+    let transformed_image =
+        if export_settings.resize.is_some() || export_settings.watermark.is_some() {
+            Some(crate::export_processing::apply_export_resize_and_watermark(
+                image.clone(),
+                export_settings,
+            )?)
+        } else {
+            None
+        };
+    let image = transformed_image.as_ref().unwrap_or(image);
     let dimensions = image.dimensions();
     if dimensions.0 == 0 || dimensions.1 == 0 {
         return Err("The image-stack result is empty and cannot be saved.".to_string());
@@ -342,7 +459,13 @@ fn write_image_stack_output(
             output_path.display()
         )
     })?;
-    encode_image_stack_file(image, temporary.as_file_mut(), output_format)?;
+    encode_image_stack_file(
+        image,
+        temporary.as_file_mut(),
+        output_format,
+        export_settings,
+        source_path,
+    )?;
     temporary.as_file().sync_all().map_err(|error| {
         format!(
             "Failed to sync the image-stack {} to disk: {error}",
@@ -367,7 +490,12 @@ fn write_image_stack_output(
         ));
     }
 
-    validate_image_stack_output(temporary.path(), dimensions, output_format)?;
+    validate_image_stack_output(
+        temporary.path(),
+        dimensions,
+        output_format,
+        export_settings.embed_color_profile,
+    )?;
 
     let persisted = temporary.persist(output_path).map_err(|error| {
         format!(
@@ -390,6 +518,21 @@ fn write_image_stack_output(
         .map_err(|error| format!("Failed to sync the image-stack output folder: {error}"))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+fn write_image_stack_output(
+    image: &DynamicImage,
+    output_path: &Path,
+    output_format: ImageStackOutputFormat,
+) -> Result<(), String> {
+    write_image_stack_output_with_settings(
+        image,
+        output_path,
+        output_format,
+        &default_image_stack_export_settings(),
+        "",
+    )
 }
 
 #[cfg(test)]
@@ -640,7 +783,7 @@ mod tests {
     use std::io::{BufReader, Cursor};
     use std::path::Path;
 
-    use image::codecs::tiff::TiffDecoder;
+    use image::codecs::{jpeg::JpegDecoder, tiff::TiffDecoder};
     use image::{DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage};
 
     use super::{
@@ -648,7 +791,7 @@ mod tests {
         ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE, PREVIEW_MAX_PIXELS,
         canonicalize_image_stack_result, detail_preview_dimensions, encode_srgb_tiff,
         preview_dimensions, resolve_image_stack_output_path, validate_image_stack_pipeline_version,
-        write_image_stack_output, write_srgb_tiff,
+        write_image_stack_output, write_image_stack_output_with_settings, write_srgb_tiff,
     };
 
     #[test]
@@ -857,6 +1000,102 @@ mod tests {
     }
 
     #[test]
+    fn shared_export_settings_resize_stack_output_and_write_selected_metadata() {
+        fn ascii_tag(exif_data: &exif::Exif, tag: exif::Tag) -> Option<String> {
+            let field = exif_data.get_field(tag, exif::In::PRIMARY)?;
+            let exif::Value::Ascii(values) = &field.value else {
+                return None;
+            };
+            Some(
+                values
+                    .iter()
+                    .map(|value| {
+                        String::from_utf8_lossy(value)
+                            .trim_end_matches('\0')
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            )
+        }
+
+        let directory = tempfile::tempdir().expect("temporary shared export directory");
+        let output_path = directory.path().join("stack-settings.jpg");
+        let source = DynamicImage::ImageRgb16(ImageBuffer::from_fn(8, 5, |x, y| {
+            Rgb([
+                ((x + 1) * 4_096) as u16,
+                ((y + 1) * 8_192) as u16,
+                ((x + y + 1) * 2_048) as u16,
+            ])
+        }));
+        let settings = crate::export_processing::ExportSettings {
+            jpeg_quality: 37,
+            resize: Some(crate::export_processing::ResizeOptions {
+                mode: crate::export_processing::ResizeMode::Width,
+                value: 4,
+                dont_enlarge: false,
+            }),
+            keep_metadata: false,
+            metadata_overrides: Some(crate::exif_processing::ExportMetadataOverrides {
+                artist: Some("Museum Imaging Team".to_string()),
+                contact: Some("archive@example.test".to_string()),
+                copyright: Some("Copyright 2026".to_string()),
+                description: Some("Focus-stacked artifact".to_string()),
+            }),
+            preserve_timestamps: false,
+            strip_gps: true,
+            embed_color_profile: false,
+            filename_template: None,
+            watermark: None,
+            export_masks: false,
+            preserve_folders: false,
+        };
+
+        write_image_stack_output_with_settings(
+            &source,
+            &output_path,
+            ImageStackOutputFormat::Jpeg,
+            &settings,
+            "/missing/source.jpg",
+        )
+        .expect("save stack through shared export settings");
+
+        let encoded = fs::read(&output_path).expect("read shared export output");
+        let mut decoder =
+            JpegDecoder::new(Cursor::new(&encoded)).expect("decode resized stack JPEG");
+        assert_eq!(decoder.dimensions(), (4, 3));
+        assert_eq!(
+            decoder.icc_profile().expect("read optional ICC profile"),
+            None
+        );
+
+        let exif_data = exif::Reader::new()
+            .read_from_container(&mut Cursor::new(&encoded))
+            .expect("read selected stack metadata");
+        assert_eq!(
+            ascii_tag(&exif_data, exif::Tag::Artist).as_deref(),
+            Some("Museum Imaging Team")
+        );
+        assert_eq!(
+            ascii_tag(&exif_data, exif::Tag::Copyright).as_deref(),
+            Some("Copyright 2026")
+        );
+        assert_eq!(
+            ascii_tag(&exif_data, exif::Tag::ImageDescription).as_deref(),
+            Some("Focus-stacked artifact")
+        );
+        let contact = exif_data
+            .get_field(exif::Tag::UserComment, exif::In::PRIMARY)
+            .and_then(|field| match &field.value {
+                exif::Value::Undefined(value, _) => {
+                    Some(String::from_utf8_lossy(value).to_string())
+                }
+                _ => None,
+            });
+        assert_eq!(contact.as_deref(), Some("Contact: archive@example.test"));
+    }
+
+    #[test]
     #[ignore = "requires RAW_EDITOR_STACK_EXPORT_SOURCE and RAW_EDITOR_STACK_EXPORT_OUTPUT_DIR"]
     fn real_stack_export_fixture_from_env() {
         let source_path = std::env::var_os("RAW_EDITOR_STACK_EXPORT_SOURCE")
@@ -899,6 +1138,7 @@ pub async fn save_image_stack(
     first_path_str: String,
     blend_mode: String,
     output_format: String,
+    export_settings: ExportSettings,
     result_id: String,
     output_path_str: Option<String>,
     state: tauri::State<'_, AppState>,
@@ -929,13 +1169,17 @@ pub async fn save_image_stack(
             );
         }
 
-        write_image_stack_output(image, &output_path_for_task, output_format)?;
+        write_image_stack_output_with_settings(
+            image,
+            &output_path_for_task,
+            output_format,
+            &export_settings,
+            &sidecar_source,
+        )?;
         *result = None;
         drop(result);
-        let _ = crate::exif_processing::write_rrexif_sidecar(
-            &sidecar_source,
-            &output_path_for_task,
-        );
+        // The encoded file is the export contract. Copying the source sidecar here would
+        // silently restore EXIF/GPS fields that the user explicitly removed in the dialog.
         Ok(output_path_for_task.to_string_lossy().into_owned())
     })
     .await

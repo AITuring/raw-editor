@@ -616,13 +616,17 @@ function App() {
 
   const handleRightPanelSelect = useCallback(
     (panelId: Panel) => {
+      if (panelId === Panel.Export && activeView === 'editor' && selectedImage) {
+        setUI({ isEditorExportDialogOpen: true });
+        return;
+      }
       setRightPanel(panelId);
       if (rightPanelWidth < 200) {
         setUI({ rightPanelWidth: 368 });
       }
       setEditor({ activeMaskId: null, activeAiSubMaskId: null, isWbPickerActive: false });
     },
-    [rightPanelWidth, setRightPanel, setEditor, setUI],
+    [activeView, rightPanelWidth, selectedImage, setRightPanel, setEditor, setUI],
   );
 
   const handleToggleFolder = useCallback(

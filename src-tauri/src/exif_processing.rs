@@ -17,6 +17,32 @@ use tempfile::NamedTempFile;
 
 static SIDECAR_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportMetadataOverrides {
+    pub artist: Option<String>,
+    pub contact: Option<String>,
+    pub copyright: Option<String>,
+    pub description: Option<String>,
+}
+
+impl ExportMetadataOverrides {
+    fn normalized(value: &Option<String>, max_chars: usize) -> Option<String> {
+        let value = value.as_deref()?.trim();
+        if value.is_empty() {
+            return None;
+        }
+        Some(value.chars().take(max_chars).collect())
+    }
+
+    pub fn has_instructions(&self) -> bool {
+        self.artist.is_some()
+            || self.contact.is_some()
+            || self.copyright.is_some()
+            || self.description.is_some()
+    }
+}
+
 #[derive(Debug)]
 enum SidecarReadError {
     Io(std::io::Error),
@@ -245,6 +271,32 @@ fn to_ir64(val: &exif::SRational) -> iR64 {
         nominator: val.num,
         denominator: val.denom,
     }
+}
+
+fn decimal_to_ur64(value: f64) -> Option<uR64> {
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    const DENOMINATOR: u32 = 1_000_000;
+    let nominator = (value * f64::from(DENOMINATOR)).round();
+    if nominator > f64::from(u32::MAX) {
+        return None;
+    }
+    Some(uR64 {
+        nominator: nominator as u32,
+        denominator: DENOMINATOR,
+    })
+}
+
+fn parse_sidecar_gps_coordinate(value: &str) -> Option<Vec<uR64>> {
+    let values = value
+        .split(|character: char| !(character.is_ascii_digit() || character == '.'))
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<f64>().ok())
+        .take(3)
+        .map(decimal_to_ur64)
+        .collect::<Option<Vec<_>>>()?;
+    (values.len() == 3).then_some(values)
 }
 
 fn clean_creation_datetime_str(s: &str) -> &str {
@@ -971,13 +1023,15 @@ fn build_export_metadata(
     output_format: &str,
     keep_metadata: bool,
     strip_gps: bool,
+    overrides: Option<&ExportMetadataOverrides>,
 ) -> Result<Option<(Metadata, FileExtension)>, String> {
-    if !keep_metadata {
+    let has_overrides = overrides.is_some_and(ExportMetadataOverrides::has_instructions);
+    if !keep_metadata && !has_overrides {
         return Ok(None);
     }
 
     let original_path = Path::new(original_path_str);
-    if !original_path.exists() {
+    if keep_metadata && !original_path.exists() && !has_overrides {
         return Ok(None);
     }
 
@@ -993,7 +1047,7 @@ fn build_export_metadata(
     let mut metadata = Metadata::new();
     let mut source_read_success = false;
 
-    if let Some(map) = read_rrexif_sidecar(original_path) {
+    if keep_metadata && let Some(map) = read_rrexif_sidecar(original_path) {
         source_read_success = true;
 
         let clean_s = |s: &String| s.replace('"', "").trim().to_string();
@@ -1082,9 +1136,46 @@ fn build_export_metadata(
         {
             metadata.set_tag(ExifTag::ISO(vec![iso]));
         }
+        if !strip_gps {
+            if let Some(value) = map
+                .get("GPSLatitude")
+                .and_then(|value| parse_sidecar_gps_coordinate(value))
+            {
+                metadata.set_tag(ExifTag::GPSLatitude(value));
+            }
+            if let Some(value) = map.get("GPSLatitudeRef") {
+                metadata.set_tag(ExifTag::GPSLatitudeRef(clean_s(value)));
+            }
+            if let Some(value) = map
+                .get("GPSLongitude")
+                .and_then(|value| parse_sidecar_gps_coordinate(value))
+            {
+                metadata.set_tag(ExifTag::GPSLongitude(value));
+            }
+            if let Some(value) = map.get("GPSLongitudeRef") {
+                metadata.set_tag(ExifTag::GPSLongitudeRef(clean_s(value)));
+            }
+            if let Some(value) = map.get("GPSAltitude")
+                && let Some(value) = value
+                    .split(|character: char| !(character.is_ascii_digit() || character == '.'))
+                    .find(|part| !part.is_empty())
+                    .and_then(|part| part.parse::<f64>().ok())
+                    .and_then(decimal_to_ur64)
+            {
+                metadata.set_tag(ExifTag::GPSAltitude(vec![value]));
+            }
+            if let Some(value) = map.get("GPSAltitudeRef")
+                && let Ok(value) = clean_s(value).parse::<u8>()
+            {
+                metadata.set_tag(ExifTag::GPSAltitudeRef(vec![value]));
+            }
+        }
     }
 
-    if !source_read_success && let Ok(file) = std::fs::File::open(original_path) {
+    if keep_metadata
+        && !source_read_success
+        && let Ok(file) = std::fs::File::open(original_path)
+    {
         let mut bufreader = std::io::BufReader::new(&file);
         let exifreader = exif::Reader::new();
 
@@ -1128,6 +1219,31 @@ fn build_export_metadata(
             }
             if let Some(f) = exif_obj.get_field(exif::Tag::Copyright, exif::In::PRIMARY) {
                 metadata.set_tag(ExifTag::Copyright(get_string_val(f)));
+            }
+            if let Some(f) = exif_obj.get_field(exif::Tag::ImageDescription, exif::In::PRIMARY) {
+                metadata.set_tag(ExifTag::ImageDescription(get_string_val(f)));
+            }
+            if let Some(f) = exif_obj.get_field(exif::Tag::UserComment, exif::In::PRIMARY) {
+                let value = match &f.value {
+                    exif::Value::Undefined(bytes, _) => {
+                        let has_character_code = bytes.starts_with(b"ASCII\0\0\0")
+                            || bytes.starts_with(b"UNICODE\0")
+                            || bytes.starts_with(b"JIS\0\0\0\0\0");
+                        let payload = if has_character_code {
+                            &bytes[8..]
+                        } else {
+                            bytes
+                        };
+                        String::from_utf8_lossy(payload)
+                            .trim_matches(char::from(0))
+                            .trim()
+                            .to_string()
+                    }
+                    _ => get_string_val(f),
+                };
+                if !value.is_empty() {
+                    metadata.set_tag(ExifTag::UserComment(value.into_bytes()));
+                }
             }
             if let Some(f) = exif_obj.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY) {
                 metadata.set_tag(ExifTag::DateTimeOriginal(get_string_val(f)));
@@ -1224,7 +1340,7 @@ fn build_export_metadata(
         }
     }
 
-    if !source_read_success && is_raw_file(original_path_str) {
+    if keep_metadata && !source_read_success && is_raw_file(original_path_str) {
         let loader = rawler::RawLoader::new();
         if let Ok(raw_source) = rawler::rawsource::RawSource::new(Path::new(original_path_str))
             && let Ok(decoder) = loader.get_decoder(&raw_source)
@@ -1348,6 +1464,40 @@ fn build_export_metadata(
         }
     }
 
+    if let Some(overrides) = overrides {
+        if overrides.artist.is_some() {
+            if let Some(value) = ExportMetadataOverrides::normalized(&overrides.artist, 512) {
+                metadata.set_tag(ExifTag::Artist(value));
+            } else {
+                metadata.remove_tag(ExifTag::Artist(String::new()));
+            }
+        }
+        if overrides.copyright.is_some() {
+            if let Some(value) = ExportMetadataOverrides::normalized(&overrides.copyright, 512) {
+                metadata.set_tag(ExifTag::Copyright(value));
+            } else {
+                metadata.remove_tag(ExifTag::Copyright(String::new()));
+            }
+        }
+        if overrides.description.is_some() {
+            if let Some(value) = ExportMetadataOverrides::normalized(&overrides.description, 2_048)
+            {
+                metadata.set_tag(ExifTag::ImageDescription(value));
+            } else {
+                metadata.remove_tag(ExifTag::ImageDescription(String::new()));
+            }
+        }
+        if overrides.contact.is_some() {
+            if let Some(value) = ExportMetadataOverrides::normalized(&overrides.contact, 512) {
+                metadata.set_tag(ExifTag::UserComment(
+                    format!("Contact: {value}").into_bytes(),
+                ));
+            } else {
+                metadata.remove_tag(ExifTag::UserComment(Vec::new()));
+            }
+        }
+    }
+
     metadata.set_tag(ExifTag::Software("RAW Editor".to_string()));
     metadata.set_tag(ExifTag::Orientation(vec![1u16]));
     metadata.set_tag(ExifTag::ColorSpace(vec![1u16]));
@@ -1360,9 +1510,15 @@ pub(crate) fn export_metadata_tiff_payload(
     output_format: &str,
     keep_metadata: bool,
     strip_gps: bool,
+    overrides: Option<&ExportMetadataOverrides>,
 ) -> Result<Option<Vec<u8>>, String> {
-    let Some((metadata, _)) =
-        build_export_metadata(original_path_str, output_format, keep_metadata, strip_gps)?
+    let Some((metadata, _)) = build_export_metadata(
+        original_path_str,
+        output_format,
+        keep_metadata,
+        strip_gps,
+        overrides,
+    )?
     else {
         return Ok(None);
     };
@@ -1395,11 +1551,16 @@ pub(crate) fn export_metadata_for_streaming_tiff(
     original_path_str: &str,
     keep_metadata: bool,
     strip_gps: bool,
+    overrides: Option<&ExportMetadataOverrides>,
 ) -> Result<Option<Metadata>, String> {
-    Ok(
-        build_export_metadata(original_path_str, "tiff", keep_metadata, strip_gps)?
-            .map(|(metadata, _)| metadata),
-    )
+    Ok(build_export_metadata(
+        original_path_str,
+        "tiff",
+        keep_metadata,
+        strip_gps,
+        overrides,
+    )?
+    .map(|(metadata, _)| metadata))
 }
 
 pub fn write_image_with_metadata(
@@ -1408,6 +1569,7 @@ pub fn write_image_with_metadata(
     output_format: &str,
     keep_metadata: bool,
     strip_gps: bool,
+    overrides: Option<&ExportMetadataOverrides>,
 ) -> Result<(), String> {
     // Desktop TIFF exports attach selected metadata while the streaming encoder is still writing
     // the file. Avoid little_exif's whole-file TIFF rewrite on legacy/full-frame paths.
@@ -1415,8 +1577,13 @@ pub fn write_image_with_metadata(
         return Ok(());
     }
 
-    let Some((metadata, file_type)) =
-        build_export_metadata(original_path_str, output_format, keep_metadata, strip_gps)?
+    let Some((metadata, file_type)) = build_export_metadata(
+        original_path_str,
+        output_format,
+        keep_metadata,
+        strip_gps,
+        overrides,
+    )?
     else {
         return Ok(());
     };
@@ -1602,6 +1769,17 @@ pub fn write_rrexif_sidecar(source_path_str: &str, target_image_path: &Path) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sidecar_gps_parser_preserves_display_coordinates() {
+        let coordinate = parse_sidecar_gps_coordinate("31 deg 14 min 15.5 sec")
+            .expect("parse sidecar GPS coordinate");
+        assert_eq!(coordinate.len(), 3);
+        assert_eq!(coordinate[0].nominator, 31_000_000);
+        assert_eq!(coordinate[1].nominator, 14_000_000);
+        assert_eq!(coordinate[2].nominator, 15_500_000);
+        assert_eq!(coordinate[2].denominator, 1_000_000);
+    }
 
     #[test]
     fn sidecar_schema_contract_matches_runtime_version() {

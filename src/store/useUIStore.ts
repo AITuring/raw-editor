@@ -43,8 +43,6 @@ export interface PanoramaModalState {
 
 export type ImageStackBlendMode = 'focus' | 'panorama';
 export type ImageStackAlignmentMode = 'auto' | 'perspective' | 'cylindrical' | 'spherical' | 'position';
-export type ImageStackExportFormat = 'tiff' | 'png' | 'jpeg';
-
 export interface ImageStackResultSize {
   height: number;
   width: number;
@@ -106,6 +104,7 @@ interface UIState {
   isLayoutReady: boolean;
   uiVisibility: UiVisibility;
   isLibraryExportPanelVisible: boolean;
+  isEditorExportDialogOpen: boolean;
   isSettingsOpen: boolean;
 
   leftPanelWidth: number;
@@ -171,6 +170,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   isLayoutReady: false,
   uiVisibility: { folderTree: true, filmstrip: true },
   isLibraryExportPanelVisible: false,
+  isEditorExportDialogOpen: false,
   isSettingsOpen: false,
 
   leftPanelWidth: 320,

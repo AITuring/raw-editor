@@ -66,7 +66,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       libraryActivePath: null,
       expandedFolders: new Set(),
     });
-    useUIStore.getState().setUI({ isLibraryExportPanelVisible: false });
+    useUIStore.getState().setUI({ isEditorExportDialogOpen: false, isLibraryExportPanelVisible: false });
   }, []);
 
   const handleBackToLibrary = useCallback(() => {
@@ -88,7 +88,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     const lastActivePath = selectedImage?.path ?? null;
 
     setLibrary({ libraryActivePath: lastActivePath });
-    setUI({ activeView: 'library', slideDirection: 1 });
+    setUI({ activeView: 'library', isEditorExportDialogOpen: false, slideDirection: 1 });
   }, [refs]);
 
   const handleImageSelect = useCallback(
@@ -281,7 +281,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         setProcess({ thumbnails: {} });
         globalImageCache.clear();
-        setUI({ activeView: 'library' });
+        setUI({ activeView: 'library', isEditorExportDialogOpen: false });
       } else {
         setLibrary({ isViewLoading: true });
       }
@@ -431,7 +431,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         setLibrary({ libraryScrollTop: 0 });
         globalImageCache.clear();
-        setUI({ activeView: 'library' });
+        setUI({ activeView: 'library', isEditorExportDialogOpen: false });
       }
 
       setLibrary({
@@ -493,7 +493,9 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         clearThumbnailQueue();
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         useLibraryStore.getState().setLibrary({ isViewLoading: true });
-        useUIStore.getState().setUI({ activeView: 'library', isLibraryExportPanelVisible: false });
+        useUIStore
+          .getState()
+          .setUI({ activeView: 'library', isEditorExportDialogOpen: false, isLibraryExportPanelVisible: false });
 
         const files = await invoke<ImageFile[]>(Invokes.GetAlbumImages, { paths: validPaths });
         if (files.length === 0) {

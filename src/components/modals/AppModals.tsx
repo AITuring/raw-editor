@@ -1,3 +1,6 @@
+import { useCallback, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../store/useUIStore';
@@ -18,18 +21,25 @@ import ImportSettingsModal from './ImportSettingsModal';
 import CullingModal from './CullingModal';
 import CollageModal from './CollageModal';
 import ImageStackModal from './ImageStackModal';
-import { AppSettings, AlbumItem, AlbumGroup } from '../ui/AppProperties';
+import ExportImageDialog from '../../features/export/ExportImageDialog';
+import { AppSettings, AlbumItem, AlbumGroup, Invokes } from '../ui/AppProperties';
+import { Status } from '../ui/ExportImportProperties';
 import { CopyPasteSettings } from '../../utils/adjustments';
-import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../../store/useUIStore';
+import {
+  EXPORT_DIALOG_FORMATS,
+  buildBackendExportSettings,
+  buildSuggestedExportPath,
+  ensureExportPathExtension,
+  exportDialogExtension,
+} from '../../features/export/exportDialog';
+import type { ExportDialogSettings, ExportDialogSource } from '../../features/export/exportDialog';
 
 export interface AppModalsProps {
   handleImageSelect: (path: string) => void;
   handleSavePanorama: () => Promise<string>;
   handleStartPanorama: (paths: string[]) => void;
-  handleSaveImageStack: (
-    blendMode: ImageStackBlendMode,
-    exportFormat: ImageStackExportFormat,
-  ) => Promise<string | null>;
+  handleSaveImageStack: (blendMode: ImageStackBlendMode, settings: ExportDialogSettings) => Promise<string | null>;
   handleStartImageStack: (
     paths: string[],
     blendMode: ImageStackBlendMode,
@@ -55,10 +65,11 @@ export interface AppModalsProps {
 
 export default function AppModals(props: AppModalsProps) {
   const { t } = useTranslation();
-  const { appSettings, handleSettingsChange } = useSettingsStore(
+  const { appSettings, handleSettingsChange, osPlatform } = useSettingsStore(
     useShallow((state) => ({
       appSettings: state.appSettings,
       handleSettingsChange: state.handleSettingsChange,
+      osPlatform: state.osPlatform,
     })),
   );
 
@@ -83,6 +94,7 @@ export default function AppModals(props: AppModalsProps) {
     denoiseModalState,
     cullingModalState,
     collageModalState,
+    isEditorExportDialogOpen,
     setUI,
   } = useUIStore(
     useShallow((state) => ({
@@ -106,22 +118,109 @@ export default function AppModals(props: AppModalsProps) {
       denoiseModalState: state.denoiseModalState,
       cullingModalState: state.cullingModalState,
       collageModalState: state.collageModalState,
+      isEditorExportDialogOpen: state.isEditorExportDialogOpen,
       setUI: state.setUI,
     })),
   );
 
-  const { thumbnails, aiModelDownloadStatus } = useProcessStore(
+  const { thumbnails, aiModelDownloadStatus, setExportState } = useProcessStore(
     useShallow((state) => ({
       thumbnails: state.thumbnails,
       aiModelDownloadStatus: state.aiModelDownloadStatus,
+      setExportState: state.setExportState,
     })),
   );
 
-  const { selectedImage, finalPreviewUrl } = useEditorStore(
+  const { selectedImage, finalPreviewUrl, adjustments } = useEditorStore(
     useShallow((state) => ({
       selectedImage: state.selectedImage,
       finalPreviewUrl: state.finalPreviewUrl,
+      adjustments: state.adjustments,
     })),
+  );
+
+  const { imageList, rootPaths } = useLibraryStore(
+    useShallow((state) => ({
+      imageList: state.imageList,
+      rootPaths: state.rootPaths,
+    })),
+  );
+
+  const editorExportSource = useMemo<ExportDialogSource | null>(() => {
+    if (!selectedImage) return null;
+    const previewSrc = finalPreviewUrl || selectedImage.originalUrl || selectedImage.thumbnailUrl;
+    if (!previewSrc) return null;
+
+    const crop = adjustments.crop;
+    const orientationSteps = adjustments.orientationSteps || 0;
+    const isSwapped = orientationSteps === 1 || orientationSteps === 3;
+    const sourceWidth = crop?.width ?? (isSwapped ? selectedImage.height : selectedImage.width);
+    const sourceHeight = crop?.height ?? (isSwapped ? selectedImage.width : selectedImage.height);
+
+    return {
+      detailPreviewSrc: finalPreviewUrl || selectedImage.originalUrl || previewSrc,
+      fileName: selectedImage.path.split('?')[0].split(/[\\/]/).pop() || selectedImage.path,
+      height: Math.max(1, Math.round(sourceHeight)),
+      previewSrc,
+      width: Math.max(1, Math.round(sourceWidth)),
+    };
+  }, [adjustments.crop, adjustments.orientationSteps, finalPreviewUrl, selectedImage]);
+
+  const imageStackSourceMetadata = useMemo<Record<string, unknown> | null>(() => {
+    const firstPath = imageStackModalState.sourcePaths[0];
+    if (!firstPath) return null;
+    const physicalPath = firstPath.split('?')[0];
+    return (
+      imageList.find((image) => image.path === firstPath || image.path.split('?')[0] === physicalPath)?.exif ?? null
+    );
+  }, [imageList, imageStackModalState.sourcePaths]);
+
+  const handleEditorExport = useCallback(
+    async (settings: ExportDialogSettings): Promise<string | null> => {
+      const currentImage = useEditorStore.getState().selectedImage;
+      if (!currentImage) throw new Error(t('export.status.noImageSelected'));
+
+      const format = EXPORT_DIALOG_FORMATS.find((candidate) => candidate.id === settings.format);
+      if (!format) throw new Error(`Unsupported export format: ${settings.format}`);
+
+      const suggestedPath = buildSuggestedExportPath(currentImage.path, '_edited', settings.format);
+      const selectedOutputPath =
+        osPlatform === 'android'
+          ? suggestedPath.split(/[\\/]/).pop() || suggestedPath
+          : await save({
+              defaultPath: suggestedPath,
+              filters: [{ name: format.label, extensions: format.extensions }],
+              title: t('export.dialog.saveEditedImageTitle'),
+            });
+      if (!selectedOutputPath) return null;
+      const outputPath = ensureExportPathExtension(selectedOutputPath, settings.format);
+
+      setExportState({
+        errorMessage: '',
+        progress: { current: 0, total: 1 },
+        status: Status.Exporting,
+      });
+
+      try {
+        await invoke(Invokes.ExportImages, {
+          baseOriginFolders: rootPaths,
+          currentEditAdjustments: useEditorStore.getState().adjustments,
+          currentEditPath: currentImage.path,
+          exportSettings: buildBackendExportSettings(settings, '{original_filename}_edited'),
+          isExplicitFilePath: true,
+          outputFolderOrFile: outputPath,
+          outputFormat: exportDialogExtension(settings.format),
+          paths: [currentImage.path],
+          waitForCompletion: true,
+        });
+        return outputPath;
+      } catch (exportError) {
+        const errorMessage = exportError instanceof Error ? exportError.message : String(exportError);
+        setExportState({ errorMessage, status: Status.Error });
+        throw exportError;
+      }
+    },
+    [osPlatform, rootPaths, setExportState, t],
   );
 
   const closeConfirmModal = () => {
@@ -168,6 +267,14 @@ export default function AppModals(props: AppModalsProps) {
 
   return (
     <>
+      <ExportImageDialog
+        initialFormat="jpeg"
+        isOpen={isEditorExportDialogOpen}
+        metadata={selectedImage?.exif ?? null}
+        onClose={() => setUI({ isEditorExportDialogOpen: false })}
+        onExport={handleEditorExport}
+        source={editorExportSource}
+      />
       <CopyPasteSettingsModal
         isOpen={isCopyPasteSettingsModalOpen}
         onClose={() => setUI({ isCopyPasteSettingsModalOpen: false })}
@@ -237,6 +344,7 @@ export default function AppModals(props: AppModalsProps) {
         onProcess={props.handleStartImageStack}
         onSave={props.handleSaveImageStack}
         progressMessage={imageStackModalState.progressMessage}
+        sourceMetadata={imageStackSourceMetadata}
         sourcePaths={imageStackModalState.sourcePaths}
         thumbnails={thumbnails}
       />

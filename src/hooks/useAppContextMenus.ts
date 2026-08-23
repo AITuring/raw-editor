@@ -51,7 +51,7 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useProcessStore } from '../store/useProcessStore';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { Invokes, Option, OPTION_SEPARATOR, Panel, AlbumItem, Album, AlbumGroup } from '../components/ui/AppProperties';
+import { Invokes, Option, OPTION_SEPARATOR, AlbumItem, Album, AlbumGroup } from '../components/ui/AppProperties';
 import { Color, COLOR_LABELS, INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjustments';
 import TaggingSubMenu from '../context/TaggingSubMenu';
 import { useEditorActions } from './useEditorActions';
@@ -165,7 +165,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
       const { selectedImage, history, historyIndex, undo, redo, resetHistory, copiedAdjustments, setEditor } =
         useEditorStore.getState();
       const { appSettings } = useSettingsStore.getState();
-      const { setRightPanel, setUI } = useUIStore.getState();
+      const { setUI } = useUIStore.getState();
 
       if (!selectedImage) return;
 
@@ -177,7 +177,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
         {
           label: t('contextMenus.editor.exportImage'),
           icon: FileInput,
-          onClick: () => setRightPanel(Panel.Export),
+          onClick: () => setUI({ isEditorExportDialogOpen: true }),
         },
         { type: OPTION_SEPARATOR },
         { label: t('contextMenus.editor.undo'), icon: Undo, onClick: undo, disabled: !canUndo },
@@ -330,7 +330,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
       const { multiSelectedPaths, imageList, libraryActivePath, albumTree, activeAlbumId, setLibrary } =
         useLibraryStore.getState();
       const { appSettings } = useSettingsStore.getState();
-      const { activeView, setUI, setRightPanel } = useUIStore.getState();
+      const { activeView, setUI } = useUIStore.getState();
       const { setProcess } = useProcessStore.getState();
 
       const isTargetInSelection = multiSelectedPaths.includes(path);
@@ -474,12 +474,10 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
       };
 
       const onExportClick = () => {
-        if (selectedImage) {
-          if (selectedImage.path !== path) {
-            props.handleImageSelect(path);
-          }
+        if (activeView === 'editor' && selectedImage) {
+          if (selectedImage.path !== path) props.handleImageSelect(path);
           setLibrary({ multiSelectedPaths: finalSelection });
-          setRightPanel(Panel.Export);
+          setUI({ isEditorExportDialogOpen: true });
         } else {
           setLibrary({ multiSelectedPaths: finalSelection });
           setUI({ isLibraryExportPanelVisible: true });

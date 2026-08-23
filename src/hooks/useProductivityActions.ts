@@ -3,33 +3,26 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackExportFormat } from '../store/useUIStore';
+import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useUIStore';
 import { Invokes } from '../components/ui/AppProperties';
 import i18n from '../i18n';
 import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
+import { buildSuggestedExportPath, buildBackendExportSettings } from '../features/export/exportDialog';
+import type { ExportDialogFormat, ExportDialogSettings } from '../features/export/exportDialog';
 
-const IMAGE_STACK_EXPORT_FORMATS: Record<
-  ImageStackExportFormat,
-  { extension: string; filterName: string; extensions: string[] }
-> = {
-  tiff: { extension: 'tiff', filterName: 'TIFF (16-bit)', extensions: ['tif', 'tiff'] },
-  png: { extension: 'png', filterName: 'PNG (16-bit)', extensions: ['png'] },
-  jpeg: { extension: 'jpg', filterName: 'JPEG', extensions: ['jpg', 'jpeg'] },
+const IMAGE_STACK_EXPORT_FORMATS: Record<ExportDialogFormat, { filterName: string; extensions: string[] }> = {
+  tiff: { filterName: 'TIFF (16-bit)', extensions: ['tif', 'tiff'] },
+  png: { filterName: 'PNG (16-bit)', extensions: ['png'] },
+  jpeg: { filterName: 'JPEG', extensions: ['jpg', 'jpeg'] },
 };
 
 const getImageStackSuggestedPath = (
   firstPath: string,
   blendMode: ImageStackBlendMode,
-  exportFormat: ImageStackExportFormat,
+  exportFormat: ExportDialogFormat,
 ) => {
-  const physicalPath = firstPath.split('?vc=')[0];
-  const separatorIndex = Math.max(physicalPath.lastIndexOf('/'), physicalPath.lastIndexOf('\\'));
-  const parent = separatorIndex >= 0 ? physicalPath.slice(0, separatorIndex + 1) : '';
-  const fileName = separatorIndex >= 0 ? physicalPath.slice(separatorIndex + 1) : physicalPath;
-  const extensionIndex = fileName.lastIndexOf('.');
-  const stem = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName || 'image';
   const suffix = blendMode === 'focus' ? 'FocusStack' : 'Panorama';
-  return `${parent}${stem}_${suffix}.${IMAGE_STACK_EXPORT_FORMATS[exportFormat].extension}`;
+  return buildSuggestedExportPath(firstPath, `_${suffix}`, exportFormat);
 };
 
 export function useProductivityActions(refreshImageList: () => Promise<void>) {
@@ -119,7 +112,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
   );
 
   const handleSaveImageStack = useCallback(
-    async (blendMode: ImageStackBlendMode, exportFormat: ImageStackExportFormat): Promise<string | null> => {
+    async (blendMode: ImageStackBlendMode, settings: ExportDialogSettings): Promise<string | null> => {
       const { imageStackModalState } = useUIStore.getState();
       if (imageStackModalState.sourcePaths.length === 0) {
         const error = 'Source paths for image stack not found.';
@@ -133,6 +126,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
       }
       try {
         const firstPath = imageStackModalState.sourcePaths[0];
+        const exportFormat = settings.format;
         const format = IMAGE_STACK_EXPORT_FORMATS[exportFormat];
         const outputPath =
           useSettingsStore.getState().osPlatform === 'android'
@@ -148,6 +142,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
           firstPathStr: firstPath,
           blendMode,
           outputFormat: exportFormat,
+          exportSettings: buildBackendExportSettings(settings, null),
           resultId: imageStackModalState.resultId,
           outputPathStr: outputPath,
         });
