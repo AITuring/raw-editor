@@ -772,104 +772,119 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
     let mut low_frequency_mask = vec![0u8; patch_pixel_count];
     let image_width = img_to_add.width() as f64;
     let image_height = img_to_add.height() as f64;
+    let patch_rgb_stride = patch_width as usize * 3;
+    let patch_mask_stride = patch_width as usize;
+    let panorama_ref: &Rgb32FImage = panorama;
+    let panorama_mask_ref: &GrayImage = panorama_mask;
 
-    for local_y in 0..patch_height {
-        for local_x in 0..patch_width {
-            let global_x = patch_left + local_x;
-            let global_y = patch_top + local_y;
-            let index = (local_y as usize * patch_width as usize) + local_x as usize;
-            let target = Point3::new(global_x as f64 - offset_x, global_y as f64 - offset_y, 1.0);
-            let candidate_source =
-                map_target_to_source(&h_add_inv, target, img_to_add_info, projection);
-            let candidate_valid = candidate_source.as_ref().is_some_and(|source| {
-                source.x >= 0.0
-                    && source.x < image_width
-                    && source.y >= 0.0
-                    && source.y < image_height
-            });
-            let candidate_pixel = if let Some(source) = candidate_source {
-                if candidate_valid {
-                    apply_exposure_gain(
-                        get_high_quality_interpolated_pixel(img_to_add, source.x, source.y),
-                        exposure.gain_at(global_x, global_y),
-                    )
-                } else {
-                    Rgb([0.0, 0.0, 0.0])
-                }
-            } else {
-                Rgb([0.0, 0.0, 0.0])
-            };
-            let panorama_valid = panorama_mask.get_pixel(global_x, global_y)[0] > 0;
-            let current_pixel = *panorama.get_pixel(global_x, global_y);
-            let candidate_pixel = if !candidate_valid && panorama_valid {
-                current_pixel
-            } else {
-                candidate_pixel
-            };
-            let base_pixel = if panorama_valid || !candidate_valid {
-                current_pixel
-            } else {
-                candidate_pixel
-            };
+    base_pixels
+        .par_chunks_mut(patch_rgb_stride)
+        .zip(candidate_pixels.par_chunks_mut(patch_rgb_stride))
+        .zip(blend_mask.par_chunks_mut(patch_mask_stride))
+        .zip(low_frequency_mask.par_chunks_mut(patch_mask_stride))
+        .enumerate()
+        .for_each(
+            |(local_y, (((base_row, candidate_row), blend_row), low_frequency_row))| {
+                let local_y = local_y as u32;
+                let global_y = patch_top + local_y;
+                for local_x in 0..patch_width {
+                    let global_x = patch_left + local_x;
+                    let target =
+                        Point3::new(global_x as f64 - offset_x, global_y as f64 - offset_y, 1.0);
+                    let candidate_source =
+                        map_target_to_source(&h_add_inv, target, img_to_add_info, projection);
+                    let candidate_valid = candidate_source.as_ref().is_some_and(|source| {
+                        source.x >= 0.0
+                            && source.x < image_width
+                            && source.y >= 0.0
+                            && source.y < image_height
+                    });
+                    let candidate_pixel = if let Some(source) = candidate_source {
+                        if candidate_valid {
+                            apply_exposure_gain(
+                                get_high_quality_interpolated_pixel(img_to_add, source.x, source.y),
+                                exposure.gain_at(global_x, global_y),
+                            )
+                        } else {
+                            Rgb([0.0, 0.0, 0.0])
+                        }
+                    } else {
+                        Rgb([0.0, 0.0, 0.0])
+                    };
+                    let panorama_valid = panorama_mask_ref.get_pixel(global_x, global_y)[0] > 0;
+                    let current_pixel = *panorama_ref.get_pixel(global_x, global_y);
+                    let candidate_pixel = if !candidate_valid && panorama_valid {
+                        current_pixel
+                    } else {
+                        candidate_pixel
+                    };
+                    let base_pixel = if panorama_valid || !candidate_valid {
+                        current_pixel
+                    } else {
+                        candidate_pixel
+                    };
 
-            let candidate_owns_pixel = if !candidate_valid {
-                false
-            } else if !panorama_valid {
-                true
-            } else {
-                match orientation {
-                    SeamOrientation::Horizontal => {
-                        let seam_y = seam_value(global_x as usize).unwrap_or(global_y);
-                        if new_image_is_dominant_side {
-                            global_y > seam_y
-                        } else {
-                            global_y < seam_y
+                    let candidate_owns_pixel = if !candidate_valid {
+                        false
+                    } else if !panorama_valid {
+                        true
+                    } else {
+                        match orientation {
+                            SeamOrientation::Horizontal => {
+                                let seam_y = seam_value(global_x as usize).unwrap_or(global_y);
+                                if new_image_is_dominant_side {
+                                    global_y > seam_y
+                                } else {
+                                    global_y < seam_y
+                                }
+                            }
+                            SeamOrientation::Vertical => {
+                                let seam_x = seam_value(global_y as usize).unwrap_or(global_x);
+                                if new_image_is_dominant_side {
+                                    global_x > seam_x
+                                } else {
+                                    global_x < seam_x
+                                }
+                            }
                         }
-                    }
-                    SeamOrientation::Vertical => {
-                        let seam_x = seam_value(global_y as usize).unwrap_or(global_x);
-                        if new_image_is_dominant_side {
-                            global_x > seam_x
-                        } else {
-                            global_x < seam_x
-                        }
-                    }
-                }
-            };
+                    };
 
-            let base_start = index * 3;
-            base_pixels[base_start..base_start + 3].copy_from_slice(&base_pixel.0);
-            candidate_pixels[base_start..base_start + 3].copy_from_slice(&candidate_pixel.0);
-            blend_mask[index] = if candidate_owns_pixel { 255 } else { 0 };
-            let low_frequency_alpha = if !candidate_valid {
-                0.0
-            } else if !panorama_valid {
-                1.0
-            } else {
-                match orientation {
-                    SeamOrientation::Horizontal => {
-                        let span = (overlap_bottom - overlap_top).max(1) as f32;
-                        let position = (global_y.saturating_sub(overlap_top)) as f32 / span;
-                        if new_image_is_dominant_side {
-                            position
-                        } else {
-                            1.0 - position
+                    let base_start = local_x as usize * 3;
+                    base_row[base_start..base_start + 3].copy_from_slice(&base_pixel.0);
+                    candidate_row[base_start..base_start + 3].copy_from_slice(&candidate_pixel.0);
+                    blend_row[local_x as usize] = if candidate_owns_pixel { 255 } else { 0 };
+                    let low_frequency_alpha = if !candidate_valid {
+                        0.0
+                    } else if !panorama_valid {
+                        1.0
+                    } else {
+                        match orientation {
+                            SeamOrientation::Horizontal => {
+                                let span = (overlap_bottom - overlap_top).max(1) as f32;
+                                let position = (global_y.saturating_sub(overlap_top)) as f32 / span;
+                                if new_image_is_dominant_side {
+                                    position
+                                } else {
+                                    1.0 - position
+                                }
+                            }
+                            SeamOrientation::Vertical => {
+                                let span = (overlap_right - overlap_left).max(1) as f32;
+                                let position =
+                                    (global_x.saturating_sub(overlap_left)) as f32 / span;
+                                if new_image_is_dominant_side {
+                                    position
+                                } else {
+                                    1.0 - position
+                                }
+                            }
                         }
-                    }
-                    SeamOrientation::Vertical => {
-                        let span = (overlap_right - overlap_left).max(1) as f32;
-                        let position = (global_x.saturating_sub(overlap_left)) as f32 / span;
-                        if new_image_is_dominant_side {
-                            position
-                        } else {
-                            1.0 - position
-                        }
-                    }
+                    };
+                    low_frequency_row[local_x as usize] =
+                        (low_frequency_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
                 }
-            };
-            low_frequency_mask[index] = (low_frequency_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-        }
-    }
+            },
+        );
 
     let base = Rgb32FImage::from_raw(patch_width, patch_height, base_pixels)
         .expect("seam base patch dimensions must match");
@@ -892,17 +907,32 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         false,
     );
 
-    for local_y in 0..patch_height {
-        for local_x in 0..patch_width {
-            let global_x = patch_left + local_x;
-            let global_y = patch_top + local_y;
-            let index = (local_y as usize * patch_width as usize) + local_x as usize;
-            *panorama.get_pixel_mut(global_x, global_y) = *blended.get_pixel(local_x, local_y);
-            if panorama_mask.get_pixel(global_x, global_y)[0] > 0 || blend_mask[index] > 0 {
-                panorama_mask.put_pixel(global_x, global_y, image::Luma([255]));
+    let panorama_rgb_stride = out_width as usize * 3;
+    let blended_pixels = blended.as_raw();
+    panorama
+        .as_mut()
+        .par_chunks_mut(panorama_rgb_stride)
+        .zip(panorama_mask.as_mut().par_chunks_mut(out_width as usize))
+        .enumerate()
+        .skip(patch_top as usize)
+        .take(patch_height as usize)
+        .for_each(|(global_y, (panorama_row, panorama_mask_row))| {
+            let local_y = global_y - patch_top as usize;
+            let blended_row =
+                &blended_pixels[local_y * patch_rgb_stride..(local_y + 1) * patch_rgb_stride];
+            let destination_start = patch_left as usize * 3;
+            let destination_end = destination_start + patch_rgb_stride;
+            panorama_row[destination_start..destination_end].copy_from_slice(blended_row);
+
+            let blend_row =
+                &blend_mask[local_y * patch_mask_stride..(local_y + 1) * patch_mask_stride];
+            for (local_x, candidate_owns_pixel) in blend_row.iter().copied().enumerate() {
+                let global_x = patch_left as usize + local_x;
+                if panorama_mask_row[global_x] > 0 || candidate_owns_pixel > 0 {
+                    panorama_mask_row[global_x] = 255;
+                }
             }
-        }
-    }
+        });
 }
 
 fn luminance(pixel: &Rgb<f32>) -> f32 {
@@ -1225,6 +1255,179 @@ fn resize_rgb(image: &Rgb32FImage, width: u32, height: u32) -> Rgb32FImage {
     )
 }
 
+fn downsample_rgb_half(image: &Rgb32FImage) -> Rgb32FImage {
+    let (source_width, source_height) = image.dimensions();
+    let target_width = source_width.div_ceil(2).max(1);
+    let target_height = source_height.div_ceil(2).max(1);
+    if (source_width, source_height) == (target_width, target_height) {
+        return image.clone();
+    }
+
+    let source = image.as_raw();
+    let source_stride = source_width as usize * 3;
+    let target_stride = target_width as usize * 3;
+    let mut output = vec![0.0f32; target_stride * target_height as usize];
+    output
+        .par_chunks_mut(target_stride)
+        .enumerate()
+        .for_each(|(target_y, row)| {
+            let source_y0 = (target_y * 2).min(source_height as usize - 1);
+            let source_y1 = (source_y0 + 1).min(source_height as usize - 1);
+            for target_x in 0..target_width as usize {
+                let source_x0 = (target_x * 2).min(source_width as usize - 1);
+                let source_x1 = (source_x0 + 1).min(source_width as usize - 1);
+                let top_left = source_y0 * source_stride + source_x0 * 3;
+                let top_right = source_y0 * source_stride + source_x1 * 3;
+                let bottom_left = source_y1 * source_stride + source_x0 * 3;
+                let bottom_right = source_y1 * source_stride + source_x1 * 3;
+                let output_start = target_x * 3;
+                for channel in 0..3 {
+                    row[output_start + channel] = (source[top_left + channel]
+                        + source[top_right + channel]
+                        + source[bottom_left + channel]
+                        + source[bottom_right + channel])
+                        * 0.25;
+                }
+            }
+        });
+    Rgb32FImage::from_raw(target_width, target_height, output)
+        .expect("half-resolution RGB buffer dimensions must match")
+}
+
+fn downsample_mask_half(mask: &GrayImage) -> GrayImage {
+    let (source_width, source_height) = mask.dimensions();
+    let target_width = source_width.div_ceil(2).max(1);
+    let target_height = source_height.div_ceil(2).max(1);
+    if (source_width, source_height) == (target_width, target_height) {
+        return mask.clone();
+    }
+
+    let source = mask.as_raw();
+    let source_stride = source_width as usize;
+    let target_stride = target_width as usize;
+    let mut output = vec![0u8; target_stride * target_height as usize];
+    output
+        .par_chunks_mut(target_stride)
+        .enumerate()
+        .for_each(|(target_y, row)| {
+            let source_y0 = (target_y * 2).min(source_height as usize - 1);
+            let source_y1 = (source_y0 + 1).min(source_height as usize - 1);
+            for (target_x, output) in row.iter_mut().enumerate() {
+                let source_x0 = (target_x * 2).min(source_width as usize - 1);
+                let source_x1 = (source_x0 + 1).min(source_width as usize - 1);
+                let total = u16::from(source[source_y0 * source_stride + source_x0])
+                    + u16::from(source[source_y0 * source_stride + source_x1])
+                    + u16::from(source[source_y1 * source_stride + source_x0])
+                    + u16::from(source[source_y1 * source_stride + source_x1]);
+                *output = ((total + 2) / 4) as u8;
+            }
+        });
+    GrayImage::from_raw(target_width, target_height, output)
+        .expect("half-resolution mask buffer dimensions must match")
+}
+
+#[derive(Clone, Copy)]
+struct LinearSample {
+    lower: usize,
+    upper: usize,
+    upper_weight: f32,
+}
+
+fn linear_samples(source_length: u32, target_length: u32) -> Vec<LinearSample> {
+    let scale = source_length as f64 / target_length.max(1) as f64;
+    (0..target_length.max(1))
+        .map(|target| {
+            let source = ((f64::from(target) + 0.5) * scale - 0.5)
+                .clamp(0.0, f64::from(source_length.saturating_sub(1)));
+            let lower = source.floor() as usize;
+            let upper = (lower + 1).min(source_length.saturating_sub(1) as usize);
+            LinearSample {
+                lower,
+                upper,
+                upper_weight: (source - lower as f64) as f32,
+            }
+        })
+        .collect()
+}
+
+fn subtract_upsampled_rgb(fine: &Rgb32FImage, coarse: &Rgb32FImage) -> Rgb32FImage {
+    let (width, height) = fine.dimensions();
+    let x_samples = linear_samples(coarse.width(), width);
+    let y_samples = linear_samples(coarse.height(), height);
+    let coarse_stride = coarse.width() as usize * 3;
+    let output_stride = width as usize * 3;
+    let coarse_pixels = coarse.as_raw();
+    let fine_pixels = fine.as_raw();
+    let mut output = vec![0.0f32; output_stride * height as usize];
+
+    output
+        .par_chunks_mut(output_stride)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_sample = y_samples[y];
+            let y_weight = y_sample.upper_weight;
+            let fine_row = &fine_pixels[y * output_stride..(y + 1) * output_stride];
+            for (x, x_sample) in x_samples.iter().copied().enumerate() {
+                let x_weight = x_sample.upper_weight;
+                let top_left = y_sample.lower * coarse_stride + x_sample.lower * 3;
+                let top_right = y_sample.lower * coarse_stride + x_sample.upper * 3;
+                let bottom_left = y_sample.upper * coarse_stride + x_sample.lower * 3;
+                let bottom_right = y_sample.upper * coarse_stride + x_sample.upper * 3;
+                let output_start = x * 3;
+                for channel in 0..3 {
+                    let top = coarse_pixels[top_left + channel] * (1.0 - x_weight)
+                        + coarse_pixels[top_right + channel] * x_weight;
+                    let bottom = coarse_pixels[bottom_left + channel] * (1.0 - x_weight)
+                        + coarse_pixels[bottom_right + channel] * x_weight;
+                    let low_frequency = top * (1.0 - y_weight) + bottom * y_weight;
+                    row[output_start + channel] = fine_row[output_start + channel] - low_frequency;
+                }
+            }
+        });
+
+    Rgb32FImage::from_raw(width, height, output)
+        .expect("Laplacian detail buffer dimensions must match")
+}
+
+fn upsample_and_add_rgb(coarse: &Rgb32FImage, detail: &Rgb32FImage) -> Rgb32FImage {
+    let (width, height) = detail.dimensions();
+    let x_samples = linear_samples(coarse.width(), width);
+    let y_samples = linear_samples(coarse.height(), height);
+    let coarse_stride = coarse.width() as usize * 3;
+    let output_stride = width as usize * 3;
+    let coarse_pixels = coarse.as_raw();
+    let detail_pixels = detail.as_raw();
+    let mut output = vec![0.0f32; output_stride * height as usize];
+
+    output
+        .par_chunks_mut(output_stride)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_sample = y_samples[y];
+            let y_weight = y_sample.upper_weight;
+            let detail_row = &detail_pixels[y * output_stride..(y + 1) * output_stride];
+            for (x, x_sample) in x_samples.iter().copied().enumerate() {
+                let x_weight = x_sample.upper_weight;
+                let top_left = y_sample.lower * coarse_stride + x_sample.lower * 3;
+                let top_right = y_sample.lower * coarse_stride + x_sample.upper * 3;
+                let bottom_left = y_sample.upper * coarse_stride + x_sample.lower * 3;
+                let bottom_right = y_sample.upper * coarse_stride + x_sample.upper * 3;
+                let output_start = x * 3;
+                for channel in 0..3 {
+                    let top = coarse_pixels[top_left + channel] * (1.0 - x_weight)
+                        + coarse_pixels[top_right + channel] * x_weight;
+                    let bottom = coarse_pixels[bottom_left + channel] * (1.0 - x_weight)
+                        + coarse_pixels[bottom_right + channel] * x_weight;
+                    row[output_start + channel] = top * (1.0 - y_weight)
+                        + bottom * y_weight
+                        + detail_row[output_start + channel];
+                }
+            }
+        });
+
+    Rgb32FImage::from_raw(width, height, output).expect("reconstructed image dimensions must match")
+}
+
 fn resize_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
     image::imageops::resize(
         mask,
@@ -1277,46 +1480,6 @@ fn combine_rgb(
             }
         });
     Rgb32FImage::from_raw(width, height, output).expect("combined image dimensions must match")
-}
-
-fn add_rgb(base: &Rgb32FImage, detail: &Rgb32FImage) -> Rgb32FImage {
-    let (width, height) = base.dimensions();
-    let mut output = vec![0.0f32; width as usize * height as usize * 3];
-    output
-        .par_chunks_mut(width as usize * 3)
-        .enumerate()
-        .for_each(|(y, row)| {
-            let y = y as u32;
-            for x in 0..width {
-                let base_pixel = base.get_pixel(x, y);
-                let detail_pixel = detail.get_pixel(x, y);
-                let start = x as usize * 3;
-                for channel in 0..3 {
-                    row[start + channel] = base_pixel[channel] + detail_pixel[channel];
-                }
-            }
-        });
-    Rgb32FImage::from_raw(width, height, output).expect("reconstructed image dimensions must match")
-}
-
-fn subtract_rgb(base: &Rgb32FImage, reference: &Rgb32FImage) -> Rgb32FImage {
-    let (width, height) = base.dimensions();
-    let mut output = vec![0.0f32; width as usize * height as usize * 3];
-    output
-        .par_chunks_mut(width as usize * 3)
-        .enumerate()
-        .for_each(|(y, row)| {
-            let y = y as u32;
-            for x in 0..width {
-                let base_pixel = base.get_pixel(x, y);
-                let reference_pixel = reference.get_pixel(x, y);
-                let start = x as usize * 3;
-                for channel in 0..3 {
-                    row[start + channel] = base_pixel[channel] - reference_pixel[channel];
-                }
-            }
-        });
-    Rgb32FImage::from_raw(width, height, output).expect("detail image dimensions must match")
 }
 
 fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
@@ -1414,21 +1577,12 @@ fn multiband_blend(
         if current_base.width() <= 4 || current_base.height() <= 4 {
             break;
         }
-        let next_width = (current_base.width() / 2).max(1);
-        let next_height = (current_base.height() / 2).max(1);
-        let next_base = resize_rgb(&current_base, next_width, next_height);
-        let next_candidate = resize_rgb(&current_candidate, next_width, next_height);
-        let next_mask = resize_mask(&current_mask, next_width, next_height);
-        let next_low_frequency_mask =
-            resize_mask(&current_low_frequency_mask, next_width, next_height);
-        let base_up = resize_rgb(&next_base, current_base.width(), current_base.height());
-        let candidate_up = resize_rgb(
-            &next_candidate,
-            current_candidate.width(),
-            current_candidate.height(),
-        );
-        base_laplacian.push(subtract_rgb(&current_base, &base_up));
-        candidate_laplacian.push(subtract_rgb(&current_candidate, &candidate_up));
+        let next_base = downsample_rgb_half(&current_base);
+        let next_candidate = downsample_rgb_half(&current_candidate);
+        let next_mask = downsample_mask_half(&current_mask);
+        let next_low_frequency_mask = downsample_mask_half(&current_low_frequency_mask);
+        base_laplacian.push(subtract_upsampled_rgb(&current_base, &next_base));
+        candidate_laplacian.push(subtract_upsampled_rgb(&current_candidate, &next_candidate));
         masks.push(current_mask);
         low_frequency_masks.push(current_low_frequency_mask);
         current_base = next_base;
@@ -1455,14 +1609,7 @@ fn multiband_blend(
             blend_mask,
             hard_finest_band && level == 0,
         );
-        reconstructed = add_rgb(
-            &resize_rgb(
-                &reconstructed,
-                base_laplacian[level].width(),
-                base_laplacian[level].height(),
-            ),
-            &blended_detail,
-        );
+        reconstructed = upsample_and_add_rgb(&reconstructed, &blended_detail);
     }
     if reconstructed.dimensions() == (width, height) {
         reconstructed
@@ -2093,6 +2240,35 @@ mod interpolation_tests {
         let blurred = box_blur_focus_map(&source, 5, 4, 2);
 
         assert!(blurred.iter().all(|value| (*value - 3.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn parallel_pyramid_downsample_preserves_constant_pixels_and_odd_edges() {
+        let source = Rgb32FImage::from_pixel(5, 7, Rgb([0.2, 0.4, 0.8]));
+        let downsampled = downsample_rgb_half(&source);
+
+        assert_eq!(downsampled.dimensions(), (3, 4));
+        assert!(downsampled.pixels().all(|pixel| pixel.0 == [0.2, 0.4, 0.8]));
+    }
+
+    #[test]
+    fn parallel_pyramid_detail_reconstructs_the_original_pixels() {
+        let source = Rgb32FImage::from_fn(17, 11, |x, y| {
+            let value = (x as f32 * 0.07 + y as f32 * 0.03).sin();
+            Rgb([value, value * 0.5, 1.0 - value])
+        });
+        let coarse = downsample_rgb_half(&source);
+        let detail = subtract_upsampled_rgb(&source, &coarse);
+        let reconstructed = upsample_and_add_rgb(&coarse, &detail);
+
+        assert_eq!(reconstructed.dimensions(), source.dimensions());
+        let maximum_error = reconstructed
+            .as_raw()
+            .iter()
+            .zip(source.as_raw())
+            .map(|(actual, expected)| (actual - expected).abs())
+            .fold(0.0f32, f32::max);
+        assert!(maximum_error < 1e-6, "maximum error: {maximum_error}");
     }
 
     #[test]

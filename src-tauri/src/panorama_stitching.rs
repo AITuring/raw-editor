@@ -3,7 +3,7 @@ use crate::app_state::AppState;
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
-use image::{DynamicImage, GenericImageView, GrayImage, Rgb32FImage};
+use image::{ColorType, DynamicImage, GenericImageView, GrayImage, Rgb32FImage, RgbImage};
 use nalgebra::Matrix3;
 use rand::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -35,6 +35,8 @@ const LARGE_STACK_NEIGHBOR_WINDOW: usize = 4;
 const SCALABLE_LOW_TEXTURE_FEATURE_TARGET: usize = 96;
 const SCALABLE_LOW_TEXTURE_FAST_THRESHOLD: u8 = 7;
 const SCALABLE_LOW_TEXTURE_NMS_RADIUS: f32 = 10.0;
+const MAX_SCALABLE_PREPARATION_WORKERS: usize = 6;
+const PREPARATION_RAM_PER_WORKER_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_IN_MEMORY_PANORAMA_PIXELS: u64 = 240_000_000;
 const MAX_STITCH_SOURCE_IMAGES: usize = 200;
 
@@ -103,6 +105,28 @@ fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
     }
 }
 
+fn bounded_preparation_worker_count(
+    image_count: usize,
+    available_threads: usize,
+    available_memory_bytes: u64,
+) -> usize {
+    let memory_limit = (available_memory_bytes / PREPARATION_RAM_PER_WORKER_BYTES) as usize;
+    image_count
+        .max(1)
+        .min(available_threads.max(1))
+        .min(memory_limit.max(1))
+        .min(MAX_SCALABLE_PREPARATION_WORKERS)
+}
+
+fn scalable_preparation_worker_count(image_count: usize) -> usize {
+    let available_threads = std::thread::available_parallelism()
+        .map(|threads| threads.get())
+        .unwrap_or(1);
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+    bounded_preparation_worker_count(image_count, available_threads, system.available_memory())
+}
+
 fn memory_safe_panorama_render_scale(width: u32, height: u32) -> f64 {
     let pixels = u64::from(width).saturating_mul(u64::from(height));
     if pixels <= MAX_IN_MEMORY_PANORAMA_PIXELS || pixels == 0 {
@@ -112,6 +136,7 @@ fn memory_safe_panorama_render_scale(width: u32, height: u32) -> f64 {
     }
 }
 
+#[cfg(test)]
 fn scaled_homographies(
     homographies: &HashMap<usize, Matrix3<f64>>,
     scale: f64,
@@ -121,6 +146,155 @@ fn scaled_homographies(
         .iter()
         .map(|(&id, homography)| (id, scale_matrix * homography))
         .collect()
+}
+
+fn scaled_source_render_homographies(
+    homographies: &HashMap<usize, Matrix3<f64>>,
+    scale: f64,
+) -> HashMap<usize, Matrix3<f64>> {
+    let output_scale = Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0);
+    let source_scale_inverse = Matrix3::new(
+        scale.recip(),
+        0.0,
+        0.0,
+        0.0,
+        scale.recip(),
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    );
+    homographies
+        .iter()
+        .map(|(&id, homography)| (id, output_scale * homography * source_scale_inverse))
+        .collect()
+}
+
+fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
+    ImageInfo {
+        id: image.id,
+        filename: image.filename.clone(),
+        width: (f64::from(image.width) * scale).round().max(1.0) as u32,
+        height: (f64::from(image.height) * scale).round().max(1.0) as u32,
+        alignment_image: GrayImage::new(0, 0),
+        full_image: None,
+        scale_factor: image.scale_factor,
+        features: Vec::new(),
+    }
+}
+
+struct AreaContributions {
+    offsets: Vec<usize>,
+    indices: Vec<usize>,
+    weights: Vec<f32>,
+}
+
+fn area_contributions(source_length: u32, target_length: u32) -> AreaContributions {
+    let mut offsets = Vec::with_capacity(target_length as usize + 1);
+    let mut indices = Vec::new();
+    let mut weights = Vec::new();
+    let scale = f64::from(source_length) / f64::from(target_length.max(1));
+    offsets.push(0);
+    for target in 0..target_length.max(1) {
+        let start = f64::from(target) * scale;
+        let end = (f64::from(target) + 1.0) * scale;
+        let first = start.floor() as usize;
+        let last = (end.ceil() as usize)
+            .saturating_sub(1)
+            .min(source_length.saturating_sub(1) as usize);
+        let normalization = (end - start).recip();
+        for source in first..=last {
+            let overlap = ((source + 1) as f64).min(end) - (source as f64).max(start);
+            if overlap > 0.0 {
+                indices.push(source);
+                weights.push((overlap * normalization) as f32);
+            }
+        }
+        offsets.push(indices.len());
+    }
+    AreaContributions {
+        offsets,
+        indices,
+        weights,
+    }
+}
+
+fn resize_rgb8_area_to_rgb32f(
+    source: &RgbImage,
+    target_width: u32,
+    target_height: u32,
+) -> Rgb32FImage {
+    let (source_width, source_height) = source.dimensions();
+    debug_assert!(target_width > 0 && target_height > 0);
+    debug_assert!(target_width <= source_width && target_height <= source_height);
+
+    let horizontal_contributions = area_contributions(source_width, target_width);
+    let vertical_contributions = area_contributions(source_height, target_height);
+    let source_stride = source_width as usize * 3;
+    let horizontal_stride = target_width as usize * 3;
+    let mut horizontal = vec![0.0f32; horizontal_stride * source_height as usize];
+    horizontal
+        .par_chunks_mut(horizontal_stride)
+        .zip(source.as_raw().par_chunks(source_stride))
+        .for_each(|(output_row, source_row)| {
+            for target_x in 0..target_width as usize {
+                let contribution_start = horizontal_contributions.offsets[target_x];
+                let contribution_end = horizontal_contributions.offsets[target_x + 1];
+                let output_start = target_x * 3;
+                for contribution in contribution_start..contribution_end {
+                    let source_start = horizontal_contributions.indices[contribution] * 3;
+                    let weight = horizontal_contributions.weights[contribution] / 255.0;
+                    for channel in 0..3 {
+                        output_row[output_start + channel] +=
+                            f32::from(source_row[source_start + channel]) * weight;
+                    }
+                }
+            }
+        });
+
+    let mut output = vec![0.0f32; horizontal_stride * target_height as usize];
+    output
+        .par_chunks_mut(horizontal_stride)
+        .enumerate()
+        .for_each(|(target_y, output_row)| {
+            let contribution_start = vertical_contributions.offsets[target_y];
+            let contribution_end = vertical_contributions.offsets[target_y + 1];
+            for contribution in contribution_start..contribution_end {
+                let source_y = vertical_contributions.indices[contribution];
+                let weight = vertical_contributions.weights[contribution];
+                let horizontal_row =
+                    &horizontal[source_y * horizontal_stride..(source_y + 1) * horizontal_stride];
+                for (output, source) in output_row.iter_mut().zip(horizontal_row) {
+                    *output += source * weight;
+                }
+            }
+        });
+
+    Rgb32FImage::from_raw(target_width, target_height, output)
+        .expect("area-resized RGB buffer dimensions must match")
+}
+
+fn source_to_render_rgb32f(
+    source: DynamicImage,
+    target_width: u32,
+    target_height: u32,
+) -> Rgb32FImage {
+    if source.dimensions() == (target_width, target_height) {
+        return source.to_rgb32f();
+    }
+    if source.color() == ColorType::Rgb8
+        && target_width <= source.width()
+        && target_height <= source.height()
+    {
+        return resize_rgb8_area_to_rgb32f(&source.into_rgb8(), target_width, target_height);
+    }
+    source
+        .resize_exact(
+            target_width,
+            target_height,
+            image::imageops::FilterType::Triangle,
+        )
+        .to_rgb32f()
 }
 
 fn pairs_to_match(image_count: usize) -> Vec<(usize, usize)> {
@@ -782,11 +956,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     };
 
     let image_data_results = if scalable_stack {
-        let available_threads = std::thread::available_parallelism()
-            .map(|threads| threads.get())
-            .unwrap_or(1);
+        let preparation_workers = scalable_preparation_worker_count(image_paths.len());
+        println!("Preparing images with {preparation_workers} bounded worker(s)...");
         let pool = ThreadPoolBuilder::new()
-            .num_threads(available_threads.clamp(1, 3))
+            .num_threads(preparation_workers)
             .thread_name(|index| format!("image-stack-analysis-{index}"))
             .build()
             .map_err(|error| format!("Failed to start image-stack workers: {error}"))?;
@@ -950,17 +1123,28 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     } else {
         1.0
     };
+    let render_image_data = (render_scale < 1.0).then(|| {
+        stitched_images_info
+            .iter()
+            .map(|image| scaled_render_image_info(image, render_scale))
+            .collect::<Vec<_>>()
+    });
+    let render_images_info = render_image_data.as_ref().map_or_else(
+        || stitched_images_info.clone(),
+        |images| images.iter().collect::<Vec<_>>(),
+    );
     let scaled_global_homographies;
     let render_homographies = if render_scale < 1.0 {
-        scaled_global_homographies = scaled_homographies(&global_homographies, render_scale);
+        scaled_global_homographies =
+            scaled_source_render_homographies(&global_homographies, render_scale);
         let (render_width, render_height) = stitching::output_canvas_dimensions(
-            &stitched_images_info,
+            &render_images_info,
             &scaled_global_homographies,
             projection,
         );
         let render_percentage = render_scale * 100.0;
         let message = format!(
-            "Large canvas {full_canvas_width}x{full_canvas_height}; rendering a memory-safe {render_width}x{render_height} result ({render_percentage:.0}%)."
+            "Large canvas {full_canvas_width}x{full_canvas_height}; pre-scaling sources and rendering a memory-safe {render_width}x{render_height} result ({render_percentage:.0}%)."
         );
         println!("{message}");
         let _ = app_handle.emit(progress_event, &message);
@@ -971,31 +1155,41 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Warping and blending images...");
-    println!("Warping and blending full-resolution images with progressive optimal seams...");
+    println!("Warping and blending images with progressive optimal seams...");
 
-    let mut load_full_image = |image: &ImageInfo| {
+    let mut load_render_image = |image: &ImageInfo| {
         if let Some(full_image) = retained_full_images.remove(&image.id) {
-            Ok(full_image)
+            if full_image.dimensions() == image.dimensions() {
+                Ok(full_image)
+            } else {
+                Ok(image::imageops::resize(
+                    &full_image,
+                    image.width,
+                    image.height,
+                    image::imageops::FilterType::Triangle,
+                ))
+            }
         } else {
-            load_prepared_stack_source(&image.filename, &settings).map(|source| source.to_rgb32f())
+            load_prepared_stack_source(&image.filename, &settings)
+                .map(|source| source_to_render_rgb32f(source, image.width, image.height))
         }
     };
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
-            &stitched_images_info,
+            &render_images_info,
             render_homographies,
             projection,
             app_handle.clone(),
             progress_event,
-            &mut load_full_image,
+            &mut load_render_image,
         ),
         BlendMode::FocusStack => stitching::focus_stack_stitcher(
-            &stitched_images_info,
+            &render_images_info,
             render_homographies,
             projection,
             app_handle.clone(),
             progress_event,
-            &mut load_full_image,
+            &mut load_render_image,
         ),
     }?;
 
@@ -1923,6 +2117,23 @@ mod alignment_tests {
     }
 
     #[test]
+    fn scalable_preparation_workers_are_bounded_by_images_cpu_and_memory() {
+        let abundant_memory = 32 * PREPARATION_RAM_PER_WORKER_BYTES;
+
+        assert_eq!(
+            bounded_preparation_worker_count(185, 10, abundant_memory),
+            MAX_SCALABLE_PREPARATION_WORKERS
+        );
+        assert_eq!(bounded_preparation_worker_count(185, 4, abundant_memory), 4);
+        assert_eq!(
+            bounded_preparation_worker_count(185, 10, 2 * PREPARATION_RAM_PER_WORKER_BYTES),
+            2
+        );
+        assert_eq!(bounded_preparation_worker_count(3, 10, abundant_memory), 3);
+        assert_eq!(bounded_preparation_worker_count(185, 10, 0), 1);
+    }
+
+    #[test]
     fn oversized_panorama_canvas_is_scaled_to_the_memory_budget() {
         assert_eq!(memory_safe_panorama_render_scale(12_000, 8_000), 1.0);
         let scale = memory_safe_panorama_render_scale(248_296, 9_843);
@@ -1945,6 +2156,47 @@ mod alignment_tests {
         assert_eq!(transform[(1, 1)], 0.25);
         assert_eq!(transform[(0, 2)], 100.0);
         assert_eq!(transform[(1, 2)], -20.0);
+    }
+
+    #[test]
+    fn scaled_render_sources_preserve_the_output_coordinate_system() {
+        let source = HashMap::from([(
+            7,
+            Matrix3::new(1.0, 0.0, 400.0, 0.0, 1.0, -80.0, 0.0, 0.0, 1.0),
+        )]);
+        let scale = 0.25;
+        let scaled = scaled_source_render_homographies(&source, scale);
+        let source_point = nalgebra::Point3::new(800.0, 200.0, 1.0);
+        let expected = Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0)
+            * source[&7]
+            * source_point;
+        let actual =
+            scaled[&7] * nalgebra::Point3::new(source_point.x * scale, source_point.y * scale, 1.0);
+
+        assert!((actual.x - expected.x).abs() < 1e-9);
+        assert!((actual.y - expected.y).abs() < 1e-9);
+        assert!((actual.z - expected.z).abs() < 1e-9);
+
+        let mut image = test_image(7, "large.jpg");
+        image.width = 4_672;
+        image.height = 7_008;
+        let rendered = scaled_render_image_info(&image, scale);
+        assert_eq!(rendered.dimensions(), (1_168, 1_752));
+        assert!(rendered.alignment_image.is_empty());
+        assert!(rendered.features.is_empty());
+    }
+
+    #[test]
+    fn parallel_area_resize_preserves_constant_rgb8_sources() {
+        let source = RgbImage::from_pixel(7, 5, image::Rgb([51, 102, 204]));
+        let resized = resize_rgb8_area_to_rgb32f(&source, 3, 2);
+
+        assert_eq!(resized.dimensions(), (3, 2));
+        for pixel in resized.pixels() {
+            assert!((pixel[0] - 0.2).abs() < 1e-6);
+            assert!((pixel[1] - 0.4).abs() < 1e-6);
+            assert!((pixel[2] - 0.8).abs() < 1e-6);
+        }
     }
 
     #[test]
