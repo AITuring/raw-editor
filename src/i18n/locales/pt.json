@@ -1150,7 +1150,7 @@
       "dropImagesHint": "Um ou vários arquivos RAW, JPEG, PNG e TIFF",
       "goToSettings": "Ir para Configurações",
       "latestVersion": "Você está na versão mais recente",
-      "multiImageSelectionHint": "O empilhamento e a montagem exigem de 2 a 30 imagens de origem.",
+      "multiImageSelectionHint": "O empilhamento e a montagem exigem de 2 a 200 imagens de origem.",
       "newVersionAvailable": "Nova versão disponível!",
       "openFolder": "Abrir Pasta",
       "openImage": "Abrir imagem",

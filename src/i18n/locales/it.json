@@ -1150,7 +1150,7 @@
       "dropImagesHint": "Uno o più file RAW, JPEG, PNG e TIFF",
       "goToSettings": "Vai alle Impostazioni",
       "latestVersion": "Hai l'ultima versione installata",
-      "multiImageSelectionHint": "L'impilamento e l'unione richiedono da 2 a 30 immagini sorgente.",
+      "multiImageSelectionHint": "L'impilamento e l'unione richiedono da 2 a 200 immagini sorgente.",
       "newVersionAvailable": "Nuova versione disponibile!",
       "openFolder": "Apri Cartella",
       "openImage": "Apri immagine",

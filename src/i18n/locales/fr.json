@@ -1151,7 +1151,7 @@
       "dropImagesHint": "Un ou plusieurs fichiers RAW, JPEG, PNG et TIFF",
       "goToSettings": "Aller aux paramètres",
       "latestVersion": "Vous utilisez la dernière version",
-      "multiImageSelectionHint": "L’empilement et l’assemblage nécessitent 2 à 30 images sources.",
+      "multiImageSelectionHint": "L’empilement et l’assemblage nécessitent 2 à 200 images sources.",
       "newVersionAvailable": "Nouvelle version disponible !",
       "openFolder": "Ouvrir un dossier",
       "openImage": "Ouvrir une image",

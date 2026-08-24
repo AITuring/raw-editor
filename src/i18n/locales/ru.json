@@ -1174,7 +1174,7 @@
       "dropImagesHint": "Один или несколько файлов RAW, JPEG, PNG и TIFF",
       "goToSettings": "Перейти в настройки",
       "latestVersion": "У вас установлена последняя версия",
-      "multiImageSelectionHint": "Для стекинга и сшивания требуется от 2 до 30 исходных изображений.",
+      "multiImageSelectionHint": "Для стекинга и сшивания требуется от 2 до 200 исходных изображений.",
       "newVersionAvailable": "Доступна новая версия!",
       "openFolder": "Открыть папку",
       "openImage": "Открыть изображение",

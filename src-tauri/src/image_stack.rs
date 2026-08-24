@@ -26,7 +26,20 @@ const DETAIL_PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
 #[cfg(test)]
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
-const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.21.1";
+const IMAGE_STACK_MAX_SOURCES: usize = 200;
+const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.24.1";
+
+fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
+    if count < 2 {
+        return Err("Please select at least two images.".to_string());
+    }
+    if count > IMAGE_STACK_MAX_SOURCES {
+        return Err(format!(
+            "Image stack is limited to {IMAGE_STACK_MAX_SOURCES} source images."
+        ));
+    }
+    Ok(())
+}
 
 fn validate_image_stack_pipeline_version(value: &str) -> Result<(), String> {
     if value == IMAGE_STACK_PIPELINE_VERSION {
@@ -681,12 +694,7 @@ pub async fn process_image_stack(
     app_handle: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    if paths.len() < 2 {
-        return Err("Please select at least two images.".to_string());
-    }
-    if paths.len() > 30 {
-        return Err("Image stack is limited to 30 source images.".to_string());
-    }
+    validate_image_stack_source_count(paths.len())?;
     if request_id.trim().is_empty() {
         return Err("Image-stack request ID is missing.".to_string());
     }
@@ -787,10 +795,11 @@ mod tests {
     use image::{DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage};
 
     use super::{
-        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, IMAGE_STACK_PIPELINE_VERSION,
-        ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE, PREVIEW_MAX_PIXELS,
-        canonicalize_image_stack_result, detail_preview_dimensions, encode_srgb_tiff,
-        preview_dimensions, resolve_image_stack_output_path, validate_image_stack_pipeline_version,
+        DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, IMAGE_STACK_MAX_SOURCES,
+        IMAGE_STACK_PIPELINE_VERSION, ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE,
+        PREVIEW_MAX_PIXELS, canonicalize_image_stack_result, detail_preview_dimensions,
+        encode_srgb_tiff, preview_dimensions, resolve_image_stack_output_path,
+        validate_image_stack_pipeline_version, validate_image_stack_source_count,
         write_image_stack_output, write_image_stack_output_with_settings, write_srgb_tiff,
     };
 
@@ -799,6 +808,14 @@ mod tests {
         assert!(validate_image_stack_pipeline_version(IMAGE_STACK_PIPELINE_VERSION).is_ok());
         assert!(validate_image_stack_pipeline_version("").is_err());
         assert!(validate_image_stack_pipeline_version("image-stack-legacy").is_err());
+    }
+
+    #[test]
+    fn image_stack_accepts_two_hundred_sources_but_rejects_more() {
+        assert!(validate_image_stack_source_count(2).is_ok());
+        assert!(validate_image_stack_source_count(IMAGE_STACK_MAX_SOURCES).is_ok());
+        assert!(validate_image_stack_source_count(1).is_err());
+        assert!(validate_image_stack_source_count(IMAGE_STACK_MAX_SOURCES + 1).is_err());
     }
 
     #[test]

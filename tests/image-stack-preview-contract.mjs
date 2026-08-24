@@ -26,11 +26,15 @@ const screenTransformSource = fs.readFileSync(
 );
 const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
 const rustStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
+const rustStitchingSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/panorama_stitching.rs'), 'utf8');
 const productivityActionsSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useProductivityActions.ts'), 'utf8');
 const listenerSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useTauriListeners.ts'), 'utf8');
 
 const frontendPipelineVersion = pipelineSource.match(/IMAGE_STACK_PIPELINE_VERSION\s*=\s*'([^']+)'/)?.[1];
 const backendPipelineVersion = rustStackSource.match(/IMAGE_STACK_PIPELINE_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1];
+const frontendMaxSources = Number(pipelineSource.match(/IMAGE_STACK_MAX_SOURCES\s*=\s*(\d+)/)?.[1]);
+const backendMaxSources = Number(rustStackSource.match(/IMAGE_STACK_MAX_SOURCES:\s*usize\s*=\s*(\d+)/)?.[1]);
+const stitchingMaxSources = Number(rustStitchingSource.match(/MAX_STITCH_SOURCE_IMAGES:\s*usize\s*=\s*(\d+)/)?.[1]);
 
 assert.ok(frontendPipelineVersion, 'frontend image-stack pipeline version must be declared');
 assert.equal(
@@ -38,6 +42,9 @@ assert.equal(
   backendPipelineVersion,
   'frontend and backend image-stack pipeline versions must change together',
 );
+assert.equal(frontendMaxSources, 200, 'the UI must accept the requested 200-image workflow');
+assert.equal(frontendMaxSources, backendMaxSources, 'frontend and backend image-stack limits must stay aligned');
+assert.equal(frontendMaxSources, stitchingMaxSources, 'all stitching entry points must enforce the same source limit');
 assert.match(productivityActionsSource, /pipelineVersion:\s*IMAGE_STACK_PIPELINE_VERSION/);
 assert.match(listenerSource, /pipelineVersion\s*!==\s*IMAGE_STACK_PIPELINE_VERSION/);
 

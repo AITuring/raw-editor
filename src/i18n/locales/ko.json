@@ -1124,7 +1124,7 @@
       "dropImagesHint": "단일 또는 여러 RAW, JPEG, PNG, TIFF 파일",
       "goToSettings": "설정으로 이동",
       "latestVersion": "최신 버전을 사용 중입니다",
-      "multiImageSelectionHint": "스태킹 및 스티칭에는 2~30개의 원본 이미지가 필요합니다.",
+      "multiImageSelectionHint": "스태킹 및 스티칭에는 2~200개의 원본 이미지가 필요합니다.",
       "newVersionAvailable": "새 버전이 있습니다!",
       "openFolder": "폴더 열기",
       "openImage": "이미지 열기",

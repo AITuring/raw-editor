@@ -13,6 +13,7 @@ import { INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjust
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { debouncedSave, debouncedSetHistory } from './useEditorActions';
 import i18n from '../i18n';
+import { IMAGE_STACK_MAX_SOURCES } from '../utils/imageStackPipeline';
 
 const normalizeExtensions = (extensions: string[]) =>
   Array.from(new Set(extensions.map((extension) => extension.trim().replace(/^\./, '').toLowerCase()).filter(Boolean)));
@@ -573,7 +574,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       const paths = Array.isArray(selected) ? selected : typeof selected === 'string' ? [selected] : [];
       if (paths.length === 0) return [];
 
-      if (paths.length < 2 || paths.length > 30) {
+      if (paths.length < 2 || paths.length > IMAGE_STACK_MAX_SOURCES) {
         message.info(i18n.t('library.splash.multiImageSelectionHint'));
         return [];
       }

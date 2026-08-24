@@ -1137,7 +1137,7 @@
       "dropImagesHint": "Single or multiple RAW, JPEG, PNG, and TIFF files",
       "goToSettings": "Go to Settings",
       "latestVersion": "You are on the latest version",
-      "multiImageSelectionHint": "Stacking and stitching require 2–30 source images.",
+      "multiImageSelectionHint": "Stacking and stitching require 2–200 source images.",
       "newVersionAvailable": "New version available!",
       "openFolder": "Open Folder",
       "openImage": "Open Image",

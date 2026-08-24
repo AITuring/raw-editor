@@ -53,16 +53,20 @@ export function useThumbnails() {
     pendingQueueRef.current.delete(path);
   }, []);
 
-  const clearThumbnailQueue = useCallback(() => {
-    generatedRef.current.clear();
+  const pauseThumbnailQueue = useCallback(() => {
     pendingQueueRef.current.clear();
     flushQueueToBackend.cancel();
     invoke('update_thumbnail_queue', { paths: [] }).catch(console.error);
   }, [flushQueueToBackend]);
 
+  const clearThumbnailQueue = useCallback(() => {
+    generatedRef.current.clear();
+    pauseThumbnailQueue();
+  }, [pauseThumbnailQueue]);
+
   useEffect(() => {
     return () => flushQueueToBackend.cancel();
   }, [flushQueueToBackend]);
 
-  return { requestThumbnails, clearThumbnailQueue, markGenerated };
+  return { requestThumbnails, clearThumbnailQueue, pauseThumbnailQueue, markGenerated };
 }

@@ -1150,7 +1150,7 @@
       "dropImagesHint": "Uno o varios archivos RAW, JPEG, PNG y TIFF",
       "goToSettings": "Ir a Ajustes",
       "latestVersion": "Estás en la versión más reciente",
-      "multiImageSelectionHint": "El apilado y la unión requieren de 2 a 30 imágenes de origen.",
+      "multiImageSelectionHint": "El apilado y la unión requieren de 2 a 200 imágenes de origen.",
       "newVersionAvailable": "¡Nueva versión disponible!",
       "openFolder": "Abrir carpeta",
       "openImage": "Abrir imagen",

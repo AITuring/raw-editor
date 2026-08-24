@@ -6,7 +6,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useUIStore';
 import { Invokes } from '../components/ui/AppProperties';
 import i18n from '../i18n';
-import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
+import { IMAGE_STACK_MAX_SOURCES, IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
 import { buildSuggestedExportPath, buildBackendExportSettings } from '../features/export/exportDialog';
 import type { ExportDialogFormat, ExportDialogSettings } from '../features/export/exportDialog';
 
@@ -25,11 +25,12 @@ const getImageStackSuggestedPath = (
   return buildSuggestedExportPath(firstPath, `_${suffix}`, exportFormat);
 };
 
-export function useProductivityActions(refreshImageList: () => Promise<void>) {
+export function useProductivityActions(refreshImageList: () => Promise<void>, pauseThumbnailQueue: () => void) {
   const setUI = useUIStore((state) => state.setUI);
 
   const handleStartPanorama = useCallback(
     (paths: string[]) => {
+      pauseThumbnailQueue();
       setUI((state) => ({
         panoramaModalState: {
           ...state.panoramaModalState,
@@ -45,7 +46,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         }));
       });
     },
-    [setUI],
+    [pauseThumbnailQueue, setUI],
   );
 
   const handleSavePanorama = useCallback(async (): Promise<string> => {
@@ -70,6 +71,15 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
 
   const handleStartImageStack = useCallback(
     (paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode) => {
+      if (paths.length < 2 || paths.length > IMAGE_STACK_MAX_SOURCES) {
+        setUI((state) => ({
+          imageStackModalState: {
+            ...state.imageStackModalState,
+            error: i18n.t('library.splash.multiImageSelectionHint'),
+          },
+        }));
+        return;
+      }
       const requestId = crypto.randomUUID();
       setUI((state) => ({
         imageStackModalState: {
@@ -87,6 +97,9 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
           alignmentMode,
         },
       }));
+      // Once full-resolution processing starts, queued thumbnail decoding should
+      // not compete with a large stack for CPU and disk bandwidth.
+      pauseThumbnailQueue();
       invoke(Invokes.ProcessImageStack, {
         paths,
         blendMode,
@@ -108,7 +121,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>) {
         });
       });
     },
-    [setUI],
+    [pauseThumbnailQueue, setUI],
   );
 
   const handleSaveImageStack = useCallback(

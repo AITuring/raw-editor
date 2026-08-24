@@ -33,6 +33,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
+import { getMessageTaskProgress } from '../../utils/taskProgress';
+import { IMAGE_STACK_MAX_SOURCES } from '../../utils/imageStackPipeline';
 import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackResultSize } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
 import ExportImageDialog from '../../features/export/ExportImageDialog';
@@ -55,6 +57,7 @@ interface ImageStackModalProps {
   onChange(): void;
   onOpenFile(path: string): void;
   onProcess(paths: string[], blendMode: ImageStackBlendMode, alignmentMode: ImageStackAlignmentMode): void;
+  onRequestThumbnails(paths: string[]): void;
   onSave(blendMode: ImageStackBlendMode, settings: ExportDialogSettings): Promise<string | null>;
 }
 
@@ -247,6 +250,7 @@ export default function ImageStackModal({
   onChange,
   onOpenFile,
   onProcess,
+  onRequestThumbnails,
   onSave,
 }: ImageStackModalProps) {
   const { t } = useTranslation();
@@ -260,6 +264,9 @@ export default function ImageStackModal({
   const [show, setShow] = useState(false);
   const [isPreviewFocused, setIsPreviewFocused] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sourcePanelRef = useRef<HTMLElement | null>(null);
+  const sourceListRef = useRef<HTMLOListElement | null>(null);
+  const thumbnailFrameRef = useRef<number | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const layerSensors = useSensors(
     useSensor(PointerSensor, {
@@ -318,6 +325,45 @@ export default function ImageStackModal({
     () => ALIGNMENT_OPTIONS.find((option) => option.value === alignmentMode) || ALIGNMENT_OPTIONS[0],
     [alignmentMode],
   );
+  const stackProgress = useMemo(() => getMessageTaskProgress(progressMessage, 'panorama'), [progressMessage]);
+
+  const requestVisibleThumbnails = useCallback(() => {
+    const panel = sourcePanelRef.current;
+    const list = sourceListRef.current;
+    if (!panel || !list || orderedPaths.length === 0) return;
+
+    const panelRect = panel.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const itemStride = 62;
+    const firstVisible = Math.floor(Math.max(0, panelRect.top - listRect.top) / itemStride);
+    const visibleCount = Math.ceil(panelRect.height / itemStride);
+    const start = Math.max(0, firstVisible - 6);
+    const end = Math.min(orderedPaths.length, firstVisible + visibleCount + 8);
+    onRequestThumbnails(orderedPaths.slice(start, end));
+  }, [onRequestThumbnails, orderedPaths]);
+
+  const scheduleVisibleThumbnailRequest = useCallback(() => {
+    if (thumbnailFrameRef.current !== null) return;
+    thumbnailFrameRef.current = window.requestAnimationFrame(() => {
+      thumbnailFrameRef.current = null;
+      requestVisibleThumbnails();
+    });
+  }, [requestVisibleThumbnails]);
+
+  useEffect(() => {
+    if (!isOpen || isPreviewFocused) return;
+    scheduleVisibleThumbnailRequest();
+    const panel = sourcePanelRef.current;
+    const resizeObserver = panel ? new ResizeObserver(scheduleVisibleThumbnailRequest) : null;
+    if (panel && resizeObserver) resizeObserver.observe(panel);
+    return () => {
+      resizeObserver?.disconnect();
+      if (thumbnailFrameRef.current !== null) {
+        window.cancelAnimationFrame(thumbnailFrameRef.current);
+        thumbnailFrameRef.current = null;
+      }
+    };
+  }, [isOpen, isPreviewFocused, orderedPaths, scheduleVisibleThumbnailRequest]);
 
   const translateAlignment = (key: string) => t(`modals.imageStack.alignmentModes.${key}` as never) as string;
 
@@ -354,7 +400,7 @@ export default function ImageStackModal({
   );
 
   const handleProcess = () => {
-    if (isProcessing || orderedPaths.length < 2) return;
+    if (isProcessing || orderedPaths.length < 2 || orderedPaths.length > IMAGE_STACK_MAX_SOURCES) return;
     setSavedPath(null);
     onProcess(orderedPaths, blendMode, alignmentMode);
   };
@@ -388,7 +434,8 @@ export default function ImageStackModal({
 
   if (!isMounted) return null;
 
-  const canProcess = orderedPaths.length >= 2 && !isProcessing && !isSaving;
+  const canProcess =
+    orderedPaths.length >= 2 && orderedPaths.length <= IMAGE_STACK_MAX_SOURCES && !isProcessing && !isSaving;
   const SelectedAlignmentIcon = selectedAlignment.icon;
 
   return (
@@ -524,8 +571,9 @@ export default function ImageStackModal({
                 >
                   <TaskProgress
                     ariaLabel={t('modals.imageStack.processing')}
-                    indeterminate
+                    indeterminate={stackProgress.value === null}
                     label={progressMessage || t('modals.imageStack.processing')}
+                    value={stackProgress.value}
                   />
                 </motion.div>
               )}
@@ -555,7 +603,11 @@ export default function ImageStackModal({
           </main>
 
           {!isPreviewFocused && (
-            <aside className="min-h-0 overscroll-contain overflow-y-auto border-l border-border-color bg-surface">
+            <aside
+              className="min-h-0 overscroll-contain overflow-y-auto border-l border-border-color bg-surface"
+              onScroll={scheduleVisibleThumbnailRequest}
+              ref={sourcePanelRef}
+            >
               <section className="p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -575,7 +627,7 @@ export default function ImageStackModal({
                   onDragEnd={handleLayerDragEnd}
                   sensors={layerSensors}
                 >
-                  <ol className="space-y-1.5" aria-label={t('modals.imageStack.sourceLayers')}>
+                  <ol className="space-y-1.5" aria-label={t('modals.imageStack.sourceLayers')} ref={sourceListRef}>
                     {orderedPaths.map((path, index) => (
                       <SourceLayerItem
                         count={orderedPaths.length}

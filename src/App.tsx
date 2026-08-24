@@ -206,7 +206,7 @@ function App() {
   const [thumbnailSize, setThumbnailSize] = useState(defaultThumbnailSize);
   const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(ThumbnailAspectRatio.Cover);
 
-  const { requestThumbnails, clearThumbnailQueue, markGenerated } = useThumbnails();
+  const { requestThumbnails, clearThumbnailQueue, pauseThumbnailQueue, markGenerated } = useThumbnails();
 
   const transformWrapperRef = useRef<any>(null);
   const preloadedDataRef = useRef<{
@@ -302,7 +302,6 @@ function App() {
     const paths = await handlePickWorkflowImages(title);
     if (paths.length === 0) return;
 
-    requestThumbnails(paths);
     setUI({
       imageStackModalState: {
         detailImageBase64: null,
@@ -319,7 +318,7 @@ function App() {
         alignmentMode: 'auto',
       },
     });
-  }, [handlePickWorkflowImages, requestThumbnails, setUI]);
+  }, [handlePickWorkflowImages, setUI]);
 
   const {
     externalEditSession,
@@ -394,7 +393,7 @@ function App() {
     handleBatchDenoise,
     handleSaveDenoisedImage,
     handleSaveCollage,
-  } = useProductivityActions(handleLibraryRefresh);
+  } = useProductivityActions(handleLibraryRefresh, pauseThumbnailQueue);
 
   const {
     handleEditorContextMenu,
@@ -943,6 +942,7 @@ function App() {
           </DndContext>
         </div>
         <AppModals
+          requestThumbnails={requestThumbnails}
           handleImageSelect={handleImageSelect}
           handleSavePanorama={handleSavePanorama}
           handleStartPanorama={handleStartPanorama}

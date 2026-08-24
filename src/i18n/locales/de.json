@@ -1126,7 +1126,7 @@
       "dropImagesHint": "Einzelne oder mehrere RAW-, JPEG-, PNG- und TIFF-Dateien",
       "goToSettings": "Zu den Einstellungen",
       "latestVersion": "Sie haben die neueste Version",
-      "multiImageSelectionHint": "Zum Stapeln und Zusammenfügen sind 2–30 Quellbilder erforderlich.",
+      "multiImageSelectionHint": "Zum Stapeln und Zusammenfügen sind 2–200 Quellbilder erforderlich.",
       "newVersionAvailable": "Neue Version verfügbar!",
       "openFolder": "Ordner öffnen",
       "openImage": "Bild öffnen",

@@ -25,7 +25,7 @@ export function getMessageTaskProgress(message: string | null | undefined, kind:
   }
 
   if (kind === 'panorama') {
-    const stitchMatch = normalized.match(/stitching image\s+(\d+)\s+of\s+(\d+)/);
+    const stitchMatch = normalized.match(/(?:stitching image|focus-stacking image)\s+(\d+)\s+of\s+(\d+)/);
     if (stitchMatch) {
       const current = Number(stitchMatch[1]);
       const total = Number(stitchMatch[2]);

@@ -1135,7 +1135,7 @@
       "dropImagesHint": "支持单张或批量 RAW、JPEG、PNG 与 TIFF",
       "goToSettings": "前往设置",
       "latestVersion": "您已是最新版本",
-      "multiImageSelectionHint": "堆栈与拼接需选择 2–30 张源图像。",
+      "multiImageSelectionHint": "堆栈与拼接需选择 2–200 张源图像。",
       "newVersionAvailable": "新版本可用！",
       "openFolder": "打开文件夹",
       "openImage": "打开单张图像",

@@ -57,6 +57,7 @@ import TaggingSubMenu from '../context/TaggingSubMenu';
 import { useEditorActions } from './useEditorActions';
 import { useLibraryActions } from './useLibraryActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { IMAGE_STACK_MAX_SOURCES } from '../utils/imageStackPipeline';
 
 export interface UseAppContextMenusProps {
   handleImageSelect: (path: string) => void;
@@ -582,7 +583,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
               },
             },
             {
-              disabled: selectionCount < 2 || selectionCount > 30,
+              disabled: selectionCount < 2 || selectionCount > IMAGE_STACK_MAX_SOURCES,
               icon: SquaresUnite,
               label: stitchLabel,
               onClick: () => {
@@ -599,7 +600,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
               },
             },
             {
-              disabled: selectionCount < 2 || selectionCount > 30,
+              disabled: selectionCount < 2 || selectionCount > IMAGE_STACK_MAX_SOURCES,
               icon: Layers3,
               label: imageStackLabel,
               onClick: () => {

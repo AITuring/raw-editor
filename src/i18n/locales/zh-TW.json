@@ -1135,7 +1135,7 @@
       "dropImagesHint": "支援單張或批次 RAW、JPEG、PNG 與 TIFF",
       "goToSettings": "前往設定",
       "latestVersion": "您已是最新版本",
-      "multiImageSelectionHint": "堆疊與拼接需選擇 2–30 張來源影像。",
+      "multiImageSelectionHint": "堆疊與拼接需選擇 2–200 張來源影像。",
       "newVersionAvailable": "新版本可用！",
       "openFolder": "開啟資料夾",
       "openImage": "開啟單張影像",

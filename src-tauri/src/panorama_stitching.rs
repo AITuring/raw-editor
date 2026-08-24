@@ -1,16 +1,17 @@
-use crate::app_settings::load_settings_for_runtime;
+use crate::app_settings::{AppSettings, load_settings_for_runtime};
 use crate::app_state::AppState;
-use crate::file_management::parse_virtual_path;
+use crate::file_management::{parse_virtual_path, read_file_mapped};
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
-use image::{DynamicImage, GenericImageView, Rgb32FImage};
+use image::{DynamicImage, GenericImageView, GrayImage, Rgb32FImage};
 use nalgebra::Matrix3;
 use rand::prelude::*;
+use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs;
 use std::io::Cursor;
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 
@@ -28,6 +29,9 @@ const MATCH_REFINE_SEARCH_RADIUS: i32 = 10;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
+const SCALABLE_STACK_THRESHOLD: usize = 30;
+const LARGE_STACK_NEIGHBOR_WINDOW: usize = 4;
+const MAX_STITCH_SOURCE_IMAGES: usize = 200;
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPoint {
@@ -49,15 +53,116 @@ pub struct Match {
 pub struct ImageInfo {
     pub id: usize,
     pub filename: String,
-    pub image: Rgb32FImage,
+    pub width: u32,
+    pub height: u32,
+    pub alignment_image: GrayImage,
+    pub full_image: Option<Rgb32FImage>,
     pub scale_factor: f64,
     pub features: Vec<Feature>,
+}
+
+impl ImageInfo {
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 }
 
 #[derive(Clone)]
 pub struct MatchInfo {
     pub homography: Matrix3<f64>,
     pub inliers: usize,
+}
+
+fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
+    if image_count <= 64 {
+        (2_400, 1_600)
+    } else if image_count <= 128 {
+        (1_800, 1_100)
+    } else {
+        (1_536, 800)
+    }
+}
+
+fn pairs_to_match(image_count: usize) -> Vec<(usize, usize)> {
+    let neighbor_window = if image_count > SCALABLE_STACK_THRESHOLD {
+        LARGE_STACK_NEIGHBOR_WINDOW
+    } else {
+        image_count.saturating_sub(1)
+    };
+    (0..image_count)
+        .flat_map(|first| {
+            let end = image_count.min(first.saturating_add(neighbor_window + 1));
+            (first + 1..end).map(move |second| (first, second))
+        })
+        .collect()
+}
+
+fn emit_match_progress<R: Runtime>(
+    completed: &Mutex<usize>,
+    total: usize,
+    progress_step: usize,
+    app_handle: &AppHandle<R>,
+    progress_event: &str,
+) {
+    // Count and emit under the same short lock so parallel match workers cannot
+    // deliver an older progress value after a newer one.
+    let mut completed = completed
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *completed += 1;
+    let current = *completed;
+    if current != total && !current.is_multiple_of(progress_step) {
+        return;
+    }
+    let overall_percentage = 30.0 + (current as f64 / total.max(1) as f64) * 24.0;
+    let _ = app_handle.emit(
+        progress_event,
+        format!("Matching image overlaps {current} of {total} ({overall_percentage:.0}%)"),
+    );
+}
+
+struct PairMatchProgress<'a, R: Runtime> {
+    completed: &'a Mutex<usize>,
+    total: usize,
+    progress_step: usize,
+    app_handle: &'a AppHandle<R>,
+    progress_event: &'a str,
+}
+
+impl<R: Runtime> Drop for PairMatchProgress<'_, R> {
+    fn drop(&mut self) {
+        emit_match_progress(
+            self.completed,
+            self.total,
+            self.progress_step,
+            self.app_handle,
+            self.progress_event,
+        );
+    }
+}
+
+fn load_prepared_stack_source(
+    filename: &str,
+    settings: &AppSettings,
+) -> Result<DynamicImage, String> {
+    let file_data = read_file_mapped(Path::new(filename))
+        .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
+    let mut image = crate::image_loader::load_base_image_from_bytes(
+        &file_data, filename, false, settings, None,
+    )
+    .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
+    if is_raw_file(filename) {
+        apply_cpu_default_raw_processing(&mut image);
+    }
+    Ok(image)
 }
 
 fn canonical_match_direction(
@@ -248,6 +353,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     if image_paths.len() < 2 {
         return Err("At least two images are required for a panorama.".to_string());
     }
+    if image_paths.len() > MAX_STITCH_SOURCE_IMAGES {
+        return Err(format!(
+            "Image stitching is limited to {MAX_STITCH_SOURCE_IMAGES} source images."
+        ));
+    }
 
     let _ = app_handle.emit(progress_event, "Starting image alignment process...");
     println!(
@@ -259,68 +369,113 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Loading and preparing images...");
-    println!("Loading and preparing images (in parallel)...");
+    let scalable_stack = image_paths.len() > SCALABLE_STACK_THRESHOLD;
+    let (alignment_max_dimension, alignment_max_features) =
+        scalable_alignment_budget(image_paths.len());
+    println!(
+        "Loading and preparing images ({} mode)...",
+        if scalable_stack {
+            "bounded-memory"
+        } else {
+            "full-resolution"
+        }
+    );
     let brief_pairs = processing::generate_brief_pairs();
+    let prepared_count = Mutex::new(0usize);
+    let prepare_images = || {
+        image_paths
+            .par_iter()
+            .enumerate()
+            .map(|(i, filename)| {
+                println!("  - Processing '{}'", filename);
+                let dynamic_image = load_prepared_stack_source(filename, &settings)?;
+                let (width, height) = dynamic_image.dimensions();
+                let (new_width, new_height, scale_factor) = if scalable_stack {
+                    processing::calculate_downscale_dimensions_capped(
+                        width,
+                        height,
+                        alignment_max_dimension,
+                    )
+                } else {
+                    processing::calculate_downscale_dimensions(width, height)
+                };
 
-    let image_data_results: Vec<Result<ImageInfo, String>> = image_paths
-        .par_iter()
-        .enumerate()
-        .map(|(i, filename)| {
-            let _ = app_handle.emit(
-                progress_event,
-                format!(
-                    "Processing '{}'",
-                    Path::new(filename)
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                ),
-            );
-            println!("  - Processing '{}'", filename);
+                let alignment_image = if scalable_stack {
+                    if (new_width, new_height) == (width, height) {
+                        dynamic_image.to_luma8()
+                    } else {
+                        dynamic_image
+                            .resize_exact(
+                                new_width,
+                                new_height,
+                                image::imageops::FilterType::Triangle,
+                            )
+                            .to_luma8()
+                    }
+                } else {
+                    let color_full_u8 = dynamic_image.to_rgb8();
+                    let gray_full = image::imageops::colorops::grayscale(&color_full_u8);
+                    image::imageops::resize(
+                        &gray_full,
+                        new_width,
+                        new_height,
+                        image::imageops::FilterType::Triangle,
+                    )
+                };
 
-            let file_bytes = fs::read(filename)
-                .map_err(|e| format!("Failed to read image {}: {}", filename, e))?;
+                let mut features = processing::find_features(&alignment_image, &brief_pairs);
+                if scalable_stack {
+                    features.truncate(alignment_max_features);
+                }
+                let full_image = (!scalable_stack).then(|| dynamic_image.to_rgb32f());
+                println!("    Found {} features in '{}'", features.len(), filename);
 
-            let mut dynamic_image = crate::image_loader::load_base_image_from_bytes(
-                &file_bytes,
-                filename,
-                false,
-                &settings,
-                None,
-            )
-            .map_err(|e| format!("Failed to load image {}: {}", filename, e))?;
+                let mut prepared_count = prepared_count
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                *prepared_count += 1;
+                let completed = *prepared_count;
+                let overall_percentage = 5.0 + (completed as f64 / image_paths.len() as f64) * 24.0;
+                let _ = app_handle.emit(
+                    progress_event,
+                    format!(
+                        "Analyzing image {completed} of {} ({overall_percentage:.0}%): {}",
+                        image_paths.len(),
+                        Path::new(filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                    ),
+                );
+                drop(prepared_count);
 
-            if is_raw_file(filename) {
-                apply_cpu_default_raw_processing(&mut dynamic_image);
-            }
-
-            let image_f32 = dynamic_image.to_rgb32f();
-
-            let color_full_u8 = dynamic_image.to_rgb8();
-            let gray_full = image::imageops::colorops::grayscale(&color_full_u8);
-
-            let (w, h) = gray_full.dimensions();
-            let (new_w, new_h, scale_factor) = processing::calculate_downscale_dimensions(w, h);
-
-            let gray_small = image::imageops::resize(
-                &gray_full,
-                new_w,
-                new_h,
-                image::imageops::FilterType::Triangle,
-            );
-
-            let features = processing::find_features(&gray_small, &brief_pairs);
-            println!("    Found {} features in '{}'", features.len(), filename);
-
-            Ok(ImageInfo {
-                id: i,
-                filename: filename.to_string(),
-                image: image_f32,
-                scale_factor,
-                features,
+                Ok(ImageInfo {
+                    id: i,
+                    filename: filename.to_string(),
+                    width,
+                    height,
+                    alignment_image,
+                    full_image,
+                    scale_factor,
+                    features,
+                })
             })
-        })
-        .collect();
+            .collect::<Vec<Result<ImageInfo, String>>>()
+    };
+
+    let image_data_results = if scalable_stack {
+        let available_threads = std::thread::available_parallelism()
+            .map(|threads| threads.get())
+            .unwrap_or(1);
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(available_threads.clamp(1, 3))
+            .thread_name(|index| format!("image-stack-analysis-{index}"))
+            .build()
+            .map_err(|error| format!("Failed to start image-stack workers: {error}"))?;
+        pool.install(prepare_images)
+    } else {
+        prepare_images()
+    };
 
     let mut image_data = Vec::new();
     for result in image_data_results {
@@ -334,17 +489,31 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Finding image matches...");
-    println!("Finding all pairwise matches (in parallel)...");
+    println!(
+        "Finding {} matches (in parallel)...",
+        if scalable_stack {
+            "ordered-neighbor"
+        } else {
+            "all pairwise"
+        }
+    );
     let projection = alignment_mode.projection_for(blend_mode);
     let mut pairwise_matches: HashMap<(usize, usize), MatchInfo> = HashMap::new();
 
-    let pairs_to_check: Vec<(usize, usize)> = (0..image_data.len())
-        .flat_map(|i| (i + 1..image_data.len()).map(move |j| (i, j)))
-        .collect();
+    let pairs_to_check = pairs_to_match(image_data.len());
+    let matched_pair_count = Mutex::new(0);
+    let pair_progress_step = (pairs_to_check.len() / 100).max(1);
 
     let match_results: Vec<Option<((usize, usize), MatchInfo)>> = pairs_to_check
         .par_iter()
         .map(|&(i, j)| {
+            let _progress = PairMatchProgress {
+                completed: &matched_pair_count,
+                total: pairs_to_check.len(),
+                progress_step: pair_progress_step,
+                app_handle: &app_handle,
+                progress_event,
+            };
             // Focus-stack matching is not perfectly symmetric: the ratio test and
             // local NCC search are evaluated from source to target. Use a stable
             // path-based direction, then convert back to the (i, j) key orientation.
@@ -399,11 +568,17 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     .iter()
                     .map(|m| (projected_points1[m.index1], projected_points2[m.index2]))
                     .collect();
-            let (h_projected, projected_inlier_indices) =
+            let (h_projected, projected_inlier_indices) = if scalable_stack {
+                processing::find_homography_ransac_points_stable(
+                    &projected_match_points,
+                    FULL_RES_RANSAC_INLIER_THRESHOLD,
+                )
+            } else {
                 processing::find_homography_ransac_points(
                     &projected_match_points,
                     FULL_RES_RANSAC_INLIER_THRESHOLD,
-                )?;
+                )
+            }?;
             let mut inlier_points: Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> =
                 projected_inlier_indices
                     .iter()
@@ -421,7 +596,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         .unwrap_or(projected_match_points[index])
                     })
                     .collect();
-            if let Some(h_refined) = refine_homography_inliers(&mut inlier_points) {
+            let refinement_threshold =
+                if source_image.full_image.is_some() && target_image.full_image.is_some() {
+                    FULL_RES_REFINEMENT_THRESHOLD
+                } else {
+                    FULL_RES_REFINEMENT_THRESHOLD
+                        .max(source_image.scale_factor.max(target_image.scale_factor) * 1.5)
+                };
+            if let Some(h_refined) =
+                refine_homography_inliers(&mut inlier_points, refinement_threshold)
+            {
                 let inlier_count = inlier_points.len();
                 println!(
                     "  - Good match found: '{}' <-> '{}' ({} inliers)",
@@ -455,7 +639,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     select_focus_stack_transform(
                         &h_refined,
                         &inlier_points,
-                        source_image.image.dimensions(),
+                        source_image.dimensions(),
                         alignment_mode,
                     )
                 } else {
@@ -485,10 +669,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     );
 
     if pairwise_matches.is_empty() {
-        return Err(
+        return Err(if scalable_stack {
+            "No overlap was found between nearby images. For large stacks, arrange the source layers in shooting order and make sure consecutive images overlap."
+                .to_string()
+        } else {
             "No suitable matches found between any pair of images. Cannot create a panorama."
-                .to_string(),
-        );
+                .to_string()
+        });
     }
 
     let start_time = Instant::now();
@@ -517,6 +704,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         format!("Stitching order: {}", ordered_filenames.join(" -> ")),
     );
 
+    let mut retained_full_images = HashMap::new();
+    for image in &mut image_data {
+        if let Some(full_image) = image.full_image.take() {
+            retained_full_images.insert(image.id, full_image);
+        }
+    }
     let stitched_images_info: Vec<&ImageInfo> =
         ordered_indices.iter().map(|&i| &image_data[i]).collect();
     let unstitched_count = image_data.len() - stitched_images_info.len();
@@ -527,10 +720,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         println!("{}", warning_msg);
         let _ = app_handle.emit(progress_event, warning_msg);
-        return Err(format!(
-            "Could not align all selected images; {} image(s) were not connected.",
-            unstitched_count
-        ));
+        return Err(if scalable_stack {
+            format!(
+                "Could not align all selected images; {unstitched_count} image(s) were not connected to nearby layers. Reorder the sources into shooting order and retry."
+            )
+        } else {
+            format!(
+                "Could not align all selected images; {unstitched_count} image(s) were not connected."
+            )
+        });
     }
     println!(
         "Global homography calculation completed in {:.2?}\n",
@@ -541,6 +739,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let _ = app_handle.emit(progress_event, "Warping and blending images...");
     println!("Warping and blending full-resolution images with progressive optimal seams...");
 
+    let mut load_full_image = |image: &ImageInfo| {
+        if let Some(full_image) = retained_full_images.remove(&image.id) {
+            Ok(full_image)
+        } else {
+            load_prepared_stack_source(&image.filename, &settings).map(|source| source.to_rgb32f())
+        }
+    };
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
             &stitched_images_info,
@@ -548,6 +753,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             projection,
             app_handle.clone(),
             progress_event,
+            &mut load_full_image,
         ),
         BlendMode::FocusStack => stitching::focus_stack_stitcher(
             &stitched_images_info,
@@ -555,8 +761,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             projection,
             app_handle.clone(),
             progress_event,
+            &mut load_full_image,
         ),
-    };
+    }?;
 
     println!("Stitching completed in {:.2?}\n", start_time.elapsed());
 
@@ -879,23 +1086,21 @@ fn select_focus_stack_transform(
     let mut selected_name = "translation";
 
     let similarity = robust_transform_fit(points, 2, 0xA24B_AED4_963E_E407, estimate_similarity);
-    if let Some(model) = similarity.as_ref() {
-        if transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
-            && focus_fit_is_competitive(model, &selected)
-        {
-            selected = model.clone();
-            selected_name = "similarity";
-        }
+    if let Some(model) = similarity.as_ref()
+        && transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+        && focus_fit_is_competitive(model, &selected)
+    {
+        selected = model.clone();
+        selected_name = "similarity";
     }
 
     let affine = robust_transform_fit(points, 3, 0x9FB2_1C65_1E98_DF25, estimate_affine);
-    if let Some(model) = affine.as_ref() {
-        if transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
-            && focus_fit_is_competitive(model, &selected)
-        {
-            selected = model.clone();
-            selected_name = "affine";
-        }
+    if let Some(model) = affine.as_ref()
+        && transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+        && focus_fit_is_competitive(model, &selected)
+    {
+        selected = model.clone();
+        selected_name = "affine";
     }
 
     let projective_error = median_symmetric_error(projective, points);
@@ -941,38 +1146,145 @@ fn refine_match_point_from_homography(
     homography: &Matrix3<f64>,
     prefer_feature_center: bool,
 ) -> Option<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> {
-    let source_x = (keypoint1.x as f64 * image1.scale_factor).round() as i32;
-    let source_y = (keypoint1.y as f64 * image1.scale_factor).round() as i32;
-    let fallback_target_x = (keypoint2.x as f64 * image2.scale_factor).round() as i32;
-    let fallback_target_y = (keypoint2.y as f64 * image2.scale_factor).round() as i32;
-    let (target_x, target_y) = if projection == Projection::Planar && !prefer_feature_center {
-        let predicted = homography * nalgebra::Point3::new(source_x as f64, source_y as f64, 1.0);
-        if predicted.z.abs() < 1e-8 {
-            (fallback_target_x, fallback_target_y)
+    let source_full_x = (keypoint1.x as f64 * image1.scale_factor).round() as i32;
+    let source_full_y = (keypoint1.y as f64 * image1.scale_factor).round() as i32;
+    let fallback_target_full_x = (keypoint2.x as f64 * image2.scale_factor).round() as i32;
+    let fallback_target_full_y = (keypoint2.y as f64 * image2.scale_factor).round() as i32;
+    let (target_full_x, target_full_y) =
+        if projection == Projection::Planar && !prefer_feature_center {
+            let predicted =
+                homography * nalgebra::Point3::new(source_full_x as f64, source_full_y as f64, 1.0);
+            if predicted.z.abs() < 1e-8 {
+                (fallback_target_full_x, fallback_target_full_y)
+            } else {
+                (
+                    (predicted.x / predicted.z).round() as i32,
+                    (predicted.y / predicted.z).round() as i32,
+                )
+            }
         } else {
-            (
-                (predicted.x / predicted.z).round() as i32,
-                (predicted.y / predicted.z).round() as i32,
-            )
-        }
+            (fallback_target_full_x, fallback_target_full_y)
+        };
+
+    let (
+        source_plane,
+        target_plane,
+        source_x,
+        source_y,
+        target_x,
+        target_y,
+        target_scale,
+        patch_radius,
+        search_radius,
+    ) = if let (Some(source), Some(target)) = (&image1.full_image, &image2.full_image) {
+        (
+            LumaPlane::Rgb(source),
+            LumaPlane::Rgb(target),
+            source_full_x,
+            source_full_y,
+            target_full_x,
+            target_full_y,
+            1.0,
+            MATCH_REFINE_PATCH_RADIUS,
+            MATCH_REFINE_SEARCH_RADIUS,
+        )
     } else {
-        (fallback_target_x, fallback_target_y)
+        (
+            LumaPlane::Gray(&image1.alignment_image),
+            LumaPlane::Gray(&image2.alignment_image),
+            keypoint1.x as i32,
+            keypoint1.y as i32,
+            (target_full_x as f64 / image2.scale_factor).round() as i32,
+            (target_full_y as f64 / image2.scale_factor).round() as i32,
+            image2.scale_factor,
+            4,
+            6,
+        )
     };
+
+    let (best_x, best_y, subpixel_x, subpixel_y) = refine_patch_position(
+        &source_plane,
+        &target_plane,
+        source_x,
+        source_y,
+        target_x,
+        target_y,
+        patch_radius,
+        search_radius,
+    )?;
+    let source = project_point(
+        image1,
+        source_full_x as f64,
+        source_full_y as f64,
+        projection,
+    )?;
+    let target = project_point(
+        image2,
+        (best_x as f64 + subpixel_x) * target_scale,
+        (best_y as f64 + subpixel_y) * target_scale,
+        projection,
+    )?;
+    Some((source, target))
+}
+
+enum LumaPlane<'a> {
+    Rgb(&'a Rgb32FImage),
+    Gray(&'a GrayImage),
+}
+
+impl LumaPlane<'_> {
+    fn dimensions(&self) -> (u32, u32) {
+        match self {
+            Self::Rgb(image) => image.dimensions(),
+            Self::Gray(image) => image.dimensions(),
+        }
+    }
+
+    fn luma_at(&self, x: i32, y: i32) -> Option<f64> {
+        let (width, height) = self.dimensions();
+        if x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+            return None;
+        }
+        match self {
+            Self::Rgb(image) => {
+                let pixel = image.get_pixel(x as u32, y as u32);
+                Some(
+                    (pixel[0] as f64 * 0.299)
+                        + (pixel[1] as f64 * 0.587)
+                        + (pixel[2] as f64 * 0.114),
+                )
+            }
+            Self::Gray(image) => Some(image.get_pixel(x as u32, y as u32)[0] as f64),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn refine_patch_position(
+    image1: &LumaPlane<'_>,
+    image2: &LumaPlane<'_>,
+    source_x: i32,
+    source_y: i32,
+    target_x: i32,
+    target_y: i32,
+    patch_radius: i32,
+    search_radius: i32,
+) -> Option<(i32, i32, f64, f64)> {
     let mut best_score = f64::NEG_INFINITY;
     let mut best_target = None;
 
-    for dy in -MATCH_REFINE_SEARCH_RADIUS..=MATCH_REFINE_SEARCH_RADIUS {
-        for dx in -MATCH_REFINE_SEARCH_RADIUS..=MATCH_REFINE_SEARCH_RADIUS {
+    for dy in -search_radius..=search_radius {
+        for dx in -search_radius..=search_radius {
             let candidate_x = target_x + dx;
             let candidate_y = target_y + dy;
             let score = patch_ncc(
-                &image1.image,
-                &image2.image,
+                image1,
+                image2,
                 source_x,
                 source_y,
                 candidate_x,
                 candidate_y,
-                MATCH_REFINE_PATCH_RADIUS,
+                patch_radius,
             );
             if score > best_score {
                 best_score = score;
@@ -996,61 +1308,23 @@ fn refine_match_point_from_homography(
             (0.5 * (negative - positive) / denominator).clamp(-1.0, 1.0)
         }
     };
+    let sample = |x, y| patch_ncc(image1, image2, source_x, source_y, x, y, patch_radius);
     let subpixel_x = subpixel_offset(
-        patch_ncc(
-            &image1.image,
-            &image2.image,
-            source_x,
-            source_y,
-            best_x - 1,
-            best_y,
-            MATCH_REFINE_PATCH_RADIUS,
-        ),
+        sample(best_x - 1, best_y),
         best_score,
-        patch_ncc(
-            &image1.image,
-            &image2.image,
-            source_x,
-            source_y,
-            best_x + 1,
-            best_y,
-            MATCH_REFINE_PATCH_RADIUS,
-        ),
+        sample(best_x + 1, best_y),
     );
     let subpixel_y = subpixel_offset(
-        patch_ncc(
-            &image1.image,
-            &image2.image,
-            source_x,
-            source_y,
-            best_x,
-            best_y - 1,
-            MATCH_REFINE_PATCH_RADIUS,
-        ),
+        sample(best_x, best_y - 1),
         best_score,
-        patch_ncc(
-            &image1.image,
-            &image2.image,
-            source_x,
-            source_y,
-            best_x,
-            best_y + 1,
-            MATCH_REFINE_PATCH_RADIUS,
-        ),
+        sample(best_x, best_y + 1),
     );
-    let source = project_point(image1, source_x as f64, source_y as f64, projection)?;
-    let target = project_point(
-        image2,
-        best_x as f64 + subpixel_x,
-        best_y as f64 + subpixel_y,
-        projection,
-    )?;
-    Some((source, target))
+    Some((best_x, best_y, subpixel_x, subpixel_y))
 }
 
 fn patch_ncc(
-    image1: &Rgb32FImage,
-    image2: &Rgb32FImage,
+    image1: &LumaPlane<'_>,
+    image2: &LumaPlane<'_>,
     center1_x: i32,
     center1_y: i32,
     center2_x: i32,
@@ -1061,10 +1335,10 @@ fn patch_ncc(
     let mut values2 = Vec::with_capacity(values1.capacity());
     for dy in -radius..=radius {
         for dx in -radius..=radius {
-            let Some(value1) = luma_at(image1, center1_x + dx, center1_y + dy) else {
+            let Some(value1) = image1.luma_at(center1_x + dx, center1_y + dy) else {
                 return f64::NEG_INFINITY;
             };
-            let Some(value2) = luma_at(image2, center2_x + dx, center2_y + dy) else {
+            let Some(value2) = image2.luma_at(center2_x + dx, center2_y + dy) else {
                 return f64::NEG_INFINITY;
             };
             values1.push(value1);
@@ -1091,16 +1365,9 @@ fn patch_ncc(
     }
 }
 
-fn luma_at(image: &Rgb32FImage, x: i32, y: i32) -> Option<f64> {
-    if x < 0 || y < 0 || x >= image.width() as i32 || y >= image.height() as i32 {
-        return None;
-    }
-    let pixel = image.get_pixel(x as u32, y as u32);
-    Some((pixel[0] as f64 * 0.299) + (pixel[1] as f64 * 0.587) + (pixel[2] as f64 * 0.114))
-}
-
 fn refine_homography_inliers(
     points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
+    refinement_threshold: f64,
 ) -> Option<Matrix3<f64>> {
     if points.len() < processing::MIN_INLIERS_FOR_CONNECTION {
         return None;
@@ -1116,7 +1383,7 @@ fn refine_homography_inliers(
             .copied()
             .filter(|(source, target)| {
                 symmetric_point_error(&homography, &inverse, *source, *target)
-                    <= FULL_RES_REFINEMENT_THRESHOLD
+                    <= refinement_threshold
             })
             .collect();
         if refined_points.len() < processing::MIN_INLIERS_FOR_CONNECTION
@@ -1324,7 +1591,10 @@ mod alignment_tests {
         ImageInfo {
             id,
             filename: filename.to_string(),
-            image: Rgb32FImage::new(1, 1),
+            width: 1,
+            height: 1,
+            alignment_image: GrayImage::new(1, 1),
+            full_image: None,
             scale_factor: 1.0,
             features: Vec::new(),
         }
@@ -1353,6 +1623,29 @@ mod alignment_tests {
         assert_eq!(forward[source].filename, "a.jpg");
         assert_eq!(forward[target].filename, "z.jpg");
         assert!(!invert_for_storage);
+    }
+
+    #[test]
+    fn large_stack_matching_scales_with_neighbors_instead_of_all_pairs() {
+        let small_pairs = pairs_to_match(SCALABLE_STACK_THRESHOLD);
+        assert_eq!(
+            small_pairs.len(),
+            SCALABLE_STACK_THRESHOLD * (SCALABLE_STACK_THRESHOLD - 1) / 2
+        );
+
+        let large_pairs = pairs_to_match(200);
+        assert!(large_pairs.len() <= 200 * LARGE_STACK_NEIGHBOR_WINDOW);
+        assert!(large_pairs.len() * 10 < 200 * 199 / 2);
+        for index in 0..199 {
+            assert!(large_pairs.contains(&(index, index + 1)));
+        }
+    }
+
+    #[test]
+    fn large_stack_alignment_budget_tightens_as_source_count_grows() {
+        assert_eq!(scalable_alignment_budget(64), (2_400, 1_600));
+        assert_eq!(scalable_alignment_budget(128), (1_800, 1_100));
+        assert_eq!(scalable_alignment_budget(200), (1_536, 800));
     }
 
     #[test]
@@ -1436,9 +1729,69 @@ mod alignment_tests {
 #[cfg(test)]
 mod acceptance_tests {
     use super::*;
-    use image::ImageFormat;
+    use image::{ImageFormat, Rgb, RgbImage};
     use std::fs;
     use std::path::PathBuf;
+
+    fn synthetic_texture_pixel(x: u32, y: u32) -> Rgb<u8> {
+        let mut hash = x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B);
+        hash ^= hash >> 16;
+        hash = hash.wrapping_mul(0x7FEB_352D);
+        hash ^= hash >> 15;
+        hash = hash.wrapping_mul(0x846C_A68B);
+        hash ^= hash >> 16;
+        let value = hash as u8;
+        Rgb([
+            value,
+            value.rotate_left(3) ^ ((x.wrapping_add(y) * 13) as u8),
+            value.rotate_right(2) ^ ((x.wrapping_mul(3).wrapping_add(y * 5)) as u8),
+        ])
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 200-image scalable stitching smoke test"]
+    fn synthetic_two_hundred_image_scalable_path() {
+        const WIDTH: u32 = 320;
+        const HEIGHT: u32 = 240;
+        const HORIZONTAL_STEP: u32 = 2;
+
+        let fixture_dir = tempfile::tempdir().expect("temporary stack fixture should be writable");
+        let mut paths = Vec::with_capacity(MAX_STITCH_SOURCE_IMAGES);
+        for index in 0..MAX_STITCH_SOURCE_IMAGES {
+            let horizontal_offset = index as u32 * HORIZONTAL_STEP;
+            let image = RgbImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                synthetic_texture_pixel(x + horizontal_offset, y)
+            });
+            let path = fixture_dir.path().join(format!("tile-{index:03}.png"));
+            image
+                .save_with_format(&path, ImageFormat::Png)
+                .expect("synthetic stack tile should be writable");
+            paths.push(path.to_string_lossy().into_owned());
+        }
+
+        crate::sidecar_storage::initialize(&fixture_dir.path().join("sidecars"))
+            .expect("test sidecar storage should initialize once");
+        let app = tauri::test::mock_app();
+        let started = Instant::now();
+        let result = stitch_images_with_options(
+            paths,
+            app.handle().clone(),
+            AlignmentMode::Position,
+            BlendMode::Panorama,
+            "test-image-stack-progress",
+        )
+        .expect("the 200 overlapping tiles should stitch through the scalable path");
+
+        let expected_width = WIDTH + (MAX_STITCH_SOURCE_IMAGES as u32 - 1) * HORIZONTAL_STEP;
+        assert!(result.width().abs_diff(expected_width) <= 2);
+        assert!(result.height().abs_diff(HEIGHT) <= 2);
+        println!(
+            "synthetic 200-image stack: {}x{} in {:.2?}",
+            result.width(),
+            result.height(),
+            started.elapsed()
+        );
+    }
 
     #[test]
     #[ignore = "requires the real three-image fixture and writes a large temporary output"]

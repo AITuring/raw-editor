@@ -36,6 +36,7 @@ import {
 import type { ExportDialogSettings, ExportDialogSource } from '../../features/export/exportDialog';
 
 export interface AppModalsProps {
+  requestThumbnails: (paths: string[]) => void;
   handleImageSelect: (path: string) => void;
   handleSavePanorama: () => Promise<string>;
   handleStartPanorama: (paths: string[]) => void;
@@ -342,6 +343,7 @@ export default function AppModals(props: AppModalsProps) {
           props.handleImageSelect(path);
         }}
         onProcess={props.handleStartImageStack}
+        onRequestThumbnails={props.requestThumbnails}
         onSave={props.handleSaveImageStack}
         progressMessage={imageStackModalState.progressMessage}
         sourceMetadata={imageStackSourceMetadata}

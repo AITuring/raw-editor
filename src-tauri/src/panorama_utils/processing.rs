@@ -238,14 +238,26 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
     if features1.is_empty() || features2.is_empty() {
         return Vec::new();
     }
-    let best_for_first: Vec<(usize, u32, u32)> = features1
+    // Compute each Hamming distance once. The previous bidirectional search
+    // recalculated the full descriptor matrix twice, which dominates large
+    // ordered stacks even after candidate-pair pruning.
+    let distances: Vec<Vec<u16>> = features1
         .par_iter()
         .map(|f1| {
+            features2
+                .iter()
+                .map(|f2| hamming_distance(&f1.descriptor, &f2.descriptor) as u16)
+                .collect()
+        })
+        .collect();
+    let best_for_first: Vec<(usize, u32, u32)> = distances
+        .par_iter()
+        .map(|row| {
             let mut best_dist = u32::MAX;
             let mut second_best_dist = u32::MAX;
             let mut best_idx = 0;
-            for (j, f2) in features2.iter().enumerate() {
-                let dist = hamming_distance(&f1.descriptor, &f2.descriptor);
+            for (j, &distance) in row.iter().enumerate() {
+                let dist = u32::from(distance);
                 if dist < best_dist {
                     second_best_dist = best_dist;
                     best_dist = dist;
@@ -257,16 +269,16 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
             (best_idx, best_dist, second_best_dist)
         })
         .collect();
-    let best_for_second: Vec<usize> = features2
-        .par_iter()
-        .map(|f2| {
+    let best_for_second: Vec<usize> = (0..features2.len())
+        .into_par_iter()
+        .map(|second_index| {
             let mut best_dist = u32::MAX;
             let mut best_idx = 0;
-            for (i, f1) in features1.iter().enumerate() {
-                let dist = hamming_distance(&f2.descriptor, &f1.descriptor);
+            for (first_index, row) in distances.iter().enumerate() {
+                let dist = u32::from(row[second_index]);
                 if dist < best_dist {
                     best_dist = dist;
-                    best_idx = i;
+                    best_idx = first_index;
                 }
             }
             best_idx
@@ -319,6 +331,25 @@ pub fn find_homography_ransac_points(
     points: &[(Point2<f64>, Point2<f64>)],
     inlier_threshold: f64,
 ) -> Option<(Matrix3<f64>, Vec<usize>)> {
+    find_homography_ransac_points_with_solver(points, inlier_threshold, false)
+}
+
+pub fn find_homography_ransac_points_stable(
+    points: &[(Point2<f64>, Point2<f64>)],
+    inlier_threshold: f64,
+) -> Option<(Matrix3<f64>, Vec<usize>)> {
+    // Solve the normalized four-point system directly. This keeps RANSAC's
+    // minimum sample size while avoiding the missing null-space row in
+    // nalgebra's thin 8x9 SVD. The legacy solver remains above so established
+    // <=30-image output bytes do not change.
+    find_homography_ransac_points_with_solver(points, inlier_threshold, true)
+}
+
+fn find_homography_ransac_points_with_solver(
+    points: &[(Point2<f64>, Point2<f64>)],
+    inlier_threshold: f64,
+    stable_four_point_solver: bool,
+) -> Option<(Matrix3<f64>, Vec<usize>)> {
     let mut rng = StdRng::seed_from_u64(
         0x9E37_79B9_7F4A_7C15u64 ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93),
     );
@@ -352,7 +383,12 @@ pub fn find_homography_ransac_points(
             continue;
         }
 
-        if let Some(h) = compute_homography(&sample_points) {
+        let homography = if stable_four_point_solver {
+            compute_homography_four_points(&sample_points)
+        } else {
+            compute_homography(&sample_points)
+        };
+        if let Some(h) = homography {
             let Some(h_inverse) = h.try_inverse() else {
                 continue;
             };
@@ -408,6 +444,60 @@ pub fn find_homography_ransac_points(
 fn are_points_collinear(p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>) -> bool {
     let area = p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y);
     area.abs() < 1e-6
+}
+
+fn compute_homography_four_points(points: &[(Point2<f64>, Point2<f64>)]) -> Option<Matrix3<f64>> {
+    if points.len() != 4 {
+        return None;
+    }
+    let source_points: Vec<_> = points.iter().map(|(source, _)| *source).collect();
+    let target_points: Vec<_> = points.iter().map(|(_, target)| *target).collect();
+    let (normalized_source, source_transform) = normalize_points(&source_points)?;
+    let (normalized_target, target_transform) = normalize_points(&target_points)?;
+    let mut coefficients = nalgebra::SMatrix::<f64, 8, 8>::zeros();
+    let mut values = nalgebra::SVector::<f64, 8>::zeros();
+
+    for (index, (source, target)) in normalized_source
+        .iter()
+        .zip(normalized_target.iter())
+        .enumerate()
+    {
+        let row_x = index * 2;
+        coefficients[(row_x, 0)] = source.x;
+        coefficients[(row_x, 1)] = source.y;
+        coefficients[(row_x, 2)] = 1.0;
+        coefficients[(row_x, 6)] = -source.x * target.x;
+        coefficients[(row_x, 7)] = -source.y * target.x;
+        values[row_x] = target.x;
+
+        let row_y = row_x + 1;
+        coefficients[(row_y, 3)] = source.x;
+        coefficients[(row_y, 4)] = source.y;
+        coefficients[(row_y, 5)] = 1.0;
+        coefficients[(row_y, 6)] = -source.x * target.y;
+        coefficients[(row_y, 7)] = -source.y * target.y;
+        values[row_y] = target.y;
+    }
+
+    let solution = coefficients.lu().solve(&values)?;
+    let normalized_h = Matrix3::new(
+        solution[0],
+        solution[1],
+        solution[2],
+        solution[3],
+        solution[4],
+        solution[5],
+        solution[6],
+        solution[7],
+        1.0,
+    );
+    let homography = target_transform.try_inverse()? * normalized_h * source_transform;
+    let scale = homography[(2, 2)];
+    if scale.abs() < 1e-12 {
+        Some(homography)
+    } else {
+        Some(homography / scale)
+    }
 }
 
 pub fn compute_homography(points: &[(Point2<f64>, Point2<f64>)]) -> Option<Matrix3<f64>> {
@@ -512,6 +602,13 @@ fn convert_gray_u8_to_f32(img: &GrayImage) -> ImageBuffer<Luma<f32>, Vec<f32>> {
 mod tests {
     use super::*;
 
+    fn feature(descriptor: Descriptor) -> Feature {
+        Feature {
+            keypoint: KeyPoint { x: 0, y: 0 },
+            descriptor,
+        }
+    }
+
     fn apply_homography(h: &Matrix3<f64>, point: Point2<f64>) -> Point2<f64> {
         let transformed = h * nalgebra::Point3::new(point.x, point.y, 1.0);
         Point2::new(transformed.x / transformed.z, transformed.y / transformed.z)
@@ -541,5 +638,40 @@ mod tests {
             let fitted_point = apply_homography(&fitted, source_point);
             assert!((fitted_point - target_point).norm() < 1e-5);
         }
+    }
+
+    #[test]
+    fn cached_distance_matrix_preserves_mutual_ratio_matches() {
+        let source = vec![feature([0; 32]), feature([u8::MAX; 32])];
+        let mut near_zero = [0; 32];
+        near_zero[0] = 1;
+        let mut near_max = [u8::MAX; 32];
+        near_max[0] = u8::MAX - 1;
+        let target = vec![feature(near_zero), feature(near_max)];
+
+        let matches = match_features(&source, &target);
+        assert_eq!(matches.len(), 2);
+        assert_eq!((matches[0].index1, matches[0].index2), (0, 0));
+        assert_eq!((matches[1].index1, matches[1].index2), (1, 1));
+    }
+
+    #[test]
+    fn stable_ransac_recovers_exact_translation() {
+        let points: Vec<_> = (0..5)
+            .flat_map(|row| {
+                (0..6).map(move |column| {
+                    let source = Point2::new(40.0 + column as f64 * 31.0, 35.0 + row as f64 * 29.0);
+                    let target = Point2::new(source.x - 2.0, source.y + 3.0);
+                    (source, target)
+                })
+            })
+            .collect();
+
+        let (homography, inliers) = find_homography_ransac_points_stable(&points, 1.0)
+            .expect("the normalized four-point solver should recover an exact translation");
+        assert_eq!(inliers.len(), points.len());
+        let probe = Point2::new(123.0, 87.0);
+        let mapped = apply_homography(&homography, probe);
+        assert!((mapped - Point2::new(121.0, 90.0)).norm() < 1e-6);
     }
 }

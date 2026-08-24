@@ -26,8 +26,8 @@ pub fn project_point(
     y: f64,
     projection: Projection,
 ) -> Option<Point2<f64>> {
-    let width = image.image.width() as f64;
-    let height = image.image.height() as f64;
+    let width = image.width() as f64;
+    let height = image.height() as f64;
     let center_x = width * 0.5;
     let center_y = height * 0.5;
     let focal = width.max(height).max(1.0) * 0.85;
@@ -67,8 +67,8 @@ fn unproject_point(
         };
     }
 
-    let width = image.image.width() as f64;
-    let height = image.image.height() as f64;
+    let width = image.width() as f64;
+    let height = image.height() as f64;
     let center_x = width * 0.5;
     let center_y = height * 0.5;
     let focal = width.max(height).max(1.0) * 0.85;
@@ -122,7 +122,7 @@ fn output_bounds(
 
     for &image in images {
         let h = global_homographies[&image.id];
-        let (width, height) = image.image.dimensions();
+        let (width, height) = image.dimensions();
         let corners = [
             (0.0, 0.0),
             (width as f64, 0.0),
@@ -159,6 +159,55 @@ fn pixel_aligned_canvas(minimum: f64, maximum: f64) -> (f64, u32) {
     (offset, size)
 }
 
+fn transformed_image_region(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+    offset_x: f64,
+    offset_y: f64,
+    out_width: u32,
+    out_height: u32,
+) -> Option<(u32, u32, u32, u32)> {
+    if out_width == 0 || out_height == 0 {
+        return None;
+    }
+    let (width, height) = image.dimensions();
+    let corners = [
+        (0.0, 0.0),
+        (width as f64, 0.0),
+        (width as f64, height as f64),
+        (0.0, height as f64),
+    ];
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for (x, y) in corners {
+        let projected = project_point(image, x, y, projection)?;
+        let mapped = homography * Point3::new(projected.x, projected.y, 1.0);
+        if mapped.z.abs() < 1e-8 {
+            continue;
+        }
+        let mapped_x = mapped.x / mapped.z + offset_x;
+        let mapped_y = mapped.y / mapped.z + offset_y;
+        if !mapped_x.is_finite() || !mapped_y.is_finite() {
+            continue;
+        }
+        min_x = min_x.min(mapped_x);
+        max_x = max_x.max(mapped_x);
+        min_y = min_y.min(mapped_y);
+        max_y = max_y.max(mapped_y);
+    }
+    if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
+        return None;
+    }
+    let left = min_x.floor().max(0.0).min((out_width - 1) as f64) as u32;
+    let right = max_x.ceil().max(0.0).min((out_width - 1) as f64) as u32;
+    let top = min_y.floor().max(0.0).min((out_height - 1) as f64) as u32;
+    let bottom = max_y.ceil().max(0.0).min((out_height - 1) as f64) as u32;
+    (left <= right && top <= bottom).then_some((left, right, top, bottom))
+}
+
 fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
 }
@@ -167,6 +216,7 @@ struct ExposureOverlap<'a> {
     panorama: &'a Rgb32FImage,
     panorama_mask: &'a GrayImage,
     candidate: &'a ImageInfo,
+    candidate_image: &'a Rgb32FImage,
     candidate_inverse: &'a Matrix3<f64>,
     projection: Projection,
     offset_x: f64,
@@ -211,8 +261,28 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
     let mut log_sums = vec![0.0f64; cell_count];
     let mut counts = vec![0u32; cell_count];
     let mut ratios = Vec::new();
-    for y in (0..out_height).step_by(sample_step) {
-        for x in (0..out_width).step_by(sample_step) {
+    let candidate_homography = ctx.candidate_inverse.try_inverse();
+    let candidate_region = candidate_homography.as_ref().and_then(|homography| {
+        transformed_image_region(
+            ctx.candidate,
+            homography,
+            ctx.projection,
+            ctx.offset_x,
+            ctx.offset_y,
+            out_width,
+            out_height,
+        )
+    });
+    let (left, right, top, bottom) = candidate_region.unwrap_or((
+        0,
+        out_width.saturating_sub(1),
+        0,
+        out_height.saturating_sub(1),
+    ));
+    let sample_step_u32 = sample_step as u32;
+    let sample_start = |value: u32| value.div_ceil(sample_step_u32) * sample_step_u32;
+    for y in (sample_start(top)..=bottom).step_by(sample_step) {
+        for x in (sample_start(left)..=right).step_by(sample_step) {
             if ctx.panorama_mask.get_pixel(x, y)[0] == 0 {
                 continue;
             }
@@ -224,14 +294,14 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
             };
             if source.x < 0.0
                 || source.y < 0.0
-                || source.x >= ctx.candidate.image.width() as f64 - 1.0
-                || source.y >= ctx.candidate.image.height() as f64 - 1.0
+                || source.x >= ctx.candidate_image.width() as f64 - 1.0
+                || source.y >= ctx.candidate_image.height() as f64 - 1.0
             {
                 continue;
             }
             let base_luma = luminance(ctx.panorama.get_pixel(x, y));
             let candidate_luma = luminance(&get_interpolated_pixel(
-                &ctx.candidate.image,
+                ctx.candidate_image,
                 source.x,
                 source.y,
             ));
@@ -335,15 +405,19 @@ struct SeamInfo {
     max_y: u32,
 }
 
-pub fn progressive_seam_stitcher<R: Runtime>(
+pub fn progressive_seam_stitcher<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     app_handle: AppHandle<R>,
     progress_event: &str,
-) -> Rgb32FImage {
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
     if images.is_empty() {
-        return Rgb32FImage::new(0, 0);
+        return Ok(Rgb32FImage::new(0, 0));
     }
 
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
@@ -356,17 +430,35 @@ pub fn progressive_seam_stitcher<R: Runtime>(
     let mut panorama_mask = GrayImage::new(out_width, out_height);
 
     let base_img_info = images[0];
+    let base_image = load_image(base_img_info)?;
     let h_base = &global_homographies[&base_img_info.id];
     let h_base_inv = h_base.try_inverse().unwrap();
     println!("  - Placing base image: '{}'", base_img_info.filename);
 
     let num_pixels_per_row = out_width as usize * 3;
+    let (base_left, base_right, base_top, base_bottom) = transformed_image_region(
+        base_img_info,
+        h_base,
+        projection,
+        offset_x,
+        offset_y,
+        out_width,
+        out_height,
+    )
+    .unwrap_or((
+        0,
+        out_width.saturating_sub(1),
+        0,
+        out_height.saturating_sub(1),
+    ));
     panorama
         .par_chunks_mut(num_pixels_per_row)
         .zip(panorama_mask.par_chunks_mut(out_width as usize))
         .enumerate()
+        .skip(base_top as usize)
+        .take((base_bottom - base_top + 1) as usize)
         .for_each(|(y, (row_slice, mask_row))| {
-            for x in 0..out_width {
+            for x in base_left..=base_right {
                 let target_p = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
                 if let Some(source) =
                     map_target_to_source(&h_base_inv, target_p, base_img_info, projection)
@@ -374,19 +466,20 @@ pub fn progressive_seam_stitcher<R: Runtime>(
                     let sx = source.x;
                     let sy = source.y;
                     if sx < 0.0
-                        || sx >= base_img_info.image.width() as f64
+                        || sx >= base_image.width() as f64
                         || sy < 0.0
-                        || sy >= base_img_info.image.height() as f64
+                        || sy >= base_image.height() as f64
                     {
                         continue;
                     }
-                    let color = get_high_quality_interpolated_pixel(&base_img_info.image, sx, sy);
+                    let color = get_high_quality_interpolated_pixel(&base_image, sx, sy);
                     let start = x as usize * 3;
                     row_slice[start..start + 3].copy_from_slice(&color.0);
                     mask_row[x as usize] = 255;
                 }
             }
         });
+    drop(base_image);
 
     for (i, &img_to_add_info) in images.iter().skip(1).enumerate() {
         let progress_msg = format!(
@@ -403,11 +496,28 @@ pub fn progressive_seam_stitcher<R: Runtime>(
 
         let h_add = &global_homographies[&img_to_add_info.id];
         let h_add_inv = h_add.try_inverse().unwrap();
-        let img_to_add = &img_to_add_info.image;
+        let img_to_add = load_image(img_to_add_info)?;
+        let (candidate_left, candidate_right, candidate_top, candidate_bottom) =
+            transformed_image_region(
+                img_to_add_info,
+                h_add,
+                projection,
+                offset_x,
+                offset_y,
+                out_width,
+                out_height,
+            )
+            .unwrap_or((
+                0,
+                out_width.saturating_sub(1),
+                0,
+                out_height.saturating_sub(1),
+            ));
         let exposure = estimate_overlap_exposure_compensation(ExposureOverlap {
             panorama: &panorama,
             panorama_mask: &panorama_mask,
             candidate: img_to_add_info,
+            candidate_image: &img_to_add,
             candidate_inverse: &h_add_inv,
             projection,
             offset_x,
@@ -422,7 +532,7 @@ pub fn progressive_seam_stitcher<R: Runtime>(
             pano: &panorama,
             pano_mask: &panorama_mask,
             img_to_add_info,
-            img_to_add,
+            img_to_add: &img_to_add,
             h_add,
             projection,
             offset_x,
@@ -479,110 +589,55 @@ pub fn progressive_seam_stitcher<R: Runtime>(
             println!("    - New image is on the {} side of the seam.", side);
         }
 
-        match orientation {
-            SeamOrientation::Vertical => {
-                panorama
-                    .par_chunks_mut(num_pixels_per_row)
-                    .zip(panorama_mask.par_chunks_mut(out_width as usize))
-                    .enumerate()
-                    .for_each(|(y, (row_slice, mask_row))| {
-                        for x in 0..out_width {
-                            let target_p =
-                                Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
+        panorama
+            .par_chunks_mut(num_pixels_per_row)
+            .zip(panorama_mask.par_chunks_mut(out_width as usize))
+            .enumerate()
+            .skip(candidate_top as usize)
+            .take((candidate_bottom - candidate_top + 1) as usize)
+            .for_each(|(y, (row_slice, mask_row))| {
+                for x in candidate_left..=candidate_right {
+                    let target_p = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
+                    let Some(source_add) =
+                        map_target_to_source(&h_add_inv, target_p, img_to_add_info, projection)
+                    else {
+                        continue;
+                    };
+                    let sx = source_add.x;
+                    let sy = source_add.y;
+                    let is_on_add = sx >= 0.0
+                        && sx < img_to_add.width() as f64
+                        && sy >= 0.0
+                        && sy < img_to_add.height() as f64;
+                    let is_on_pano = mask_row[x as usize] > 0;
 
-                            let Some(source_add) = map_target_to_source(
-                                &h_add_inv,
-                                target_p,
-                                img_to_add_info,
-                                projection,
-                            ) else {
-                                continue;
-                            };
-                            let sx = source_add.x;
-                            let sy = source_add.y;
-                            let is_on_add = sx >= 0.0
-                                && sx < img_to_add.width() as f64
-                                && sy >= 0.0
-                                && sy < img_to_add.height() as f64;
-
-                            let is_on_pano = mask_row[x as usize] > 0;
-
-                            if !is_on_add && !is_on_pano {
-                                continue;
-                            }
-
-                            if is_on_add && is_on_pano && use_seam {
-                                // Preserve both inputs across the overlap. The multiband
-                                // stage below needs the untouched base to blend broad
-                                // illumination independently from the detail seam.
-                                continue;
-                            } else if is_on_add {
-                                let color_to_add = apply_exposure_gain(
-                                    get_high_quality_interpolated_pixel(img_to_add, sx, sy),
-                                    exposure.gain_at(x, y as u32),
-                                );
-                                let start = x as usize * 3;
-                                row_slice[start..start + 3].copy_from_slice(&color_to_add.0);
-                                mask_row[x as usize] = 255;
-                            }
-                        }
-                    });
-            }
-            SeamOrientation::Horizontal => {
-                panorama
-                    .par_chunks_mut(num_pixels_per_row)
-                    .zip(panorama_mask.par_chunks_mut(out_width as usize))
-                    .enumerate()
-                    .for_each(|(y, (row_slice, mask_row))| {
-                        for x in 0..out_width {
-                            let target_p =
-                                Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
-
-                            let Some(source_add) = map_target_to_source(
-                                &h_add_inv,
-                                target_p,
-                                img_to_add_info,
-                                projection,
-                            ) else {
-                                continue;
-                            };
-                            let sx = source_add.x;
-                            let sy = source_add.y;
-                            let is_on_add = sx >= 0.0
-                                && sx < img_to_add.width() as f64
-                                && sy >= 0.0
-                                && sy < img_to_add.height() as f64;
-
-                            let is_on_pano = mask_row[x as usize] > 0;
-
-                            if !is_on_add && !is_on_pano {
-                                continue;
-                            }
-
-                            if is_on_add && is_on_pano && use_seam {
-                                // Preserve both inputs across the overlap. The multiband
-                                // stage below needs the untouched base to blend broad
-                                // illumination independently from the detail seam.
-                                continue;
-                            } else if is_on_add {
-                                let color_to_add = apply_exposure_gain(
-                                    get_high_quality_interpolated_pixel(img_to_add, sx, sy),
-                                    exposure.gain_at(x, y as u32),
-                                );
-                                let start = x as usize * 3;
-                                row_slice[start..start + 3].copy_from_slice(&color_to_add.0);
-                                mask_row[x as usize] = 255;
-                            }
-                        }
-                    });
-            }
-        }
+                    if !is_on_add && !is_on_pano {
+                        continue;
+                    }
+                    if is_on_add && is_on_pano && use_seam {
+                        // Preserve both inputs across the overlap. The multiband
+                        // stage below needs the untouched base to blend broad
+                        // illumination independently from the detail seam.
+                        continue;
+                    }
+                    if is_on_add {
+                        let color_to_add = apply_exposure_gain(
+                            get_high_quality_interpolated_pixel(&img_to_add, sx, sy),
+                            exposure.gain_at(x, y as u32),
+                        );
+                        let start = x as usize * 3;
+                        row_slice[start..start + 3].copy_from_slice(&color_to_add.0);
+                        mask_row[x as usize] = 255;
+                    }
+                }
+            });
 
         if let (true, Some((min_x, max_x, min_y, max_y))) = (use_seam, seam_bounds) {
             blend_panorama_seam_band(SeamBandBlend {
                 panorama: &mut panorama,
                 panorama_mask: &mut panorama_mask,
                 img_to_add_info,
+                img_to_add: &img_to_add,
                 h_add,
                 projection,
                 offset_x,
@@ -599,23 +654,25 @@ pub fn progressive_seam_stitcher<R: Runtime>(
         }
     }
 
-    let cropped = crop_to_valid_rectangle(&panorama, &panorama_mask);
-    if cropped.dimensions() != panorama.dimensions() {
+    let panorama_dimensions = panorama.dimensions();
+    let cropped = crop_to_valid_rectangle(panorama, &panorama_mask);
+    if cropped.dimensions() != panorama_dimensions {
         println!(
             "  - Cropped invalid projection margins: {}x{} -> {}x{}",
-            panorama.width(),
-            panorama.height(),
+            panorama_dimensions.0,
+            panorama_dimensions.1,
             cropped.width(),
             cropped.height()
         );
     }
-    cropped
+    Ok(cropped)
 }
 
 struct SeamBandBlend<'a> {
     panorama: &'a mut Rgb32FImage,
     panorama_mask: &'a mut GrayImage,
     img_to_add_info: &'a ImageInfo,
+    img_to_add: &'a Rgb32FImage,
     h_add: &'a Matrix3<f64>,
     projection: Projection,
     offset_x: f64,
@@ -635,6 +692,7 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         panorama,
         panorama_mask,
         img_to_add_info,
+        img_to_add,
         h_add,
         projection,
         offset_x,
@@ -695,8 +753,8 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
     let mut candidate_pixels = vec![0.0f32; patch_pixel_count * 3];
     let mut blend_mask = vec![0u8; patch_pixel_count];
     let mut low_frequency_mask = vec![0u8; patch_pixel_count];
-    let image_width = img_to_add_info.image.width() as f64;
-    let image_height = img_to_add_info.image.height() as f64;
+    let image_width = img_to_add.width() as f64;
+    let image_height = img_to_add.height() as f64;
 
     for local_y in 0..patch_height {
         for local_x in 0..patch_width {
@@ -715,11 +773,7 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
             let candidate_pixel = if let Some(source) = candidate_source {
                 if candidate_valid {
                     apply_exposure_gain(
-                        get_high_quality_interpolated_pixel(
-                            &img_to_add_info.image,
-                            source.x,
-                            source.y,
-                        ),
+                        get_high_quality_interpolated_pixel(img_to_add, source.x, source.y),
                         exposure.gain_at(global_x, global_y),
                     )
                 } else {
@@ -838,8 +892,10 @@ fn luminance(pixel: &Rgb<f32>) -> f32 {
     pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_focus_layer(
     image: &ImageInfo,
+    source_image: &Rgb32FImage,
     homography: &Matrix3<f64>,
     projection: Projection,
     offset_x: f64,
@@ -850,25 +906,36 @@ fn render_focus_layer(
     let inverse = homography.try_inverse().unwrap_or_else(Matrix3::identity);
     let mut pixels = vec![0.0f32; out_width as usize * out_height as usize * 3];
     let mut mask = vec![0u8; out_width as usize * out_height as usize];
+    let (left, right, top, bottom) = transformed_image_region(
+        image, homography, projection, offset_x, offset_y, out_width, out_height,
+    )
+    .unwrap_or((
+        0,
+        out_width.saturating_sub(1),
+        0,
+        out_height.saturating_sub(1),
+    ));
 
     pixels
         .par_chunks_mut(out_width as usize * 3)
         .zip(mask.par_chunks_mut(out_width as usize))
         .enumerate()
+        .skip(top as usize)
+        .take((bottom - top + 1) as usize)
         .for_each(|(y, (row, mask_row))| {
-            for x in 0..out_width {
+            for x in left..=right {
                 let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
                 let Some(source) = map_target_to_source(&inverse, target, image, projection) else {
                     continue;
                 };
                 if source.x < 1.0
                     || source.y < 1.0
-                    || source.x >= image.image.width() as f64 - 2.0
-                    || source.y >= image.image.height() as f64 - 2.0
+                    || source.x >= source_image.width() as f64 - 2.0
+                    || source.y >= source_image.height() as f64 - 2.0
                 {
                     continue;
                 }
-                let pixel = get_high_quality_interpolated_pixel(&image.image, source.x, source.y);
+                let pixel = get_high_quality_interpolated_pixel(source_image, source.x, source.y);
                 let start = x as usize * 3;
                 row[start..start + 3].copy_from_slice(&pixel.0);
                 mask_row[x as usize] = 255;
@@ -1235,10 +1302,10 @@ fn subtract_rgb(base: &Rgb32FImage, reference: &Rgb32FImage) -> Rgb32FImage {
     Rgb32FImage::from_raw(width, height, output).expect("detail image dimensions must match")
 }
 
-fn crop_to_valid_rectangle(image: &Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
+fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 || mask.dimensions() != (width, height) {
-        return image.clone();
+        return image;
     }
 
     let mut heights = vec![0usize; width as usize];
@@ -1283,11 +1350,19 @@ fn crop_to_valid_rectangle(image: &Rgb32FImage, mask: &GrayImage) -> Rgb32FImage
     }
 
     if best_area == 0 {
-        return image.clone();
+        return image;
+    }
+
+    if best_left == 0
+        && best_top == 0
+        && best_width == width as usize
+        && best_height == height as usize
+    {
+        return image;
     }
 
     image::imageops::crop_imm(
-        image,
+        &image,
         best_left as u32,
         best_top as u32,
         best_width as u32,
@@ -1386,8 +1461,8 @@ fn mapped_image_center(
 ) -> Option<Point2<f64>> {
     let center = project_point(
         image,
-        image.image.width() as f64 * 0.5,
-        image.image.height() as f64 * 0.5,
+        image.width() as f64 * 0.5,
+        image.height() as f64 * 0.5,
         projection,
     )?;
     let mapped = homography * Point3::new(center.x, center.y, 1.0);
@@ -1411,8 +1486,8 @@ fn focus_stack_is_shifted_mosaic(
     else {
         return false;
     };
-    let reference_width = first.image.width().max(1) as f64;
-    let reference_height = first.image.height().max(1) as f64;
+    let reference_width = first.width().max(1) as f64;
+    let reference_height = first.height().max(1) as f64;
     images.iter().skip(1).any(|image| {
         mapped_image_center(image, &global_homographies[&image.id], projection).is_some_and(
             |center| {
@@ -1423,15 +1498,19 @@ fn focus_stack_is_shifted_mosaic(
     })
 }
 
-pub fn focus_stack_stitcher<R: Runtime>(
+pub fn focus_stack_stitcher<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     app_handle: AppHandle<R>,
     progress_event: &str,
-) -> Rgb32FImage {
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
     if images.is_empty() {
-        return Rgb32FImage::new(0, 0);
+        return Ok(Rgb32FImage::new(0, 0));
     }
     if focus_stack_is_shifted_mosaic(images, global_homographies, projection) {
         println!(
@@ -1447,16 +1526,19 @@ pub fn focus_stack_stitcher<R: Runtime>(
             projection,
             app_handle,
             progress_event,
+            load_image,
         );
     }
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
-        return Rgb32FImage::new(0, 0);
+        return Ok(Rgb32FImage::new(0, 0));
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
+    let first_source = load_image(images[0])?;
     let (mut merged, mut merged_mask) = render_focus_layer(
         images[0],
+        &first_source,
         &global_homographies[&images[0].id],
         projection,
         offset_x,
@@ -1464,6 +1546,7 @@ pub fn focus_stack_stitcher<R: Runtime>(
         out_width,
         out_height,
     );
+    drop(first_source);
     let (analysis_width, analysis_height) = focus_analysis_dimensions(out_width, out_height);
     let mut merged_analysis = resize_rgb(&merged, analysis_width, analysis_height);
     let mut merged_analysis_mask =
@@ -1475,8 +1558,10 @@ pub fn focus_stack_stitcher<R: Runtime>(
             progress_event,
             format!("Focus-stacking image {} of {}", index + 1, images.len()),
         );
+        let source_image = load_image(image)?;
         let (candidate, candidate_mask) = render_focus_layer(
             image,
+            &source_image,
             &global_homographies[&image.id],
             projection,
             offset_x,
@@ -1484,6 +1569,7 @@ pub fn focus_stack_stitcher<R: Runtime>(
             out_width,
             out_height,
         );
+        drop(source_image);
         let candidate_analysis = resize_rgb(&candidate, analysis_width, analysis_height);
         let candidate_analysis_mask =
             resize_binary_mask(&candidate_mask, analysis_width, analysis_height);
@@ -1529,17 +1615,18 @@ pub fn focus_stack_stitcher<R: Runtime>(
             &full_resolution_decision,
         );
     }
-    let cropped = crop_to_valid_rectangle(&merged, &merged_mask);
-    if cropped.dimensions() != merged.dimensions() {
+    let merged_dimensions = merged.dimensions();
+    let cropped = crop_to_valid_rectangle(merged, &merged_mask);
+    if cropped.dimensions() != merged_dimensions {
         println!(
             "  - Cropped invalid focus-stack margins: {}x{} -> {}x{}",
-            merged.width(),
-            merged.height(),
+            merged_dimensions.0,
+            merged_dimensions.1,
             cropped.width(),
             cropped.height()
         );
     }
-    cropped
+    Ok(cropped)
 }
 
 fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
@@ -1552,8 +1639,18 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
     let mut max_oy = 0;
     let mut has_overlap = false;
 
-    for y in 0..ctx.out_height {
-        for x in 0..ctx.out_width {
+    let (candidate_left, candidate_right, candidate_top, candidate_bottom) =
+        transformed_image_region(
+            ctx.img_to_add_info,
+            ctx.h_add,
+            ctx.projection,
+            ctx.offset_x,
+            ctx.offset_y,
+            ctx.out_width,
+            ctx.out_height,
+        )?;
+    for y in candidate_top..=candidate_bottom {
+        for x in candidate_left..=candidate_right {
             if ctx.pano_mask.get_pixel(x, y)[0] > 0 {
                 let target_p = Point3::new(x as f64 - ctx.offset_x, y as f64 - ctx.offset_y, 1.0);
                 let Some(source) =
@@ -1744,9 +1841,14 @@ fn find_pairwise_seam_dp(
             let last_neighbor = (cross_index + 1).min(cross_count - 1);
             let mut best_previous = f64::INFINITY;
             let mut best_index = cross_index;
-            for previous_index in first_neighbor..=last_neighbor {
-                if previous[previous_index] < best_previous {
-                    best_previous = previous[previous_index];
+            for (previous_index, &previous_cost) in previous
+                .iter()
+                .enumerate()
+                .take(last_neighbor + 1)
+                .skip(first_neighbor)
+            {
+                if previous_cost < best_previous {
+                    best_previous = previous_cost;
                     best_index = previous_index;
                 }
             }
@@ -1918,7 +2020,7 @@ fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb
     }
 
     let mut output = [0.0f32; 3];
-    for channel in 0..3 {
+    for (channel, output_channel) in output.iter_mut().enumerate() {
         let mut rows = [0.0f64; 4];
         let mut local_min = f64::INFINITY;
         let mut local_max = f64::NEG_INFINITY;
@@ -1933,7 +2035,7 @@ fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb
             rows[row_index] =
                 cubic_sample(samples[0], samples[1], samples[2], samples[3], amount_x);
         }
-        output[channel] = cubic_sample(rows[0], rows[1], rows[2], rows[3], amount_y)
+        *output_channel = cubic_sample(rows[0], rows[1], rows[2], rows[3], amount_y)
             .clamp(local_min, local_max) as f32;
     }
     Rgb(output)
