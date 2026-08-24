@@ -624,7 +624,7 @@ fn match_image_pair(
                 keypoints2[matched.index2],
                 projection,
                 &projected_homography,
-                blend_mode == BlendMode::FocusStack,
+                false,
             )
             .unwrap_or(projected_match_points[index])
         })
@@ -1491,11 +1491,16 @@ fn focus_fit_is_competitive(candidate: &RobustTransformFit, selected: &RobustTra
     if candidate.inlier_indices.len() < FOCUS_MODEL_MIN_INLIERS {
         return false;
     }
-    let retains_consensus = candidate.inlier_indices.len() + 2 >= selected.inlier_indices.len();
-    let materially_more_precise = candidate.median_error + 0.35 < selected.median_error
-        && candidate.median_error <= selected.median_error * 0.82;
-    candidate.inlier_indices.len() > selected.inlier_indices.len()
-        || (retains_consensus && materially_more_precise)
+    // A focus stack is normally captured from one stable camera pose. Prefer the
+    // lower-error, lower-DOF model instead of allowing a slightly larger inlier
+    // consensus to select an affine warp that bends the paper differently at each
+    // edge. Extra support may win only when it does not materially worsen the fit.
+    let materially_more_precise = candidate.median_error + 0.25 < selected.median_error
+        && candidate.median_error <= selected.median_error * 0.90;
+    let similar_precision_with_more_support = candidate.inlier_indices.len()
+        >= selected.inlier_indices.len() + 4
+        && candidate.median_error <= selected.median_error * 1.04;
+    materially_more_precise || similar_precision_with_more_support
 }
 
 fn select_focus_stack_transform(
@@ -1507,14 +1512,23 @@ fn select_focus_stack_transform(
     let translation = estimate_translation(points);
     let translation_inliers =
         symmetric_inlier_indices(&translation, points, FOCUS_MODEL_INLIER_THRESHOLD);
+    let translation_is_valid = translation_inliers.len() >= FOCUS_MODEL_MIN_INLIERS;
     let translation_points: Vec<_> = translation_inliers
         .iter()
         .map(|&index| points[index])
         .collect();
     let mut selected = RobustTransformFit {
         transform: translation,
-        inlier_indices: translation_inliers,
-        median_error: median_symmetric_error(&translation, &translation_points),
+        inlier_indices: if translation_is_valid {
+            translation_inliers
+        } else {
+            Vec::new()
+        },
+        median_error: if translation_is_valid {
+            median_symmetric_error(&translation, &translation_points)
+        } else {
+            f64::INFINITY
+        },
     };
     let mut selected_name = "translation";
 
@@ -1560,8 +1574,17 @@ fn select_focus_stack_transform(
         .as_ref()
         .map(|fit| format!("{:.3}px/{}", fit.median_error, fit.inlier_indices.len()))
         .unwrap_or_else(|| "n/a".to_string());
+    let translation_summary = if translation_is_valid {
+        format!(
+            "{:.3}px/{}",
+            median_symmetric_error(&translation, &translation_points),
+            translation_points.len()
+        )
+    } else {
+        format!("invalid/{}", translation_points.len())
+    };
     println!(
-        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{})",
+        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (translation {translation_summary}, similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{})",
         selected.median_error,
         selected.inlier_indices.len(),
         projective_error,
@@ -2263,6 +2286,28 @@ mod alignment_tests {
         let expected_probe = transformed_point(&expected, probe).unwrap();
         let actual_probe = transformed_point(&fit.transform, probe).unwrap();
         assert!((actual_probe - expected_probe).norm() < 0.5);
+    }
+
+    #[test]
+    fn focus_alignment_does_not_trade_fit_precision_for_a_few_more_inliers() {
+        let selected = RobustTransformFit {
+            transform: Matrix3::identity(),
+            inlier_indices: (0..22).collect(),
+            median_error: 2.0,
+        };
+        let overfit = RobustTransformFit {
+            transform: Matrix3::identity(),
+            inlier_indices: (0..28).collect(),
+            median_error: 2.45,
+        };
+        let precise = RobustTransformFit {
+            transform: Matrix3::identity(),
+            inlier_indices: (0..18).collect(),
+            median_error: 1.6,
+        };
+
+        assert!(!focus_fit_is_competitive(&overfit, &selected));
+        assert!(focus_fit_is_competitive(&precise, &selected));
     }
 
     #[test]

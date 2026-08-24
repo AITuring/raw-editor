@@ -894,17 +894,17 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         .expect("seam mask dimensions must match");
     let low_frequency_mask = GrayImage::from_raw(patch_width, patch_height, low_frequency_mask)
         .expect("low-frequency seam mask dimensions must match");
-    // The optimal path keeps the transition away from strong subject edges. A narrow
-    // feather at the finest band then removes fabric/sky phase discontinuities without
-    // averaging detail across the photographed subject.
-    let feathered_mask = feather_mask(&mask, 24);
+    // Keep the finest detail on one source side of the path. Averaging two samples
+    // that are still a couple of pixels apart creates the dark/double strokes that
+    // are especially visible on calligraphy and other high-contrast artwork. Only
+    // the low-frequency band receives a smooth transition below.
     let blended = multiband_blend(
         base,
         candidate,
-        feathered_mask,
+        mask,
         Some(low_frequency_mask),
         PANORAMA_BLEND_BANDS,
-        false,
+        true,
     );
 
     let panorama_rgb_stride = out_width as usize * 3;
@@ -1180,12 +1180,11 @@ fn focus_decision_mask(
         let base_valid = base_mask.as_raw()[index] > 0;
         let candidate_valid = candidate_mask.as_raw()[index] > 0;
         let confident = base_focus[index].max(candidate_focus[index]) > confidence_floor;
-        let fine = fine_advantage[index];
-        let advantage = if fine.abs() > FOCUS_DECISIVE_ADVANTAGE {
-            fine
-        } else {
-            coarse_advantage[index]
-        };
+        // Always use the coherent neighborhood decision for ownership. A single
+        // high-contrast stroke can be displaced by a couple of pixels between
+        // captures; using its raw per-pixel score would then alternate sources
+        // across the stroke and recreate a double contour.
+        let advantage = coarse_advantage[index];
         let nearby_base_claim = base_claim[index];
         let nearby_candidate_claim = candidate_claim[index];
         let structural_winner = if nearby_candidate_claim > FOCUS_EDGE_CLAIM_THRESHOLD
@@ -1428,25 +1427,6 @@ fn upsample_and_add_rgb(coarse: &Rgb32FImage, detail: &Rgb32FImage) -> Rgb32FIma
     Rgb32FImage::from_raw(width, height, output).expect("reconstructed image dimensions must match")
 }
 
-fn resize_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
-    image::imageops::resize(
-        mask,
-        width.max(1),
-        height.max(1),
-        image::imageops::FilterType::Triangle,
-    )
-}
-
-fn feather_mask(mask: &GrayImage, radius: u32) -> GrayImage {
-    if radius <= 1 || mask.width() <= 2 || mask.height() <= 2 {
-        return mask.clone();
-    }
-    let reduced_width = mask.width().div_ceil(radius).max(1);
-    let reduced_height = mask.height().div_ceil(radius).max(1);
-    let reduced = resize_mask(mask, reduced_width, reduced_height);
-    resize_mask(&reduced, mask.width(), mask.height())
-}
-
 fn combine_rgb(
     base: &Rgb32FImage,
     candidate: &Rgb32FImage,
@@ -1678,19 +1658,11 @@ where
     }
     if focus_stack_is_shifted_mosaic(images, global_homographies, projection) {
         println!(
-            "  - Large framing shift detected; using coherent optimal seams to preserve detail"
+            "  - Large framing shift detected; keeping local sharpness ownership across overlaps"
         );
         let _ = app_handle.emit(
             progress_event,
-            "Large framing shift detected; optimizing overlap seams...",
-        );
-        return progressive_seam_stitcher(
-            images,
-            global_homographies,
-            projection,
-            app_handle,
-            progress_event,
-            load_image,
+            "Large framing shift detected; selecting the sharpest source in each overlap...",
         );
     }
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
