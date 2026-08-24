@@ -1386,6 +1386,7 @@
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",
       "focusStackResult": "Focus stack",
+      "memorySafeResult": "Speichersicher {{percent}} %",
       "moveDown": "Move layer {{number}} down",
       "moveUp": "Move layer {{number}} up",
       "openInEditor": "Open in Editor",

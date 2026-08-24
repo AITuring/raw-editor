@@ -1395,6 +1395,7 @@
       "focusStack": "景深堆栈",
       "focusStackDescription": "选择最清晰区域，并用多尺度方式平滑融合。",
       "focusStackResult": "景深堆栈",
+      "memorySafeResult": "内存安全缩放 {{percent}}%",
       "moveDown": "下移第 {{number}} 层",
       "moveUp": "上移第 {{number}} 层",
       "openInEditor": "在编辑器中打开",

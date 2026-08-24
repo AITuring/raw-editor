@@ -29,6 +29,12 @@ function ImageStackResultPreview({
   const { t } = useTranslation();
   const hintId = useId();
   const focusLabel = isFocused ? t('modals.imageStack.exitFocusPreview') : t('modals.imageStack.focusPreview');
+  const memorySafeScale =
+    resultSize?.renderScale && resultSize.renderScale < 0.999 ? Math.round(resultSize.renderScale * 100) : null;
+  const fullCanvasLabel =
+    resultSize?.fullCanvasWidth && resultSize.fullCanvasHeight
+      ? `${resultSize.fullCanvasWidth.toLocaleString()} × ${resultSize.fullCanvasHeight.toLocaleString()}`
+      : undefined;
 
   return (
     <ZoomableImagePreview
@@ -63,6 +69,18 @@ function ImageStackResultPreview({
         <span className="rounded-md border border-white/10 bg-black/80 px-2 py-1 text-[11px] text-white/70">
           {alignmentLabel}
         </span>
+        {memorySafeScale !== null && (
+          <span
+            aria-label={`${t('modals.imageStack.memorySafeResult', { percent: memorySafeScale })}${
+              fullCanvasLabel ? ` · ${fullCanvasLabel}` : ''
+            }`}
+            className="pointer-events-auto rounded-md border border-status-warning/35 bg-black/80 px-2 py-1 text-[11px] text-status-warning"
+            data-tooltip={fullCanvasLabel}
+            role="status"
+          >
+            {t('modals.imageStack.memorySafeResult', { percent: memorySafeScale })}
+          </span>
+        )}
       </div>
 
       <p

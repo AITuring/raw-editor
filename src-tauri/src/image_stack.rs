@@ -27,7 +27,7 @@ const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
 #[cfg(test)]
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
 const IMAGE_STACK_MAX_SOURCES: usize = 200;
-const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.24.1";
+const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.08.24.2";
 
 fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
     if count < 2 {
@@ -721,12 +721,15 @@ pub async fn process_image_stack(
         );
 
         match result {
-            Ok(image) => {
+            Ok(outcome) => {
                 if generation_handle.load(Ordering::SeqCst) != generation {
                     return Ok(());
                 }
 
-                let image = canonicalize_image_stack_result(image);
+                let full_canvas_width = outcome.full_canvas_width;
+                let full_canvas_height = outcome.full_canvas_height;
+                let render_scale = outcome.render_scale;
+                let image = canonicalize_image_stack_result(outcome.image);
                 let _ = app_handle.emit("image-stack-progress", "Creating preview…");
                 let previews = write_preview_files(&image, &app_handle)?;
                 if generation_handle.load(Ordering::SeqCst) != generation {
@@ -757,6 +760,9 @@ pub async fn process_image_stack(
                         "detailPreviewHeight": previews.detail_height,
                         "sourceWidth": source_width,
                         "sourceHeight": source_height,
+                        "fullCanvasWidth": full_canvas_width,
+                        "fullCanvasHeight": full_canvas_height,
+                        "renderScale": render_scale,
                         "pipelineVersion": IMAGE_STACK_PIPELINE_VERSION,
                         "requestId": request_id,
                         "resultId": result_id,

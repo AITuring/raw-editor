@@ -47,6 +47,13 @@ assert.equal(frontendMaxSources, backendMaxSources, 'frontend and backend image-
 assert.equal(frontendMaxSources, stitchingMaxSources, 'all stitching entry points must enforce the same source limit');
 assert.match(productivityActionsSource, /pipelineVersion:\s*IMAGE_STACK_PIPELINE_VERSION/);
 assert.match(listenerSource, /pipelineVersion\s*!==\s*IMAGE_STACK_PIPELINE_VERSION/);
+assert.match(rustStackSource, /"fullCanvasWidth": full_canvas_width/);
+assert.match(rustStackSource, /"fullCanvasHeight": full_canvas_height/);
+assert.match(rustStackSource, /"renderScale": render_scale/);
+assert.match(listenerSource, /fullCanvasWidth/);
+assert.match(listenerSource, /fullCanvasHeight/);
+assert.match(listenerSource, /renderScale/);
+assert.match(previewSource, /modals\.imageStack\.memorySafeResult/);
 
 const cleanupMatch = reusablePreviewSource.match(/useEffect\(\s*\(\) => \(\) => \{([\s\S]*?)\}\s*,\s*\[\]\s*,?\s*\);/);
 

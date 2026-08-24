@@ -159,6 +159,23 @@ fn pixel_aligned_canvas(minimum: f64, maximum: f64) -> (f64, u32) {
     (offset, size)
 }
 
+pub(crate) fn output_canvas_dimensions(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+) -> (u32, u32) {
+    if images.is_empty() {
+        return (0, 0);
+    }
+    let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
+    if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
+        return (0, 0);
+    }
+    let (_, width) = pixel_aligned_canvas(min_x, max_x);
+    let (_, height) = pixel_aligned_canvas(min_y, max_y);
+    (width, height)
+}
+
 fn transformed_image_region(
     image: &ImageInfo,
     homography: &Matrix3<f64>,

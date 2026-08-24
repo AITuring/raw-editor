@@ -296,6 +296,9 @@ export function useTauriListeners({
           const pipelineVersion = event.payload?.pipelineVersion;
           const sourceWidth = event.payload?.sourceWidth;
           const sourceHeight = event.payload?.sourceHeight;
+          const fullCanvasWidth = event.payload?.fullCanvasWidth;
+          const fullCanvasHeight = event.payload?.fullCanvasHeight;
+          const renderScale = event.payload?.renderScale;
           const resultSize =
             typeof sourceWidth === 'number' &&
             Number.isFinite(sourceWidth) &&
@@ -303,7 +306,21 @@ export function useTauriListeners({
             typeof sourceHeight === 'number' &&
             Number.isFinite(sourceHeight) &&
             sourceHeight > 0
-              ? { width: sourceWidth, height: sourceHeight }
+              ? {
+                  width: sourceWidth,
+                  height: sourceHeight,
+                  ...(typeof fullCanvasWidth === 'number' &&
+                  Number.isFinite(fullCanvasWidth) &&
+                  fullCanvasWidth > 0 &&
+                  typeof fullCanvasHeight === 'number' &&
+                  Number.isFinite(fullCanvasHeight) &&
+                  fullCanvasHeight > 0 &&
+                  typeof renderScale === 'number' &&
+                  Number.isFinite(renderScale) &&
+                  renderScale > 0
+                    ? { fullCanvasWidth, fullCanvasHeight, renderScale }
+                    : {}),
+                }
               : null;
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0

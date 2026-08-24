@@ -46,6 +46,9 @@ export type ImageStackAlignmentMode = 'auto' | 'perspective' | 'cylindrical' | '
 export interface ImageStackResultSize {
   height: number;
   width: number;
+  fullCanvasHeight?: number;
+  fullCanvasWidth?: number;
+  renderScale?: number;
 }
 
 export interface ImageStackModalState {
