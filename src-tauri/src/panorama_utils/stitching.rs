@@ -7,6 +7,11 @@ use std::path::Path;
 use tauri::{AppHandle, Emitter, Runtime};
 
 const PANORAMA_BLEND_BANDS: usize = 9;
+const PANORAMA_DETAIL_SEAM_FEATHER_RADIUS: f32 = 4.0;
+// Laplacian levels 0..4 contain structure up to roughly 32 px wide. Keep those
+// levels tied to the optimal seam; broader bands may follow the overlap-wide
+// illumination ramp without visibly doubling normal photographic detail.
+const PANORAMA_GLOBAL_TONE_FIRST_BAND: usize = 5;
 const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 1536;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
@@ -227,6 +232,17 @@ fn transformed_image_region(
 
 fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
+}
+
+fn panorama_detail_alpha(candidate_signed_distance: f32) -> f32 {
+    if candidate_signed_distance.is_infinite() {
+        return if candidate_signed_distance.is_sign_positive() {
+            1.0
+        } else {
+            0.0
+        };
+    }
+    (0.5 + candidate_signed_distance / (PANORAMA_DETAIL_SEAM_FEATHER_RADIUS * 2.0)).clamp(0.0, 1.0)
 }
 
 struct ExposureOverlap<'a> {
@@ -824,35 +840,38 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
                         candidate_pixel
                     };
 
-                    let candidate_owns_pixel = if !candidate_valid {
-                        false
+                    let candidate_signed_distance = if !candidate_valid {
+                        f32::NEG_INFINITY
                     } else if !panorama_valid {
-                        true
+                        f32::INFINITY
                     } else {
                         match orientation {
                             SeamOrientation::Horizontal => {
                                 let seam_y = seam_value(global_x as usize).unwrap_or(global_y);
+                                let distance = global_y as f32 - seam_y as f32;
                                 if new_image_is_dominant_side {
-                                    global_y > seam_y
+                                    distance
                                 } else {
-                                    global_y < seam_y
+                                    -distance
                                 }
                             }
                             SeamOrientation::Vertical => {
                                 let seam_x = seam_value(global_y as usize).unwrap_or(global_x);
+                                let distance = global_x as f32 - seam_x as f32;
                                 if new_image_is_dominant_side {
-                                    global_x > seam_x
+                                    distance
                                 } else {
-                                    global_x < seam_x
+                                    -distance
                                 }
                             }
                         }
                     };
+                    let detail_alpha = panorama_detail_alpha(candidate_signed_distance);
 
                     let base_start = local_x as usize * 3;
                     base_row[base_start..base_start + 3].copy_from_slice(&base_pixel.0);
                     candidate_row[base_start..base_start + 3].copy_from_slice(&candidate_pixel.0);
-                    blend_row[local_x as usize] = if candidate_owns_pixel { 255 } else { 0 };
+                    blend_row[local_x as usize] = (detail_alpha * 255.0).round() as u8;
                     let low_frequency_alpha = if !candidate_valid {
                         0.0
                     } else if !panorama_valid {
@@ -894,17 +913,18 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         .expect("seam mask dimensions must match");
     let low_frequency_mask = GrayImage::from_raw(patch_width, patch_height, low_frequency_mask)
         .expect("low-frequency seam mask dimensions must match");
-    // Keep the finest detail on one source side of the path. Averaging two samples
-    // that are still a couple of pixels apart creates the dark/double strokes that
-    // are especially visible on calligraphy and other high-contrast artwork. Only
-    // the low-frequency band receives a smooth transition below.
+    // Keep fine and middle-frequency Laplacian detail on one source side of the
+    // path. Averaging those bands across the complete overlap softens strokes,
+    // seals, foliage, and other structure whenever registration is not literally
+    // pixel-identical. Only broad tonal bands may transition across the complete
+    // overlap; visible detail transitions stay local to the optimal seam.
     let blended = multiband_blend(
         base,
         candidate,
         mask,
         Some(low_frequency_mask),
         PANORAMA_BLEND_BANDS,
-        true,
+        false,
     );
 
     let panorama_rgb_stride = out_width as usize * 3;
@@ -1543,7 +1563,6 @@ fn multiband_blend(
     let mut current_base = base;
     let mut current_candidate = candidate;
     let mut current_mask = mask;
-    let has_distinct_low_frequency_mask = low_frequency_mask.is_some();
     let mut current_low_frequency_mask = low_frequency_mask.unwrap_or_else(|| current_mask.clone());
     let mut base_laplacian = Vec::new();
     let mut candidate_laplacian = Vec::new();
@@ -1578,7 +1597,7 @@ fn multiband_blend(
         false,
     );
     for level in (0..base_laplacian.len()).rev() {
-        let blend_mask = if has_distinct_low_frequency_mask && level >= 2 {
+        let blend_mask = if level >= PANORAMA_GLOBAL_TONE_FIRST_BAND {
             &low_frequency_masks[level]
         } else {
             &masks[level]
@@ -1843,6 +1862,11 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
             min_oy,
             max_oy,
         );
+        if let Some(active) = seam.get(min_oy as usize..=max_oy as usize) {
+            let minimum = active.iter().copied().min().unwrap_or_default();
+            let maximum = active.iter().copied().max().unwrap_or_default();
+            println!("    - Vertical seam range: x={minimum}..{maximum}");
+        }
         Some(SeamInfo {
             orientation: SeamOrientation::Vertical,
             coords: seam,
@@ -1863,6 +1887,11 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
             min_oy,
             max_oy,
         );
+        if let Some(active) = seam.get(min_ox as usize..=max_ox as usize) {
+            let minimum = active.iter().copied().min().unwrap_or_default();
+            let maximum = active.iter().copied().max().unwrap_or_default();
+            println!("    - Horizontal seam range: y={minimum}..{maximum}");
+        }
         Some(SeamInfo {
             orientation: SeamOrientation::Horizontal,
             coords: seam,
@@ -2241,6 +2270,61 @@ mod interpolation_tests {
             .map(|(actual, expected)| (actual - expected).abs())
             .fold(0.0f32, f32::max);
         assert!(maximum_error < 1e-6, "maximum error: {maximum_error}");
+    }
+
+    #[test]
+    fn panorama_detail_feather_is_local_and_symmetric() {
+        let radius = PANORAMA_DETAIL_SEAM_FEATHER_RADIUS;
+
+        assert_eq!(panorama_detail_alpha(f32::NEG_INFINITY), 0.0);
+        assert_eq!(panorama_detail_alpha(-radius), 0.0);
+        assert_eq!(panorama_detail_alpha(0.0), 0.5);
+        assert_eq!(panorama_detail_alpha(radius), 1.0);
+        assert_eq!(panorama_detail_alpha(f32::INFINITY), 1.0);
+    }
+
+    #[test]
+    fn panorama_global_tone_blend_preserves_medium_frequency_detail() {
+        const WIDTH: u32 = 256;
+        const HEIGHT: u32 = 64;
+        let pattern = |x: u32| if (x / 4).is_multiple_of(2) { 0.2 } else { 0.8 };
+        let base = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            let value = pattern(x);
+            Rgb([value, value, value])
+        });
+        let candidate = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            let value = (pattern((x + 4).min(WIDTH - 1)) + 0.08).min(1.0);
+            Rgb([value, value, value])
+        });
+        let seam_mask = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            image::Luma([if x >= WIDTH / 2 { 255 } else { 0 }])
+        });
+        let tone_mask = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            image::Luma([((x as f32 / (WIDTH - 1) as f32) * 255.0).round() as u8])
+        });
+        let blended = multiband_blend(
+            base.clone(),
+            candidate,
+            seam_mask,
+            Some(tone_mask),
+            PANORAMA_BLEND_BANDS,
+            false,
+        );
+        let horizontal_variation = |image: &Rgb32FImage| {
+            (32..96)
+                .map(|x| {
+                    (image.get_pixel(x, HEIGHT / 2)[0] - image.get_pixel(x - 1, HEIGHT / 2)[0])
+                        .abs()
+                })
+                .sum::<f32>()
+        };
+
+        let source_variation = horizontal_variation(&base);
+        let blended_variation = horizontal_variation(&blended);
+        assert!(
+            blended_variation >= source_variation * 0.9,
+            "medium-frequency contrast fell from {source_variation:.3} to {blended_variation:.3}",
+        );
     }
 
     #[test]

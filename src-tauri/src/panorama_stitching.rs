@@ -24,9 +24,9 @@ use crate::panorama_utils::{processing, stitching};
 pub const BRIEF_DESCRIPTOR_SIZE: usize = 256;
 pub type Descriptor = [u8; BRIEF_DESCRIPTOR_SIZE / 8];
 const FULL_RES_RANSAC_INLIER_THRESHOLD: f64 = 12.0;
-const FULL_RES_REFINEMENT_THRESHOLD: f64 = 8.0;
-const MATCH_REFINE_PATCH_RADIUS: i32 = 6;
-const MATCH_REFINE_SEARCH_RADIUS: i32 = 10;
+const FULL_RES_REFINEMENT_THRESHOLD: f64 = 2.5;
+const MATCH_REFINE_PATCH_RADIUS: i32 = 14;
+const MATCH_REFINE_SEARCH_RADIUS: i32 = 14;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
@@ -629,11 +629,16 @@ fn match_image_pair(
             .unwrap_or(projected_match_points[index])
         })
         .collect::<Vec<_>>();
+    let model_refinement_threshold = if blend_mode == BlendMode::FocusStack {
+        FOCUS_MODEL_INLIER_THRESHOLD
+    } else {
+        FULL_RES_REFINEMENT_THRESHOLD
+    };
     let refinement_threshold =
         if source_image.full_image.is_some() && target_image.full_image.is_some() {
-            FULL_RES_REFINEMENT_THRESHOLD
+            model_refinement_threshold
         } else {
-            FULL_RES_REFINEMENT_THRESHOLD
+            model_refinement_threshold
                 .max(source_image.scale_factor.max(target_image.scale_factor) * 1.5)
         };
     let refined_homography = refine_homography_inliers(&mut inlier_points, refinement_threshold)?;
@@ -1787,8 +1792,12 @@ fn patch_ncc(
     center2_y: i32,
     radius: i32,
 ) -> f64 {
-    let mut values1 = Vec::with_capacity(((radius * 2 + 1) * (radius * 2 + 1)) as usize);
-    let mut values2 = Vec::with_capacity(values1.capacity());
+    let mut sum1 = 0.0;
+    let mut sum2 = 0.0;
+    let mut sum_squares1 = 0.0;
+    let mut sum_squares2 = 0.0;
+    let mut sum_products = 0.0;
+    let mut sample_count = 0usize;
     for dy in -radius..=radius {
         for dx in -radius..=radius {
             let Some(value1) = image1.luma_at(center1_x + dx, center1_y + dy) else {
@@ -1797,23 +1806,19 @@ fn patch_ncc(
             let Some(value2) = image2.luma_at(center2_x + dx, center2_y + dy) else {
                 return f64::NEG_INFINITY;
             };
-            values1.push(value1);
-            values2.push(value2);
+            sum1 += value1;
+            sum2 += value2;
+            sum_squares1 += value1 * value1;
+            sum_squares2 += value2 * value2;
+            sum_products += value1 * value2;
+            sample_count += 1;
         }
     }
 
-    let mean1 = values1.iter().sum::<f64>() / values1.len() as f64;
-    let mean2 = values2.iter().sum::<f64>() / values2.len() as f64;
-    let mut covariance = 0.0;
-    let mut variance1 = 0.0;
-    let mut variance2 = 0.0;
-    for (value1, value2) in values1.iter().zip(values2.iter()) {
-        let centered1 = value1 - mean1;
-        let centered2 = value2 - mean2;
-        covariance += centered1 * centered2;
-        variance1 += centered1 * centered1;
-        variance2 += centered2 * centered2;
-    }
+    let sample_count = sample_count as f64;
+    let covariance = sum_products - sum1 * sum2 / sample_count;
+    let variance1 = sum_squares1 - sum1 * sum1 / sample_count;
+    let variance2 = sum_squares2 - sum2 * sum2 / sample_count;
     if variance1 <= f64::EPSILON || variance2 <= f64::EPSILON {
         f64::NEG_INFINITY
     } else {
@@ -1827,6 +1832,23 @@ fn refine_homography_inliers(
 ) -> Option<Matrix3<f64>> {
     if points.len() < processing::MIN_INLIERS_FOR_CONNECTION {
         return None;
+    }
+
+    // Patch correlation can occasionally lock onto a nearby repeated stroke or
+    // texture. Starting the least-squares refinement from every correlation lets
+    // a coherent minority bend a projective model enough that none of those bad
+    // points exceeds the later residual threshold. Re-run a deterministic robust
+    // fit at full resolution before optimizing all remaining correspondences.
+    let (_, robust_inlier_indices) =
+        processing::find_homography_ransac_points_stable(points, refinement_threshold)?;
+    if robust_inlier_indices.len() < processing::MIN_INLIERS_FOR_CONNECTION {
+        return None;
+    }
+    if robust_inlier_indices.len() < points.len() {
+        *points = robust_inlier_indices
+            .into_iter()
+            .map(|index| points[index])
+            .collect();
     }
 
     let mut homography = processing::compute_homography(points)?;
@@ -2223,6 +2245,51 @@ mod alignment_tests {
     }
 
     #[test]
+    fn panorama_refinement_rejects_multi_pixel_correspondence_errors() {
+        let expected = Matrix3::new(1.0, 0.0, 4_273.25, 0.0, 1.0, 71.75, 0.0, 0.0, 1.0);
+        let mut points = Vec::new();
+        for row in 0..4 {
+            for column in 0..6 {
+                let source = Point2::new(
+                    480.0 + column as f64 * 1_350.0,
+                    420.0 + row as f64 * 1_420.0,
+                );
+                let mut target = transformed_point(&expected, source).unwrap();
+                target.x += ((row * 7 + column * 5) as f64).sin() * 0.18;
+                target.y += ((row * 3 + column * 11) as f64).cos() * 0.18;
+                points.push((source, target));
+            }
+        }
+        for index in 0..8 {
+            let source = Point2::new(700.0 + index as f64 * 780.0, 850.0 + index as f64 * 510.0);
+            let mut target = transformed_point(&expected, source).unwrap();
+            target.x += 5.5;
+            target.y -= 4.5;
+            points.push((source, target));
+        }
+
+        let refined = refine_homography_inliers(&mut points, FULL_RES_REFINEMENT_THRESHOLD)
+            .expect("the accurate correspondence grid should remain connected");
+
+        assert_eq!(points.len(), 24);
+        assert!(symmetric_reprojection_rmse(&refined, &points) < 0.35);
+    }
+
+    #[test]
+    fn allocation_free_patch_ncc_preserves_correlation_range() {
+        let source = GrayImage::from_fn(9, 9, |x, y| {
+            image::Luma([((x * 17 + y * 29 + x * y * 3) % 255) as u8])
+        });
+        let inverted =
+            GrayImage::from_fn(9, 9, |x, y| image::Luma([255 - source.get_pixel(x, y)[0]]));
+        let source_plane = LumaPlane::Gray(&source);
+        let inverted_plane = LumaPlane::Gray(&inverted);
+
+        assert!(patch_ncc(&source_plane, &source_plane, 4, 4, 4, 4, 3) > 0.999_999);
+        assert!(patch_ncc(&source_plane, &inverted_plane, 4, 4, 4, 4, 3) < -0.999_999);
+    }
+
+    #[test]
     fn stitching_order_uses_stable_filenames_for_equivalent_graphs() {
         let first_images = vec![
             test_image(0, "c.jpg"),
@@ -2505,6 +2572,9 @@ mod acceptance_tests {
         )
         .expect("the complete ordered panorama fixture should align and render");
         let (rendered_width, rendered_height) = outcome.image.dimensions();
+        let full_canvas_width = outcome.full_canvas_width;
+        let full_canvas_height = outcome.full_canvas_height;
+        let render_scale = outcome.render_scale;
         let rendered_pixels = u64::from(rendered_width) * u64::from(rendered_height);
         assert!(rendered_width > 0 && rendered_height > 0);
         assert!(rendered_pixels <= MAX_IN_MEMORY_PANORAMA_PIXELS + 1_000_000);
@@ -2529,15 +2599,26 @@ mod acceptance_tests {
         preview
             .save_with_format(&preview_path, ImageFormat::Jpeg)
             .expect("ordered panorama preview should be writable");
+        let full_output_path =
+            std::env::var_os("RAW_EDITOR_ORDERED_PANORAMA_OUTPUT").map(PathBuf::from);
+        if let Some(output_path) = full_output_path.as_ref() {
+            let canonical = crate::image_stack::canonicalize_image_stack_result(outcome.image);
+            crate::image_stack::write_srgb_jpeg(&canonical, output_path)
+                .expect("full-resolution ordered panorama JPEG should be writable");
+        }
         println!(
-            "ordered panorama full render ({alignment_name}): {}x{} from full canvas {}x{} at {:.1}% in {:.2?}\npreview: {}",
+            "ordered panorama full render ({alignment_name}): {}x{} from full canvas {}x{} at {:.1}% in {:.2?}\npreview: {}{}",
             rendered_width,
             rendered_height,
-            outcome.full_canvas_width,
-            outcome.full_canvas_height,
-            outcome.render_scale * 100.0,
+            full_canvas_width,
+            full_canvas_height,
+            render_scale * 100.0,
             started.elapsed(),
             preview_path.display(),
+            full_output_path
+                .as_ref()
+                .map(|path| format!("\nfull: {}", path.display()))
+                .unwrap_or_default(),
         );
     }
 
