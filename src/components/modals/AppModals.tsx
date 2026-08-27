@@ -224,6 +224,19 @@ export default function AppModals(props: AppModalsProps) {
     [osPlatform, rootPaths, setExportState, t],
   );
 
+  const handleEstimateEditorExportSize = useCallback(async (settings: ExportDialogSettings): Promise<number | null> => {
+    const currentEditor = useEditorStore.getState();
+    if (!currentEditor.selectedImage) return null;
+
+    return invoke<number>(Invokes.EstimateExportSizes, {
+      currentEditAdjustments: currentEditor.adjustments,
+      currentEditPath: currentEditor.selectedImage.path,
+      exportSettings: buildBackendExportSettings(settings, '{original_filename}_edited'),
+      outputFormat: settings.format,
+      paths: [currentEditor.selectedImage.path],
+    });
+  }, []);
+
   const closeConfirmModal = () => {
     setUI((state) => ({ confirmModalState: { ...state.confirmModalState, isOpen: false } }));
   };
@@ -273,6 +286,7 @@ export default function AppModals(props: AppModalsProps) {
         isOpen={isEditorExportDialogOpen}
         metadata={selectedImage?.exif ?? null}
         onClose={() => setUI({ isEditorExportDialogOpen: false })}
+        onEstimateSize={handleEstimateEditorExportSize}
         onExport={handleEditorExport}
         source={editorExportSource}
       />

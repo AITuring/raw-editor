@@ -18,9 +18,12 @@ const stackProcessingSource = read('src-tauri/src/image_stack.rs');
 assert.match(dialogSource, /import ZoomableImagePreview from/);
 assert.match(dialogSource, /role="dialog"/);
 assert.match(dialogSource, /metadataModeOptions/);
+assert.match(dialogSource, /aria-expanded=\{isMetadataExpanded\}/);
+assert.match(dialogSource, /estimatedFileSizes/);
 assert.match(dialogSource, /embedColorProfile/);
 assert.match(dialogSource, /sourceSize=\{\{ width: settings\.resizeWidth, height: settings\.resizeHeight \}\}/);
 assert.match(appModalsSource, /<ExportImageDialog/);
+assert.match(appModalsSource, /onEstimateSize=\{handleEstimateEditorExportSize\}/);
 assert.match(stackModalSource, /<ExportImageDialog/);
 assert.match(appModalsSource, /buildBackendExportSettings\(settings/);
 assert.match(appModalsSource, /waitForCompletion:\s*true/);
@@ -45,10 +48,12 @@ const bundled = await build({
 const moduleSource = Buffer.from(bundled.outputFiles[0].contents).toString('base64');
 const {
   buildBackendExportSettings,
+  buildExportMetadataEntries,
   buildSuggestedExportPath,
   createInitialExportDialogSettings,
   dimensionsFromPercent,
   ensureExportPathExtension,
+  estimateExportFileSize,
 } = await import(`data:text/javascript;base64,${moduleSource}`);
 
 const initial = createInitialExportDialogSettings({ width: 6480, height: 9664 }, 'jpeg', {
@@ -68,6 +73,13 @@ assert.deepEqual(buildBackendExportSettings(resized, null).resize, {
   dontEnlarge: false,
 });
 assert.deepEqual(dimensionsFromPercent(6480, 9664, 50), { width: 3240, height: 4832 });
+
+const jpegEstimate = estimateExportFileSize('jpeg', 6480, 9664, 95);
+const pngEstimate = estimateExportFileSize('png', 6480, 9664, 95);
+const tiffEstimate = estimateExportFileSize('tiff', 6480, 9664, 95);
+assert.ok(jpegEstimate < pngEstimate);
+assert.ok(pngEstimate < tiffEstimate);
+assert.ok(estimateExportFileSize('jpeg', 6480, 9664, 100) > estimateExportFileSize('jpeg', 6480, 9664, 50));
 
 const copyrightOnly = buildBackendExportSettings(
   {
@@ -94,6 +106,28 @@ const clearedAllMetadata = buildBackendExportSettings(
 );
 assert.equal(clearedAllMetadata.metadataOverrides.artist, '');
 assert.equal(clearedAllMetadata.metadataOverrides.description, null);
+
+const visibleMetadata = buildExportMetadataEntries(
+  {
+    Artist: 'Museum Team',
+    GPSLatitude: '31 deg 14 min',
+    LensModel: 'Archive Lens',
+  },
+  initial,
+);
+assert.deepEqual(
+  visibleMetadata.map(({ key }) => key),
+  ['Artist', 'LensModel'],
+);
+assert.deepEqual(
+  buildExportMetadataEntries(null, { ...initial, contact: 'archive@example.test', metadataMode: 'copyright' }),
+  [
+    { key: 'Artist', value: 'Museum Team' },
+    { key: 'Copyright', value: 'Copyright 2026' },
+    { key: 'Contact', value: 'archive@example.test' },
+  ],
+);
+assert.deepEqual(buildExportMetadataEntries({ Artist: 'Museum Team' }, { ...initial, metadataMode: 'none' }), []);
 
 assert.equal(buildSuggestedExportPath('/photos/source.jpg?vc=3', '_edited', 'tiff'), '/photos/source_edited.tif');
 assert.equal(ensureExportPathExtension('/photos/export.jpeg', 'jpeg'), '/photos/export.jpeg');

@@ -33,6 +33,11 @@ export interface ExportDialogResult extends ExportDialogSettings {
   backendSettings: ExportSettings;
 }
 
+export interface ExportMetadataEntry {
+  key: string;
+  value: string;
+}
+
 export const EXPORT_DIALOG_FORMATS: ReadonlyArray<{
   extensions: string[];
   id: ExportDialogFormat;
@@ -66,6 +71,97 @@ export const heightFromWidth = (sourceWidth: number, sourceHeight: number, width
 
 export const widthFromHeight = (sourceWidth: number, sourceHeight: number, height: number): number =>
   clampExportDimension((clampExportDimension(height) * sourceWidth) / Math.max(1, sourceHeight));
+
+/**
+ * Gives the export dialog a fast, deliberately approximate size indication.
+ * JPEG and PNG depend heavily on image detail, so the coefficients represent
+ * photographic content rather than promising a byte-accurate result. TIFF is
+ * emitted as uncompressed 16-bit RGB and can therefore be estimated closely.
+ */
+export const estimateExportFileSize = (
+  format: ExportDialogFormat,
+  width: number,
+  height: number,
+  jpegQuality: number,
+): number => {
+  const pixelCount = clampExportDimension(width) * clampExportDimension(height);
+  const containerOverhead = 64 * 1_024;
+
+  if (format === 'tiff') return Math.round(pixelCount * 6 + containerOverhead);
+  if (format === 'png') return Math.round(pixelCount * 2.8 + containerOverhead);
+
+  const normalizedQuality = Math.max(0.01, Math.min(1, jpegQuality / 100));
+  const highQualityPenalty = 0.55 * Math.pow(Math.max(0, (normalizedQuality - 0.9) / 0.1), 2);
+  const bytesPerPixel = 0.08 + 0.55 * normalizedQuality + 0.4 * Math.pow(normalizedQuality, 3) + highQualityPenalty;
+  return Math.round(pixelCount * bytesPerPixel + containerOverhead);
+};
+
+const metadataValueToString = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (value === null || value === undefined) return '';
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const METADATA_FIELD_ALIASES = {
+  artist: ['Artist', 'Creator', 'Author'],
+  contact: ['Contact', 'OwnerName'],
+  copyright: ['Copyright'],
+  description: ['ImageDescription', 'Description', 'Caption'],
+} as const;
+
+const removeMetadataAliases = (entries: Map<string, string>, aliases: readonly string[]) => {
+  const normalizedAliases = new Set(aliases.map((alias) => alias.toLowerCase()));
+  for (const key of entries.keys()) {
+    if (normalizedAliases.has(key.toLowerCase())) entries.delete(key);
+  }
+};
+
+/** Returns the metadata represented by the current export choices, not merely the source EXIF. */
+export const buildExportMetadataEntries = (
+  metadata: Record<string, unknown> | null | undefined,
+  settings: ExportDialogSettings,
+): ExportMetadataEntry[] => {
+  if (settings.metadataMode === 'none') return [];
+
+  if (settings.metadataMode === 'copyright') {
+    return [
+      { key: 'Artist', value: settings.artist.trim() },
+      { key: 'Copyright', value: settings.copyright.trim() },
+      { key: 'Contact', value: settings.contact.trim() },
+    ].filter((entry) => entry.value.length > 0);
+  }
+
+  const entries = new Map<string, string>();
+  for (const [key, rawValue] of Object.entries(metadata ?? {})) {
+    if (settings.stripGps && key.toLowerCase().startsWith('gps')) continue;
+    const value = metadataValueToString(rawValue);
+    if (value) entries.set(key, value);
+  }
+
+  const editedFields = [
+    ['artist', 'Artist'],
+    ['copyright', 'Copyright'],
+    ['contact', 'Contact'],
+    ['description', 'ImageDescription'],
+  ] as const;
+  for (const [field, canonicalKey] of editedFields) {
+    if (!settings.metadataEditedFields[field]) continue;
+    removeMetadataAliases(entries, METADATA_FIELD_ALIASES[field]);
+    const value = settings[field].trim();
+    if (value) entries.set(canonicalKey, value);
+  }
+
+  return Array.from(entries, ([key, value]) => ({ key, value })).sort((a, b) =>
+    a.key.localeCompare(b.key, undefined, { numeric: true, sensitivity: 'base' }),
+  );
+};
 
 const normalizeOptionalText = (value: string): string | null => {
   const normalized = value.trim();

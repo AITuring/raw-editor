@@ -6,10 +6,12 @@ import Switch from '../../components/ui/Switch';
 import ZoomableImagePreview from '../../components/preview/ZoomableImagePreview';
 import {
   EXPORT_DIALOG_FORMATS,
+  buildExportMetadataEntries,
   clampExportDimension,
   clampExportPercent,
   createInitialExportDialogSettings,
   dimensionsFromPercent,
+  estimateExportFileSize,
   heightFromWidth,
   widthFromHeight,
 } from './exportDialog';
@@ -20,6 +22,7 @@ interface ExportImageDialogProps {
   isOpen: boolean;
   metadata?: Record<string, unknown> | null;
   onClose(): void;
+  onEstimateSize?(settings: ExportDialogSettings): Promise<number | null>;
   onExport(settings: ExportDialogSettings): Promise<string | null>;
   onExported?(path: string): void;
   source: ExportDialogSource | null;
@@ -29,6 +32,14 @@ const fieldClassName =
   'h-9 w-full rounded-md border border-border-color bg-bg-primary/55 px-2.5 text-xs text-text-primary outline-none transition-colors placeholder:text-text-secondary/55 focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-50';
 
 const sectionClassName = 'rounded-lg border border-border-color bg-bg-primary/26 p-3';
+
+const formatMetadataKey = (key: string): string =>
+  key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([A-Za-z])/g, '$1 $2');
 
 function NumberField({
   label,
@@ -110,15 +121,21 @@ export default function ExportImageDialog({
   isOpen,
   metadata,
   onClose,
+  onEstimateSize,
   onExport,
   onExported,
   source,
 }: ExportImageDialogProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [settings, setSettings] = useState<ExportDialogSettings | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
+  const [refinedSizeEstimate, setRefinedSizeEstimate] = useState<{
+    bytes: number;
+    signature: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -126,7 +143,48 @@ export default function ExportImageDialog({
     setSettings(createInitialExportDialogSettings(source, initialFormat, metadata));
     setError(null);
     setIsExporting(false);
+    setIsMetadataExpanded(false);
+    setRefinedSizeEstimate(null);
   }, [initialFormat, isOpen, metadata, source]);
+
+  const estimateSignature = settings
+    ? [
+        source?.fileName,
+        settings.format,
+        settings.resizeWidth,
+        settings.resizeHeight,
+        settings.jpegQuality,
+        settings.embedColorProfile,
+        settings.metadataMode,
+        settings.stripGps,
+        settings.artist,
+        settings.contact,
+        settings.copyright,
+        settings.description,
+        ...Object.values(settings.metadataEditedFields),
+      ].join('|')
+    : '';
+
+  useEffect(() => {
+    if (!isOpen || !settings || !onEstimateSize) return;
+    let isCancelled = false;
+    setRefinedSizeEstimate(null);
+    const timer = window.setTimeout(() => {
+      void onEstimateSize(settings)
+        .then((bytes) => {
+          if (!isCancelled && bytes !== null && Number.isFinite(bytes) && bytes > 0) {
+            setRefinedSizeEstimate({ bytes, signature: estimateSignature });
+          }
+        })
+        .catch(() => {
+          // The immediate pixel-based estimate remains available if native estimation fails.
+        });
+    }, 350);
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [estimateSignature, isOpen, metadata, onEstimateSize, source]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -253,6 +311,31 @@ export default function ExportImageDialog({
   }
   const outputPixels = settings.resizeWidth * settings.resizeHeight;
   const pixelRatio = sourcePixels > 0 ? outputPixels / sourcePixels : 1;
+  const metadataEntries = buildExportMetadataEntries(metadata, settings);
+  const estimatedFileSizes = Object.fromEntries(
+    EXPORT_DIALOG_FORMATS.map((format) => [
+      format.id,
+      estimateExportFileSize(format.id, settings.resizeWidth, settings.resizeHeight, settings.jpegQuality),
+    ]),
+  ) as Record<ExportDialogFormat, number>;
+  if (refinedSizeEstimate?.signature === estimateSignature) {
+    estimatedFileSizes[settings.format] = refinedSizeEstimate.bytes;
+  }
+  const formatEstimatedBytes = (bytes: number): string => {
+    const unitKeys = [
+      'export.bytes.bytes',
+      'export.bytes.kb',
+      'export.bytes.mb',
+      'export.bytes.gb',
+      'export.bytes.tb',
+    ] as const;
+    const unitIndex = bytes > 0 ? Math.min(unitKeys.length - 1, Math.floor(Math.log(bytes) / Math.log(1_024))) : 0;
+    const value = bytes / Math.pow(1_024, unitIndex);
+    const maximumFractionDigits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return `${new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits }).format(value)} ${t(
+      unitKeys[unitIndex],
+    )}`;
+  };
 
   return (
     <div
@@ -317,7 +400,10 @@ export default function ExportImageDialog({
                   {EXPORT_DIALOG_FORMATS.map((format) => (
                     <button
                       aria-checked={settings.format === format.id}
-                      className={`h-9 rounded-md border text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                      aria-label={`${format.label}, ${t('export.status.estimatedSize', {
+                        size: formatEstimatedBytes(estimatedFileSizes[format.id]),
+                      })}`}
+                      className={`flex min-h-12 flex-col items-center justify-center rounded-md border px-1 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
                         settings.format === format.id
                           ? 'border-accent bg-accent/13 text-text-primary'
                           : 'border-border-color bg-bg-primary/45 text-text-secondary hover:bg-card-active hover:text-text-primary'
@@ -327,7 +413,14 @@ export default function ExportImageDialog({
                       role="radio"
                       type="button"
                     >
-                      {format.label}
+                      <span>{format.label}</span>
+                      <span
+                        className={`mt-0.5 text-[10px] font-normal tabular-nums ${
+                          settings.format === format.id ? 'text-accent' : 'text-text-secondary/80'
+                        }`}
+                      >
+                        ≈ {formatEstimatedBytes(estimatedFileSizes[format.id])}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -417,6 +510,52 @@ export default function ExportImageDialog({
                     onChange={(stripGps) => updateSettings({ stripGps })}
                   />
                 )}
+                <div className="mt-3 border-t border-border-color/75 pt-1.5">
+                  <button
+                    aria-controls="export-dialog-metadata-details"
+                    aria-expanded={isMetadataExpanded}
+                    className="flex min-h-8 w-full items-center justify-between gap-3 rounded-md px-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                    onClick={() => setIsMetadataExpanded((expanded) => !expanded)}
+                    type="button"
+                  >
+                    <span className="font-medium">{t('editor.metadata.extendedExif.title')}</span>
+                    <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                      <span>{metadataEntries.length}</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={`transition-transform duration-150 motion-reduce:transition-none ${
+                          isMetadataExpanded ? 'rotate-180' : ''
+                        }`}
+                        size={14}
+                      />
+                    </span>
+                  </button>
+                  {isMetadataExpanded && (
+                    <div className="pt-1.5" id="export-dialog-metadata-details">
+                      {metadataEntries.length > 0 ? (
+                        <dl className="max-h-52 overflow-y-auto rounded-md bg-bg-primary/32 px-2 custom-scrollbar">
+                          {metadataEntries.map((entry) => (
+                            <div
+                              className="grid grid-cols-[minmax(5.75rem,0.8fr)_minmax(0,1.2fr)] gap-3 border-b border-border-color/55 py-2 last:border-b-0"
+                              key={entry.key}
+                            >
+                              <dt className="break-words text-[10px] font-medium leading-4 text-text-secondary">
+                                {formatMetadataKey(entry.key)}
+                              </dt>
+                              <dd className="min-w-0 whitespace-pre-wrap break-words text-[10px] leading-4 text-text-primary [overflow-wrap:anywhere]">
+                                {entry.value}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <p className="rounded-md bg-bg-primary/32 px-2.5 py-2 text-[10px] text-text-secondary">
+                          {t('export.exportDialog.metadataNone')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </section>
 
               {settings.metadataMode !== 'none' && (
