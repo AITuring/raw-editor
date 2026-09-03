@@ -3983,6 +3983,842 @@ button {
   min-width: 0;
 }
 
+/* Style Lab -------------------------------------------------------------- */
+
+.style-transfer-app-workspace {
+  gap: 0;
+  background: var(--app-bg-secondary);
+}
+
+.style-transfer-page {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--app-bg-secondary);
+  opacity: 0;
+  transition: opacity var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-page.is-visible {
+  opacity: 1;
+}
+
+.style-transfer-page-surface {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-bg-secondary);
+  opacity: 0;
+  transform: translateY(5px);
+  transition:
+    opacity var(--ui-duration-fast) ease-out,
+    transform var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-page-surface.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.style-transfer-backdrop {
+  padding: clamp(var(--ui-space-3), 4vw, var(--ui-space-6));
+}
+
+.style-transfer-modal {
+  display: flex;
+  width: min(1060px, 100%);
+  max-height: min(900px, calc(100dvh - (var(--ui-floating-viewport-inset) * 2)));
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-bg-secondary);
+}
+
+.style-transfer-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ui-space-5);
+  border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+  padding: var(--ui-space-5) var(--ui-space-6) var(--ui-space-4);
+}
+
+.style-transfer-header-leading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--ui-space-5);
+}
+
+.style-transfer-back {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.style-transfer-heading {
+  min-width: 0;
+}
+
+.style-transfer-eyebrow,
+.style-transfer-panel-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-1-5);
+  color: var(--app-accent);
+  font-size: var(--ui-font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+}
+
+.style-transfer-heading h2 {
+  margin: var(--ui-space-1-5) 0 0;
+  color: var(--app-text-primary);
+  font-size: clamp(20px, 2.5vw, 27px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.style-transfer-heading p {
+  max-width: 62ch;
+  margin: var(--ui-space-2) 0 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-body);
+  line-height: 1.55;
+}
+
+.style-transfer-close {
+  display: grid;
+  width: var(--ui-size-control-large);
+  height: var(--ui-size-control-large);
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--ui-radius-control);
+  color: var(--app-text-secondary);
+  transition: background-color var(--ui-duration-fast) ease-out, color var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-close:hover {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+}
+
+.style-transfer-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.style-transfer-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--ui-space-5) var(--ui-space-6);
+}
+
+.style-transfer-source-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--ui-space-3);
+}
+
+.style-transfer-source-card {
+  min-width: 0;
+}
+
+.style-transfer-source-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--ui-space-2-5);
+  margin-bottom: var(--ui-space-2-5);
+}
+
+.style-transfer-source-index {
+  display: inline-flex;
+  min-width: 25px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-bottom: var(--ui-border-width) solid var(--app-accent);
+  color: var(--app-accent);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.style-transfer-source-heading h3 {
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-title);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.style-transfer-source-heading p {
+  max-width: 42ch;
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-transfer-dropzone {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  aspect-ratio: 1.66;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: var(--ui-border-width) dashed color-mix(in srgb, var(--app-text-secondary) 48%, var(--app-border-color));
+  border-radius: var(--ui-radius-surface);
+  background: var(--app-bg-primary);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--ui-duration-fast) ease-out,
+    background-color var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-dropzone:hover,
+.style-transfer-dropzone:focus-visible {
+  border-color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 5%, var(--app-bg-primary));
+  outline: none;
+}
+
+.style-transfer-dropzone.has-image {
+  border-style: solid;
+  border-color: var(--app-border-color);
+}
+
+.style-transfer-dropzone.has-image:hover {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, var(--app-border-color));
+}
+
+.style-transfer-dropzone.is-busy {
+  cursor: progress;
+}
+
+.style-transfer-empty-dropzone {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: var(--ui-space-1-5);
+  padding: var(--ui-space-4);
+  text-align: center;
+}
+
+.style-transfer-empty-dropzone strong {
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-body);
+  font-weight: 600;
+}
+
+.style-transfer-empty-dropzone > span:last-child {
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+}
+
+.style-transfer-upload-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: var(--ui-border-width) solid color-mix(in srgb, var(--app-accent) 42%, var(--app-border-color));
+  border-radius: 50%;
+  color: var(--app-accent);
+}
+
+.style-transfer-dropzone > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.style-transfer-image-scrim {
+  position: absolute;
+  inset: 35% 0 0;
+  background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 72%));
+  pointer-events: none;
+}
+
+.style-transfer-image-meta {
+  position: absolute;
+  right: var(--ui-space-3);
+  bottom: var(--ui-space-2-5);
+  left: var(--ui-space-3);
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  color: rgb(255 255 255 / 86%);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 55%);
+}
+
+.style-transfer-image-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-transfer-remove {
+  position: absolute;
+  top: var(--ui-space-2);
+  right: var(--ui-space-2);
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: var(--ui-border-width) solid rgb(255 255 255 / 22%);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 42%);
+  color: rgb(255 255 255 / 92%);
+  transition: background-color var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-remove:hover {
+  background: rgb(0 0 0 / 70%);
+}
+
+.style-transfer-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-1);
+  color: var(--app-accent);
+}
+
+.style-transfer-flow span {
+  height: var(--ui-border-width);
+  flex: 1;
+  background: color-mix(in srgb, var(--app-accent) 50%, var(--app-border-color));
+}
+
+.style-transfer-workbench {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 274px);
+  align-items: stretch;
+  gap: var(--ui-space-4);
+  margin-top: var(--ui-space-5);
+}
+
+.style-transfer-preview-panel,
+.style-transfer-controls {
+  min-width: 0;
+  border: var(--ui-border-width) solid var(--app-border-color);
+  border-radius: var(--ui-radius-surface);
+  background: var(--app-surface);
+}
+
+.style-transfer-preview-panel {
+  display: flex;
+  min-height: 320px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.style-transfer-panel-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  border-bottom: var(--ui-border-width) solid var(--app-border-color);
+  padding: var(--ui-space-3) var(--ui-space-4);
+}
+
+.style-transfer-panel-heading h3 {
+  margin: 3px 0 0;
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-title);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.style-transfer-preview-size {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.style-transfer-preview-stage {
+  position: relative;
+  display: flex;
+  min-height: 220px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--app-bg-primary) 88%, var(--app-text-secondary));
+  background-image: linear-gradient(45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.style-transfer-preview-stage.has-target {
+  min-height: 280px;
+}
+
+.style-transfer-preview-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.style-transfer-preview-stage > canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.style-transfer-original-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.style-transfer-original-layer canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.style-transfer-compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 28%);
+  pointer-events: none;
+}
+
+.style-transfer-compare-line span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgb(255 255 255 / 92%);
+  border-radius: 50%;
+  background: var(--app-bg-primary);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  transform: translate(-50%, -50%);
+}
+
+.style-transfer-compare-line span::before,
+.style-transfer-compare-line span::after {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 1px;
+  background: var(--app-text-primary);
+  content: '';
+}
+
+.style-transfer-compare-line span::before {
+  left: 4px;
+}
+
+.style-transfer-compare-line span::after {
+  right: 4px;
+}
+
+.style-transfer-preview-label {
+  position: absolute;
+  top: var(--ui-space-3);
+  border: var(--ui-border-width) solid rgb(255 255 255 / 25%);
+  border-radius: var(--ui-radius-control);
+  background: rgb(0 0 0 / 38%);
+  padding: 3px 6px;
+  color: rgb(255 255 255 / 88%);
+  font-size: var(--ui-font-size-caption);
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.style-transfer-preview-label--left {
+  left: var(--ui-space-3);
+}
+
+.style-transfer-preview-label--right {
+  right: var(--ui-space-3);
+}
+
+.style-transfer-processing-indicator {
+  position: absolute;
+  right: var(--ui-space-3);
+  bottom: var(--ui-space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ui-space-1-5);
+  border: var(--ui-border-width) solid rgb(255 255 255 / 24%);
+  border-radius: var(--ui-radius-control);
+  background: rgb(0 0 0 / 50%);
+  padding: 4px 7px;
+  color: rgb(255 255 255 / 90%);
+  font-size: var(--ui-font-size-caption);
+}
+
+.style-transfer-preview-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  max-width: 260px;
+  padding: var(--ui-space-5);
+  color: var(--app-text-secondary);
+  text-align: center;
+}
+
+.style-transfer-preview-empty strong {
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-body);
+  font-weight: 600;
+}
+
+.style-transfer-preview-empty span {
+  font-size: var(--ui-font-size-label);
+  line-height: 1.45;
+}
+
+.style-transfer-compare-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ui-space-2-5);
+  border-top: var(--ui-border-width) solid var(--app-border-color);
+  padding: var(--ui-space-2-5) var(--ui-space-4);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+}
+
+.style-transfer-compare-control input {
+  min-width: 0;
+}
+
+.style-transfer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-4);
+}
+
+.style-transfer-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+}
+
+.style-transfer-control-label,
+.style-transfer-range-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-2);
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+}
+
+.style-transfer-control-note,
+.style-transfer-range-labels {
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  font-weight: 400;
+}
+
+.style-transfer-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-1);
+  border-radius: var(--ui-radius-control);
+  background: var(--app-bg-primary);
+  padding: var(--ui-space-1);
+}
+
+.style-transfer-mode-switch button {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  border-radius: var(--ui-radius-control);
+  padding: var(--ui-space-2) var(--ui-space-2-5);
+  color: var(--app-text-secondary);
+  text-align: left;
+  transition: background-color var(--ui-duration-fast) ease-out, color var(--ui-duration-fast) ease-out;
+}
+
+.style-transfer-mode-switch button:hover {
+  color: var(--app-text-primary);
+}
+
+.style-transfer-mode-switch button.is-active {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+  box-shadow: var(--ui-shadow-button-rest);
+}
+
+.style-transfer-mode-switch button small {
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  font-weight: 400;
+}
+
+.style-transfer-range,
+.style-transfer-compare-control input {
+  width: 100%;
+  height: 18px;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--app-accent) 0 var(--range-progress, 50%), var(--app-bg-primary) var(--range-progress, 50%) 100%);
+  cursor: pointer;
+}
+
+.style-transfer-range::-webkit-slider-thumb,
+.style-transfer-compare-control input::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  appearance: none;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 65%, var(--app-border-color));
+}
+
+.style-transfer-range::-moz-range-thumb,
+.style-transfer-compare-control input::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-accent);
+}
+
+.style-transfer-metrics {
+  border-top: var(--ui-border-width) solid var(--app-border-color);
+  padding-top: var(--ui-space-3);
+}
+
+.style-transfer-metrics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+}
+
+.style-transfer-metrics-heading svg {
+  color: var(--app-status-success);
+}
+
+.style-transfer-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-2);
+  margin-top: var(--ui-space-2-5);
+}
+
+.style-transfer-metric-grid > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 2px solid color-mix(in srgb, var(--app-accent) 50%, var(--app-border-color));
+  padding-left: var(--ui-space-2);
+}
+
+.style-transfer-metric-grid span {
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+}
+
+.style-transfer-metric-grid strong {
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-body);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.style-transfer-local-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ui-space-2);
+  margin-top: auto;
+  border-top: var(--ui-border-width) solid var(--app-border-color);
+  padding-top: var(--ui-space-3);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  line-height: 1.45;
+}
+
+.style-transfer-local-note svg {
+  flex: 0 0 auto;
+  color: var(--app-accent);
+}
+
+.style-transfer-footer {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+  border-top: var(--ui-border-width) solid var(--ui-border-structural);
+  padding: var(--ui-space-3) var(--ui-space-6);
+}
+
+.style-transfer-page .style-transfer-header {
+  padding-top: var(--ui-space-4);
+  padding-bottom: var(--ui-space-3);
+}
+
+.style-transfer-page .style-transfer-body {
+  padding-top: clamp(var(--ui-space-4), 3vw, var(--ui-space-6));
+  padding-bottom: clamp(var(--ui-space-4), 3vw, var(--ui-space-6));
+}
+
+.style-transfer-status {
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  line-height: 1.4;
+}
+
+.style-transfer-status > span {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--ui-space-1-5);
+}
+
+.style-transfer-status-error {
+  color: var(--app-status-error);
+}
+
+.style-transfer-status-success {
+  overflow: hidden;
+  color: var(--app-status-success);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-transfer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.style-transfer-actions .ui-button {
+  min-height: var(--ui-size-control-large);
+}
+
+.style-transfer-reset {
+  color: var(--app-text-secondary);
+}
+
+.style-transfer-reset:hover {
+  color: var(--app-text-primary);
+}
+
+@media (max-width: 820px) {
+  .style-transfer-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .style-transfer-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .style-transfer-metrics,
+  .style-transfer-local-note {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .style-transfer-dropzone {
+    aspect-ratio: 2.15;
+  }
+
+  .style-transfer-preview-panel {
+    min-height: 246px;
+  }
+
+  .style-transfer-preview-stage.has-target {
+    min-height: 194px;
+  }
+}
+
+@media (max-width: 620px) {
+  .style-transfer-header,
+  .style-transfer-body,
+  .style-transfer-footer {
+    padding-right: var(--ui-space-4);
+    padding-left: var(--ui-space-4);
+  }
+
+  .style-transfer-source-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .style-transfer-flow {
+    justify-content: center;
+    transform: rotate(90deg);
+  }
+
+  .style-transfer-dropzone {
+    aspect-ratio: 1.8;
+  }
+
+  .style-transfer-controls {
+    display: flex;
+  }
+
+  .style-transfer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .style-transfer-actions {
+    justify-content: flex-end;
+  }
+}
+
 /* Denoise uses a split stage/footer layout, so its insets are explicit on
  * each region instead of depending on a utility padding class on the shell. */
 .denoise-modal-surface {
@@ -4616,6 +5452,21 @@ button {
   grid-area: settings;
 }
 
+.splash-action-style-transfer {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  transition: transform var(--ui-duration-fast) ease-out;
+}
+
+.splash-action-style-transfer:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.splash-action-style-transfer:active:not(:disabled) {
+  transform: translateY(0);
+}
+
 @container (min-width: 500px) {
   .splash-action-grid {
     grid-template-areas: 'folder image stack settings';
@@ -4643,11 +5494,11 @@ button {
 /*
  * Camera Raw adjustment panel grid
  *
- * The adjustment panel is a dense, data-oriented surface. Every section uses
- * the same three visual columns (leading control, content, trailing action),
- * while sliders and metadata rows share a stable value column. Keeping this
- * contract outside Tailwind layers prevents utility classes from changing the
- * alignment when an adjustment component is reused.
+ * The adjustment panel is a dense, data-oriented surface. Section headers use
+ * one leading disclosure control and a single content column; sliders and
+ * metadata rows share a stable value column. Keeping this contract outside
+ * Tailwind layers prevents utility classes from changing the alignment when
+ * an adjustment component is reused.
  */
 .develop-controls-panel {
   min-width: 0;
@@ -4655,6 +5506,7 @@ button {
 }
 
 .develop-controls-panel > .ui-panel-header {
+  box-sizing: border-box;
   min-height: var(--ui-panel-header-height);
   padding: var(--ui-space-2) calc(var(--ui-editor-adjustment-inset) + var(--ui-editor-scrollbar-reserve))
     var(--ui-space-2) var(--ui-editor-adjustment-inset);
@@ -4676,15 +5528,48 @@ button {
   display: grid;
   flex: 0 0 auto;
   grid-template-columns: repeat(2, max-content);
-  gap: var(--ui-space-1);
+  gap: var(--ui-space-1-5);
 }
 
 .develop-controls-panel > .ui-panel-header .ui-button {
-  min-width: var(--ui-size-control-compact);
+  max-width: 96px;
+  min-width: var(--ui-editor-header-action-min-width);
+  min-height: var(--ui-size-control);
+  border-radius: var(--ui-radius-control);
+  overflow: hidden;
+  padding-inline: var(--ui-space-2-5);
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.develop-controls-panel > .ui-panel-header .develop-adjustment-action--auto {
+  background: var(--app-accent);
+  color: var(--app-button-text);
+  box-shadow: var(--ui-shadow-button-rest);
+}
+
+.develop-controls-panel > .ui-panel-header .develop-adjustment-action--auto:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-accent) 88%, white);
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.develop-controls-panel > .ui-panel-header .develop-adjustment-action--reset {
+  background: var(--app-surface);
+  color: var(--app-text-primary);
+  box-shadow: var(--ui-shadow-button-rest);
+}
+
+.develop-controls-panel > .ui-panel-header .develop-adjustment-action--reset:hover:not(:disabled) {
+  background: var(--app-card-active);
+  box-shadow: var(--ui-shadow-button-hover);
 }
 
 .develop-controls-panel > .develop-profile-strip {
+  box-sizing: border-box;
   min-height: var(--ui-size-control-large);
   grid-template-columns: var(--ui-editor-field-label-column) minmax(0, 1fr);
   column-gap: var(--ui-editor-control-gap);
@@ -4718,8 +5603,10 @@ button {
 
 .develop-controls-panel .develop-collapsible-header {
   display: grid;
+  box-sizing: border-box;
   min-height: var(--ui-editor-section-header-height);
-  grid-template-columns: minmax(0, 1fr) var(--ui-editor-section-leading-column);
+  /* Visibility toggles are intentionally not part of the Develop UI. */
+  grid-template-columns: minmax(0, 1fr);
   column-gap: var(--ui-editor-control-gap);
   align-items: center;
   padding: var(--ui-space-1) var(--ui-editor-adjustment-inset);
@@ -4763,15 +5650,8 @@ button {
   white-space: nowrap;
 }
 
-.develop-controls-panel .develop-collapsible-visibility {
-  width: var(--ui-editor-section-leading-column);
-  height: var(--ui-editor-section-leading-column);
-  justify-self: end;
-  border-radius: var(--ui-radius-control);
-}
-
 .develop-controls-panel .develop-collapsible-content {
-  padding: 0 var(--ui-editor-adjustment-inset) var(--ui-space-4);
+  padding: 0 var(--ui-editor-adjustment-inset) var(--ui-space-3);
 }
 
 .develop-controls-panel .camera-raw-section-body {
@@ -4805,7 +5685,7 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--ui-editor-control-gap);
   align-items: center;
-  margin-bottom: var(--ui-space-2);
+  margin-bottom: var(--ui-space-1);
 }
 
 .develop-controls-panel .camera-raw-subsection-title,
@@ -4827,7 +5707,7 @@ button {
 
 .develop-controls-panel .camera-raw-subsection-description {
   max-width: min(100%, var(--ui-editor-description-measure));
-  margin: 0 0 var(--ui-space-2);
+  margin: 0 0 var(--ui-space-1-5);
   color: var(--app-text-secondary);
   font-size: var(--ui-font-size-label);
   line-height: var(--ui-line-height-body);
@@ -4897,7 +5777,7 @@ button {
 .develop-controls-panel .camera-raw-tabs {
   min-height: var(--ui-size-control-large);
   gap: var(--ui-space-1);
-  margin-bottom: var(--ui-space-2);
+  margin-bottom: var(--ui-space-1-5);
 }
 
 .develop-controls-panel .camera-raw-tab {
@@ -4909,7 +5789,7 @@ button {
 
 .develop-controls-panel .camera-raw-profile-summary {
   gap: 0;
-  margin-bottom: var(--ui-space-2);
+  margin-bottom: var(--ui-space-1-5);
 }
 
 .develop-controls-panel .camera-raw-profile-summary > div {
@@ -4990,7 +5870,7 @@ button {
 
 .develop-controls-panel .develop-slider {
   min-width: 0;
-  margin-bottom: var(--ui-space-2);
+  margin-bottom: var(--ui-editor-slider-row-gap);
 }
 
 .develop-controls-panel .develop-slider:last-child {
@@ -4999,6 +5879,7 @@ button {
 
 .develop-controls-panel .camera-raw-slider-header {
   display: grid;
+  box-sizing: border-box;
   min-width: 0;
   min-height: var(--ui-editor-subsection-header-height);
   grid-template-columns: minmax(0, 1fr) var(--ui-editor-value-column);
@@ -5008,6 +5889,7 @@ button {
 
 .develop-controls-panel .camera-raw-slider-label {
   display: grid;
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   min-height: var(--ui-editor-subsection-header-height);
@@ -5043,6 +5925,15 @@ button {
   font-variant-numeric: tabular-nums;
   line-height: 18px;
   text-align: right;
+}
+
+/* A value button is a text action, not a full-size form field. Keep its
+ * hit-area aligned with the compact slider label while leaving editable
+ * inputs at the standard control height below. */
+.develop-controls-panel button.camera-raw-slider-number {
+  min-height: var(--ui-size-control-dense);
+  height: var(--ui-size-control-dense);
+  padding-block: 0;
 }
 
 .develop-controls-panel input.camera-raw-slider-number {

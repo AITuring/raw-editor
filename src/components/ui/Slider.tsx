@@ -61,6 +61,10 @@ const Slider = ({
   const { t } = useTranslation();
   const [displayValue, setDisplayValue] = useState<number>(value);
   const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const onDragStateChangeRef = useRef(onDragStateChange);
+  const isWheelPreviewActiveRef = useRef(false);
+  const previewInteractionRef = useRef(false);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState<string>(String(toDisplayValue(value)));
@@ -81,13 +85,39 @@ const Slider = ({
   const isWheelActivelyChangingRef = useRef(false);
   const wheelTimeoutRef = useRef<number | undefined>(undefined);
 
+  onDragStateChangeRef.current = onDragStateChange;
+
+  const notifyPreviewInteraction = useCallback((nextIsInteractive: boolean) => {
+    if (previewInteractionRef.current === nextIsInteractive) return;
+    previewInteractionRef.current = nextIsInteractive;
+    onDragStateChangeRef.current(nextIsInteractive);
+  }, []);
+
+  const updateDragging = useCallback(
+    (nextIsDragging: boolean) => {
+      if (isDraggingRef.current === nextIsDragging) return;
+      isDraggingRef.current = nextIsDragging;
+      setIsDragging(nextIsDragging);
+      // Tell the render scheduler before the adjustment value changes. Waiting
+      // for a passive effect here lets the first pointer move enter the much
+      // heavier settled-preview path and makes the canvas appear to lag behind.
+      notifyPreviewInteraction(nextIsDragging || isWheelPreviewActiveRef.current);
+    },
+    [notifyPreviewInteraction],
+  );
+
   useEffect(() => {
     return () => {
       if (wheelTimeoutRef.current !== undefined) {
         window.clearTimeout(wheelTimeoutRef.current);
       }
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+      }
+      isWheelPreviewActiveRef.current = false;
+      notifyPreviewInteraction(false);
     };
-  }, []);
+  }, [notifyPreviewInteraction]);
 
   const fillPercentage = max !== min ? ((displayValue - min) / (max - min)) * 100 : 0;
   const originPercentage = useMemo(() => {
@@ -143,10 +173,6 @@ const Slider = ({
   rangeRef.current = { min, max };
 
   useEffect(() => {
-    onDragStateChange(isDragging);
-  }, [isDragging, onDragStateChange]);
-
-  useEffect(() => {
     if (!disabled) return;
 
     pendingTouchRef.current = null;
@@ -162,12 +188,14 @@ const Slider = ({
       animationFrameRef.current = undefined;
     }
 
-    setIsDragging(false);
+    isWheelPreviewActiveRef.current = false;
+    updateDragging(false);
+    notifyPreviewInteraction(false);
     setIsEditing(false);
     setIsLabelHovered(false);
     setDisplayValue(value);
     setInputValue(formatInputValue(value));
-  }, [disabled, formatInputValue, value]);
+  }, [disabled, formatInputValue, notifyPreviewInteraction, updateDragging, value]);
 
   useEffect(() => {
     const sliderElement = containerRef.current;
@@ -187,6 +215,8 @@ const Slider = ({
 
       if (clampedValue !== value && !isNaN(clampedValue)) {
         isWheelActivelyChangingRef.current = true;
+        isWheelPreviewActiveRef.current = true;
+        notifyPreviewInteraction(true);
         setDisplayValue(clampedValue);
 
         if (wheelTimeoutRef.current !== undefined) {
@@ -194,6 +224,8 @@ const Slider = ({
         }
         wheelTimeoutRef.current = window.setTimeout(() => {
           isWheelActivelyChangingRef.current = false;
+          isWheelPreviewActiveRef.current = false;
+          notifyPreviewInteraction(isDraggingRef.current);
         }, 150);
 
         const syntheticEvent = {
@@ -210,7 +242,7 @@ const Slider = ({
     return () => {
       sliderElement.removeEventListener('wheel', handleWheel);
     };
-  }, [disabled, value, min, max, step, onChange, decimalPlaces]);
+  }, [disabled, value, min, max, step, onChange, decimalPlaces, notifyPreviewInteraction]);
 
   // Handle Dragging
   useEffect(() => {
@@ -260,7 +292,7 @@ const Slider = ({
       lastUpTime.current = Date.now();
       pendingTouchRef.current = null;
       suppressTouchChangeRef.current = false;
-      setIsDragging(false);
+      updateDragging(false);
     };
 
     window.addEventListener('mousemove', handlePointerMove, { passive: false });
@@ -276,7 +308,7 @@ const Slider = ({
       window.removeEventListener('touchend', handlePointerUp);
       window.removeEventListener('touchcancel', handlePointerUp);
     };
-  }, [disabled, isDragging]);
+  }, [disabled, isDragging, updateDragging]);
 
   useEffect(() => {
     if (isDragging) {
@@ -378,7 +410,7 @@ const Slider = ({
     accumulatedValueRef.current = rawValue;
     lastPointerXRef.current = e.clientX;
 
-    setIsDragging(true);
+    updateDragging(true);
     setDisplayValue(snappedValue);
     onChange({ target: { value: snappedValue } });
   };
@@ -448,7 +480,7 @@ const Slider = ({
       e.preventDefault();
     }
 
-    setIsDragging(true);
+    updateDragging(true);
     setDisplayValue(snappedValue);
     onChange({ target: { value: snappedValue } });
   };

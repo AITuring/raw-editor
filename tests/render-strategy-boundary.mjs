@@ -8,6 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 
 const previewResolution = read('src/utils/previewResolution.ts');
 const imageProcessingHook = read('src/hooks/useImageProcessing.ts');
+const slider = read('src/components/ui/Slider.tsx');
 const appState = read('src-tauri/src/app_state.rs');
 const renderStrategy = read('src-tauri/src/render_strategy.rs');
 const lib = read('src-tauri/src/lib.rs');
@@ -27,8 +28,40 @@ for (const tier of ['rapidPreview', 'halfResolutionEdit', 'fullResolutionRoi', '
 
 assert.match(imageProcessingHook, /renderTier: renderPlan\.tier/);
 assert.match(imageProcessingHook, /targetResolution: renderPlan\.targetResolution/);
+assert.match(
+  imageProcessingHook,
+  /MAX_PREVIEW_REQUESTS_IN_FLIGHT = 1/,
+  'interactive preview IPC must keep only one request in flight',
+);
+assert.match(
+  imageProcessingHook,
+  /pendingApplyRef\.current = \{ adjustments: currentAdjustments, dragging, targetRes \}/,
+  'interactive and settled previews must share the latest-only request lane',
+);
+assert.match(slider, /onDragStateChangeRef\.current\(nextIsInteractive\)/);
+const sliderDragStart = slider.indexOf('updateDragging(true);');
+const sliderDragValueChange = slider.indexOf('onChange({ target: { value: snappedValue } });', sliderDragStart);
+assert.ok(
+  sliderDragStart >= 0 && sliderDragValueChange > sliderDragStart,
+  'slider must notify the preview scheduler before its first drag value change',
+);
 assert.match(appState, /render_tier: Option<RenderTier>/);
 assert.match(lib, /resolve_preview_render_tier\(/);
+const processPreviewStart = lib.indexOf('fn process_preview_job(');
+const processPreviewEnd = lib.indexOf('\nfn start_analytics_worker(', processPreviewStart);
+assert.ok(processPreviewStart >= 0 && processPreviewEnd > processPreviewStart);
+const processPreview = lib.slice(processPreviewStart, processPreviewEnd);
+assert.match(
+  processPreview,
+  /let analytics_config = if wants_analytics && !is_interactive/,
+  'interactive previews must not compete with full-frame analytics readback',
+);
+assert.match(processPreview, /device\.poll\(wgpu::PollType::Poll\)/, 'native preview notification must not block');
+assert.doesNotMatch(
+  processPreview,
+  /device\.poll\(wgpu::PollType::Wait/,
+  'native preview completion must not wait before presenting the frame',
+);
 assert.match(renderStrategy, /fullResolutionExport cannot be submitted to the preview worker/);
 assert.match(exportProcessing, /RenderTier::FullResolutionExport\.as_str\(\)/);
 

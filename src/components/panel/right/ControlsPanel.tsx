@@ -10,12 +10,7 @@ import GeometryPanel from '../../adjustments/Geometry';
 import OpticsPanel from '../../adjustments/Optics';
 import CollapsibleSection from '../../ui/CollapsibleSection';
 import Button from '../../ui/Button';
-import {
-  Adjustments,
-  SectionVisibility,
-  INITIAL_ADJUSTMENTS,
-  CAMERA_RAW_ADJUSTMENT_SECTIONS,
-} from '../../../utils/adjustments';
+import { Adjustments, INITIAL_ADJUSTMENTS, CAMERA_RAW_ADJUSTMENT_SECTIONS } from '../../../utils/adjustments';
 import { useContextMenu } from '../../../context/ContextMenuContext';
 import { OPTION_SEPARATOR } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
@@ -97,19 +92,6 @@ export default function Controls() {
       })),
     [setUI],
   );
-
-  const handleToggleVisibility = (sectionName: string) => {
-    setAdjustments((prev: Adjustments) => {
-      const currentVisibility: SectionVisibility = prev.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
-      return {
-        ...prev,
-        sectionVisibility: {
-          ...currentVisibility,
-          [sectionName]: !(currentVisibility[sectionName] ?? true),
-        },
-      };
-    });
-  };
 
   const handleResetAdjustments = () => {
     setAdjustments((prev: Adjustments) => ({
@@ -284,23 +266,25 @@ export default function Controls() {
         <div className="ui-panel-header-actions">
           <Button
             aria-label={t('editor.adjustments.tooltips.autoAdjust')}
+            className="develop-adjustment-action develop-adjustment-action--auto"
             disabled={!selectedImage}
             onClick={handleAutoAdjustments}
             size="sm"
             data-tooltip={t('editor.adjustments.tooltips.autoAdjust')}
             type="button"
-            variant="ghost"
+            variant="primary"
           >
             {t('settings.processing.backends.auto')}
           </Button>
           <Button
             aria-label={t('editor.adjustments.tooltips.resetAdjustments')}
+            className="develop-adjustment-action develop-adjustment-action--reset"
             disabled={!selectedImage}
             onClick={handleResetAdjustments}
             size="sm"
             data-tooltip={t('editor.adjustments.tooltips.resetAdjustments')}
             type="button"
-            variant="ghost"
+            variant="secondary"
           >
             {t('adjustments.basic.reset')}
           </Button>
@@ -331,16 +315,15 @@ export default function Controls() {
         {selectedImage ? (
           CAMERA_RAW_SECTIONS.map(({ name: sectionName, titleKey }) => {
             const title = t(titleKey as never) as string;
-            const sectionVisibility = adjustments.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
 
             return (
               <div className="shrink-0 group" key={sectionName}>
                 <CollapsibleSection
-                  isContentVisible={sectionVisibility[sectionName as keyof SectionVisibility] ?? true}
+                  canToggleVisibility={false}
+                  isContentVisible={true}
                   isOpen={collapsibleSectionsState[sectionName as keyof typeof collapsibleSectionsState] ?? false}
                   onContextMenu={(e: any) => handleSectionContextMenu(e, sectionName, titleKey)}
                   onToggle={() => handleToggleSection(sectionName)}
-                  onToggleVisibility={() => handleToggleVisibility(sectionName)}
                   title={title}
                 >
                   {renderSection(sectionName)}

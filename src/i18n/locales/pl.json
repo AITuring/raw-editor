@@ -2032,6 +2032,20 @@
       "goHome": "Przejdź do strony głównej"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Wybierz obraz",
+    "dropHint": "lub upuść tutaj · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Dopasuj kolor i nastrój obrazu referencyjnego do swojego zdjęcia.",
+    "entryTitle": "Przenieś wygląd",
+    "loading": "Przygotowywanie podglądu…",
+    "open": "Otwórz Style Lab",
+    "reference": "Obraz referencyjny",
+    "referenceHint": "Obraz, którego charakter kolorystyczny chcesz zapożyczyć.",
+    "removeImage": "Usuń obraz",
+    "replaceImage": "Zastąp obraz",
+    "target": "Obraz docelowy",
+    "targetHint": "Zachowuje temat, kompozycję i szczegóły."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "Zaznaczono {{current}} z {{total}} obrazów",

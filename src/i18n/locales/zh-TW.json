@@ -1969,6 +1969,20 @@
       "goHome": "返回首頁"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "選擇影像",
+    "dropHint": "或拖放至此 · JPG、PNG、TIFF、RAW",
+    "entryDescription": "將參考影像的色彩與氛圍套用到你的照片。",
+    "entryTitle": "風格轉移",
+    "loading": "正在準備預覽…",
+    "open": "開啟風格實驗室",
+    "reference": "參考影像",
+    "referenceHint": "提供你想借用的色彩與明暗風格。",
+    "removeImage": "移除影像",
+    "replaceImage": "替換影像",
+    "target": "目標影像",
+    "targetHint": "保留主體、構圖與紋理細節。"
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "已選擇 {{current}} / {{total}} 張影像",

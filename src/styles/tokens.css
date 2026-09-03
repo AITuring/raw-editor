@@ -79,14 +79,16 @@
   /* Semantic rhythm for the dense Camera Raw adjustment panel. */
   --ui-editor-adjustment-inset: calc(var(--ui-space-6) + var(--ui-space-1));
   --ui-editor-section-leading-column: var(--ui-size-icon-hit);
-  --ui-editor-section-header-height: var(--ui-size-control-large);
-  --ui-editor-subsection-header-height: var(--ui-size-control-compact);
+  --ui-editor-section-header-height: var(--ui-section-header-height);
+  --ui-editor-subsection-header-height: var(--ui-size-control-dense);
   --ui-editor-field-label-column: 96px;
   --ui-editor-value-column: 52px;
   --ui-editor-control-gap: var(--ui-space-3);
-  --ui-editor-section-padding-block: var(--ui-space-3);
-  --ui-editor-slider-track-height: 14px;
+  --ui-editor-section-padding-block: var(--ui-space-2);
+  --ui-editor-slider-track-height: 10px;
+  --ui-editor-slider-row-gap: var(--ui-space-1);
   --ui-editor-action-min-height: 44px;
+  --ui-editor-header-action-min-width: 64px;
   --ui-editor-description-measure: 42ch;
   --ui-editor-scrollbar-reserve: 8px;
 

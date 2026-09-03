@@ -1962,6 +1962,20 @@
       "goHome": "Zur Startseite"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Bild auswählen",
+    "dropHint": "oder hier ablegen · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Übertrage die Farben und Stimmung eines Referenzbildes auf dein Foto.",
+    "entryTitle": "Look übertragen",
+    "loading": "Vorschau wird vorbereitet…",
+    "open": "Style Lab öffnen",
+    "reference": "Referenzbild",
+    "referenceHint": "Das Bild, dessen Farbsprache du übernehmen möchtest.",
+    "removeImage": "Bild entfernen",
+    "replaceImage": "Bild ersetzen",
+    "target": "Zielbild",
+    "targetHint": "Behält Motiv, Komposition und Details."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} von {{total}} Bildern ausgewählt",

@@ -1998,6 +1998,20 @@
       "goHome": "Aller à l'accueil"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Choisir une image",
+    "dropHint": "ou déposez-la ici · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Appliquez les couleurs et l’ambiance d’une image de référence à votre photo.",
+    "entryTitle": "Transférer un style",
+    "loading": "Préparation de l’aperçu…",
+    "open": "Ouvrir Style Lab",
+    "reference": "Image de référence",
+    "referenceHint": "L’image dont vous souhaitez reprendre le langage coloré.",
+    "removeImage": "Supprimer l’image",
+    "replaceImage": "Remplacer l’image",
+    "target": "Image cible",
+    "targetHint": "Conserve le sujet, la composition et les détails."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} sur {{total}} images sélectionnées",

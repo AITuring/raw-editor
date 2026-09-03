@@ -1958,6 +1958,20 @@
       "goHome": "ホームへ移動"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "画像を選択",
+    "dropHint": "またはここにドロップ · JPG, PNG, TIFF, RAW",
+    "entryDescription": "参照画像の色と雰囲気を写真に合わせます。",
+    "entryTitle": "ルックを転送",
+    "loading": "プレビューを準備中…",
+    "open": "スタイルラボを開く",
+    "reference": "参照画像",
+    "referenceHint": "色の表現を借りたい画像です。",
+    "removeImage": "画像を削除",
+    "replaceImage": "画像を置き換え",
+    "target": "ターゲット画像",
+    "targetHint": "被写体・構図・ディテールを保持します。"
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{total}}枚中 {{current}}枚の画像を選択中",

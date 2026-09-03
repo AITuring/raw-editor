@@ -1997,6 +1997,20 @@
       "goHome": "Ir para Início"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Escolher uma imagem",
+    "dropHint": "ou solte aqui · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Aplique à sua foto as cores e o clima de uma imagem de referência.",
+    "entryTitle": "Transferir um visual",
+    "loading": "Preparando pré-visualização…",
+    "open": "Abrir Style Lab",
+    "reference": "Imagem de referência",
+    "referenceHint": "A imagem de onde você quer aproveitar a linguagem de cores.",
+    "removeImage": "Remover imagem",
+    "replaceImage": "Substituir imagem",
+    "target": "Imagem de destino",
+    "targetHint": "Mantém o assunto, a composição e os detalhes."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} de {{total}} imagens selecionadas",

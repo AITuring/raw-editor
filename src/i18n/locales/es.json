@@ -1997,6 +1997,20 @@
       "goHome": "Ir al Inicio"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Elegir una imagen",
+    "dropHint": "o suéltala aquí · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Adapta el color y el ambiente de una imagen de referencia a tu foto.",
+    "entryTitle": "Transferir un estilo",
+    "loading": "Preparando la vista previa…",
+    "open": "Abrir Style Lab",
+    "reference": "Imagen de referencia",
+    "referenceHint": "La imagen cuyo lenguaje de color quieres tomar prestado.",
+    "removeImage": "Eliminar imagen",
+    "replaceImage": "Reemplazar imagen",
+    "target": "Imagen objetivo",
+    "targetHint": "Conserva el sujeto, la composición y los detalles."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} de {{total}} imágenes seleccionadas",

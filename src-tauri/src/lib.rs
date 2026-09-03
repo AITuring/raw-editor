@@ -40,6 +40,7 @@ mod preview_protocol;
 mod raw_processing;
 mod render_strategy;
 mod sidecar_storage;
+mod style_transfer;
 mod tagging;
 mod tagging_utils;
 mod window_customizer;
@@ -547,13 +548,18 @@ fn process_preview_job(
     // A viewport patch is not representative of the whole image. Keep the
     // histogram/waveform from the most recent complete preview instead.
     let wants_analytics = pixel_roi.is_none();
-    let channel_filter = if is_interactive {
+    let channel_filter = if !is_interactive {
         active_waveform_channel.map(|s| s.to_string())
     } else {
         None
     };
 
-    let analytics_config = if wants_analytics {
+    // Histogram/waveform readback copies the complete preview texture. It is
+    // useful for a settled frame, but doing that work for every pointer move
+    // competes with the image shown to the user. Keep analytics on the final
+    // frame of a gesture; the existing analytics worker still coalesces those
+    // settled updates to the newest image.
+    let analytics_config = if wants_analytics && !is_interactive {
         state
             .analytics_worker_tx
             .lock()
@@ -588,10 +594,10 @@ fn process_preview_job(
 
     if let Ok(final_processed_image) = final_processed_image_result {
         if output_to_native_display {
-            let _ = context.device.poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: Some(std::time::Duration::from_millis(500)),
-            });
+            // Rendering has already been submitted and presented in order.
+            // A 500ms Wait here made every slider update look stuck even
+            // though the native surface could display it immediately.
+            let _ = context.device.poll(wgpu::PollType::Poll);
             let _ = app_handle.emit(
                 "wgpu-frame-ready",
                 serde_json::json!({ "path": loaded_image.path }),
@@ -2344,6 +2350,8 @@ pub fn run() {
             lut_processing::remove_lut,
             lut_processing::generate_lut_previews,
             save_temp_file,
+            style_transfer::generate_style_transfer_preview,
+            style_transfer::export_style_transfer,
             get_image_dimensions,
             frontend_ready,
             cancel_thumbnail_generation,

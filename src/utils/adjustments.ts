@@ -703,20 +703,14 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     subMasks: normalizeSubMasks(patch.subMasks),
   }));
 
-  const loadedSectionVisibility = loadedAdjustments.sectionVisibility || ({} as SectionVisibility);
   const normalizedWhiteBalanceMode =
     loadedAdjustments.whiteBalanceMode ||
     ((loadedAdjustments.temperature ?? 0) !== 0 || (loadedAdjustments.tint ?? 0) !== 0 ? 'custom' : 'asShot');
-  const normalizedSectionVisibility: SectionVisibility = {
-    ...INITIAL_ADJUSTMENTS.sectionVisibility,
-    ...loadedSectionVisibility,
-    calibration: loadedSectionVisibility.calibration ?? loadedSectionVisibility.color ?? true,
-    colorGrading: loadedSectionVisibility.colorGrading ?? loadedSectionVisibility.color ?? true,
-    colorMixer: loadedSectionVisibility.colorMixer ?? loadedSectionVisibility.color ?? true,
-    geometry: loadedSectionVisibility.geometry ?? true,
-    lensBlur: loadedSectionVisibility.lensBlur ?? loadedSectionVisibility.effects ?? true,
-    optics: loadedSectionVisibility.optics ?? loadedSectionVisibility.details ?? true,
-  };
+  // Global Develop sections no longer expose per-section visibility toggles.
+  // Migrate legacy sidecars to an always-active global pipeline so a hidden
+  // stale flag cannot make an otherwise editable control appear unresponsive.
+  // Mask containers keep their own visibility normalization above.
+  const normalizedSectionVisibility: SectionVisibility = { ...INITIAL_ADJUSTMENTS.sectionVisibility };
 
   return {
     ...INITIAL_ADJUSTMENTS,

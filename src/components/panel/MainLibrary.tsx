@@ -3,6 +3,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import {
   AlertTriangle,
   ArrowLeft,
+  Blend,
   Check,
   Folder,
   FolderInput,
@@ -594,6 +595,28 @@ export default function MainLibrary(props: MainLibraryProps) {
                           <Settings aria-hidden="true" size={20} />
                         </Button>
                       </div>
+                      {!props.isAndroid && (
+                        <Button
+                          aria-label={t('styleTransfer.open', { defaultValue: 'Open Style Lab' })}
+                          className="splash-action-style-transfer flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                          onClick={() =>
+                            setUI({
+                              activeView: 'style-transfer',
+                              isLibraryQuickPreviewOpen: false,
+                              isSettingsOpen: false,
+                              libraryContextPanel: null,
+                            })
+                          }
+                          size="lg"
+                          type="button"
+                          variant="secondary"
+                        >
+                          <Blend aria-hidden="true" size={20} strokeWidth={1.7} />
+                          <span className="truncate">
+                            {t('styleTransfer.entryTitle', { defaultValue: 'Transfer a look' })}
+                          </span>
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -780,6 +803,26 @@ export default function MainLibrary(props: MainLibraryProps) {
               variant="secondary"
             >
               <ImagePlus aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          )}
+          {!props.isAndroid && (
+            <Button
+              aria-label={t('styleTransfer.open', { defaultValue: 'Open Style Lab' })}
+              className="p-0"
+              data-tooltip={t('styleTransfer.open', { defaultValue: 'Open Style Lab' })}
+              onClick={() =>
+                setUI({
+                  activeView: 'style-transfer',
+                  isLibraryQuickPreviewOpen: false,
+                  isSettingsOpen: false,
+                  libraryContextPanel: null,
+                })
+              }
+              size="icon"
+              type="button"
+              variant="secondary"
+            >
+              <Blend aria-hidden="true" className="h-4 w-4" />
             </Button>
           )}
         </div>

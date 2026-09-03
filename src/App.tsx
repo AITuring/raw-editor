@@ -28,6 +28,7 @@ import PresetsPanel from './components/panel/right/PresetsPanel';
 
 import EditorView from './components/views/EditorView';
 import LibraryView from './components/views/LibraryView';
+import StyleTransferView from './components/views/StyleTransferView';
 
 import { ContextMenuProvider } from './context/ContextMenuContext';
 import { useSettingsStore } from './store/useSettingsStore';
@@ -719,7 +720,9 @@ function App() {
   );
 
   const hasRoots = rootPaths && rootPaths.length > 0;
-  const hasMainContent = hasRoots || libraryImageCount > 0 || (activeView === 'editor' && !!selectedImage);
+  const isStyleTransferWorkspace = activeView === 'style-transfer';
+  const hasMainContent =
+    hasRoots || libraryImageCount > 0 || (activeView === 'editor' && !!selectedImage) || isStyleTransferWorkspace;
   const isDevelopWorkspace = activeView === 'editor' && !!selectedImage;
 
   const shouldHideFolderTree = isAndroid;
@@ -788,7 +791,10 @@ function App() {
               hasMainContent &&
               !isInstantTransition &&
               'transition-[padding,gap] duration-300 ease-in-out',
-            [hasMainContent && (isFullScreen || isDevelopWorkspace ? 'p-0 gap-0' : 'p-2 gap-2')],
+            [
+              hasMainContent &&
+                (isFullScreen || isDevelopWorkspace || isStyleTransferWorkspace ? 'p-0 gap-0' : 'p-2 gap-2'),
+            ],
           )}
         >
           <DndContext sensors={layoutSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -798,15 +804,20 @@ function App() {
                 isDevelopWorkspace && 'develop-workspace',
                 isDevelopWorkspace && isWgpuActive && 'is-wgpu-active',
                 !isDevelopWorkspace && hasMainContent && 'ui-library-workspace',
+                isStyleTransferWorkspace && 'style-transfer-app-workspace',
               )}
             >
-              {!shouldHideFolderTree && hasRoots && hasMainContent && !isDevelopWorkspace && (
-                <LibraryNavigationPanel
-                  width={leftPanelWidth}
-                  renderPanel={renderAppPanel}
-                  onWidthChange={createResizeHandler('left', leftPanelWidth)}
-                />
-              )}
+              {!shouldHideFolderTree &&
+                hasRoots &&
+                hasMainContent &&
+                !isDevelopWorkspace &&
+                !isStyleTransferWorkspace && (
+                  <LibraryNavigationPanel
+                    width={leftPanelWidth}
+                    renderPanel={renderAppPanel}
+                    onWidthChange={createResizeHandler('left', leftPanelWidth)}
+                  />
+                )}
               <div className="relative flex-1 flex flex-col min-w-0">
                 {selectedImage && externalEditSession && (
                   <ExternalEditBar
@@ -847,10 +858,15 @@ function App() {
                     />
                   )}
                 </div>
+                {isStyleTransferWorkspace && (
+                  <div className="flex-1 flex flex-col min-w-0 h-full">
+                    <StyleTransferView onBack={() => setUI({ activeView: 'library' })} />
+                  </div>
+                )}
                 <div
                   className={clsx(
                     'flex-1 flex flex-col min-w-0 h-full',
-                    activeView === 'editor' && selectedImage ? 'hidden' : 'flex',
+                    activeView === 'editor' && selectedImage ? 'hidden' : isStyleTransferWorkspace ? 'hidden' : 'flex',
                   )}
                 >
                   <LibraryView
@@ -897,6 +913,7 @@ function App() {
               </div>
               {!isAndroid &&
                 hasMainContent &&
+                !isStyleTransferWorkspace &&
                 (isDevelopWorkspace ? (
                   <DevelopPanel
                     activePanel={activeRightPanel}

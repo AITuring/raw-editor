@@ -21,6 +21,18 @@ interface UncroppedPreviewRequest {
   path: string;
 }
 
+interface PendingApplyRequest {
+  adjustments: Adjustments;
+  dragging: boolean;
+  targetRes?: number;
+}
+
+// The native preview worker is latest-only as well. Keeping a single IPC
+// request in flight prevents superseded renders from occupying the command
+// queue while the user is still moving a slider.
+const MAX_PREVIEW_REQUESTS_IN_FLIGHT = 1;
+const PREVIEW_SETTLE_DELAY_MS = 16;
+
 export function useImageProcessing(
   transformWrapperRef: any,
   prevAdjustmentsRef: React.RefObject<any>,
@@ -52,7 +64,7 @@ export function useImageProcessing(
   const multiSelectedPaths = useLibraryStore((state) => state.multiSelectedPaths);
 
   const inFlightCountRef = useRef(0);
-  const pendingApplyRef = useRef<{ adjustments: Adjustments; targetRes?: number } | null>(null);
+  const pendingApplyRef = useRef<PendingApplyRequest | null>(null);
   const currentOriginalResRef = useRef<number>(0);
   const originalPreviewJobIdRef = useRef(0);
   const lastViewportRequestKeyRef = useRef<string | null>(null);
@@ -270,8 +282,8 @@ export function useImageProcessing(
           targetResolution: renderPlan.targetResolution,
           renderTier: renderPlan.tier,
           roi: roi || null,
-          computeWaveform: !!isWaveformVisible && !BASIC_MODE,
-          activeWaveformChannel: BASIC_MODE ? null : activeWaveformChannelRef.current || null,
+          computeWaveform: !dragging && !!isWaveformVisible && !BASIC_MODE,
+          activeWaveformChannel: !dragging && !BASIC_MODE ? activeWaveformChannelRef.current || null : null,
           // The native display surface is still available in full/debug mode.
           // Basic mode keeps the processed JPEG in the WebView so a failed
           // native-surface handoff can never leave the editor blank.
@@ -367,15 +379,15 @@ export function useImageProcessing(
   );
 
   const flushPipeline = useCallback(() => {
-    if (inFlightCountRef.current >= 3) return;
+    if (inFlightCountRef.current >= MAX_PREVIEW_REQUESTS_IN_FLIGHT) return;
     if (!pendingApplyRef.current) return;
 
-    const { adjustments, targetRes } = pendingApplyRef.current;
+    const { adjustments, dragging, targetRes } = pendingApplyRef.current;
     pendingApplyRef.current = null;
 
     inFlightCountRef.current += 1;
 
-    executeApplyAdjustments(adjustments, true, targetRes).finally(() => {
+    executeApplyAdjustments(adjustments, dragging, targetRes).finally(() => {
       inFlightCountRef.current -= 1;
       if (pendingApplyRef.current) {
         requestAnimationFrame(() => flushPipeline());
@@ -387,15 +399,12 @@ export function useImageProcessing(
     (currentAdjustments: Adjustments, dragging: boolean = false, targetRes?: number) => {
       if (!selectedImage?.isReady) return;
 
-      if (dragging) {
-        pendingApplyRef.current = { adjustments: currentAdjustments, targetRes };
-        flushPipeline();
-      } else {
-        pendingApplyRef.current = null;
-        executeApplyAdjustments(currentAdjustments, false, targetRes);
-      }
+      // Settled renders use the same latest-only lane as interactive renders.
+      // This keeps a release render from racing a still-running drag frame.
+      pendingApplyRef.current = { adjustments: currentAdjustments, dragging, targetRes };
+      flushPipeline();
     },
-    [selectedImage?.isReady, flushPipeline, executeApplyAdjustments],
+    [selectedImage?.isReady, flushPipeline],
   );
 
   const uncroppedPreviewQueue = useMemo(
@@ -616,7 +625,7 @@ export function useImageProcessing(
           }
         }
         prevAdjustmentsRef.current = { path: selectedImage.path, adjustments };
-      }, 50);
+      }, PREVIEW_SETTLE_DELAY_MS);
     }
 
     return () => {

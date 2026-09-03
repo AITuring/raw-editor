@@ -31,7 +31,9 @@ const requiredTokens = [
   '--ui-editor-control-gap',
   '--ui-editor-section-padding-block',
   '--ui-editor-slider-track-height',
+  '--ui-editor-slider-row-gap',
   '--ui-editor-action-min-height',
+  '--ui-editor-header-action-min-width',
   '--ui-editor-description-measure',
   '--ui-editor-scrollbar-reserve',
   '--ui-border-control',
@@ -89,6 +91,7 @@ const selectorContracts = [
   ['.develop-tool-rail', '--develop-tool-rail-size'],
   ['.develop-panel-content :is(.ui-panel-header', '--ui-editor-panel-inset'],
   ['.develop-controls-panel .develop-collapsible-header', '--ui-editor-section-header-height'],
+  ['.develop-controls-panel > .ui-panel-header .ui-button', '--ui-editor-header-action-min-width'],
   ['.develop-controls-panel .camera-raw-slider-header', '--ui-editor-value-column'],
   ['.develop-controls-panel .camera-raw-action-row', '--ui-editor-action-min-height'],
   ['.develop-controls-panel .camera-raw-select', '--ui-shadow-button-rest'],
@@ -134,6 +137,28 @@ if (!messageRule.includes('border: 0;')) {
 
 if (!styles.includes('.ui-button:is(.ui-button--ghost, .ui-button--icon)')) {
   failures.push('Ghost and icon Button variants must share the flat tool-button contract.');
+}
+
+const controlsPanelSource = read('src/components/panel/right/ControlsPanel.tsx');
+const adjustmentsSource = read('src/utils/adjustments.ts');
+if (!controlsPanelSource.includes('variant="primary"')) {
+  failures.push('Develop auto-adjust must remain a raised primary action.');
+}
+if (!controlsPanelSource.includes('variant="secondary"')) {
+  failures.push('Develop reset must remain a raised secondary action.');
+}
+if (!controlsPanelSource.includes('canToggleVisibility={false}')) {
+  failures.push('Develop adjustment sections must not expose visibility toggles.');
+}
+if (controlsPanelSource.includes('onToggleVisibility=')) {
+  failures.push('Develop adjustment sections must not wire the removed eye action.');
+}
+if (
+  !adjustmentsSource.includes(
+    'const normalizedSectionVisibility: SectionVisibility = { ...INITIAL_ADJUSTMENTS.sectionVisibility };',
+  )
+) {
+  failures.push('Legacy global section visibility must normalize to the always-active Develop pipeline.');
 }
 
 const flatToolSelectors = [

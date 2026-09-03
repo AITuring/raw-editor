@@ -20,6 +20,7 @@ The main density controls are:
 | Denoise dialog / grid  | `--ui-denoise-dialog-max-width` / `--ui-denoise-control-column` / `--ui-denoise-preview-height` | shared           |
 | Standard action button | `--ui-button-height`                                                                            | `28px`           |
 | Compact action button  | `--ui-button-height-sm`                                                                         | `24px`           |
+| Develop header action  | `--ui-editor-header-action-min-width`                                                           | `64px`           |
 | Button rest elevation  | `--ui-shadow-button-rest`                                                                       | shared           |
 | Button hover elevation | `--ui-shadow-button-hover`                                                                      | shared           |
 | Button press elevation | `--ui-shadow-button-pressed`                                                                    | shared           |
@@ -32,6 +33,7 @@ The main density controls are:
 | Right tool rail        | `--ui-tool-rail-width`                                                                          | `48px`           |
 | Standard control       | `--ui-size-control`                                                                             | `32px`           |
 | Compact icon target    | `--ui-size-icon-hit`                                                                            | `28px`           |
+| Develop slider rhythm  | `--ui-editor-subsection-header-height` / `--ui-editor-slider-row-gap`                           | `24px` / `4px`   |
 | App panel gap          | `--ui-shell-gap`                                                                                | `8px`            |
 | Message surface        | `--ui-message-min-height` / `--ui-message-max-width`                                            | `34px` / `420px` |
 | Message elevation      | `--ui-shadow-message`                                                                           | shared           |
@@ -44,6 +46,9 @@ headings predictable as panels are reused. A container query narrows these
 columns for compact right-panel widths without changing the underlying controls.
 `--ui-editor-scrollbar-reserve` keeps the fixed header/profile actions on the
 same right edge as the scrollable adjustment content.
+Slider rows use `--ui-editor-slider-row-gap`, `--ui-editor-section-padding-block`,
+and `--ui-editor-slider-track-height` so the panel can become denser without
+hard-coding spacing in each adjustment component.
 Native selection fields in the adjustment panel use the same raised-surface
 shadow and left-aligned value treatment, so a dropdown reads as a control
 without adding a perimeter border.

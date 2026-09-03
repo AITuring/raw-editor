@@ -1997,6 +1997,20 @@
       "goHome": "Torna alla Home page"
     }
   },
+  "styleTransfer": {
+    "chooseImage": "Scegli un'immagine",
+    "dropHint": "oppure trascinala qui · JPG, PNG, TIFF, RAW",
+    "entryDescription": "Abbina alla tua foto i colori e l’atmosfera di un’immagine di riferimento.",
+    "entryTitle": "Trasferisci uno stile",
+    "loading": "Preparazione dell’anteprima…",
+    "open": "Apri Style Lab",
+    "reference": "Immagine di riferimento",
+    "referenceHint": "L’immagine di cui vuoi riprendere il linguaggio cromatico.",
+    "removeImage": "Rimuovi immagine",
+    "replaceImage": "Sostituisci immagine",
+    "target": "Immagine di destinazione",
+    "targetHint": "Mantiene soggetto, composizione e dettagli."
+  },
   "ui": {
     "bottomBar": {
       "imagesSelected": "{{current}} di {{total}} immagini selezionate",

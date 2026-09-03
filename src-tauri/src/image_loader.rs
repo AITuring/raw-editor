@@ -69,8 +69,34 @@ pub fn load_and_composite(
     settings: &AppSettings,
     cancel_token: Option<(Arc<AtomicUsize>, usize)>,
 ) -> Result<DynamicImage> {
-    let base_image =
-        load_base_image_from_bytes(base_image, path, use_fast_raw_dev, settings, cancel_token)?;
+    load_and_composite_with_exif_persistence(
+        base_image,
+        path,
+        adjustments,
+        use_fast_raw_dev,
+        settings,
+        cancel_token,
+        true,
+    )
+}
+
+fn load_and_composite_with_exif_persistence(
+    base_image: &[u8],
+    path: &str,
+    adjustments: &Value,
+    use_fast_raw_dev: bool,
+    settings: &AppSettings,
+    cancel_token: Option<(Arc<AtomicUsize>, usize)>,
+    persist_exif: bool,
+) -> Result<DynamicImage> {
+    let base_image = load_base_image_from_bytes_with_exif_persistence(
+        base_image,
+        path,
+        use_fast_raw_dev,
+        settings,
+        cancel_token,
+        persist_exif,
+    )?;
     composite_patches_on_image(&base_image, adjustments)
 }
 
@@ -80,6 +106,44 @@ pub fn load_base_image_from_bytes(
     use_fast_raw_dev: bool,
     settings: &AppSettings,
     cancel_token: Option<(Arc<AtomicUsize>, usize)>,
+) -> Result<DynamicImage> {
+    load_base_image_from_bytes_with_exif_persistence(
+        bytes,
+        path_for_ext_check,
+        use_fast_raw_dev,
+        settings,
+        cancel_token,
+        true,
+    )
+}
+
+/// Decodes a source image without writing or migrating its EXIF sidecar.
+/// Transient tools can use this when they do not need adjustment-patch
+/// compositing, avoiding an otherwise unnecessary full-frame clone.
+pub fn load_base_image_from_bytes_without_exif_persistence(
+    bytes: &[u8],
+    path_for_ext_check: &str,
+    use_fast_raw_dev: bool,
+    settings: &AppSettings,
+    cancel_token: Option<(Arc<AtomicUsize>, usize)>,
+) -> Result<DynamicImage> {
+    load_base_image_from_bytes_with_exif_persistence(
+        bytes,
+        path_for_ext_check,
+        use_fast_raw_dev,
+        settings,
+        cancel_token,
+        false,
+    )
+}
+
+fn load_base_image_from_bytes_with_exif_persistence(
+    bytes: &[u8],
+    path_for_ext_check: &str,
+    use_fast_raw_dev: bool,
+    settings: &AppSettings,
+    cancel_token: Option<(Arc<AtomicUsize>, usize)>,
+    persist_exif: bool,
 ) -> Result<DynamicImage> {
     let highlight_compression = settings.raw_highlight_compression.unwrap_or(2.5);
     let linear_mode = settings.linear_raw_mode.clone();
@@ -93,11 +157,13 @@ pub fn load_base_image_from_bytes(
     let sharpening_amount = settings.raw_preprocessing_sharpening.unwrap_or(0.35);
     let apply_to_non_raws = settings.apply_preprocessing_to_non_raws.unwrap_or(false);
 
-    crate::exif_processing::persist_exif_if_missing(
-        Path::new(path_for_ext_check),
-        path_for_ext_check,
-        bytes,
-    );
+    if persist_exif {
+        crate::exif_processing::persist_exif_if_missing(
+            Path::new(path_for_ext_check),
+            path_for_ext_check,
+            bytes,
+        );
+    }
 
     if is_raw_file(path_for_ext_check) {
         match panic::catch_unwind(move || {
