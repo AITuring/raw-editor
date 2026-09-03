@@ -2379,6 +2379,7 @@ pub fn run() {
             file_management::update_exif_fields,
             file_management::get_supported_file_types,
             file_management::read_exif_for_paths,
+            file_management::inspect_folder_contents,
             file_management::list_images_in_dir,
             file_management::list_images_recursive,
             file_management::get_folder_tree,

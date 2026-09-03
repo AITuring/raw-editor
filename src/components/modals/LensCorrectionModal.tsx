@@ -577,19 +577,19 @@ export default function LensCorrectionModal({
   };
 
   const renderControls = () => (
-    <div className="modal-adjustments-pane w-80 shrink-0 bg-bg-secondary flex flex-col border-l border-surface h-full z-10">
-      <div className="p-4 flex justify-between items-center shrink-0 border-b border-surface">
+    <div className="modal-adjustments-pane z-10 flex h-full w-80 shrink-0 flex-col border-l border-border-color bg-bg-secondary">
+      <div className="flex shrink-0 items-center justify-between border-b border-border-color p-4">
         <Text variant={TextVariants.title}>{t('modals.lensCorrection.title')}</Text>
         <button
           onClick={handleReset}
           data-tooltip={t('modals.lensCorrection.resetTooltip')}
-          className="p-2 rounded-full hover:bg-surface transition-colors"
+          className="modal-icon-action"
         >
           <RotateCcw size={18} />
         </button>
       </div>
       <div className="grow overflow-y-auto p-4 flex flex-col gap-6 text-text-secondary">
-        <div className="w-full p-2 bg-card-active rounded-md">
+        <div className="ui-segmented-frame w-full">
           <div className="relative flex w-full">
             <motion.div
               className="absolute top-0 bottom-0 z-0 bg-accent"
@@ -599,20 +599,14 @@ export default function LensCorrectionModal({
             />
             <button
               onClick={() => handleModeChange('auto')}
-              className={clsx(
-                'relative flex-1 flex items-center justify-center gap-2 px-3 p-1.5 text-sm font-medium rounded-md transition-colors',
-                params.lensCorrectionMode === 'auto' ? 'text-button-text' : 'text-text-primary hover:bg-surface',
-              )}
+              className={clsx('ui-segmented-option', params.lensCorrectionMode === 'auto' && 'is-active')}
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               <span className="relative z-10 flex items-center">{t('modals.lensCorrection.modeAuto')}</span>
             </button>
             <button
               onClick={() => handleModeChange('manual')}
-              className={clsx(
-                'relative flex-1 flex items-center justify-center gap-2 px-3 p-1.5 text-sm font-medium rounded-md transition-colors',
-                params.lensCorrectionMode === 'manual' ? 'text-button-text' : 'text-text-primary hover:bg-surface',
-              )}
+              className={clsx('ui-segmented-option', params.lensCorrectionMode === 'manual' && 'is-active')}
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               <span className="relative z-10 flex items-center">{t('modals.lensCorrection.modeManual')}</span>
@@ -830,7 +824,7 @@ export default function LensCorrectionModal({
             <Text
               as="div"
               variant={TextVariants.small}
-              className="p-3 bg-surface rounded-md border border-surface flex items-center gap-3"
+              className="flex items-center gap-3 rounded-md border border-border-color bg-surface p-3"
             >
               <Info size={16} className="shrink-0" />
               <p className="leading-relaxed">{t('modals.lensCorrection.maskWarning')}</p>
@@ -839,7 +833,7 @@ export default function LensCorrectionModal({
           <Text
             as="div"
             variant={TextVariants.small}
-            className="p-3 bg-surface rounded-md border border-surface flex items-center gap-3"
+            className="flex items-center gap-3 rounded-md border border-border-color bg-surface p-3"
           >
             <Info size={16} className="shrink-0" />
             <div className="leading-tight space-y-1">
@@ -946,9 +940,7 @@ export default function LensCorrectionModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs transition-opacity duration-300 ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -962,16 +954,13 @@ export default function LensCorrectionModal({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="bg-surface rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+            className="app-modal-surface app-modal-surface--full-bleed flex h-[90vh] max-w-6xl flex-col"
           >
             <div className="grow min-h-0 overflow-hidden">{renderContent()}</div>
-            <div className="shrink-0 p-4 flex justify-end gap-3 border-t border-surface bg-bg-secondary z-20">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-              >
+            <div className="z-20 flex shrink-0 justify-end gap-3 border-t border-border-color bg-bg-secondary p-4">
+              <Button onClick={onClose} variant="secondary">
                 {t('modals.lensCorrection.cancel')}
-              </button>
+              </Button>
               <Button onClick={handleApply} disabled={isApplying || !previewUrl}>
                 <Check className="mr-2" size={16} /> {t('modals.lensCorrection.apply')}
               </Button>

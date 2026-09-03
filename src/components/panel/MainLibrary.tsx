@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import {
   AlertTriangle,
@@ -16,11 +16,19 @@ import {
   Columns,
   SlidersHorizontal,
   Rows3,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  ChevronDown,
+  ChevronUp,
+  FileQuestion,
+  FolderX,
 } from 'lucide-react';
 import CullingView from './library/CullingView';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import Button from '../ui/Button';
+import Dropdown from '../ui/Dropdown';
 import TaskProgress from '../ui/TaskProgress';
 import {
   AppSettings,
@@ -32,18 +40,20 @@ import {
   RawStatus,
   EditedStatus,
   LibraryDisplayMode,
+  SortDirection,
 } from '../ui/AppProperties';
 import { GroupBadgeInfo, GroupId } from '../../utils/imageGrouping';
 import { ImportState, Status } from '../ui/ExportImportProperties';
 import Text from '../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { LibraryContentState, useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
 import SettingsPanel from './SettingsPanel';
 import { COVER_IMAGES, COVER_ROTATION_INTERVAL_MS } from '../../config/coverImages';
 
 import LibraryGrid from './library/LibraryGrid';
 import { SearchInput, ViewOptionsDropdown } from './library/LibraryHeader';
+import { useShallow } from 'zustand/react/shallow';
 
 export interface ColumnWidths {
   thumbnail: number;
@@ -67,17 +77,18 @@ interface MainLibraryProps {
   isIndexing: boolean;
   isAndroid: boolean;
   isTreeLoading: boolean;
+  contentState: LibraryContentState;
   libraryViewMode: LibraryViewMode;
   multiSelectedPaths: Array<string>;
   onClearSelection(): void;
   onContextMenu(event: any, path: string): void;
-  onContinueSession(): void;
   onEmptyAreaContextMenu(event: any): void;
   onGoHome(): void;
   onImageClick(path: string, event: any): void;
   onImageDoubleClick(path: string): void;
   onImportClick(): void;
-  onLibraryRefresh(): void;
+  onLibraryRefresh(): void | Promise<void>;
+  onRate(rating: number): void;
   onOpenImage(): void;
   onOpenMultiImageWorkflow(): void;
   onOpenFolder(): void;
@@ -90,6 +101,7 @@ interface MainLibraryProps {
   thumbnailAspectRatio: ThumbnailAspectRatio;
   thumbnailProgress: Progress;
   thumbnailSize: ThumbnailSize;
+  totalImageCount: number;
 }
 
 export interface ColumnWidths {
@@ -137,16 +149,16 @@ function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitch
   const safeIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
   return (
-    <div className="flex items-center bg-surface p-1 rounded-lg border border-border-color/20 h-14 w-40 select-none">
-      <div className="relative flex w-full h-full">
+    <div className="ui-segmented-control">
+      <div className="ui-segmented-track">
         <motion.div
-          className="absolute top-0 bottom-0 z-0 bg-bg-primary rounded-md shadow-sm"
+          className="ui-segmented-indicator"
           initial={false}
           animate={{
             x: `${safeIndex * 100}%`,
             width: `${100 / options.length}%`,
           }}
-          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0.2, duration: 0.6 }}
+          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
         />
         {options.map((opt) => {
           const Icon = opt.Icon;
@@ -157,14 +169,12 @@ function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitch
               aria-pressed={isActive}
               key={opt.id}
               onClick={() => setDisplayMode(opt.id)}
-              className={`relative z-10 flex-1 h-full flex items-center justify-center rounded-md transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-1 ${
-                isActive ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
-              }`}
+              className={clsx('ui-segmented-item', isActive && 'is-active')}
               data-tooltip={opt.tooltip}
               style={{ WebkitTapHighlightColor: 'transparent' }}
               type="button"
             >
-              <Icon aria-hidden="true" className="w-5 h-5" />
+              <Icon aria-hidden="true" className="h-4 w-4" />
             </button>
           );
         })}
@@ -173,10 +183,61 @@ function DisplayModeSwitch({ displayMode, setDisplayMode, t }: DisplayModeSwitch
   );
 }
 
+function LibraryMessageState({
+  icon,
+  title,
+  description,
+  actions,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
+      <div className="flex max-w-lg flex-col items-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border-color bg-surface text-text-secondary">
+          {icon}
+        </div>
+        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+        <p className="mt-1.5 max-w-md text-sm leading-6 text-text-secondary">{description}</p>
+        {actions && <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{actions}</div>}
+      </div>
+    </div>
+  );
+}
+
+function LibraryLoadingGrid({ label }: { label: string }) {
+  return (
+    <div aria-busy="true" aria-label={label} className="relative flex-1 overflow-hidden p-3" role="status">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 opacity-70">
+        {Array.from({ length: 12 }).map((_, index) => (
+          <div className="aspect-square overflow-hidden rounded-md bg-surface" key={index}>
+            <div className="library-loading-sheen h-full w-full" />
+          </div>
+        ))}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center bg-bg-secondary/35">
+        <div className="flex items-center gap-2 rounded-sm border border-border-color bg-bg-secondary px-3 py-2 text-xs text-text-secondary shadow-lg">
+          <Loader2 aria-hidden="true" className="animate-spin text-status-info" size={16} />
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MainLibrary(props: MainLibraryProps) {
   const { t } = useTranslation();
   const prefersReducedMotion = useReducedMotion();
-  const setUI = useUIStore((state) => state.setUI);
+  const { isSettingsOpen, libraryContextPanel, setUI } = useUIStore(
+    useShallow((state) => ({
+      isSettingsOpen: state.isSettingsOpen,
+      libraryContextPanel: state.libraryContextPanel,
+      setUI: state.setUI,
+    })),
+  );
   const [coverImageIndex, setCoverImageIndex] = useState(() =>
     COVER_IMAGES.length > 0 ? Math.floor(Math.random() * COVER_IMAGES.length) : 0,
   );
@@ -184,7 +245,6 @@ export default function MainLibrary(props: MainLibraryProps) {
   const [isBusyDelayed, setIsBusyDelayed] = useState(false);
   const [isBusyLoaderMounted, setIsBusyLoaderMounted] = useState(false);
   const [isProgressHovered, setIsProgressHovered] = useState(false);
-  const isSettingsOpen = useUIStore((state) => state.isSettingsOpen);
 
   const libraryDisplayMode = props.appSettings?.libraryDisplayMode || LibraryDisplayMode.Grid;
 
@@ -197,7 +257,44 @@ export default function MainLibrary(props: MainLibraryProps) {
     }
   };
 
-  const searchCriteria = useLibraryStore((state) => state.searchCriteria);
+  const handleLibraryViewModeChange = async (mode: LibraryViewMode) => {
+    props.setLibraryViewMode(mode);
+    if (props.appSettings) {
+      await props.onSettingsChange({ ...props.appSettings, libraryViewMode: mode });
+    }
+    await props.onLibraryRefresh();
+  };
+
+  const { filterCriteria, searchCriteria, setFilterCriteria, setSearchCriteria, setSortCriteria, sortCriteria } =
+    useLibraryStore(
+      useShallow((state) => ({
+        filterCriteria: state.filterCriteria,
+        searchCriteria: state.searchCriteria,
+        setFilterCriteria: state.setFilterCriteria,
+        setSearchCriteria: state.setSearchCriteria,
+        setSortCriteria: state.setSortCriteria,
+        sortCriteria: state.sortCriteria,
+      })),
+    );
+
+  const locationLabel = useMemo(() => {
+    if (!props.currentFolderPath) return t('library.header.selectedFiles', { total: props.totalImageCount });
+    if (props.currentFolderPath.startsWith('Album: ')) return props.currentFolderPath.slice('Album: '.length);
+    const parts = props.currentFolderPath.split(/[\\/]/).filter(Boolean);
+    return parts.at(-1) || props.currentFolderPath;
+  }, [props.currentFolderPath, props.totalImageCount, t]);
+
+  const hasSearch = searchCriteria.tags.length > 0 || !!searchCriteria.text;
+  const hasFilters =
+    filterCriteria.rating !== 0 ||
+    (filterCriteria.rawStatus && filterCriteria.rawStatus !== RawStatus.All) ||
+    (filterCriteria.editedStatus && filterCriteria.editedStatus !== EditedStatus.All) ||
+    (filterCriteria.colors && filterCriteria.colors.length > 0);
+
+  const clearDiscoveryCriteria = () => {
+    setSearchCriteria({ tags: [], text: '', mode: 'OR' });
+    setFilterCriteria({ colors: [], rating: 0, rawStatus: RawStatus.All, editedStatus: EditedStatus.All });
+  };
 
   const translatedRatingFilterOptions = useMemo(
     () => [
@@ -370,12 +467,11 @@ export default function MainLibrary(props: MainLibraryProps) {
     if (!props.appSettings) {
       return null;
     }
-    const hasLastPath = !!props.appSettings.lastRootPath || !!props.appSettings.rootFolders?.length;
     const coverImage = COVER_IMAGES[coverImageIndex] ?? COVER_IMAGES[0];
 
     return (
       <div className="flex-1 flex h-full p-2 bg-transparent">
-        <div className="grid w-full h-full grid-cols-1 md:grid-cols-2 bg-bg-secondary rounded-lg border border-border-color/25 overflow-hidden">
+        <div className="ui-chrome-panel grid h-full w-full grid-cols-1 md:grid-cols-2">
           <div className="hidden md:block relative min-w-0 overflow-hidden bg-black">
             <AnimatePresence initial={false}>
               {coverImage && (
@@ -448,49 +544,25 @@ export default function MainLibrary(props: MainLibraryProps) {
                       weight={TextWeights.normal}
                       className="mb-10 max-w-md drop-shadow-sm"
                     >
-                      {hasLastPath ? (
-                        <>
-                          {t('library.splash.welcomeBack')}
-                          <br />
-                          {t('library.splash.welcomeBackDesc')}
-                        </>
-                      ) : props.isAndroid ? (
-                        t('library.splash.descriptionAndroid')
-                      ) : (
-                        t('library.splash.descriptionDesktop')
-                      )}
+                      {props.isAndroid
+                        ? t('library.splash.descriptionAndroid')
+                        : t('library.splash.descriptionDesktop')}
                     </Text>
                     <div className="splash-actions-container relative z-10 flex w-full flex-col gap-4">
-                      {hasLastPath && (
-                        <Button
-                          className="flex h-11 w-full justify-center rounded-md shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
-                          onClick={props.onContinueSession}
-                          size="lg"
-                        >
-                          <RefreshCw aria-hidden="true" className="shrink-0" size={20} />
-                          <span className="truncate">{t('library.splash.continueSession')}</span>
-                        </Button>
-                      )}
                       <div className={props.isAndroid ? 'flex items-center gap-2' : 'splash-action-grid'}>
                         <Button
-                          className={`splash-action-folder flex h-11 min-w-0 justify-center rounded-md shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98] ${
-                            hasLastPath ? 'bg-surface text-text-primary' : ''
-                          }`}
+                          className="splash-action-folder flex h-11 min-w-0 justify-center rounded-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
                           onClick={props.onOpenFolder}
                           size="lg"
                         >
                           <Folder aria-hidden="true" className="shrink-0" size={20} />
                           <span className="truncate">
-                            {props.isAndroid
-                              ? t('library.splash.openLibrary')
-                              : hasLastPath
-                                ? t('library.splash.addFolder')
-                                : t('library.splash.openFolder')}
+                            {props.isAndroid ? t('library.splash.openLibrary') : t('library.splash.openFolder')}
                           </span>
                         </Button>
                         {!props.isAndroid && (
                           <Button
-                            className="splash-action-image flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                            className="splash-action-image flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
                             onClick={props.onOpenImage}
                             size="lg"
                           >
@@ -500,7 +572,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                         )}
                         {!props.isAndroid && (
                           <Button
-                            className="splash-action-stack flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
+                            className="splash-action-stack flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
                             data-tooltip={t('library.splash.multiImageSelectionHint')}
                             onClick={props.onOpenMultiImageWorkflow}
                             size="lg"
@@ -512,7 +584,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                         )}
                         <Button
                           aria-label={t('settings.general.title')}
-                          className="splash-action-settings h-11 w-11 shrink-0 bg-surface px-0 text-text-primary shadow-md transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
+                          className="splash-action-settings h-11 w-11 shrink-0 bg-surface px-0 text-text-primary transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
                           onClick={() => setUI({ isSettingsOpen: true })}
                           size="lg"
                           data-tooltip={t('settings.general.title')}
@@ -550,144 +622,171 @@ export default function MainLibrary(props: MainLibraryProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-bg-secondary rounded-lg overflow-hidden">
+    <div className="ui-chrome-panel flex h-full min-w-0 flex-1 flex-col">
       <header
-        className="p-3 shrink-0 flex justify-between items-center border-b border-surface gap-4"
+        className="ui-toolbar ui-library-toolbar"
         onMouseEnter={() => setIsProgressHovered(true)}
         onMouseLeave={() => setIsProgressHovered(false)}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Button
             aria-label={t('library.tooltips.goHome')}
-            className="h-10 shrink-0 rounded-lg border border-border-color/50 bg-surface px-3 text-text-primary shadow-sm hover:bg-card-active"
+            className="shrink-0 p-0"
             data-tooltip={t('library.tooltips.goHome')}
             onClick={props.onGoHome}
+            size="icon"
             type="button"
+            variant="secondary"
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-            <span className="whitespace-nowrap">{t('library.tooltips.goHome')}</span>
           </Button>
-          <div className="min-w-0">
-            <Text variant={TextVariants.headline}>{t('library.header.title')}</Text>
-            {!props.isAndroid && (
-              <div className="flex items-center gap-2">
-                {props.currentFolderPath ? (
-                  <Text className="truncate">{props.currentFolderPath}</Text>
-                ) : props.imageList.length > 0 ? (
-                  <Text className="truncate">
-                    {t('library.header.selectedFiles', { total: props.imageList.length })}
-                  </Text>
-                ) : (
-                  <p className="text-sm invisible select-none pointer-events-none h-5 overflow-hidden"></p>
-                )}
-                <div
-                  className={`flex items-center gap-2 overflow-hidden transition-[max-width,opacity] duration-300 whitespace-nowrap ${
-                    isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'
-                  }`}
-                  onTransitionEnd={(e) => {
-                    if (e.propertyName === 'opacity' && !isBusyDelayed) {
-                      setIsBusyLoaderMounted(false);
-                    }
-                  }}
-                >
-                  {isBusyLoaderMounted && <Loader2 size={14} className="animate-spin text-status-info shrink-0" />}
-                  <div
-                    className={`flex items-center transition-[max-width,opacity] duration-300 ease-out overflow-hidden ${
-                      isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
-                        ? 'max-w-xs opacity-100'
-                        : 'max-w-0 opacity-0'
-                    }`}
-                  >
-                    <Text variant={TextVariants.small} color={TextColors.secondary} className="whitespace-nowrap">
-                      ({props.thumbnailProgress?.current ?? 0}/{props.thumbnailProgress?.total ?? 0})
-                    </Text>
-                  </div>
-                </div>
-              </div>
+
+          <div className="flex min-w-0 items-center gap-2" title={props.currentFolderPath || locationLabel}>
+            <span className="hidden shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary lg:inline">
+              {t('library.header.title')}
+            </span>
+            <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-border-color lg:block" />
+            <span className="truncate text-sm font-semibold text-text-primary">{locationLabel}</span>
+            <span className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
+              {props.imageList.length === props.totalImageCount
+                ? props.totalImageCount
+                : t('library.header.resultCount', {
+                    shown: props.imageList.length,
+                    total: props.totalImageCount,
+                  })}
+            </span>
+          </div>
+
+          <div
+            className={`flex items-center gap-1.5 overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ${
+              isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'
+            }`}
+            onTransitionEnd={(event) => {
+              if (event.propertyName === 'opacity' && !isBusyDelayed) setIsBusyLoaderMounted(false);
+            }}
+          >
+            {isBusyLoaderMounted && (
+              <Loader2 aria-hidden="true" className="shrink-0 animate-spin text-status-info" size={13} />
             )}
+            <span
+              className={`overflow-hidden text-[10px] tabular-nums text-text-secondary transition-[max-width,opacity] duration-200 ${
+                isProgressHovered && isBusyDelayed && (props.thumbnailProgress?.total ?? 0) > 0
+                  ? 'max-w-28 opacity-100'
+                  : 'max-w-0 opacity-0'
+              }`}
+            >
+              {props.thumbnailProgress?.current ?? 0}/{props.thumbnailProgress?.total ?? 0}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-4 shrink-0">
-          {props.importState.status === Status.Importing && (
-            <Text
-              aria-live="polite"
-              as="div"
-              color={TextColors.info}
-              className="semantic-status"
-              data-tone="processing"
-              role="status"
-            >
-              <FolderInput size={16} />
-              <span>
-                {t('library.import.progress', {
-                  current: props.importState.progress?.current,
-                  total: props.importState.progress?.total,
-                })}
-              </span>
-            </Text>
-          )}
-          {props.importState.status === Status.Success && (
-            <Text
-              aria-live="polite"
-              as="div"
-              color={TextColors.success}
-              className="semantic-status"
-              data-tone="success"
-              role="status"
-            >
-              <Check size={16} />
-              <span>{t('library.import.complete')}</span>
-            </Text>
-          )}
-          {props.importState.status === Status.Error && (
-            <Text
-              aria-live="assertive"
-              as="div"
-              color={TextColors.error}
-              className="semantic-status"
-              data-tone="error"
-              role="status"
-            >
-              <AlertTriangle size={16} />
-              <span>{t('library.import.failed')}</span>
-            </Text>
-          )}
-          <DisplayModeSwitch displayMode={libraryDisplayMode} setDisplayMode={setLibraryDisplayMode} t={t} />
 
-          <div className="flex items-center bg-surface p-1 rounded-lg gap-1 border border-border-color/20">
-            <SearchInput indexingProgress={props.indexingProgress} isIndexing={props.isIndexing} />
-            <ViewOptionsDropdown
-              libraryViewMode={props.libraryViewMode}
-              onSelectSize={props.onThumbnailSizeChange}
-              onSelectAspectRatio={props.onThumbnailAspectRatioChange}
-              onLibraryRefresh={props.onLibraryRefresh}
-              setLibraryViewMode={props.setLibraryViewMode}
-              thumbnailSize={props.thumbnailSize}
-              thumbnailAspectRatio={props.thumbnailAspectRatio}
-              thumbnailSizeOptions={translatedThumbnailSizeOptions}
-              thumbnailAspectRatioOptions={translatedThumbnailAspectRatioOptions}
-              ratingFilterOptions={translatedRatingFilterOptions}
-              rawStatusOptions={translatedRawStatusOptions}
-              editedStatusOptions={translatedEditedStatusOptions}
-              sortOptions={translatedSortOptions}
-            />
-            {!props.isAndroid && (
-              <Button
-                aria-label={t('library.splash.openImage')}
-                className="h-12 w-12 bg-transparent text-text-primary shadow-none p-0 flex items-center justify-center"
-                data-tooltip={t('library.splash.openImage')}
-                onClick={props.onOpenImage}
-                type="button"
-              >
-                <ImagePlus aria-hidden="true" className="w-5 h-5" />
-              </Button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {props.importState.status !== Status.Idle && (
+            <div
+              aria-live={props.importState.status === Status.Error ? 'assertive' : 'polite'}
+              className="hidden xl:flex"
+              role="status"
+            >
+              {props.importState.status === Status.Importing ? (
+                <span className="semantic-status" data-tone="processing">
+                  <FolderInput aria-hidden="true" size={14} />
+                  <span className="hidden 2xl:inline">
+                    {t('library.import.progress', {
+                      current: props.importState.progress?.current,
+                      total: props.importState.progress?.total,
+                    })}
+                  </span>
+                </span>
+              ) : props.importState.status === Status.Success ? (
+                <span className="semantic-status" data-tone="success">
+                  <Check aria-hidden="true" size={14} />
+                  <span className="hidden 2xl:inline">{t('library.import.complete')}</span>
+                </span>
+              ) : props.importState.status === Status.Error ? (
+                <span className="semantic-status" data-tone="error">
+                  <AlertTriangle aria-hidden="true" size={14} />
+                  <span className="hidden 2xl:inline">{t('library.import.failed')}</span>
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          <DisplayModeSwitch displayMode={libraryDisplayMode} setDisplayMode={setLibraryDisplayMode} t={t} />
+          <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-border-color" />
+          <SearchInput indexingProgress={props.indexingProgress} isIndexing={props.isIndexing} />
+
+          <div className={libraryContextPanel ? 'hidden' : 'hidden items-center gap-1 xl:flex'}>
+            {sortCriteria.order === SortDirection.Ascending ? (
+              <ArrowDownAZ aria-hidden="true" className="text-text-secondary" size={15} />
+            ) : (
+              <ArrowUpAZ aria-hidden="true" className="text-text-secondary" size={15} />
             )}
+            <Dropdown
+              className="w-36"
+              onChange={(value) => setSortCriteria((previous) => ({ ...previous, key: value }))}
+              options={translatedSortOptions.map((option) => ({ value: option.key, label: option.label }))}
+              triggerClassName="mr-0"
+              value={sortCriteria.key}
+            />
+            <button
+              aria-label={
+                sortCriteria.order === SortDirection.Ascending
+                  ? t('library.header.viewOptions.sortDescending')
+                  : t('library.header.viewOptions.sortAscending')
+              }
+              className="ui-icon-button ui-icon-button--md"
+              data-tooltip={
+                sortCriteria.order === SortDirection.Ascending
+                  ? t('library.header.viewOptions.sortDescending')
+                  : t('library.header.viewOptions.sortAscending')
+              }
+              onClick={() =>
+                setSortCriteria((previous) => ({
+                  ...previous,
+                  order:
+                    previous.order === SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending,
+                }))
+              }
+              type="button"
+            >
+              {sortCriteria.order === SortDirection.Ascending ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+            </button>
           </div>
+
+          <ViewOptionsDropdown
+            libraryViewMode={props.libraryViewMode}
+            onSelectSize={props.onThumbnailSizeChange}
+            onSelectAspectRatio={props.onThumbnailAspectRatioChange}
+            onLibraryRefresh={props.onLibraryRefresh}
+            setLibraryViewMode={(mode) => void handleLibraryViewModeChange(mode)}
+            thumbnailSize={props.thumbnailSize}
+            thumbnailAspectRatio={props.thumbnailAspectRatio}
+            thumbnailSizeOptions={translatedThumbnailSizeOptions}
+            thumbnailAspectRatioOptions={translatedThumbnailAspectRatioOptions}
+            ratingFilterOptions={translatedRatingFilterOptions}
+            rawStatusOptions={translatedRawStatusOptions}
+            editedStatusOptions={translatedEditedStatusOptions}
+            sortOptions={translatedSortOptions}
+          />
+
+          {!props.isAndroid && (
+            <Button
+              aria-label={t('library.splash.openImage')}
+              className="p-0"
+              data-tooltip={t('library.splash.openImage')}
+              onClick={props.onOpenImage}
+              size="icon"
+              type="button"
+              variant="secondary"
+            >
+              <ImagePlus aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </header>
 
       {activeLibraryTask && (
-        <div className="shrink-0 border-b border-surface bg-bg-primary/35 px-3 py-2">
+        <div className="shrink-0 border-b border-border-color bg-bg-primary/35 px-4 py-2">
           <TaskProgress
             ariaLabel={activeLibraryTask.label}
             compact
@@ -709,52 +808,100 @@ export default function MainLibrary(props: MainLibraryProps) {
             thumbnailSizeOptions={translatedThumbnailSizeOptions}
           />
         )
-      ) : props.isIndexing || props.aiModelDownloadStatus || props.importState.status === Status.Importing ? (
-        <div className="flex-1 flex flex-col items-center justify-center" onContextMenu={props.onEmptyAreaContextMenu}>
-          <Loader2 className="h-12 w-12 text-secondary animate-spin mb-4" />
-          <Text variant={TextVariants.heading} color={TextColors.secondary}>
-            {props.aiModelDownloadStatus
-              ? t('library.status.downloading', { status: props.aiModelDownloadStatus })
-              : props.isIndexing && props.indexingProgress.total > 0
-                ? t('library.status.indexing', {
-                    current: props.indexingProgress.current,
-                    total: props.indexingProgress.total,
-                  })
-                : props.importState.status === Status.Importing &&
-                    props.importState?.progress?.total &&
-                    props.importState.progress.total > 0
-                  ? t('library.status.importing', {
-                      current: props.importState.progress?.current,
-                      total: props.importState.progress?.total,
-                    })
-                  : t('library.status.processing')}
-          </Text>
-          <Text className="mt-2">{t('library.status.moment')}</Text>
-        </div>
-      ) : searchCriteria.tags.length > 0 || searchCriteria.text ? (
-        <div
-          className="flex-1 flex flex-col items-center justify-center text-text-secondary text-center"
-          onContextMenu={props.onEmptyAreaContextMenu}
-        >
-          <Search className="h-12 w-12 text-secondary mb-4" />
-          <Text variant={TextVariants.heading} color={TextColors.secondary}>
-            {t('library.search.noResults')}
-          </Text>
-          <Text className="mt-2 max-w-sm">
-            {t('library.search.noResultsDesc')}
-            {!props.appSettings?.enableAiTagging && t('library.search.noResultsAiHint')}
-          </Text>
-        </div>
+      ) : props.contentState.status === 'loading' || props.importState.status === Status.Importing ? (
+        <LibraryLoadingGrid
+          label={
+            props.importState.status === Status.Importing && (props.importState.progress?.total ?? 0) > 0
+              ? t('library.status.importing', {
+                  current: props.importState.progress?.current,
+                  total: props.importState.progress?.total,
+                })
+              : t('library.states.loadingTitle')
+          }
+        />
+      ) : props.contentState.status === 'error' ? (
+        <LibraryMessageState
+          actions={
+            <>
+              <Button onClick={props.onLibraryRefresh} type="button">
+                <RefreshCw aria-hidden="true" size={15} />
+                {t('library.actions.retry')}
+              </Button>
+              <Button className="bg-surface text-text-primary" onClick={props.onOpenFolder} type="button">
+                <Folder aria-hidden="true" size={15} />
+                {t('library.actions.openAnotherFolder')}
+              </Button>
+            </>
+          }
+          description={t('library.states.errorDescription', {
+            error: props.contentState.error || t('library.states.unknownError'),
+          })}
+          icon={<AlertTriangle aria-hidden="true" className="text-status-error" size={22} />}
+          title={t('library.states.errorTitle')}
+        />
+      ) : hasSearch ? (
+        <LibraryMessageState
+          actions={
+            <Button className="bg-surface text-text-primary" onClick={clearDiscoveryCriteria} type="button">
+              {t('library.actions.clearSearchAndFilters')}
+            </Button>
+          }
+          description={t('library.search.noResultsDesc')}
+          icon={<Search aria-hidden="true" size={21} />}
+          title={t('library.search.noResults')}
+        />
+      ) : hasFilters || props.totalImageCount > 0 ? (
+        <LibraryMessageState
+          actions={
+            <Button className="bg-surface text-text-primary" onClick={clearDiscoveryCriteria} type="button">
+              {t('library.actions.clearFilters')}
+            </Button>
+          }
+          description={t('library.states.filteredDescription')}
+          icon={<SlidersHorizontal aria-hidden="true" size={21} />}
+          title={t('library.filters.noMatch')}
+        />
+      ) : props.contentState.status === 'unsupported' ? (
+        <LibraryMessageState
+          actions={
+            <>
+              <Button className="bg-surface text-text-primary" onClick={props.onOpenFolder} type="button">
+                <Folder aria-hidden="true" size={15} />
+                {t('library.actions.openAnotherFolder')}
+              </Button>
+              <Button onClick={props.onImportClick} type="button">
+                <FolderInput aria-hidden="true" size={15} />
+                {t('library.actions.importHere')}
+              </Button>
+            </>
+          }
+          description={t('library.states.unsupportedDescription', { total: props.contentState.totalFiles })}
+          icon={<FileQuestion aria-hidden="true" size={22} />}
+          title={t('library.states.unsupportedTitle')}
+        />
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center" onContextMenu={props.onEmptyAreaContextMenu}>
-          <SlidersHorizontal className="h-12 w-12 mb-4 text-text-secondary" />
-          <Text>{t('library.filters.noMatch')}</Text>
-        </div>
+        <LibraryMessageState
+          actions={
+            <>
+              <Button onClick={props.onImportClick} type="button">
+                <FolderInput aria-hidden="true" size={15} />
+                {t('library.actions.importHere')}
+              </Button>
+              <Button className="bg-surface text-text-primary" onClick={props.onOpenFolder} type="button">
+                <Folder aria-hidden="true" size={15} />
+                {t('library.actions.openAnotherFolder')}
+              </Button>
+            </>
+          }
+          description={t('library.states.emptyDescription')}
+          icon={<FolderX aria-hidden="true" size={22} />}
+          title={t('library.states.emptyTitle')}
+        />
       )}
       {props.isAndroid && (
         <Button
           aria-label={t('library.tooltips.importImages')}
-          className="absolute bottom-18 right-8 h-12 w-12 bg-accent text-button-text shadow-lg p-0 flex items-center justify-center z-50 border border-border-color/50"
+          className="absolute bottom-18 right-8 z-50 flex h-12 w-12 items-center justify-center bg-accent p-0 text-button-text"
           onClick={(e) => {
             e.stopPropagation();
             props.onImportClick();

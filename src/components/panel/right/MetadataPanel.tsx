@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Invokes } from '../../ui/AppProperties';
 import { COLOR_LABELS, Color } from '../../../utils/adjustments';
+import { formatExposureTime } from '../../../utils/exifFormatting';
 import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { IconAperture, IconShutter, IconIso, IconFocalLength, IconLens } from '../editor/ExifIcons';
@@ -16,7 +17,7 @@ import { useProcessStore } from '../../../store/useProcessStore';
 import { useLibraryActions } from '../../../hooks/useLibraryActions';
 
 interface CameraSetting {
-  format?(value: number): string | number;
+  format?(value: unknown): string | number;
   label: string;
 }
 
@@ -205,26 +206,26 @@ const EDITABLE_FIELDS = [
 
 const KEY_CAMERA_SETTINGS_MAP: CameraSettings = {
   FNumber: {
-    format: (value: number) => {
+    format: (value: unknown) => {
       const fStr = String(value);
       return fStr.toLowerCase().startsWith('f') ? fStr : `f/${fStr}`;
     },
     label: 'Aperture',
   },
   ExposureTime: {
-    format: (value: number) => (String(value).endsWith('s') ? value : `${value}s`),
+    format: (value: unknown) => formatExposureTime(value),
     label: 'Shutter Speed',
   },
   PhotographicSensitivity: {
-    format: (value: number) => `${value}`,
+    format: (value: unknown) => `${value}`,
     label: 'ISO',
   },
   FocalLengthIn35mmFilm: {
-    format: (value: number) => (String(value).endsWith('mm') ? value : `${value} mm`),
+    format: (value: unknown) => (String(value).endsWith('mm') ? String(value) : `${value} mm`),
     label: 'Focal Length',
   },
   LensModel: {
-    format: (value: number) => String(value).replace(/"/g, ''),
+    format: (value: unknown) => String(value).replace(/"/g, ''),
     label: 'Lens',
   },
 };
@@ -274,7 +275,7 @@ export default function MetadataPanel() {
         label: translatedLabel,
         value:
           hasValue && KEY_CAMERA_SETTINGS_MAP[key].format
-            ? KEY_CAMERA_SETTINGS_MAP[key].format!(value as number)
+            ? KEY_CAMERA_SETTINGS_MAP[key].format!(value)
             : hasValue
               ? value
               : '-',
@@ -288,7 +289,7 @@ export default function MetadataPanel() {
       label: t('editor.metadata.camera.lens'),
       value:
         hasLensValue && KEY_CAMERA_SETTINGS_MAP['LensModel'].format
-          ? KEY_CAMERA_SETTINGS_MAP['LensModel'].format(lensValue as number)
+          ? KEY_CAMERA_SETTINGS_MAP['LensModel'].format(lensValue)
           : hasLensValue
             ? lensValue
             : '-',
@@ -381,18 +382,18 @@ export default function MetadataPanel() {
   const LensIcon = CAMERA_ICONS['LensModel'];
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="develop-panel-header">
+    <div className="ui-panel-root">
+      <div className="ui-panel-header">
         <Text variant={TextVariants.heading}>{t('editor.metadata.title')}</Text>
       </div>
-      <div className="grow overflow-y-auto p-3 custom-scrollbar">
+      <div className="ui-panel-body custom-scrollbar">
         {selectedImage ? (
           <div className="flex flex-col gap-6">
             <div>
               <Text variant={TextVariants.heading} className="mb-3">
                 {t('editor.metadata.fileInfo.title')}
               </Text>
-              <div className="bg-surface border border-surface rounded-xl p-3.5 flex flex-col gap-2 cursor-default relative min-h-[5.5rem] overflow-hidden">
+              <div className="relative flex min-h-[5.5rem] cursor-default flex-col gap-2 overflow-hidden rounded-lg border border-border-color bg-surface p-3.5">
                 {(liveThumbnailUrl || selectedImage?.thumbnailUrl) && (
                   <div
                     className="absolute inset-y-0 right-0 w-2/3 pointer-events-none opacity-20"
@@ -414,13 +415,13 @@ export default function MetadataPanel() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     {isVirtualCopy && (
                       <div
-                        className="bg-bg-primary/80 backdrop-blur-md text-text-secondary font-bold text-[10px] rounded-md px-2 py-1 tracking-wider uppercase shadow-sm border border-surface/50"
+                        className="rounded-md border border-border-color bg-bg-primary/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-secondary shadow-sm backdrop-blur-md"
                         data-tooltip={t('editor.metadata.fileInfo.virtualCopy')}
                       >
                         VC
                       </div>
                     )}
-                    <div className="bg-bg-primary/80 backdrop-blur-md text-text-secondary font-bold text-[10px] rounded-md px-2 py-1 tracking-wider uppercase shadow-sm border border-surface/50">
+                    <div className="rounded-md border border-border-color bg-bg-primary/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-secondary shadow-sm backdrop-blur-md">
                       {fileExtension}
                     </div>
                   </div>
@@ -454,7 +455,7 @@ export default function MetadataPanel() {
                     return (
                       <div
                         key={item.key}
-                        className="flex items-center gap-2 bg-surface border border-surface px-3 py-2 rounded-xl cursor-default"
+                        className="flex cursor-default items-center gap-2 rounded-lg border border-border-color bg-surface px-3 py-2"
                         data-tooltip={item.label}
                       >
                         {Icon && (
@@ -477,7 +478,7 @@ export default function MetadataPanel() {
                 </div>
 
                 <div
-                  className="flex items-center gap-2 bg-surface border border-surface px-3 py-2 rounded-xl cursor-default"
+                  className="flex cursor-default items-center gap-2 rounded-lg border border-border-color bg-surface px-3 py-2"
                   data-tooltip={lensSetting.label}
                 >
                   {LensIcon && (
@@ -502,7 +503,7 @@ export default function MetadataPanel() {
               <Text variant={TextVariants.heading} className="mb-3">
                 {t('editor.metadata.author.title')}
               </Text>
-              <div className="bg-surface rounded-xl overflow-hidden">
+              <div className="overflow-hidden rounded-lg border border-border-color bg-surface">
                 <button
                   onClick={() => setIsAuthorExpanded(!isAuthorExpanded)}
                   className="w-full flex items-center justify-between p-3 hover:bg-card-active transition-colors"
@@ -529,7 +530,7 @@ export default function MetadataPanel() {
                       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="px-2 pb-3 pt-2 border-t border-surface/50 flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-0.5 border-t border-border-color px-2 pb-3 pt-2">
                         {EDITABLE_FIELDS.map((field) => {
                           const rawValue = (selectedImage?.exif?.[field.key] as string) || '';
                           const cleanValue = rawValue.replace(/^"|"$/g, '').trim();
@@ -556,7 +557,7 @@ export default function MetadataPanel() {
               <Text variant={TextVariants.heading} className="mb-3">
                 {t('editor.metadata.organization.title')}
               </Text>
-              <div className="bg-surface rounded-xl overflow-hidden">
+              <div className="overflow-hidden rounded-lg border border-border-color bg-surface">
                 <button
                   onClick={() => setIsOrganizationExpanded(!isOrganizationExpanded)}
                   className="w-full flex items-center justify-between p-3 hover:bg-card-active transition-colors"
@@ -583,7 +584,7 @@ export default function MetadataPanel() {
                       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 pb-4 pt-2 border-t border-surface/50 flex flex-col gap-4">
+                      <div className="flex flex-col gap-4 border-t border-border-color px-4 pb-4 pt-2">
                         <div>
                           <Text
                             variant={TextVariants.small}
@@ -626,7 +627,7 @@ export default function MetadataPanel() {
                             <button
                               onClick={() => handleSetColorLabel(null, targetPaths)}
                               className={clsx(
-                                'w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110',
+                                'flex h-5 w-5 items-center justify-center rounded-full transition-[box-shadow,opacity,transform] duration-150 hover:scale-110',
                                 currentColor === null
                                   ? 'ring-2 ring-text-secondary ring-offset-1 ring-offset-bg-primary'
                                   : 'opacity-50 hover:opacity-100 hover:ring-2 hover:ring-text-secondary/20',
@@ -640,7 +641,7 @@ export default function MetadataPanel() {
                                 key={color.name}
                                 onClick={() => handleSetColorLabel(color.name, targetPaths)}
                                 className={clsx(
-                                  'w-5 h-5 rounded-full transition-all hover:scale-110',
+                                  'h-5 w-5 rounded-full transition-[box-shadow,opacity,transform] duration-150 hover:scale-110',
                                   currentColor === color.name
                                     ? 'ring-2 ring-white ring-offset-1 ring-offset-bg-primary'
                                     : 'hover:ring-2 hover:ring-white/20',
@@ -672,7 +673,7 @@ export default function MetadataPanel() {
                                     initial={{ opacity: 0, scale: 0.8 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.8 }}
-                                    className="flex items-center gap-1 bg-bg-primary px-2 py-1 rounded-md group cursor-pointer border border-surface hover:border-text-tertiary/50 transition-colors"
+                                    className="group flex cursor-pointer items-center gap-1 rounded-md border border-border-color bg-bg-primary px-2 py-1 transition-colors hover:border-text-tertiary/50"
                                     onClick={() => handleRemoveTag(tagItem)}
                                   >
                                     <Text
@@ -724,7 +725,7 @@ export default function MetadataPanel() {
                                 <button
                                   key={shortcut}
                                   onClick={() => handleAddTag(shortcut)}
-                                  className="text-xs font-medium bg-bg-secondary hover:bg-card-active text-text-secondary px-1.5 py-0.5 rounded-sm border border-transparent hover:border-border-color transition-all"
+                                  className="ui-surface-button rounded-sm bg-bg-secondary px-1.5 py-0.5 text-xs font-medium text-text-secondary transition-colors duration-150 hover:bg-card-active hover:text-text-primary"
                                 >
                                   {shortcut}
                                 </button>
@@ -744,7 +745,7 @@ export default function MetadataPanel() {
                 <Text variant={TextVariants.heading} className="mb-3">
                   {t('editor.metadata.gps.title')}
                 </Text>
-                <div className="bg-surface border border-surface rounded-xl p-3 flex flex-col gap-3">
+                <div className="flex flex-col gap-3 rounded-lg border border-border-color bg-surface p-3">
                   <div className="flex flex-col gap-0.5">
                     <MetadataItem label={t('editor.metadata.gps.latitude')} value={gpsData.lat?.toFixed(6)} />
                     <MetadataItem label={t('editor.metadata.gps.longitude')} value={gpsData.lon?.toFixed(6)} />
@@ -761,7 +762,7 @@ export default function MetadataPanel() {
                 <Text variant={TextVariants.heading} className="mb-3">
                   {t('editor.metadata.extendedExif.title')}
                 </Text>
-                <div className="bg-surface border border-surface rounded-xl p-3 flex flex-col gap-0.5 overflow-hidden">
+                <div className="flex flex-col gap-0.5 overflow-hidden rounded-lg border border-border-color bg-surface p-3">
                   {otherExifEntries.map(([tag, value]) => (
                     <MetadataItem key={tag} label={formatExifTag(tag)} value={value} />
                   ))}

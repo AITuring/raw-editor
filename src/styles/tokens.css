@@ -1,0 +1,136 @@
+/*
+ * RAW Editor design tokens
+ *
+ * Primitive tokens describe the scale. Semantic tokens describe intent.
+ * Components should consume semantic tokens instead of introducing new
+ * pixel values so light/dark themes and density changes stay coordinated.
+ */
+
+:root {
+  /* Primitive spacing scale */
+  --ui-space-0-5: 2px;
+  --ui-space-1: 4px;
+  --ui-space-1-5: 6px;
+  --ui-space-2: 8px;
+  --ui-space-2-5: 10px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+
+  /* Primitive sizing scale */
+  --ui-size-control-dense: 24px;
+  --ui-size-control-compact: 28px;
+  --ui-size-control: 32px;
+  --ui-size-control-large: 40px;
+  --ui-size-icon-hit: 28px;
+  --ui-control-padding-inline: var(--ui-space-3);
+  --ui-control-padding-inline-compact: 9px;
+  --ui-field-padding-inline: var(--ui-space-2-5);
+
+  /* Primitive stroke and motion scale */
+  --ui-border-width: 1px;
+  --ui-duration-fast: 120ms;
+  --ui-duration-standard: 160ms;
+  --ui-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Primitive typography scale */
+  --ui-font-size-caption: 10px;
+  --ui-font-size-label: 11px;
+  --ui-font-size-body: 12px;
+  --ui-font-size-title: 14px;
+  --ui-line-height-compact: 1.25;
+  --ui-line-height-body: 1.45;
+
+  /* Primitive shape and elevation scale */
+  --ui-radius-control: 4px;
+  --ui-radius-surface: 6px;
+  --ui-radius-dialog: 8px;
+  --ui-shadow-button-rest: 0 1px 2px rgb(0 0 0 / 13%), 0 2px 6px rgb(0 0 0 / 6%);
+  --ui-shadow-button-hover: 0 2px 4px rgb(0 0 0 / 15%), 0 4px 10px rgb(0 0 0 / 8%);
+  --ui-shadow-button-pressed: 0 1px 2px rgb(0 0 0 / 10%), inset 0 1px 2px rgb(0 0 0 / 10%);
+  --ui-shadow-button-selected: 0 1px 2px rgb(0 0 0 / 10%), inset 0 -2px 0 var(--app-accent);
+  --ui-shadow-tool-rest: none;
+  --ui-shadow-tool-hover: none;
+  --ui-shadow-tool-selected: none;
+  --ui-shadow-floating: 0 14px 38px rgb(0 0 0 / 28%);
+  --ui-shadow-message: 0 10px 28px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 9%);
+  --ui-shadow-dialog: 0 24px 72px rgb(0 0 0 / 38%);
+
+  /* Semantic layout tokens */
+  --ui-panel-inset: var(--ui-space-5);
+  --ui-editor-panel-inset: var(--ui-space-6);
+  --ui-floating-viewport-inset: var(--ui-space-6);
+  /* Dialogs need a calmer reading gutter than dense editor panels. */
+  --ui-dialog-inset: var(--ui-space-6);
+  --ui-dialog-footer-gap: var(--ui-space-3);
+  --ui-dialog-footer-padding-block: var(--ui-space-4);
+  --ui-panel-header-height: 44px;
+  --ui-section-header-height: 36px;
+  --ui-toolbar-height: 44px;
+  --ui-library-toolbar-height: 48px;
+  --ui-statusbar-height: 40px;
+  --ui-tool-rail-width: 48px;
+  --ui-tool-rail-inset: var(--ui-space-2);
+  --ui-component-gap: var(--ui-space-2);
+  --ui-shell-gap: var(--ui-space-2);
+  --ui-viewport-inset: var(--ui-space-3);
+
+  /* Semantic rhythm for the dense Camera Raw adjustment panel. */
+  --ui-editor-adjustment-inset: calc(var(--ui-space-6) + var(--ui-space-1));
+  --ui-editor-section-leading-column: var(--ui-size-icon-hit);
+  --ui-editor-section-header-height: var(--ui-size-control-large);
+  --ui-editor-subsection-header-height: var(--ui-size-control-compact);
+  --ui-editor-field-label-column: 96px;
+  --ui-editor-value-column: 52px;
+  --ui-editor-control-gap: var(--ui-space-3);
+  --ui-editor-section-padding-block: var(--ui-space-3);
+  --ui-editor-slider-track-height: 14px;
+  --ui-editor-action-min-height: 44px;
+  --ui-editor-description-measure: 42ch;
+  --ui-editor-scrollbar-reserve: 8px;
+
+  /* Semantic border and surface tokens */
+  --ui-border-control: color-mix(in srgb, var(--app-text-secondary) 42%, var(--app-border-color));
+  --ui-border-structural: color-mix(in srgb, var(--app-text-secondary) 56%, var(--app-border-color));
+  --ui-border-floating: color-mix(in srgb, var(--app-text-secondary) 68%, var(--app-border-color));
+  --ui-surface-control: color-mix(in srgb, var(--app-surface) 68%, transparent);
+  --ui-surface-control-subtle: color-mix(in srgb, var(--app-surface) 52%, transparent);
+  --ui-surface-tool-rest: transparent;
+  --ui-surface-tool-hover: color-mix(in srgb, var(--app-card-active) 78%, transparent);
+  --ui-surface-tool-selected: color-mix(in srgb, var(--app-accent) 13%, var(--app-card-active));
+  --ui-surface-chrome: color-mix(in srgb, var(--app-bg-secondary) 95%, black);
+  --ui-surface-popover: color-mix(in srgb, var(--app-bg-secondary) 96%, black);
+
+  /* Semantic component tokens */
+  --ui-button-height: var(--ui-size-control-compact);
+  --ui-button-height-sm: var(--ui-size-control-dense);
+  --ui-button-padding-inline: var(--ui-space-2-5);
+  --ui-button-padding-inline-sm: var(--ui-space-2);
+  --ui-filter-popover-width: 160px;
+  --ui-filter-popover-max-height: 240px;
+  --ui-filter-popover-trigger-gap: var(--ui-space-3);
+  --ui-copy-paste-dialog-width: 560px;
+  --ui-copy-paste-dialog-max-height: 540px;
+  --ui-denoise-dialog-max-width: 896px;
+  --ui-denoise-control-column: 280px;
+  --ui-denoise-preview-height: 460px;
+  --ui-denoise-result-height: 500px;
+  --ui-message-max-width: 420px;
+  --ui-message-min-height: 34px;
+  --ui-message-icon-size: 16px;
+  --ui-message-gap: var(--ui-space-2);
+  --ui-message-padding-block: var(--ui-space-1-5);
+  --ui-message-padding-inline: var(--ui-space-3);
+  --ui-popover-z-index: 90;
+  --ui-panel-z-index: 30;
+
+  /* Compatibility aliases for existing editor-specific selectors. */
+  --editor-chrome-size: var(--ui-statusbar-height);
+  --develop-tool-rail-size: var(--ui-tool-rail-width);
+  --editor-control-border: var(--ui-border-control);
+  --editor-structural-border: var(--ui-border-structural);
+  --editor-floating-border: var(--ui-border-floating);
+  --ui-control-height: var(--ui-size-control);
+  --ui-control-height-compact: var(--ui-size-control-compact);
+}

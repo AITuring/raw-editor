@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Image as ImageIcon, Folder, FolderOpen, Star as StarIcon, SlidersHorizontal, CloudOff, Layers } from 'lucide-react';
+import {
+  AlertTriangle,
+  Image as ImageIcon,
+  Folder,
+  FolderOpen,
+  Star as StarIcon,
+  SlidersHorizontal,
+  CloudOff,
+  Layers,
+} from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { COLOR_LABELS, Color } from '../../../utils/adjustments';
+import { formatExposureTime } from '../../../utils/exifFormatting';
 import { ThumbnailAspectRatio, ImageFile, ExifOverlay } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights, TEXT_COLOR_KEYS } from '../../../types/typography';
@@ -41,6 +51,7 @@ const ThumbnailComponent = ({
   const showEditIcon = isEdited && displayEditIcon;
 
   const [showPlaceholder, setShowPlaceholder] = useState(false);
+  const [hasThumbnailError, setHasThumbnailError] = useState(false);
   const [layers, setLayers] = useState<ImageLayer[]>([]);
 
   const [currentPath, setCurrentPath] = useState(path);
@@ -71,7 +82,7 @@ const ThumbnailComponent = ({
     let fNum = e.FNumber ? String(e.FNumber) : '';
     if (fNum && !fNum.toLowerCase().startsWith('f')) fNum = `f/${fNum}`;
     return {
-      shutter: e.ExposureTime || '',
+      shutter: formatExposureTime(e.ExposureTime),
       fNumber: fNum,
       iso: e.PhotographicSensitivity || e.ISOSpeedRatings || '',
       focal: e.FocalLengthIn35mmFilm || e.FocalLength || '',
@@ -79,6 +90,7 @@ const ThumbnailComponent = ({
   }, [exif]);
 
   useEffect(() => {
+    setHasThumbnailError(false);
     if (data) {
       setShowPlaceholder(false);
       return;
@@ -87,7 +99,7 @@ const ThumbnailComponent = ({
       setShowPlaceholder(true);
     }, 500);
     return () => clearTimeout(timer);
-  }, [data]);
+  }, [data, path]);
 
   useEffect(() => {
     if (!data) {
@@ -150,7 +162,7 @@ const ThumbnailComponent = ({
 
   return (
     <div
-      className="aspect-square bg-surface rounded-md overflow-hidden cursor-pointer group relative flex flex-col transition-all duration-150 transform-gpu [-webkit-mask-image:-webkit-radial-gradient(white,black)]"
+      className="group relative flex aspect-square cursor-pointer flex-col overflow-hidden rounded-md border border-transparent bg-surface transition-[border-color,box-shadow] duration-150 transform-gpu [-webkit-mask-image:-webkit-radial-gradient(white,black)]"
       data-bench-id="thumbnail"
       onClick={(e: any) => {
         e.stopPropagation();
@@ -181,6 +193,7 @@ const ThumbnailComponent = ({
                   )}
                   decoding="async"
                   loading="lazy"
+                  onError={() => setHasThumbnailError(true)}
                   src={layer.url}
                   onLoad={() => onLoad(path)}
                 />
@@ -204,6 +217,17 @@ const ThumbnailComponent = ({
             </div>
           ))}
 
+        {hasThumbnailError && (
+          <div
+            className="absolute inset-0 z-10 flex h-full w-full flex-col items-center justify-center gap-1.5 bg-surface text-text-secondary"
+            data-tooltip={t('library.items.thumbnailError')}
+            role="status"
+          >
+            <AlertTriangle aria-hidden="true" className="text-status-warning" size={20} />
+            <span className="max-w-[80%] truncate text-[10px]">{t('library.items.thumbnailError')}</span>
+          </div>
+        )}
+
         {isCloudPlaceholder && layers.length > 0 && (
           <div
             className="absolute top-1.5 left-1.5 z-10 rounded-full h-5 w-5 flex items-center justify-center bg-black/40 shadow-md pointer-events-none"
@@ -224,13 +248,13 @@ const ThumbnailComponent = ({
       <div className="absolute top-1.5 right-1.5 flex items-center justify-end z-10 pointer-events-none">
         <div
           className={clsx(
-            'rounded-full h-5 px-1.5 flex items-center justify-center gap-0 shadow-md bg-black/30 pointer-events-auto transition-all duration-200 ease-out origin-top-right',
+            'rounded-full h-5 px-1.5 flex items-center justify-center gap-0 shadow-md bg-black/30 pointer-events-auto transition-[opacity,transform] duration-200 ease-out origin-top-right',
             hasAnyOverlay ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none',
           )}
         >
           <div
             className={clsx(
-              'text-white flex items-center transition-all duration-200 ease-out overflow-hidden',
+              'text-white flex items-center transition-[max-width,opacity,transform] duration-200 ease-out overflow-hidden',
               hasEditIcon ? 'max-w-3 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
             )}
           >
@@ -239,7 +263,7 @@ const ThumbnailComponent = ({
 
           <div
             className={clsx(
-              'flex items-center justify-center shrink-0 transition-all duration-200 ease-out overflow-hidden',
+              'flex items-center justify-center shrink-0 transition-[max-width,margin,opacity,transform] duration-200 ease-out overflow-hidden',
               hasColorLabel ? 'max-w-3 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
               hasColorLabel && hasEditIcon ? 'ml-1.5' : 'ml-0',
             )}
@@ -252,7 +276,7 @@ const ThumbnailComponent = ({
 
           <div
             className={clsx(
-              'flex items-center gap-0.5 shrink-0 transition-all duration-200 ease-out overflow-hidden',
+              'flex items-center gap-0.5 shrink-0 transition-[max-width,margin,opacity,transform] duration-200 ease-out overflow-hidden',
               hasRating ? 'max-w-7 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
               hasRating && (hasEditIcon || hasColorLabel) ? 'ml-1.5' : 'ml-0',
             )}
@@ -265,7 +289,7 @@ const ThumbnailComponent = ({
 
           <div
             className={clsx(
-              'flex items-center shrink-0 transition-all duration-200 ease-out overflow-hidden',
+              'flex items-center shrink-0 transition-[max-width,margin,opacity,transform] duration-200 ease-out overflow-hidden',
               hasGroupBadge ? 'max-w-4 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
               hasGroupBadge && (hasEditIcon || hasColorLabel || hasRating) ? 'ml-1.5' : 'ml-0',
             )}
@@ -306,25 +330,25 @@ const ThumbnailComponent = ({
             <div className="pt-1.5 pb-0.5 flex flex-wrap items-center gap-x-2.5 shrink-0">
               <div className="flex items-center gap-1">
                 <IconShutter className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {shutter || '-'}
                 </Text>
               </div>
               <div className="flex items-center gap-1">
                 <IconAperture className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {fNumber || '-'}
                 </Text>
               </div>
               <div className="flex items-center gap-1">
                 <IconIso className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {iso || '-'}
                 </Text>
               </div>
               <div className="flex items-center gap-1">
                 <IconFocalLength className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {focal ? (String(focal).endsWith('mm') ? focal : `${focal}mm`) : '-'}
                 </Text>
               </div>
@@ -335,7 +359,7 @@ const ThumbnailComponent = ({
 
       <div
         className={clsx(
-          'absolute bottom-0 left-0 right-0 flex flex-col p-2 pb-1.5 transition-all duration-300 ease-in-out z-20',
+          'absolute bottom-0 left-0 right-0 z-20 flex flex-col p-2 pb-1.5 transition-[background-color,border-color,backdrop-filter] duration-200 ease-out',
           isAlways
             ? 'bg-surface border-t border-border-color/50 pointer-events-auto'
             : isHover
@@ -395,7 +419,7 @@ const ThumbnailComponent = ({
                 data-tooltip={t('library.items.tooltipShutterSpeed')}
               >
                 <IconShutter className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {shutter || '-'}
                 </Text>
               </div>
@@ -404,13 +428,13 @@ const ThumbnailComponent = ({
                 data-tooltip={t('library.items.tooltipAperture')}
               >
                 <IconAperture className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {fNumber || '-'}
                 </Text>
               </div>
               <div className="flex items-center gap-1 text-text-secondary" data-tooltip={t('library.items.tooltipIso')}>
                 <IconIso className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {iso || '-'}
                 </Text>
               </div>
@@ -419,7 +443,7 @@ const ThumbnailComponent = ({
                 data-tooltip={t('library.items.tooltipFocalLength')}
               >
                 <IconFocalLength className="w-2.5 h-2.5" />
-                <Text variant={TextVariants.small} className="text-[9px] font-medium tracking-wide">
+                <Text variant={TextVariants.small} className="text-[10px] font-medium tabular-nums">
                   {focal ? (String(focal).endsWith('mm') ? focal : `${focal}mm`) : '-'}
                 </Text>
               </div>
@@ -429,7 +453,10 @@ const ThumbnailComponent = ({
       </div>
 
       <div
-        className={clsx('absolute inset-0 rounded-md pointer-events-none z-30 transition-all duration-150', ringClass)}
+        className={clsx(
+          'pointer-events-none absolute inset-0 z-30 rounded-md transition-[box-shadow] duration-150',
+          ringClass,
+        )}
       />
     </div>
   );
@@ -488,7 +515,7 @@ const ListItemComponent = ({
     let fNum = e.FNumber ? String(e.FNumber) : '';
     if (fNum && !fNum.toLowerCase().startsWith('f')) fNum = `f/${fNum}`;
     return {
-      shutter: e.ExposureTime || '',
+      shutter: formatExposureTime(e.ExposureTime),
       fNumber: fNum,
       iso: e.PhotographicSensitivity || e.ISOSpeedRatings || '',
       focal: e.FocalLengthIn35mmFilm || e.FocalLength || '',
@@ -586,7 +613,7 @@ const ListItemComponent = ({
 
   return (
     <div
-      className={`flex items-center w-full h-full cursor-pointer transition-all duration-150 ${borderClass} ${roundingClass} ${stateClass}`}
+      className={`flex h-full w-full cursor-pointer items-center transition-[background-color,border-color,box-shadow] duration-150 ${borderClass} ${roundingClass} ${stateClass}`}
       onClick={(e: any) => {
         e.stopPropagation();
         onImageClick(path, e);

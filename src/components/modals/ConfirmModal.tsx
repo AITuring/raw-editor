@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import Button from '../ui/Button';
+import Button, { type ButtonVariant } from '../ui/Button';
 import Text from '../ui/Text';
 import { TextVariants } from '../../types/typography';
 
 interface ConfirmModalProps {
   cancelText?: string;
   confirmText?: string;
-  confirmVariant?: string;
+  confirmVariant?: ButtonVariant;
   isOpen: boolean;
   message?: string;
   onClose(): void;
@@ -80,43 +80,26 @@ export default function ConfirmModal({
     <div
       aria-labelledby="confirm-modal-title"
       aria-modal="true"
-      className={`
-        fixed inset-0 flex items-center justify-center z-50
-        bg-black/30 backdrop-blur-xs
-        transition-opacity duration-300 ease-in-out
-        ${show ? 'opacity-100' : 'opacity-0'}
-      `}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onClick={onClose}
       role="dialog"
     >
       <div
-        className={`
-          bg-surface rounded-lg shadow-xl p-6 w-full max-w-md
-          transform transition-all duration-300 ease-out
-          ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'}
-        `}
+        className={`app-modal-surface app-modal-surface--padded max-w-md ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
+        }`}
         onClick={(e: any) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
-        <Text variant={TextVariants.title} id="confirm-modal-title" className="mb-4">
+        <Text variant={TextVariants.heading} id="confirm-modal-title" className="mb-3">
           {title}
         </Text>
-        <Text className="mb-6 whitespace-pre-wrap">{message}</Text>
-        <div className="flex justify-end gap-3 mt-5">
-          <Button
-            className="bg-bg-primary shadow-transparent hover:bg-bg-primary text-white shadow-none focus:outline-hidden focus:ring-0"
-            onClick={onClose}
-            variant="ghost"
-            tabIndex={0}
-          >
+        <Text className="whitespace-pre-wrap leading-5">{message}</Text>
+        <div className="app-modal-actions">
+          <Button onClick={onClose} variant="ghost" tabIndex={0}>
             {resolvedCancelText}
           </Button>
-          <Button
-            onClick={handleConfirm}
-            variant={confirmVariant}
-            autoFocus={true}
-            className="focus:outline-hidden focus:ring-0 focus:ring-offset-0"
-          >
+          <Button onClick={handleConfirm} variant={confirmVariant} autoFocus={true}>
             {resolvedConfirmText}
           </Button>
         </div>

@@ -199,8 +199,8 @@ export default function NegativeConversionModal({
   };
 
   const renderControls = () => (
-    <div className="modal-adjustments-pane w-80 shrink-0 bg-bg-secondary flex flex-col border-l border-surface h-full z-10">
-      <div className="p-4 flex justify-between items-center shrink-0 border-b border-surface">
+    <div className="modal-adjustments-pane z-10 flex h-full w-80 shrink-0 flex-col border-l border-border-color bg-bg-secondary">
+      <div className="flex shrink-0 items-center justify-between border-b border-border-color p-4">
         <Text variant={TextVariants.title}>{t('modals.negativeConversion.title')}</Text>
         <button
           onClick={() => {
@@ -209,7 +209,7 @@ export default function NegativeConversionModal({
           }}
           disabled={isSaving}
           data-tooltip={t('modals.negativeConversion.resetTooltip')}
-          className="p-2 rounded-full hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="modal-icon-action"
         >
           <RotateCcw size={18} />
         </button>
@@ -289,7 +289,7 @@ export default function NegativeConversionModal({
           <Text
             as="div"
             variant={TextVariants.small}
-            className="p-3 bg-surface rounded-md border border-surface flex items-center gap-3"
+            className="flex items-center gap-3 rounded-md border border-border-color bg-surface p-3"
           >
             <Info size={16} className="shrink-0" />
             <div className="text-xs text-text-tertiary leading-tight space-y-1">
@@ -406,10 +406,7 @@ export default function NegativeConversionModal({
 
   return (
     <div
-      className={clsx(
-        'fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-xs transition-opacity duration-300',
-        show ? 'opacity-100' : 'opacity-0',
-      )}
+      className={clsx('app-modal-backdrop z-100', show ? 'opacity-100' : 'opacity-0')}
       onMouseDown={() => {
         if (!isSaving) onClose();
       }}
@@ -421,12 +418,12 @@ export default function NegativeConversionModal({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="bg-surface rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+            className="app-modal-surface app-modal-surface--full-bleed flex h-[90vh] max-w-6xl flex-col"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="grow min-h-0 overflow-hidden">{renderContent()}</div>
 
-            <div className="shrink-0 p-4 flex flex-col gap-3 border-t border-surface bg-bg-secondary z-20">
+            <div className="z-20 flex shrink-0 flex-col gap-3 border-t border-border-color bg-bg-secondary p-4">
               {isSaving && (
                 <TaskProgress
                   ariaLabel={t('modals.negativeConversion.converting')}
@@ -445,13 +442,9 @@ export default function NegativeConversionModal({
                 />
               )}
               <div className="flex justify-end gap-3">
-                <button
-                  disabled={isSaving}
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <Button disabled={isSaving} onClick={onClose} variant="secondary">
                   {t('modals.negativeConversion.cancel')}
-                </button>
+                </Button>
                 <Button onClick={handleSave} disabled={isSaving || isLoading || !previewUrl}>
                   {isSaving ? (
                     <>

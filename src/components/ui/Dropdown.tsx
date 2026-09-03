@@ -107,20 +107,16 @@ const Dropdown = <T extends React.Key>({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         disabled={disabled}
-        className={clsx(
-          'w-full border border-border-color rounded-md px-3 mr-4 py-2 flex justify-between items-center text-left disabled:opacity-50 disabled:cursor-not-allowed',
-          'focus:ring-accent focus:border-accent focus:outline-hidden focus:ring-2',
-          triggerClassName || 'bg-surface',
-        )}
+        className={clsx('ui-select-trigger', triggerClassName)}
         onClick={() => setIsOpen(!isOpen)}
         type="button"
       >
-        <Text as="span" variant={TextVariants.label} color={TextColors.primary}>
+        <Text as="span" className="ui-select-label" variant={TextVariants.label} color={TextColors.primary}>
           {selectedOption ? selectedOption.label : placeholder}
         </Text>
         <ChevronDown
           className={`${TEXT_COLOR_KEYS[TextColors.secondary]} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          size={20}
+          size={16}
         />
       </button>
 
@@ -135,7 +131,7 @@ const Dropdown = <T extends React.Key>({
           >
             <div
               aria-orientation="vertical"
-              className="bg-surface/95 backdrop-blur-md rounded-lg shadow-xl p-2 max-h-80 overflow-y-auto"
+              className="ui-popover-surface max-h-80 overflow-y-auto p-1.5"
               role="listbox"
             >
               {showSearch && (
@@ -155,13 +151,7 @@ const Dropdown = <T extends React.Key>({
                   <button
                     key={option.value}
                     onClick={() => handleSelect(option)}
-                    className={clsx(
-                      'w-full text-left px-3 py-2 rounded-md flex items-center justify-between',
-                      'transition-colors duration-150 hover:bg-bg-primary',
-                      {
-                        'bg-bg-primary': isSelected,
-                      },
-                    )}
+                    className={clsx('ui-select-option', isSelected && 'is-selected')}
                     role="option"
                     aria-selected={isSelected}
                   >

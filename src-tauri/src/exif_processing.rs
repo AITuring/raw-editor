@@ -395,6 +395,46 @@ fn format_min_max(min: f32, max: f32, tolerance: f32) -> String {
     }
 }
 
+/// Keep shutter values readable when an EXIF library emits a reciprocal
+/// fraction with a floating-point denominator (for example, `1/1.6666667 s`
+/// for a 0.6 second exposure). The stored rational remains untouched; this is
+/// only the presentation string used by the UI and sidecar metadata display.
+fn format_exposure_time_seconds(seconds: f64) -> Option<String> {
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return None;
+    }
+
+    let compact = |value: f64| {
+        let rounded = (value * 100.0).round() / 100.0;
+        let mut formatted = format!("{rounded:.2}");
+        while formatted.contains('.') && formatted.ends_with('0') {
+            formatted.pop();
+        }
+        if formatted.ends_with('.') {
+            formatted.pop();
+        }
+        formatted
+    };
+
+    if seconds >= 1.0 {
+        return Some(format!("{} s", compact(seconds)));
+    }
+
+    let denominator = 1.0 / seconds;
+    if denominator >= 2.0 {
+        Some(format!("1/{} s", compact(denominator)))
+    } else {
+        Some(format!("{} s", compact(seconds)))
+    }
+}
+
+fn format_exif_exposure_time(numerator: u32, denominator: u32) -> Option<String> {
+    if denominator == 0 {
+        return None;
+    }
+    format_exposure_time_seconds(numerator as f64 / denominator as f64)
+}
+
 fn format_lens_specification(components: &[exif::Rational]) -> Option<String> {
     if components.len() < 4 {
         return None;
@@ -545,18 +585,8 @@ pub fn extract_metadata(file_bytes: &[u8]) -> Option<HashMap<String, String>> {
                         && !v.is_empty()
                     {
                         let r = &v[0];
-                        if r.num == 1 && r.denom > 1 {
-                            map.insert("ExposureTime".to_string(), format!("1/{} s", r.denom));
-                        } else {
-                            let val = r.num as f32 / r.denom as f32;
-                            if val < 1.0 && val > 0.0 {
-                                map.insert(
-                                    "ExposureTime".to_string(),
-                                    format!("1/{} s", (1.0 / val).round()),
-                                );
-                            } else {
-                                map.insert("ExposureTime".to_string(), format!("{} s", val));
-                            }
+                        if let Some(formatted) = format_exif_exposure_time(r.num, r.denom) {
+                            map.insert("ExposureTime".to_string(), formatted);
                         }
                     }
                 }
@@ -802,17 +832,10 @@ pub fn extract_metadata(file_bytes: &[u8]) -> Option<HashMap<String, String>> {
         insert_if_present("MaxApertureValue", fmt_rat(&r).to_string());
     }
 
-    if let Some(r) = exif.exposure_time {
-        if r.n == 1 && r.d > 1 {
-            insert_if_present("ExposureTime", format!("1/{} s", r.d));
-        } else {
-            let val = fmt_rat(&r);
-            if val < 1.0 && val > 0.0 {
-                insert_if_present("ExposureTime", format!("1/{} s", (1.0 / val).round()));
-            } else {
-                insert_if_present("ExposureTime", format!("{} s", val));
-            }
-        }
+    if let Some(r) = exif.exposure_time
+        && let Some(formatted) = format_exif_exposure_time(r.n, r.d)
+    {
+        insert_if_present("ExposureTime", formatted);
     }
 
     if let Some(r) = exif.shutter_speed_value {
@@ -1659,6 +1682,15 @@ pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<Strin
                     Some(v) => v,
                     None => continue,
                 },
+                exif::Value::Rational(v) if field.tag == exif::Tag::ExposureTime => {
+                    match v
+                        .first()
+                        .and_then(|r| format_exif_exposure_time(r.num, r.denom))
+                    {
+                        Some(s) => s,
+                        None => continue,
+                    }
+                }
                 exif::Value::Rational(v) if field.tag == exif::Tag::LensSpecification => {
                     match format_lens_specification(v) {
                         Some(s) => s,
@@ -1769,6 +1801,20 @@ pub fn write_rrexif_sidecar(source_path_str: &str, target_image_path: &Path) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exposure_time_formatter_removes_float_denominator_noise() {
+        assert_eq!(
+            format_exposure_time_seconds(1.0 / 1.6666666666666667),
+            Some("0.6 s".to_string())
+        );
+        assert_eq!(
+            format_exif_exposure_time(1, 200),
+            Some("1/200 s".to_string())
+        );
+        assert_eq!(format_exif_exposure_time(5, 2), Some("2.5 s".to_string()));
+        assert_eq!(format_exposure_time_seconds(0.0), None);
+    }
 
     #[test]
     fn sidecar_gps_parser_preserves_display_coordinates() {

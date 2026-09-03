@@ -951,6 +951,19 @@
     }
   },
   "library": {
+    "actions": {
+      "clearFilters": "Clear filters",
+      "clearSearchAndFilters": "Clear search and filters",
+      "closePanel": "Close panel",
+      "enterEdit": "Edit",
+      "importHere": "Import here",
+      "info": "Info",
+      "openAnotherFolder": "Open another folder",
+      "quickPreview": "Quick preview",
+      "quickPreviewHint": "Quick preview (Space)",
+      "retry": "Try again",
+      "showInfo": "Show photo information"
+    },
     "community": {
       "actionSave": "Salva",
       "actionSaved": "Salvato",
@@ -1057,6 +1070,7 @@
       }
     },
     "header": {
+      "resultCount": "{{shown}} / {{total}}",
       "search": {
         "addFilterOrSearch": "Aggiungi filtro o cerca...",
         "indexingImages": "Indicizzazione Immagini...",
@@ -1115,11 +1129,27 @@
       "imagesCount_one": "1 immagine",
       "imagesCount_many": "{{count}} immagini",
       "imagesCount_other": "{{count}} immagini",
+      "thumbnailError": "Preview unavailable",
       "tooltipAperture": "Apertura",
       "tooltipFocalLength": "Lunghezza Focale",
       "tooltipIso": "ISO",
       "tooltipShutterSpeed": "Tempo di Esposizione",
       "tooltipVirtualCopy": "Copia Virtuale"
+    },
+    "quickPreview": {
+      "close": "Close quick preview",
+      "fit": "Fit image",
+      "keyboardHint": "←/→ Browse · Space Close · Enter Edit",
+      "loading": "Loading detailed preview…",
+      "next": "Next photo",
+      "position": "{{current}} of {{total}}",
+      "previewFailed": "Detailed preview could not be loaded. The thumbnail is still available.",
+      "previous": "Previous photo",
+      "rating": "Photo rating",
+      "title": "Quick preview",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomTools": "Preview zoom controls"
     },
     "search": {
       "noResults": "Nessun Risultato Trovato",
@@ -1138,9 +1168,7 @@
       "shutterSpeed": "Tempo di Esposizione"
     },
     "splash": {
-      "addFolder": "Aggiungi Cartella",
       "brand": "RAW Editor",
-      "continueSession": "Continua Sessione",
       "contribute": "Contribuisci su GitHub",
       "descriptionAndroid": "Un editor di immagini RAW velocissimo e con accelerazione GPU. Apri la libreria per iniziare.",
       "descriptionDesktop": "Un editor di immagini RAW velocissimo e con accelerazione GPU. Apri una cartella per iniziare.",
@@ -1150,15 +1178,24 @@
       "dropImagesHint": "Uno o più file RAW, JPEG, PNG e TIFF",
       "goToSettings": "Vai alle Impostazioni",
       "latestVersion": "Hai l'ultima versione installata",
-      "multiImageSelectionHint": "L'impilamento e l'unione richiedono da 2 a 200 immagini sorgente.",
+      "multiImageSelectionHint": "Seleziona da 2 a 200 immagini per continuare.",
       "newVersionAvailable": "Nuova versione disponibile!",
       "openFolder": "Apri Cartella",
       "openImage": "Apri immagine",
       "openLibrary": "Apri Libreria",
       "or": "oppure",
-      "version": "Versione {{version}}",
-      "welcomeBack": "Bentornato!",
-      "welcomeBackDesc": "Continua da dove avevi interrotto o inizia una nuova sessione."
+      "version": "Versione {{version}}"
+    },
+    "states": {
+      "emptyDescription": "This folder contains no files yet. Import photos here or choose another folder.",
+      "emptyTitle": "This folder is empty",
+      "errorDescription": "RAW Editor could not read this folder. {{error}}",
+      "errorTitle": "Folder could not be opened",
+      "filteredDescription": "Photos are present, but none match the current filters.",
+      "loadingTitle": "Reading folder…",
+      "unknownError": "Check the folder permission and try again.",
+      "unsupportedDescription": "{{total}} file(s) were found, but none use a supported image format.",
+      "unsupportedTitle": "No supported photos found"
     },
     "status": {
       "downloading": "Download in corso {{status}}...",

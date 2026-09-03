@@ -56,9 +56,11 @@ function DropdownMenu({ buttonContent, buttonTitle, children, contentClassName =
       <Button
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className="h-12 w-12 bg-surface text-text-primary shadow-none p-0 flex items-center justify-center"
+        className="p-0"
         onClick={() => setIsOpen(!isOpen)}
+        size="icon"
         data-tooltip={buttonTitle}
+        variant="secondary"
       >
         {buttonContent}
       </Button>
@@ -72,7 +74,7 @@ function DropdownMenu({ buttonContent, buttonTitle, children, contentClassName =
             transition={{ duration: 0.1, ease: 'easeOut' }}
           >
             <div
-              className="bg-surface/90 backdrop-blur-md rounded-lg shadow-xl"
+              className="ui-popover-surface max-h-[calc(100dvh-5rem)] overflow-y-auto"
               role="menu"
               aria-orientation="vertical"
             >
@@ -113,11 +115,10 @@ const SegmentedSwitch = ({ options, value, onChange }: SegmentedSwitchProps) => 
   }, [value, options, hasSelection]);
 
   return (
-    <div className="w-full bg-bg-primary p-1 rounded-md">
-      <div className="relative flex w-full">
+    <div className="ui-segmented-control ui-segmented-control--fluid">
+      <div className="ui-segmented-track">
         <motion.div
-          className="absolute top-0 bottom-0 left-0 z-0 bg-card-active shadow-xs"
-          style={{ borderRadius: 6 }}
+          className="ui-segmented-indicator"
           animate={bubbleStyle}
           initial={false}
           transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
@@ -127,11 +128,8 @@ const SegmentedSwitch = ({ options, value, onChange }: SegmentedSwitchProps) => 
             key={option.id}
             onClick={() => onChange(option.id)}
             className={clsx(
-              'relative flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors truncate',
-              {
-                'text-text-secondary hover:text-text-primary': value !== option.id,
-                'text-text-primary font-semibold': value === option.id,
-              },
+              'ui-segmented-item ui-segmented-item--label',
+              value === option.id && 'is-active font-semibold',
             )}
             style={{ WebkitTapHighlightColor: 'transparent' }}
           >
@@ -169,11 +167,10 @@ const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) =
   }, [activeIndex]);
 
   return (
-    <div className="w-full bg-bg-primary p-1 rounded-md">
-      <div className="relative flex w-full">
+    <div className="ui-segmented-control ui-segmented-control--fluid">
+      <div className="ui-segmented-track">
         <motion.div
-          className="absolute top-0 bottom-0 left-0 z-0 bg-card-active shadow-xs"
-          style={{ borderRadius: 6 }}
+          className="ui-segmented-indicator"
           animate={bubbleStyle}
           initial={false}
           transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
@@ -181,10 +178,7 @@ const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) =
 
         <button
           onClick={() => onChange(0)}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center px-1 py-1.5 text-xs rounded-md transition-colors truncate',
-            activeIndex === 0 ? 'text-text-primary font-semibold' : 'text-text-secondary hover:text-text-primary',
-          )}
+          className={clsx('ui-segmented-item ui-segmented-item--label', activeIndex === 0 && 'is-active font-semibold')}
         >
           <span className="relative z-10">
             {ratingFilterOptions.find((o: any) => o.value === 0)?.label || t('library.filters.rating.all')}
@@ -193,22 +187,14 @@ const RatingSegmentedSwitch = ({ rating, onChange, ratingFilterOptions }: any) =
 
         <button
           onClick={() => onChange(-1)}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center px-1 py-1.5 text-xs rounded-md transition-colors truncate',
-            activeIndex === 1 ? 'text-text-primary font-semibold' : 'text-text-secondary hover:text-text-primary',
-          )}
+          className={clsx('ui-segmented-item ui-segmented-item--label', activeIndex === 1 && 'is-active font-semibold')}
         >
           <span className="relative z-10">
             {ratingFilterOptions.find((o: any) => o.value === -1)?.label || t('library.filters.rating.unrated')}
           </span>
         </button>
 
-        <div
-          className={clsx(
-            'relative flex-1 flex items-center justify-center gap-0.5 px-1 py-1.5 transition-colors',
-            activeIndex === 2 ? 'text-text-primary' : 'text-text-secondary',
-          )}
-        >
+        <div className={clsx('ui-segmented-item gap-0.5 px-1', activeIndex === 2 && 'is-active')}>
           <div className="flex items-center z-10">
             {[...Array(5)].map((_, index) => {
               const starValue = index + 1;
@@ -348,22 +334,22 @@ export function SearchInput({ indexingProgress, isIndexing }: any) {
           ? t('library.header.search.addFilterOrSearch')
           : t('library.header.search.searchOrQuery');
 
-  const INACTIVE_WIDTH = 48;
-  const PADDING_AND_ICONS_WIDTH = 100;
-  const MAX_WIDTH = 680;
+  const INACTIVE_WIDTH = 32;
+  const PADDING_AND_ICONS_WIDTH = 80;
+  const MAX_WIDTH = 440;
 
   const calculatedWidth = Math.min(MAX_WIDTH, contentWidth + PADDING_AND_ICONS_WIDTH);
 
   return (
     <motion.div
       animate={{ width: isActive ? calculatedWidth : INACTIVE_WIDTH }}
-      className="relative flex items-center bg-surface rounded-md h-12 overflow-hidden"
+      className="ui-search-control relative flex items-center"
       initial={false}
       transition={{ type: 'spring', stiffness: 400, damping: 35 }}
       onClick={() => inputRef.current?.focus()}
     >
       <button
-        className="h-12 w-12 flex items-center justify-center text-text-primary z-10 shrink-0 bg-surface outline-hidden"
+        className="z-10 flex h-8 w-8 shrink-0 items-center justify-center bg-surface text-text-primary outline-hidden"
         onClick={(e) => {
           e.stopPropagation();
           if (!isActive) setIsSearchActive(true);
@@ -377,7 +363,7 @@ export function SearchInput({ indexingProgress, isIndexing }: any) {
         className="flex-1 min-w-0 h-full overflow-hidden flex items-center pl-1"
         style={{ opacity: isActive ? 1 : 0, pointerEvents: isActive ? 'auto' : 'none', transition: 'opacity 0.2s' }}
       >
-        <div ref={contentRef} className="flex items-center gap-2 h-full flex-nowrap min-w-[250px] pr-2">
+        <div ref={contentRef} className="flex h-full min-w-[210px] flex-nowrap items-center gap-1.5 pr-1.5">
           {tags.map((tag) => {
             const match = tag.match(ADVANCED_QUERY_REGEX);
             const isQuery = !!match;
@@ -413,7 +399,7 @@ export function SearchInput({ indexingProgress, isIndexing }: any) {
             );
           })}
           <input
-            className="grow w-full h-full bg-transparent text-text-primary placeholder-text-secondary border-none focus:outline-hidden min-w-[150px]"
+            className="h-full w-full min-w-[120px] grow border-none bg-transparent text-xs text-text-primary placeholder-text-secondary focus:outline-hidden"
             disabled={isIndexing}
             onBlur={() => {
               if (tags.length === 0 && !text) setIsSearchActive(false);
@@ -577,12 +563,12 @@ export function ViewOptionsDropdown({
     <DropdownMenu
       buttonContent={
         <>
-          <SlidersHorizontal className="w-8 h-8" />
+          <SlidersHorizontal className="h-4 w-4" />
           {isFilterActive && <div className="absolute -top-1 -right-1 bg-accent rounded-full w-3 h-3" />}
         </>
       }
       buttonTitle={t('library.header.viewOptions.title')}
-      contentClassName="library-view-options-menu w-[760px]"
+      contentClassName="library-view-options-menu w-[min(760px,calc(100vw-2rem))]"
     >
       <div className="library-view-options-content flex">
         {/* Left Column (50%) - View Settings */}
@@ -604,7 +590,7 @@ export function ViewOptionsDropdown({
                     ? t('library.header.viewOptions.sortDescending')
                     : t('library.header.viewOptions.sortAscending')
                 }
-                className="absolute top-1/2 right-3 -translate-y-1/2 p-1 bg-transparent border-none text-text-secondary hover:text-text-primary rounded-sm transition-colors"
+        className="absolute top-1/2 right-3 -translate-y-1/2 rounded-sm bg-transparent p-1 text-text-secondary transition-colors hover:text-text-primary"
               >
                 {sortCriteria.order === SortDirection.Ascending ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>

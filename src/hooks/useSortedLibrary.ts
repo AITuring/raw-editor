@@ -3,21 +3,13 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { RawStatus, EditedStatus, SortDirection, ImageFile, GroupingMode } from '../components/ui/AppProperties';
 import { buildImageGroups, GroupBadgeInfo, GroupId } from '../utils/imageGrouping';
+import { parseExposureTimeSeconds } from '../utils/exifFormatting';
 
 export const ADVANCED_QUERY_REGEX =
   /^(iso|aperture|f|shutter|s|focal|mm|rating|color|camera|make|model|lens)\s*(?::)?\s*(>=|<=|>|<|=)?\s*(.+)$/i;
 
 export const parseShutter = (val: string | undefined): number => {
-  if (!val) return 0;
-  const cleanVal = val.replace(/s/i, '').trim();
-  const parts = cleanVal.split('/');
-  if (parts.length === 2) {
-    const num = parseFloat(parts[0]);
-    const den = parseFloat(parts[1]);
-    return den !== 0 ? num / den : 0;
-  }
-  const numVal = parseFloat(cleanVal);
-  return isNaN(numVal) ? 0 : numVal;
+  return parseExposureTimeSeconds(val) ?? 0;
 };
 
 export const parseAperture = (val: string | undefined): number => {

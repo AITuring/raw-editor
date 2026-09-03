@@ -119,7 +119,7 @@ function RegionDroppableContainer({
       className={clsx(
         'flex h-full w-full bg-bg-secondary rounded-lg overflow-hidden border transition-colors shadow-xs relative',
         isFlexRow ? 'flex-row' : 'flex-col',
-        isOver && !hoverPlacement ? 'border-accent' : 'border-surface',
+        isOver && !hoverPlacement ? 'border-accent' : 'border-border-color',
       )}
     >
       <AnimatePresence>
@@ -143,7 +143,7 @@ function RegionDroppableContainer({
           >
             <div
               className={clsx(
-                'absolute inset-0 bg-accent/10 transition-all duration-200',
+                'absolute inset-0 bg-accent/10 transition-[border-color,border-width] duration-150',
                 hoverPlacement === 'bottom' && 'border-b-4 border-accent',
                 hoverPlacement === 'right' && 'border-r-4 border-accent',
                 hoverPlacement === 'left' && 'border-l-4 border-accent',
@@ -265,7 +265,7 @@ function SplitOverlayDropzone({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
       className={clsx(
-        'absolute inset-x-0 h-1/2 z-30 border-2 flex items-center justify-center transition-all duration-200 backdrop-blur-sm overflow-hidden',
+        'absolute inset-x-0 z-30 flex h-1/2 items-center justify-center overflow-hidden border-2 backdrop-blur-sm transition-[background-color,border-color,transform] duration-150',
         isTop ? 'top-0 rounded-t-lg' : 'bottom-0 rounded-b-lg',
         isOver
           ? 'scale-[0.98] text-accent font-semibold border-transparent'
@@ -286,7 +286,7 @@ function SplitOverlayDropzone({
           >
             <div
               className={clsx(
-                'absolute inset-0 bg-accent/20 transition-all duration-200',
+                'absolute inset-0 bg-accent/20 transition-[border-color,border-width] duration-150',
                 hoverPlacement === 'bottom' && 'border-b-4 border-accent',
                 hoverPlacement === 'right' && 'border-r-4 border-accent',
                 hoverPlacement === 'left' && 'border-l-4 border-accent',
@@ -379,13 +379,11 @@ export default function SidePanelArea({
       className={clsx(
         'flex shrink-0 h-full relative overflow-hidden',
         isFullScreen ? 'w-0 opacity-0 pointer-events-none' : 'opacity-100',
-        shouldAnimateWidth && 'transition-all duration-300 ease-in-out',
+        shouldAnimateWidth && 'transition-[width,opacity] duration-200 ease-out',
       )}
       style={{ width: isFullScreen ? 0 : width }}
     >
-      {side === 'right' && (
-        <div className="shrink-0 w-2 my-auto h-full cursor-col-resize z-20" onPointerDown={onWidthChange} />
-      )}
+      {side === 'right' && <div aria-hidden="true" className="app-resizer is-vertical" onPointerDown={onWidthChange} />}
 
       <div ref={colContainerRef} className="flex flex-col h-full w-full overflow-hidden relative">
         {hasTop && (
@@ -411,7 +409,7 @@ export default function SidePanelArea({
         )}
 
         {hasTop && hasBottom && (
-          <div className="shrink-0 h-2 cursor-row-resize z-20" onPointerDown={handleVerticalResize} />
+          <div aria-hidden="true" className="app-resizer is-horizontal" onPointerDown={handleVerticalResize} />
         )}
 
         {hasBottom && (
@@ -447,9 +445,7 @@ export default function SidePanelArea({
         )}
       </div>
 
-      {side === 'left' && (
-        <div className="shrink-0 w-2 my-auto h-full cursor-col-resize z-20" onPointerDown={onWidthChange} />
-      )}
+      {side === 'left' && <div aria-hidden="true" className="app-resizer is-vertical" onPointerDown={onWidthChange} />}
     </div>
   );
 }

@@ -92,7 +92,7 @@ export default function PreviewNavigator({
     <div
       aria-label={`${label} · ${zoomPercent}%`}
       className={clsx(
-        'absolute bottom-4 left-4 z-30 rounded-[4px] border border-border-color bg-bg-primary/95 p-[3px]',
+        'absolute bottom-4 left-4 z-30 rounded-md border border-border-color bg-bg-primary/95 p-1',
         'shadow-[0_6px_20px_rgba(0,0,0,0.28)] transition-[opacity,transform] duration-150 ease-out',
         visible ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-1 opacity-0',
       )}
@@ -102,7 +102,7 @@ export default function PreviewNavigator({
       title={`${label} · ${zoomPercent}%`}
     >
       <div
-        className="relative touch-none overflow-hidden rounded-[2px] bg-bg-secondary"
+        className="relative touch-none overflow-hidden rounded-sm bg-bg-secondary"
         onClick={(event) => event.stopPropagation()}
         onPointerCancel={handlePointerEnd}
         onPointerDown={handlePointerDown}

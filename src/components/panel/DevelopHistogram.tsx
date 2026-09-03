@@ -8,6 +8,7 @@ import { useWaveformControls } from '../../hooks/useWaveformControls';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { Adjustments, DisplayMode } from '../../utils/adjustments';
+import { formatExposureTime } from '../../utils/exifFormatting';
 import Waveform from './editor/Waveform';
 
 export default function DevelopHistogram() {
@@ -30,12 +31,10 @@ export default function DevelopHistogram() {
 
   const exif = selectedImage?.exif || {};
   const captureDetails = [
-    exif.PhotographicSensitivity || exif.ISOSpeed
-      ? `ISO ${exif.PhotographicSensitivity || exif.ISOSpeed}`
-      : null,
+    exif.PhotographicSensitivity || exif.ISOSpeed ? `ISO ${exif.PhotographicSensitivity || exif.ISOSpeed}` : null,
     exif.LensSpecification || exif.LensModel || (exif.FocalLength ? `${exif.FocalLength} mm` : null),
     exif.FNumber || exif.ApertureValue || null,
-    exif.ExposureTime || null,
+    formatExposureTime(exif.ExposureTime) || null,
   ].filter(Boolean) as string[];
 
   const toggleLabel = t('editor.adjustments.tooltips.toggleAnalytics');

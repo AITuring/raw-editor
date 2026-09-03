@@ -458,7 +458,7 @@ export default function ImageStackModal({
           <div className="flex min-w-0 items-center gap-3">
             <button
               aria-label={t('modals.imageStack.back')}
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-40"
+              className="ui-button ui-button--secondary ui-button--sm shrink-0"
               disabled={isSaving}
               onClick={onClose}
               ref={closeButtonRef}
@@ -591,11 +591,7 @@ export default function ImageStackModal({
                     {savedPath}
                   </span>
                 </span>
-                <button
-                  className="font-medium underline underline-offset-2"
-                  onClick={() => onOpenFile(savedPath)}
-                  type="button"
-                >
+                <button className="ui-inline-action" onClick={() => onOpenFile(savedPath)} type="button">
                   {t('modals.imageStack.openInEditor')}
                 </button>
               </div>
@@ -659,11 +655,7 @@ export default function ImageStackModal({
                 >
                   <button
                     aria-pressed={blendMode === 'focus'}
-                    className={`flex h-10 items-center justify-center gap-2 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                      blendMode === 'focus'
-                        ? 'bg-surface text-text-primary shadow-sm'
-                        : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
-                    }`}
+                    className={`ui-choice-button ${blendMode === 'focus' ? 'is-active' : ''}`}
                     disabled={isProcessing}
                     onClick={() => {
                       setBlendMode('focus');
@@ -678,11 +670,7 @@ export default function ImageStackModal({
                   </button>
                   <button
                     aria-pressed={blendMode === 'panorama'}
-                    className={`flex h-10 items-center justify-center gap-2 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                      blendMode === 'panorama'
-                        ? 'bg-surface text-text-primary shadow-sm'
-                        : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
-                    }`}
+                    className={`ui-choice-button ${blendMode === 'panorama' ? 'is-active' : ''}`}
                     disabled={isProcessing}
                     onClick={() => {
                       setBlendMode('panorama');
@@ -727,10 +715,10 @@ export default function ImageStackModal({
                     return (
                       <button
                         aria-checked={isSelected}
-                        className={`flex h-11 min-w-0 items-center gap-2 rounded-lg border px-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        className={`ui-surface-button flex h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                           isSelected
-                            ? 'border-accent bg-accent/10 text-text-primary'
-                            : 'border-border-color/60 text-text-secondary hover:border-border-color hover:bg-card-active hover:text-text-primary'
+                            ? 'bg-accent/10 text-text-primary'
+                            : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
                         }`}
                         data-tooltip={translateAlignment(option.descriptionKey)}
                         disabled={isProcessing}
@@ -766,19 +754,10 @@ export default function ImageStackModal({
             {t('modals.imageStack.selectedSummary', { count: orderedPaths.length })}
           </p>
           <div className="flex justify-end gap-2">
-            <button
-              className="rounded-lg px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary disabled:opacity-40"
-              disabled={isSaving}
-              onClick={onClose}
-              type="button"
-            >
+            <Button disabled={isSaving} onClick={onClose} type="button" variant="secondary">
               {t('modals.imageStack.cancel')}
-            </button>
-            <Button
-              className="border border-border-color bg-surface text-text-primary hover:bg-card-active"
-              disabled={!canProcess}
-              onClick={handleProcess}
-            >
+            </Button>
+            <Button className="bg-surface text-text-primary hover:bg-card-active" disabled={!canProcess} onClick={handleProcess}>
               {isProcessing ? (
                 <Loader2 aria-hidden="true" className="animate-spin" size={15} />
               ) : finalImageBase64 ? (

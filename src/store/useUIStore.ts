@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ButtonVariant } from '../components/ui/Button';
 import { ImageFile, Panel, UiVisibility, CullingSuggestions, PanelRegion } from '../components/ui/AppProperties';
 import { BASIC_MODE } from '../basic/runtime';
 
@@ -20,7 +21,7 @@ export interface CollapsibleSectionsState {
 
 export interface ConfirmModalState {
   confirmText?: string;
-  confirmVariant?: string;
+  confirmVariant?: ButtonVariant;
   isOpen: boolean;
   message?: string;
   onConfirm?(): void;
@@ -106,7 +107,8 @@ interface UIState {
   isInstantTransition: boolean;
   isLayoutReady: boolean;
   uiVisibility: UiVisibility;
-  isLibraryExportPanelVisible: boolean;
+  libraryContextPanel: Panel | null;
+  isLibraryQuickPreviewOpen: boolean;
   isEditorExportDialogOpen: boolean;
   isSettingsOpen: boolean;
 
@@ -172,7 +174,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   isInstantTransition: false,
   isLayoutReady: false,
   uiVisibility: { folderTree: true, filmstrip: true },
-  isLibraryExportPanelVisible: false,
+  libraryContextPanel: null,
+  isLibraryQuickPreviewOpen: false,
   isEditorExportDialogOpen: false,
   isSettingsOpen: false,
 

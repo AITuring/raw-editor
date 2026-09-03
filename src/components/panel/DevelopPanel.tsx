@@ -91,7 +91,7 @@ export default function DevelopPanel({
         isFullScreen && 'is-hidden',
         !isInstantTransition && !isResizing && 'is-animated',
       )}
-      style={{ width: isFullScreen ? 0 : isCollapsed ? 44 : width }}
+      style={{ width: isFullScreen ? 0 : isCollapsed ? 'var(--ui-tool-rail-width)' : width }}
     >
       <div aria-hidden="true" className="develop-panel-resizer" onPointerDown={onWidthChange} />
 

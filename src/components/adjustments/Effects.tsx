@@ -106,7 +106,7 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
         </Text>
       </button>
 
-      <div className="w-full p-1 bg-bg-primary rounded-md">
+      <div className="ui-segmented-frame w-full">
         <div className="relative flex w-full">
           <motion.div
             className="absolute top-0 bottom-0 z-0 bg-accent"
@@ -123,13 +123,7 @@ const BokehShapeSwitch = ({ selectedShape, onShapeChange }: BokehShapeSwitchProp
                 key={shape.id}
                 data-tooltip={shape.title}
                 onClick={() => onShapeChange(shape.id)}
-                className={clsx(
-                  'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  {
-                    'text-text-secondary hover:text-text-primary hover:bg-surface': selectedShape !== shape.id,
-                    'text-button-text': selectedShape === shape.id,
-                  },
-                )}
+                className={clsx('ui-segmented-option', selectedShape === shape.id && 'is-active')}
                 style={{ WebkitTapHighlightColor: 'transparent' }}
                 type="button"
               >

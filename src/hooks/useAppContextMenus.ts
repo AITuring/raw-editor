@@ -51,7 +51,7 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useProcessStore } from '../store/useProcessStore';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { Invokes, Option, OPTION_SEPARATOR, AlbumItem, Album, AlbumGroup } from '../components/ui/AppProperties';
+import { Invokes, Option, OPTION_SEPARATOR, AlbumItem, Album, AlbumGroup, Panel } from '../components/ui/AppProperties';
 import { Color, COLOR_LABELS, INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjustments';
 import TaggingSubMenu from '../context/TaggingSubMenu';
 import { useEditorActions } from './useEditorActions';
@@ -481,7 +481,7 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
           setUI({ isEditorExportDialogOpen: true });
         } else {
           setLibrary({ multiSelectedPaths: finalSelection });
-          setUI({ isLibraryExportPanelVisible: true });
+          setUI({ libraryContextPanel: Panel.Export });
         }
       };
 

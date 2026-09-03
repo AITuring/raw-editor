@@ -18,7 +18,7 @@ export default function ExternalEditBar({ session, isFinishing, errorMessage, on
   const progress = useProcessStore((state) => state.exportState.progress);
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2 bg-bg-secondary border border-surface rounded-lg shadow-lg px-4 py-2">
+    <div className="ui-popover-surface absolute bottom-6 left-1/2 z-40 flex w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2 px-4 py-3">
       <div className="flex items-center gap-3">
         <span className="min-w-0 truncate text-sm text-text-secondary whitespace-nowrap">
           {t('editor.externalEdit.savesTo')} <span className="text-text-primary">{outputName}</span>

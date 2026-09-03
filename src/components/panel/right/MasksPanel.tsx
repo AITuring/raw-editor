@@ -170,14 +170,18 @@ const BrushTools = ({
       />
       <div className="grid grid-cols-2 gap-2 pt-2">
         <button
-          className={`p-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${settings.tool === ToolType.Brush ? 'text-primary bg-surface' : 'bg-surface text-text-secondary hover:bg-card-active'}`}
+          aria-pressed={settings.tool === ToolType.Brush}
+          className={`ui-choice-button ${settings.tool === ToolType.Brush ? 'is-active' : ''}`}
           onClick={() => onSettingsChange((s: any) => ({ ...s, tool: ToolType.Brush }))}
+          type="button"
         >
           {t('editor.masks.brush.brush')}
         </button>
         <button
-          className={`p-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${settings.tool === ToolType.Eraser ? 'text-primary bg-surface' : 'bg-surface text-text-secondary hover:bg-card-active'}`}
+          aria-pressed={settings.tool === ToolType.Eraser}
+          className={`ui-choice-button ${settings.tool === ToolType.Eraser ? 'is-active' : ''}`}
           onClick={() => onSettingsChange((s: any) => ({ ...s, tool: ToolType.Eraser }))}
+          type="button"
         >
           {t('editor.masks.brush.eraser')}
         </button>
@@ -202,7 +206,7 @@ const FlowBrushTool = ({
   const { t } = useTranslation();
 
   return (
-    <div className="space-y-4 border-t border-surface">
+    <div className="space-y-4 border-t border-border-color">
       <Slider
         defaultValue={10}
         label={t('editor.masks.brush.flow')}
@@ -943,13 +947,13 @@ export default function MasksPanel() {
       onDragEnd={handleDragEnd}
       collisionDetection={pointerWithin}
     >
-      <div className="flex flex-col h-full select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
-        <div className="develop-panel-header">
+      <div className="ui-panel-root select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
+        <div className="ui-panel-header">
           <Text variant={TextVariants.heading}>{t('editor.masks.maskingTitle')}</Text>
           <div className="flex items-center gap-0.5">
             <button
               aria-label={t('editor.masks.resetMaskingTooltip')}
-              className="develop-panel-action"
+              className="ui-icon-button"
               onClick={handleResetAllMasks}
               data-tooltip={t('editor.masks.resetMaskingTooltip')}
             >
@@ -958,7 +962,7 @@ export default function MasksPanel() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0 p-3">
+        <div className="ui-panel-body flex flex-col overflow-x-hidden">
           {selectedImage ? (
             <>
               <AnimatePresence mode="wait">
@@ -2060,7 +2064,7 @@ function SettingsPanel({
               <button
                 ref={presetButtonRef}
                 onClick={handlePresetSelectClick}
-                className="text-sm text-text-primary text-right select-none cursor-pointer hover:text-accent transition-colors"
+                className="ui-button ui-button--secondary ui-button--sm"
                 data-tooltip={t('editor.masks.settings.selectPresetTooltip')}
               >
                 {t('editor.masks.settings.select')}

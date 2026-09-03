@@ -974,6 +974,19 @@
     }
   },
   "library": {
+    "actions": {
+      "clearFilters": "Clear filters",
+      "clearSearchAndFilters": "Clear search and filters",
+      "closePanel": "Close panel",
+      "enterEdit": "Edit",
+      "importHere": "Import here",
+      "info": "Info",
+      "openAnotherFolder": "Open another folder",
+      "quickPreview": "Quick preview",
+      "quickPreviewHint": "Quick preview (Space)",
+      "retry": "Try again",
+      "showInfo": "Show photo information"
+    },
     "community": {
       "actionSave": "Сохранить",
       "actionSaved": "Сохранено",
@@ -1080,6 +1093,7 @@
       }
     },
     "header": {
+      "resultCount": "{{shown}} / {{total}}",
       "search": {
         "addFilterOrSearch": "Добавить фильтр или найти...",
         "indexingImages": "Индексация изображений...",
@@ -1139,11 +1153,27 @@
       "imagesCount_few": "{{count}} изображений",
       "imagesCount_many": "{{count}} изображений",
       "imagesCount_other": "{{count}} изображений",
+      "thumbnailError": "Preview unavailable",
       "tooltipAperture": "Диафрагма",
       "tooltipFocalLength": "Фокусное расстояние",
       "tooltipIso": "ISO",
       "tooltipShutterSpeed": "Выдержка",
       "tooltipVirtualCopy": "Виртуальная копия"
+    },
+    "quickPreview": {
+      "close": "Close quick preview",
+      "fit": "Fit image",
+      "keyboardHint": "←/→ Browse · Space Close · Enter Edit",
+      "loading": "Loading detailed preview…",
+      "next": "Next photo",
+      "position": "{{current}} of {{total}}",
+      "previewFailed": "Detailed preview could not be loaded. The thumbnail is still available.",
+      "previous": "Previous photo",
+      "rating": "Photo rating",
+      "title": "Quick preview",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomTools": "Preview zoom controls"
     },
     "search": {
       "noResults": "Результатов не найдено",
@@ -1162,9 +1192,7 @@
       "shutterSpeed": "Выдержке"
     },
     "splash": {
-      "addFolder": "Добавить папку",
       "brand": "RAW Editor",
-      "continueSession": "Продолжить сеанс",
       "contribute": "Участвовать на GitHub",
       "descriptionAndroid": "Невероятно быстрый редактор RAW-файлов с GPU-ускорением. Откройте библиотеку, чтобы начать.",
       "descriptionDesktop": "Невероятно быстрый редактор RAW-файлов с GPU-ускорением. Откройте папку, чтобы начать.",
@@ -1174,15 +1202,24 @@
       "dropImagesHint": "Один или несколько файлов RAW, JPEG, PNG и TIFF",
       "goToSettings": "Перейти в настройки",
       "latestVersion": "У вас установлена последняя версия",
-      "multiImageSelectionHint": "Для стекинга и сшивания требуется от 2 до 200 исходных изображений.",
+      "multiImageSelectionHint": "Выберите от 2 до 200 изображений, чтобы продолжить.",
       "newVersionAvailable": "Доступна новая версия!",
       "openFolder": "Открыть папку",
       "openImage": "Открыть изображение",
       "openLibrary": "Открыть библиотеку",
       "or": "или",
-      "version": "Версия {{version}}",
-      "welcomeBack": "С возвращением!",
-      "welcomeBackDesc": "Продолжите работу с прошлого сеанса или начните новый."
+      "version": "Версия {{version}}"
+    },
+    "states": {
+      "emptyDescription": "This folder contains no files yet. Import photos here or choose another folder.",
+      "emptyTitle": "This folder is empty",
+      "errorDescription": "RAW Editor could not read this folder. {{error}}",
+      "errorTitle": "Folder could not be opened",
+      "filteredDescription": "Photos are present, but none match the current filters.",
+      "loadingTitle": "Reading folder…",
+      "unknownError": "Check the folder permission and try again.",
+      "unsupportedDescription": "{{total}} file(s) were found, but none use a supported image format.",
+      "unsupportedTitle": "No supported photos found"
     },
     "status": {
       "downloading": "Загрузка {{status}}...",

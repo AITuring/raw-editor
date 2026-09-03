@@ -146,7 +146,7 @@ function WatermarkPreview({
 
   return (
     <div
-      className="w-full bg-surface rounded-md relative overflow-hidden border border-surface"
+      className="relative w-full overflow-hidden rounded-md border border-border-color bg-surface"
       style={{ aspectRatio: imageAspectRatio }}
     >
       <div className="absolute inset-0 flex items-center justify-center">
@@ -299,7 +299,9 @@ export default function ExportPanel({
   const osPlatform = useOsPlatform();
   const isAndroid = osPlatform === 'android';
   const activePanels = useUIStore((state) => state.activePanels);
-  const isPanelReallyActive = Object.values(activePanels).includes(Panel.Export);
+  const libraryContextPanel = useUIStore((state) => state.libraryContextPanel);
+  const isPanelReallyActive =
+    Object.values(activePanels).includes(Panel.Export) || libraryContextPanel === Panel.Export;
 
   const { status, progress, errorMessage } = exportState;
   const isExporting = [Status.Exporting, Status.Cancelling].includes(status);
@@ -599,11 +601,11 @@ export default function ExportPanel({
   const itemLabelPlural = isLut ? t('export.labels.lut_plural') : t('export.labels.image_plural');
 
   return (
-    <div className={onClose ? 'h-full bg-bg-secondary rounded-lg flex flex-col' : 'flex flex-col h-full'}>
-      <div className="develop-panel-header">
+    <div className={onClose ? 'ui-panel-root rounded-lg bg-bg-secondary' : 'ui-panel-root'}>
+      <div className="ui-panel-header">
         <Text variant={TextVariants.heading}>{t('export.title')}</Text>
       </div>
-      <div className="grow overflow-y-auto p-3 space-y-8">
+      <div className="ui-panel-body space-y-8">
         {canExport ? (
           <>
             <div className={isExporting ? 'opacity-50 pointer-events-none' : ''}>
@@ -653,7 +655,7 @@ export default function ExportPanel({
             {numImages > 1 && (
               <Section title={t('export.sections.fileNaming')}>
                 <input
-                  className="w-full bg-surface border border-surface rounded-md p-2 text-sm text-text-primary focus:ring-accent focus:border-accent"
+                  className="w-full rounded-md border border-border-color bg-surface p-2 text-sm text-text-primary focus:border-accent focus:ring-accent"
                   disabled={isExporting}
                   onChange={(e) => setFilenameTemplate(e.target.value)}
                   ref={filenameInputRef}
@@ -686,7 +688,7 @@ export default function ExportPanel({
                     trackClassName="bg-surface"
                   />
                   {enableResize && (
-                    <div className="space-y-4 pl-2 border-l-2 border-surface">
+                    <div className="space-y-4 border-l-2 border-border-color pl-2">
                       <div className="flex items-center gap-2">
                         <Dropdown
                           options={resizeModeOptions}
@@ -696,7 +698,7 @@ export default function ExportPanel({
                           className="w-full"
                         />
                         <input
-                          className="w-24 bg-surface text-center rounded-md p-2 border border-surface focus:border-accent focus:ring-accent text-text-secondary focus:text-text-primary"
+                          className="w-24 rounded-md border border-border-color bg-surface p-2 text-center text-text-secondary focus:border-accent focus:text-text-primary focus:ring-accent"
                           disabled={isExporting}
                           min="1"
                           onChange={(e) => setResizeValue(parseInt(e?.target?.value))}
@@ -726,7 +728,7 @@ export default function ExportPanel({
                       trackClassName="bg-surface"
                     />
                     {keepMetadata && (
-                      <div className="pl-2 border-l-2 border-surface">
+                      <div className="border-l-2 border-border-color pl-2">
                         <Switch
                           label={t('export.metadata.removeGps')}
                           checked={stripGps}
@@ -748,7 +750,7 @@ export default function ExportPanel({
                     trackClassName="bg-surface"
                   />
                   {enableWatermark && (
-                    <div className="space-y-4 pl-2 border-l-2 border-surface">
+                    <div className="space-y-4 border-l-2 border-border-color pl-2">
                       <div className={isExporting ? 'opacity-50 pointer-events-none' : ''}>
                         <ImagePicker
                           disabled={isExporting}
@@ -818,7 +820,7 @@ export default function ExportPanel({
               <Text variant={TextVariants.heading} className="mb-2">
                 {t('export.sections.advanced')}
               </Text>
-              <div className="bg-surface rounded-xl overflow-hidden">
+              <div className="overflow-hidden rounded-lg border border-border-color bg-surface">
                 <button
                   onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded)}
                   disabled={isExporting}
@@ -845,7 +847,7 @@ export default function ExportPanel({
                       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 pb-4 pt-2 border-t border-surface/50 flex flex-col gap-4">
+                      <div className="flex flex-col gap-4 border-t border-border-color px-4 pb-4 pt-2">
                         <Switch
                           label={t('export.advanced.preserveFolders')}
                           checked={preserveFolders}
@@ -894,7 +896,7 @@ export default function ExportPanel({
         )}
       </div>
 
-      <div className="p-3 border-t border-surface shrink-0 space-y-2">
+      <div className="ui-panel-footer space-y-2">
         {isExporting && (
           <TaskProgress
             ariaLabel={isCancelling ? t('export.status.cancelling') : t('export.status.exporting')}
@@ -927,15 +929,15 @@ export default function ExportPanel({
         <Button
           className={`group rounded-md h-11 w-full flex items-center text-md font-bold! justify-center ${
             status === Status.Exporting
-              ? 'bg-status-info/14 text-status-info border border-status-info/35 shadow-none hover:bg-status-error/16 hover:text-status-error hover:border-status-error/35'
+              ? 'bg-status-info/14 text-status-info hover:bg-status-error/16 hover:text-status-error'
               : status === Status.Cancelling
-                ? 'bg-status-warning/14 text-status-warning border border-status-warning/35 shadow-none'
+                ? 'bg-status-warning/14 text-status-warning'
                 : status === Status.Success
-                  ? 'bg-status-success/14 text-status-success border border-status-success/35 shadow-none'
+                  ? 'bg-status-success/14 text-status-success'
                   : status === Status.Error
-                    ? 'bg-status-error/14 text-status-error border border-status-error/35 shadow-none'
+                    ? 'bg-status-error/14 text-status-error'
                     : status === Status.Cancelled
-                      ? 'bg-status-warning/14 text-status-warning border border-status-warning/35 shadow-none'
+                      ? 'bg-status-warning/14 text-status-warning'
                       : ''
           }`}
           disabled={isCancelling || (status !== Status.Exporting && !canStartExport)}

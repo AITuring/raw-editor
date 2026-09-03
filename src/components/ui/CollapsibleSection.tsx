@@ -30,7 +30,7 @@ export default function CollapsibleSection({
 
   return (
     <section
-      className={clsx('develop-collapsible group/section', !isContentVisible && 'is-disabled')}
+      className={clsx('develop-collapsible group/section', isOpen && 'is-open', !isContentVisible && 'is-disabled')}
       onContextMenu={onContextMenu}
     >
       <div className="develop-collapsible-header">

@@ -527,7 +527,7 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
 
         <div
           aria-label={labels.toolbar ?? alt}
-          className="absolute right-3 bottom-3 z-20 flex h-10 items-center overflow-hidden rounded-lg border border-white/15 bg-black/85 text-white shadow-lg"
+          className="absolute right-3 bottom-3 z-20 flex h-10 items-center overflow-hidden rounded-lg bg-black/85 text-white shadow-lg"
           data-zoomable-image-preview-toolbar
           onDoubleClick={(event) => event.stopPropagation()}
           role="toolbar"
@@ -562,7 +562,7 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
           </button>
           <button
             aria-label={labels.fit}
-            className="flex h-10 w-10 items-center justify-center border-l border-white/10 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center text-white/70 transition-colors hover:bg-white/10 hover:text-white"
             data-tooltip={labels.fit}
             onClick={resetView}
             type="button"

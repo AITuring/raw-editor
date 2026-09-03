@@ -164,7 +164,7 @@ const FilmstripThumbnail = memo(
     return (
       <div
         className={clsx(
-          'h-full w-full rounded-[2px] overflow-hidden cursor-pointer shrink-0 group relative transition-[box-shadow] duration-[120ms] bg-surface',
+          'group relative h-full w-full shrink-0 cursor-pointer overflow-hidden rounded-sm border border-transparent bg-surface transition-[border-color,box-shadow] duration-[120ms]',
           ringClass,
         )}
         onClick={(e: any) => {
@@ -225,13 +225,13 @@ const FilmstripThumbnail = memo(
         <div className="absolute top-1 right-1 flex items-center justify-end z-10 pointer-events-none">
           <div
             className={clsx(
-              'rounded-[2px] h-4 px-1 flex items-center justify-center gap-0 bg-black/45 pointer-events-auto transition-opacity duration-[120ms] ease-out origin-top-right',
+              'rounded-sm h-4 px-1 flex items-center justify-center gap-0 bg-black/45 pointer-events-auto transition-opacity duration-[120ms] ease-out origin-top-right',
               hasAnyOverlay ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none',
             )}
           >
             <div
               className={clsx(
-                'text-white flex items-center transition-all duration-200 ease-out overflow-hidden',
+                'text-white flex items-center transition-[max-width,opacity,transform] duration-200 ease-out overflow-hidden',
                 hasEditIcon ? 'max-w-3 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
               )}
             >
@@ -240,7 +240,7 @@ const FilmstripThumbnail = memo(
 
             <div
               className={clsx(
-                'flex items-center justify-center shrink-0 transition-all duration-200 ease-out overflow-hidden',
+                'flex items-center justify-center shrink-0 transition-[max-width,margin,opacity,transform] duration-200 ease-out overflow-hidden',
                 hasColorLabel ? 'max-w-3 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
                 hasColorLabel && hasEditIcon ? 'ml-1.5' : 'ml-0',
               )}
@@ -253,7 +253,7 @@ const FilmstripThumbnail = memo(
 
             <div
               className={clsx(
-                'flex items-center gap-0.5 shrink-0 transition-all duration-200 ease-out overflow-hidden',
+                'flex items-center gap-0.5 shrink-0 transition-[max-width,margin,opacity,transform] duration-200 ease-out overflow-hidden',
                 hasRating ? 'max-w-7 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
                 hasRating && (hasEditIcon || hasColorLabel) ? 'ml-1.5' : 'ml-0',
               )}
@@ -276,7 +276,7 @@ const FilmstripThumbnail = memo(
                 variant={TextVariants.small}
                 color={TextColors.white}
                 weight={TextWeights.bold}
-                className="text-[9px] px-1 py-0.5 rounded-[2px] bg-black/50"
+                className="rounded-sm bg-black/50 px-1 py-0.5 text-[10px]"
                 data-tooltip={t('ui.filmstrip.tooltips.virtualCopy')}
               >
                 {t('ui.filmstrip.virtualCopyAbbreviation')}

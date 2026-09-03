@@ -9,6 +9,7 @@ import EffectsPanel from '../../adjustments/Effects';
 import GeometryPanel from '../../adjustments/Geometry';
 import OpticsPanel from '../../adjustments/Optics';
 import CollapsibleSection from '../../ui/CollapsibleSection';
+import Button from '../../ui/Button';
 import {
   Adjustments,
   SectionVisibility,
@@ -275,32 +276,34 @@ export default function Controls() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="develop-panel-header">
+    <div className="ui-panel-root develop-controls-panel">
+      <div className="ui-panel-header">
         <div className="min-w-0">
           <Text variant={TextVariants.heading}>{t('editor.adjustments.title')}</Text>
         </div>
-        <div className="develop-panel-header-actions">
-          <button
+        <div className="ui-panel-header-actions">
+          <Button
             aria-label={t('editor.adjustments.tooltips.autoAdjust')}
-            className="develop-panel-text-action"
             disabled={!selectedImage}
             onClick={handleAutoAdjustments}
+            size="sm"
             data-tooltip={t('editor.adjustments.tooltips.autoAdjust')}
             type="button"
+            variant="ghost"
           >
             {t('settings.processing.backends.auto')}
-          </button>
-          <button
+          </Button>
+          <Button
             aria-label={t('editor.adjustments.tooltips.resetAdjustments')}
-            className="develop-panel-text-action"
             disabled={!selectedImage}
             onClick={handleResetAdjustments}
+            size="sm"
             data-tooltip={t('editor.adjustments.tooltips.resetAdjustments')}
             type="button"
+            variant="ghost"
           >
             {t('adjustments.basic.reset')}
-          </button>
+          </Button>
         </div>
       </div>
 

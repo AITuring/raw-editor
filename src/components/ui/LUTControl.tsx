@@ -207,7 +207,7 @@ export default function LUTControl({
           )}
           <button
             onClick={() => setIsExpanded((value) => !value)}
-            className="flex items-center gap-1 text-sm text-text-secondary select-none cursor-pointer hover:text-accent transition-colors"
+            className="ui-button ui-button--secondary ui-button--sm min-w-0"
             data-tooltip={lutName || t('ui.lut.selectLutFile')}
           >
             <span className="truncate max-w-35 text-right">{lutName || t('ui.lut.select')}</span>
@@ -227,10 +227,7 @@ export default function LUTControl({
           >
             <div className="mt-2 pb-1">
               {entries.length === 0 ? (
-                <button
-                  onClick={handleImport}
-                  className="w-full flex items-center justify-center gap-1.5 py-4 rounded-md bg-bg-tertiary hover:bg-surface border-2 border-dashed border-text-secondary/20 hover:border-text-secondary/40 text-sm text-text-primary transition-colors"
-                >
+                <button onClick={handleImport} className="ui-choice-button w-full">
                   <Upload size={16} />
                   {t('ui.lut.import')}
                 </button>
@@ -240,15 +237,14 @@ export default function LUTControl({
                     const thumb = previews[entry.path];
                     const isSelected = entry.path === lutPath;
                     return (
-                      <button
-                        key={entry.path}
+          <button
+            aria-pressed={isSelected}
+            key={entry.path}
                         onMouseEnter={() => onLutHover?.(entry.path)}
                         onMouseLeave={() => onLutHover?.(null)}
                         onClick={() => handleSwatchClick(entry.path)}
                         onContextMenu={(e) => handleContextMenu(e, entry)}
-                        className={`relative aspect-square rounded-md overflow-hidden bg-bg-tertiary border-2 transition-colors ${
-                          isSelected ? 'border-accent' : 'border-transparent hover:border-surface'
-                        }`}
+            className="ui-surface-button relative aspect-square overflow-hidden rounded-md bg-bg-tertiary transition-colors"
                         data-tooltip={entry.name}
                       >
                         {isLoadingPreviews && thumb === undefined ? (
@@ -266,9 +262,9 @@ export default function LUTControl({
                       </button>
                     );
                   })}
-                  <button
-                    onClick={handleImport}
-                    className="aspect-square rounded-md bg-bg-tertiary border-2 border-text-secondary/25 hover:border-accent flex items-center justify-center text-text-secondary hover:text-text-primary transition-all duration-150"
+        <button
+          onClick={handleImport}
+          className="ui-surface-button flex aspect-square items-center justify-center rounded-md bg-bg-tertiary text-text-secondary transition-colors duration-150 hover:text-text-primary"
                     data-tooltip={t('ui.lut.import')}
                   >
                     <Upload size={20} />

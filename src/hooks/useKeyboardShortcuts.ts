@@ -135,8 +135,7 @@ export const useKeyboardShortcuts = ({
           s.library.setLibrary({ multiSelectedPaths: sortedListRef.current.map((f: ImageFile) => f.path) });
           if (s.ui.activeView === 'library') {
             const lastPath = sortedListRef.current[sortedListRef.current.length - 1].path;
-            s.library.setLibrary({ libraryActivePath: lastPath });
-            handleImageSelect(lastPath, false);
+            s.library.setLibrary({ libraryActivePath: lastPath, selectionAnchorPath: lastPath });
           }
         },
       },
@@ -192,9 +191,18 @@ export const useKeyboardShortcuts = ({
         },
       },
       cycle_zoom: {
-        shouldFire: (s: any) => s.ui.activeView === 'editor' && !!s.editor.selectedImage,
+        shouldFire: (s: any) =>
+          (s.ui.activeView === 'editor' && !!s.editor.selectedImage) ||
+          (s.ui.activeView === 'library' && !!s.library.libraryActivePath),
         execute: (e: any, s: any) => {
           e.preventDefault();
+          if (s.ui.activeView === 'library') {
+            s.ui.setUI({
+              isLibraryQuickPreviewOpen: !s.ui.isLibraryQuickPreviewOpen,
+              libraryContextPanel: null,
+            });
+            return;
+          }
           const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
           const { originalSize, displaySize, baseRenderSize } = s.editor;
           const currentPercent =
@@ -344,7 +352,11 @@ export const useKeyboardShortcuts = ({
         shouldFire: () => true,
         execute: (e: any, s: any) => {
           e.preventDefault();
-          s.ui.setRightPanel(Panel.Metadata);
+          if (s.ui.activeView === 'library') {
+            s.ui.setUI({ libraryContextPanel: s.ui.libraryContextPanel === Panel.Metadata ? null : Panel.Metadata });
+          } else {
+            s.ui.setRightPanel(Panel.Metadata);
+          }
         },
       },
       toggle_analytics: {
@@ -361,7 +373,7 @@ export const useKeyboardShortcuts = ({
           if (s.ui.activeView === 'editor' && s.editor.selectedImage) {
             s.ui.setUI({ isEditorExportDialogOpen: true });
           } else {
-            s.ui.setRightPanel(Panel.Export);
+            s.ui.setUI({ libraryContextPanel: s.ui.libraryContextPanel === Panel.Export ? null : Panel.Export });
           }
         },
       },
@@ -519,7 +531,9 @@ export const useKeyboardShortcuts = ({
         match: (e: KeyboardEvent) => e.code === 'Escape',
         execute: (e: KeyboardEvent, s: any) => {
           e.preventDefault();
-          if (s.editor.isStraightenActive) s.editor.setEditor({ isStraightenActive: false });
+          if (s.ui.activeView === 'library' && s.ui.isLibraryQuickPreviewOpen) {
+            s.ui.setUI({ isLibraryQuickPreviewOpen: false });
+          } else if (s.editor.isStraightenActive) s.editor.setEditor({ isStraightenActive: false });
           else if (s.ui.customEscapeHandler) s.ui.customEscapeHandler();
           else if (s.editor.activeAiSubMaskId) s.editor.setEditor({ activeAiSubMaskId: null });
           else if (s.editor.activeAiPatchContainerId) s.editor.setEditor({ activeAiPatchContainerId: null });
@@ -573,8 +587,11 @@ export const useKeyboardShortcuts = ({
           if (nextIndex < 0) nextIndex = sortedListRef.current.length - 1;
           const nextImage = sortedListRef.current[nextIndex];
           if (nextImage) {
-            s.library.setLibrary({ libraryActivePath: nextImage.path, multiSelectedPaths: [nextImage.path] });
-            handleImageSelect(nextImage.path, false);
+            s.library.setLibrary({
+              libraryActivePath: nextImage.path,
+              multiSelectedPaths: [nextImage.path],
+              selectionAnchorPath: nextImage.path,
+            });
           }
         },
       },

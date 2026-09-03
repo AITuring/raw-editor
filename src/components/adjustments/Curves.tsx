@@ -783,7 +783,7 @@ export default function CurveGraph({
       <div className="flex items-center justify-between gap-2 mb-2 mt-2">
         <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-secondary shrink-0">
           <button
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${
+            className={`flex h-8 w-8 items-center justify-center rounded-md transition-[background-color,color] duration-150 ${
               !isParametricMode ? 'bg-surface text-text-primary' : 'text-text-secondary hover:text-text-primary'
             }`}
             onClick={() => handleToggleMode('point')}
@@ -793,7 +793,7 @@ export default function CurveGraph({
             <Spline size={16} />
           </button>
           <button
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${
+            className={`flex h-8 w-8 items-center justify-center rounded-md transition-[background-color,color] duration-150 ${
               isParametricMode ? 'bg-surface text-text-primary' : 'text-text-secondary hover:text-text-primary'
             }`}
             onClick={() => handleToggleMode('parametric')}
@@ -811,7 +811,7 @@ export default function CurveGraph({
             return (
               <button
                 key={channel}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                className={`flex h-7 w-7 items-center justify-center rounded-full transition-[background-color,box-shadow,color] duration-150 ${
                   selected ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent' : 'bg-surface-secondary'
                 } ${channel === ActiveChannel.Luma ? 'text-text-primary' : ''}`}
                 onClick={() => setActiveChannel(channel as ActiveChannel)}

@@ -89,7 +89,7 @@ const EditorToolbar = memo(
     };
 
     return (
-      <header className="editor-command-bar">
+      <header className="ui-toolbar editor-command-bar">
         <div className="editor-command-group min-w-0">
           <button
             aria-label={t('editor.toolbar.tooltips.backToLibrary')}

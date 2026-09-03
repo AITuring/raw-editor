@@ -937,6 +937,19 @@
     }
   },
   "library": {
+    "actions": {
+      "clearFilters": "清除篩選",
+      "clearSearchAndFilters": "清除搜尋與篩選",
+      "closePanel": "關閉面板",
+      "enterEdit": "進入編輯",
+      "importHere": "匯入到這裡",
+      "info": "資訊",
+      "openAnotherFolder": "開啟其他資料夾",
+      "quickPreview": "快速預覽",
+      "quickPreviewHint": "快速預覽（空白鍵）",
+      "retry": "重試",
+      "showInfo": "顯示相片資訊"
+    },
     "community": {
       "actionSave": "儲存",
       "actionSaved": "已儲存",
@@ -1043,6 +1056,7 @@
       }
     },
     "header": {
+      "resultCount": "{{shown}} / {{total}}",
       "search": {
         "addFilterOrSearch": "新增過濾或搜尋...",
         "indexingImages": "索引影像中...",
@@ -1100,11 +1114,27 @@
       "expandFolder": "展開資料夾",
       "imagesCount_one": "1 張影像",
       "imagesCount_other": "{{count}} 張影像",
+      "thumbnailError": "預覽無法使用",
       "tooltipAperture": "光圈",
       "tooltipFocalLength": "焦距",
       "tooltipIso": "ISO",
       "tooltipShutterSpeed": "快門速度",
       "tooltipVirtualCopy": "虛擬副本"
+    },
+    "quickPreview": {
+      "close": "關閉快速預覽",
+      "fit": "符合視窗",
+      "keyboardHint": "←/→ 瀏覽 · 空白鍵關閉 · Enter 進入編輯",
+      "loading": "正在載入精細預覽…",
+      "next": "下一張相片",
+      "position": "第 {{current}} 張，共 {{total}} 張",
+      "previewFailed": "無法載入精細預覽，仍可使用縮圖。",
+      "previous": "上一張相片",
+      "rating": "相片評分",
+      "title": "快速預覽",
+      "zoomIn": "放大",
+      "zoomOut": "縮小",
+      "zoomTools": "預覽縮放控制"
     },
     "search": {
       "noResults": "未找到結果",
@@ -1123,9 +1153,7 @@
       "shutterSpeed": "快門速度"
     },
     "splash": {
-      "addFolder": "新增資料夾",
       "brand": "RAW Editor",
-      "continueSession": "繼續會話",
       "contribute": "在 GitHub 上貢獻",
       "descriptionAndroid": "一款極速、GPU 加速的 RAW 影像編輯器。開啟相簿以開始。",
       "descriptionDesktop": "一款極速、GPU 加速的 RAW 影像編輯器。開啟資料夾以開始。",
@@ -1135,15 +1163,24 @@
       "dropImagesHint": "支援單張或批次 RAW、JPEG、PNG 與 TIFF",
       "goToSettings": "前往設定",
       "latestVersion": "您已是最新版本",
-      "multiImageSelectionHint": "堆疊與拼接需選擇 2–200 張來源影像。",
+      "multiImageSelectionHint": "請選擇 2–200 張影像後繼續。",
       "newVersionAvailable": "新版本可用！",
       "openFolder": "開啟資料夾",
       "openImage": "開啟單張影像",
       "openLibrary": "開啟相簿",
       "or": "或",
-      "version": "版本 {{version}}",
-      "welcomeBack": "歡迎回來！",
-      "welcomeBackDesc": "繼續上次的進度或開始新會話。"
+      "version": "版本 {{version}}"
+    },
+    "states": {
+      "emptyDescription": "這個資料夾中還沒有檔案。可以將相片匯入到這裡，或選擇其他資料夾。",
+      "emptyTitle": "資料夾為空",
+      "errorDescription": "RAW Editor 無法讀取這個資料夾。{{error}}",
+      "errorTitle": "無法開啟資料夾",
+      "filteredDescription": "資料夾中有相片，但沒有相片符合目前的篩選條件。",
+      "loadingTitle": "正在讀取資料夾…",
+      "unknownError": "請檢查資料夾權限後重試。",
+      "unsupportedDescription": "找到 {{total}} 個檔案，但沒有支援的影像格式。",
+      "unsupportedTitle": "找不到支援的相片"
     },
     "status": {
       "downloading": "下載中 {{status}}...",

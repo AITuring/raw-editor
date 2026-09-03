@@ -142,22 +142,18 @@ const BrushTools = ({ settings, onSettingsChange }: { settings: any; onSettingsC
       />
       <div className="grid grid-cols-2 gap-2 pt-2">
         <button
-          className={`p-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            settings.tool === ToolType.Brush
-              ? 'text-primary bg-surface'
-              : 'bg-surface text-text-secondary hover:bg-card-active'
-          }`}
+          aria-pressed={settings.tool === ToolType.Brush}
+          className={`ui-choice-button ${settings.tool === ToolType.Brush ? 'is-active' : ''}`}
           onClick={() => onSettingsChange((s: any) => ({ ...s, tool: ToolType.Brush }))}
+          type="button"
         >
           {t('editor.ai.brush.add')}
         </button>
         <button
-          className={`p-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            settings.tool === ToolType.Eraser
-              ? 'text-primary bg-surface'
-              : 'bg-surface text-text-secondary hover:bg-card-active'
-          }`}
+          aria-pressed={settings.tool === ToolType.Eraser}
+          className={`ui-choice-button ${settings.tool === ToolType.Eraser ? 'is-active' : ''}`}
           onClick={() => onSettingsChange((s: any) => ({ ...s, tool: ToolType.Eraser }))}
+          type="button"
         >
           {t('editor.ai.brush.erase')}
         </button>
@@ -913,11 +909,11 @@ export default function AIPanel() {
       onDragEnd={handleDragEnd}
       collisionDetection={pointerWithin}
     >
-      <div className="flex flex-col h-full select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
-        <div className="develop-panel-header">
+      <div className="ui-panel-root select-none overflow-hidden" onContextMenu={handlePanelContextMenu}>
+        <div className="ui-panel-header">
           <Text variant={TextVariants.heading}>{t('editor.ai.inpaintingTitle')}</Text>
           <button
-            className="p-2 rounded-full hover:bg-surface transition-colors"
+            className="ui-icon-button"
             onClick={handleResetAllAiEdits}
             data-tooltip={t('editor.ai.resetInpaintingTooltip')}
           >
@@ -925,7 +921,7 @@ export default function AIPanel() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0 p-3">
+        <div className="ui-panel-body flex flex-col overflow-x-hidden">
           {!selectedImage ? (
             <div className="flex items-center justify-center h-full">
               <Text

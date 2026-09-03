@@ -208,11 +208,11 @@ export default function PanelSwitcher({
         isVertical
           ? clsx(
               'flex-col overflow-y-auto h-full',
-              placement === 'left' ? 'border-r border-surface' : 'border-l border-surface',
+              placement === 'left' ? 'border-r border-border-color' : 'border-l border-border-color',
             )
           : clsx(
               'flex-row overflow-x-auto w-full',
-              placement === 'top' ? 'border-b border-surface' : 'border-t border-surface',
+              placement === 'top' ? 'border-b border-border-color' : 'border-t border-border-color',
             ),
       )}
     >

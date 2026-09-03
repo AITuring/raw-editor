@@ -84,12 +84,12 @@ export default function TaggingSubMenu({
 
   return (
     <div
-      className="bg-surface/95 p-2 w-64 text-text-primary rounded-lg"
+      className="ui-popover-surface w-64 p-3 text-text-primary"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="mb-2">
-        <div className="flex flex-wrap gap-1 p-1 bg-surface rounded-md min-h-[32px] items-center">
+      <div className="mb-3">
+        <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-border-color bg-bg-primary/45 p-1.5">
           <AnimatePresence>
             {tags.length > 0 ? (
               tags.map((tagItem) => (
@@ -128,7 +128,7 @@ export default function TaggingSubMenu({
         </div>
       </div>
 
-      <div className="relative mb-2">
+      <div className="relative mb-3">
         <input
           ref={inputRef}
           type="text"
@@ -136,11 +136,11 @@ export default function TaggingSubMenu({
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleInputKeyDown}
           placeholder={t('menus.tagging.placeholder')}
-          className="w-full bg-surface border border-border-color rounded-md pl-2 pr-8 py-1.5 text-sm focus:outline-hidden"
+          className="ui-input pr-9"
         />
         <button
           onClick={() => handleAddTag(inputValue)}
-          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface"
+          className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-sm text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary"
           data-tooltip={t('menus.tagging.addTagTooltip')}
         >
           <Plus size={16} />

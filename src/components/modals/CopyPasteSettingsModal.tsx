@@ -82,16 +82,18 @@ const PasteModeSwitch = ({ selectedMode, onModeChange, isVisible }: PasteModeSwi
   }, [isVisible]);
 
   return (
-    <div ref={containerRef} className="relative flex w-full gap-1 bg-bg-primary p-1 rounded-md">
+    <div ref={containerRef} className="copy-paste-mode-control">
       <motion.div
-        className="absolute top-1 bottom-1 z-0 bg-accent shadow-xs"
-        style={{ borderRadius: 6 }}
         animate={bubbleStyle}
-        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+        className="copy-paste-mode-indicator"
+        transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
       />
       {pasteModeOptions.map((option) => (
         <button
+          aria-pressed={selectedMode === option.id}
+          className={clsx('copy-paste-mode-option', selectedMode === option.id && 'is-active')}
           key={option.id}
+          onClick={() => onModeChange(option.id)}
           ref={(el) => {
             if (el) {
               const newRefs = new Map(buttonRefs);
@@ -101,17 +103,10 @@ const PasteModeSwitch = ({ selectedMode, onModeChange, isVisible }: PasteModeSwi
               }
             }
           }}
-          onClick={() => onModeChange(option.id)}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center gap-2 py-1.5 text-sm rounded-md transition-colors',
-            {
-              'text-text-primary hover:bg-surface': selectedMode !== option.id,
-              'text-button-text': selectedMode === option.id,
-            },
-          )}
           style={{ WebkitTapHighlightColor: 'transparent' }}
+          type="button"
         >
-          <span className="relative z-10 flex items-center">{option.label}</span>
+          <span>{option.label}</span>
         </button>
       ))}
     </div>
@@ -180,109 +175,104 @@ export default function CopyPasteSettingsModal({ isOpen, onClose, onSave, settin
   if (!isMounted) return null;
 
   return (
-    <div
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
-      onClick={onClose}
-      role="dialog"
-    >
+    <div className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`} onClick={onClose}>
       <div
-        className={`bg-surface rounded-lg shadow-xl p-6 w-full max-w-2xl flex flex-col transform transition-all duration-300 ease-out ${
-          show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'
+        aria-labelledby="copy-paste-settings-title"
+        aria-modal="true"
+        className={`app-modal-surface app-modal-surface--structured copy-paste-dialog ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
         }`}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
       >
-        <Text variant={TextVariants.title} className="mb-4">
-          {t('modals.copyPaste.title')}
-        </Text>
-        <div className="grow overflow-y-auto pr-2 -mr-2 space-y-6">
-          <div>
-            <Text variant={TextVariants.heading} className="block mb-2">
+        <header className="copy-paste-dialog-header">
+          <Text className="copy-paste-dialog-title" id="copy-paste-settings-title" variant={TextVariants.heading}>
+            {t('modals.copyPaste.title')}
+          </Text>
+        </header>
+
+        <div className="copy-paste-dialog-body custom-scrollbar">
+          <section className="copy-paste-section">
+            <Text className="copy-paste-section-title" variant={TextVariants.heading}>
               {t('modals.copyPaste.pasteMode')}
             </Text>
             <PasteModeSwitch
-              selectedMode={localSettings.mode}
-              onModeChange={(mode) => setLocalSettings((p) => ({ ...p, mode }))}
               isVisible={show}
+              onModeChange={(mode) => setLocalSettings((p) => ({ ...p, mode }))}
+              selectedMode={localSettings.mode}
             />
-            <Text variant={TextVariants.small} className="mt-2">
+            <Text className="copy-paste-description" variant={TextVariants.small}>
               <b>{t('modals.copyPaste.modeMerge')}:</b> {t('modals.copyPaste.descMerge')}
               <br />
               <b>{t('modals.copyPaste.modeReplace')}:</b> {t('modals.copyPaste.descReplace')}
             </Text>
-          </div>
+          </section>
 
-          <div>
-            <Text variant={TextVariants.heading} className="block mb-2">
+          <section className="copy-paste-section">
+            <Text className="copy-paste-section-title" variant={TextVariants.heading}>
               {t('modals.copyPaste.autoSyncTitle')}
             </Text>
             <Switch
-              label={t('modals.copyPaste.autoSyncLabel')}
               checked={localSettings.autoSync}
+              className="copy-paste-auto-sync"
+              label={t('modals.copyPaste.autoSyncLabel')}
               onChange={(checked) => setLocalSettings((p) => ({ ...p, autoSync: checked }))}
             />
-            <Text variant={TextVariants.small} className="mt-2">
+            <Text className="copy-paste-description" variant={TextVariants.small}>
               {t('modals.copyPaste.autoSyncDesc')}
             </Text>
-          </div>
+          </section>
 
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <Text variant={TextVariants.heading}>{t('modals.copyPaste.includedAdjustments')}</Text>
-              <div className="flex gap-2">
-                <Button
-                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-                  size="sm"
-                  onClick={handleSelectAll}
-                >
+          <section className="copy-paste-section copy-paste-adjustments-section">
+            <div className="copy-paste-adjustments-heading">
+              <Text className="copy-paste-section-title" variant={TextVariants.heading}>
+                {t('modals.copyPaste.includedAdjustments')}
+              </Text>
+              <div className="copy-paste-selection-actions">
+                <Button variant="secondary" size="sm" onClick={handleSelectAll}>
                   {t('modals.copyPaste.selectAll')}
                 </Button>
-                <Button
-                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-                  size="sm"
-                  onClick={handleSelectNone}
-                >
+                <Button variant="secondary" size="sm" onClick={handleSelectNone}>
                   {t('modals.copyPaste.selectNone')}
                 </Button>
               </div>
             </div>
-            <div className="bg-bg-primary p-4 rounded-md max-h-64 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+            <div className="copy-paste-adjustment-list custom-scrollbar">
+              <div className="copy-paste-adjustment-grid">
                 {Object.entries(ADJUSTMENT_GROUPS).map(([section, groups]) => (
-                  <div key={section}>
-                    <Text variant={TextVariants.heading} className="mb-2">
+                  <section className="copy-paste-adjustment-group" key={section}>
+                    <Text className="copy-paste-adjustment-group-title" variant={TextVariants.heading}>
                       {t(`editor.adjustments.sections.${section}`, { defaultValue: capitalize(section) })}
                     </Text>
-                    {groups.map((group) => {
-                      const isFullyChecked = group.keys.every((key) => localSettings.includedAdjustments.includes(key));
+                    <div className="copy-paste-adjustment-options">
+                      {groups.map((group) => {
+                        const isFullyChecked = group.keys.every((key) =>
+                          localSettings.includedAdjustments.includes(key),
+                        );
 
-                      return (
-                        <div key={group.label} className="mb-1.5 last:mb-0">
+                        return (
                           <Switch
-                            label={t(group.label as never) as string}
                             checked={isFullyChecked}
+                            key={group.label}
+                            label={t(group.label as never) as string}
                             onChange={(checked) => handleGroupToggle(group.keys, checked)}
                           />
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </section>
                 ))}
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-surface">
-          <Button
-            className="px-4 py-2 rounded-md text-text-secondary bg-surface hover:bg-surface transition-colors"
-            onClick={onClose}
-          >
+        <footer className="copy-paste-dialog-footer">
+          <Button variant="secondary" onClick={onClose}>
             {t('modals.copyPaste.cancel')}
           </Button>
           <Button onClick={handleSave}>{t('modals.copyPaste.save')}</Button>
-        </div>
+        </footer>
       </div>
     </div>
   );

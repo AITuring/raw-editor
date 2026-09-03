@@ -20,7 +20,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { motion, AnimatePresence, LayoutGroup, type Variants } from 'framer-motion';
 import clsx from 'clsx';
-import Button from '../ui/Button';
+import Button, { type ButtonVariant } from '../ui/Button';
 import ConfirmModal from '../modals/ConfirmModal';
 import Dropdown, { OptionItem } from '../ui/Dropdown';
 import Switch from '../ui/Switch';
@@ -56,7 +56,7 @@ const THIRD_PARTY_DISPLAY_NAMES = {
 
 interface ConfirmModalState {
   confirmText: string;
-  confirmVariant: string;
+  confirmVariant: ButtonVariant;
   isOpen: boolean;
   message: string;
   onConfirm(): void;
@@ -271,18 +271,12 @@ const CanvasInputModeSwitch = ({ mode, onModeChange }: CanvasInputModeSwitchProp
   );
 
   return (
-    <div className="relative flex w-full p-1 bg-bg-primary rounded-md border border-border-color">
+    <div className="ui-segmented-frame relative flex w-full">
       {canvasInputModes.map((item) => (
         <button
           key={item.id}
           onClick={() => onModeChange(item.id as 'mouse' | 'trackpad')}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-            {
-              'text-text-primary hover:bg-surface': mode !== item.id,
-              'text-button-text': mode === item.id,
-            },
-          )}
+          className={clsx('ui-segmented-option', mode === item.id && 'is-active')}
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           {mode === item.id && (
@@ -320,18 +314,12 @@ const PreviewModeSwitch = ({ mode, onModeChange }: PreviewModeSwitchProps) => {
   );
 
   return (
-    <div className="relative flex w-full p-1 bg-bg-primary rounded-md border border-border-color">
+    <div className="ui-segmented-frame relative flex w-full">
       {previewModes.map((item) => (
         <button
           key={item.id}
           onClick={() => onModeChange(item.id as 'static' | 'dynamic')}
-          className={clsx(
-            'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-            {
-              'text-text-primary hover:bg-surface': mode !== item.id,
-              'text-button-text': mode === item.id,
-            },
-          )}
+          className={clsx('ui-segmented-option', mode === item.id && 'is-active')}
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           {mode === item.id && (
@@ -837,18 +825,12 @@ export default function SettingsPanel({
               </Text>
             </div>
 
-            <div className="relative flex w-full min-[1200px]:w-112.5 p-2 bg-surface rounded-md">
+            <div className="ui-segmented-frame relative flex w-full min-[1200px]:w-112.5">
               {settingCategories.map((category) => (
                 <button
                   key={category.id}
                   onClick={() => setActiveCategory(category.id)}
-                  className={clsx(
-                    'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                    {
-                      'text-text-primary hover:bg-surface': activeCategory !== category.id,
-                      'text-button-text': activeCategory === category.id,
-                    },
-                  )}
+                  className={clsx('ui-segmented-option', activeCategory === category.id && 'is-active')}
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   {activeCategory === category.id && (

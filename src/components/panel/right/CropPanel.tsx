@@ -21,6 +21,7 @@ import { Adjustments, INITIAL_ADJUSTMENTS } from '../../../utils/adjustments';
 import clsx from 'clsx';
 import { Invokes, Orientation, Panel } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
+import Button from '../../ui/Button';
 import Slider from '../../ui/Slider';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useEditorStore } from '../../../store/useEditorStore';
@@ -1160,18 +1161,19 @@ export default function CropPanel() {
   ]);
 
   return (
-    <div className="crop-panel flex h-full flex-col">
-      <div className="develop-panel-header">
+    <div className="crop-panel ui-panel-root">
+      <div className="ui-panel-header">
         <Text variant={TextVariants.heading}>{t('editor.crop.title')}</Text>
-        <button
+        <Button
           aria-label={t('editor.crop.resetTooltip')}
-          className="develop-panel-text-action"
           data-tooltip={t('editor.crop.resetTooltip')}
           onClick={handleResetCrop}
+          size="sm"
           type="button"
+          variant="secondary"
         >
           {t('adjustments.basic.reset')}
-        </button>
+        </Button>
       </div>
 
       <div className="crop-panel-scroll grow overflow-y-auto">
@@ -1478,7 +1480,12 @@ export default function CropPanel() {
                         <span>
                           {t('editor.crop.upright.guidedTooltip')} · {uprightGuides.length}/4
                         </span>
-                        <button disabled={uprightGuides.length === 0} onClick={clearGuidedUpright} type="button">
+                        <button
+                          className="ui-inline-action"
+                          disabled={uprightGuides.length === 0}
+                          onClick={clearGuidedUpright}
+                          type="button"
+                        >
                           {t('adjustments.basic.reset')}
                         </button>
                       </div>

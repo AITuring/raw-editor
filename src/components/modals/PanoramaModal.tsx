@@ -115,7 +115,7 @@ export default function PanoramaModal({
     if (finalImageBase64 && !isProcessing) {
       return (
         <div className="w-full">
-          <div className="w-full max-h-[500px] bg-[#111] rounded-lg overflow-hidden border border-surface flex items-center justify-center">
+          <div className="flex max-h-[500px] w-full items-center justify-center overflow-hidden rounded-lg border border-border-color bg-[#111]">
             <img
               src={finalImageBase64}
               alt="Stitched Panorama"
@@ -141,7 +141,7 @@ export default function PanoramaModal({
 
     if (isProcessing) {
       return (
-        <div className="flex h-[460px] overflow-hidden rounded-lg border border-surface">
+        <div className="flex h-[460px] overflow-hidden rounded-lg border border-border-color">
           <div className="w-2/5 relative overflow-hidden shrink-0 bg-[#0a0a0a] flex items-center justify-center">
             {loadingImageUrl ? (
               <img src={loadingImageUrl} alt="Source preview" className="w-full h-full object-cover" />
@@ -204,12 +204,9 @@ export default function PanoramaModal({
     if (savedPath) {
       return (
         <>
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 rounded-md text-text-secondary hover:bg-card-active transition-colors"
-          >
+          <Button onClick={handleClose} variant="secondary">
             {t('modals.panorama.close')}
-          </button>
+          </Button>
           <Button onClick={handleOpen}>{t('modals.panorama.openInEditor')}</Button>
         </>
       );
@@ -219,12 +216,9 @@ export default function PanoramaModal({
 
     return (
       <div className={`w-full flex items-center justify-end gap-2 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-        <button
-          onClick={handleClose}
-          className="px-4 py-2 rounded-md text-text-secondary hover:bg-card-active transition-colors text-sm"
-        >
+        <Button onClick={handleClose} variant="secondary">
           {finalImageBase64 ? t('modals.panorama.close') : t('modals.panorama.cancel')}
-        </button>
+        </Button>
 
         <Button onClick={onStitch} disabled={isProcessing} variant={finalImageBase64 ? 'secondary' : 'primary'}>
           {isProcessing ? (
@@ -251,15 +245,13 @@ export default function PanoramaModal({
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/40 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
       <div
-        className={`bg-surface rounded-xl shadow-2xl p-6 w-full max-w-4xl transform transition-all duration-300 ease-out ${
-          show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'
+        className={`app-modal-surface app-modal-surface--padded max-w-4xl ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
         }`}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -275,9 +267,7 @@ export default function PanoramaModal({
               label={t('modals.panorama.save')}
             />
           )}
-          <div className={`mt-4 flex justify-end gap-3 ${savedPath ? '' : 'pt-4 border-t border-surface/50'}`}>
-            {renderButtons()}
-          </div>
+          <div className={`app-modal-footer ${savedPath ? 'is-result' : ''}`}>{renderButtons()}</div>
         </div>
       </div>
     </div>

@@ -1,37 +1,26 @@
 import clsx from 'clsx';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'size'> {
   children: ReactNode;
-  size?: string;
-  variant?: string;
+  size?: 'sm' | 'md' | 'lg' | 'icon';
+  variant?: ButtonVariant;
 }
 
-const Button = ({
-  children,
-  onClick,
-  disabled,
-  className = '',
-  size: _size,
-  variant: _variant,
-  ...props
-}: ButtonProps) => {
-  const baseClasses = `
-    flex items-center justify-center gap-2
-    min-h-8 font-medium py-1.5 px-3 rounded-[3px]
-    text-button-text text-xs
-    transition-colors duration-150
-    disabled:opacity-50 disabled:cursor-not-allowed
-  `;
-
-  const hasSurfaceBg = className.includes('bg-surface');
-
+const Button = ({ children, onClick, disabled, className = '', size = 'md', variant, ...props }: ButtonProps) => {
+  const resolvedVariant = variant
+    ? variant
+    : className.includes('bg-transparent') || className.includes('bg-bg-primary')
+      ? 'ghost'
+      : className.includes('bg-surface')
+        ? 'secondary'
+        : 'primary';
   const combinedClasses = clsx(
-    baseClasses,
-    {
-      'bg-accent': !hasSurfaceBg,
-      'bg-surface': hasSurfaceBg,
-    },
+    'ui-button',
+    `ui-button--${resolvedVariant}`,
+    size !== 'md' && `ui-button--${size}`,
     className,
   );
 

@@ -16,6 +16,16 @@ export interface SearchCriteria {
   mode: 'AND' | 'OR';
 }
 
+export type LibraryContentStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'unsupported' | 'error';
+
+export interface LibraryContentState {
+  status: LibraryContentStatus;
+  error: string | null;
+  totalFiles: number;
+  supportedFiles: number;
+  unreadableEntries: number;
+}
+
 interface LibraryState {
   // Paths & Trees
   rootPaths: string[];
@@ -45,6 +55,7 @@ interface LibraryState {
   // UI State specific to the Library View
   isTreeLoading: boolean;
   isViewLoading: boolean;
+  contentState: LibraryContentState;
   libraryScrollTop: number;
   listColumnWidths: ColumnWidths;
 
@@ -80,6 +91,13 @@ export const useLibraryStore = create<LibraryState>((set) => ({
 
   isTreeLoading: false,
   isViewLoading: false,
+  contentState: {
+    status: 'idle',
+    error: null,
+    totalFiles: 0,
+    supportedFiles: 0,
+    unreadableEntries: 0,
+  },
   libraryScrollTop: 0,
   listColumnWidths: {
     thumbnail: 4,

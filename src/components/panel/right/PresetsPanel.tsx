@@ -529,7 +529,7 @@ function RootDroppableArea({
 
   return (
     <div
-      className={`grow overflow-y-auto p-3 space-y-2 rounded-lg transition-colors ${isOver ? 'bg-surface-hover' : ''}`}
+      className={`ui-panel-body space-y-2 transition-colors ${isOver ? 'bg-surface-hover' : ''}`}
       onContextMenu={onContextMenu}
       ref={setNodeRef}
     >
@@ -1204,12 +1204,12 @@ export default function PresetsPanel() {
 
   return (
     <DndContext id="presets-panel-dnd" sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex flex-col h-full">
-        <div className="develop-panel-header">
+      <div className="ui-panel-root">
+        <div className="ui-panel-header">
           <Text variant={TextVariants.heading}>{t('editor.presets.title')}</Text>
-          <div className="flex items-center gap-1">
+          <div className="ui-panel-header-actions">
             <button
-              className="p-2 rounded-full hover:bg-surface transition-colors"
+              className="ui-icon-button"
               disabled={isLoading}
               onClick={handleImportPresets}
               data-tooltip={t('editor.presets.tooltips.import')}
@@ -1217,7 +1217,7 @@ export default function PresetsPanel() {
               <FileUp size={18} />
             </button>
             <button
-              className="p-2 rounded-full hover:bg-surface transition-colors"
+              className="ui-icon-button"
               disabled={presets.length === 0 || isLoading}
               onClick={handleExportAllPresets}
               data-tooltip={t('editor.presets.tooltips.export')}
@@ -1225,7 +1225,7 @@ export default function PresetsPanel() {
               <FileDown size={18} />
             </button>
             <button
-              className="p-2 rounded-full hover:bg-surface transition-colors"
+              className="ui-icon-button"
               disabled={isLoading}
               onClick={() => setConfigureModalState({ isOpen: true, preset: null })}
               data-tooltip={t('editor.presets.tooltips.saveNew')}

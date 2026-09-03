@@ -926,6 +926,19 @@
     }
   },
   "library": {
+    "actions": {
+      "clearFilters": "Clear filters",
+      "clearSearchAndFilters": "Clear search and filters",
+      "closePanel": "Close panel",
+      "enterEdit": "Edit",
+      "importHere": "Import here",
+      "info": "Info",
+      "openAnotherFolder": "Open another folder",
+      "quickPreview": "Quick preview",
+      "quickPreviewHint": "Quick preview (Space)",
+      "retry": "Try again",
+      "showInfo": "Show photo information"
+    },
     "community": {
       "actionSave": "保存",
       "actionSaved": "保存済み",
@@ -1032,6 +1045,7 @@
       }
     },
     "header": {
+      "resultCount": "{{shown}} / {{total}}",
       "search": {
         "addFilterOrSearch": "フィルターまたは検索を追加...",
         "indexingImages": "画像をインデックス中...",
@@ -1089,11 +1103,27 @@
       "expandFolder": "フォルダを展開",
       "imagesCount_one": "1 枚の画像",
       "imagesCount_other": "{{count}} 枚の画像",
+      "thumbnailError": "Preview unavailable",
       "tooltipAperture": "絞り値",
       "tooltipFocalLength": "焦点距離",
       "tooltipIso": "ISO感度",
       "tooltipShutterSpeed": "シャッタースピード",
       "tooltipVirtualCopy": "仮想コピー"
+    },
+    "quickPreview": {
+      "close": "Close quick preview",
+      "fit": "Fit image",
+      "keyboardHint": "←/→ Browse · Space Close · Enter Edit",
+      "loading": "Loading detailed preview…",
+      "next": "Next photo",
+      "position": "{{current}} of {{total}}",
+      "previewFailed": "Detailed preview could not be loaded. The thumbnail is still available.",
+      "previous": "Previous photo",
+      "rating": "Photo rating",
+      "title": "Quick preview",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomTools": "Preview zoom controls"
     },
     "search": {
       "noResults": "結果が見つかりません",
@@ -1112,9 +1142,7 @@
       "shutterSpeed": "シャッタースピード"
     },
     "splash": {
-      "addFolder": "フォルダを追加",
       "brand": "RAW Editor",
-      "continueSession": "セッションを続行",
       "contribute": "GitHubで貢献する",
       "descriptionAndroid": "圧倒的に高速な、GPUアクセラレーション対応RAW画像エディタ。ライブラリを開いて始めましょう。",
       "descriptionDesktop": "圧倒的に高速な、GPUアクセラレーション対応RAW画像エディタ。フォルダを開いて始めましょう。",
@@ -1124,15 +1152,24 @@
       "dropImagesHint": "単一または複数の RAW、JPEG、PNG、TIFF ファイル",
       "goToSettings": "設定へ移動",
       "latestVersion": "最新バージョンを使用しています",
-      "multiImageSelectionHint": "スタックと合成には2～200枚の元画像が必要です。",
+      "multiImageSelectionHint": "続行するには2～200枚の画像を選択してください。",
       "newVersionAvailable": "新しいバージョンが利用可能です！",
       "openFolder": "フォルダを開く",
       "openImage": "画像を開く",
       "openLibrary": "ライブラリを開く",
       "or": "または",
-      "version": "バージョン {{version}}",
-      "welcomeBack": "おかえりなさい！",
-      "welcomeBackDesc": "前回の続きから始めるか、新しいセッションを開始します。"
+      "version": "バージョン {{version}}"
+    },
+    "states": {
+      "emptyDescription": "This folder contains no files yet. Import photos here or choose another folder.",
+      "emptyTitle": "This folder is empty",
+      "errorDescription": "RAW Editor could not read this folder. {{error}}",
+      "errorTitle": "Folder could not be opened",
+      "filteredDescription": "Photos are present, but none match the current filters.",
+      "loadingTitle": "Reading folder…",
+      "unknownError": "Check the folder permission and try again.",
+      "unsupportedDescription": "{{total}} file(s) were found, but none use a supported image format.",
+      "unsupportedTitle": "No supported photos found"
     },
     "status": {
       "downloading": "{{status}}をダウンロード中...",

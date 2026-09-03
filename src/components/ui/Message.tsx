@@ -37,7 +37,7 @@ export function MessageHost({ topOffset = 16 }: MessageHostProps) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="app-message-host" style={{ top: topOffset }}>
+    <div className="app-message-host" style={{ top: `max(${topOffset}px, var(--ui-floating-viewport-inset))` }}>
       {items.map((item) => (
         <div
           aria-atomic="true"

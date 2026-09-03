@@ -5,6 +5,8 @@ import clsx from 'clsx';
 import Text from '../ui/Text';
 import { TextVariants } from '../../types/typography';
 import Switch from '../ui/Switch';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
 import { Preset } from '../ui/AppProperties';
 import { ADJUSTMENT_GROUPS } from '../../utils/adjustments';
 
@@ -66,7 +68,7 @@ const PresetTypeSwitch = ({ selectedType, onChange }: PresetTypeSwitchProps) => 
   }, [selectedType, presetTypeOptions]);
 
   return (
-    <div className="w-full p-1.5 bg-card-active rounded-md mt-2">
+    <div className="ui-segmented-frame mt-2 w-full">
       <div className="relative flex w-full">
         <motion.div
           className="absolute top-0 bottom-0 z-0 bg-accent"
@@ -82,13 +84,7 @@ const PresetTypeSwitch = ({ selectedType, onChange }: PresetTypeSwitchProps) => 
               e.preventDefault();
               onChange(option.id);
             }}
-            className={clsx(
-              'relative flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-              {
-                'text-text-primary hover:bg-surface': selectedType !== option.id,
-                'text-button-text': selectedType === option.id,
-              },
-            )}
+            className={clsx('ui-segmented-option', selectedType === option.id && 'is-active')}
             style={{ WebkitTapHighlightColor: 'transparent' }}
           >
             <span className="relative z-10 flex items-center">{option.label}</span>
@@ -163,30 +159,23 @@ export default function ConfigurePresetModal({ isOpen, onClose, onSave, initialP
 
   return (
     <div
-      className={`
-        fixed inset-0 flex items-center justify-center z-50
-        bg-black/30 backdrop-blur-xs
-        transition-opacity duration-300 ease-in-out
-        ${show ? 'opacity-100' : 'opacity-0'}
-      `}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`
-          bg-surface rounded-lg shadow-xl p-6 w-full max-w-sm
-          transform transition-all duration-300 ease-out
-          ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'}
-        `}
+        className={`app-modal-surface app-modal-surface--padded max-w-sm ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
+        }`}
         onClick={(e: any) => e.stopPropagation()}
       >
-        <Text variant={TextVariants.title} className="mb-4">
+        <Text variant={TextVariants.heading} className="mb-3">
           {initialPreset ? t('modals.configurePreset.titleConfigure') : t('modals.configurePreset.titleSave')}
         </Text>
-        <input
+        <Input
           autoFocus
-          className="w-full bg-bg-primary text-text-primary border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+          bgClassName="bg-bg-primary"
           onChange={(e: any) => setName(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t('modals.configurePreset.placeholder')}
@@ -194,7 +183,7 @@ export default function ConfigurePresetModal({ isOpen, onClose, onSave, initialP
           value={name}
         />
 
-        <div className="mt-5 mb-4 p-1 space-y-4">
+        <div className="my-5 space-y-3 rounded-md border border-border-color bg-bg-primary/35 p-3">
           <Switch label={t('modals.configurePreset.includeMasks')} checked={includeMasks} onChange={setIncludeMasks} />
           <Switch
             label={t('modals.configurePreset.includeCropTransform')}
@@ -205,20 +194,13 @@ export default function ConfigurePresetModal({ isOpen, onClose, onSave, initialP
 
         <PresetTypeSwitch selectedType={presetType} onChange={setPresetType} />
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-            onClick={onClose}
-          >
+        <div className="app-modal-actions">
+          <Button variant="ghost" onClick={onClose}>
             {t('modals.configurePreset.cancel')}
-          </button>
-          <button
-            className="px-4 py-2 rounded-md bg-accent text-button-text font-semibold hover:bg-accent-hover disabled:bg-gray-500 disabled:text-white disabled:cursor-not-allowed transition-colors"
-            disabled={!name.trim()}
-            onClick={handleSave}
-          >
+          </Button>
+          <Button disabled={!name.trim()} onClick={handleSave}>
             {t('modals.configurePreset.save')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -116,8 +116,8 @@ const ImageCompare = ({ original, denoised }: { original: string; denoised: stri
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#111] rounded-lg overflow-hidden border border-surface">
-      <div className="h-9 bg-bg-primary border-b border-surface flex items-center justify-between px-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-color bg-[#111]">
+      <div className="flex h-9 items-center justify-between border-b border-border-color bg-bg-primary px-3">
         <Text as="div" variant={TextVariants.small} className="flex items-center gap-2">
           <Move size={14} /> <span>{t('modals.denoise.panZoomEnabled')}</span>
         </Text>
@@ -135,7 +135,7 @@ const ImageCompare = ({ original, denoised }: { original: string; denoised: stri
               setPan({ x: 0, y: 0 });
               setSliderPosition(50);
             }}
-            className="ml-2 text-accent hover:underline"
+            className="ui-inline-action ml-1"
           >
             {t('modals.denoise.reset')}
           </button>
@@ -355,7 +355,7 @@ export default function DenoiseModal({
   const renderContent = () => {
     if (error) {
       return (
-        <div className="flex flex-col items-center justify-center py-10 h-[460px]">
+        <div className="denoise-modal-stage denoise-modal-stage--message flex flex-col items-center justify-center py-10">
           <div className="flex items-center justify-center mb-6">
             <XCircle className="w-12 h-12 text-status-error" />
           </div>
@@ -371,7 +371,7 @@ export default function DenoiseModal({
 
     if (previewBase64 && originalBase64 && !isProcessing && !isBatch) {
       return (
-        <div className="w-full h-[500px]">
+        <div className="denoise-modal-stage denoise-modal-stage--preview w-full">
           <ImageCompare original={originalBase64} denoised={previewBase64} />
           {savedPath && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -392,7 +392,7 @@ export default function DenoiseModal({
 
     if (isProcessing || (isBatch && isSaving)) {
       return (
-        <div className="flex h-[460px] overflow-hidden rounded-lg border border-surface">
+        <div className="denoise-modal-stage denoise-modal-stage--processing flex overflow-hidden rounded-lg border border-border-color">
           <div className="w-2/5 relative overflow-hidden shrink-0 bg-[#0a0a0a] flex items-center justify-center">
             {loadingImageUrl ? (
               <img src={loadingImageUrl} alt="Selected preview" className="w-full h-full object-cover" />
@@ -433,7 +433,7 @@ export default function DenoiseModal({
     }
 
     return (
-      <div className="flex flex-col items-center justify-center h-[460px]">
+      <div className="denoise-modal-stage denoise-modal-stage--idle flex flex-col items-center justify-center">
         <div className="flex items-center justify-center mb-6">
           <Grip className="w-12 h-12 text-accent" />
         </div>
@@ -457,12 +457,9 @@ export default function DenoiseModal({
     if (savedPath) {
       return (
         <>
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 rounded-md text-text-secondary hover:bg-card-active transition-colors"
-          >
+          <Button onClick={handleClose} variant="secondary">
             {t('modals.denoise.close')}
-          </button>
+          </Button>
           <Button onClick={handleOpen}>{t('modals.denoise.openInEditor')}</Button>
         </>
       );
@@ -471,9 +468,9 @@ export default function DenoiseModal({
     const disabled = isProcessing || isSaving;
 
     return (
-      <div className={`w-full flex items-center gap-4 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="flex-1 flex items-center gap-6">
-          <div className="flex flex-col gap-1 w-[280px] mt-2 shrink-0">
+      <div className={`denoise-modal-controls ${disabled ? 'is-disabled' : ''}`}>
+        <div className="denoise-modal-settings">
+          <div className="denoise-modal-field denoise-modal-method-field">
             <Text variant={TextVariants.body} weight={TextWeights.medium}>
               {t('modals.denoise.methodLabel')}
             </Text>
@@ -486,7 +483,7 @@ export default function DenoiseModal({
               }}
             />
           </div>
-          <div className="flex-1 max-w-[280px]">
+          <div className="denoise-modal-field denoise-modal-intensity-field">
             <Slider
               label={method === 'ai' ? t('modals.denoise.qualityTileSizeLabel') : t('modals.denoise.strengthLabel')}
               value={intensity}
@@ -515,15 +512,12 @@ export default function DenoiseModal({
           </div>
         </div>
 
-        <div className="h-10 w-px bg-surface shrink-0" />
+        <div className="denoise-modal-divider" aria-hidden="true" />
 
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 rounded-md text-text-secondary hover:bg-card-active transition-colors text-sm"
-          >
+        <div className="denoise-modal-actions">
+          <Button onClick={handleClose} variant="secondary">
             {previewBase64 ? t('modals.denoise.close') : t('modals.denoise.cancel')}
-          </button>
+          </Button>
 
           <Button
             onClick={handleRunDenoise}
@@ -559,29 +553,29 @@ export default function DenoiseModal({
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/40 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
       <div
-        className={`bg-surface rounded-xl shadow-2xl p-6 w-full max-w-4xl transform transition-all duration-300 ease-out ${
-          show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'
+        className={`app-modal-surface app-modal-surface--structured denoise-modal-surface ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
         }`}
       >
-        <div className="flex flex-col">
-          {renderContent()}
+        <div className="app-modal-content denoise-modal-content">
+          <div className="denoise-modal-body">{renderContent()}</div>
           {isSaving && !isProcessing && !isBatch && (
             <TaskProgress
               ariaLabel={t('modals.denoise.btnSave')}
-              className="mt-4"
+              className="denoise-modal-progress"
               compact
               indeterminate
               label={t('modals.denoise.btnSave')}
             />
           )}
-          <div className={`mt-4 flex justify-end gap-3 ${savedPath ? '' : 'pt-4 border-t border-surface/50'}`}>
+          <div
+            className={`app-modal-footer app-modal-footer--inset denoise-modal-footer ${savedPath ? 'is-result' : ''}`}
+          >
             {renderButtons()}
           </div>
         </div>

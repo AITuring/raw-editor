@@ -2354,7 +2354,11 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
             <span className="truncate" title={imageLoadError}>
               {t('library.import.openFailed')}
             </span>
-            <button onClick={retryImageLoad} type="button">
+            <button
+              className="ui-button ui-button--secondary ui-button--sm shrink-0"
+              onClick={retryImageLoad}
+              type="button"
+            >
               <RefreshCw aria-hidden="true" size={13} strokeWidth={1.9} />
               {t('modals.hdr.retry')}
             </button>

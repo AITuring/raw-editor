@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import MainLibrary from '../panel/MainLibrary';
 import BottomBar from '../panel/BottomBar';
+import LibraryQuickPreview from '../panel/library/LibraryQuickPreview';
 
 import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -9,7 +11,7 @@ import { useEditorStore } from '../../store/useEditorStore';
 import { useProcessStore } from '../../store/useProcessStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 
-import { ImageFile, LibraryViewMode, ThumbnailAspectRatio, ThumbnailSize } from '../ui/AppProperties';
+import { ImageFile, LibraryViewMode, Panel, ThumbnailAspectRatio, ThumbnailSize } from '../ui/AppProperties';
 import { GroupBadgeInfo, GroupId } from '../../utils/imageGrouping';
 
 interface LibraryViewProps {
@@ -28,7 +30,6 @@ interface LibraryViewProps {
   handleRate: (...args: any) => void;
   handleThumbnailContextMenu: (...args: any) => void;
   handleMainLibraryContextMenu: (...args: any) => void;
-  handleContinueSession: (...args: any) => void;
   handleGoHome: (...args: any) => void;
   handleOpenImage: (...args: any) => void;
   handleOpenMultiImageWorkflow: () => void;
@@ -57,7 +58,6 @@ export default function LibraryView({
   handleRate,
   handleThumbnailContextMenu,
   handleMainLibraryContextMenu,
-  handleContinueSession,
   handleGoHome,
   handleOpenImage,
   handleOpenMultiImageWorkflow,
@@ -69,7 +69,13 @@ export default function LibraryView({
   handleResetAdjustments,
   requestThumbnails,
 }: LibraryViewProps) {
-  const setUI = useUIStore((state) => state.setUI);
+  const { isLibraryQuickPreviewOpen, libraryContextPanel, setUI } = useUIStore(
+    useShallow((state) => ({
+      isLibraryQuickPreviewOpen: state.isLibraryQuickPreviewOpen,
+      libraryContextPanel: state.libraryContextPanel,
+      setUI: state.setUI,
+    })),
+  );
 
   const {
     rootPaths,
@@ -80,6 +86,8 @@ export default function LibraryView({
     imageRatings,
     isViewLoading,
     isTreeLoading,
+    contentState,
+    setLibrary,
   } = useLibraryStore(
     useShallow((state) => ({
       rootPaths: state.rootPaths,
@@ -90,6 +98,8 @@ export default function LibraryView({
       imageRatings: state.imageRatings,
       isViewLoading: state.isViewLoading,
       isTreeLoading: state.isTreeLoading,
+      contentState: state.contentState,
+      setLibrary: state.setLibrary,
     })),
   );
 
@@ -113,9 +123,42 @@ export default function LibraryView({
       })),
     );
 
+  const activeImageIndex = sortedImageList.findIndex((image) => image.path === libraryActivePath);
+  const activeImage = activeImageIndex >= 0 ? sortedImageList[activeImageIndex] : null;
+
+  useEffect(() => {
+    if (isLibraryQuickPreviewOpen && !activeImage) {
+      setUI({ isLibraryQuickPreviewOpen: false });
+    }
+  }, [activeImage, isLibraryQuickPreviewOpen, setUI]);
+
+  const handleEnterEdit = () => {
+    if (libraryActivePath) void handleImageSelect(libraryActivePath, true);
+  };
+
+  const handleToggleInfo = () => {
+    if (!libraryActivePath) return;
+    if (useEditorStore.getState().selectedImage?.path !== libraryActivePath) {
+      void handleImageSelect(libraryActivePath, false);
+    }
+    setUI({ libraryContextPanel: libraryContextPanel === Panel.Metadata ? null : Panel.Metadata });
+  };
+
+  const handlePreviewNavigate = (direction: -1 | 1) => {
+    if (sortedImageList.length === 0) return;
+    const currentIndex = activeImageIndex >= 0 ? activeImageIndex : 0;
+    const nextIndex = (currentIndex + direction + sortedImageList.length) % sortedImageList.length;
+    const nextPath = sortedImageList[nextIndex].path;
+    setLibrary({
+      libraryActivePath: nextPath,
+      multiSelectedPaths: [nextPath],
+      selectionAnchorPath: nextPath,
+    });
+  };
+
   return (
-    <div className="flex flex-row grow h-full min-h-0">
-      <div className="flex-1 flex flex-col min-w-0 gap-2">
+    <div className="relative flex flex-row grow h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <MainLibrary
           activePath={libraryActivePath}
           aiModelDownloadStatus={aiModelDownloadStatus}
@@ -129,18 +172,19 @@ export default function LibraryView({
           isIndexing={isIndexing}
           isLoading={isViewLoading}
           isTreeLoading={isTreeLoading}
+          contentState={contentState}
           isAndroid={isAndroid}
           libraryViewMode={libraryViewMode}
           multiSelectedPaths={multiSelectedPaths}
           onClearSelection={handleClearSelection}
           onContextMenu={handleThumbnailContextMenu}
-          onContinueSession={handleContinueSession}
           onEmptyAreaContextMenu={handleMainLibraryContextMenu}
           onGoHome={handleGoHome}
           onImageClick={handleLibraryImageSingleClick}
-          onImageDoubleClick={handleImageSelect}
+          onImageDoubleClick={(path) => handleImageSelect(path, true)}
           onImportClick={() => handleImportClick(currentFolderPath as string)}
           onLibraryRefresh={handleLibraryRefresh}
+          onRate={handleRate}
           onOpenImage={handleOpenImage}
           onOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
           onOpenFolder={handleOpenFolder}
@@ -153,6 +197,7 @@ export default function LibraryView({
           thumbnailAspectRatio={thumbnailAspectRatio}
           thumbnailProgress={thumbnailProgress}
           thumbnailSize={thumbnailSize}
+          totalImageCount={imageList.length}
         />
         {((rootPaths && rootPaths.length > 0) || imageList.length > 0) && (
           <BottomBar
@@ -167,11 +212,14 @@ export default function LibraryView({
             multiSelectedPaths={multiSelectedPaths}
             onCopy={handleCopyAdjustments}
             onExportClick={() =>
-              setUI((state) => ({ isLibraryExportPanelVisible: !state.isLibraryExportPanelVisible }))
+              setUI({ libraryContextPanel: libraryContextPanel === Panel.Export ? null : Panel.Export })
             }
+            onEditSelected={handleEnterEdit}
+            onInfoClick={handleToggleInfo}
             onOpenCopyPasteSettings={() => setUI({ isCopyPasteSettingsModalOpen: true })}
             onPaste={() => handlePasteAdjustments()}
             onRate={handleRate}
+            onQuickPreview={() => setUI({ isLibraryQuickPreviewOpen: true, libraryContextPanel: null })}
             onReset={() => handleResetAdjustments()}
             rating={imageRatings[libraryActivePath || ''] || 0}
             thumbnailAspectRatio={thumbnailAspectRatio}
@@ -179,6 +227,18 @@ export default function LibraryView({
           />
         )}
       </div>
+      {isLibraryQuickPreviewOpen && activeImage && (
+        <LibraryQuickPreview
+          image={activeImage}
+          index={activeImageIndex}
+          onClose={() => setUI({ isLibraryQuickPreviewOpen: false })}
+          onEdit={handleEnterEdit}
+          onNavigate={handlePreviewNavigate}
+          onRate={handleRate}
+          rating={imageRatings[activeImage.path] || 0}
+          total={sortedImageList.length}
+        />
+      )}
     </div>
   );
 }

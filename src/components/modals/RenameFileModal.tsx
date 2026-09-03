@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FILENAME_VARIABLES } from '../ui/ExportImportProperties';
 import Text from '../ui/Text';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
 import { TextVariants } from '../../types/typography';
 
 interface RenameFileModalProps {
@@ -92,33 +94,31 @@ export default function RenameFileModal({ filesToRename, isOpen, onClose, onSave
   return (
     <div
       aria-modal="true"
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onClick={onClose}
       role="dialog"
     >
       <div
-        className={`bg-surface rounded-lg shadow-xl p-6 w-full max-w-lg transform transition-all duration-300 ease-out ${
-          show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'
+        className={`app-modal-surface app-modal-surface--padded max-w-lg ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
         }`}
         onClick={(e: any) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
-        <Text variant={TextVariants.title} className="mb-4">
+        <Text variant={TextVariants.heading} className="mb-4">
           {isSingleFile
             ? t('modals.renameFile.titleSingle')
             : t('modals.renameFile.titleMultiple', { count: fileCount })}
         </Text>
 
-        <div className="space-y-8 text-sm">
+        <div className="text-sm">
           <div>
             <Text variant={TextVariants.heading} className="block mb-2">
               {isSingleFile ? t('modals.renameFile.newName') : t('modals.renameFile.fileNamingTemplate')}
             </Text>
-            <input
+            <Input
               autoFocus
-              className="w-full bg-bg-primary border border-surface rounded-md p-2 text-sm text-text-primary focus:ring-accent focus:border-accent"
+              bgClassName="bg-bg-primary"
               onChange={(e: any) => setNameTemplate(e.target.value)}
               ref={nameInputRef}
               type="text"
@@ -128,7 +128,7 @@ export default function RenameFileModal({ filesToRename, isOpen, onClose, onSave
               <div className="flex flex-wrap gap-2 mt-2">
                 {FILENAME_VARIABLES.map((variable: string) => (
                   <button
-                    className="px-2 py-1 bg-surface text-text-secondary text-xs rounded-md hover:bg-card-active transition-colors"
+                className="ui-surface-button min-h-7 rounded-sm bg-bg-primary px-2 py-1 text-[11px] text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary"
                     key={variable}
                     onClick={() => handleVariableClick(variable)}
                   >
@@ -140,20 +140,13 @@ export default function RenameFileModal({ filesToRename, isOpen, onClose, onSave
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-8">
-          <button
-            className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-            onClick={onClose}
-          >
+        <div className="app-modal-actions">
+          <Button variant="ghost" onClick={onClose}>
             {t('modals.renameFile.cancel')}
-          </button>
-          <button
-            className="px-4 py-2 rounded-md bg-accent shadow-shiny text-button-text font-semibold hover:bg-accent-hover disabled:bg-gray-500 disabled:text-white disabled:cursor-not-allowed transition-colors"
-            disabled={!nameTemplate.trim()}
-            onClick={handleSave}
-          >
+          </Button>
+          <Button disabled={!nameTemplate.trim()} onClick={handleSave}>
             {t('modals.renameFile.save')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

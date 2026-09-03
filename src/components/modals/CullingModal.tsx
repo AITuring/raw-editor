@@ -224,12 +224,9 @@ export default function CullingModal({
         </div>
       </div>
       <div className="flex justify-end gap-3 mt-8">
-        <button
-          className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-          onClick={onClose}
-        >
+        <Button variant="secondary" onClick={onClose}>
           {t('modals.culling.cancel')}
-        </button>
+        </Button>
         <Button onClick={handleStartCulling}>{t('modals.culling.startCulling')}</Button>
       </div>
     </>
@@ -288,32 +285,26 @@ export default function CullingModal({
         <Text variant={TextVariants.title} className="mb-4">
           {t('modals.culling.cullingSuggestions')}
         </Text>
-        <div className="border-b border-surface mb-4">
+        <div className="mb-4 border-b border-border-color">
           <nav className="-mb-px flex space-x-4" aria-label={t('modals.culling.title')}>
             {numSimilar > 0 && (
               <button
+                aria-pressed={activeTab === 'similar'}
                 onClick={() => setActiveTab('similar')}
-                className={`${
-                  activeTab === 'similar'
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
+                className={`ui-tab-action ${activeTab === 'similar' ? 'is-active' : ''}`}
+                type="button"
               >
-                {t('modals.culling.similarGroupsTab')}{' '}
-                <span className="bg-surface text-text-secondary rounded-full px-2 py-0.5 text-xs">{numSimilar}</span>
+                {t('modals.culling.similarGroupsTab')} <span className="ui-count-badge">{numSimilar}</span>
               </button>
             )}
             {numBlurry > 0 && (
               <button
+                aria-pressed={activeTab === 'blurry'}
                 onClick={() => setActiveTab('blurry')}
-                className={`${
-                  activeTab === 'blurry'
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-text-secondary hover:text-text-primary hover:border-gray-300'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
+                className={`ui-tab-action ${activeTab === 'blurry' ? 'is-active' : ''}`}
+                type="button"
               >
-                {t('modals.culling.blurryImagesTab')}{' '}
-                <span className="bg-surface text-text-secondary rounded-full px-2 py-0.5 text-xs">{numBlurry}</span>
+                {t('modals.culling.blurryImagesTab')} <span className="ui-count-badge">{numBlurry}</span>
               </button>
             )}
           </nav>
@@ -398,7 +389,7 @@ export default function CullingModal({
           </AnimatePresence>
         </div>
 
-        <div className="flex justify-between items-center gap-3 mt-6">
+        <div className="app-modal-footer culling-modal-footer">
           <div className="flex-1">
             <Dropdown
               options={CULL_ACTIONS.map(({ value, label }) => ({ value, label }))}
@@ -408,12 +399,9 @@ export default function CullingModal({
             />
           </div>
           <div className="flex gap-3">
-            <button
-              className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors"
-              onClick={onClose}
-            >
+            <Button variant="secondary" onClick={onClose}>
               {t('modals.culling.cancel')}
-            </button>
+            </Button>
             <Button onClick={handleApply} disabled={selectedRejects.size === 0}>
               {t('modals.culling.applyButton', { count: selectedRejects.size })}
             </Button>
@@ -440,16 +428,14 @@ export default function CullingModal({
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-        show ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`bg-surface rounded-lg shadow-xl p-6 w-full max-w-3xl transform transition-all duration-300 ease-out ${
-          show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 -translate-y-4'
+        className={`app-modal-surface app-modal-surface--padded max-w-3xl ${
+          show ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-2 scale-[0.98] opacity-0'
         }`}
         onClick={(e) => e.stopPropagation()}
       >

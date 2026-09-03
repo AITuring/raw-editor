@@ -926,6 +926,19 @@
     }
   },
   "library": {
+    "actions": {
+      "clearFilters": "Clear filters",
+      "clearSearchAndFilters": "Clear search and filters",
+      "closePanel": "Close panel",
+      "enterEdit": "Edit",
+      "importHere": "Import here",
+      "info": "Info",
+      "openAnotherFolder": "Open another folder",
+      "quickPreview": "Quick preview",
+      "quickPreviewHint": "Quick preview (Space)",
+      "retry": "Try again",
+      "showInfo": "Show photo information"
+    },
     "community": {
       "actionSave": "저장",
       "actionSaved": "저장됨",
@@ -1032,6 +1045,7 @@
       }
     },
     "header": {
+      "resultCount": "{{shown}} / {{total}}",
       "search": {
         "addFilterOrSearch": "필터 추가 또는 검색...",
         "indexingImages": "이미지 색인 중...",
@@ -1089,11 +1103,27 @@
       "expandFolder": "폴더 펼치기",
       "imagesCount_one": "이미지 1개",
       "imagesCount_other": "이미지 {{count}}개",
+      "thumbnailError": "Preview unavailable",
       "tooltipAperture": "조리개",
       "tooltipFocalLength": "초점 거리",
       "tooltipIso": "ISO",
       "tooltipShutterSpeed": "셔터 속도",
       "tooltipVirtualCopy": "가상 복사본"
+    },
+    "quickPreview": {
+      "close": "Close quick preview",
+      "fit": "Fit image",
+      "keyboardHint": "←/→ Browse · Space Close · Enter Edit",
+      "loading": "Loading detailed preview…",
+      "next": "Next photo",
+      "position": "{{current}} of {{total}}",
+      "previewFailed": "Detailed preview could not be loaded. The thumbnail is still available.",
+      "previous": "Previous photo",
+      "rating": "Photo rating",
+      "title": "Quick preview",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomTools": "Preview zoom controls"
     },
     "search": {
       "noResults": "결과를 찾을 수 없습니다",
@@ -1112,9 +1142,7 @@
       "shutterSpeed": "셔터 속도"
     },
     "splash": {
-      "addFolder": "폴더 추가",
       "brand": "RAW Editor",
-      "continueSession": "세션 계속하기",
       "contribute": "GitHub에서 기여하기",
       "descriptionAndroid": "매우 빠른 GPU 가속 RAW 이미지 편집기입니다. 라이브러리를 열어 시작하세요.",
       "descriptionDesktop": "매우 빠른 GPU 가속 RAW 이미지 편집기입니다. 폴더를 열어 시작하세요.",
@@ -1124,15 +1152,24 @@
       "dropImagesHint": "단일 또는 여러 RAW, JPEG, PNG, TIFF 파일",
       "goToSettings": "설정으로 이동",
       "latestVersion": "최신 버전을 사용 중입니다",
-      "multiImageSelectionHint": "스태킹 및 스티칭에는 2~200개의 원본 이미지가 필요합니다.",
+      "multiImageSelectionHint": "계속하려면 2~200개의 이미지를 선택하세요.",
       "newVersionAvailable": "새 버전이 있습니다!",
       "openFolder": "폴더 열기",
       "openImage": "이미지 열기",
       "openLibrary": "라이브러리 열기",
       "or": "또는",
-      "version": "버전 {{version}}",
-      "welcomeBack": "다시 오신 것을 환영합니다!",
-      "welcomeBackDesc": "이전 작업을 계속하거나 새 세션을 시작하세요."
+      "version": "버전 {{version}}"
+    },
+    "states": {
+      "emptyDescription": "This folder contains no files yet. Import photos here or choose another folder.",
+      "emptyTitle": "This folder is empty",
+      "errorDescription": "RAW Editor could not read this folder. {{error}}",
+      "errorTitle": "Folder could not be opened",
+      "filteredDescription": "Photos are present, but none match the current filters.",
+      "loadingTitle": "Reading folder…",
+      "unknownError": "Check the folder permission and try again.",
+      "unsupportedDescription": "{{total}} file(s) were found, but none use a supported image format.",
+      "unsupportedTitle": "No supported photos found"
     },
     "status": {
       "downloading": "{{status}} 다운로드 중...",

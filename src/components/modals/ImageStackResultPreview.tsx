@@ -51,7 +51,7 @@ function ImageStackResultPreview({
       toolbarEnd={
         <button
           aria-label={focusLabel}
-          className={`flex h-10 w-10 items-center justify-center border-l border-white/10 transition-colors ${
+          className={`flex h-10 w-10 items-center justify-center transition-colors ${
             isFocused ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
           }`}
           data-tooltip={focusLabel}

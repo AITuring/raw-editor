@@ -11,7 +11,7 @@ import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useProcessStore } from '../../store/useProcessStore';
 
-import { ImageFile, Orientation, Panel, ThumbnailAspectRatio } from '../ui/AppProperties';
+import { ImageFile, Orientation, ThumbnailAspectRatio } from '../ui/AppProperties';
 
 interface EditorViewProps {
   transformWrapperRef: RefObject<any>;
@@ -33,7 +33,6 @@ interface EditorViewProps {
   handlePasteAdjustments: () => void;
   handleRate: (...args: any) => void;
   handleZoomChange: (zoom: number) => void;
-  handleRightPanelSelect: (panelId: any) => void;
   requestThumbnails: any;
 }
 
@@ -54,7 +53,6 @@ export default function EditorView({
   handleCopyAdjustments,
   handlePasteAdjustments,
   handleRate,
-  handleRightPanelSelect,
   handleZoomChange,
   requestThumbnails,
 }: EditorViewProps) {
@@ -116,8 +114,6 @@ export default function EditorView({
       onContextMenu={handleThumbnailContextMenu}
       onEmptyAreaContextMenu={handleMainLibraryContextMenu}
       onCopy={handleCopyAdjustments}
-      onDone={handleBackToLibrary}
-      onExportClick={() => handleRightPanelSelect(Panel.Export)}
       onOpenCopyPasteSettings={() => setUI({ isCopyPasteSettingsModalOpen: true })}
       onImageSelect={handleImageClick}
       onPaste={() => handlePasteAdjustments()}
@@ -140,7 +136,7 @@ export default function EditorView({
     <div
       className={clsx(
         'flex flex-col w-full overflow-hidden shrink-0',
-        !isResizing && !isInstantTransition && 'transition-all duration-300 ease-in-out',
+        !isResizing && !isInstantTransition && 'transition-[max-height,opacity] duration-200 ease-out',
       )}
       style={{
         maxHeight: isFullScreen ? '0px' : '500px',

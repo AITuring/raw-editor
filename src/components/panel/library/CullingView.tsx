@@ -26,6 +26,7 @@ import { useProcessStore } from '../../../store/useProcessStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useLibraryActions } from '../../../hooks/useLibraryActions';
 import { COLOR_LABELS, Color } from '../../../utils/adjustments';
+import { formatExposureTime } from '../../../utils/exifFormatting';
 import { IconAperture, IconFocalLength, IconIso, IconShutter } from '../editor/ExifIcons';
 
 interface SyncViewport {
@@ -138,7 +139,7 @@ function CullingPreview({
     const data = {
       iso: exif.PhotographicSensitivity || exif.ISO,
       fNumber: fNum,
-      shutter: exif.ExposureTime,
+      shutter: formatExposureTime(exif.ExposureTime),
       focal: exif.FocalLengthIn35mmFilm,
       captureDate: captureDate,
       captureTime: captureTime,
@@ -684,7 +685,7 @@ function CullingPreview({
                 <button
                   onClick={() => handleSetColorLabel(null, [image.path])}
                   className={clsx(
-                    'w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110',
+                    'flex h-5 w-5 items-center justify-center rounded-full transition-[box-shadow,opacity,transform] duration-150 hover:scale-110',
                     currentColor === null
                       ? 'ring-2 ring-white/50 ring-offset-1 ring-offset-bg-primary'
                       : 'opacity-50 hover:opacity-100 hover:ring-2 hover:ring-white/30',
@@ -698,7 +699,7 @@ function CullingPreview({
                     key={color.name}
                     onClick={() => handleSetColorLabel(color.name, [image.path])}
                     className={clsx(
-                      'w-5 h-5 rounded-full transition-all hover:scale-110',
+                      'h-5 w-5 rounded-full transition-[box-shadow,opacity,transform] duration-150 hover:scale-110',
                       currentColor === color.name
                         ? 'ring-2 ring-white ring-offset-1 ring-offset-bg-primary'
                         : 'hover:ring-2 hover:ring-white/30',
@@ -797,7 +798,7 @@ function CullingPreview({
 
         {isVirtualCopy && (
           <div className="bg-white/20 text-white px-1.5 py-0.5 rounded-sm shrink-0 ml-1">
-            <Text variant={TextVariants.small} weight={TextWeights.bold} className="text-[9px] leading-none">
+            <Text variant={TextVariants.small} weight={TextWeights.bold} className="text-[10px] leading-none">
               {t('library.culling.vc')}
             </Text>
           </div>
@@ -916,7 +917,7 @@ function CullingPreview({
 
       <div
         className={clsx(
-          'absolute inset-0 rounded-lg pointer-events-none z-30 transition-all duration-150 ring-2 ring-inset ring-transparent',
+          'pointer-events-none absolute inset-0 z-30 rounded-lg ring-2 ring-inset ring-transparent transition-[box-shadow] duration-150',
           ringClass,
         )}
       />
@@ -1221,7 +1222,7 @@ export default function CullingView(props: any) {
       <div
         ref={containerRef}
         style={{ width: sidebarWidth }}
-        className="relative shrink-0 border-l border-surface/50 bg-bg-secondary/50 flex flex-col"
+        className="relative flex shrink-0 flex-col border-l border-border-color bg-bg-secondary/50"
         onClick={handleSidebarEmptyClick}
         onContextMenu={handleSidebarEmptyContextMenu}
       >

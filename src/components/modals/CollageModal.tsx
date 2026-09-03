@@ -602,7 +602,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
   }, [panningImage, thumbnailDrag, activeLayout, previewSize, spacing, loadedImages, imageStates, hoveredCellIndex]);
 
   const renderControls = () => (
-    <div className="modal-adjustments-pane w-80 shrink-0 bg-bg-secondary p-4 flex flex-col gap-8 overflow-y-auto border-l border-surface h-full">
+    <div className="modal-adjustments-pane flex h-full w-80 shrink-0 flex-col gap-8 overflow-y-auto border-l border-border-color bg-bg-secondary p-4">
       {loadedImages.length > 1 && (
         <div>
           <Text variant={TextVariants.heading} className="mb-2 flex items-center justify-between">
@@ -621,13 +621,14 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             {availableLayouts.length > 0
               ? availableLayouts.map((item, index) => (
                   <button
+                    aria-pressed={item.layout === activeLayout}
                     key={index}
                     onClick={() => {
                       setActiveLayout(item.layout);
                       resetImageOffsets();
                     }}
-                    className={clsx('p-2 rounded-md bg-surface hover:bg-card-active', {
-                      'ring-2 ring-accent': item.layout === activeLayout,
+                    className={clsx('ui-surface-button rounded-md bg-surface p-2 hover:bg-card-active', {
+                      'bg-card-active': item.layout === activeLayout,
                     })}
                   >
                     <div className="w-full h-8">{item.icon}</div>
@@ -660,10 +661,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             <button
               key={preset.id}
               onClick={() => handleAspectRatioChange(preset)}
-              className={clsx(
-                'px-2 py-1.5 text-sm rounded-md transition-colors',
-                activeAspectRatio.id === preset.id ? 'bg-accent text-button-text' : 'bg-surface hover:bg-card-active',
-              )}
+              className={clsx('ui-choice-button', activeAspectRatio.id === preset.id && 'is-active')}
             >
               {preset.name}
             </button>
@@ -671,10 +669,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
           {loadedImages.length === 1 && (
             <button
               onClick={handleOriginalAspectRatio}
-              className={clsx(
-                'px-2 py-1.5 text-sm rounded-md transition-colors',
-                activeAspectRatio.id === 'original' ? 'bg-accent text-button-text' : 'bg-surface hover:bg-card-active',
-              )}
+              className={clsx('ui-choice-button', activeAspectRatio.id === 'original' && 'is-active')}
             >
               {t('modals.collage.original')}
             </button>
@@ -726,7 +721,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             type="text"
             value={backgroundColor}
             onChange={(e) => setBackgroundColor(e.target.value)}
-            className="w-full bg-bg-primary text-center rounded-md p-1 border border-surface focus:border-accent focus:ring-accent"
+            className="w-full rounded-md border border-border-color bg-bg-primary p-1 text-center focus:border-accent focus:ring-accent"
           />
         </div>
       </div>
@@ -740,7 +735,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             type="number"
             value={exportWidth}
             onChange={(e) => handleExportDimChange(e, 'width')}
-            className="w-full bg-bg-primary text-center rounded-md p-1 border border-surface focus:border-accent focus:ring-accent"
+            className="w-full rounded-md border border-border-color bg-bg-primary p-1 text-center focus:border-accent focus:ring-accent"
             placeholder="W"
           />
           <span className="text-text-tertiary">×</span>
@@ -748,7 +743,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             type="number"
             value={exportHeight}
             onChange={(e) => handleExportDimChange(e, 'height')}
-            className="w-full bg-bg-primary text-center rounded-md p-1 border border-surface focus:border-accent focus:ring-accent"
+            className="w-full rounded-md border border-border-color bg-bg-primary p-1 text-center focus:border-accent focus:ring-accent"
             placeholder="H"
           />
         </div>
@@ -859,7 +854,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             </div>
           </div>
 
-          <div className="h-28 shrink-0 border-t border-surface bg-bg-primary/50 flex items-center px-4 gap-3 overflow-x-auto z-20 select-none">
+          <div className="z-20 flex h-28 shrink-0 select-none items-center gap-3 overflow-x-auto border-t border-border-color bg-bg-primary/50 px-4">
             {sourceImages.map((sourceImg, idx) => {
               const loadedData = loadedImages.find((l) => l.path === sourceImg.path);
               if (!loadedData) return null;
@@ -875,7 +870,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
                     src={loadedData.url}
                     alt=""
                     onMouseDown={(e) => handleThumbnailMouseDown(e, sourceImg.path, loadedData.url)}
-                    className="h-20 w-20 shrink-0 object-cover rounded-md cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-accent transition-all select-none shadow-xs"
+                    className="h-20 w-20 shrink-0 cursor-grab select-none rounded-md object-cover shadow-xs transition-[box-shadow,transform] duration-150 hover:ring-2 hover:ring-accent active:cursor-grabbing"
                   />
                 </motion.div>
               );
@@ -891,7 +886,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-xs transition-opacity duration-300 ${show ? 'opacity-100' : 'opacity-0'}`}
+      className={`app-modal-backdrop ${show ? 'opacity-100' : 'opacity-0'}`}
       onMouseDown={() => {
         if (!isSaving) onClose();
       }}
@@ -899,7 +894,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
       <AnimatePresence>
         {show && (
           <motion.div
-            className="bg-surface rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+            className="app-modal-surface app-modal-surface--full-bleed flex h-[90vh] max-w-6xl flex-col"
             onMouseDown={(e) => e.stopPropagation()}
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -907,7 +902,7 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
             <div className="grow min-h-0 overflow-hidden">{renderContent()}</div>
-            <div className="shrink-0 p-4 flex flex-col gap-3 border-t border-surface bg-bg-secondary">
+            <div className="flex shrink-0 flex-col gap-3 border-t border-border-color bg-bg-secondary p-4">
               {isSaving && (
                 <TaskProgress
                   ariaLabel={t('modals.collage.saving')}
@@ -917,17 +912,13 @@ export default function CollageModal({ isOpen, onClose, onSave, sourceImages }: 
                 />
               )}
               <div className="flex justify-end gap-3">
-                <button
-                  disabled={isSaving}
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-md text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <Button disabled={isSaving} onClick={onClose} variant="secondary">
                   {savedPath || error
                     ? savedPath
                       ? t('modals.collage.done')
                       : t('modals.collage.close')
                     : t('modals.collage.cancel')}
-                </button>
+                </Button>
                 {!savedPath && !error && (
                   <Button onClick={handleSave} disabled={isSaving || isLoading || !activeLayout}>
                     {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}

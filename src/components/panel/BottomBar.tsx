@@ -1,13 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
-import { Star, Copy, ClipboardPaste, ChevronUp, ChevronDown, Check, Settings, Filter } from 'lucide-react';
+import { useState, useEffect, useId, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Star,
+  Copy,
+  ClipboardPaste,
+  ChevronUp,
+  ChevronDown,
+  Check,
+  Settings,
+  Filter,
+  Eye,
+  Info,
+  Download,
+  SquarePen,
+  Scan,
+} from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 
 import Filmstrip from './Filmstrip';
-import { GLOBAL_KEYS, ImageFile, SelectedImage, ThumbnailAspectRatio } from '../ui/AppProperties';
-import Text from '../ui/Text';
+import { FilterCriteria, GLOBAL_KEYS, ImageFile, SelectedImage, ThumbnailAspectRatio } from '../ui/AppProperties';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -33,12 +47,14 @@ interface BottomBarProps {
   onContextMenu?(event: any, path: string): void;
   onEmptyAreaContextMenu?(event: any): void;
   onCopy(): void;
-  onDone?(): void;
   onExportClick?(): void;
+  onEditSelected?(): void;
+  onInfoClick?(): void;
   onImageSelect?(path: string, event: any): void;
   onOpenCopyPasteSettings?(): void;
   onRequestThumbnails?(paths: string[]): void;
   onPaste(): void;
+  onQuickPreview?(): void;
   onRate(rate: number): void;
   onReset?(): void;
   onZoomChange?(zoomValue: number, fitToWindow?: boolean): void;
@@ -61,7 +77,11 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => {
   const { t } = useTranslation();
 
   return (
-    <div className={clsx('flex items-center gap-0.5', disabled && 'cursor-not-allowed')}>
+    <div
+      aria-label={t('library.quickPreview.rating')}
+      className={clsx('editor-rating-group', disabled && 'cursor-not-allowed')}
+      role="group"
+    >
       {[...Array(5)].map((_, index: number) => {
         const starValue = index + 1;
         return (
@@ -71,7 +91,7 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => {
                 ? t('ui.bottomBar.tooltips.selectToRate')
                 : t('ui.bottomBar.tooltips.rateStars', { count: starValue })
             }
-            className="disabled:cursor-not-allowed"
+            className="editor-rating-button disabled:cursor-not-allowed"
             disabled={disabled}
             key={starValue}
             onClick={() => !disabled && onRate(starValue === rating ? 0 : starValue)}
@@ -99,6 +119,201 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => {
   );
 };
 
+interface QuickFilterProps {
+  allColors: Array<{ color: string; name: string }>;
+  filterCriteria: FilterCriteria;
+  isActive: boolean;
+  setFilterCriteria(criteria: Partial<FilterCriteria> | ((previous: FilterCriteria) => FilterCriteria)): void;
+}
+
+const QuickFilter = ({ allColors, filterCriteria, isActive, setFilterCriteria }: QuickFilterProps) => {
+  const { t } = useTranslation();
+  const popoverId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState<{ bottom: string; triggerCenter: number } | null>(null);
+  const activeColorCount = filterCriteria.colors?.length ?? 0;
+  const hasQuickFilters = filterCriteria.rating > 0 || activeColorCount > 0;
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setPosition({
+        bottom: `max(var(--ui-floating-viewport-inset), calc(${window.innerHeight - rect.top}px + var(--ui-filter-popover-trigger-gap)))`,
+        triggerCenter: rect.left + rect.width / 2,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isActive) setIsOpen(false);
+  }, [isActive]);
+
+  const clearQuickFilters = () => {
+    setFilterCriteria((previous) => ({ ...previous, colors: [], rating: 0 }));
+  };
+
+  return (
+    <div className="editor-quick-filter shrink-0">
+      <button
+        aria-controls={popoverId}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-label={t('ui.bottomBar.tooltips.quickFilter')}
+        className={clsx('editor-status-icon-button relative', (isOpen || hasQuickFilters) && 'is-active')}
+        data-tooltip={t('ui.bottomBar.tooltips.quickFilter')}
+        onClick={() => setIsOpen((open) => !open)}
+        ref={triggerRef}
+        type="button"
+      >
+        <Filter aria-hidden="true" size={16} />
+        {hasQuickFilters && <span aria-hidden="true" className="editor-filter-active-dot" />}
+      </button>
+
+      {isOpen &&
+        position &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            aria-label={t('ui.bottomBar.tooltips.quickFilter')}
+            aria-modal="false"
+            className="editor-filter-popover"
+            id={popoverId}
+            ref={popoverRef}
+            role="dialog"
+            style={{
+              bottom: position.bottom,
+              left: `clamp(var(--ui-floating-viewport-inset), calc(${position.triggerCenter}px - (var(--ui-filter-popover-width) / 2)), calc(100vw - var(--ui-filter-popover-width) - var(--ui-floating-viewport-inset)))`,
+            }}
+          >
+            {hasQuickFilters && (
+              <div className="editor-filter-popover-header">
+                <span>{t('ui.bottomBar.tooltips.quickFilter')}</span>
+                <button className="editor-filter-clear" onClick={clearQuickFilters} type="button">
+                  {t('library.actions.clearFilters')}
+                </button>
+              </div>
+            )}
+
+            <div className={clsx('editor-filter-section', !hasQuickFilters && 'is-first')}>
+              <span className="editor-filter-section-label">{t('library.header.viewOptions.filterByRating')}</span>
+              <div className="editor-filter-options" role="group">
+                {[1, 2, 3, 4, 5].map((starValue) => {
+                  const isFilled = filterCriteria.rating > 0 && starValue <= filterCriteria.rating;
+                  return (
+                    <button
+                      aria-label={t('ui.bottomBar.tooltips.rateStars', { count: starValue })}
+                      aria-pressed={filterCriteria.rating === starValue}
+                      className="editor-filter-option-button"
+                      key={`qf-star-${starValue}`}
+                      onClick={() =>
+                        setFilterCriteria((previous) => ({
+                          ...previous,
+                          rating: previous.rating === starValue ? 0 : starValue,
+                        }))
+                      }
+                      type="button"
+                    >
+                      <Star
+                        aria-hidden="true"
+                        className={clsx(
+                          'transition-colors duration-150',
+                          isFilled ? 'fill-accent text-accent' : 'text-text-secondary',
+                        )}
+                        size={16}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="editor-filter-section">
+              <span className="editor-filter-section-label">{t('library.header.viewOptions.filterByColorLabel')}</span>
+              <div className="editor-filter-options" role="group">
+                {allColors.map((color) => {
+                  const isSelected = (filterCriteria.colors || []).includes(color.name);
+                  const tooltipTitle =
+                    color.name === 'none'
+                      ? t('library.header.viewOptions.noLabel')
+                      : t(`contextMenus.colors.${color.name}`, {
+                          defaultValue: color.name.charAt(0).toUpperCase() + color.name.slice(1),
+                        });
+
+                  return (
+                    <button
+                      aria-label={tooltipTitle}
+                      aria-pressed={isSelected}
+                      className="editor-color-filter-button"
+                      data-tooltip={tooltipTitle}
+                      key={`qf-color-${color.name}`}
+                      onClick={() => {
+                        const currentColors = filterCriteria.colors || [];
+                        const colors = currentColors.includes(color.name)
+                          ? currentColors.filter((currentColor) => currentColor !== color.name)
+                          : [...currentColors, color.name];
+                        setFilterCriteria((previous) => ({ ...previous, colors }));
+                      }}
+                      type="button"
+                    >
+                      <span
+                        className={clsx('editor-color-filter-swatch', isSelected && 'is-selected')}
+                        style={{ backgroundColor: color.color }}
+                      >
+                        {isSelected && <Check aria-hidden="true" className="text-white drop-shadow-md" size={10} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+};
+
 export default function BottomBar({
   filmstripHeight,
   imageList = [],
@@ -118,12 +333,14 @@ export default function BottomBar({
   onContextMenu,
   onEmptyAreaContextMenu,
   onCopy,
-  onDone,
   onExportClick,
+  onEditSelected,
+  onInfoClick,
   onImageSelect,
   onOpenCopyPasteSettings,
   onRequestThumbnails,
   onPaste,
+  onQuickPreview,
   onRate,
   onZoomChange = () => {},
   rating,
@@ -135,7 +352,12 @@ export default function BottomBar({
   totalImages,
 }: BottomBarProps) {
   const { t } = useTranslation();
-  const isInstantTransition = useUIStore((s) => s.isInstantTransition);
+  const { activeView, isInstantTransition } = useUIStore(
+    useShallow((state) => ({
+      activeView: state.activeView,
+      isInstantTransition: state.isInstantTransition,
+    })),
+  );
 
   const { displaySize, originalSize } = useEditorStore(
     useShallow((state) => ({
@@ -150,7 +372,6 @@ export default function BottomBar({
   const [isZoomActive, setIsZoomActive] = useState(false);
 
   const percentInputRef = useRef<HTMLInputElement>(null);
-  const [isZoomLabelHovered, setIsZoomLabelHovered] = useState(false);
   const isZoomReady = !isLoading && originalSize && originalSize.width > 0 && displaySize && displaySize.width > 0;
 
   const currentOriginalPercent = isZoomReady
@@ -162,9 +383,8 @@ export default function BottomBar({
 
   const numSelected = multiSelectedPaths.length;
   const total = totalImages ?? 0;
-  const showSelectionCounter = numSelected > 1;
+  const showSelectionCounter = numSelected > 0;
 
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const { filterCriteria, setFilterCriteria } = useLibraryStore(
     useShallow((state) => ({
       filterCriteria: state.filterCriteria,
@@ -177,10 +397,7 @@ export default function BottomBar({
   const isCollapsed = !isFilmstripVisible;
   const effectiveHeight = isFilmstripVisible ? currentHeight : 0;
   const shouldAnimate = !isInstantTransition && (!isResizing || isCollapsed);
-  const sourceExtension = selectedImage?.path.split('?')[0].split('.').pop()?.toUpperCase();
-  const outputSummary = selectedImage
-    ? `${sourceExtension || 'RAW'} · ${selectedImage.width} × ${selectedImage.height}`
-    : '';
+  const isActiveView = isLibraryView ? activeView === 'library' : activeView === 'editor';
 
   useEffect(() => {
     if (isZoomReady && !isDraggingSlider.current) {
@@ -276,12 +493,12 @@ export default function BottomBar({
   };
 
   return (
-    <div className="editor-bottom-dock shrink-0 bg-bg-secondary flex flex-col">
+    <div className={clsx('editor-bottom-dock shrink-0', isLibraryView && 'is-library')}>
       {!isLibraryView && showFilmstrip && (
         <div
           className={clsx(
             'overflow-hidden shrink-0 relative',
-            shouldAnimate && 'transition-all duration-300 ease-in-out',
+            shouldAnimate && 'transition-[height] duration-200 ease-out',
           )}
           style={{ height: `${effectiveHeight}px` }}
         >
@@ -311,21 +528,22 @@ export default function BottomBar({
 
       <div
         className={clsx(
-          'editor-status-bar shrink-0 h-11 flex items-center justify-between gap-3 px-2.5',
-          !isLibraryView && 'border-t transition-colors duration-300',
-          !isLibraryView && showFilmstrip && isFilmstripVisible ? 'border-surface' : 'border-transparent',
+          'editor-status-bar shrink-0',
+          isLibraryView ? 'is-library' : 'is-editor',
+          !isLibraryView && showFilmstrip && isFilmstripVisible && 'has-filmstrip-divider',
         )}
       >
-        <div className="editor-status-primary flex min-w-0 items-center gap-3">
+        <div className="editor-status-primary">
           <StarRating rating={rating} onRate={onRate} disabled={isRatingDisabled} />
-          <div className="h-5 w-px bg-surface"></div>
-          <div className="flex items-center gap-0.5">
+          <span aria-hidden="true" className="editor-status-divider is-after-rating" />
+          <div className="editor-copy-actions">
             <button
               aria-label={t('ui.bottomBar.tooltips.copySettings')}
-              className="relative w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+              className="editor-status-icon-button relative"
               disabled={isCopyDisabled}
               onClick={onCopy}
               data-tooltip={t('ui.bottomBar.tooltips.copySettings')}
+              type="button"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {isCopied ? (
@@ -356,10 +574,11 @@ export default function BottomBar({
 
             <button
               aria-label={t('ui.bottomBar.tooltips.pasteSettings')}
-              className="relative w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+              className="editor-status-icon-button relative"
               disabled={isPasteDisabled}
               onClick={onPaste}
               data-tooltip={t('ui.bottomBar.tooltips.pasteSettings')}
+              type="button"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {isPasted ? (
@@ -390,185 +609,147 @@ export default function BottomBar({
 
             <button
               aria-label={t('ui.bottomBar.tooltips.copyPasteSettings')}
-              className="w-7 h-7 flex items-center justify-center rounded-[3px] text-text-secondary hover:bg-surface hover:text-text-primary transition-colors"
+              className="editor-status-icon-button"
               onClick={onOpenCopyPasteSettings}
               data-tooltip={t('ui.bottomBar.tooltips.copyPasteSettings')}
+              type="button"
             >
               <Settings size={16} />
             </button>
           </div>
 
-          <div className="h-5 w-px bg-surface"></div>
+          <span aria-hidden="true" className="editor-status-divider is-before-filter" />
 
-          <div
-            className={clsx(
-              'flex items-center transition-[background-color] duration-150',
-              isFilterExpanded ? 'bg-surface rounded-md' : 'bg-transparent',
-            )}
-          >
-            <button
-              aria-label={t('ui.bottomBar.tooltips.quickFilter')}
-              className={clsx(
-                'relative w-7 h-7 flex items-center justify-center rounded-[3px] transition-colors shrink-0',
-                isFilterExpanded ? 'text-text-primary' : 'text-text-secondary hover:bg-surface hover:text-text-primary',
-              )}
-              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-              data-tooltip={t('ui.bottomBar.tooltips.quickFilter', 'Quick Filter')}
-            >
-              <Filter size={16} />
-            </button>
+          <QuickFilter
+            allColors={allColors}
+            filterCriteria={filterCriteria}
+            isActive={isActiveView}
+            setFilterCriteria={setFilterCriteria}
+          />
 
-            <div
-              className={clsx(
-                'flex items-center transition-[max-width,opacity] duration-150 ease-out overflow-hidden',
-                isFilterExpanded ? 'max-w-100 opacity-100 pr-2 ml-1' : 'max-w-0 opacity-0 pr-0 ml-0',
-              )}
-            >
-              <div className="flex items-center gap-3 whitespace-nowrap">
-                <div className="flex items-center gap-0.5">
-                  {[1, 2, 3, 4, 5].map((starValue) => {
-                    const isFilled = filterCriteria.rating > 0 && starValue <= filterCriteria.rating;
-                    return (
-                      <button
-                        aria-label={t('ui.bottomBar.tooltips.rateStars', { count: starValue })}
-                        key={`qf-star-${starValue}`}
-                        onClick={() =>
-                          setFilterCriteria((prev) => ({
-                            ...prev,
-                            rating: prev.rating === starValue ? 0 : starValue,
-                          }))
-                        }
-                        className="p-0.5"
-                      >
-                        <Star
-                          size={16}
-                          className={clsx(
-                            'transition-colors duration-150',
-                            isFilled ? 'text-accent fill-accent' : 'text-text-secondary hover:text-accent',
-                          )}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="h-4 w-px bg-border-color"></div>
-
-                <div className="flex items-center gap-1.5">
-                  {allColors.map((color) => {
-                    const isSelected = (filterCriteria.colors || []).includes(color.name);
-
-                    const tooltipTitle =
-                      color.name === 'none'
-                        ? t('library.header.viewOptions.noLabel')
-                        : t(`contextMenus.colors.${color.name}`, {
-                            defaultValue: color.name.charAt(0).toUpperCase() + color.name.slice(1),
-                          });
-
-                    return (
-                      <button
-                        aria-label={tooltipTitle}
-                        key={`qf-color-${color.name}`}
-                        onClick={() => {
-                          const currentColors = filterCriteria.colors || [];
-                          const newColors = currentColors.includes(color.name)
-                            ? currentColors.filter((c) => c !== color.name)
-                            : [...currentColors, color.name];
-                          setFilterCriteria((prev) => ({ ...prev, colors: newColors }));
-                        }}
-                        className={clsx(
-                          'w-4 h-4 rounded-full transition-transform hover:scale-105 flex items-center justify-center',
-                          isSelected ? 'ring-2 ring-accent ring-offset-1 ring-offset-bg-primary' : '',
-                        )}
-                        style={{ backgroundColor: color.color }}
-                        data-tooltip={tooltipTitle}
-                      >
-                        {isSelected && <Check size={10} className="text-white drop-shadow-md" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+          {showSelectionCounter && (
+            <div className="editor-status-selection">
+              <span aria-hidden="true" className="editor-status-divider" />
+              <span className="editor-status-selection-label">
+                {t('ui.bottomBar.imagesSelected', { current: numSelected, total })}
+              </span>
             </div>
-          </div>
-
-          <div
-            className={clsx(
-              'flex items-center transition-all duration-300 ease-out overflow-hidden',
-              showSelectionCounter ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0',
-            )}
-          >
-            <div className="h-5 w-px bg-surface mr-4"></div>
-            <Text as="span" className="whitespace-nowrap">
-              {t('ui.bottomBar.imagesSelected', { current: numSelected, total })}
-            </Text>
-          </div>
+          )}
         </div>
-        <div className="grow" />
-        {!isLibraryView && (
-          <div className="editor-status-actions flex items-center gap-3">
-            {showZoomControls && (
-              <div className="editor-zoom-control flex w-48 items-center gap-2">
-                <div
-                  className="relative flex h-full w-9 cursor-pointer items-center justify-end"
-                  onClick={handleResetZoom}
-                  onMouseEnter={() => setIsZoomLabelHovered(true)}
-                  onMouseLeave={() => setIsZoomLabelHovered(false)}
-                  data-tooltip={t('ui.bottomBar.tooltips.resetZoom')}
-                >
-                  <span className="absolute right-0 text-xs text-text-secondary select-none text-right w-max transition-colors hover:text-text-primary">
-                    {isZoomLabelHovered ? t('ui.bottomBar.zoomLabelReset') : t('ui.bottomBar.zoomLabel')}
-                  </span>
-                </div>
+        {isLibraryView ? (
+          <div className="editor-library-status-actions">
+            <button
+              aria-label={t('library.actions.quickPreview')}
+              className="editor-library-action"
+              data-tooltip={t('library.actions.quickPreviewHint')}
+              disabled={numSelected === 0}
+              onClick={onQuickPreview}
+              type="button"
+            >
+              <Eye aria-hidden="true" size={15} />
+              <span className="editor-library-action-label">{t('library.actions.quickPreview')}</span>
+            </button>
+            <button
+              aria-label={t('library.actions.showInfo')}
+              className="editor-library-action"
+              data-tooltip={t('library.actions.showInfo')}
+              disabled={numSelected === 0}
+              onClick={onInfoClick}
+              type="button"
+            >
+              <Info aria-hidden="true" size={15} />
+              <span className="editor-library-action-label">{t('library.actions.info')}</span>
+            </button>
+            <button
+              aria-label={t('ui.bottomBar.tooltips.export')}
+              className="editor-library-action"
+              data-tooltip={t('ui.bottomBar.tooltips.export')}
+              disabled={isExportDisabled}
+              onClick={onExportClick}
+              type="button"
+            >
+              <Download aria-hidden="true" size={15} />
+              <span className="editor-library-action-label">{t('ui.bottomBar.tooltips.export')}</span>
+            </button>
+            <span aria-hidden="true" className="mx-1 h-5 w-px bg-surface" />
+            <button
+              className="editor-footer-button is-primary flex items-center justify-center gap-1.5"
+              disabled={numSelected === 0}
+              onClick={onEditSelected}
+              type="button"
+            >
+              <SquarePen aria-hidden="true" size={14} />
+              {t('library.actions.enterEdit')}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="editor-status-center">
+              {showZoomControls && (
+                <div className="editor-zoom-control">
+                  <button
+                    aria-label={t('ui.bottomBar.tooltips.resetZoom')}
+                    className="editor-status-icon-button editor-zoom-fit-button"
+                    data-tooltip={t('ui.bottomBar.tooltips.resetZoom')}
+                    disabled={!isZoomReady}
+                    onClick={handleResetZoom}
+                    type="button"
+                  >
+                    <Scan aria-hidden="true" size={15} />
+                  </button>
 
-                <div className="relative h-5 flex-1">
-                  <div className="absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-surface pointer-events-none" />
-                  <input
-                    aria-label={t('ui.bottomBar.zoomLabel')}
-                    type="range"
-                    min={0.1}
-                    max={2.0}
-                    step="0.05"
-                    value={latchedSliderValue}
-                    onChange={handleSliderChange}
-                    onKeyDown={handleZoomKeyDown}
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    onDoubleClick={handleResetZoom}
-                    className={`absolute left-0 top-1/2 z-10 h-5 w-full -translate-y-1/2 appearance-none bg-transparent p-0 slider-input ${
-                      isZoomActive ? 'slider-thumb-active' : ''
-                    }`}
-                  />
-                </div>
-
-                <div className="relative text-xs text-text-secondary w-6 text-right flex items-center justify-end h-5 gap-1">
-                  {isEditingPercent ? (
+                  <div className="editor-zoom-slider">
+                    <div aria-hidden="true" className="editor-zoom-slider-track" />
                     <input
-                      ref={percentInputRef}
-                      type="text"
-                      value={percentInputValue}
-                      onChange={(e) => setPercentInputValue(e.target.value)}
-                      onKeyDown={handlePercentKeyDown}
-                      onBlur={handlePercentSubmit}
-                      className="w-full text-xs text-text-primary bg-bg-primary border border-border-color rounded-sm px-1 text-right"
-                      style={{ fontSize: '12px', height: '18px' }}
+                      aria-label={t('ui.bottomBar.zoomLabel')}
+                      className={clsx('slider-input', isZoomActive && 'slider-thumb-active')}
+                      disabled={!isZoomReady}
+                      max={2.0}
+                      min={0.1}
+                      onChange={handleSliderChange}
+                      onDoubleClick={handleResetZoom}
+                      onKeyDown={handleZoomKeyDown}
+                      onMouseDown={handleMouseDown}
+                      onMouseUp={handleMouseUp}
+                      onTouchEnd={handleMouseUp}
+                      onTouchStart={handleMouseDown}
+                      step="0.05"
+                      type="range"
+                      value={latchedSliderValue}
                     />
-                  ) : (
-                    <span
-                      onClick={handlePercentClick}
-                      className="cursor-pointer hover:text-text-primary transition-colors select-none"
-                      data-tooltip={t('ui.bottomBar.tooltips.customZoom')}
-                    >
-                      {latchedDisplayPercent}%
-                    </span>
-                  )}
+                  </div>
+
+                  <div className="editor-zoom-value">
+                    {isEditingPercent ? (
+                      <input
+                        aria-label={t('ui.bottomBar.tooltips.customZoom')}
+                        className="editor-zoom-input"
+                        inputMode="numeric"
+                        onBlur={handlePercentSubmit}
+                        onChange={(event) => setPercentInputValue(event.target.value)}
+                        onKeyDown={handlePercentKeyDown}
+                        ref={percentInputRef}
+                        type="text"
+                        value={percentInputValue}
+                      />
+                    ) : (
+                      <button
+                        className="editor-zoom-value-button"
+                        data-tooltip={t('ui.bottomBar.tooltips.customZoom')}
+                        disabled={!isZoomReady}
+                        onClick={handlePercentClick}
+                        type="button"
+                      >
+                        {latchedDisplayPercent}%
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-            {showFilmstrip && (
-              <>
+              )}
+            </div>
+
+            <div className="editor-status-trailing">
+              {showFilmstrip && (
                 <button
                   aria-label={
                     isFilmstripVisible
@@ -576,41 +757,23 @@ export default function BottomBar({
                       : t('ui.bottomBar.tooltips.expandFilmstrip')
                   }
                   className="editor-status-icon-button"
-                  onClick={() => setIsFilmstripVisible?.(!isFilmstripVisible)}
                   data-tooltip={
                     isFilmstripVisible
                       ? t('ui.bottomBar.tooltips.collapseFilmstrip')
                       : t('ui.bottomBar.tooltips.expandFilmstrip')
                   }
+                  onClick={() => setIsFilmstripVisible?.(!isFilmstripVisible)}
+                  type="button"
                 >
-                  {isFilmstripVisible ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                  {isFilmstripVisible ? (
+                    <ChevronDown aria-hidden="true" size={16} />
+                  ) : (
+                    <ChevronUp aria-hidden="true" size={16} />
+                  )}
                 </button>
-              </>
-            )}
-
-            <span aria-hidden="true" className="editor-command-divider" />
-
-            <button
-              className="editor-workflow-summary"
-              data-tooltip={t('ui.bottomBar.tooltips.export')}
-              disabled={isExportDisabled}
-              onClick={onExportClick}
-              type="button"
-            >
-              {outputSummary}
-            </button>
-            <button
-              className="editor-footer-button is-secondary"
-              disabled={isExportDisabled}
-              onClick={onExportClick}
-              type="button"
-            >
-              {t('ui.bottomBar.tooltips.export')}
-            </button>
-            <button className="editor-footer-button is-primary" onClick={onDone} type="button">
-              {t('editor.externalEdit.done')}
-            </button>
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

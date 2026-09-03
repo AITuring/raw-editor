@@ -1,3 +1,4 @@
+@import './styles/tokens.css';
 @import 'tailwindcss';
 @source not "../src-tauri";
 
@@ -21,8 +22,10 @@
 
   --shadow-shiny: none;
 
+  --radius-sm: 3px;
   --radius-md: 4px;
   --radius-lg: 6px;
+  --radius-xl: 8px;
 }
 
 @layer base {
@@ -154,9 +157,384 @@
     border-radius: 14px;
     overflow: hidden;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
+  .ui-panel-root {
+    display: flex;
+    min-height: 0;
+    height: 100%;
+    flex-direction: column;
+  }
+
+  .ui-chrome-panel {
+    min-width: 0;
+    overflow: hidden;
+    border: var(--ui-border-width) solid var(--ui-border-structural);
+    border-radius: var(--ui-radius-surface);
+    background: var(--app-bg-secondary);
+  }
+
+  .ui-library-workspace {
+    gap: var(--ui-shell-gap);
+  }
+
+  .ui-panel-body {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--ui-panel-inset);
+  }
+
+  .ui-panel-footer {
+    flex-shrink: 0;
+    border-top: var(--ui-border-width) solid var(--ui-border-structural);
+    padding: var(--ui-panel-inset);
+  }
+
+  .ui-toolbar {
+    display: flex;
+    min-height: var(--ui-toolbar-height);
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ui-component-gap);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    padding-inline: var(--ui-panel-inset);
+  }
+
+  .ui-library-toolbar {
+    height: var(--ui-library-toolbar-height);
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+  }
+
+  .ui-input {
+    display: flex;
+    width: 100%;
+    height: var(--ui-control-height);
+    border: var(--ui-border-width) solid var(--editor-control-border);
+    border-radius: var(--ui-radius-control);
+    background: var(--app-surface);
+    padding: 5px var(--ui-field-padding-inline);
+    color: var(--app-text-primary);
+    font-size: var(--ui-font-size-body);
+    line-height: 20px;
+    transition:
+      border-color var(--ui-duration-fast) ease-out,
+      box-shadow var(--ui-duration-fast) ease-out,
+      background-color var(--ui-duration-fast) ease-out;
+  }
+
+  .ui-input::placeholder {
+    color: var(--app-text-secondary);
+    opacity: 0.72;
+  }
+
+  .ui-input:focus-visible {
+    border-color: var(--app-accent);
+    outline: 0;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 22%, transparent);
+  }
+
+  .ui-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .ui-select-trigger {
+    display: flex;
+    width: 100%;
+    height: var(--ui-size-control);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-component-gap);
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--app-surface);
+    padding-inline: var(--ui-field-padding-inline);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-button-rest);
+    font-size: var(--ui-font-size-body);
+    text-align: left;
+    transition:
+      background-color var(--ui-duration-fast) ease-out,
+      box-shadow var(--ui-duration-fast) ease-out;
+  }
+
+  .ui-select-trigger:focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: 2px;
+    box-shadow: var(--ui-shadow-button-hover);
+  }
+
+  .ui-select-trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .ui-select-label {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--ui-font-size-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-select-option {
+    display: flex;
+    width: 100%;
+    min-height: var(--ui-size-control);
+    align-items: center;
+    justify-content: space-between;
+    border-radius: var(--ui-radius-control);
+    padding: var(--ui-space-1-5) var(--ui-field-padding-inline);
+    text-align: left;
+    transition: background-color var(--ui-duration-fast) ease-out;
+  }
+
+  .ui-select-option:hover,
+  .ui-select-option.is-selected {
+    background: var(--app-card-active);
+  }
+
+  .ui-segmented-control {
+    display: flex;
+    width: 96px;
+    height: var(--ui-size-control);
+    align-items: center;
+    border: 0;
+    border-radius: var(--ui-radius-surface);
+    background: var(--ui-surface-control-subtle);
+    padding: var(--ui-space-0-5);
+    box-shadow: var(--ui-shadow-tool-rest);
+    user-select: none;
+  }
+
+  .ui-segmented-track {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 100%;
+  }
+
+  .ui-segmented-indicator {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--app-bg-primary);
+    box-shadow: var(--ui-shadow-tool-selected);
+  }
+
+  .ui-segmented-item {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    height: 100%;
+    flex: 1;
+    place-items: center;
+    border-radius: var(--ui-radius-control);
+    color: var(--app-text-secondary);
+    transition: color var(--ui-duration-fast) ease-out;
+  }
+
+  .ui-segmented-item:hover,
+  .ui-segmented-item.is-active {
+    color: var(--app-text-primary);
+  }
+
+  .ui-segmented-control--fluid {
+    width: 100%;
+    height: auto;
+    background: var(--app-bg-primary);
+    padding: var(--ui-space-1);
+  }
+
+  .ui-segmented-control--fluid .ui-segmented-track {
+    min-height: var(--ui-size-control-compact);
+  }
+
+  .ui-segmented-control--fluid .ui-segmented-indicator {
+    background: var(--app-card-active);
+  }
+
+  .ui-segmented-item--label {
+    min-width: 0;
+    padding-inline: var(--ui-space-2);
+    overflow: hidden;
+    font-size: var(--ui-font-size-label);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-search-control {
+    height: var(--ui-size-control);
+    overflow: hidden;
+    border: var(--ui-border-width) solid var(--ui-border-control);
+    border-radius: var(--ui-radius-surface);
+    background: var(--app-surface);
+  }
+
+  .ui-popover-surface {
+    border: var(--ui-border-width) solid var(--ui-border-floating);
+    border-radius: var(--ui-radius-surface);
+    background: var(--ui-surface-popover);
+    box-shadow: var(--ui-shadow-floating);
+  }
+
+  .app-modal-backdrop {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(0 0 0 / 46%);
+    padding: var(--ui-floating-viewport-inset);
+    backdrop-filter: blur(3px);
+    transition: opacity 160ms ease-out;
+  }
+
+  .app-modal-surface {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-height: calc(100dvh - (var(--ui-floating-viewport-inset) * 2));
+    overflow: hidden;
+    border: var(--ui-border-width) solid var(--ui-border-floating);
+    border-radius: var(--ui-radius-dialog);
+    background: var(--app-surface);
+    box-shadow: var(--ui-shadow-dialog);
+    transition:
+      opacity 160ms ease-out,
+      transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .app-modal-surface--padded {
+    box-sizing: border-box;
+    min-width: 0;
+    overflow: auto;
+    padding: var(--ui-dialog-inset);
+  }
+
+  .app-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ui-component-gap);
+    margin-top: var(--ui-dialog-inset);
+  }
+
+  @media (max-width: 600px) {
+    .app-modal-backdrop {
+      padding: var(--ui-space-3);
+    }
+
+    .app-modal-surface {
+      max-height: calc(100dvh - (var(--ui-space-3) * 2));
+    }
+
+    .app-modal-surface--padded {
+      padding: var(--ui-space-4);
+    }
+  }
+
+  .app-resizer {
+    position: relative;
+    z-index: 40;
+    flex: 0 0 auto;
+  }
+
+  .app-resizer::before,
+  .app-resizer::after {
+    position: absolute;
+    content: '';
+  }
+
+  .app-resizer::before {
+    z-index: 1;
+  }
+
+  .app-resizer::after {
+    background: var(--editor-structural-border);
+    pointer-events: none;
+    transition: background-color 120ms ease-out;
+  }
+
+  .app-resizer.is-horizontal {
+    width: 100%;
+    height: 0;
+    cursor: row-resize;
+  }
+
+  .app-resizer.is-horizontal::before {
+    inset: -4px 0;
+  }
+
+  .app-resizer.is-horizontal::after {
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 1px;
+  }
+
+  .app-resizer.is-vertical {
+    width: 0;
+    height: 100%;
+    cursor: col-resize;
+  }
+
+  .app-resizer.is-vertical::before {
+    inset: 0 -4px;
+  }
+
+  .app-resizer.is-vertical::after {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+  }
+
+  .app-resizer:hover::after {
+    background: color-mix(in srgb, var(--app-accent) 72%, var(--editor-structural-border));
+  }
+
+  .library-loading-sheen {
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      color-mix(in srgb, var(--app-text-secondary) 10%, transparent) 45%,
+      transparent 70%
+    );
+    background-size: 220% 100%;
+    animation: library-loading-sheen 1.4s ease-in-out infinite;
+  }
+
+  .library-context-panel :is(.ui-panel-header, .develop-panel-header) {
+    padding-inline-end: calc(var(--ui-panel-inset) + var(--ui-size-icon-hit) + var(--ui-space-2));
+  }
+
+  .library-context-close {
+    position: absolute;
+    top: var(--ui-space-2);
+    right: var(--ui-panel-inset);
+    z-index: var(--ui-panel-z-index);
+  }
+
   .semantic-status {
     --semantic-status-color: var(--app-status-info);
 
@@ -433,6 +811,22 @@
   }
 }
 
+@keyframes library-loading-sheen {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-loading-sheen {
+    animation: none;
+    background: color-mix(in srgb, var(--app-text-secondary) 7%, transparent);
+  }
+}
+
 @media (orientation: portrait) {
   .modal-preview-adjustments {
     flex-direction: column;
@@ -538,9 +932,19 @@
     height: 100%;
     flex-shrink: 0;
     overflow: hidden;
-    border-left: 1px solid var(--app-border-color);
     background: var(--app-bg-secondary);
     opacity: 1;
+  }
+
+  .develop-panel-shell::before {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 31;
+    width: 1px;
+    background: var(--editor-structural-border);
+    content: '';
+    pointer-events: none;
   }
 
   .develop-panel-shell.is-animated {
@@ -559,12 +963,22 @@
     inset-block: 0;
     left: 0;
     z-index: 30;
-    width: 4px;
+    width: 8px;
     cursor: col-resize;
   }
 
-  .develop-panel-resizer:hover {
-    background: color-mix(in srgb, var(--app-accent) 45%, transparent);
+  .develop-panel-resizer::after {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 1px;
+    background: transparent;
+    content: '';
+    transition: background-color 120ms ease-out;
+  }
+
+  .develop-panel-resizer:hover::after {
+    background: color-mix(in srgb, var(--app-accent) 76%, var(--editor-structural-border));
   }
 
   .develop-panel-content {
@@ -581,59 +995,68 @@
   }
 
   .develop-tool-rail {
+    position: relative;
     display: flex;
-    width: 43px;
+    width: var(--develop-tool-rail-size);
     flex-shrink: 0;
     flex-direction: column;
+    align-items: center;
     justify-content: space-between;
-    border-left: 1px solid var(--app-border-color);
+    border-left: var(--ui-border-width) solid var(--editor-structural-border);
     background: color-mix(in srgb, var(--app-bg-secondary) 88%, black);
-    padding: 5px 3px;
+    padding: var(--ui-tool-rail-inset);
   }
 
   .develop-panel-shell.is-collapsed .develop-tool-rail {
-    width: 44px;
-    border-left: 0;
+    width: var(--develop-tool-rail-size);
   }
 
   .develop-tool-group {
     display: flex;
+    width: 100%;
     flex-direction: column;
-    gap: 1px;
+    align-items: center;
+    gap: 4px;
   }
 
   .develop-tool-group-secondary {
-    border-top: 1px solid var(--app-border-color);
-    padding-top: 5px;
+    padding-top: 4px;
+    box-shadow: inset 0 1px 0 var(--editor-structural-border);
   }
 
   .develop-tool-button {
     position: relative;
     display: grid;
-    width: 36px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     place-items: center;
-    border-radius: 3px;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
     color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
     transition:
       color 120ms ease-out,
-      background-color 120ms ease-out;
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
   }
 
   .develop-tool-button:hover {
-    background: color-mix(in srgb, var(--app-card-active) 76%, transparent);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .develop-tool-button.is-active {
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-selected);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .develop-tool-indicator {
     position: absolute;
-    inset-block: 7px;
-    left: -3px;
+    inset-block: 6px;
+    left: 0;
     width: 2px;
     border-radius: 0 2px 2px 0;
     background: var(--app-accent);
@@ -649,91 +1072,85 @@
     transform: scaleY(1);
   }
 
+  .ui-panel-header,
   .develop-panel-header {
     display: flex;
-    min-height: 42px;
+    min-height: var(--ui-panel-header-height);
     flex-shrink: 0;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    border-bottom: 1px solid var(--app-border-color);
-    padding: 6px 10px 6px 13px;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    padding: var(--ui-space-1-5) var(--ui-panel-inset);
   }
 
+  .ui-panel-header-actions,
   .develop-panel-header-actions {
     display: flex;
     align-items: center;
     gap: 5px;
   }
 
-  .develop-panel-text-action {
-    min-width: 42px;
-    height: 25px;
-    border: 1px solid var(--app-border-color);
-    border-radius: 2px;
-    background: color-mix(in srgb, var(--app-surface) 74%, transparent);
-    padding-inline: 8px;
-    color: var(--app-text-primary);
-    font-size: 10px;
-    font-weight: 500;
-    line-height: 23px;
-    transition:
-      border-color 120ms ease-out,
-      background-color 120ms ease-out,
-      color 120ms ease-out;
-  }
-
-  .develop-panel-text-action:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--app-text-secondary) 66%, var(--app-border-color));
-    background: var(--app-card-active);
-  }
-
-  .develop-panel-text-action:active:not(:disabled) {
-    background: color-mix(in srgb, var(--app-card-active) 76%, var(--app-accent));
-  }
-
-  .develop-panel-text-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.35;
+  .ui-panel-header h3,
+  .develop-panel-header h3 {
+    font-size: var(--ui-font-size-title);
+    line-height: 20px;
   }
 
   .develop-profile-strip {
     display: grid;
-    min-height: 38px;
+    min-height: 40px;
     flex-shrink: 0;
     grid-template-columns: minmax(70px, 0.32fr) minmax(0, 1fr);
     align-items: center;
     gap: 9px;
-    border-bottom: 1px solid var(--app-border-color);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
     background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
-    padding: 7px 11px 7px 13px;
+    padding: 8px var(--ui-panel-inset);
     color: var(--app-text-secondary);
     font-size: 11px;
   }
 
+  .ui-icon-button,
   .develop-panel-action,
+  .modal-icon-action,
   .editor-command-button,
   .editor-status-icon-button {
     display: inline-grid;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-size-icon-hit);
+    height: var(--ui-size-icon-hit);
     flex-shrink: 0;
     place-items: center;
-    border-radius: 3px;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
     color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
     transition:
       color 120ms ease-out,
-      background-color 120ms ease-out;
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
   }
 
+  .ui-icon-button:hover,
   .develop-panel-action:hover,
+  .modal-icon-action:hover,
   .editor-command-button:hover,
   .editor-status-icon-button:hover {
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
+  .ui-icon-button--md,
+  .modal-icon-action {
+    width: var(--ui-size-control);
+    height: var(--ui-size-control);
+  }
+
+  .ui-icon-button:disabled,
   .develop-panel-action:disabled,
+  .modal-icon-action:disabled,
   .editor-command-button:disabled,
   .editor-status-icon-button:disabled {
     cursor: not-allowed;
@@ -741,8 +1158,19 @@
   }
 
   .editor-command-button.is-active {
-    background: color-mix(in srgb, var(--app-accent) 16%, var(--app-card-active));
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
+  }
+
+  .ui-icon-button:focus-visible,
+  .develop-panel-action:focus-visible,
+  .modal-icon-action:focus-visible,
+  .editor-command-button:focus-visible,
+  .editor-status-icon-button:focus-visible,
+  .develop-tool-button:focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .develop-histogram {
@@ -752,9 +1180,9 @@
     flex-shrink: 0;
     flex-direction: column;
     overflow: hidden;
-    border-bottom: 1px solid var(--app-border-color);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
     background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
-    padding: 7px 9px 0;
+    padding: 8px var(--ui-panel-inset) 0;
   }
 
   .develop-histogram-graph {
@@ -769,7 +1197,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 9px;
-    border-top: 1px solid color-mix(in srgb, var(--app-border-color) 74%, transparent);
+    border-top: var(--ui-border-width) solid var(--ui-border-control);
     margin-top: 5px;
     color: var(--app-text-primary);
     font-size: 10px;
@@ -789,7 +1217,7 @@
   .develop-histogram-collapse {
     position: absolute;
     top: 9px;
-    right: 35px;
+    right: calc(var(--ui-panel-inset) + 24px);
     z-index: 25;
     display: grid;
     width: 22px;
@@ -821,7 +1249,7 @@
     height: 30px;
     flex-shrink: 0;
     place-items: center;
-    border-bottom: 1px solid var(--app-border-color);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
     background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
     color: var(--app-text-secondary);
   }
@@ -873,7 +1301,7 @@
     align-items: center;
     justify-content: space-between;
     color: rgb(226 232 240 / 50%);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 500;
     letter-spacing: 0.02em;
     line-height: 12px;
@@ -987,15 +1415,15 @@
 
   .develop-collapsible {
     flex-shrink: 0;
-    border-bottom: 1px solid var(--app-border-color);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
     background: transparent;
   }
 
   .develop-collapsible-header {
     display: flex;
-    min-height: 34px;
+    min-height: var(--ui-section-header-height);
     align-items: center;
-    padding: 0 7px 0 9px;
+    padding: 0 var(--ui-panel-inset);
   }
 
   .develop-collapsible-toggle {
@@ -1058,7 +1486,7 @@
   }
 
   .develop-collapsible-content {
-    padding: 0 12px 7px;
+    padding: 0 var(--ui-panel-inset) 10px;
   }
 
   .camera-raw-section-body {
@@ -1068,11 +1496,11 @@
 
   .camera-raw-subsection {
     min-width: 0;
-    padding-block: 7px;
+    padding-block: 8px;
   }
 
   .camera-raw-subsection + .camera-raw-subsection {
-    border-top: 1px solid color-mix(in srgb, var(--app-border-color) 78%, transparent);
+    border-top: var(--ui-border-width) solid var(--ui-border-control);
   }
 
   .camera-raw-subsection.is-bare {
@@ -1129,12 +1557,12 @@
 
   .camera-raw-select {
     width: 100%;
-    height: 22px;
+    height: 26px;
     min-width: 0;
-    border: 1px solid var(--app-border-color);
-    border-radius: 2px;
+    border: var(--ui-border-width) solid var(--ui-border-control);
+    border-radius: var(--ui-radius-control);
     background: var(--app-surface);
-    padding: 0 24px 0 7px;
+    padding: 0 26px 0 8px;
     color: var(--app-text-primary);
     font-size: 11px;
   }
@@ -1157,37 +1585,39 @@
   .camera-raw-white-balance-control {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) 24px;
+    grid-template-columns: minmax(0, 1fr) 28px;
     align-items: center;
     gap: 5px;
   }
 
   .camera-raw-wb-picker {
     display: grid;
-    width: 24px;
-    height: 22px;
+    width: 28px;
+    height: 26px;
     flex-shrink: 0;
     place-items: center;
-    border: 1px solid transparent;
-    border-radius: 2px;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
     color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
     transition:
-      border-color 120ms ease-out,
       background-color 120ms ease-out,
-      color 120ms ease-out;
+      color 120ms ease-out,
+      box-shadow 120ms ease-out;
   }
 
   .camera-raw-wb-picker:hover,
   .camera-raw-wb-picker:focus-visible {
-    border-color: var(--app-border-color);
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .camera-raw-wb-picker.is-active {
-    border-color: color-mix(in srgb, var(--app-accent) 58%, var(--app-border-color));
-    background: color-mix(in srgb, var(--app-accent) 15%, transparent);
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .camera-raw-white-balance-status {
@@ -1207,7 +1637,7 @@
     min-width: 0;
     align-items: center;
     gap: 2px;
-    border-bottom: 1px solid var(--app-border-color);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-control);
     margin-bottom: 4px;
   }
 
@@ -1373,23 +1803,24 @@
     min-height: 28px;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--app-border-color);
-    border-radius: 3px;
-    background: color-mix(in srgb, var(--app-surface) 72%, transparent);
-    padding: 3px 6px;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-control-subtle);
+    padding: 4px 8px;
     color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
     text-align: left;
     transition:
-      border-color 120ms ease-out,
       background-color 120ms ease-out,
-      color 120ms ease-out;
+      color 120ms ease-out,
+      box-shadow 120ms ease-out;
   }
 
   .camera-raw-action-row:hover:not(:disabled),
   .camera-raw-action-row:focus-visible {
-    border-color: color-mix(in srgb, var(--app-accent) 55%, var(--app-border-color));
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .camera-raw-action-row:disabled {
@@ -1507,14 +1938,28 @@
   }
 
   .develop-panel-content .camera-raw-slider-number {
-    min-height: 19px;
-    height: 19px;
-    border: 1px solid color-mix(in srgb, var(--app-border-color) 82%, transparent);
-    border-radius: 1px;
-    background: color-mix(in srgb, var(--app-surface) 78%, transparent);
-    padding-inline: 4px;
+    min-height: 22px;
+    height: 22px;
+    border-radius: 3px;
+    padding-inline: 5px;
     font-size: 11px;
-    line-height: 17px;
+    line-height: 20px;
+  }
+
+  .develop-panel-content input.camera-raw-slider-number {
+    border: 1px solid color-mix(in srgb, var(--app-border-color) 82%, transparent);
+    background: color-mix(in srgb, var(--app-surface) 78%, transparent);
+  }
+
+  .develop-panel-content button.camera-raw-slider-number {
+    border: 0;
+    background: var(--ui-surface-tool-rest);
+    box-shadow: var(--ui-shadow-tool-rest);
+  }
+
+  .develop-panel-content button.camera-raw-slider-number:hover:not(:disabled) {
+    background: var(--ui-surface-tool-hover);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .develop-panel-content .camera-raw-slider-track {
@@ -1648,7 +2093,7 @@
 
   .crop-tool-section {
     border-bottom: 1px solid var(--app-border-color);
-    padding: 10px 11px 12px 13px;
+    padding: 10px var(--ui-panel-inset) 12px;
   }
 
   .crop-tool-section:last-child {
@@ -1726,25 +2171,27 @@
     width: 27px;
     height: 27px;
     place-items: center;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 2px;
+    background: var(--ui-surface-tool-rest);
     color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
     transition:
-      border-color 100ms ease-out,
       background-color 100ms ease-out,
-      color 100ms ease-out;
+      color 100ms ease-out,
+      box-shadow 100ms ease-out;
   }
 
   .crop-icon-button:hover:not(:disabled) {
-    border-color: var(--app-border-color);
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .crop-icon-button.is-active {
-    border-color: color-mix(in srgb, var(--app-accent) 42%, var(--app-border-color));
-    background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .crop-icon-button:disabled {
@@ -1809,15 +2256,17 @@
     height: 27px;
     align-items: center;
     gap: 6px;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 2px;
+    background: var(--ui-surface-tool-rest);
     padding-inline: 6px;
     color: var(--app-text-secondary);
     font-size: 10px;
+    box-shadow: var(--ui-shadow-tool-rest);
     transition:
-      border-color 100ms ease-out,
       background-color 100ms ease-out,
-      color 100ms ease-out;
+      color 100ms ease-out,
+      box-shadow 100ms ease-out;
   }
 
   .crop-inline-tool span {
@@ -1828,9 +2277,9 @@
 
   .crop-inline-tool:hover,
   .crop-inline-tool.is-active {
-    border-color: var(--app-border-color);
-    background: var(--app-card-active);
+    background: var(--ui-surface-tool-hover);
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
   }
 
   .crop-inline-tool:disabled {
@@ -1839,9 +2288,9 @@
   }
 
   .crop-inline-tool.is-active {
-    border-color: color-mix(in srgb, var(--app-accent) 42%, var(--app-border-color));
-    background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .crop-angle-slider {
@@ -1879,7 +2328,7 @@
     overflow: hidden;
     max-width: 170px;
     color: var(--app-text-tertiary, var(--app-text-secondary));
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1900,7 +2349,7 @@
     overflow: hidden;
     min-width: 0;
     color: var(--app-text-tertiary, var(--app-text-secondary));
-    font-size: 9px;
+    font-size: 10px;
     font-variant-numeric: tabular-nums;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1920,24 +2369,21 @@
     display: grid;
     overflow: hidden;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--app-border-color);
+    border: 0;
     border-radius: 2px;
     background: color-mix(in srgb, var(--app-surface) 68%, transparent);
+    box-shadow: var(--ui-shadow-tool-rest);
   }
 
   .crop-action-button {
     display: grid;
     height: 31px;
     place-items: center;
-    border-right: 1px solid var(--app-border-color);
+    border: 0;
     color: var(--app-text-secondary);
     transition:
       background-color 100ms ease-out,
       color 100ms ease-out;
-  }
-
-  .crop-action-button:last-child {
-    border-right: 0;
   }
 
   .crop-action-button:hover {
@@ -1946,8 +2392,9 @@
   }
 
   .crop-action-button.is-active {
-    background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .crop-collapsible-heading {
@@ -2025,9 +2472,10 @@
     display: grid;
     overflow: hidden;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    border: 1px solid var(--app-border-color);
+    border: 0;
     border-radius: 2px;
     background: color-mix(in srgb, var(--app-surface) 68%, transparent);
+    box-shadow: var(--ui-shadow-tool-rest);
   }
 
   .crop-upright-mode {
@@ -2038,17 +2486,13 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    border-right: 1px solid var(--app-border-color);
+    border: 0;
     color: var(--app-text-secondary);
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1;
     transition:
       background-color 100ms ease-out,
       color 100ms ease-out;
-  }
-
-  .crop-upright-mode:last-child {
-    border-right: 0;
   }
 
   .crop-upright-mode:hover:not(:disabled),
@@ -2058,8 +2502,9 @@
   }
 
   .crop-upright-mode.is-active {
-    background: color-mix(in srgb, var(--app-accent) 14%, var(--app-card-active));
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .crop-upright-mode:disabled {
@@ -2081,12 +2526,12 @@
     gap: 8px;
     padding-top: 5px;
     color: var(--app-text-tertiary, var(--app-text-secondary));
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .crop-upright-guided-status button {
     color: var(--app-accent);
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .crop-upright-guided-status button:disabled {
@@ -2120,28 +2565,28 @@
     justify-content: flex-end;
     gap: 7px;
     border-top: 1px solid var(--app-border-color);
-    padding: 7px 11px;
+    padding: 7px var(--ui-panel-inset);
     background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
   }
 
   .crop-session-button {
     min-width: 68px;
     height: 29px;
-    border: 1px solid var(--app-border-color);
+    border: 0;
     border-radius: 2px;
     background: color-mix(in srgb, var(--app-surface) 75%, transparent);
     color: var(--app-text-primary);
     font-size: 11px;
+    box-shadow: var(--ui-shadow-button-rest);
   }
 
   .crop-session-button:hover,
   .crop-session-button:focus-visible {
-    border-color: color-mix(in srgb, var(--app-text-secondary) 75%, var(--app-border-color));
     background: var(--app-card-active);
+    box-shadow: var(--ui-shadow-button-hover);
   }
 
   .crop-session-button.is-primary {
-    border-color: color-mix(in srgb, var(--app-accent) 70%, var(--app-border-color));
     background: var(--app-accent);
     color: var(--app-accent-contrast, white);
     font-weight: 600;
@@ -2289,8 +2734,8 @@
   .crop-guide-menu-item.is-separated {
     min-height: 30px;
     margin-top: 3px;
-    border-top: 1px solid var(--app-border-color);
     padding-top: 3px;
+    box-shadow: inset 0 1px 0 var(--app-border-color);
   }
 
   .crop-guide-menu-shortcuts {
@@ -2387,13 +2832,8 @@
   }
 
   .editor-command-bar {
-    display: flex;
-    min-height: 42px;
-    align-items: center;
-    gap: 10px;
-    border-bottom: 1px solid var(--app-border-color);
+    gap: var(--ui-space-2-5);
     background: color-mix(in srgb, var(--app-bg-secondary) 94%, black);
-    padding: 5px 8px;
   }
 
   .editor-command-group {
@@ -2417,7 +2857,7 @@
     border-radius: 2px;
     padding: 0 3px;
     color: var(--app-accent);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     line-height: 14px;
   }
@@ -2429,9 +2869,10 @@
     max-width: 38%;
     transform: translateX(-50%);
     overflow: hidden;
-    border: 1px solid var(--app-border-color);
+    border: 0;
     border-radius: 3px;
     background: var(--app-surface);
+    box-shadow: var(--ui-shadow-tool-rest);
   }
 
   .editor-variant-button {
@@ -2444,14 +2885,14 @@
     white-space: nowrap;
   }
 
-  .editor-variant-button + .editor-variant-button {
-    border-left: 1px solid var(--app-border-color);
-  }
-
   .editor-variant-button:hover,
   .editor-variant-button.is-active {
     background: var(--app-card-active);
     color: var(--app-text-primary);
+  }
+
+  .editor-variant-button.is-active {
+    box-shadow: var(--ui-shadow-tool-selected);
   }
 
   .editor-history-popover {
@@ -2464,11 +2905,11 @@
     max-height: 320px;
     flex-direction: column;
     overflow-y: auto;
-    border: 1px solid var(--app-border-color);
-    border-radius: 4px;
+    border: 1px solid var(--editor-floating-border);
+    border-radius: var(--ui-radius-surface);
     background: color-mix(in srgb, var(--app-bg-secondary) 96%, black);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
-    padding: 4px;
+    box-shadow: var(--ui-shadow-floating);
+    padding: 6px;
   }
 
   .editor-history-item {
@@ -2666,43 +3107,391 @@
     flex-shrink: 0;
     align-items: center;
     gap: 4px;
-    border: 1px solid var(--app-border-color);
+    border: 0;
     border-radius: 2px;
     background: var(--app-surface);
     padding-inline: 7px;
     color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-button-rest);
   }
 
   .editor-load-error > button:hover {
     background: var(--app-card-active);
+    box-shadow: var(--ui-shadow-button-hover);
   }
 
   .editor-bottom-dock {
-    border-top: 1px solid var(--app-border-color);
+    position: relative;
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
     border-radius: 0;
-  }
-
-  .editor-status-bar {
     background: color-mix(in srgb, var(--app-bg-secondary) 95%, black);
   }
 
-  .editor-status-icon-button {
-    width: 26px;
-    height: 26px;
+  .editor-bottom-dock::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 1;
+    height: 1px;
+    background: var(--ui-border-structural);
+    content: '';
+    pointer-events: none;
   }
 
-  .editor-workflow-summary {
-    max-width: 185px;
+  .editor-bottom-dock.is-library {
     overflow: hidden;
+    border: var(--ui-border-width) solid var(--ui-border-structural);
+    border-radius: var(--ui-radius-surface);
+  }
+
+  .editor-bottom-dock.is-library::before {
+    display: none;
+  }
+
+  .editor-status-bar {
+    height: var(--ui-statusbar-height);
+    align-items: center;
+    background: var(--ui-surface-chrome);
+    padding-inline: var(--ui-panel-inset);
+    color: var(--app-text-secondary);
+    font-size: var(--ui-font-size-label);
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .editor-status-bar.has-filmstrip-divider {
+    box-shadow: inset 0 1px 0 var(--editor-structural-border);
+  }
+
+  .editor-status-bar.is-library {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .editor-status-bar.is-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .editor-status-primary,
+  .editor-rating-group,
+  .editor-copy-actions,
+  .editor-status-selection,
+  .editor-library-status-actions,
+  .editor-library-action,
+  .editor-status-center,
+  .editor-status-trailing,
+  .editor-zoom-control,
+  .editor-filter-options {
+    display: flex;
+    align-items: center;
+  }
+
+  .editor-status-primary {
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .editor-status-bar.is-library .editor-status-primary {
+    flex: 1;
+  }
+
+  .editor-status-divider {
+    display: block;
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    background: var(--ui-border-control);
+    margin-inline: 3px;
+  }
+
+  .editor-rating-group,
+  .editor-copy-actions,
+  .editor-quick-filter {
+    flex-shrink: 0;
+  }
+
+  .editor-rating-group {
+    height: calc(var(--ui-size-icon-hit) + 2px);
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
+    padding-inline: 2px;
+    box-shadow: var(--ui-shadow-tool-rest);
+  }
+
+  .editor-copy-actions {
+    gap: 2px;
+  }
+
+  .editor-rating-button {
+    display: grid;
+    width: 23px;
+    height: 28px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 3px;
+    color: var(--app-text-secondary);
+  }
+
+  .editor-rating-button:hover:not(:disabled) {
+    background: var(--app-card-active);
+  }
+
+  .editor-rating-button:focus-visible,
+  .editor-filter-option-button:focus-visible,
+  .editor-color-filter-button:focus-visible,
+  .editor-zoom-value-button:focus-visible,
+  .editor-zoom-input:focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .editor-status-icon-button.is-active {
+    background: var(--ui-surface-tool-selected);
     color: var(--app-accent);
-    font-size: 10px;
+    box-shadow: var(--ui-shadow-tool-selected);
+  }
+
+  .editor-filter-active-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--app-accent);
+  }
+
+  .editor-status-selection {
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .editor-status-selection-label {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .editor-workflow-summary:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  .editor-status-center {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .editor-status-trailing {
+    min-width: 28px;
+    justify-content: flex-end;
+  }
+
+  .editor-zoom-control {
+    width: 190px;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .editor-zoom-slider {
+    position: relative;
+    height: 28px;
+    min-width: 42px;
+    flex: 1;
+  }
+
+  .editor-zoom-slider-track {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    left: 0;
+    height: 3px;
+    transform: translateY(-50%);
+    border-radius: 999px;
+    background: var(--editor-control-border);
+    pointer-events: none;
+  }
+
+  .editor-zoom-slider .slider-input {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 28px;
+    appearance: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .editor-zoom-slider .slider-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
+  .editor-zoom-value {
+    width: 40px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  .editor-zoom-value-button,
+  .editor-zoom-input {
+    width: 100%;
+    height: 24px;
+    border-radius: 3px;
+    color: var(--app-text-secondary);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    line-height: 24px;
+    text-align: center;
+  }
+
+  .editor-zoom-value-button:hover:not(:disabled) {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .editor-zoom-value-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
+  .editor-zoom-input {
+    border: 1px solid var(--app-border-color);
+    background: var(--app-bg-primary);
+    color: var(--app-text-primary);
+    padding-inline: 3px;
+  }
+
+  .editor-filter-popover {
+    position: fixed;
+    z-index: var(--ui-popover-z-index);
+    width: var(--ui-filter-popover-width);
+    max-height: min(var(--ui-filter-popover-max-height), calc(100dvh - (var(--ui-floating-viewport-inset) * 2)));
+    overflow: auto;
+    border: 1px solid var(--ui-border-floating);
+    border-radius: var(--ui-radius-surface);
+    background: var(--ui-surface-popover);
+    padding: var(--ui-space-3);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-floating);
+    font-size: var(--ui-font-size-label);
+    line-height: var(--ui-line-height-compact);
+  }
+
+  .editor-filter-popover-header {
+    display: flex;
+    min-height: 28px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 0 9px;
+    font-weight: 600;
+  }
+
+  .editor-filter-clear {
+    flex-shrink: 0;
+    border-radius: 3px;
+    padding: 4px 5px;
+    color: var(--app-accent);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .editor-filter-clear:hover {
+    background: var(--app-card-active);
+  }
+
+  .editor-filter-section {
+    padding: 10px 0 2px;
+    box-shadow: inset 0 1px 0 var(--editor-control-border);
+  }
+
+  .editor-filter-section + .editor-filter-section {
+    margin-top: 8px;
+  }
+
+  .editor-filter-section-label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--app-text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .editor-filter-options {
+    gap: 6px;
+  }
+
+  .editor-filter-option-button,
+  .editor-color-filter-button {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 3px;
+  }
+
+  .editor-filter-option-button:hover,
+  .editor-color-filter-button:hover {
+    background: var(--app-card-active);
+  }
+
+  .editor-color-filter-swatch {
+    display: grid;
+    width: 15px;
+    height: 15px;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, white 18%, transparent);
+    border-radius: 999px;
+    transition:
+      box-shadow 120ms ease-out,
+      transform 120ms ease-out;
+  }
+
+  .editor-color-filter-button:hover .editor-color-filter-swatch {
+    transform: scale(1.06);
+  }
+
+  .editor-color-filter-swatch.is-selected {
+    box-shadow:
+      0 0 0 1px var(--app-bg-secondary),
+      0 0 0 2px var(--app-accent);
+  }
+
+  .editor-library-status-actions {
+    flex-shrink: 0;
+    gap: 3px;
+  }
+
+  .editor-library-action {
+    height: var(--ui-size-icon-hit);
+    gap: 5px;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
+    padding-inline: 7px;
+    color: var(--app-text-secondary);
+    font-size: var(--ui-font-size-label);
+    box-shadow: var(--ui-shadow-tool-rest);
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  .editor-library-action:hover:not(:disabled) {
+    background: var(--ui-surface-tool-hover);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
+  }
+
+  .editor-library-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
   }
 
   .editor-footer-button {
@@ -2712,37 +3501,965 @@
     padding: 0 12px;
     font-size: 11px;
     font-weight: 500;
+    box-shadow: var(--ui-shadow-button-rest);
     transition:
       background-color 120ms ease-out,
-      border-color 120ms ease-out,
-      color 120ms ease-out;
+      color 120ms ease-out,
+      box-shadow 120ms ease-out;
   }
 
   .editor-footer-button.is-secondary {
-    border: 1px solid var(--app-border-color);
+    border: 0;
     background: var(--app-surface);
     color: var(--app-text-primary);
   }
 
   .editor-footer-button.is-secondary:hover {
-    border-color: color-mix(in srgb, var(--app-text-secondary) 70%, transparent);
     background: var(--app-card-active);
+    box-shadow: var(--ui-shadow-button-hover);
   }
 
   .editor-footer-button.is-primary {
-    border: 1px solid color-mix(in srgb, var(--app-accent) 72%, black);
+    border: 0;
     background: var(--app-accent);
     color: var(--app-button-text);
   }
 
   .editor-footer-button.is-primary:hover {
     background: color-mix(in srgb, var(--app-accent) 88%, white);
+    box-shadow: var(--ui-shadow-button-hover);
   }
 
-  .editor-footer-button:disabled,
-  .editor-workflow-summary:disabled {
+  .editor-footer-button:disabled {
     cursor: not-allowed;
     opacity: 0.4;
+  }
+
+  @container (max-width: 980px) {
+    .editor-status-selection,
+    .editor-library-action-label {
+      display: none;
+    }
+
+    .editor-status-bar.is-editor {
+      gap: 8px;
+    }
+
+    .editor-zoom-control {
+      width: 154px;
+    }
+  }
+
+  @container (max-width: 680px) {
+    .editor-zoom-fit-button,
+    .editor-copy-actions > :last-child {
+      display: none;
+    }
+
+    .editor-zoom-control {
+      width: 116px;
+    }
+  }
+
+  @container (max-width: 540px) {
+    .editor-copy-actions,
+    .editor-status-divider.is-after-rating,
+    .editor-status-divider.is-before-filter {
+      display: none;
+    }
+
+    .editor-status-bar.is-editor {
+      grid-template-columns: minmax(0, 1fr) 108px 28px;
+      gap: 6px;
+    }
+  }
+
+  @container (max-width: 400px) {
+    .editor-rating-group {
+      display: none;
+    }
+
+    .editor-zoom-control {
+      width: 100px;
+    }
+  }
+}
+
+/*
+ * Shared text-action contract
+ *
+ * This intentionally lives outside Tailwind layers so utility classes cannot
+ * enlarge action text or erase button boundaries in dense editor surfaces.
+ */
+.ui-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  padding: 3px var(--ui-button-padding-inline);
+  color: var(--app-text-primary);
+  box-shadow: var(--ui-shadow-button-rest);
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out,
+    opacity var(--ui-duration-fast) ease-out;
+}
+
+.ui-button--primary {
+  background: var(--app-accent);
+  color: var(--app-button-text);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-accent) 88%, white);
+}
+
+.ui-button--secondary {
+  background: var(--ui-surface-control);
+  color: var(--app-text-primary);
+}
+
+.ui-button--ghost {
+  background: var(--ui-surface-tool-rest);
+  color: var(--app-text-secondary);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-button--secondary:hover:not(:disabled) {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  background: var(--ui-surface-tool-hover);
+  color: var(--app-text-primary);
+}
+
+.ui-button--destructive {
+  background: color-mix(in srgb, var(--app-status-error) 14%, var(--app-surface));
+  color: var(--app-status-error);
+}
+
+.ui-button--destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-status-error) 22%, var(--app-surface));
+}
+
+.ui-button--sm {
+  min-height: var(--ui-button-height-sm);
+  padding: 2px var(--ui-button-padding-inline-sm);
+  font-size: var(--ui-font-size-caption);
+  line-height: 14px;
+}
+
+.ui-button--lg {
+  min-height: var(--ui-size-control);
+  padding: var(--ui-space-1) var(--ui-space-3);
+  font-size: var(--ui-font-size-body);
+  line-height: 18px;
+}
+
+.ui-button--icon {
+  width: var(--ui-button-height);
+  min-height: var(--ui-button-height);
+  padding: 0;
+}
+
+.ui-button:active:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow: var(--ui-shadow-button-pressed);
+}
+
+.ui-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon) {
+  background: var(--ui-surface-tool-rest);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon):hover:not(:disabled) {
+  background: var(--ui-surface-tool-hover);
+  box-shadow: var(--ui-shadow-tool-hover);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon):active:not(:disabled) {
+  background: var(--ui-surface-tool-selected);
+  box-shadow: var(--ui-shadow-tool-selected);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon)[aria-pressed='true'] {
+  background: var(--ui-surface-tool-selected);
+  color: var(--app-accent);
+  box-shadow: var(--ui-shadow-tool-selected);
+}
+
+.ui-button:focus-visible,
+.ui-segmented-option:focus-visible,
+.ui-choice-button:focus-visible,
+.ui-tab-action:focus-visible,
+.ui-inline-action:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.ui-segmented-frame {
+  border: 0;
+  border-radius: var(--ui-radius-surface);
+  background: var(--ui-surface-control-subtle);
+  padding: var(--ui-space-1);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-segmented-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  min-height: var(--ui-button-height-sm);
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border-radius: var(--ui-radius-control);
+  padding: 2px var(--ui-button-padding-inline-sm);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out;
+}
+
+.ui-segmented-option:hover:not(.is-active) {
+  background: var(--ui-surface-control-subtle);
+  color: var(--app-text-primary);
+}
+
+.ui-segmented-option.is-active {
+  color: var(--app-button-text);
+}
+
+.ui-choice-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface-control-subtle);
+  padding: 3px var(--ui-button-padding-inline-sm);
+  color: var(--app-text-secondary);
+  box-shadow: var(--ui-shadow-button-rest);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.ui-choice-button:hover:not(:disabled),
+.ui-choice-button.is-active {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+}
+
+.ui-choice-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-choice-button.is-active {
+  box-shadow: var(--ui-shadow-button-selected);
+}
+
+.ui-tab-action {
+  display: inline-flex;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  gap: var(--ui-space-1);
+  border: 0;
+  padding: 2px var(--ui-space-1);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+
+.ui-tab-action:hover,
+.ui-tab-action.is-active {
+  color: var(--app-text-primary);
+}
+
+.ui-tab-action.is-active {
+  color: var(--app-accent);
+  box-shadow: inset 0 -2px 0 var(--app-accent);
+}
+
+.ui-count-badge {
+  min-width: 18px;
+  border-radius: 999px;
+  background: var(--ui-surface-control);
+  padding-inline: var(--ui-space-1);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.ui-inline-action {
+  display: inline-flex;
+  min-height: var(--ui-button-height-sm);
+  align-items: center;
+  gap: var(--ui-space-1);
+  border-radius: var(--ui-radius-control);
+  padding: 2px var(--ui-space-1);
+  color: var(--app-accent);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.ui-inline-action:hover {
+  background: var(--ui-surface-control-subtle);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/*
+ * Button boundary contract
+ *
+ * Buttons never use a perimeter stroke. Raised controls opt into the shared
+ * elevation states; flat icon, tab, and text actions remain borderless.
+ * This unlayered rule also prevents local Tailwind border utilities from
+ * reintroducing the former border-plus-shadow treatment.
+ */
+button {
+  border: 0;
+}
+
+.ui-surface-button {
+  box-shadow: var(--ui-shadow-button-rest);
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.ui-surface-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-surface-button:active:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-pressed);
+}
+
+.ui-surface-button:is(.is-active, [aria-checked='true'], [aria-pressed='true']) {
+  box-shadow: var(--ui-shadow-button-selected);
+}
+
+/*
+ * Editor edge-safety contract
+ *
+ * These rules intentionally live outside Tailwind layers. The right-side
+ * editor panel is assembled from several independently reusable panels, and
+ * utility-layer rules must not be able to collapse its visual safe area.
+ * The histogram remains full bleed; every interactive panel surface below it
+ * shares one inset token.
+ */
+.develop-panel-content :is(.ui-panel-header, .develop-panel-header, .develop-profile-strip) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.ui-panel-body, .ui-panel-footer) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.develop-collapsible-header, .develop-collapsible-content) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.crop-tool-section, .crop-panel-footer) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+/*
+ * Modal edge-safety contract
+ *
+ * Modal surfaces are deliberately split into two layouts: padded dialogs for
+ * forms/actions and full-bleed dialogs for image workspaces.  Keep this
+ * contract outside Tailwind layers so a utility class cannot collapse the
+ * safety gutter and make a footer appear glued to the card edge.
+ */
+.app-modal-backdrop {
+  box-sizing: border-box;
+  padding: var(--ui-floating-viewport-inset);
+}
+
+.app-modal-surface {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-surface--padded {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--ui-dialog-inset);
+}
+
+.app-modal-surface--padded > * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-surface--full-bleed {
+  padding: 0;
+}
+
+.app-modal-surface--structured {
+  padding: 0;
+}
+
+.app-modal-content {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-actions {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.app-modal-footer {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ui-dialog-footer-gap);
+  margin-top: var(--ui-space-4);
+  border-top: var(--ui-border-width) solid var(--ui-border-structural);
+  padding-block: var(--ui-dialog-footer-padding-block) 0;
+}
+
+.app-modal-footer--inset {
+  padding-inline: var(--ui-dialog-inset);
+}
+
+.app-modal-footer.is-result {
+  margin-top: var(--ui-space-3);
+  border-top: 0;
+  padding-top: 0;
+}
+
+.app-modal-footer > * {
+  min-width: 0;
+}
+
+/* Denoise uses a split stage/footer layout, so its insets are explicit on
+ * each region instead of depending on a utility padding class on the shell. */
+.denoise-modal-surface {
+  display: flex;
+  width: min(100%, var(--ui-denoise-dialog-max-width));
+  max-width: var(--ui-denoise-dialog-max-width);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.denoise-modal-content {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex-direction: column;
+}
+
+.denoise-modal-body {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--ui-dialog-inset) var(--ui-dialog-inset) 0;
+}
+
+.denoise-modal-stage {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.denoise-modal-stage--message,
+.denoise-modal-stage--idle,
+.denoise-modal-stage--processing {
+  min-height: var(--ui-denoise-preview-height);
+}
+
+.denoise-modal-stage--preview {
+  height: var(--ui-denoise-result-height);
+  min-height: 0;
+}
+
+.denoise-modal-progress {
+  margin: var(--ui-space-4) var(--ui-dialog-inset) 0;
+}
+
+.denoise-modal-footer {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: var(--ui-space-4);
+  margin-inline: var(--ui-dialog-inset);
+  padding-block: var(--ui-dialog-footer-padding-block);
+}
+
+.denoise-modal-footer.app-modal-footer--inset {
+  padding-inline: 0;
+}
+
+.denoise-modal-controls {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--ui-space-4);
+}
+
+.denoise-modal-controls.is-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.denoise-modal-settings {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, var(--ui-denoise-control-column)) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--ui-space-4);
+}
+
+.denoise-modal-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--ui-space-1);
+}
+
+.denoise-modal-field > * {
+  min-width: 0;
+}
+
+.denoise-modal-intensity-field {
+  align-self: end;
+}
+
+.denoise-modal-divider {
+  width: var(--ui-border-width);
+  height: var(--ui-size-control-large);
+  background: var(--ui-border-structural);
+}
+
+.denoise-modal-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ui-component-gap);
+}
+
+.culling-modal-footer {
+  align-items: stretch;
+}
+
+.culling-modal-footer > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.culling-modal-footer > :last-child {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ui-component-gap);
+}
+
+@media (max-width: 760px) {
+  .denoise-modal-settings {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .denoise-modal-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--ui-space-3);
+  }
+
+  .denoise-modal-divider {
+    display: none;
+  }
+
+  .denoise-modal-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .culling-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .culling-modal-footer > :last-child {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 520px) {
+  .denoise-modal-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .denoise-modal-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .app-modal-backdrop {
+    padding: var(--ui-space-3);
+  }
+
+  .app-modal-surface--padded {
+    padding: var(--ui-space-4);
+  }
+
+  .app-modal-footer--inset {
+    padding-inline: var(--ui-space-4);
+  }
+
+  .denoise-modal-footer {
+    margin-inline: var(--ui-space-4);
+  }
+
+  .denoise-modal-footer.app-modal-footer--inset {
+    padding-inline: 0;
+  }
+}
+
+/* Quick filter is a compact menu anchored to its status-bar trigger. */
+.editor-filter-popover {
+  box-sizing: border-box;
+  width: var(--ui-filter-popover-width);
+  max-width: calc(100vw - (var(--ui-floating-viewport-inset) * 2));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--ui-space-2-5);
+}
+
+.editor-filter-popover-header {
+  min-height: 22px;
+  gap: var(--ui-space-1);
+  padding: 0 0 var(--ui-space-1-5);
+  font-size: var(--ui-font-size-label);
+  line-height: 16px;
+}
+
+.editor-filter-clear {
+  padding: var(--ui-space-0-5) var(--ui-space-1);
+  font-size: var(--ui-font-size-caption);
+  line-height: 16px;
+}
+
+.editor-filter-section {
+  padding: var(--ui-space-1-5) 0 0;
+  box-shadow: inset 0 1px 0 var(--ui-border-control);
+}
+
+.editor-filter-section.is-first {
+  padding-top: 0;
+  box-shadow: none;
+}
+
+.editor-filter-section + .editor-filter-section {
+  margin-top: var(--ui-space-1-5);
+}
+
+.editor-filter-section-label {
+  margin-bottom: var(--ui-space-0-5);
+  font-size: var(--ui-font-size-caption);
+  line-height: 12px;
+}
+
+.editor-filter-options {
+  justify-content: space-between;
+  gap: var(--ui-space-0-5);
+}
+
+.editor-filter-option-button {
+  width: 24px;
+  height: 24px;
+}
+
+.editor-color-filter-button {
+  width: 20px;
+  height: 24px;
+}
+
+.editor-color-filter-swatch {
+  width: 14px;
+  height: 14px;
+}
+
+/* Copy/paste settings is a dense editor utility, not a document-sized modal. */
+.copy-paste-dialog {
+  display: flex;
+  width: min(var(--ui-copy-paste-dialog-width), calc(100vw - (var(--ui-floating-viewport-inset) * 2)));
+  height: min(var(--ui-copy-paste-dialog-max-height), calc(100dvh - (var(--ui-floating-viewport-inset) * 2)));
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  container-name: copy-paste-dialog;
+  container-type: inline-size;
+}
+
+.copy-paste-dialog-header {
+  display: flex;
+  min-height: var(--ui-panel-header-height);
+  flex: 0 0 auto;
+  align-items: center;
+  border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+  padding-inline: var(--ui-space-4);
+}
+
+.copy-paste-dialog-title,
+.copy-paste-section-title,
+.copy-paste-adjustment-group-title {
+  margin: 0;
+  color: var(--app-text-primary);
+}
+
+.copy-paste-dialog-title {
+  font-size: var(--ui-font-size-title);
+  line-height: 20px;
+}
+
+.copy-paste-dialog-body {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--ui-space-4);
+  overflow: hidden;
+  padding: var(--ui-space-3) var(--ui-space-4);
+}
+
+.copy-paste-section {
+  display: grid;
+  min-width: 0;
+  gap: var(--ui-space-2);
+}
+
+.copy-paste-section-title {
+  font-size: var(--ui-font-size-body);
+  line-height: 18px;
+}
+
+.copy-paste-description {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  line-height: var(--ui-line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-mode-control {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ui-button-height);
+  gap: var(--ui-space-1);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--app-bg-primary);
+  padding: var(--ui-space-0-5);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.copy-paste-mode-indicator {
+  position: absolute;
+  inset-block: var(--ui-space-0-5);
+  left: 0;
+  z-index: 0;
+  border-radius: calc(var(--ui-radius-control) - 1px);
+  background: var(--app-accent);
+}
+
+.copy-paste-mode-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--ui-radius-control) - 1px);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 20px;
+  transition: color var(--ui-duration-fast) ease-out;
+}
+
+.copy-paste-mode-option:hover:not(.is-active) {
+  color: var(--app-text-primary);
+}
+
+.copy-paste-mode-option.is-active {
+  color: var(--app-button-text);
+}
+
+.copy-paste-auto-sync {
+  min-height: 24px;
+}
+
+.copy-paste-adjustments-section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.copy-paste-adjustments-heading,
+.copy-paste-selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.copy-paste-adjustments-heading {
+  min-width: 0;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.copy-paste-selection-actions {
+  flex: 0 0 auto;
+  gap: var(--ui-space-1);
+}
+
+.copy-paste-adjustment-list {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: var(--ui-border-width) solid var(--ui-border-structural);
+  border-radius: var(--ui-radius-surface);
+  background: var(--app-bg-primary);
+  overscroll-behavior: contain;
+}
+
+.copy-paste-adjustment-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-4) var(--ui-space-6);
+  padding: var(--ui-space-3);
+}
+
+.copy-paste-adjustment-group {
+  min-width: 0;
+}
+
+.copy-paste-adjustment-group-title {
+  margin-bottom: var(--ui-space-1);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.copy-paste-adjustment-options {
+  display: grid;
+  gap: var(--ui-space-0-5);
+}
+
+.copy-paste-dialog .camera-raw-switch {
+  min-width: 0;
+  min-height: 22px;
+  gap: var(--ui-space-2);
+}
+
+.copy-paste-dialog .camera-raw-switch-label {
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 400;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-dialog-footer {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-component-gap);
+  border-top: var(--ui-border-width) solid var(--ui-border-structural);
+  background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
+  padding: var(--ui-space-2) var(--ui-space-4);
+}
+
+@container copy-paste-dialog (max-width: 480px) {
+  .copy-paste-adjustment-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ui-space-3);
+  }
+
+  .copy-paste-adjustments-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+  }
+}
+
+@media (max-height: 480px) {
+  .copy-paste-dialog-body {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .copy-paste-adjustments-section {
+    min-height: 220px;
   }
 }
 
@@ -2753,35 +4470,34 @@
     left: 0;
     z-index: 2000;
     display: flex;
-    max-height: calc(100dvh - 24px);
+    max-height: calc(100dvh - (var(--ui-floating-viewport-inset) * 2));
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-message-gap);
     overflow: hidden;
-    padding-inline: 12px;
+    padding-inline: var(--ui-floating-viewport-inset);
     pointer-events: none;
   }
 
   .app-message {
     --app-message-tone: var(--app-status-info);
 
+    box-sizing: border-box;
     display: inline-flex;
     width: fit-content;
-    max-width: min(520px, calc(100vw - 24px));
-    min-height: 40px;
-    align-items: flex-start;
-    gap: 10px;
-    border: 1px solid color-mix(in srgb, var(--app-border-color) 84%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--app-bg-secondary) 96%, var(--app-surface));
-    padding: 10px 14px;
+    max-width: min(var(--ui-message-max-width), calc(100vw - (var(--ui-floating-viewport-inset) * 2)));
+    min-height: var(--ui-message-min-height);
+    align-items: center;
+    gap: var(--ui-message-gap);
+    border: 0;
+    border-radius: var(--ui-radius-surface);
+    background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
+    padding: var(--ui-message-padding-block) var(--ui-message-padding-inline);
     color: var(--app-text-primary);
-    box-shadow:
-      0 10px 28px rgb(0 0 0 / 20%),
-      0 2px 7px rgb(0 0 0 / 12%);
-    font-size: 13px;
+    box-shadow: var(--ui-shadow-message);
+    font-size: var(--ui-font-size-body);
     font-weight: 500;
-    line-height: 19px;
+    line-height: var(--ui-line-height-body);
     text-align: start;
     pointer-events: auto;
     user-select: text;
@@ -2807,15 +4523,14 @@
 
   .app-message__icon {
     display: inline-flex;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-message-icon-size);
+    height: var(--ui-message-icon-size);
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    margin-top: 0.5px;
-    border-radius: 50%;
-    background: var(--app-message-tone);
-    color: var(--app-bg-secondary);
+    border-radius: var(--ui-radius-control);
+    background: color-mix(in srgb, var(--app-message-tone) 14%, var(--app-bg-secondary));
+    color: var(--app-message-tone);
   }
 
   .app-message__icon--loading {
@@ -2826,7 +4541,9 @@
 
   .app-message__content {
     min-width: 0;
+    max-width: 42ch;
     overflow-wrap: anywhere;
+    text-wrap: pretty;
   }
 
   @keyframes app-message-enter {
@@ -2857,6 +4574,16 @@
     to {
       transform: rotate(360deg);
     }
+  }
+}
+
+@media (max-width: 480px) {
+  .app-message-host {
+    padding-inline: var(--ui-space-3);
+  }
+
+  .app-message {
+    max-width: calc(100vw - (var(--ui-space-3) * 2));
   }
 }
 
@@ -2896,30 +4623,7 @@
   }
 }
 
-@media (max-width: 1120px) {
-  .editor-workflow-summary,
-  .editor-zoom-control > :first-child {
-    display: none;
-  }
-
-  .editor-zoom-control {
-    width: 128px;
-  }
-}
-
 @media (max-width: 920px) {
-  .editor-status-primary > :first-child,
-  .editor-status-primary > :nth-child(2),
-  .editor-status-primary > :nth-child(4),
-  .editor-status-primary > :nth-child(5),
-  .editor-zoom-control {
-    display: none;
-  }
-
-  .editor-status-actions {
-    gap: 5px;
-  }
-
   .editor-variant-switcher {
     display: none;
   }
@@ -2933,5 +4637,481 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/*
+ * Camera Raw adjustment panel grid
+ *
+ * The adjustment panel is a dense, data-oriented surface. Every section uses
+ * the same three visual columns (leading control, content, trailing action),
+ * while sliders and metadata rows share a stable value column. Keeping this
+ * contract outside Tailwind layers prevents utility classes from changing the
+ * alignment when an adjustment component is reused.
+ */
+.develop-controls-panel {
+  min-width: 0;
+  color: var(--app-text-primary);
+}
+
+.develop-controls-panel > .ui-panel-header {
+  min-height: var(--ui-panel-header-height);
+  padding: var(--ui-space-2) calc(var(--ui-editor-adjustment-inset) + var(--ui-editor-scrollbar-reserve))
+    var(--ui-space-2) var(--ui-editor-adjustment-inset);
+  background: color-mix(in srgb, var(--app-bg-secondary) 96%, var(--app-surface));
+}
+
+.develop-controls-panel > .ui-panel-header h3 {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--ui-font-size-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel > .ui-panel-header .ui-panel-header-actions {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--ui-space-1);
+}
+
+.develop-controls-panel > .ui-panel-header .ui-button {
+  min-width: var(--ui-size-control-compact);
+  font-variant-numeric: tabular-nums;
+}
+
+.develop-controls-panel > .develop-profile-strip {
+  min-height: var(--ui-size-control-large);
+  grid-template-columns: var(--ui-editor-field-label-column) minmax(0, 1fr);
+  column-gap: var(--ui-editor-control-gap);
+  padding: var(--ui-space-2) calc(var(--ui-editor-adjustment-inset) + var(--ui-editor-scrollbar-reserve))
+    var(--ui-space-2) var(--ui-editor-adjustment-inset);
+}
+
+.develop-controls-panel > .develop-profile-strip > span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel > .develop-profile-strip .camera-raw-select {
+  height: var(--ui-size-control-compact);
+  padding-inline: var(--ui-space-2) var(--ui-space-6);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.develop-controls-panel > .develop-adjustment-stack {
+  scrollbar-gutter: stable;
+}
+
+.develop-controls-panel .develop-collapsible {
+  border-bottom-color: color-mix(in srgb, var(--ui-border-structural) 72%, transparent);
+}
+
+.develop-controls-panel .develop-collapsible-header {
+  display: grid;
+  min-height: var(--ui-editor-section-header-height);
+  grid-template-columns: minmax(0, 1fr) var(--ui-editor-section-leading-column);
+  column-gap: var(--ui-editor-control-gap);
+  align-items: center;
+  padding: var(--ui-space-1) var(--ui-editor-adjustment-inset);
+  transition: background-color var(--ui-duration-fast) ease-out;
+}
+
+.develop-controls-panel .develop-collapsible-header:hover {
+  background: color-mix(in srgb, var(--app-card-active) 42%, transparent);
+}
+
+.develop-controls-panel .develop-collapsible.is-open > .develop-collapsible-header {
+  background: color-mix(in srgb, var(--app-accent) 5%, transparent);
+}
+
+.develop-controls-panel .develop-collapsible.is-open > .develop-collapsible-header:hover {
+  background: color-mix(in srgb, var(--app-accent) 9%, var(--app-card-active));
+}
+
+.develop-controls-panel .develop-collapsible-toggle {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ui-size-control-compact);
+  grid-template-columns: var(--ui-editor-section-leading-column) minmax(0, 1fr);
+  column-gap: var(--ui-space-2);
+  align-items: center;
+  align-self: center;
+  font-size: var(--ui-font-size-body);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.develop-controls-panel .develop-collapsible-toggle > .develop-collapsible-chevron {
+  justify-self: center;
+}
+
+.develop-controls-panel .develop-collapsible-toggle > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel .develop-collapsible-visibility {
+  width: var(--ui-editor-section-leading-column);
+  height: var(--ui-editor-section-leading-column);
+  justify-self: end;
+  border-radius: var(--ui-radius-control);
+}
+
+.develop-controls-panel .develop-collapsible-content {
+  padding: 0 var(--ui-editor-adjustment-inset) var(--ui-space-4);
+}
+
+.develop-controls-panel .camera-raw-section-body {
+  min-width: 0;
+}
+
+.develop-controls-panel .camera-raw-subsection {
+  min-width: 0;
+  padding-block: var(--ui-editor-section-padding-block);
+}
+
+.develop-controls-panel .camera-raw-subsection:first-child {
+  padding-top: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-subsection:last-child {
+  padding-bottom: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-subsection.is-bare {
+  padding-block: 0;
+}
+
+.develop-controls-panel .camera-raw-subsection + .camera-raw-subsection {
+  border-top-color: color-mix(in srgb, var(--ui-border-control) 74%, transparent);
+}
+
+.develop-controls-panel .camera-raw-subsection-header {
+  display: grid;
+  min-height: var(--ui-editor-subsection-header-height);
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--ui-editor-control-gap);
+  align-items: center;
+  margin-bottom: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-subsection-title,
+.develop-controls-panel .camera-raw-mixer-channel-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-body);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel .camera-raw-subsection-actions {
+  justify-self: end;
+}
+
+.develop-controls-panel .camera-raw-subsection-description {
+  max-width: min(100%, var(--ui-editor-description-measure));
+  margin: 0 0 var(--ui-space-2);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  line-height: var(--ui-line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.develop-controls-panel .camera-raw-subsection-description > .inline-flex {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: var(--ui-space-1);
+}
+
+.develop-controls-panel .camera-raw-field,
+.develop-controls-panel .camera-raw-profile-summary > div {
+  grid-template-columns: var(--ui-editor-field-label-column) minmax(0, 1fr);
+  column-gap: var(--ui-editor-control-gap);
+}
+
+.develop-controls-panel .camera-raw-field {
+  min-height: var(--ui-size-control-compact);
+}
+
+.develop-controls-panel .camera-raw-field-label {
+  min-width: 0;
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.develop-controls-panel .camera-raw-select {
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--ui-size-control-compact);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background-color: var(--ui-surface-control);
+  box-shadow: var(--ui-shadow-button-rest);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 18px;
+  text-align: left;
+  text-align-last: left;
+  cursor: pointer;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.develop-controls-panel .camera-raw-select:hover:not(:disabled) {
+  background-color: var(--app-card-active);
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.develop-controls-panel .camera-raw-select:focus-visible {
+  border: 0;
+  outline: 2px solid color-mix(in srgb, var(--app-accent) 68%, transparent);
+  outline-offset: 1px;
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.develop-controls-panel .camera-raw-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.develop-controls-panel .camera-raw-tabs {
+  min-height: var(--ui-size-control-large);
+  gap: var(--ui-space-1);
+  margin-bottom: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-tab {
+  min-height: var(--ui-size-control-compact);
+  padding: var(--ui-space-1) var(--ui-space-2) var(--ui-space-2);
+  font-size: var(--ui-font-size-label);
+  line-height: 16px;
+}
+
+.develop-controls-panel .camera-raw-profile-summary {
+  gap: 0;
+  margin-bottom: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-profile-summary > div {
+  min-height: var(--ui-size-control-compact);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.develop-controls-panel .camera-raw-profile-summary dd {
+  min-width: 0;
+  text-align: right;
+}
+
+.develop-controls-panel .camera-raw-action-row {
+  display: grid;
+  width: 100%;
+  min-height: var(--ui-editor-action-min-height);
+  grid-template-columns: var(--ui-editor-section-leading-column) minmax(0, 1fr) auto;
+  column-gap: var(--ui-space-2);
+  align-items: center;
+  border-radius: var(--ui-radius-surface);
+  padding: var(--ui-space-2) var(--ui-space-3);
+}
+
+.develop-controls-panel .camera-raw-action-row > svg:first-child {
+  justify-self: center;
+}
+
+.develop-controls-panel .camera-raw-action-row > :is(span, .camera-raw-action-title) {
+  min-width: 0;
+}
+
+.develop-controls-panel .camera-raw-action-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel .camera-raw-action-description {
+  margin-top: var(--ui-space-0-5);
+  font-size: var(--ui-font-size-label);
+  line-height: var(--ui-line-height-body);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.develop-controls-panel .camera-raw-capability-list {
+  margin-top: var(--ui-space-2);
+}
+
+.develop-controls-panel .camera-raw-capability {
+  display: grid;
+  min-height: var(--ui-size-control-compact);
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: var(--ui-editor-control-gap);
+  align-items: center;
+  border-bottom-color: color-mix(in srgb, var(--ui-border-control) 60%, transparent);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.develop-controls-panel .camera-raw-capability > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel .camera-raw-capability > :last-child {
+  min-width: 72px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.develop-controls-panel .develop-slider {
+  min-width: 0;
+  margin-bottom: var(--ui-space-2);
+}
+
+.develop-controls-panel .develop-slider:last-child {
+  margin-bottom: 0;
+}
+
+.develop-controls-panel .camera-raw-slider-header {
+  display: grid;
+  min-width: 0;
+  min-height: var(--ui-editor-subsection-header-height);
+  grid-template-columns: minmax(0, 1fr) var(--ui-editor-value-column);
+  column-gap: var(--ui-editor-control-gap);
+  align-items: center;
+}
+
+.develop-controls-panel .camera-raw-slider-label {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ui-editor-subsection-header-height);
+  align-items: center;
+  overflow: hidden;
+  text-align: left;
+}
+
+.develop-controls-panel .camera-raw-slider-label span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-controls-panel .camera-raw-slider-value {
+  width: auto;
+  min-width: 0;
+  justify-self: end;
+}
+
+.develop-controls-panel .camera-raw-slider-number {
+  width: 100%;
+  min-height: var(--ui-size-control-compact);
+  height: var(--ui-size-control-compact);
+  border-radius: var(--ui-radius-control);
+  padding-inline: var(--ui-space-1);
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-label);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+}
+
+.develop-controls-panel input.camera-raw-slider-number {
+  border: var(--ui-border-width) solid color-mix(in srgb, var(--ui-border-control) 78%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 76%, transparent);
+}
+
+.develop-controls-panel input.camera-raw-slider-number:focus-visible {
+  border-color: var(--app-accent);
+  outline: 1px solid color-mix(in srgb, var(--app-accent) 52%, transparent);
+  outline-offset: 1px;
+}
+
+.develop-controls-panel .camera-raw-slider-track {
+  height: var(--ui-editor-slider-track-height);
+  margin-top: var(--ui-space-0-5);
+}
+
+.develop-controls-panel .camera-raw-slider-rail,
+.develop-controls-panel .camera-raw-slider-fill {
+  height: 3px;
+}
+
+.develop-controls-panel .camera-raw-slider-input {
+  height: 24px;
+}
+
+.develop-controls-panel .camera-raw-switch {
+  min-height: var(--ui-size-control-compact);
+  gap: var(--ui-editor-control-gap);
+  padding-inline: 0;
+}
+
+.develop-controls-panel .camera-raw-switch-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Text used as a subsection heading should follow the panel scale too. */
+.develop-controls-panel .camera-raw-subsection > .text-base,
+.develop-controls-panel .camera-raw-section-body > .text-base {
+  margin: 0 0 var(--ui-space-2);
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-body);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+@container (max-width: 285px) {
+  .develop-controls-panel {
+    --ui-editor-adjustment-inset: var(--ui-space-4);
+    --ui-editor-field-label-column: 72px;
+    --ui-editor-value-column: 44px;
+    --ui-editor-control-gap: var(--ui-space-2);
+  }
+
+  .develop-controls-panel .develop-collapsible-header {
+    column-gap: var(--ui-space-2);
+  }
+
+  .develop-controls-panel .camera-raw-action-row {
+    padding-inline: var(--ui-space-2);
+  }
+
+  .develop-controls-panel .camera-raw-capability > :last-child {
+    min-width: 60px;
   }
 }

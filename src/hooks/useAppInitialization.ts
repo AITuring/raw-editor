@@ -23,7 +23,6 @@ import { getSystemLanguage, resolveSupportedLanguage } from '../i18n/languages';
 import type { FolderTree } from '../components/panel/right/FolderTree';
 
 interface UseAppInitializationProps {
-  preloadedDataRef: React.RefObject<any>;
   thumbnailSize: ThumbnailSize;
   setThumbnailSize: (size: ThumbnailSize) => void;
   thumbnailAspectRatio: ThumbnailAspectRatio;
@@ -33,7 +32,6 @@ interface UseAppInitializationProps {
 }
 
 export const useAppInitialization = ({
-  preloadedDataRef,
   thumbnailSize,
   setThumbnailSize,
   thumbnailAspectRatio,
@@ -210,32 +208,6 @@ export const useAppInitialization = ({
           }
         }
 
-        const rootFolders = settings.rootFolders?.length
-          ? settings.rootFolders
-          : settings.lastRootPath
-            ? [settings.lastRootPath]
-            : [];
-
-        if (!isAndroid && rootFolders.length > 0) {
-          const currentPath = settings.lastFolderState?.currentFolderPath || rootFolders[0];
-          const isAlbum = currentPath.startsWith('Album: ');
-          const command =
-            settings.libraryViewMode === LibraryViewMode.Recursive
-              ? Invokes.ListImagesRecursive
-              : Invokes.ListImagesInDir;
-
-          preloadedDataRef.current = {
-            rootPaths: rootFolders,
-            currentPath: currentPath,
-            trees: invoke(Invokes.GetPinnedFolderTrees, {
-              paths: rootFolders,
-              expandedFolders: settings.lastFolderState?.expandedFolders ?? rootFolders,
-              showImageCounts: settings.enableFolderImageCounts || settings.folderTreeSort?.key === 'imageCount',
-            }),
-            images: isAlbum ? undefined : invoke(command, { path: currentPath }),
-          };
-        }
-
         if (settings?.lastFolderState) {
           setLibrary({
             expandedFolders: new Set(settings.lastFolderState.expandedFolders || []),
@@ -276,7 +248,6 @@ export const useAppInitialization = ({
     setFilterCriteria,
     setEditor,
     setLibrary,
-    preloadedDataRef,
     setLibraryViewMode,
     setThumbnailSize,
     setThumbnailAspectRatio,

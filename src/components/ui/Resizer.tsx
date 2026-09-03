@@ -9,9 +9,9 @@ interface ResizerProps {
 
 const Resizer = ({ direction, onMouseDown }: ResizerProps) => (
   <div
-    className={clsx('shrink-0 bg-transparent z-10 touch-none', {
-      'w-2 cursor-col-resize': direction === Orientation.Vertical,
-      'h-2 cursor-row-resize': direction === Orientation.Horizontal,
+    className={clsx('app-resizer', {
+      'is-vertical': direction === Orientation.Vertical,
+      'is-horizontal': direction === Orientation.Horizontal,
     })}
     role="separator"
     aria-orientation={direction === Orientation.Vertical ? 'vertical' : 'horizontal'}

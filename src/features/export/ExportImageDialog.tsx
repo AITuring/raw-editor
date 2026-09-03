@@ -29,7 +29,7 @@ interface ExportImageDialogProps {
 }
 
 const fieldClassName =
-  'h-9 w-full rounded-md border border-border-color bg-bg-primary/55 px-2.5 text-xs text-text-primary outline-none transition-colors placeholder:text-text-secondary/55 focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-50';
+  'h-8 w-full rounded-md border border-border-color bg-bg-primary/55 px-2.5 text-xs text-text-primary outline-none transition-colors placeholder:text-text-secondary/55 focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-50';
 
 const sectionClassName = 'rounded-lg border border-border-color bg-bg-primary/26 p-3';
 
@@ -101,10 +101,10 @@ function MetadataModeButton({ checked, label, onClick }: { checked: boolean; lab
   return (
     <button
       aria-checked={checked}
-      className={`flex h-9 items-center justify-between rounded-md border px-2.5 text-left text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+      className={`ui-surface-button flex h-8 items-center justify-between rounded-md px-2.5 text-left text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
         checked
-          ? 'border-accent bg-accent/12 text-text-primary'
-          : 'border-border-color bg-bg-primary/35 text-text-secondary hover:bg-card-active hover:text-text-primary'
+          ? 'bg-accent/12 text-text-primary'
+          : 'bg-bg-primary/35 text-text-secondary hover:bg-card-active hover:text-text-primary'
       }`}
       onClick={onClick}
       role="radio"
@@ -342,14 +342,14 @@ export default function ExportImageDialog({
       aria-busy={isExporting}
       aria-labelledby="export-image-dialog-title"
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/72 p-2 backdrop-blur-[2px] sm:p-4"
+      className="app-modal-backdrop z-[80]"
       role="dialog"
     >
       <div
-        className="flex h-[min(900px,calc(100dvh-1rem))] w-[min(1500px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border-color bg-surface shadow-2xl sm:h-[min(900px,calc(100dvh-2rem))] sm:w-[min(1500px,calc(100vw-2rem))]"
+        className="app-modal-surface app-modal-surface--full-bleed flex h-[min(900px,calc(100dvh-3rem))] max-w-[1500px] flex-col"
         ref={dialogRef}
       >
-        <header className="flex h-13 shrink-0 items-center justify-between border-b border-border-color px-4">
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-color px-4">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-text-primary" id="export-image-dialog-title">
               {t('export.exportDialog.title')}
@@ -358,7 +358,7 @@ export default function ExportImageDialog({
           </div>
           <button
             aria-label={t('export.exportDialog.close')}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
+            className="ui-button ui-button--ghost ui-button--icon"
             disabled={isExporting}
             onClick={onClose}
             ref={closeButtonRef}
@@ -403,10 +403,10 @@ export default function ExportImageDialog({
                       aria-label={`${format.label}, ${t('export.status.estimatedSize', {
                         size: formatEstimatedBytes(estimatedFileSizes[format.id]),
                       })}`}
-                      className={`flex min-h-12 flex-col items-center justify-center rounded-md border px-1 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                      className={`ui-surface-button flex min-h-12 flex-col items-center justify-center rounded-md px-1 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
                         settings.format === format.id
-                          ? 'border-accent bg-accent/13 text-text-primary'
-                          : 'border-border-color bg-bg-primary/45 text-text-secondary hover:bg-card-active hover:text-text-primary'
+                          ? 'bg-accent/13 text-text-primary'
+                          : 'bg-bg-primary/45 text-text-secondary hover:bg-card-active hover:text-text-primary'
                       }`}
                       key={format.id}
                       onClick={() => updateSettings({ format: format.id })}
@@ -591,7 +591,7 @@ export default function ExportImageDialog({
 
               <section className={sectionClassName}>
                 <h3 className="mb-2 text-xs font-semibold text-text-primary">{t('export.exportDialog.colorSpace')}</h3>
-                <div className="mb-2 flex h-9 items-center justify-between rounded-md border border-border-color bg-bg-primary/35 px-2.5 text-xs">
+                <div className="mb-2 flex h-8 items-center justify-between rounded-md border border-border-color bg-bg-primary/35 px-2.5 text-xs">
                   <span className="text-text-secondary">{t('export.exportDialog.convertTo')}</span>
                   <strong className="font-medium text-text-primary">{t('export.exportDialog.srgb')}</strong>
                 </div>
@@ -622,7 +622,7 @@ export default function ExportImageDialog({
           </div>
           <div className="flex shrink-0 gap-2">
             <Button
-              className="border border-border-color bg-surface text-text-primary hover:bg-card-active"
+              className="bg-surface text-text-primary hover:bg-card-active"
               disabled={isExporting}
               onClick={onClose}
             >

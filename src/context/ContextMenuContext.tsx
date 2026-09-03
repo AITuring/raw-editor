@@ -131,10 +131,7 @@ function SubMenu({ cancelCloseSubmenu, closeSubmenu, hideContextMenu, options, p
         style={style}
         transition={{ duration: 0.1, ease: 'easeOut' }}
       >
-        <div
-          className={clsx('backdrop-blur-md rounded-lg shadow-xl', !CustomComponent && 'bg-surface/95 p-2 w-56')}
-          role="menu"
-        >
+        <div className={clsx(!CustomComponent && 'ui-popover-surface w-56 p-1.5')} role="menu">
           {CustomComponent && customOption ? (
             <CustomComponent {...customOption.customProps} hideContextMenu={hideContextMenu} />
           ) : (
@@ -190,14 +187,14 @@ function MenuItem({ option, path, hideContextMenu }: MenuItemProps) {
   };
 
   if (option.type === OPTION_SEPARATOR) {
-    return <div className="h-px bg-text-secondary/20 my-1 mx-2" />;
+    return <div className="mx-1 my-1 h-px bg-text-secondary/20" />;
   }
 
   return (
     <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} className="relative">
       <button
         className={`
-          w-full text-left px-3 py-2 text-sm rounded-md flex items-center gap-3 justify-between
+          flex min-h-8 w-full items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs
           transition-colors duration-150
           ${option.isDestructive ? 'text-status-error hover:bg-status-error/20' : 'text-text-primary hover:bg-bg-primary'}
           ${option.disabled ? 'text-text-secondary bg-transparent cursor-not-allowed' : ''}
@@ -224,10 +221,10 @@ function MenuItem({ option, path, hideContextMenu }: MenuItemProps) {
         ref={itemRef}
         role="menuitem"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           {option.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: option.color }}></div>}
           {option.icon && <option.icon size={16} />}
-          <span>{option.label}</span>
+          <span className="truncate">{option.label}</span>
         </div>
         {option.submenu && <ChevronRight size={16} />}
       </button>
@@ -266,7 +263,7 @@ function ContextMenu() {
           style={{ top: y, left: x }}
           transition={{ duration: 0.1, ease: 'easeOut' }}
         >
-          <div className="bg-surface/95 backdrop-blur-md rounded-lg shadow-xl p-2 w-64" role="menu">
+          <div className="ui-popover-surface w-64 p-1.5" role="menu">
             {options.map((option: any, index: number) => (
               <MenuItem hideContextMenu={hideContextMenu} key={index} option={option} path={[index]} />
             ))}
@@ -287,7 +284,7 @@ export function ContextMenuProvider({ children }: ContextMenuProviderProps) {
   const showContextMenu = useCallback((x: number, y: number, options: Array<Option>) => {
     const menuWidth = 256;
     const menuHeight =
-      options.reduce((acc: number, opt: Option) => acc + (opt.type === OPTION_SEPARATOR ? 9 : 40), 0) + 16;
+      options.reduce((acc: number, opt: Option) => acc + (opt.type === OPTION_SEPARATOR ? 9 : 32), 0) + 12;
     const adjustedX = x + menuWidth > window.innerWidth ? window.innerWidth - menuWidth - 10 : x;
     const adjustedY = y + menuHeight > window.innerHeight ? window.innerHeight - menuHeight - 10 : y;
 

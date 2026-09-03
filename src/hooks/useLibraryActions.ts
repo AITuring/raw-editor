@@ -231,13 +231,10 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
           } else {
             setLibrary({ multiSelectedPaths: [p], libraryActivePath: p, selectionAnchorPath: p });
           }
-          if (handleImageSelect) {
-            handleImageSelect(p, false);
-          }
         },
       });
     },
-    [handleMultiSelectClick, handleImageSelect],
+    [handleMultiSelectClick],
   );
 
   const handleImageClick = useCallback(

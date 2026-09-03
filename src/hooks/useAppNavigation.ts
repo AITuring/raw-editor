@@ -14,9 +14,16 @@ import { globalImageCache } from '../utils/ImageLRUCache';
 import { debouncedSave, debouncedSetHistory } from './useEditorActions';
 import i18n from '../i18n';
 import { IMAGE_STACK_MAX_SOURCES } from '../utils/imageStackPipeline';
+import { computeSortedLibrary } from './useSortedLibrary';
 
 const normalizeExtensions = (extensions: string[]) =>
   Array.from(new Set(extensions.map((extension) => extension.trim().replace(/^\./, '').toLowerCase()).filter(Boolean)));
+
+interface FolderContentSummary {
+  totalFiles: number;
+  supportedFiles: number;
+  unreadableEntries: number;
+}
 
 const loadSupportedImageTypes = async (): Promise<SupportedTypes> => {
   const settingsStore = useSettingsStore.getState();
@@ -31,7 +38,6 @@ export interface AppNavigationProps {
   clearThumbnailQueue: () => void;
   refs: {
     transformWrapperRef: React.RefObject<any>;
-    preloadedDataRef: React.RefObject<any>;
     cachedEditStateRef: React.RefObject<any>;
     selectedImagePathRef: React.RefObject<string | null>;
     isBackendReadyRef: React.RefObject<boolean>;
@@ -45,7 +51,6 @@ export interface AppNavigationProps {
 export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationProps) {
   const {
     transformWrapperRef,
-    preloadedDataRef,
     cachedEditStateRef,
     selectedImagePathRef,
     isBackendReadyRef,
@@ -66,8 +71,19 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       multiSelectedPaths: [],
       libraryActivePath: null,
       expandedFolders: new Set(),
+      contentState: {
+        status: 'idle',
+        error: null,
+        totalFiles: 0,
+        supportedFiles: 0,
+        unreadableEntries: 0,
+      },
     });
-    useUIStore.getState().setUI({ isEditorExportDialogOpen: false, isLibraryExportPanelVisible: false });
+    useUIStore.getState().setUI({
+      isEditorExportDialogOpen: false,
+      libraryContextPanel: null,
+      isLibraryQuickPreviewOpen: false,
+    });
   }, []);
 
   const handleBackToLibrary = useCallback(() => {
@@ -89,7 +105,13 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     const lastActivePath = selectedImage?.path ?? null;
 
     setLibrary({ libraryActivePath: lastActivePath });
-    setUI({ activeView: 'library', isEditorExportDialogOpen: false, slideDirection: 1 });
+    setUI({
+      activeView: 'library',
+      isEditorExportDialogOpen: false,
+      libraryContextPanel: null,
+      isLibraryQuickPreviewOpen: false,
+      slideDirection: 1,
+    });
   }, [refs]);
 
   const handleImageSelect = useCallback(
@@ -99,12 +121,12 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       const { setUI } = useUIStore.getState();
 
       if (openInEditor) {
-        setUI({ activeView: 'editor' });
+        setUI({ activeView: 'editor', libraryContextPanel: null, isLibraryQuickPreviewOpen: false });
       }
 
       if (selectedImage?.path === path) {
         if (!selectedImage.isReady) {
-          setLibrary({ isViewLoading: true });
+          if (openInEditor) setLibrary({ isViewLoading: true });
           setEditor((state) => ({
             imageLoadError: null,
             imageLoadRevision: state.imageLoadRevision + 1,
@@ -150,7 +172,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       });
 
       setUI({
-        isLibraryExportPanelVisible: false,
+        ...(openInEditor ? { libraryContextPanel: null, isLibraryQuickPreviewOpen: false } : {}),
         compactEditorPanelHeightOverride: null,
       });
 
@@ -237,7 +259,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         imageLoadError: null,
       });
 
-      setLibrary({ isViewLoading: true });
+      if (openInEditor) setLibrary({ isViewLoading: true });
 
       setEditor((state) => {
         const prev = state.finalPreviewUrl;
@@ -278,13 +300,38 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       if (!preserveEditor) {
         await invoke('cancel_thumbnail_generation');
         clearThumbnailQueue();
-        setLibrary({ isViewLoading: true, activeAlbumId: null, libraryScrollTop: 0 });
+        setLibrary({
+          isViewLoading: true,
+          activeAlbumId: null,
+          libraryScrollTop: 0,
+          contentState: {
+            status: 'loading',
+            error: null,
+            totalFiles: 0,
+            supportedFiles: 0,
+            unreadableEntries: 0,
+          },
+        });
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         setProcess({ thumbnails: {} });
         globalImageCache.clear();
-        setUI({ activeView: 'library', isEditorExportDialogOpen: false });
+        setUI({
+          activeView: 'library',
+          isEditorExportDialogOpen: false,
+          libraryContextPanel: null,
+          isLibraryQuickPreviewOpen: false,
+        });
       } else {
-        setLibrary({ isViewLoading: true });
+        setLibrary({
+          isViewLoading: true,
+          contentState: {
+            status: 'loading',
+            error: null,
+            totalFiles: 0,
+            supportedFiles: 0,
+            unreadableEntries: 0,
+          },
+        });
       }
 
       try {
@@ -335,12 +382,30 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         const command =
           libraryViewMode === LibraryViewMode.Recursive ? Invokes.ListImagesRecursive : Invokes.ListImagesInDir;
 
-        let files: ImageFile[];
-        if (preloadedImages) {
-          files = preloadedImages;
-        } else {
-          files = await invoke(command, { path });
-        }
+        const summaryPromise = path
+          ? invoke<FolderContentSummary>(Invokes.InspectFolderContents, {
+              path,
+              recursive: libraryViewMode === LibraryViewMode.Recursive,
+            }).catch((error) => {
+              console.warn('Failed to inspect folder contents:', error);
+              return null;
+            })
+          : Promise.resolve(null);
+
+        const files: ImageFile[] = preloadedImages ?? (await invoke(command, { path }));
+        const summary = await summaryPromise;
+
+        const contentStatus = files.length > 0 ? 'ready' : summary && summary.totalFiles > 0 ? 'unsupported' : 'empty';
+
+        setLibrary({
+          contentState: {
+            status: contentStatus,
+            error: null,
+            totalFiles: summary?.totalFiles ?? files.length,
+            supportedFiles: summary?.supportedFiles ?? files.length,
+            unreadableEntries: summary?.unreadableEntries ?? 0,
+          },
+        });
 
         const initialRatings: Record<string, number> = {};
         files.forEach((f) => {
@@ -406,6 +471,16 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
           setLibrary({ imageList: files });
         }
 
+        if (!preserveEditor && files.length > 0) {
+          const firstVisibleImage = computeSortedLibrary(useLibraryStore.getState(), useSettingsStore.getState())[0];
+          const firstPath = firstVisibleImage?.path ?? null;
+          setLibrary({
+            libraryActivePath: firstPath,
+            multiSelectedPaths: firstPath ? [firstPath] : [],
+            selectionAnchorPath: firstPath,
+          });
+        }
+
         if (!preserveEditor) {
           invoke(Invokes.StartBackgroundIndexing, { folderPath: path }).catch((err) => {
             console.error('Failed to start background indexing:', err);
@@ -414,6 +489,19 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
       } catch (err) {
         console.error('Failed to load folder contents:', err);
         message.error('Failed to load images from the selected folder.');
+        setLibrary({
+          imageList: [],
+          multiSelectedPaths: [],
+          libraryActivePath: null,
+          selectionAnchorPath: null,
+          contentState: {
+            status: 'error',
+            error: String(err),
+            totalFiles: 0,
+            supportedFiles: 0,
+            unreadableEntries: 0,
+          },
+        });
       } finally {
         useLibraryStore.getState().setLibrary({ isViewLoading: false });
       }
@@ -432,13 +520,25 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         setLibrary({ libraryScrollTop: 0 });
         globalImageCache.clear();
-        setUI({ activeView: 'library', isEditorExportDialogOpen: false });
+        setUI({
+          activeView: 'library',
+          isEditorExportDialogOpen: false,
+          libraryContextPanel: null,
+          isLibraryQuickPreviewOpen: false,
+        });
       }
 
       setLibrary({
         isViewLoading: true,
         currentFolderPath: `Album: ${albumName}`,
         activeAlbumId: albumId,
+        contentState: {
+          status: 'loading',
+          error: null,
+          totalFiles: 0,
+          supportedFiles: 0,
+          unreadableEntries: 0,
+        },
       });
 
       try {
@@ -452,11 +552,37 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         setLibrary({
           imageList: files,
           imageRatings: initialRatings,
-          ...(preserveEditor ? {} : { multiSelectedPaths: [], libraryActivePath: null }),
+          contentState: {
+            status: files.length > 0 ? 'ready' : 'empty',
+            error: null,
+            totalFiles: files.length,
+            supportedFiles: files.length,
+            unreadableEntries: 0,
+          },
+          ...(preserveEditor ? {} : { multiSelectedPaths: [], libraryActivePath: null, selectionAnchorPath: null }),
         });
+        if (!preserveEditor && files.length > 0) {
+          const firstVisibleImage = computeSortedLibrary(useLibraryStore.getState(), useSettingsStore.getState())[0];
+          const firstPath = firstVisibleImage?.path ?? null;
+          setLibrary({
+            multiSelectedPaths: firstPath ? [firstPath] : [],
+            libraryActivePath: firstPath,
+            selectionAnchorPath: firstPath,
+          });
+        }
       } catch (err) {
         console.error('Failed to load album images:', err);
         message.error(`Failed to load album: ${err}`);
+        setLibrary({
+          imageList: [],
+          contentState: {
+            status: 'error',
+            error: String(err),
+            totalFiles: 0,
+            supportedFiles: 0,
+            unreadableEntries: 0,
+          },
+        });
       } finally {
         setLibrary({ isViewLoading: false });
       }
@@ -494,9 +620,12 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         clearThumbnailQueue();
         useLibraryStore.getState().setSearchCriteria({ tags: [], text: '', mode: 'OR' });
         useLibraryStore.getState().setLibrary({ isViewLoading: true });
-        useUIStore
-          .getState()
-          .setUI({ activeView: 'library', isEditorExportDialogOpen: false, isLibraryExportPanelVisible: false });
+        useUIStore.getState().setUI({
+          activeView: 'library',
+          isEditorExportDialogOpen: false,
+          libraryContextPanel: null,
+          isLibraryQuickPreviewOpen: false,
+        });
 
         const files = await invoke<ImageFile[]>(Invokes.GetAlbumImages, { paths: validPaths });
         if (files.length === 0) {
@@ -515,6 +644,13 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
           libraryScrollTop: 0,
           multiSelectedPaths: [firstPath],
           selectionAnchorPath: firstPath,
+          contentState: {
+            status: 'ready',
+            error: null,
+            totalFiles: files.length,
+            supportedFiles: files.length,
+            unreadableEntries: 0,
+          },
         });
 
         await handleImageSelect(firstPath);
@@ -635,108 +771,6 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     }
   };
 
-  const handleContinueSession = () => {
-    const restore = async () => {
-      const { appSettings } = useSettingsStore.getState();
-      const { setLibrary } = useLibraryStore.getState();
-
-      const rootFolders = appSettings?.rootFolders?.length
-        ? appSettings.rootFolders
-        : appSettings?.lastRootPath
-          ? [appSettings.lastRootPath]
-          : [];
-
-      if (rootFolders.length === 0) return;
-
-      const folderState = appSettings?.lastFolderState;
-      const pathToSelect = folderState?.currentFolderPath || rootFolders[0];
-
-      setLibrary({ rootPaths: rootFolders });
-
-      if (folderState?.expandedFolders) {
-        const newExpandedFolders = new Set<string>(folderState.expandedFolders);
-        setLibrary({ expandedFolders: newExpandedFolders });
-      } else {
-        setLibrary({ expandedFolders: new Set(rootFolders) });
-      }
-
-      setLibrary({ isTreeLoading: true });
-      try {
-        let treesData;
-        if (preloadedDataRef.current?.rootPaths?.join() === rootFolders.join() && preloadedDataRef.current.trees) {
-          treesData = await preloadedDataRef.current.trees;
-          preloadedDataRef.current.trees = undefined;
-        } else {
-          const expandedArr = folderState?.expandedFolders
-            ? Array.from(new Set(folderState.expandedFolders))
-            : rootFolders;
-          treesData = await invoke(Invokes.GetPinnedFolderTrees, {
-            paths: rootFolders,
-            expandedFolders: expandedArr,
-            showImageCounts: appSettings?.enableFolderImageCounts || appSettings?.folderTreeSort?.key === 'imageCount',
-          });
-        }
-        setLibrary({ folderTrees: treesData });
-      } catch (err) {
-        console.error('Failed to restore folder trees:', err);
-      } finally {
-        setLibrary({ isTreeLoading: false });
-      }
-
-      let preloadedImages: ImageFile[] | undefined = undefined;
-      if (preloadedDataRef.current?.currentPath === pathToSelect && preloadedDataRef.current.images) {
-        try {
-          preloadedImages = await preloadedDataRef.current.images;
-          preloadedDataRef.current.images = undefined;
-        } catch (e) {
-          console.error('Failed to retrieve preloaded images', e);
-        }
-      }
-
-      if (pathToSelect && pathToSelect.startsWith('Album: ')) {
-        const activeAlbumId = folderState?.activeAlbumId;
-        if (activeAlbumId) {
-          try {
-            const albumTree: any = await invoke(Invokes.GetAlbums);
-            setLibrary({ albumTree });
-
-            const findObj = (nodes: any[]): any => {
-              for (const n of nodes) {
-                if (n.id === activeAlbumId) return n;
-                if (n.type === 'group') {
-                  const f = findObj(n.children);
-                  if (f) return f;
-                }
-              }
-              return null;
-            };
-
-            const album = findObj(albumTree);
-            if (album) {
-              await handleSelectAlbum(album.id, album.name, album.images);
-            } else {
-              await handleSelectSubfolder(rootFolders[0], false, undefined, false);
-            }
-          } catch (e) {
-            console.error('Failed to restore album session:', e);
-            await handleSelectSubfolder(rootFolders[0], false, undefined, false);
-          }
-        } else {
-          await handleSelectSubfolder(rootFolders[0], false, undefined, false);
-        }
-      } else {
-        await handleSelectSubfolder(pathToSelect, false, preloadedImages, false);
-      }
-    };
-
-    restore().catch((err) => {
-      console.error('Failed to restore session:', err);
-      message.error('Failed to restore session. A folder may have been moved or deleted.');
-      handleGoHome();
-      useLibraryStore.getState().setLibrary({ isTreeLoading: false });
-    });
-  };
-
   return {
     handleGoHome,
     handleBackToLibrary,
@@ -747,6 +781,5 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
     handlePickWorkflowImages,
     handleOpenImagePaths,
     handleOpenFolder,
-    handleContinueSession,
   };
 }

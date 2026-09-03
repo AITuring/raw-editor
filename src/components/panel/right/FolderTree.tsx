@@ -199,7 +199,7 @@ function FolderSortMenu({
     <div className="relative" ref={menuRef}>
       <button
         className={clsx(
-          'bg-surface rounded-md hover:bg-card-active flex items-center justify-center shrink-0 overflow-hidden transition-colors w-9 h-9',
+          'ui-surface-button flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface transition-colors hover:bg-card-active',
           isOpen && 'bg-card-active',
         )}
         onClick={() => setIsOpen(!isOpen)}
@@ -216,7 +216,7 @@ function FolderSortMenu({
             transition={{ duration: 0.1, ease: 'easeOut' }}
             className="absolute right-0 top-full mt-2 w-48 origin-top-right z-50"
           >
-            <div className="bg-surface/90 backdrop-blur-md border border-border-color/50 rounded-lg shadow-xl p-2 flex flex-col">
+            <div className="ui-popover-surface flex flex-col p-1.5">
               <div className="px-3 py-2 relative flex items-center">
                 <Text as="div" variant={TextVariants.small} weight={TextWeights.semibold} className="uppercase">
                   {t('library.header.viewOptions.sortBy')}
@@ -235,7 +235,7 @@ function FolderSortMenu({
                       ? t('library.header.viewOptions.sortDescending')
                       : t('library.header.viewOptions.sortAscending')
                   }
-                  className="absolute top-1/2 right-3 -translate-y-1/2 p-1 bg-transparent border-none text-text-secondary hover:text-text-primary rounded-sm transition-colors"
+                className="absolute top-1/2 right-3 -translate-y-1/2 rounded-sm bg-transparent p-1 text-text-secondary transition-colors hover:text-text-primary"
                 >
                   {sort.order === SortDirection.Ascending ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
@@ -247,7 +247,7 @@ function FolderSortMenu({
                   <button
                     key={opt.key}
                     className={clsx(
-                      'w-full text-left px-3 py-2 rounded-md flex items-center justify-between transition-colors duration-150',
+                      'flex min-h-8 w-full items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-xs transition-colors duration-150',
                       isSelected ? 'bg-card-active' : 'hover:bg-bg-primary',
                     )}
                     onClick={() => {
@@ -371,7 +371,7 @@ function AlbumTreeNode({
               variant={TextVariants.small}
               color={TextColors.secondary}
               className={clsx(
-                'inline-block ml-1 transition-all ease-in-out duration-300',
+                'ml-1 inline-block transition-[opacity,transform] duration-150 ease-out',
                 showImageCounts ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2',
               )}
             >
@@ -532,7 +532,7 @@ function TreeNode({
               variant={TextVariants.small}
               color={TextColors.secondary}
               className={clsx(
-                'inline-block ml-1 transition-all ease-in-out duration-300',
+                'ml-1 inline-block transition-[opacity,transform] duration-150 ease-out',
                 showImageCounts ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2',
               )}
             >
@@ -776,19 +776,19 @@ export default function FolderTree({
   return (
     <div
       className={clsx(
-        'relative bg-bg-secondary rounded-lg shrink-0 flex flex-col h-full',
+        'ui-panel-root relative shrink-0 bg-bg-secondary',
         !isResizing && 'transition-[width] duration-300 ease-in-out',
       )}
       style={style}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
-        <Text variant={TextVariants.title}>{t('library.folders.sourcesTitle', 'Sources')}</Text>
+      <div className="ui-panel-header">
+        <Text variant={TextVariants.heading}>{t('library.folders.sourcesTitle', 'Sources')}</Text>
       </div>
 
-      <div className="p-2 flex flex-col flex-1 min-h-0">
-        <div className="pt-1 pb-2">
+      <div className="ui-panel-body flex flex-col">
+        <div className="pb-3">
           <div className="flex items-center">
             <div className="relative flex-1 min-w-0">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
@@ -797,12 +797,12 @@ export default function FolderTree({
                 placeholder={t('library.folders.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surface border border-transparent rounded-md pl-9 pr-8 py-2 text-sm focus:outline-hidden truncate"
+                className="h-8 w-full truncate rounded-md border border-border-color bg-surface pl-9 pr-8 text-xs focus:border-accent focus:outline-hidden"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-card-active"
+                  className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm hover:bg-card-active"
                   data-tooltip={t('library.folders.tooltips.clearSearch')}
                 >
                   <X size={16} className="text-text-secondary" />

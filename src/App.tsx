@@ -15,8 +15,9 @@ import { MessageHost } from './components/ui/Message';
 import { message } from './components/ui/messageApi';
 import AppModals from './components/modals/AppModals';
 
-import SidePanelArea from './components/panel/SidePanelArea';
 import DevelopPanel from './components/panel/DevelopPanel';
+import LibraryContextPanel from './components/panel/LibraryContextPanel';
+import LibraryNavigationPanel from './components/panel/LibraryNavigationPanel';
 import { PANEL_ICONS } from './components/panel/PanelSwitcher';
 import Controls from './components/panel/right/ControlsPanel';
 import MetadataPanel from './components/panel/right/MetadataPanel';
@@ -58,7 +59,6 @@ import i18n from './i18n';
 
 import {
   Invokes,
-  ImageFile,
   LibraryViewMode,
   Panel,
   PanelRegion,
@@ -115,6 +115,7 @@ function App() {
     rightPanelWidth,
     compactEditorPanelHeightOverride,
     activeRightPanel,
+    libraryContextPanel,
     activeLayoutDragItem,
     isSettingsOpen,
     setUI,
@@ -129,11 +130,11 @@ function App() {
       isInstantTransition: state.isInstantTransition,
       isLayoutReady: state.isLayoutReady,
       uiVisibility: state.uiVisibility,
-      isLibraryExportPanelVisible: state.isLibraryExportPanelVisible,
       leftPanelWidth: state.leftPanelWidth,
       rightPanelWidth: state.rightPanelWidth,
       compactEditorPanelHeightOverride: state.compactEditorPanelHeightOverride,
       activeRightPanel: state.activeRightPanel,
+      libraryContextPanel: state.libraryContextPanel,
       activeLayoutDragItem: state.activeLayoutDragItem,
       isSettingsOpen: state.isSettingsOpen,
       setUI: state.setUI,
@@ -209,15 +210,7 @@ function App() {
   const { requestThumbnails, clearThumbnailQueue, pauseThumbnailQueue, markGenerated } = useThumbnails();
 
   const transformWrapperRef = useRef<any>(null);
-  const preloadedDataRef = useRef<{
-    trees?: Promise<any>;
-    images?: Promise<ImageFile[]>;
-    rootPaths?: string[];
-    currentPath?: string;
-  }>({});
-
   useAppInitialization({
-    preloadedDataRef,
     thumbnailSize,
     setThumbnailSize,
     thumbnailAspectRatio,
@@ -271,7 +264,6 @@ function App() {
 
   const navigationRefs = {
     transformWrapperRef,
-    preloadedDataRef,
     cachedEditStateRef,
     selectedImagePathRef,
     isBackendReadyRef,
@@ -291,7 +283,6 @@ function App() {
     handlePickWorkflowImages,
     handleOpenImagePaths,
     handleOpenFolder,
-    handleContinueSession,
   } = useAppNavigation({
     clearThumbnailQueue,
     refs: navigationRefs,
@@ -688,7 +679,7 @@ function App() {
               onSettingsChange={handleSettingsChange}
               rootPaths={rootPaths}
               isVisible={true}
-              onClose={() => setUI({ isLibraryExportPanelVisible: false })}
+              onClose={() => setUI({ libraryContextPanel: null })}
             />
           );
         case Panel.Adjustments:
@@ -806,17 +797,14 @@ function App() {
                 'flex flex-row grow h-full min-h-0',
                 isDevelopWorkspace && 'develop-workspace',
                 isDevelopWorkspace && isWgpuActive && 'is-wgpu-active',
+                !isDevelopWorkspace && hasMainContent && 'ui-library-workspace',
               )}
             >
               {!shouldHideFolderTree && hasRoots && hasMainContent && !isDevelopWorkspace && (
-                <SidePanelArea
-                  side="left"
+                <LibraryNavigationPanel
                   width={leftPanelWidth}
-                  topRegion="leftTop"
-                  bottomRegion="leftBottom"
                   renderPanel={renderAppPanel}
                   onWidthChange={createResizeHandler('left', leftPanelWidth)}
-                  isResizing={isResizing}
                 />
               )}
               <div className="relative flex-1 flex flex-col min-w-0">
@@ -855,7 +843,6 @@ function App() {
                       handlePasteAdjustments={handlePasteAdjustments}
                       handleRate={handleRate}
                       handleZoomChange={handleZoomChange}
-                      handleRightPanelSelect={handleRightPanelSelect}
                       requestThumbnails={requestThumbnails}
                     />
                   )}
@@ -882,7 +869,6 @@ function App() {
                     handleRate={handleRate}
                     handleThumbnailContextMenu={handleThumbnailContextMenu}
                     handleMainLibraryContextMenu={handleMainLibraryContextMenu}
-                    handleContinueSession={handleContinueSession}
                     handleGoHome={handleGoHome}
                     handleOpenImage={handleOpenImage}
                     handleOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
@@ -920,17 +906,15 @@ function App() {
                     renderPanel={renderAppPanel}
                     width={rightPanelWidth}
                   />
-                ) : (
-                  <SidePanelArea
-                    side="right"
+                ) : libraryContextPanel ? (
+                  <LibraryContextPanel
+                    panel={libraryContextPanel}
                     width={rightPanelWidth}
-                    topRegion="rightTop"
-                    bottomRegion="rightBottom"
-                    renderPanel={renderAppPanel}
+                    onClose={() => setUI({ libraryContextPanel: null })}
                     onWidthChange={createResizeHandler('right', rightPanelWidth)}
-                    isResizing={isResizing}
+                    renderPanel={renderAppPanel}
                   />
-                ))}
+                ) : null)}
             </div>
             <DragOverlay dropAnimation={{ duration: 120, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
               {!isDevelopWorkspace && activeLayoutDragItem && ActiveOverlayIcon ? (

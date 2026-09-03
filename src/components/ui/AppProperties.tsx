@@ -69,6 +69,7 @@ export enum Invokes {
   GetLogFilePath = 'get_log_file_path',
   GetOrCreateInternalLibraryRoot = 'get_or_create_internal_library_root',
   GetPinnedFolderTrees = 'get_pinned_folder_trees',
+  InspectFolderContents = 'inspect_folder_contents',
   GetSupportedFileTypes = 'get_supported_file_types',
   HandleExportPresetsToFile = 'handle_export_presets_to_file',
   HandleImportPresetsFromFile = 'handle_import_presets_from_file',

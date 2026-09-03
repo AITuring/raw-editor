@@ -528,6 +528,61 @@ fn update_rotational_disk_flag(path: &str, app_handle: &AppHandle) {
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderContentSummary {
+    total_files: usize,
+    supported_files: usize,
+    unreadable_entries: usize,
+}
+
+#[tauri::command]
+pub fn inspect_folder_contents(
+    path: String,
+    recursive: bool,
+) -> std::result::Result<FolderContentSummary, String> {
+    let root = Path::new(&path);
+    let mut summary = FolderContentSummary {
+        total_files: 0,
+        supported_files: 0,
+        unreadable_entries: 0,
+    };
+
+    if recursive {
+        for entry in WalkDir::new(root) {
+            match entry {
+                Ok(entry) if entry.file_type().is_file() => {
+                    summary.total_files += 1;
+                    if is_supported_image_file(entry.path()) {
+                        summary.supported_files += 1;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => summary.unreadable_entries += 1,
+            }
+        }
+    } else {
+        let entries = fs::read_dir(root).map_err(|error| error.to_string())?;
+        for entry in entries {
+            match entry {
+                Ok(entry) => match entry.file_type() {
+                    Ok(file_type) if file_type.is_file() => {
+                        summary.total_files += 1;
+                        if is_supported_image_file(entry.path()) {
+                            summary.supported_files += 1;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => summary.unreadable_entries += 1,
+                },
+                Err(_) => summary.unreadable_entries += 1,
+            }
+        }
+    }
+
+    Ok(summary)
+}
+
 #[tauri::command]
 pub fn list_images_in_dir(path: String, app_handle: AppHandle) -> Result<Vec<ImageFile>, String> {
     let settings = load_settings(app_handle.clone()).unwrap_or_default();
