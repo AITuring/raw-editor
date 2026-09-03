@@ -70,6 +70,7 @@ import {
 import ImageProcessingManager from './components/managers/ImageProcessingManager';
 import ImageLoaderManager from './components/managers/ImageLoaderManager';
 import { BASIC_MODE } from './basic/runtime';
+import { disposeTauriListener, isMissingTauriListenerError } from './utils/tauriListenerCleanup';
 
 const insertChildrenIntoTree = (node: any, targetPath: string, newChildren: any[]): any => {
   if (!node) return null;
@@ -572,7 +573,7 @@ function App() {
     checkFullscreen();
     const unlistenPromise = appWindow.onResized(checkFullscreen);
     return () => {
-      unlistenPromise.then((unlisten: any) => unlisten());
+      void unlistenPromise.then((unlisten: any) => disposeTauriListener(unlisten));
     };
   }, [setUI]);
 
@@ -580,6 +581,7 @@ function App() {
     if (!isTauri() || isAndroid) return;
 
     let isEffectActive = true;
+    const resolvedUnlisteners: Array<() => void | Promise<void>> = [];
     const listeners = [
       listen<{ paths: string[] }>(TauriEvent.DRAG_ENTER, () => {
         if (isEffectActive) setIsImageDragActive(true);
@@ -597,10 +599,26 @@ function App() {
       }),
     ];
 
+    listeners.forEach((listener) => {
+      void listener
+        .then((unlisten) => {
+          if (isEffectActive) {
+            resolvedUnlisteners.push(unlisten);
+            return;
+          }
+          return disposeTauriListener(unlisten);
+        })
+        .catch((error) => {
+          if (!isMissingTauriListenerError(error)) {
+            console.error(error);
+          }
+        });
+    });
+
     return () => {
       isEffectActive = false;
-      listeners.forEach((listener) => {
-        void listener.then((unlisten) => unlisten()).catch(console.error);
+      resolvedUnlisteners.forEach((unlisten) => {
+        void disposeTauriListener(unlisten);
       });
     };
   }, [handleOpenImagePaths, isAndroid]);

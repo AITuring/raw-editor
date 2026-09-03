@@ -8,6 +8,7 @@ import { useUIStore } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { BASIC_MODE } from '../basic/runtime';
 import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
+import { disposeTauriListener, isMissingTauriListenerError } from '../utils/tauriListenerCleanup';
 
 interface TauriListenerProps {
   refreshAllFolderTrees: () => void;
@@ -35,6 +36,7 @@ export function useTauriListeners({
 
   useEffect(() => {
     let isEffectActive = true;
+    const resolvedUnlisteners: Array<() => void | Promise<void>> = [];
 
     const flushThumbnailBatch = () => {
       flushHandle.current = null;
@@ -463,6 +465,22 @@ export function useTauriListeners({
       }),
     ];
 
+    listeners.forEach((listenerPromise) => {
+      void listenerPromise
+        .then((unlisten) => {
+          if (isEffectActive) {
+            resolvedUnlisteners.push(unlisten);
+            return;
+          }
+          return disposeTauriListener(unlisten);
+        })
+        .catch((error) => {
+          if (!isMissingTauriListenerError(error)) {
+            console.error('Failed to register Tauri listener:', error);
+          }
+        });
+    });
+
     return () => {
       isEffectActive = false;
       if (flushHandle.current !== null) {
@@ -471,7 +489,10 @@ export function useTauriListeners({
       }
       thumbnailBuffer.current = {};
       ratingBuffer.current = {};
-      listeners.forEach((p) => p.then((unlisten) => unlisten()));
+      editStatusBuffer.current = {};
+      resolvedUnlisteners.forEach((unlisten) => {
+        void disposeTauriListener(unlisten);
+      });
     };
   }, []);
 }

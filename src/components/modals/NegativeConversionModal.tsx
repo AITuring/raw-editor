@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import throttle from 'lodash.throttle';
 import Text from '../ui/Text';
 import { TextColors, TextVariants } from '../../types/typography';
+import { disposeTauriListener } from '../../utils/tauriListenerCleanup';
 
 interface NegativeParams {
   red_weight: number;
@@ -65,7 +66,7 @@ export default function NegativeConversionModal({
       setProgress(e.payload);
     });
     return () => {
-      unlisten.then((f) => f());
+      void unlisten.then((dispose) => disposeTauriListener(dispose));
     };
   }, []);
 

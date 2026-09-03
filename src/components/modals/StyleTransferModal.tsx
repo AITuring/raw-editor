@@ -145,11 +145,10 @@ const makeImageData = (image: HTMLImageElement): ImageDataLike => {
   return context.getImageData(0, 0, width, height);
 };
 
-const createImageDataCopy = (source: ImageDataLike): ImageDataLike => ({
-  data: new Uint8ClampedArray(source.data),
-  width: source.width,
-  height: source.height,
-});
+const toNativeImageData = (source: ImageDataLike): ImageData =>
+  source instanceof ImageData ? source : new ImageData(new Uint8ClampedArray(source.data), source.width, source.height);
+
+const createImageDataCopy = (source: ImageDataLike): ImageData => toNativeImageData(source);
 
 function SourceCard({ image, isBusy, onChoose, onDrop, onRemove, role }: SourceCardProps) {
   const { t } = useTranslation();
@@ -519,8 +518,8 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
     originalCanvas.height = originalData.height;
     resultCanvas.width = resultData.width;
     resultCanvas.height = resultData.height;
-    originalCanvas.getContext('2d')?.putImageData(originalData as ImageData, 0, 0);
-    resultCanvas.getContext('2d')?.putImageData(resultData as ImageData, 0, 0);
+    originalCanvas.getContext('2d')?.putImageData(toNativeImageData(originalData), 0, 0);
+    resultCanvas.getContext('2d')?.putImageData(toNativeImageData(resultData), 0, 0);
   }, [transform]);
 
   const summary = useMemo(() => (transform ? summarizeStyleTransform(transform) : null), [transform]);
@@ -558,7 +557,7 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
         canvas.height = resultData.height;
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Canvas export is unavailable.');
-        context.putImageData(resultData as ImageData, 0, 0);
+        context.putImageData(toNativeImageData(resultData), 0, 0);
         const blob = await new Promise<Blob>((resolve, reject) => {
           canvas.toBlob(
             (value) => (value ? resolve(value) : reject(new Error('Could not encode the image.'))),

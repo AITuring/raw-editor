@@ -864,6 +864,52 @@ mod tests {
     use super::{StyleTransferMode, TransferTransform, apply_transform, hsv_to_rgb, rgb_to_hsv};
     use image::{Rgb, RgbImage};
 
+    #[test]
+    #[ignore]
+    fn dump_local_style_preview_probe() {
+        let input = std::env::var("RAW_EDITOR_STYLE_PREVIEW_INPUT")
+            .expect("RAW_EDITOR_STYLE_PREVIEW_INPUT");
+        let output = std::env::var("RAW_EDITOR_STYLE_PREVIEW_OUTPUT")
+            .expect("RAW_EDITOR_STYLE_PREVIEW_OUTPUT");
+        let settings = crate::app_settings::AppSettings::default();
+        let direct = image::open(&input).expect("decode direct").to_rgb8();
+        let loaded = super::load_image(&input, &settings).expect("load shared");
+        let loaded_rgb = loaded.to_rgb8();
+        let preview = super::downscale_preview(&loaded);
+        let direct_mean = direct.pixels().fold([0_u64; 3], |mut sum, pixel| {
+            for channel in 0..3 {
+                sum[channel] += u64::from(pixel[channel]);
+            }
+            sum
+        });
+        let loaded_mean = loaded_rgb.pixels().fold([0_u64; 3], |mut sum, pixel| {
+            for channel in 0..3 {
+                sum[channel] += u64::from(pixel[channel]);
+            }
+            sum
+        });
+        let preview_mean = preview.pixels().fold([0_u64; 3], |mut sum, pixel| {
+            for channel in 0..3 {
+                sum[channel] += u64::from(pixel[channel]);
+            }
+            sum
+        });
+        println!(
+            "direct mean={:?}; loaded mean={:?}; preview mean={:?}; direct center={:?}; loaded center={:?}",
+            direct_mean.map(|value| value as f64 / direct.width() as f64 / direct.height() as f64),
+            loaded_mean.map(|value| value as f64 / loaded_rgb.width() as f64 / loaded_rgb.height() as f64),
+            preview_mean.map(|value| value as f64 / preview.width() as f64 / preview.height() as f64),
+            direct.get_pixel(direct.width() / 2, direct.height() / 2),
+            loaded_rgb.get_pixel(loaded_rgb.width() / 2, loaded_rgb.height() / 2),
+        );
+        let (width, height) = preview.dimensions();
+        let bytes = crate::color_management::srgb_preview_encoder(mozjpeg_rs::Preset::BaselineFastest)
+            .quality(88)
+            .encode_rgb(preview.as_raw(), width, height)
+            .expect("encode preview");
+        std::fs::write(output, bytes).expect("write preview");
+    }
+
     #[cfg(not(target_os = "android"))]
     use super::{PREVIEW_EDGE, decode_jpeg_preview, jpeg_info, stream_jpeg_export};
     #[cfg(not(target_os = "android"))]

@@ -10,6 +10,7 @@ import TaskProgress from '../ui/TaskProgress';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { listen } from '@tauri-apps/api/event';
 import { getMessageTaskProgress } from '../../utils/taskProgress';
+import { disposeTauriListener } from '../../utils/tauriListenerCleanup';
 
 interface DenoiseModalProps {
   isOpen: boolean;
@@ -254,7 +255,7 @@ export default function DenoiseModal({
       setBatchProgress(e.payload);
     });
     return () => {
-      unlisten.then((f) => f());
+      void unlisten.then((dispose) => disposeTauriListener(dispose));
     };
   }, []);
 
