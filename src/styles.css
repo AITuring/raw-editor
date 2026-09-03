@@ -4047,23 +4047,32 @@ button {
   justify-content: space-between;
   gap: var(--ui-space-5);
   border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
-  padding: var(--ui-space-5) var(--ui-space-6) var(--ui-space-4);
+  padding: var(--ui-space-4) var(--ui-space-6) var(--ui-space-3);
 }
 
 .style-transfer-header-leading {
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: var(--ui-space-5);
+  gap: var(--ui-space-3);
 }
 
 .style-transfer-back {
   flex: 0 0 auto;
-  margin-top: 3px;
+  margin-top: 0;
+  padding-inline: var(--ui-space-2);
 }
 
 .style-transfer-heading {
   min-width: 0;
+}
+
+.style-transfer-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ui-space-2);
 }
 
 .style-transfer-eyebrow,
@@ -4079,17 +4088,17 @@ button {
 }
 
 .style-transfer-heading h2 {
-  margin: var(--ui-space-1-5) 0 0;
+  margin: 0;
   color: var(--app-text-primary);
-  font-size: clamp(20px, 2.5vw, 27px);
-  font-weight: 650;
-  letter-spacing: -0.025em;
-  line-height: 1.15;
+  font-size: clamp(18px, 1.7vw, 21px);
+  font-weight: 640;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
 }
 
 .style-transfer-heading p {
   max-width: 62ch;
-  margin: var(--ui-space-2) 0 0;
+  margin: var(--ui-space-1-5) 0 0;
   color: var(--app-text-secondary);
   font-size: var(--ui-font-size-body);
   line-height: 1.55;
@@ -4103,7 +4112,9 @@ button {
   place-items: center;
   border-radius: var(--ui-radius-control);
   color: var(--app-text-secondary);
-  transition: background-color var(--ui-duration-fast) ease-out, color var(--ui-duration-fast) ease-out;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out;
 }
 
 .style-transfer-close:hover {
@@ -4196,7 +4207,7 @@ button {
 }
 
 .style-transfer-dropzone:hover,
-.style-transfer-dropzone:focus-visible {
+.style-transfer-dropzone:focus-within {
   border-color: var(--app-accent);
   background: color-mix(in srgb, var(--app-accent) 5%, var(--app-bg-primary));
   outline: none;
@@ -4213,6 +4224,32 @@ button {
 
 .style-transfer-dropzone.is-busy {
   cursor: progress;
+}
+
+.style-transfer-choose-source {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: inherit;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: inherit;
+}
+
+.style-transfer-choose-source:disabled {
+  cursor: progress;
+}
+
+.style-transfer-dropzone.has-image .style-transfer-choose-source {
+  align-items: stretch;
+  flex-direction: column;
 }
 
 .style-transfer-empty-dropzone {
@@ -4245,38 +4282,46 @@ button {
   color: var(--app-accent);
 }
 
-.style-transfer-dropzone > img {
+.style-transfer-image-frame {
+  display: flex;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--app-bg-primary) 96%, black);
 }
 
-.style-transfer-image-scrim {
-  position: absolute;
-  inset: 35% 0 0;
-  background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 72%));
-  pointer-events: none;
+.style-transfer-image-frame > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .style-transfer-image-meta {
-  position: absolute;
-  right: var(--ui-space-3);
-  bottom: var(--ui-space-2-5);
-  left: var(--ui-space-3);
   display: flex;
+  width: 100%;
   min-width: 0;
+  min-height: 32px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--ui-space-2);
-  color: rgb(255 255 255 / 86%);
+  border-top: var(--ui-border-width) solid var(--app-border-color);
+  background: var(--app-surface);
+  padding: var(--ui-space-2) var(--ui-space-3);
+  color: var(--app-text-secondary);
   font-size: var(--ui-font-size-caption);
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 55%);
 }
 
 .style-transfer-image-name {
   min-width: 0;
   overflow: hidden;
+  color: var(--app-text-primary);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4373,11 +4418,16 @@ button {
   justify-content: center;
   overflow: hidden;
   background-color: color-mix(in srgb, var(--app-bg-primary) 88%, var(--app-text-secondary));
-  background-image: linear-gradient(45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
     linear-gradient(-45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%),
     linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%);
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
   background-size: 16px 16px;
 }
 
@@ -4413,42 +4463,59 @@ button {
   position: absolute;
   top: 0;
   bottom: 0;
+  z-index: 3;
+  width: 44px;
+  cursor: ew-resize;
+  outline: none;
+  touch-action: none;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.style-transfer-compare-line::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 1px;
   background: rgb(255 255 255 / 92%);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 28%);
-  pointer-events: none;
+  content: '';
+  transform: translateX(-50%);
 }
 
 .style-transfer-compare-line span {
   position: absolute;
   top: 50%;
   left: 50%;
-  display: block;
-  width: 22px;
-  height: 22px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border: 1px solid rgb(255 255 255 / 92%);
   border-radius: 50%;
   background: var(--app-bg-primary);
+  color: var(--app-text-primary);
   box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  pointer-events: none;
   transform: translate(-50%, -50%);
+  transition:
+    box-shadow 120ms ease,
+    transform 120ms ease;
 }
 
-.style-transfer-compare-line span::before,
-.style-transfer-compare-line span::after {
-  position: absolute;
-  top: 50%;
-  width: 5px;
-  height: 1px;
-  background: var(--app-text-primary);
-  content: '';
+.style-transfer-compare-line:hover span {
+  box-shadow: 0 3px 11px rgb(0 0 0 / 45%);
 }
 
-.style-transfer-compare-line span::before {
-  left: 4px;
+.style-transfer-compare-line:active span {
+  transform: translate(-50%, -50%) scale(0.94);
 }
 
-.style-transfer-compare-line span::after {
-  right: 4px;
+.style-transfer-compare-line:focus-visible span {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--app-accent) 45%, transparent),
+    0 3px 11px rgb(0 0 0 / 45%);
 }
 
 .style-transfer-preview-label {
@@ -4576,7 +4643,9 @@ button {
   padding: var(--ui-space-2) var(--ui-space-2-5);
   color: var(--app-text-secondary);
   text-align: left;
-  transition: background-color var(--ui-duration-fast) ease-out, color var(--ui-duration-fast) ease-out;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out;
 }
 
 .style-transfer-mode-switch button:hover {
@@ -4601,7 +4670,11 @@ button {
   height: 18px;
   appearance: none;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--app-accent) 0 var(--range-progress, 50%), var(--app-bg-primary) var(--range-progress, 50%) 100%);
+  background: linear-gradient(
+    to right,
+    var(--app-accent) 0 var(--range-progress, 50%),
+    var(--app-bg-primary) var(--range-progress, 50%) 100%
+  );
   cursor: pointer;
 }
 
@@ -4700,8 +4773,13 @@ button {
 }
 
 .style-transfer-page .style-transfer-header {
-  padding-top: var(--ui-space-4);
-  padding-bottom: var(--ui-space-3);
+  padding-top: var(--ui-space-3);
+  padding-bottom: var(--ui-space-2-5);
+}
+
+.style-transfer-page .style-transfer-heading p {
+  font-size: var(--ui-font-size-label);
+  line-height: var(--ui-line-height-body);
 }
 
 .style-transfer-page .style-transfer-body {

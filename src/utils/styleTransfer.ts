@@ -36,6 +36,13 @@ export interface StyleTransferSummary {
   contrastPercent: number;
 }
 
+/** Clone the pixel buffer so in-place rendering can never overwrite its source. */
+export const cloneImageData = (source: ImageDataLike): ImageDataLike => ({
+  data: new Uint8ClampedArray(source.data),
+  width: source.width,
+  height: source.height,
+});
+
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
 const normalizeHue = (value: number) => {

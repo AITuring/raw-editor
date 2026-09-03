@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Blend,
   Check,
+  ChevronsLeftRight,
   Download,
   FileImage,
   ImagePlus,
@@ -21,11 +22,13 @@ import { Invokes } from '../ui/AppProperties';
 import {
   analyzeStyleTransfer,
   applyStyleTransfer,
+  cloneImageData,
   summarizeStyleTransform,
   type ImageDataLike,
   type StyleTransferMode,
   type StyleTransferTransform,
 } from '../../utils/styleTransfer';
+import { comparePositionFromClientX, comparePositionFromKey } from '../../utils/compareSlider';
 
 const MAX_PREVIEW_EDGE = 1_600;
 const DEFAULT_STRENGTH = 0.86;
@@ -97,6 +100,11 @@ interface StyleImage {
   image: HTMLImageElement;
 }
 
+interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
 interface StyleTransferModalProps {
   fullPage?: boolean;
   isOpen: boolean;
@@ -130,6 +138,20 @@ const getOutputName = (name: string) => {
 
 const toUint8Array = (value: Uint8Array | ArrayBuffer) => (value instanceof Uint8Array ? value : new Uint8Array(value));
 
+const orientDimensionsLikePreview = (
+  dimensions: ImageDimensions | null,
+  previewWidth: number,
+  previewHeight: number,
+): ImageDimensions => {
+  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+    return { width: previewWidth, height: previewHeight };
+  }
+
+  const sourceIsLandscape = dimensions.width >= dimensions.height;
+  const previewIsLandscape = previewWidth >= previewHeight;
+  return sourceIsLandscape === previewIsLandscape ? dimensions : { width: dimensions.height, height: dimensions.width };
+};
+
 const makeImageData = (image: HTMLImageElement): ImageDataLike => {
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
@@ -148,8 +170,6 @@ const makeImageData = (image: HTMLImageElement): ImageDataLike => {
 const toNativeImageData = (source: ImageDataLike): ImageData =>
   source instanceof ImageData ? source : new ImageData(new Uint8ClampedArray(source.data), source.width, source.height);
 
-const createImageDataCopy = (source: ImageDataLike): ImageData => toNativeImageData(source);
-
 function SourceCard({ image, isBusy, onChoose, onDrop, onRemove, role }: SourceCardProps) {
   const { t } = useTranslation();
   const isReference = role === 'reference';
@@ -159,14 +179,6 @@ function SourceCard({ image, isBusy, onChoose, onDrop, onRemove, role }: SourceC
   const helper = isReference
     ? t('styleTransfer.referenceHint', { defaultValue: 'The image whose colour language you want to borrow.' })
     : t('styleTransfer.targetHint', { defaultValue: 'The image that keeps its composition and detail.' });
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onChoose();
-    }
-  };
 
   return (
     <div className="style-transfer-source-card" data-source-role={role}>
@@ -178,56 +190,59 @@ function SourceCard({ image, isBusy, onChoose, onDrop, onRemove, role }: SourceC
         </div>
       </div>
       <div
-        aria-label={image ? t('styleTransfer.replaceImage', { defaultValue: `Replace ${title}` }) : title}
-        aria-busy={isBusy}
         className={`style-transfer-dropzone ${image ? 'has-image' : ''} ${isBusy ? 'is-busy' : ''}`}
-        onClick={onChoose}
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
-        onKeyDown={handleKeyDown}
-        role="button"
-        tabIndex={0}
       >
-        {image ? (
-          <>
-            <img alt={image.name} src={image.url} />
-            <div className="style-transfer-image-scrim" aria-hidden="true" />
-            <div className="style-transfer-image-meta">
-              <span className="style-transfer-image-name" title={image.name}>
-                {image.name}
+        <button
+          aria-busy={isBusy}
+          aria-label={image ? t('styleTransfer.replaceImage', { defaultValue: `Replace ${title}` }) : title}
+          className="style-transfer-choose-source"
+          disabled={isBusy}
+          onClick={onChoose}
+          type="button"
+        >
+          {image ? (
+            <>
+              <span className="style-transfer-image-frame">
+                <img alt={image.name} src={image.url} />
               </span>
-              <span>
-                {image.width.toLocaleString()} × {image.height.toLocaleString()}
+              <span className="style-transfer-image-meta">
+                <span className="style-transfer-image-name" title={image.name}>
+                  {image.name}
+                </span>
+                <span>
+                  {image.width.toLocaleString()} × {image.height.toLocaleString()}
+                </span>
               </span>
-            </div>
-            <button
-              aria-label={t('styleTransfer.removeImage', { defaultValue: `Remove ${title}` })}
-              className="style-transfer-remove"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRemove();
-              }}
-              type="button"
-            >
-              <X aria-hidden="true" size={14} />
-            </button>
-          </>
-        ) : (
-          <div className="style-transfer-empty-dropzone">
-            {isBusy ? (
-              <Loader2 aria-hidden="true" className="animate-spin" size={25} />
-            ) : (
-              <span className="style-transfer-upload-mark" aria-hidden="true">
-                <ImagePlus size={22} />
-              </span>
-            )}
-            <strong>
-              {isBusy
-                ? t('styleTransfer.loading', { defaultValue: 'Preparing preview…' })
-                : t('styleTransfer.chooseImage', { defaultValue: 'Choose an image' })}
-            </strong>
-            <span>{t('styleTransfer.dropHint', { defaultValue: 'or drop it here · JPG, PNG, TIFF, RAW' })}</span>
-          </div>
+            </>
+          ) : (
+            <span className="style-transfer-empty-dropzone">
+              {isBusy ? (
+                <Loader2 aria-hidden="true" className="animate-spin" size={25} />
+              ) : (
+                <span className="style-transfer-upload-mark" aria-hidden="true">
+                  <ImagePlus size={22} />
+                </span>
+              )}
+              <strong>
+                {isBusy
+                  ? t('styleTransfer.loading', { defaultValue: 'Preparing preview…' })
+                  : t('styleTransfer.chooseImage', { defaultValue: 'Choose an image' })}
+              </strong>
+              <span>{t('styleTransfer.dropHint', { defaultValue: 'or drop it here · JPG, PNG, TIFF, RAW' })}</span>
+            </span>
+          )}
+        </button>
+        {image && (
+          <button
+            aria-label={t('styleTransfer.removeImage', { defaultValue: `Remove ${title}` })}
+            className="style-transfer-remove"
+            onClick={onRemove}
+            type="button"
+          >
+            <X aria-hidden="true" size={14} />
+          </button>
         )}
       </div>
     </div>
@@ -254,14 +269,67 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
   const pickerRoleRef = useRef<SourceRole>('reference');
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const resultCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewStageRef = useRef<HTMLDivElement>(null);
   const originalDataRef = useRef<ImageDataLike | null>(null);
   const resultDataRef = useRef<ImageDataLike | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  const isCompareDraggingRef = useRef(false);
+  const compareDragBoundsRef = useRef<{ left: number; width: number } | null>(null);
 
   const tr = useCallback(
     (key: string, fallback: string, options?: Record<string, unknown>) =>
       t(key, { defaultValue: fallback, ...(options || {}) }),
     [t],
+  );
+
+  const setCompareFromClientX = useCallback((clientX: number) => {
+    const bounds = compareDragBoundsRef.current ?? previewStageRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const position = comparePositionFromClientX(clientX, bounds.left, bounds.width);
+    if (position !== null) setComparePosition(position);
+  }, []);
+
+  const handleComparePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      const bounds = previewStageRef.current?.getBoundingClientRect();
+      if (!bounds || bounds.width <= 0) return;
+      event.preventDefault();
+      isCompareDraggingRef.current = true;
+      compareDragBoundsRef.current = { left: bounds.left, width: bounds.width };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setCompareFromClientX(event.clientX);
+    },
+    [setCompareFromClientX],
+  );
+
+  const handleComparePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isCompareDraggingRef.current) return;
+      event.preventDefault();
+      setCompareFromClientX(event.clientX);
+    },
+    [setCompareFromClientX],
+  );
+
+  const handleComparePointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isCompareDraggingRef.current) return;
+    event.preventDefault();
+    isCompareDraggingRef.current = false;
+    compareDragBoundsRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const handleCompareKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const nextPosition = comparePositionFromKey(comparePosition, event.key, event.shiftKey);
+      if (nextPosition === null) return;
+      event.preventDefault();
+      setComparePosition(nextPosition);
+    },
+    [comparePosition],
   );
 
   const revokeObjectUrls = useCallback(() => {
@@ -339,7 +407,10 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
   }, []);
 
   const loadPath = useCallback(async (path: string): Promise<StyleImage> => {
-    const previewResult = await invoke<Uint8Array | ArrayBuffer>(Invokes.GenerateStyleTransferPreview, { path });
+    const [previewResult, sourceDimensions] = await Promise.all([
+      invoke<Uint8Array | ArrayBuffer>(Invokes.GenerateStyleTransferPreview, { path }),
+      invoke<ImageDimensions>(Invokes.GetImageDimensions, { path }).catch(() => null),
+    ]);
     const bytes = toUint8Array(previewResult);
     const jpegBytes = new Uint8Array(bytes);
     // Keep the typed-array view's byte offset/length intact. Tauri may return
@@ -348,16 +419,19 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
     const url = rememberUrl(URL.createObjectURL(new Blob([jpegBytes], { type: 'image/jpeg' })));
     try {
       const image = await readImageElement(url);
+      const previewWidth = image.naturalWidth || image.width;
+      const previewHeight = image.naturalHeight || image.height;
+      const dimensions = orientDimensionsLikePreview(sourceDimensions, previewWidth, previewHeight);
       return {
         isPath: true,
         name: getFileName(path),
         path,
         url,
-        // The native preview is intentionally bounded to keep the modal
-        // responsive. The full-resolution source is loaded again only when
-        // the user exports, so these dimensions describe the working preview.
-        width: image.naturalWidth || image.width,
-        height: image.naturalHeight || image.height,
+        // The decoded image remains a bounded working preview, while the card
+        // reports the original file dimensions so it does not look as though
+        // choosing the file silently replaced it with a smaller image.
+        width: dimensions.width,
+        height: dimensions.height,
         image,
       };
     } catch (error) {
@@ -486,7 +560,7 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
         const referenceData = makeImageData(reference.image);
         const targetData = makeImageData(target.image);
         const nextTransform = analyzeStyleTransfer(referenceData, targetData, mode);
-        const resultData = createImageDataCopy(targetData);
+        const resultData = cloneImageData(targetData);
         applyStyleTransfer(resultData, nextTransform, strength);
         if (cancelled) return;
 
@@ -614,19 +688,22 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
                 className="style-transfer-back"
                 disabled={isExporting}
                 onClick={onClose}
+                size="sm"
                 type="button"
                 variant="ghost"
               >
-                <ArrowLeft aria-hidden="true" size={15} />
+                <ArrowLeft aria-hidden="true" size={14} />
                 {tr('styleTransfer.backToLibrary', 'Back to library')}
               </Button>
             )}
             <div className="style-transfer-heading">
-              <span className="style-transfer-eyebrow">
-                <Sparkles aria-hidden="true" size={13} />
-                {tr('styleTransfer.eyebrow', 'STYLE LAB')}
-              </span>
-              <h2 id="style-transfer-title">{tr('styleTransfer.title', 'Transfer a look')}</h2>
+              <div className="style-transfer-title-line">
+                <span className="style-transfer-eyebrow">
+                  <Sparkles aria-hidden="true" size={12} />
+                  {tr('styleTransfer.eyebrow', 'STYLE LAB')}
+                </span>
+                <h2 id="style-transfer-title">{tr('styleTransfer.title', 'Transfer a look')}</h2>
+              </div>
               <p id="style-transfer-description">
                 {tr(
                   'styleTransfer.description',
@@ -693,6 +770,7 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
 
               <div
                 className={`style-transfer-preview-stage ${target ? 'has-target' : ''}`}
+                ref={previewStageRef}
                 style={target ? { aspectRatio: `${target.width} / ${target.height}` } : undefined}
               >
                 {target ? (
@@ -710,8 +788,30 @@ export default function StyleTransferModal({ fullPage = false, isOpen, onClose }
                         ref={originalCanvasRef}
                       />
                     </div>
-                    <div className="style-transfer-compare-line" style={{ left: `${comparePosition * 100}%` }}>
-                      <span />
+                    <div
+                      aria-label={tr('styleTransfer.dragCompare', 'Drag comparison divider')}
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={Math.round(comparePosition * 100)}
+                      aria-valuetext={`${Math.round(comparePosition * 100)}%`}
+                      aria-orientation="horizontal"
+                      className="style-transfer-compare-line"
+                      onKeyDown={handleCompareKeyDown}
+                      onLostPointerCapture={() => {
+                        isCompareDraggingRef.current = false;
+                        compareDragBoundsRef.current = null;
+                      }}
+                      onPointerCancel={handleComparePointerEnd}
+                      onPointerDown={handleComparePointerDown}
+                      onPointerMove={handleComparePointerMove}
+                      onPointerUp={handleComparePointerEnd}
+                      role="slider"
+                      style={{ left: `${comparePosition * 100}%` }}
+                      tabIndex={0}
+                    >
+                      <span aria-hidden="true">
+                        <ChevronsLeftRight size={15} strokeWidth={2} />
+                      </span>
                     </div>
                     <span className="style-transfer-preview-label style-transfer-preview-label--left">
                       {tr('styleTransfer.original', 'Original')}

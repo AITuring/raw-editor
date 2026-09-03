@@ -412,12 +412,25 @@ fn load_image(path: &str, settings: &AppSettings) -> Result<DynamicImage, String
     })
 }
 
-fn downscale_preview(image: &DynamicImage) -> RgbImage {
+fn downscale_preview_to_edge(image: &DynamicImage, max_edge: u32) -> RgbImage {
+    let max_edge = max_edge.max(1);
     let (width, height) = image.dimensions();
-    if width.max(height) <= PREVIEW_EDGE {
+    if width.max(height) <= max_edge {
         return image.to_rgb8();
     }
-    image.thumbnail(PREVIEW_EDGE, PREVIEW_EDGE).to_rgb8()
+
+    // The fast thumbnail path in image 0.25.10 applies an integer rounding
+    // offset to floating-point samples. Our shared raster/RAW loader returns
+    // RGB32F, so that path adds about 0.5 to every averaged channel and washes
+    // out both the visible preview and the statistics used for style matching.
+    // Filtered resize keeps the float samples in their original range.
+    image
+        .resize(max_edge, max_edge, image::imageops::FilterType::Triangle)
+        .to_rgb8()
+}
+
+fn downscale_preview(image: &DynamicImage) -> RgbImage {
+    downscale_preview_to_edge(image, PREVIEW_EDGE)
 }
 
 #[cfg(not(target_os = "android"))]
@@ -861,53 +874,25 @@ pub async fn export_style_transfer(
 mod tests {
     use std::path::Path;
 
-    use super::{StyleTransferMode, TransferTransform, apply_transform, hsv_to_rgb, rgb_to_hsv};
-    use image::{Rgb, RgbImage};
+    use super::{
+        StyleTransferMode, TransferTransform, apply_transform, downscale_preview_to_edge,
+        hsv_to_rgb, rgb_to_hsv,
+    };
+    use image::{DynamicImage, Rgb, Rgb32FImage, RgbImage};
 
     #[test]
-    #[ignore]
-    fn dump_local_style_preview_probe() {
-        let input = std::env::var("RAW_EDITOR_STYLE_PREVIEW_INPUT")
-            .expect("RAW_EDITOR_STYLE_PREVIEW_INPUT");
-        let output = std::env::var("RAW_EDITOR_STYLE_PREVIEW_OUTPUT")
-            .expect("RAW_EDITOR_STYLE_PREVIEW_OUTPUT");
-        let settings = crate::app_settings::AppSettings::default();
-        let direct = image::open(&input).expect("decode direct").to_rgb8();
-        let loaded = super::load_image(&input, &settings).expect("load shared");
-        let loaded_rgb = loaded.to_rgb8();
-        let preview = super::downscale_preview(&loaded);
-        let direct_mean = direct.pixels().fold([0_u64; 3], |mut sum, pixel| {
-            for channel in 0..3 {
-                sum[channel] += u64::from(pixel[channel]);
+    fn floating_point_preview_downscale_preserves_midtone_levels() {
+        let source =
+            DynamicImage::ImageRgb32F(Rgb32FImage::from_pixel(4, 4, Rgb([0.25, 0.5, 0.75])));
+
+        let preview = downscale_preview_to_edge(&source, 2);
+
+        assert_eq!(preview.dimensions(), (2, 2));
+        for pixel in preview.pixels() {
+            for (actual, expected) in pixel.0.into_iter().zip([64_i16, 128, 191]) {
+                assert!((i16::from(actual) - expected).abs() <= 1);
             }
-            sum
-        });
-        let loaded_mean = loaded_rgb.pixels().fold([0_u64; 3], |mut sum, pixel| {
-            for channel in 0..3 {
-                sum[channel] += u64::from(pixel[channel]);
-            }
-            sum
-        });
-        let preview_mean = preview.pixels().fold([0_u64; 3], |mut sum, pixel| {
-            for channel in 0..3 {
-                sum[channel] += u64::from(pixel[channel]);
-            }
-            sum
-        });
-        println!(
-            "direct mean={:?}; loaded mean={:?}; preview mean={:?}; direct center={:?}; loaded center={:?}",
-            direct_mean.map(|value| value as f64 / direct.width() as f64 / direct.height() as f64),
-            loaded_mean.map(|value| value as f64 / loaded_rgb.width() as f64 / loaded_rgb.height() as f64),
-            preview_mean.map(|value| value as f64 / preview.width() as f64 / preview.height() as f64),
-            direct.get_pixel(direct.width() / 2, direct.height() / 2),
-            loaded_rgb.get_pixel(loaded_rgb.width() / 2, loaded_rgb.height() / 2),
-        );
-        let (width, height) = preview.dimensions();
-        let bytes = crate::color_management::srgb_preview_encoder(mozjpeg_rs::Preset::BaselineFastest)
-            .quality(88)
-            .encode_rgb(preview.as_raw(), width, height)
-            .expect("encode preview");
-        std::fs::write(output, bytes).expect("write preview");
+        }
     }
 
     #[cfg(not(target_os = "android"))]
