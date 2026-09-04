@@ -30,7 +30,9 @@ const styleTransferBundle = await build({
   write: false,
 });
 const styleTransferModuleSource = Buffer.from(styleTransferBundle.outputFiles[0].contents).toString('base64');
-const { applyStyleTransfer, cloneImageData } = await import(`data:text/javascript;base64,${styleTransferModuleSource}`);
+const { analyzeStyleTransfer, applyStyleTransfer, cloneImageData } = await import(
+  `data:text/javascript;base64,${styleTransferModuleSource}`
+);
 
 assert.equal(comparePositionFromClientX(300, 100, 400), 0.5);
 assert.equal(comparePositionFromClientX(0, 100, 400), 0, 'pointer positions before the preview must clamp left');
@@ -62,13 +64,52 @@ applyStyleTransfer(
     referenceMean: [0.7, 0.6, 0.4],
     saturationScale: 1,
     targetMean: [0.3, 0.4, 0.5],
+    targetValueMean: 0.5,
     valueContrast: 1,
+    valueOffset: 0,
     valueScale: 1,
   },
   1,
 );
 assert.deepEqual(originalImage.data, originalSnapshot, 'rendering the styled preview must not mutate original pixels');
 assert.notDeepEqual(styledImage.data, originalSnapshot, 'the styled preview fixture must actually change');
+
+const makeGrayTexture = (low, high) => {
+  const data = new Uint8ClampedArray(64 * 64 * 4);
+  for (let y = 0; y < 64; y += 1) {
+    for (let x = 0; x < 64; x += 1) {
+      const offset = (y * 64 + x) * 4;
+      const value = (x + y) % 2 === 0 ? low : high;
+      data[offset] = value;
+      data[offset + 1] = value;
+      data[offset + 2] = value;
+      data[offset + 3] = 255;
+    }
+  }
+  return { data, height: 64, width: 64 };
+};
+const meanHorizontalGradient = (image) => {
+  let total = 0;
+  let count = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 1; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      total += Math.abs(image.data[offset] - image.data[offset - 4]);
+      count += 1;
+    }
+  }
+  return total / count;
+};
+const texturedTarget = makeGrayTexture(96, 112);
+const highContrastReference = makeGrayTexture(32, 224);
+
+for (const mode of ['mood', 'distribution']) {
+  const transform = analyzeStyleTransfer(highContrastReference, texturedTarget, mode);
+  const naturallyStyled = cloneImageData(texturedTarget);
+  applyStyleTransfer(naturallyStyled, transform, 1);
+  const gradientRatio = meanHorizontalGradient(naturallyStyled) / meanHorizontalGradient(texturedTarget);
+  assert.ok(gradientRatio <= 1.25, `${mode} preview amplified detail contrast by ${gradientRatio.toFixed(3)}x`);
+}
 
 for (const pointerContract of [
   'onPointerDown={handleComparePointerDown}',

@@ -62,7 +62,6 @@ function DevelopToolButton({
       type="button"
     >
       <Icon aria-hidden="true" size={17} strokeWidth={1.7} />
-      <span className="develop-tool-indicator" />
     </button>
   );
 }

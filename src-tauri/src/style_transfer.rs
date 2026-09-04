@@ -31,6 +31,10 @@ use crate::image_loader::load_base_image_from_bytes_without_exif_persistence;
 use crate::image_processing::{apply_linear_to_srgb, apply_orientation};
 
 const PREVIEW_EDGE: u32 = 1_600;
+// Full variance matching exaggerates paper grain, noise, and brush edges until
+// a colour transfer looks artificially sharpened. Transfer only the broad
+// contrast character while retaining most of the target's native detail.
+const DETAIL_CONTRAST_TRANSFER: f32 = 0.28;
 
 // The regular image loader intentionally keeps the editor's colour-managed
 // float pipeline. A very large JPEG, however, would need multiple full-frame
@@ -64,11 +68,11 @@ struct ImageStats {
 struct TransferTransform {
     hue_shift: f32,
     saturation_scale: f32,
-    value_scale: f32,
+    value_offset: f32,
     value_contrast: f32,
+    target_value_mean: f32,
     channel_scale: [f32; 3],
     channel_offset: [f32; 3],
-    target_luma: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,11 +80,11 @@ struct AppliedTransform {
     mode: StyleTransferMode,
     hue_shift: f32,
     saturation_scale: f32,
-    value_scale: f32,
+    value_offset: f32,
     value_contrast: f32,
+    target_value_mean: f32,
     channel_scale: [f32; 3],
     channel_offset: [f32; 3],
-    target_luma: f32,
 }
 
 fn clamp(value: f32, min: f32, max: f32) -> f32 {
@@ -233,17 +237,13 @@ fn estimate_transform(reference: &RgbImage, target: &RgbImage) -> TransferTransf
         0.35,
         2.4,
     );
-    let value_scale = clamp(
-        reference_stats.mean_value / target_stats.mean_value.max(0.08),
-        0.55,
-        1.65,
-    );
-    let value_contrast = clamp(
+    let raw_value_contrast = clamp(
         reference_stats.value_std / target_stats.value_std.max(0.04),
         0.6,
         1.7,
     );
-    let channel_scale = [
+    let value_contrast = 1.0 + (raw_value_contrast - 1.0) * DETAIL_CONTRAST_TRANSFER;
+    let raw_channel_scale = [
         clamp(
             reference_stats.std[0] / target_stats.std[0].max(0.025),
             0.55,
@@ -260,6 +260,8 @@ fn estimate_transform(reference: &RgbImage, target: &RgbImage) -> TransferTransf
             1.8,
         ),
     ];
+    let channel_scale =
+        raw_channel_scale.map(|scale| 1.0 + (scale - 1.0) * DETAIL_CONTRAST_TRANSFER);
     let channel_offset = [
         reference_stats.mean[0] - target_stats.mean[0] * channel_scale[0],
         reference_stats.mean[1] - target_stats.mean[1] * channel_scale[1],
@@ -269,13 +271,11 @@ fn estimate_transform(reference: &RgbImage, target: &RgbImage) -> TransferTransf
     TransferTransform {
         hue_shift: normalize_hue(reference_hue - target_hue),
         saturation_scale,
-        value_scale,
+        value_offset: reference_stats.mean_value - target_stats.mean_value,
         value_contrast,
+        target_value_mean: target_stats.mean_value,
         channel_scale,
         channel_offset,
-        target_luma: target_stats.mean[0] * 0.2126
-            + target_stats.mean[1] * 0.7152
-            + target_stats.mean[2] * 0.0722,
     }
 }
 
@@ -310,8 +310,9 @@ impl AppliedTransform {
             mode,
             hue_shift: transform.hue_shift * amount,
             saturation_scale: 1.0 + (transform.saturation_scale - 1.0) * amount,
-            value_scale: 1.0 + (transform.value_scale - 1.0) * amount,
+            value_offset: transform.value_offset * amount,
             value_contrast: 1.0 + (transform.value_contrast - 1.0) * amount,
+            target_value_mean: transform.target_value_mean,
             channel_scale: [
                 1.0 + (transform.channel_scale[0] - 1.0) * amount,
                 1.0 + (transform.channel_scale[1] - 1.0) * amount,
@@ -322,7 +323,6 @@ impl AppliedTransform {
                 transform.channel_offset[1] * amount,
                 transform.channel_offset[2] * amount,
             ],
-            target_luma: transform.target_luma,
         }
     }
 
@@ -336,14 +336,16 @@ impl AppliedTransform {
             StyleTransferMode::Mood => {
                 let (hue, saturation, value) = rgb_to_hsv(original[0], original[1], original[2]);
                 let adjusted_value = clamp(
-                    self.target_luma + (value - self.target_luma) * self.value_contrast,
+                    self.target_value_mean
+                        + (value - self.target_value_mean) * self.value_contrast
+                        + self.value_offset,
                     0.0,
                     1.0,
                 );
                 hsv_to_rgb(
                     hue + self.hue_shift,
                     clamp(saturation * self.saturation_scale, 0.0, 1.0),
-                    clamp(adjusted_value * self.value_scale, 0.0, 1.0),
+                    adjusted_value,
                 )
             }
         }
@@ -876,7 +878,7 @@ mod tests {
 
     use super::{
         StyleTransferMode, TransferTransform, apply_transform, downscale_preview_to_edge,
-        hsv_to_rgb, rgb_to_hsv,
+        estimate_transform, hsv_to_rgb, rgb_to_hsv,
     };
     use image::{DynamicImage, Rgb, Rgb32FImage, RgbImage};
 
@@ -921,14 +923,54 @@ mod tests {
         let transform = TransferTransform {
             hue_shift: 0.2,
             saturation_scale: 0.4,
-            value_scale: 1.4,
+            value_offset: 0.2,
             value_contrast: 1.2,
+            target_value_mean: 0.2,
             channel_scale: [1.4, 0.7, 1.3],
             channel_offset: [0.1, -0.1, 0.0],
-            target_luma: 0.2,
         };
         let result = apply_transform(image.clone(), transform, StyleTransferMode::Mood, 0.0);
         assert_eq!(result, image);
+    }
+
+    fn mean_horizontal_gradient(image: &RgbImage) -> f32 {
+        let mut total = 0.0_f32;
+        let mut count = 0_u32;
+        for y in 0..image.height() {
+            for x in 1..image.width() {
+                let left = image.get_pixel(x - 1, y).0[0] as f32;
+                let right = image.get_pixel(x, y).0[0] as f32;
+                total += (right - left).abs();
+                count += 1;
+            }
+        }
+        total / count.max(1) as f32
+    }
+
+    #[test]
+    fn tonal_transfer_preserves_natural_detail_contrast() {
+        let target = RgbImage::from_fn(64, 64, |x, y| {
+            let value = if (x + y) % 2 == 0 { 96 } else { 112 };
+            Rgb([value, value, value])
+        });
+        let reference = RgbImage::from_fn(64, 64, |x, y| {
+            let value = if (x + y) % 2 == 0 { 32 } else { 224 };
+            Rgb([value, value, value])
+        });
+        let transform = estimate_transform(&reference, &target);
+
+        assert!(transform.value_contrast <= 1.2);
+        assert!(transform.channel_scale.iter().all(|scale| *scale <= 1.23));
+
+        for mode in [StyleTransferMode::Mood, StyleTransferMode::Distribution] {
+            let styled = apply_transform(target.clone(), transform, mode, 1.0);
+            let gradient_ratio =
+                mean_horizontal_gradient(&styled) / mean_horizontal_gradient(&target);
+            assert!(
+                gradient_ratio <= 1.25,
+                "{mode:?} amplified detail contrast by {gradient_ratio:.3}x"
+            );
+        }
     }
 
     #[cfg(not(target_os = "android"))]

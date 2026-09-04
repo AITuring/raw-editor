@@ -22,7 +22,9 @@ export interface StyleTransferTransform {
   hueShift: number;
   saturationScale: number;
   valueScale: number;
+  valueOffset: number;
   valueContrast: number;
+  targetValueMean: number;
   channelScale: [number, number, number];
   channelOffset: [number, number, number];
   targetMean: [number, number, number];
@@ -35,6 +37,11 @@ export interface StyleTransferSummary {
   brightnessPercent: number;
   contrastPercent: number;
 }
+
+// Full variance matching exaggerates paper grain, noise, and brush edges until
+// a colour transfer looks artificially sharpened. Transfer only the broad
+// contrast character while retaining most of the target's native detail.
+const DETAIL_CONTRAST_TRANSFER = 0.28;
 
 /** Clone the pixel buffer so in-place rendering can never overwrite its source. */
 export const cloneImageData = (source: ImageDataLike): ImageDataLike => ({
@@ -187,12 +194,16 @@ export const analyzeStyleTransfer = (
   const hueShift = normalizeHue(referenceHue - targetHue);
   const saturationScale = clamp(referenceStats.meanSaturation / Math.max(0.04, targetStats.meanSaturation), 0.35, 2.4);
   const valueScale = clamp(referenceStats.meanValue / Math.max(0.08, targetStats.meanValue), 0.55, 1.65);
-  const valueContrast = clamp(referenceStats.valueStd / Math.max(0.04, targetStats.valueStd), 0.6, 1.7);
-  const channelScale: [number, number, number] = [
+  const rawValueContrast = clamp(referenceStats.valueStd / Math.max(0.04, targetStats.valueStd), 0.6, 1.7);
+  const valueContrast = 1 + (rawValueContrast - 1) * DETAIL_CONTRAST_TRANSFER;
+  const rawChannelScale: [number, number, number] = [
     clamp(referenceStats.std[0] / Math.max(0.025, targetStats.std[0]), 0.55, 1.8),
     clamp(referenceStats.std[1] / Math.max(0.025, targetStats.std[1]), 0.55, 1.8),
     clamp(referenceStats.std[2] / Math.max(0.025, targetStats.std[2]), 0.55, 1.8),
   ];
+  const channelScale: [number, number, number] = rawChannelScale.map(
+    (scale) => 1 + (scale - 1) * DETAIL_CONTRAST_TRANSFER,
+  ) as [number, number, number];
   const channelOffset: [number, number, number] = [
     referenceStats.mean[0] - targetStats.mean[0] * channelScale[0],
     referenceStats.mean[1] - targetStats.mean[1] * channelScale[1],
@@ -204,7 +215,9 @@ export const analyzeStyleTransfer = (
     hueShift,
     saturationScale,
     valueScale,
+    valueOffset: referenceStats.meanValue - targetStats.meanValue,
     valueContrast,
+    targetValueMean: targetStats.meanValue,
     channelScale,
     channelOffset,
     targetMean: targetStats.mean,
@@ -223,7 +236,7 @@ export const applyStyleTransfer = (
 
   const data = image.data;
   const saturationScale = 1 + (transform.saturationScale - 1) * amount;
-  const valueScale = 1 + (transform.valueScale - 1) * amount;
+  const valueOffset = transform.valueOffset * amount;
   const valueContrast = 1 + (transform.valueContrast - 1) * amount;
   const hueShift = transform.hueShift * amount;
   const channelScale: [number, number, number] = [
@@ -254,18 +267,9 @@ export const applyStyleTransfer = (
     } else {
       const [hue, saturation, value] = rgbToHsv(originalR, originalG, originalB);
       const adjustedValue = clamp(
-        transform.targetMean[0] * 0.2126 +
-          transform.targetMean[1] * 0.7152 +
-          transform.targetMean[2] * 0.0722 +
-          (value -
-            (transform.targetMean[0] * 0.2126 + transform.targetMean[1] * 0.7152 + transform.targetMean[2] * 0.0722)) *
-            valueContrast,
+        transform.targetValueMean + (value - transform.targetValueMean) * valueContrast + valueOffset,
       );
-      [nextR, nextG, nextB] = hsvToRgb(
-        hue + hueShift,
-        clamp(saturation * saturationScale),
-        clamp(adjustedValue * valueScale),
-      );
+      [nextR, nextG, nextB] = hsvToRgb(hue + hueShift, clamp(saturation * saturationScale), adjustedValue);
     }
 
     data[offset] = Math.round(clamp(originalR + (nextR - originalR), 0, 1) * 255);

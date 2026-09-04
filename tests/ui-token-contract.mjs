@@ -69,8 +69,18 @@ for (const token of requiredTokens) {
   if (!tokens.includes(`${token}:`)) failures.push(`Missing required token: ${token}`);
 }
 
-for (const token of ['--ui-shadow-tool-rest', '--ui-shadow-tool-hover', '--ui-shadow-tool-selected']) {
+for (const token of ['--ui-shadow-button-selected', '--ui-shadow-tool-selected']) {
+  if (!tokens.includes(`${token}:`) || !tokens.includes('inset 0 0 0 1px var(--app-accent)')) {
+    failures.push(`${token} must use a four-edge inset selection highlight.`);
+  }
+}
+
+for (const token of ['--ui-shadow-tool-rest', '--ui-shadow-tool-hover']) {
   if (!tokens.includes(`${token}: none;`)) failures.push(`${token} must keep contextual tool buttons flat.`);
+}
+
+if (tokens.includes('inset 0 -2px 0 var(--app-accent)')) {
+  failures.push('Selected controls must not use a single-edge underline highlight.');
 }
 
 if (styles.indexOf("@import './styles/tokens.css';") > styles.indexOf("@import 'tailwindcss';")) {
@@ -137,6 +147,17 @@ if (!messageRule.includes('border: 0;')) {
 
 if (!styles.includes('.ui-button:is(.ui-button--ghost, .ui-button--icon)')) {
   failures.push('Ghost and icon Button variants must share the flat tool-button contract.');
+}
+
+if (!styles.includes('.ui-tab-action.is-active {') || !styles.includes('box-shadow: var(--ui-shadow-tool-selected);')) {
+  failures.push('Active tabs must use the shared four-edge selection highlight.');
+}
+
+if (
+  styles.includes('.develop-tool-indicator') ||
+  read('src/components/panel/DevelopPanel.tsx').includes('develop-tool-indicator')
+) {
+  failures.push('Develop tool buttons must not reintroduce a single-edge active indicator.');
 }
 
 const controlsPanelSource = read('src/components/panel/right/ControlsPanel.tsx');

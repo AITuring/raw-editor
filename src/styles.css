@@ -1053,25 +1053,6 @@
     box-shadow: var(--ui-shadow-tool-selected);
   }
 
-  .develop-tool-indicator {
-    position: absolute;
-    inset-block: 6px;
-    left: 0;
-    width: 2px;
-    border-radius: 0 2px 2px 0;
-    background: var(--app-accent);
-    opacity: 0;
-    transform: scaleY(0.5);
-    transition:
-      opacity 120ms ease-out,
-      transform 120ms ease-out;
-  }
-
-  .develop-tool-button.is-active .develop-tool-indicator {
-    opacity: 1;
-    transform: scaleY(1);
-  }
-
   .ui-panel-header,
   .develop-panel-header {
     display: flex;
@@ -3798,13 +3779,17 @@
   align-items: center;
   gap: var(--ui-space-1);
   border: 0;
+  border-radius: var(--ui-radius-control);
   padding: 2px var(--ui-space-1);
   color: var(--app-text-secondary);
   font-size: var(--ui-font-size-label);
   font-weight: 500;
   line-height: 16px;
   white-space: nowrap;
-  box-shadow: inset 0 -2px 0 transparent;
+  box-shadow: var(--ui-shadow-tool-rest);
+  transition:
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
 }
 
 .ui-tab-action:hover,
@@ -3814,7 +3799,7 @@
 
 .ui-tab-action.is-active {
   color: var(--app-accent);
-  box-shadow: inset 0 -2px 0 var(--app-accent);
+  box-shadow: var(--ui-shadow-tool-selected);
 }
 
 .ui-count-badge {
@@ -3851,10 +3836,11 @@
 /*
  * Button boundary contract
  *
- * Buttons never use a perimeter stroke. Raised controls opt into the shared
- * elevation states; flat icon, tab, and text actions remain borderless.
- * This unlayered rule also prevents local Tailwind border utilities from
- * reintroducing the former border-plus-shadow treatment.
+ * Buttons keep CSS borders at zero. Raised controls opt into the shared
+ * elevation states, while active controls use an inset perimeter highlight;
+ * this keeps the selected state visible on all four edges without changing
+ * layout. This unlayered rule also prevents local Tailwind border utilities
+ * from reintroducing the former border-plus-shadow treatment.
  */
 button {
   border: 0;
@@ -4655,7 +4641,7 @@ button {
 .style-transfer-mode-switch button.is-active {
   background: var(--app-card-active);
   color: var(--app-text-primary);
-  box-shadow: var(--ui-shadow-button-rest);
+  box-shadow: var(--ui-shadow-button-selected);
 }
 
 .style-transfer-mode-switch button small {
