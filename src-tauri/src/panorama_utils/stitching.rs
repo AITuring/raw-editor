@@ -13,6 +13,7 @@ const PANORAMA_DETAIL_SEAM_FEATHER_RADIUS: f32 = 4.0;
 // illumination ramp without visibly doubling normal photographic detail.
 const PANORAMA_GLOBAL_TONE_FIRST_BAND: usize = 5;
 const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 1536;
+const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 24_000_000;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
 const FOCUS_EDGE_PROTECTION_AT_1024: f32 = 12.0;
@@ -959,6 +960,13 @@ fn luminance(pixel: &Rgb<f32>) -> f32 {
     pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114
 }
 
+struct RenderedFocusLayer {
+    image: Rgb32FImage,
+    mask: GrayImage,
+    left: u32,
+    top: u32,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_focus_layer(
     image: &ImageInfo,
@@ -969,29 +977,33 @@ fn render_focus_layer(
     offset_y: f64,
     out_width: u32,
     out_height: u32,
-) -> (Rgb32FImage, GrayImage) {
+) -> RenderedFocusLayer {
     let inverse = homography.try_inverse().unwrap_or_else(Matrix3::identity);
-    let mut pixels = vec![0.0f32; out_width as usize * out_height as usize * 3];
-    let mut mask = vec![0u8; out_width as usize * out_height as usize];
-    let (left, right, top, bottom) = transformed_image_region(
+    let Some((left, right, top, bottom)) = transformed_image_region(
         image, homography, projection, offset_x, offset_y, out_width, out_height,
-    )
-    .unwrap_or((
-        0,
-        out_width.saturating_sub(1),
-        0,
-        out_height.saturating_sub(1),
-    ));
+    ) else {
+        return RenderedFocusLayer {
+            image: Rgb32FImage::new(0, 0),
+            mask: GrayImage::new(0, 0),
+            left: 0,
+            top: 0,
+        };
+    };
+    let layer_width = right - left + 1;
+    let layer_height = bottom - top + 1;
+    let mut pixels = vec![0.0f32; layer_width as usize * layer_height as usize * 3];
+    let mut mask = vec![0u8; layer_width as usize * layer_height as usize];
 
     pixels
-        .par_chunks_mut(out_width as usize * 3)
-        .zip(mask.par_chunks_mut(out_width as usize))
+        .par_chunks_mut(layer_width as usize * 3)
+        .zip(mask.par_chunks_mut(layer_width as usize))
         .enumerate()
-        .skip(top as usize)
-        .take((bottom - top + 1) as usize)
         .for_each(|(y, (row, mask_row))| {
-            for x in left..=right {
-                let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
+            let global_y = top + y as u32;
+            for local_x in 0..layer_width {
+                let global_x = left + local_x;
+                let target =
+                    Point3::new(global_x as f64 - offset_x, global_y as f64 - offset_y, 1.0);
                 let Some(source) = map_target_to_source(&inverse, target, image, projection) else {
                     continue;
                 };
@@ -1003,26 +1015,37 @@ fn render_focus_layer(
                     continue;
                 }
                 let pixel = get_high_quality_interpolated_pixel(source_image, source.x, source.y);
-                let start = x as usize * 3;
+                let start = local_x as usize * 3;
                 row[start..start + 3].copy_from_slice(&pixel.0);
-                mask_row[x as usize] = 255;
+                mask_row[local_x as usize] = 255;
             }
         });
 
-    (
-        Rgb32FImage::from_raw(out_width, out_height, pixels)
+    RenderedFocusLayer {
+        image: Rgb32FImage::from_raw(layer_width, layer_height, pixels)
             .expect("focus layer buffer dimensions must match"),
-        GrayImage::from_raw(out_width, out_height, mask)
+        mask: GrayImage::from_raw(layer_width, layer_height, mask)
             .expect("focus layer mask dimensions must match"),
-    )
+        left,
+        top,
+    }
 }
 
-fn focus_analysis_dimensions(width: u32, height: u32) -> (u32, u32) {
+fn focus_analysis_dimensions(width: u32, height: u32, source_longest_dimension: u32) -> (u32, u32) {
     let longest_side = width.max(height).max(1);
-    if longest_side <= FOCUS_ANALYSIS_MAX_DIMENSION {
+    // Keep the focus-analysis sampling density tied to an individual source,
+    // not to the total mosaic length. Otherwise a long shifted stack compresses
+    // each 9504px frame to a few hundred analysis pixels and erases the very
+    // sharpness differences the stacker is supposed to select.
+    let source_scale = FOCUS_ANALYSIS_MAX_DIMENSION as f64 / source_longest_dimension.max(1) as f64;
+    let mut scale = source_scale.min(1.0);
+    let scaled_pixels = width as f64 * height as f64 * scale * scale;
+    if scaled_pixels > FOCUS_ANALYSIS_MAX_PIXELS as f64 {
+        scale *= (FOCUS_ANALYSIS_MAX_PIXELS as f64 / scaled_pixels).sqrt();
+    }
+    if scale >= 1.0 && longest_side <= FOCUS_ANALYSIS_MAX_DIMENSION {
         return (width.max(1), height.max(1));
     }
-    let scale = FOCUS_ANALYSIS_MAX_DIMENSION as f64 / longest_side as f64;
     (
         (width as f64 * scale).round().max(1.0) as u32,
         (height as f64 * scale).round().max(1.0) as u32,
@@ -1263,6 +1286,192 @@ fn hard_select_focus_pixels(
                 }
             },
         );
+}
+
+fn place_focus_layer(
+    base: &mut Rgb32FImage,
+    base_mask: &mut GrayImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0 || layer_height == 0 {
+        return;
+    }
+    let base_width = base.width();
+    let base_height = base.height();
+    if candidate.left >= base_width
+        || candidate.top >= base_height
+        || candidate.left + layer_width > base_width
+        || candidate.top + layer_height > base_height
+    {
+        return;
+    }
+
+    let base_stride = base_width as usize * 3;
+    let layer_stride = layer_width as usize * 3;
+    base.as_mut()
+        .par_chunks_mut(base_stride)
+        .zip(base_mask.as_mut().par_chunks_mut(base_width as usize))
+        .skip(candidate.top as usize)
+        .take(layer_height as usize)
+        .zip(candidate.image.as_raw().par_chunks(layer_stride))
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .for_each(
+            |(((base_row, base_mask_row), candidate_row), candidate_mask_row)| {
+                let base_start = candidate.left as usize * 3;
+                let base_end = base_start + layer_stride;
+                base_row[base_start..base_end].copy_from_slice(candidate_row);
+                let mask_start = candidate.left as usize;
+                let mask_end = mask_start + layer_width as usize;
+                base_mask_row[mask_start..mask_end].copy_from_slice(candidate_mask_row);
+            },
+        );
+}
+
+fn hard_select_focus_layer(
+    base: &mut Rgb32FImage,
+    base_mask: &mut GrayImage,
+    candidate: &RenderedFocusLayer,
+    decision_mask: &GrayImage,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0 || layer_height == 0 {
+        return;
+    }
+    debug_assert_eq!(candidate.mask.dimensions(), (layer_width, layer_height));
+    debug_assert_eq!(decision_mask.dimensions(), (layer_width, layer_height));
+    let base_width = base.width();
+    let base_height = base.height();
+    if candidate.left >= base_width
+        || candidate.top >= base_height
+        || candidate.left + layer_width > base_width
+        || candidate.top + layer_height > base_height
+    {
+        return;
+    }
+
+    let base_stride = base_width as usize * 3;
+    let layer_stride = layer_width as usize * 3;
+    base.as_mut()
+        .par_chunks_mut(base_stride)
+        .zip(base_mask.as_mut().par_chunks_mut(base_width as usize))
+        .skip(candidate.top as usize)
+        .take(layer_height as usize)
+        .zip(candidate.image.as_raw().par_chunks(layer_stride))
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .zip(decision_mask.as_raw().par_chunks(layer_width as usize))
+        .for_each(
+            |((((base_row, base_mask_row), candidate_row), candidate_mask_row), decision_row)| {
+                for local_x in 0..layer_width as usize {
+                    if candidate_mask_row[local_x] == 0 {
+                        continue;
+                    }
+                    let global_x = candidate.left as usize + local_x;
+                    let base_pixel_start = global_x * 3;
+                    let candidate_pixel_start = local_x * 3;
+                    if base_mask_row[global_x] == 0 || decision_row[local_x] > 0 {
+                        base_row[base_pixel_start..base_pixel_start + 3].copy_from_slice(
+                            &candidate_row[candidate_pixel_start..candidate_pixel_start + 3],
+                        );
+                    }
+                    base_mask_row[global_x] = 255;
+                }
+            },
+        );
+}
+
+fn scaled_region_start(value: u32, source_size: u32, target_size: u32) -> u32 {
+    ((value as u64 * target_size as u64) / source_size.max(1) as u64) as u32
+}
+
+fn scaled_region_end(value: u32, source_size: u32, target_size: u32) -> u32 {
+    (value as u64 * target_size as u64).div_ceil(source_size.max(1) as u64) as u32
+}
+
+fn render_focus_analysis_layer(
+    layer: &RenderedFocusLayer,
+    out_width: u32,
+    out_height: u32,
+    analysis_width: u32,
+    analysis_height: u32,
+) -> (Rgb32FImage, GrayImage) {
+    let mut analysis = Rgb32FImage::new(analysis_width, analysis_height);
+    let mut analysis_mask = GrayImage::new(analysis_width, analysis_height);
+    let (layer_width, layer_height) = layer.image.dimensions();
+    if layer_width == 0 || layer_height == 0 || out_width == 0 || out_height == 0 {
+        return (analysis, analysis_mask);
+    }
+
+    let left = scaled_region_start(layer.left, out_width, analysis_width).min(analysis_width);
+    let top = scaled_region_start(layer.top, out_height, analysis_height).min(analysis_height);
+    let right = scaled_region_end(
+        layer.left.saturating_add(layer_width),
+        out_width,
+        analysis_width,
+    )
+    .min(analysis_width);
+    let bottom = scaled_region_end(
+        layer.top.saturating_add(layer_height),
+        out_height,
+        analysis_height,
+    )
+    .min(analysis_height);
+    if left >= right || top >= bottom {
+        return (analysis, analysis_mask);
+    }
+
+    let resized_width = right - left;
+    let resized_height = bottom - top;
+    let resized = resize_rgb(&layer.image, resized_width, resized_height);
+    let resized_mask = resize_binary_mask(&layer.mask, resized_width, resized_height);
+    let analysis_stride = analysis_width as usize * 3;
+    let resized_stride = resized_width as usize * 3;
+    analysis
+        .as_mut()
+        .par_chunks_mut(analysis_stride)
+        .skip(top as usize)
+        .take(resized_height as usize)
+        .zip(resized.as_raw().par_chunks(resized_stride))
+        .for_each(|(analysis_row, resized_row)| {
+            let start = left as usize * 3;
+            let end = start + resized_stride;
+            analysis_row[start..end].copy_from_slice(resized_row);
+        });
+    analysis_mask
+        .as_mut()
+        .par_chunks_mut(analysis_width as usize)
+        .skip(top as usize)
+        .take(resized_height as usize)
+        .zip(resized_mask.as_raw().par_chunks(resized_width as usize))
+        .for_each(|(analysis_row, resized_row)| {
+            let start = left as usize;
+            let end = start + resized_width as usize;
+            analysis_row[start..end].copy_from_slice(resized_row);
+        });
+    (analysis, analysis_mask)
+}
+
+fn focus_decision_for_layer(
+    analysis_decision: &GrayImage,
+    layer: &RenderedFocusLayer,
+    out_width: u32,
+    out_height: u32,
+) -> GrayImage {
+    let (width, height) = layer.image.dimensions();
+    let analysis_width = analysis_decision.width();
+    let analysis_height = analysis_decision.height();
+    GrayImage::from_fn(width, height, |x, y| {
+        if out_width == 0 || out_height == 0 || analysis_width == 0 || analysis_height == 0 {
+            return image::Luma([0]);
+        }
+        let global_x = layer.left.saturating_add(x);
+        let global_y = layer.top.saturating_add(y);
+        let analysis_x = ((global_x as u64 * analysis_width as u64) / out_width as u64)
+            .min(analysis_width.saturating_sub(1) as u64) as u32;
+        let analysis_y = ((global_y as u64 * analysis_height as u64) / out_height as u64)
+            .min(analysis_height.saturating_sub(1) as u64) as u32;
+        *analysis_decision.get_pixel(analysis_x, analysis_y)
+    })
 }
 
 fn resize_rgb(image: &Rgb32FImage, width: u32, height: u32) -> Rgb32FImage {
@@ -1691,7 +1900,7 @@ where
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
     let first_source = load_image(images[0])?;
-    let (mut merged, mut merged_mask) = render_focus_layer(
+    let first_layer = render_focus_layer(
         images[0],
         &first_source,
         &global_homographies[&images[0].id],
@@ -1702,7 +1911,20 @@ where
         out_height,
     );
     drop(first_source);
-    let (analysis_width, analysis_height) = focus_analysis_dimensions(out_width, out_height);
+    // The merged image occupies the final canvas, but each subsequent source
+    // layer is kept local to its transformed bounds. This is important for a
+    // long scan: allocating a full-canvas candidate for every 60MP source can
+    // multiply memory use by the number of frames.
+    let mut merged = Rgb32FImage::new(out_width, out_height);
+    let mut merged_mask = GrayImage::new(out_width, out_height);
+    place_focus_layer(&mut merged, &mut merged_mask, &first_layer);
+    let source_longest_dimension = images
+        .iter()
+        .map(|image| image.width().max(image.height()))
+        .max()
+        .unwrap_or(1);
+    let (analysis_width, analysis_height) =
+        focus_analysis_dimensions(out_width, out_height, source_longest_dimension);
     let mut merged_analysis = resize_rgb(&merged, analysis_width, analysis_height);
     let mut merged_analysis_mask =
         resize_binary_mask(&merged_mask, analysis_width, analysis_height);
@@ -1714,7 +1936,7 @@ where
             format!("Focus-stacking image {} of {}", index + 1, images.len()),
         );
         let source_image = load_image(image)?;
-        let (candidate, candidate_mask) = render_focus_layer(
+        let candidate = render_focus_layer(
             image,
             &source_image,
             &global_homographies[&image.id],
@@ -1725,9 +1947,13 @@ where
             out_height,
         );
         drop(source_image);
-        let candidate_analysis = resize_rgb(&candidate, analysis_width, analysis_height);
-        let candidate_analysis_mask =
-            resize_binary_mask(&candidate_mask, analysis_width, analysis_height);
+        let (candidate_analysis, candidate_analysis_mask) = render_focus_analysis_layer(
+            &candidate,
+            out_width,
+            out_height,
+            analysis_width,
+            analysis_height,
+        );
         let candidate_focus = focus_score_map(&candidate_analysis, &candidate_analysis_mask);
         let analysis_decision = focus_decision_mask(
             &merged_focus,
@@ -1761,12 +1987,11 @@ where
         );
 
         let full_resolution_decision =
-            resize_binary_mask(&analysis_decision, out_width, out_height);
-        hard_select_focus_pixels(
+            focus_decision_for_layer(&analysis_decision, &candidate, out_width, out_height);
+        hard_select_focus_layer(
             &mut merged,
             &mut merged_mask,
             &candidate,
-            &candidate_mask,
             &full_resolution_decision,
         );
     }
@@ -2241,6 +2466,17 @@ mod interpolation_tests {
         let blurred = box_blur_focus_map(&source, 5, 4, 2);
 
         assert!(blurred.iter().all(|value| (*value - 3.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn focus_analysis_keeps_source_sampling_density_on_long_mosaics() {
+        let (analysis_width, analysis_height) = focus_analysis_dimensions(31_121, 11_034, 9_504);
+
+        assert!(analysis_width >= 4_500);
+        assert!(analysis_height >= 1_500);
+        assert!(
+            u64::from(analysis_width) * u64::from(analysis_height) <= FOCUS_ANALYSIS_MAX_PIXELS
+        );
     }
 
     #[test]

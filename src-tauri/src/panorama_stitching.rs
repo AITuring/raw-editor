@@ -30,6 +30,9 @@ const MATCH_REFINE_SEARCH_RADIUS: i32 = 14;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
+const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
+const FOCUS_SEQUENCE_LINK_WINDOW: usize = 2;
+const FOCUS_SEQUENCE_GAP_PENALTY: f64 = 96.0;
 const SCALABLE_STACK_THRESHOLD: usize = 30;
 const LARGE_STACK_NEIGHBOR_WINDOW: usize = 4;
 const SCALABLE_LOW_TEXTURE_FEATURE_TARGET: usize = 96;
@@ -1061,8 +1064,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Determining stitching order...");
     println!("Determining stitching order...");
-    let (ordered_indices, global_homographies) =
-        build_stitching_order(&image_data, &pairwise_matches);
+    let (ordered_indices, global_homographies) = if blend_mode == BlendMode::FocusStack {
+        build_focus_stack_stitching_order(&image_data, &pairwise_matches)
+    } else {
+        build_stitching_order(&image_data, &pairwise_matches)
+    };
 
     if ordered_indices.len() < 2 {
         return Err("Could not find a connected sequence of at least two images.".to_string());
@@ -1556,14 +1562,19 @@ fn select_focus_stack_transform(
     }
 
     let projective_error = median_symmetric_error(projective, points);
-    let allow_projective = matches!(
+    let explicit_projective = matches!(
         alignment_mode,
         AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
     );
+    // A moving focus stack is also a planar scan/mosaic. Auto may use the
+    // projective fit for that case, while a genuinely fixed-camera stack keeps
+    // the lower-DOF model that is safer against defocus-driven false matches.
+    let shifted_mosaic = focus_stack_motion_is_shifted_mosaic(points, source_dimensions);
+    let allow_projective = explicit_projective || shifted_mosaic;
     if allow_projective
         && transform_is_stable_for_focus_stack(projective, source_dimensions)
-        && projective_error + 0.75 < selected.median_error
-        && projective_error <= selected.median_error * 0.72
+        && projective_error + 0.15 < selected.median_error
+        && projective_error <= selected.median_error * 0.80
     {
         selected.transform = *projective;
         selected.inlier_indices = (0..points.len()).collect();
@@ -1589,13 +1600,29 @@ fn select_focus_stack_transform(
         format!("invalid/{}", translation_points.len())
     };
     println!(
-        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (translation {translation_summary}, similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{})",
+        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (translation {translation_summary}, similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{}, shifted-mosaic {})",
         selected.median_error,
         selected.inlier_indices.len(),
         projective_error,
-        points.len()
+        points.len(),
+        shifted_mosaic
     );
     selected.transform
+}
+
+fn focus_stack_motion_is_shifted_mosaic(
+    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+    source_dimensions: (u32, u32),
+) -> bool {
+    if points.len() < FOCUS_MODEL_MIN_INLIERS {
+        return false;
+    }
+    let translation = estimate_translation(points);
+    let motion = nalgebra::Vector2::new(translation[(0, 2)], translation[(1, 2)]).norm();
+    let image_scale = source_dimensions.0.max(source_dimensions.1) as f64;
+    motion.is_finite()
+        && image_scale > 1.0
+        && motion > image_scale * FOCUS_SHIFTED_MOSAIC_MOTION_RATIO
 }
 
 fn refine_match_point_from_homography(
@@ -2060,6 +2087,112 @@ fn build_stitching_order(
     (ordered_indices, global_homographies)
 }
 
+fn build_focus_stack_stitching_order(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
+    if images.len() < 2 {
+        let mut homographies = HashMap::new();
+        if let Some(image) = images.first() {
+            homographies.insert(image.id, Matrix3::identity());
+        }
+        return ((0..images.len()).collect(), homographies);
+    }
+
+    // Focus stacking is a source-order operation: later layers must compete
+    // with the pixels already selected from earlier layers. For a moving scan,
+    // using the panorama MST here can reorder frames around high-texture areas
+    // and then compound unrelated transforms. Keep the user/import order and
+    // choose a strong nearby link for each frame instead.
+    let ordered_indices = (0..images.len()).collect::<Vec<_>>();
+    let mut global_homographies = HashMap::new();
+    global_homographies.insert(ordered_indices[0], Matrix3::identity());
+
+    for position in 1..ordered_indices.len() {
+        let current = ordered_indices[position];
+        let preferred_gap = position.min(FOCUS_SEQUENCE_LINK_WINDOW);
+        let mut best_link: Option<(f64, usize, usize, Matrix3<f64>)> = None;
+
+        for gap in 1..=preferred_gap {
+            let previous = ordered_indices[position - gap];
+            let Some((inliers, current_to_previous)) =
+                focus_stack_link_transform(matches, current, previous)
+            else {
+                continue;
+            };
+            let score =
+                inliers as f64 - (gap.saturating_sub(1) as f64) * FOCUS_SEQUENCE_GAP_PENALTY;
+            let should_replace =
+                best_link
+                    .as_ref()
+                    .is_none_or(|(best_score, best_inliers, best_gap, _)| {
+                        score > *best_score
+                            || (score == *best_score
+                                && (inliers > *best_inliers
+                                    || (inliers == *best_inliers && gap < *best_gap)))
+                    });
+            if should_replace {
+                best_link = Some((score, inliers, gap, current_to_previous));
+            }
+        }
+
+        // The normal scalable matcher considers a four-frame window. If the
+        // preferred one/two-frame path has a missing edge, use the remaining
+        // nearby links before falling back to the generic graph order.
+        if best_link.is_none() {
+            for gap in (preferred_gap + 1)..=position.min(LARGE_STACK_NEIGHBOR_WINDOW) {
+                let previous = ordered_indices[position - gap];
+                let Some((inliers, current_to_previous)) =
+                    focus_stack_link_transform(matches, current, previous)
+                else {
+                    continue;
+                };
+                let score =
+                    inliers as f64 - (gap.saturating_sub(1) as f64) * FOCUS_SEQUENCE_GAP_PENALTY;
+                let should_replace =
+                    best_link
+                        .as_ref()
+                        .is_none_or(|(best_score, best_inliers, best_gap, _)| {
+                            score > *best_score
+                                || (score == *best_score
+                                    && (inliers > *best_inliers
+                                        || (inliers == *best_inliers && gap < *best_gap)))
+                        });
+                if should_replace {
+                    best_link = Some((score, inliers, gap, current_to_previous));
+                }
+            }
+        }
+
+        let Some((_, _, gap, current_to_previous)) = best_link else {
+            return build_stitching_order(images, matches);
+        };
+        let previous = ordered_indices[position - gap];
+        let Some(previous_global) = global_homographies.get(&previous).copied() else {
+            return build_stitching_order(images, matches);
+        };
+        global_homographies.insert(current, previous_global * current_to_previous);
+    }
+
+    (ordered_indices, global_homographies)
+}
+
+fn focus_stack_link_transform(
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    from: usize,
+    to: usize,
+) -> Option<(usize, Matrix3<f64>)> {
+    if let Some(match_info) = matches.get(&(from, to)) {
+        return Some((match_info.inliers, match_info.homography));
+    }
+    matches.get(&(to, from)).and_then(|match_info| {
+        match_info
+            .homography
+            .try_inverse()
+            .map(|transform| (match_info.inliers, transform))
+    })
+}
+
 #[cfg(test)]
 mod alignment_tests {
     use super::*;
@@ -2081,6 +2214,13 @@ mod alignment_tests {
     fn identity_match(inliers: usize) -> MatchInfo {
         MatchInfo {
             homography: Matrix3::identity(),
+            inliers,
+        }
+    }
+
+    fn translation_match(dx: f64, dy: f64, inliers: usize) -> MatchInfo {
+        MatchInfo {
+            homography: Matrix3::new(1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0),
             inliers,
         }
     }
@@ -2152,6 +2292,61 @@ mod alignment_tests {
             paths,
             ["tile-1.jpg", "tile-001.jpg", "tile-2.jpg", "tile-10.jpg"]
         );
+    }
+
+    #[test]
+    fn focus_stack_order_preserves_input_sequence_over_a_high_inlier_mst() {
+        let images = vec![
+            test_image(0, "DSC08854.jpg"),
+            test_image(1, "DSC08855.jpg"),
+            test_image(2, "DSC08856.jpg"),
+            test_image(3, "DSC08857.jpg"),
+        ];
+        let matches = HashMap::from([
+            ((0, 1), translation_match(100.0, 0.0, 30)),
+            ((1, 2), translation_match(100.0, 0.0, 35)),
+            ((2, 3), translation_match(100.0, 0.0, 25)),
+            // The generic panorama MST would prefer these long links and can
+            // traverse the source layers in a non-capture order.
+            ((0, 2), translation_match(200.0, 0.0, 400)),
+            ((0, 3), translation_match(300.0, 0.0, 350)),
+        ]);
+
+        let (order, homographies) = build_focus_stack_stitching_order(&images, &matches);
+
+        assert_eq!(order, vec![0, 1, 2, 3]);
+        assert_eq!(homographies[&0], Matrix3::identity());
+        assert_eq!(homographies[&1][(0, 2)], -100.0);
+        assert_eq!(homographies[&2][(0, 2)], -200.0);
+        assert_eq!(homographies[&3][(0, 2)], -300.0);
+    }
+
+    #[test]
+    fn focus_stack_motion_detects_a_scan_without_reclassifying_a_fixed_stack() {
+        let points = (0..3)
+            .flat_map(|row| {
+                (0..3).map(move |column| {
+                    let source = Point2::new(
+                        1_000.0 + column as f64 * 2_000.0,
+                        900.0 + row as f64 * 2_000.0,
+                    );
+                    (source, source + nalgebra::Vector2::new(4.0, 2.0))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(!focus_stack_motion_is_shifted_mosaic(
+            &points,
+            (9_504, 6_336)
+        ));
+
+        let shifted = points
+            .iter()
+            .map(|(source, target)| (*source, *target + nalgebra::Vector2::new(300.0, 0.0)))
+            .collect::<Vec<_>>();
+        assert!(focus_stack_motion_is_shifted_mosaic(
+            &shifted,
+            (9_504, 6_336)
+        ));
     }
 
     #[test]

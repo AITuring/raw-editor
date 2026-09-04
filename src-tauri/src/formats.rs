@@ -78,8 +78,18 @@ pub const NON_RAW_EXTENSIONS: &[&str] = &[
     "pnm", "pbm", "pgm", "ppm", "pam", // Netpbm family
 ];
 
+fn is_apple_double_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("._"))
+}
+
 pub fn is_raw_file<P: AsRef<Path>>(path: P) -> bool {
-    let ext = match path.as_ref().extension().and_then(|s| s.to_str()) {
+    let path = path.as_ref();
+    if is_apple_double_file(path) {
+        return false;
+    }
+    let ext = match path.extension().and_then(|s| s.to_str()) {
         Some(e) => e,
         None => return false,
     };
@@ -91,6 +101,9 @@ pub fn is_raw_file<P: AsRef<Path>>(path: P) -> bool {
 
 pub fn is_supported_image_file<P: AsRef<Path>>(path: P) -> bool {
     let path = path.as_ref();
+    if is_apple_double_file(path) {
+        return false;
+    }
 
     let ext = match path.extension().and_then(|s| s.to_str()) {
         Some(e) => e,
@@ -107,4 +120,17 @@ pub fn is_supported_image_file<P: AsRef<Path>>(path: P) -> bool {
     NON_RAW_EXTENSIONS
         .iter()
         .any(|non_raw_ext| non_raw_ext.eq_ignore_ascii_case(ext))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apple_double_metadata_is_not_treated_as_an_image() {
+        assert!(!is_supported_image_file("._DSC08890.jpg"));
+        assert!(!is_raw_file("._DSC08890.arw"));
+        assert!(is_supported_image_file("DSC08890.jpg"));
+        assert!(is_raw_file("DSC08890.arw"));
+    }
 }
