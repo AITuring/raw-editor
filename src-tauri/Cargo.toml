@@ -111,7 +111,9 @@ tauri = { version = "2.11", features = ["test"] }
 [profile.dev]
 opt-level = 1
 debug = 1
-incremental = true
+# Rust 1.96.1 on Apple Silicon can leave incomplete LLVM symbols in
+# incremental archives used by the desktop binary linker.
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 3

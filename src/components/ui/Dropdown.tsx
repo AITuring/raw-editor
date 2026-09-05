@@ -12,6 +12,7 @@ export interface OptionItem<T extends React.Key> {
 }
 
 interface DropdownProps<T extends React.Key> {
+  ariaLabel?: string;
   className?: string;
   onChange: (value: T) => void;
   options: Array<OptionItem<T>>;
@@ -23,6 +24,7 @@ interface DropdownProps<T extends React.Key> {
 }
 
 const Dropdown = <T extends React.Key>({
+  ariaLabel,
   className = '',
   onChange,
   options,
@@ -104,6 +106,7 @@ const Dropdown = <T extends React.Key>({
   return (
     <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleContainerKeyDown}>
       <button
+        aria-label={ariaLabel}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         disabled={disabled}

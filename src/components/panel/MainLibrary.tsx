@@ -10,6 +10,7 @@ import {
   ImagePlus,
   Loader2,
   RefreshCw,
+  ScanLine,
   Settings,
   Search,
   LayoutGrid,
@@ -91,6 +92,7 @@ interface MainLibraryProps {
   onLibraryRefresh(): void | Promise<void>;
   onRate(rating: number): void;
   onOpenImage(): void;
+  onOpenBatchGeometryWorkflow(): void;
   onOpenMultiImageWorkflow(): void;
   onOpenFolder(): void;
   onSettingsChange(settings: AppSettings): Promise<void>;
@@ -569,6 +571,18 @@ export default function MainLibrary(props: MainLibraryProps) {
                           >
                             <ImagePlus aria-hidden="true" className="shrink-0" size={20} />
                             <span className="truncate">{t('library.splash.openImage')}</span>
+                          </Button>
+                        )}
+                        {!props.isAndroid && (
+                          <Button
+                            className="splash-action-batch flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
+                            data-tooltip={t('modals.batchGeometry.description')}
+                            onClick={props.onOpenBatchGeometryWorkflow}
+                            size="lg"
+                            type="button"
+                          >
+                            <ScanLine aria-hidden="true" className="shrink-0" size={20} />
+                            <span className="truncate">{t('modals.batchGeometry.entryTitle')}</span>
                           </Button>
                         )}
                         {!props.isAndroid && (

@@ -59,6 +59,75 @@ const DEPTH_FILENAME: &str = "depth_anything_v2_vits.onnx";
 const DEPTH_INPUT_SIZE: u32 = 518;
 const DEPTH_SHA256: &str = "d2b11a11c1d4a12b47608fa65a17ee9a4c605b55ee1730c8e3b526304f2562be";
 
+/// ONNX Runtime is normally bundled with release builds. Development builds can
+/// intentionally omit it, so an on-device AI action provisions this verified
+/// runtime beside its models before opening the first session.
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "onnxruntime.dll",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/onnxruntime-windows-x86_64.dll?download=true",
+    "579b636403983254346a5c1d80bd28f1519cd1e284cd204f8d4ff41f8d711559",
+);
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "onnxruntime.dll",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/onnxruntime-windows-aarch64.dll?download=true",
+    "79281671a386ed1baab9dbdbb09fe55f99577011472e9526cf9d0b468bb6bcc7",
+);
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "libonnxruntime.so",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/libonnxruntime-linux-x86_64.so?download=true",
+    "3da6146e14e7b8aaec625dde11d6114c7457c87a5f93d744897da8781e35c673",
+);
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "libonnxruntime.so",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/libonnxruntime-linux-aarch64.so?download=true",
+    "0afd69a0ae38c5099fd0e8604dda398ac43dee67cd9c6394b5142b19e82528de",
+);
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "libonnxruntime.dylib",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/libonnxruntime-macos-x86_64.dylib?download=true",
+    "283e595e61cf65df7a6b1d59a1616cbd35c8b6399dd90d799d99b71a3ff83160",
+);
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const ONNX_RUNTIME_ASSET: (&str, &str, &str) = (
+    "libonnxruntime.dylib",
+    "https://huggingface.co/CyberTimon/RapidRAW-Models/resolve/main/onnxruntimes-v1.22.0/libonnxruntime-macos-aarch64.dylib?download=true",
+    "2b885992d3d6fa4130d39ec84a80d7504ff52750027c547bb22c86165f19406a",
+);
+
+#[cfg(not(target_os = "android"))]
+fn onnx_runtime_asset() -> Result<(&'static str, &'static str, &'static str)> {
+    #[cfg(any(
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "aarch64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64"),
+    ))]
+    {
+        Ok(ONNX_RUNTIME_ASSET)
+    }
+
+    #[cfg(not(any(
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "aarch64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64"),
+    )))]
+    {
+        Err(anyhow::anyhow!(
+            "No verified ONNX Runtime asset is available for this platform."
+        ))
+    }
+}
+
 pub struct AiModels {
     pub sam_encoder: Mutex<Session>,
     pub sam_decoder: Mutex<Session>,
@@ -301,6 +370,56 @@ async fn download_and_verify_model(
     Ok(())
 }
 
+/// Ensures a valid dynamic ONNX Runtime is selected before constructing a
+/// session. Prefer the release-bundled library; development builds fall back
+/// to a hash-verified, app-data copy downloaded on the first AI action.
+#[cfg(not(target_os = "android"))]
+async fn ensure_onnx_runtime(app_handle: &tauri::AppHandle, models_dir: &Path) -> Result<()> {
+    if let Some(configured_path) = std::env::var_os("ORT_DYLIB_PATH").map(PathBuf::from)
+        && configured_path.is_file()
+    {
+        return Ok(());
+    }
+
+    let (filename, url, expected_hash) = onnx_runtime_asset()?;
+    let bundled_path = app_handle
+        .path()
+        .resolve("resources", tauri::path::BaseDirectory::Resource)
+        .ok()
+        .map(|resource_path| resource_path.join(filename));
+
+    let runtime_path = match bundled_path.filter(|path| path.is_file()) {
+        Some(path) => path,
+        None => {
+            download_and_verify_model(
+                app_handle,
+                models_dir,
+                filename,
+                url,
+                expected_hash,
+                "ONNX Runtime",
+            )
+            .await?;
+            models_dir.join(filename)
+        }
+    };
+
+    // `ort` reads this during its first global initialization. This function is
+    // called while the shared AI initialization lock is held, before a session
+    // is built, so the process-wide path cannot race another model setup.
+    unsafe {
+        std::env::set_var("ORT_DYLIB_PATH", &runtime_path);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+async fn ensure_onnx_runtime(_app_handle: &tauri::AppHandle, _models_dir: &Path) -> Result<()> {
+    // Android packages its native runtime with the app rather than loading a
+    // desktop dylib path at run time.
+    Ok(())
+}
+
 pub async fn get_or_init_ai_models(
     app_handle: &tauri::AppHandle,
     ai_state_mutex: &Mutex<Option<AiState>>,
@@ -327,6 +446,7 @@ pub async fn get_or_init_ai_models(
     }
 
     let models_dir = get_models_dir(app_handle)?;
+    ensure_onnx_runtime(app_handle, &models_dir).await?;
 
     download_and_verify_model(
         app_handle,
@@ -441,6 +561,7 @@ pub async fn get_or_init_denoise_model(
     }
 
     let models_dir = get_models_dir(app_handle)?;
+    ensure_onnx_runtime(app_handle, &models_dir).await?;
     download_and_verify_model(
         app_handle,
         &models_dir,
@@ -501,6 +622,7 @@ pub async fn get_or_init_clip_models(
     }
 
     let models_dir = get_models_dir(app_handle)?;
+    ensure_onnx_runtime(app_handle, &models_dir).await?;
 
     download_and_verify_model(
         app_handle,
@@ -573,6 +695,7 @@ pub async fn get_or_init_lama_model(
     }
 
     let models_dir = get_models_dir(app_handle)?;
+    ensure_onnx_runtime(app_handle, &models_dir).await?;
     download_and_verify_model(
         app_handle,
         &models_dir,

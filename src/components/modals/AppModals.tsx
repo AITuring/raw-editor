@@ -13,6 +13,7 @@ import PanoramaModal from './PanoramaModal';
 import HdrModal from './HdrModal';
 import NegativeConversionModal from './NegativeConversionModal';
 import DenoiseModal from './DenoiseModal';
+import BatchGeometryModal from './BatchGeometryModal';
 import CreateFolderModal from './CreateFolderModal';
 import RenameFolderModal from './RenameFolderModal';
 import RenameFileModal from './RenameFileModal';
@@ -93,6 +94,7 @@ export default function AppModals(props: AppModalsProps) {
     hdrModalState,
     negativeModalState,
     denoiseModalState,
+    batchGeometryModalState,
     cullingModalState,
     collageModalState,
     isEditorExportDialogOpen,
@@ -117,6 +119,7 @@ export default function AppModals(props: AppModalsProps) {
       hdrModalState: state.hdrModalState,
       negativeModalState: state.negativeModalState,
       denoiseModalState: state.denoiseModalState,
+      batchGeometryModalState: state.batchGeometryModalState,
       cullingModalState: state.cullingModalState,
       collageModalState: state.collageModalState,
       isEditorExportDialogOpen: state.isEditorExportDialogOpen,
@@ -427,6 +430,10 @@ export default function AppModals(props: AppModalsProps) {
               (selectedImage?.path === denoiseModalState.targetPaths[0] ? finalPreviewUrl : null)
             : null
         }
+      />
+      <BatchGeometryModal
+        isOpen={batchGeometryModalState.isOpen}
+        onClose={() => setUI({ batchGeometryModalState: { isOpen: false } })}
       />
       <CreateFolderModal
         isOpen={isCreateFolderModalOpen}

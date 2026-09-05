@@ -4,7 +4,7 @@ use crate::file_management::{parse_virtual_path, read_file_mapped};
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
 use image::{ColorType, DynamicImage, GenericImageView, GrayImage, Rgb32FImage, RgbImage};
-use nalgebra::Matrix3;
+use nalgebra::{Matrix3, Point2, Point3};
 use rand::prelude::*;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
@@ -30,9 +30,42 @@ const MATCH_REFINE_SEARCH_RADIUS: i32 = 14;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
+const FOCUS_LOCAL_MODEL_MIN_INLIERS: usize = 6;
 const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
 const FOCUS_SEQUENCE_LINK_WINDOW: usize = 2;
 const FOCUS_SEQUENCE_GAP_PENALTY: f64 = 96.0;
+const FOCUS_GLOBAL_MAX_POINTS_PER_EDGE: usize = 256;
+const FOCUS_GLOBAL_MAX_ITERATIONS: usize = 12;
+const FOCUS_GLOBAL_HUBER_THRESHOLD: f64 = 0.0012;
+const FOCUS_GLOBAL_PRIOR_WEIGHT: f64 = 0.01;
+const FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT: f64 = 0.5;
+const FOCUS_GLOBAL_DAMPING: f64 = 1e-6;
+const FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT: f64 = 0.12;
+const FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT: f64 = 0.18;
+const FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT: f64 = 0.02;
+const FOCUS_LOCAL_MODEL_MAX_DISPLACEMENT_RATIO: f64 = 0.08;
+// Regional matches are measured against the already registered global model.
+// Keep this close to the dense-search radius after conversion back to the
+// source coordinate system. A wide gate can accept a different repeated stroke
+// and let an under-constrained local fit bend an entire band.
+const FOCUS_LOCAL_MATCH_RESIDUAL_RATIO: f64 = 0.008;
+const FOCUS_DENSE_REGION_MIN_NCC: f64 = 0.48;
+const FOCUS_FOREGROUND_PATCH_RADIUS: i32 = 12;
+const FOCUS_FOREGROUND_SEARCH_RADIUS: i32 = 48;
+const FOCUS_FOREGROUND_MIN_GRADIENT_ENERGY: f64 = 2.0;
+const FOCUS_FOREGROUND_MIN_CORNER_ENERGY: f64 = 500.0;
+pub(crate) const FOCUS_FOREGROUND_LUMA_THRESHOLD: u8 = 150;
+const FOCUS_FOREGROUND_MIN_BRIGHT_FRACTION: f64 = 0.35;
+const FOCUS_FOREGROUND_SCAN_MAX_Y: f64 = 0.45;
+const FOCUS_FOREGROUND_MIN_HEIGHT_RATIO: f64 = 0.025;
+// Overlapping source-coordinate bands let a moving-camera stack absorb small
+// residual lens/plane deformation without making the whole algorithm depend on
+// a particular foreground object. A narrower detected depth layer, when it is
+// trustworthy, is given precedence by the renderer.
+const FOCUS_GENERIC_BAND_RANGES: [(f64, f64); 4] =
+    [(0.00, 0.32), (0.22, 0.54), (0.44, 0.76), (0.66, 1.00)];
+const FOCUS_GENERIC_BAND_MAX_DISPLACEMENT_RATIO: f64 = 0.012;
+const FOCUS_DEPTH_LAYER_MAX_DISPLACEMENT_RATIO: f64 = 0.02;
 const SCALABLE_STACK_THRESHOLD: usize = 30;
 const LARGE_STACK_NEIGHBOR_WINDOW: usize = 4;
 const SCALABLE_LOW_TEXTURE_FEATURE_TARGET: usize = 96;
@@ -69,6 +102,9 @@ pub struct ImageInfo {
     pub full_image: Option<Rgb32FImage>,
     pub scale_factor: f64,
     pub features: Vec<Feature>,
+    pub top_features: Vec<Feature>,
+    pub foreground_range: Option<(f64, f64)>,
+    pub foreground_mask: Option<GrayImage>,
 }
 
 impl ImageInfo {
@@ -89,6 +125,22 @@ impl ImageInfo {
 pub struct MatchInfo {
     pub homography: Matrix3<f64>,
     pub inliers: usize,
+    pub points: Vec<(Point2<f64>, Point2<f64>)>,
+    pub candidate_points: Vec<(Point2<f64>, Point2<f64>)>,
+    pub top_candidate_points: Vec<(Point2<f64>, Point2<f64>)>,
+    pub dense_focus_points: Vec<(Point2<f64>, Point2<f64>)>,
+    pub foreground_feature_points: Vec<(Point2<f64>, Point2<f64>)>,
+}
+
+#[derive(Clone)]
+pub(crate) struct FocusWarpBand {
+    pub(crate) homographies: HashMap<usize, Matrix3<f64>>,
+    pub(crate) source_ranges: HashMap<usize, (f64, f64)>,
+}
+
+#[derive(Clone)]
+pub(crate) struct FocusLayerWarp {
+    pub(crate) bands: Vec<FocusWarpBand>,
 }
 
 pub(crate) struct StitchOutcome {
@@ -183,6 +235,9 @@ fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
         full_image: None,
         scale_factor: image.scale_factor,
         features: Vec::new(),
+        top_features: Vec::new(),
+        foreground_range: image.foreground_range,
+        foreground_mask: image.foreground_mask.clone(),
     }
 }
 
@@ -437,6 +492,215 @@ fn find_alignment_features(
     features
 }
 
+fn detect_foreground_range(alignment_image: &GrayImage) -> Option<(f64, f64)> {
+    let width = alignment_image.width();
+    let height = alignment_image.height();
+    if width < 64 || height < 128 {
+        return None;
+    }
+
+    let scan_end = ((height as f64 * FOCUS_FOREGROUND_SCAN_MAX_Y).round() as u32)
+        .clamp(1, height.saturating_sub(1));
+    let minimum_bright_pixels = (width as f64 * FOCUS_FOREGROUND_MIN_BRIGHT_FRACTION).ceil() as u32;
+    let bright_rows = (0..scan_end)
+        .map(|y| {
+            let bright_pixels = alignment_image
+                .rows()
+                .nth(y as usize)
+                .into_iter()
+                .flatten()
+                .filter(|pixel| pixel[0] >= FOCUS_FOREGROUND_LUMA_THRESHOLD)
+                .count() as u32;
+            bright_pixels >= minimum_bright_pixels
+        })
+        .collect::<Vec<_>>();
+
+    // This is only a conservative seed for an optional depth mask. The main
+    // focus registration does not depend on it and samples the complete frame.
+    let max_gap = ((height as f64 * 0.012).round() as usize).max(2);
+    let mut first = None;
+    let mut last = None;
+    let mut gap = 0usize;
+    for (row, is_bright) in bright_rows.iter().copied().enumerate() {
+        if is_bright {
+            if first.is_none() {
+                first = Some(row);
+            }
+            last = Some(row);
+            gap = 0;
+        } else if first.is_some() {
+            gap += 1;
+            if gap > max_gap {
+                break;
+            }
+        }
+    }
+    let (first, last) = first.zip(last)?;
+    let run_height = last.saturating_sub(first) + 1;
+    if (run_height as f64) < height as f64 * FOCUS_FOREGROUND_MIN_HEIGHT_RATIO {
+        return None;
+    }
+
+    let padding = (height as f64 * 0.012).max(3.0);
+    let minimum = ((first as f64 - padding) / height as f64).clamp(0.0, 1.0);
+    let maximum = (((last + 1) as f64 + padding) / height as f64).clamp(0.0, 1.0);
+    Some((minimum, maximum))
+}
+
+fn dilate_binary_mask(
+    mask: &GrayImage,
+    horizontal_radius: usize,
+    vertical_radius: usize,
+) -> GrayImage {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 {
+        return mask.clone();
+    }
+    let width = width as usize;
+    let height = height as usize;
+    let source = mask.as_raw();
+    let mut horizontal = vec![0u8; width * height];
+    let mut output = vec![0u8; width * height];
+
+    for y in 0..height {
+        let row_start = y * width;
+        let mut prefix = vec![0u32; width + 1];
+        for x in 0..width {
+            prefix[x + 1] = prefix[x] + u32::from(source[row_start + x] > 0);
+        }
+        for x in 0..width {
+            let start = x.saturating_sub(horizontal_radius);
+            let end = (x + horizontal_radius).min(width - 1);
+            if prefix[end + 1] > prefix[start] {
+                horizontal[row_start + x] = 255;
+            }
+        }
+    }
+
+    for x in 0..width {
+        let mut prefix = vec![0u32; height + 1];
+        for y in 0..height {
+            prefix[y + 1] = prefix[y] + u32::from(horizontal[y * width + x] > 0);
+        }
+        for y in 0..height {
+            let start = y.saturating_sub(vertical_radius);
+            let end = (y + vertical_radius).min(height - 1);
+            if prefix[end + 1] > prefix[start] {
+                output[y * width + x] = 255;
+            }
+        }
+    }
+
+    GrayImage::from_raw(width as u32, height as u32, output)
+        .expect("foreground mask dimensions must match")
+}
+
+fn build_foreground_mask(
+    alignment_image: &GrayImage,
+    foreground_range: Option<(f64, f64)>,
+) -> Option<GrayImage> {
+    let (minimum_y, maximum_y) = foreground_range?;
+    let (width, height) = alignment_image.dimensions();
+    if width == 0 || height == 0 || minimum_y >= maximum_y {
+        return None;
+    }
+    let base = GrayImage::from_fn(width, height, |x, y| {
+        let normalized_y = y as f64 / height.max(1) as f64;
+        let value = alignment_image.get_pixel(x, y)[0];
+        image::Luma([
+            if (minimum_y..=maximum_y).contains(&normalized_y)
+                && value >= FOCUS_FOREGROUND_LUMA_THRESHOLD
+            {
+                255
+            } else {
+                0
+            },
+        ])
+    });
+    // Include the narrow shadow and metallic lip around the bright core so
+    // ownership remains stable at its silhouette. This is a mask-space margin;
+    // it does not alter the generic registration path.
+    let horizontal_radius = ((width as f64 * 0.012).round() as usize).clamp(2, 32);
+    let vertical_radius = ((height as f64 * 0.025).round() as usize).clamp(3, 48);
+    Some(dilate_binary_mask(
+        &base,
+        horizontal_radius,
+        vertical_radius,
+    ))
+}
+
+fn focus_alignment_keypoint_is_foreground(image: &ImageInfo, keypoint: KeyPoint) -> bool {
+    let Some((minimum_y, maximum_y)) = image.foreground_range else {
+        return false;
+    };
+    let (width, height) = image.alignment_image.dimensions();
+    if keypoint.x >= width || keypoint.y >= height {
+        return false;
+    }
+    let normalized_y = keypoint.y as f64 / height.max(1) as f64;
+    if !(minimum_y..=maximum_y).contains(&normalized_y) {
+        return false;
+    }
+    image.foreground_mask.as_ref().map_or_else(
+        || {
+            image.alignment_image.get_pixel(keypoint.x, keypoint.y)[0]
+                >= FOCUS_FOREGROUND_LUMA_THRESHOLD
+        },
+        |mask| mask.get_pixel(keypoint.x, keypoint.y)[0] > 0,
+    )
+}
+
+fn find_top_alignment_features(
+    alignment_image: &GrayImage,
+    brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
+    foreground_range: Option<(f64, f64)>,
+) -> Vec<Feature> {
+    let Some((minimum_y, maximum_y)) = foreground_range else {
+        return Vec::new();
+    };
+    if alignment_image.height() < 128 || minimum_y >= maximum_y {
+        return Vec::new();
+    }
+    let top_start = (alignment_image.height() as f64 * minimum_y).round() as u32;
+    let top_end = (alignment_image.height() as f64 * maximum_y)
+        .round()
+        .max((top_start + 64) as f64)
+        .min(alignment_image.height() as f64) as u32;
+    let top_region = image::imageops::crop_imm(
+        alignment_image,
+        0,
+        top_start,
+        alignment_image.width(),
+        top_end.saturating_sub(top_start),
+    )
+    .to_image();
+    let mut features = processing::find_features_tuned(
+        &top_region,
+        brief_pairs,
+        SCALABLE_LOW_TEXTURE_FAST_THRESHOLD,
+        (SCALABLE_LOW_TEXTURE_NMS_RADIUS * 0.75).max(6.0),
+    );
+    let normalized_region = processing::normalize_grayscale(&top_region);
+    features.extend(processing::find_features_tuned(
+        &normalized_region,
+        brief_pairs,
+        5,
+        8.0,
+    ));
+    for feature in &mut features {
+        feature.keypoint.y = feature.keypoint.y.saturating_add(top_start);
+    }
+    features.retain(|feature| {
+        let y = feature.keypoint.y as f64 / alignment_image.height().max(1) as f64;
+        (minimum_y..=maximum_y).contains(&y)
+            && alignment_image
+                .get_pixel(feature.keypoint.x, feature.keypoint.y)
+                .0[0]
+                >= FOCUS_FOREGROUND_LUMA_THRESHOLD
+    });
+    features
+}
+
 fn emit_match_progress<R: Runtime>(
     completed: &Mutex<usize>,
     total: usize,
@@ -605,17 +869,98 @@ fn match_image_pair(
             )
         })
         .collect::<Vec<_>>();
+    let background_match_indices = if blend_mode == BlendMode::FocusStack
+        && (source_image.foreground_range.is_some() || target_image.foreground_range.is_some())
+    {
+        initial_matches
+            .iter()
+            .enumerate()
+            .filter_map(|(index, matched)| {
+                (!focus_alignment_keypoint_is_foreground(source_image, keypoints1[matched.index1])
+                    && !focus_alignment_keypoint_is_foreground(
+                        target_image,
+                        keypoints2[matched.index2],
+                    ))
+                .then_some(index)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    // A depth-discontinuous object can dominate a local descriptor match (the
+    // bright holder in this fixture is one example). Solve the global camera
+    // pose from the paper/background whenever there is enough background
+    // support, then let the optional regional model handle the object itself.
+    // If a pair contains too little background, retain the old all-point solver
+    // so unusual stacks do not become disconnected merely because an object
+    // detector fired.
+    let solver_indices = if background_match_indices.len() >= processing::MIN_INLIERS_FOR_CONNECTION
+    {
+        background_match_indices
+    } else {
+        (0..projected_match_points.len()).collect::<Vec<_>>()
+    };
+    let solver_points = solver_indices
+        .iter()
+        .map(|&index| projected_match_points[index])
+        .collect::<Vec<_>>();
+    let top_matches =
+        processing::match_features(&source_image.top_features, &target_image.top_features);
+    let top_candidate_points = top_matches
+        .iter()
+        .filter_map(|matched| {
+            let source = source_image.top_features.get(matched.index1)?.keypoint;
+            let target = target_image.top_features.get(matched.index2)?.keypoint;
+            Some((
+                project_point(
+                    source_image,
+                    source.x as f64 * source_image.scale_factor,
+                    source.y as f64 * source_image.scale_factor,
+                    projection,
+                )?,
+                project_point(
+                    target_image,
+                    target.x as f64 * target_image.scale_factor,
+                    target.y as f64 * target_image.scale_factor,
+                    projection,
+                )?,
+            ))
+        })
+        .collect::<Vec<_>>();
     let (projected_homography, projected_inlier_indices) = if stable_four_point_solver {
         processing::find_homography_ransac_points_stable(
-            &projected_match_points,
+            &solver_points,
             FULL_RES_RANSAC_INLIER_THRESHOLD,
         )
     } else {
-        processing::find_homography_ransac_points(
-            &projected_match_points,
-            FULL_RES_RANSAC_INLIER_THRESHOLD,
-        )
+        processing::find_homography_ransac_points(&solver_points, FULL_RES_RANSAC_INLIER_THRESHOLD)
     }?;
+    let projected_inlier_indices = projected_inlier_indices
+        .into_iter()
+        .map(|index| solver_indices[index])
+        .collect::<Vec<_>>();
+    let (dense_focus_points, foreground_feature_points) = if blend_mode == BlendMode::FocusStack {
+        let dense_focus_points = collect_dense_focus_region_points(
+            source_image,
+            target_image,
+            &projected_homography,
+            projection,
+        );
+        let mut foreground_feature_points = collect_foreground_feature_points(
+            source_image,
+            target_image,
+            &projected_homography,
+            projection,
+        );
+        // Descriptor matches are sparse but carry a stronger identity signal
+        // than a patch search on a long edge. Keep them alongside the strictly
+        // corner-filtered matches; the regional residual/RANSAC checks below
+        // decide whether a point is geometrically usable.
+        foreground_feature_points.extend(top_candidate_points.iter().copied());
+        (dense_focus_points, foreground_feature_points)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let mut inlier_points = projected_inlier_indices
         .iter()
         .map(|&index| {
@@ -691,7 +1036,268 @@ fn match_image_pair(
     Some(MatchInfo {
         homography,
         inliers: inlier_count,
+        points: inlier_points,
+        candidate_points: projected_match_points,
+        top_candidate_points,
+        dense_focus_points,
+        foreground_feature_points,
     })
+}
+
+fn collect_dense_focus_region_points(
+    source_image: &ImageInfo,
+    target_image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    if projection != Projection::Planar
+        || source_image.alignment_image.width() < 64
+        || source_image.alignment_image.height() < 64
+        || target_image.alignment_image.width() < 64
+        || target_image.alignment_image.height() < 64
+    {
+        return Vec::new();
+    }
+
+    let source_plane = LumaPlane::Gray(&source_image.alignment_image);
+    let target_plane = LumaPlane::Gray(&target_image.alignment_image);
+    let source_width = source_image.alignment_image.width() as f64;
+    let source_height = source_image.alignment_image.height() as f64;
+    let target_width = target_image.alignment_image.width() as i32;
+    let target_height = target_image.alignment_image.height() as i32;
+    let source_scale = source_image.scale_factor;
+    let target_scale = target_image.scale_factor;
+    let mut points = Vec::new();
+
+    // Use a sparse grid over the complete source frame. This is the generic
+    // residual-registration signal: ordinary paper texture and any foreground
+    // object can contribute, while the later regional RANSAC decides whether a
+    // consistent local model exists. The search radius is intentionally much
+    // smaller than the previous foreground-only search so repeated strokes on
+    // a long edge cannot jump to a different copy.
+    // The grid is deliberately independent of colour, brightness, or a named
+    // object. Extra samples near both frame edges let the generic regional
+    // registration see structured layers near the frame boundary even when an
+    // optional depth-mask detector does not fire.
+    let mut source_y_fractions = vec![
+        0.03, 0.08, 0.14, 0.20, 0.26, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88, 0.95,
+    ];
+    // A narrow depth layer is easy to miss when the fixed grid lands only on
+    // its uniform interior. Add samples at both silhouettes and along the
+    // interior whenever the capture contains a detected occlusion band. The
+    // same path is used for every object; the detector only supplies optional
+    // sampling locations and never changes the stitcher's geometry model.
+    if let Some((minimum_y, maximum_y)) = source_image.foreground_range {
+        let span = (maximum_y - minimum_y).max(0.0);
+        source_y_fractions.extend([
+            minimum_y,
+            minimum_y + span * 0.25,
+            minimum_y + span * 0.5,
+            minimum_y + span * 0.75,
+            maximum_y,
+        ]);
+        source_y_fractions.sort_unstable_by(f64::total_cmp);
+        source_y_fractions.dedup_by(|left, right| (*left - *right).abs() < 0.005);
+    }
+    let source_x_fractions = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95];
+    let patch_radius = 8;
+    let search_radius = 14;
+    for source_y_fraction in source_y_fractions {
+        for source_x_fraction in source_x_fractions {
+            let source_x = (source_width * source_x_fraction).round() as i32;
+            let source_y = (source_height * source_y_fraction).round() as i32;
+            if gradient_patch_energy(&source_plane, source_x, source_y, patch_radius) < 1.5 {
+                continue;
+            }
+            let source_full = Point2::new(
+                source_x as f64 * source_scale,
+                source_y as f64 * source_scale,
+            );
+            let predicted = *homography * Point3::new(source_full.x, source_full.y, 1.0);
+            if predicted.z.abs() < 1e-8 {
+                continue;
+            }
+            let predicted_target_full =
+                Point2::new(predicted.x / predicted.z, predicted.y / predicted.z);
+            let target_x = (predicted_target_full.x / target_scale).round() as i32;
+            let target_y = (predicted_target_full.y / target_scale).round() as i32;
+            if source_x < patch_radius
+                || source_y < patch_radius
+                || source_x + patch_radius >= source_width as i32
+                || source_y + patch_radius >= source_height as i32
+                || target_x < patch_radius + search_radius
+                || target_y < patch_radius + search_radius
+                || target_x + patch_radius + search_radius >= target_width
+                || target_y + patch_radius + search_radius >= target_height
+            {
+                continue;
+            }
+            let Some((best_x, best_y, subpixel_x, subpixel_y)) = refine_foreground_patch_position(
+                &source_plane,
+                &target_plane,
+                source_x,
+                source_y,
+                target_x,
+                target_y,
+                patch_radius,
+                search_radius,
+            ) else {
+                continue;
+            };
+            let score = gradient_patch_ncc(
+                &source_plane,
+                &target_plane,
+                source_x,
+                source_y,
+                best_x,
+                best_y,
+                patch_radius,
+            );
+            let luminance_score = patch_ncc(
+                &source_plane,
+                &target_plane,
+                source_x,
+                source_y,
+                best_x,
+                best_y,
+                patch_radius,
+            );
+            if !score.is_finite()
+                || score < FOCUS_DENSE_REGION_MIN_NCC
+                || !luminance_score.is_finite()
+                || luminance_score < 0.40
+                || gradient_patch_energy(&target_plane, best_x, best_y, patch_radius) < 1.5
+            {
+                continue;
+            }
+            let target_full = Point2::new(
+                (best_x as f64 + subpixel_x) * target_scale,
+                (best_y as f64 + subpixel_y) * target_scale,
+            );
+            points.push((source_full, target_full));
+        }
+    }
+    points
+}
+
+fn collect_foreground_feature_points(
+    source_image: &ImageInfo,
+    target_image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    let Some((source_minimum_y, source_maximum_y)) = source_image.foreground_range else {
+        return Vec::new();
+    };
+    let Some((target_minimum_y, target_maximum_y)) = target_image.foreground_range else {
+        return Vec::new();
+    };
+    if projection != Projection::Planar {
+        return Vec::new();
+    }
+
+    let source_plane = LumaPlane::Gray(&source_image.alignment_image);
+    let target_plane = LumaPlane::Gray(&target_image.alignment_image);
+    let source_width = source_image.alignment_image.width() as i32;
+    let source_height = source_image.alignment_image.height() as i32;
+    let target_width = target_image.alignment_image.width() as i32;
+    let target_height = target_image.alignment_image.height() as i32;
+    let patch_radius = FOCUS_FOREGROUND_PATCH_RADIUS;
+    let search_radius = FOCUS_FOREGROUND_SEARCH_RADIUS;
+    let mut points = Vec::new();
+
+    for feature in &source_image.top_features {
+        let source_x = feature.keypoint.x as i32;
+        let source_y = feature.keypoint.y as i32;
+        if source_x < patch_radius
+            || source_y < patch_radius
+            || source_x + patch_radius >= source_width - 1
+            || source_y + patch_radius >= source_height - 1
+        {
+            continue;
+        }
+        let source_y_fraction = source_y as f64 / source_height.max(1) as f64;
+        if !(source_minimum_y..=source_maximum_y).contains(&source_y_fraction) {
+            continue;
+        }
+        if gradient_patch_corner_energy(&source_plane, source_x, source_y, patch_radius)
+            < FOCUS_FOREGROUND_MIN_CORNER_ENERGY
+        {
+            continue;
+        }
+        let source_full = Point2::new(
+            source_x as f64 * source_image.scale_factor,
+            source_y as f64 * source_image.scale_factor,
+        );
+        let predicted = *homography * Point3::new(source_full.x, source_full.y, 1.0);
+        if predicted.z.abs() < 1e-8 {
+            continue;
+        }
+        let predicted_target_full =
+            Point2::new(predicted.x / predicted.z, predicted.y / predicted.z);
+        let target_x = (predicted_target_full.x / target_image.scale_factor).round() as i32;
+        let target_y = (predicted_target_full.y / target_image.scale_factor).round() as i32;
+        if target_x < patch_radius + search_radius
+            || target_y < patch_radius + search_radius
+            || target_x + patch_radius + search_radius >= target_width
+            || target_y + patch_radius + search_radius >= target_height
+        {
+            continue;
+        }
+        let Some((best_x, best_y, subpixel_x, subpixel_y)) = refine_foreground_patch_position(
+            &source_plane,
+            &target_plane,
+            source_x,
+            source_y,
+            target_x,
+            target_y,
+            patch_radius,
+            search_radius,
+        ) else {
+            continue;
+        };
+        let score = gradient_patch_ncc(
+            &source_plane,
+            &target_plane,
+            source_x,
+            source_y,
+            best_x,
+            best_y,
+            patch_radius,
+        );
+        let target_y_fraction = (best_y as f64 + subpixel_y) / target_height.max(1) as f64;
+        if !score.is_finite()
+            || score < FOCUS_DENSE_REGION_MIN_NCC
+            || !(target_minimum_y..=target_maximum_y).contains(&target_y_fraction)
+            || target_plane.luma_at(best_x, best_y).unwrap_or(0.0) < 110.0
+            || gradient_patch_energy(&target_plane, best_x, best_y, patch_radius)
+                < FOCUS_FOREGROUND_MIN_GRADIENT_ENERGY
+            || gradient_patch_corner_energy(&target_plane, best_x, best_y, patch_radius)
+                < FOCUS_FOREGROUND_MIN_CORNER_ENERGY
+        {
+            continue;
+        }
+        if points.iter().any(|(previous_source, previous_target)| {
+            (previous_source - source_full).norm() < 10.0
+                || (previous_target
+                    - Point2::new(
+                        (best_x as f64 + subpixel_x) * target_image.scale_factor,
+                        (best_y as f64 + subpixel_y) * target_image.scale_factor,
+                    ))
+                .norm()
+                    < 10.0
+        }) {
+            continue;
+        }
+        points.push((
+            source_full,
+            Point2::new(
+                (best_x as f64 + subpixel_x) * target_image.scale_factor,
+                (best_y as f64 + subpixel_y) * target_image.scale_factor,
+            ),
+        ));
+    }
+    points
 }
 
 fn select_large_panorama_transform(
@@ -848,6 +1454,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     blend_mode: BlendMode,
     progress_event: &str,
 ) -> Result<StitchOutcome, String> {
+    let image_paths = image_paths
+        .into_iter()
+        .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
+        .collect::<Vec<_>>();
     if image_paths.len() < 2 {
         return Err("At least two images are required for a panorama.".to_string());
     }
@@ -867,6 +1477,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Loading and preparing images...");
+    let focus_stack = blend_mode == BlendMode::FocusStack;
     let scalable_stack = image_paths.len() > SCALABLE_STACK_THRESHOLD;
     let (alignment_max_dimension, alignment_max_features) =
         scalable_alignment_budget(image_paths.len());
@@ -927,6 +1538,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     alignment_max_features,
                     scalable_stack,
                 );
+                let foreground_range = if focus_stack {
+                    detect_foreground_range(&alignment_image)
+                } else {
+                    None
+                };
+                let foreground_mask = if focus_stack {
+                    build_foreground_mask(&alignment_image, foreground_range)
+                } else {
+                    None
+                };
+                let top_features = if focus_stack {
+                    find_top_alignment_features(&alignment_image, &brief_pairs, foreground_range)
+                } else {
+                    Vec::new()
+                };
                 let full_image = (!scalable_stack).then(|| dynamic_image.to_rgb32f());
                 println!("    Found {} features in '{}'", features.len(), filename);
 
@@ -958,6 +1584,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     full_image,
                     scale_factor,
                     features,
+                    top_features,
+                    foreground_range,
+                    foreground_mask,
                 })
             })
             .collect::<Vec<Result<ImageInfo, String>>>()
@@ -1038,6 +1667,31 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             )?;
             if invert_for_storage {
                 match_info.homography = match_info.homography.try_inverse()?;
+                match_info.points = match_info
+                    .points
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect();
+                match_info.candidate_points = match_info
+                    .candidate_points
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect();
+                match_info.top_candidate_points = match_info
+                    .top_candidate_points
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect();
+                match_info.dense_focus_points = match_info
+                    .dense_focus_points
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect();
+                match_info.foreground_feature_points = match_info
+                    .foreground_feature_points
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect();
             }
             Some(((i, j), match_info))
         })
@@ -1069,6 +1723,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
     };
+    let focus_layer_warp = (blend_mode == BlendMode::FocusStack)
+        .then(|| build_focus_layer_warp(&image_data, &pairwise_matches, &global_homographies));
 
     if ordered_indices.len() < 2 {
         return Err("Could not find a connected sequence of at least two images.".to_string());
@@ -1121,11 +1777,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         start_time.elapsed()
     );
 
-    let (full_canvas_width, full_canvas_height) = stitching::output_canvas_dimensions(
-        &stitched_images_info,
-        &global_homographies,
-        projection,
-    );
+    let (full_canvas_width, full_canvas_height) = if blend_mode == BlendMode::FocusStack {
+        stitching::output_canvas_dimensions_with_focus_warp(
+            &stitched_images_info,
+            &global_homographies,
+            projection,
+            focus_layer_warp.as_ref(),
+        )
+    } else {
+        stitching::output_canvas_dimensions(&stitched_images_info, &global_homographies, projection)
+    };
     if full_canvas_width == 0 || full_canvas_height == 0 {
         return Err("The aligned panorama canvas is empty or invalid.".to_string());
     }
@@ -1198,6 +1859,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             &render_images_info,
             render_homographies,
             projection,
+            focus_layer_warp.as_ref(),
             app_handle.clone(),
             progress_event,
             &mut load_render_image,
@@ -1214,6 +1876,32 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         full_canvas_height,
         render_scale,
     })
+}
+
+fn is_generated_stitch_output(path: &str) -> bool {
+    let Some(stem) = Path::new(path).file_stem().and_then(|stem| stem.to_str()) else {
+        return false;
+    };
+    let stem = stem.to_ascii_lowercase();
+    ["_focusstack", "_panorama", "_pano"]
+        .into_iter()
+        .any(|suffix| {
+            let Some(marker) = stem.rfind(suffix) else {
+                return false;
+            };
+            let trailing = &stem[marker + suffix.len()..];
+            trailing.is_empty()
+                || trailing
+                    .chars()
+                    .all(|character| character.is_ascii_digit() || matches!(character, '-' | '_'))
+        })
+}
+
+fn is_auxiliary_stitch_file(path: &str) -> bool {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("._"))
 }
 
 fn estimate_translation(points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Matrix3<f64> {
@@ -1745,6 +2433,214 @@ impl LumaPlane<'_> {
             Self::Gray(image) => Some(image.get_pixel(x as u32, y as u32)[0] as f64),
         }
     }
+
+    fn gradient_at(&self, x: i32, y: i32) -> Option<(f64, f64)> {
+        let horizontal = self.luma_at(x + 1, y)? - self.luma_at(x - 1, y)?;
+        let vertical = self.luma_at(x, y + 1)? - self.luma_at(x, y - 1)?;
+        Some((horizontal, vertical))
+    }
+}
+
+fn gradient_patch_energy(image: &LumaPlane<'_>, center_x: i32, center_y: i32, radius: i32) -> f64 {
+    let mut energy = 0.0;
+    let mut sample_count = 0usize;
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let Some((horizontal, vertical)) = image.gradient_at(center_x + dx, center_y + dy)
+            else {
+                return 0.0;
+            };
+            energy += horizontal * horizontal + vertical * vertical;
+            sample_count += 1;
+        }
+    }
+    if sample_count == 0 {
+        0.0
+    } else {
+        (energy / sample_count as f64).sqrt()
+    }
+}
+
+fn gradient_patch_corner_energy(
+    image: &LumaPlane<'_>,
+    center_x: i32,
+    center_y: i32,
+    radius: i32,
+) -> f64 {
+    let mut sum_horizontal_squared = 0.0;
+    let mut sum_vertical_squared = 0.0;
+    let mut sum_cross = 0.0;
+    let mut sample_count = 0usize;
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let Some((horizontal, vertical)) = image.gradient_at(center_x + dx, center_y + dy)
+            else {
+                return 0.0;
+            };
+            sum_horizontal_squared += horizontal * horizontal;
+            sum_vertical_squared += vertical * vertical;
+            sum_cross += horizontal * vertical;
+            sample_count += 1;
+        }
+    }
+    if sample_count == 0 {
+        return 0.0;
+    }
+    let sample_count = sample_count as f64;
+    let horizontal_squared = sum_horizontal_squared / sample_count;
+    let vertical_squared = sum_vertical_squared / sample_count;
+    let cross = sum_cross / sample_count;
+    (horizontal_squared * vertical_squared - cross * cross)
+        .max(0.0)
+        .sqrt()
+}
+
+fn gradient_patch_ncc(
+    image1: &LumaPlane<'_>,
+    image2: &LumaPlane<'_>,
+    center1_x: i32,
+    center1_y: i32,
+    center2_x: i32,
+    center2_y: i32,
+    radius: i32,
+) -> f64 {
+    let mut sum1_horizontal = 0.0;
+    let mut sum1_vertical = 0.0;
+    let mut sum2_horizontal = 0.0;
+    let mut sum2_vertical = 0.0;
+    let mut sum_squared1 = 0.0;
+    let mut sum_squared2 = 0.0;
+    let mut sum_product = 0.0;
+    let mut sample_count = 0usize;
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let Some((horizontal1, vertical1)) = image1.gradient_at(center1_x + dx, center1_y + dy)
+            else {
+                return f64::NEG_INFINITY;
+            };
+            let Some((horizontal2, vertical2)) = image2.gradient_at(center2_x + dx, center2_y + dy)
+            else {
+                return f64::NEG_INFINITY;
+            };
+            sum1_horizontal += horizontal1;
+            sum1_vertical += vertical1;
+            sum2_horizontal += horizontal2;
+            sum2_vertical += vertical2;
+            sum_squared1 += horizontal1 * horizontal1 + vertical1 * vertical1;
+            sum_squared2 += horizontal2 * horizontal2 + vertical2 * vertical2;
+            sum_product += horizontal1 * horizontal2 + vertical1 * vertical2;
+            sample_count += 1;
+        }
+    }
+
+    let sample_count = sample_count as f64;
+    let covariance = sum_product
+        - (sum1_horizontal * sum2_horizontal + sum1_vertical * sum2_vertical) / sample_count;
+    let variance1 = sum_squared1
+        - (sum1_horizontal * sum1_horizontal + sum1_vertical * sum1_vertical) / sample_count;
+    let variance2 = sum_squared2
+        - (sum2_horizontal * sum2_horizontal + sum2_vertical * sum2_vertical) / sample_count;
+    if variance1 <= f64::EPSILON || variance2 <= f64::EPSILON {
+        f64::NEG_INFINITY
+    } else {
+        covariance / (variance1 * variance2).sqrt()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn refine_foreground_patch_position(
+    image1: &LumaPlane<'_>,
+    image2: &LumaPlane<'_>,
+    source_x: i32,
+    source_y: i32,
+    target_x: i32,
+    target_y: i32,
+    patch_radius: i32,
+    search_radius: i32,
+) -> Option<(i32, i32, f64, f64)> {
+    let source_energy = gradient_patch_energy(image1, source_x, source_y, patch_radius);
+    if source_energy < FOCUS_FOREGROUND_MIN_GRADIENT_ENERGY {
+        return None;
+    }
+
+    let mut best_score = f64::NEG_INFINITY;
+    let mut best_target = None;
+    for dy in -search_radius..=search_radius {
+        for dx in -search_radius..=search_radius {
+            let candidate_x = target_x + dx;
+            let candidate_y = target_y + dy;
+            let gradient_score = gradient_patch_ncc(
+                image1,
+                image2,
+                source_x,
+                source_y,
+                candidate_x,
+                candidate_y,
+                patch_radius,
+            );
+            if !gradient_score.is_finite() {
+                continue;
+            }
+            // Gradient correlation identifies stable depth-layer edges and
+            // structure; a small luminance contribution keeps the position from
+            // becoming arbitrary on a long, nearly uniform surface.
+            let luminance_score = patch_ncc(
+                image1,
+                image2,
+                source_x,
+                source_y,
+                candidate_x,
+                candidate_y,
+                patch_radius,
+            );
+            let score = if luminance_score.is_finite() {
+                gradient_score * 0.75 + luminance_score * 0.25
+            } else {
+                gradient_score
+            };
+            if score > best_score {
+                best_score = score;
+                best_target = Some((candidate_x, candidate_y));
+            }
+        }
+    }
+
+    let (best_x, best_y) = best_target?;
+    if !best_score.is_finite() {
+        return None;
+    }
+    let sample = |x, y| {
+        let gradient_score =
+            gradient_patch_ncc(image1, image2, source_x, source_y, x, y, patch_radius);
+        let luminance_score = patch_ncc(image1, image2, source_x, source_y, x, y, patch_radius);
+        if luminance_score.is_finite() {
+            gradient_score * 0.75 + luminance_score * 0.25
+        } else {
+            gradient_score
+        }
+    };
+    let subpixel_offset = |negative: f64, center: f64, positive: f64| {
+        if !negative.is_finite() || !center.is_finite() || !positive.is_finite() {
+            return 0.0;
+        }
+        let denominator = negative - 2.0 * center + positive;
+        if denominator.abs() < 1e-8 {
+            0.0
+        } else {
+            (0.5 * (negative - positive) / denominator).clamp(-1.0, 1.0)
+        }
+    };
+    let subpixel_x = subpixel_offset(
+        sample(best_x - 1, best_y),
+        best_score,
+        sample(best_x + 1, best_y),
+    );
+    let subpixel_y = subpixel_offset(
+        sample(best_x, best_y - 1),
+        best_score,
+        sample(best_x, best_y + 1),
+    );
+    Some((best_x, best_y, subpixel_x, subpixel_y))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2174,6 +3070,8 @@ fn build_focus_stack_stitching_order(
         global_homographies.insert(current, previous_global * current_to_previous);
     }
 
+    let global_homographies =
+        optimize_focus_stack_global_homographies(images, matches, &global_homographies);
     (ordered_indices, global_homographies)
 }
 
@@ -2193,6 +3091,1197 @@ fn focus_stack_link_transform(
     })
 }
 
+type FocusPose = [f64; 8];
+
+#[derive(Clone, Copy)]
+struct FocusGlobalObservation {
+    source_index: usize,
+    target_index: usize,
+    source: Point2<f64>,
+    target: Point2<f64>,
+}
+
+fn focus_pose_matrix(pose: &FocusPose) -> Matrix3<f64> {
+    Matrix3::new(
+        pose[0], pose[1], pose[2], pose[3], pose[4], pose[5], pose[6], pose[7], 1.0,
+    )
+}
+
+fn focus_matrix_pose(matrix: &Matrix3<f64>) -> Option<FocusPose> {
+    let normalization = matrix[(2, 2)];
+    if !normalization.is_finite() || normalization.abs() < 1e-8 {
+        return None;
+    }
+    let pose = [
+        matrix[(0, 0)] / normalization,
+        matrix[(0, 1)] / normalization,
+        matrix[(0, 2)] / normalization,
+        matrix[(1, 0)] / normalization,
+        matrix[(1, 1)] / normalization,
+        matrix[(1, 2)] / normalization,
+        matrix[(2, 0)] / normalization,
+        matrix[(2, 1)] / normalization,
+    ];
+    pose.iter().all(|value| value.is_finite()).then_some(pose)
+}
+
+fn focus_local_norm_to_full(image: &ImageInfo, coordinate_scale: f64) -> Matrix3<f64> {
+    Matrix3::new(
+        coordinate_scale,
+        0.0,
+        image.width as f64 * 0.5,
+        0.0,
+        coordinate_scale,
+        image.height as f64 * 0.5,
+        0.0,
+        0.0,
+        1.0,
+    )
+}
+
+fn focus_world_full_to_norm(reference: &ImageInfo, coordinate_scale: f64) -> Matrix3<f64> {
+    Matrix3::new(
+        coordinate_scale.recip(),
+        0.0,
+        -(reference.width as f64 * 0.5) / coordinate_scale,
+        0.0,
+        coordinate_scale.recip(),
+        -(reference.height as f64 * 0.5) / coordinate_scale,
+        0.0,
+        0.0,
+        1.0,
+    )
+}
+
+fn focus_world_norm_to_full(reference: &ImageInfo, coordinate_scale: f64) -> Matrix3<f64> {
+    focus_local_norm_to_full(reference, coordinate_scale)
+}
+
+fn focus_normalized_point(
+    image: &ImageInfo,
+    point: Point2<f64>,
+    coordinate_scale: f64,
+) -> Point2<f64> {
+    Point2::new(
+        (point.x - image.width as f64 * 0.5) / coordinate_scale,
+        (point.y - image.height as f64 * 0.5) / coordinate_scale,
+    )
+}
+
+fn focus_pose_to_full_homography(
+    pose: &FocusPose,
+    image: &ImageInfo,
+    reference: &ImageInfo,
+    coordinate_scale: f64,
+) -> Option<Matrix3<f64>> {
+    let local_full_to_norm = Matrix3::new(
+        coordinate_scale.recip(),
+        0.0,
+        -(image.width as f64 * 0.5) / coordinate_scale,
+        0.0,
+        coordinate_scale.recip(),
+        -(image.height as f64 * 0.5) / coordinate_scale,
+        0.0,
+        0.0,
+        1.0,
+    );
+    let full = focus_world_norm_to_full(reference, coordinate_scale)
+        * focus_pose_matrix(pose)
+        * local_full_to_norm;
+    focus_matrix_pose(&full).map(|normalized| focus_pose_matrix(&normalized))
+}
+
+fn focus_homography_to_pose(
+    homography: &Matrix3<f64>,
+    image: &ImageInfo,
+    reference: &ImageInfo,
+    coordinate_scale: f64,
+) -> Option<FocusPose> {
+    let normalized = focus_world_full_to_norm(reference, coordinate_scale)
+        * homography
+        * focus_local_norm_to_full(image, coordinate_scale);
+    focus_matrix_pose(&normalized)
+}
+
+fn focus_pose_projection(
+    pose: &FocusPose,
+    point: Point2<f64>,
+) -> Option<(Point2<f64>, [f64; 8], [f64; 8])> {
+    let x = point.x;
+    let y = point.y;
+    let numerator_x = pose[0] * x + pose[1] * y + pose[2];
+    let numerator_y = pose[3] * x + pose[4] * y + pose[5];
+    let denominator = pose[6] * x + pose[7] * y + 1.0;
+    if !denominator.is_finite() || denominator.abs() < 1e-8 {
+        return None;
+    }
+    let inverse_denominator = denominator.recip();
+    let projected = Point2::new(
+        numerator_x * inverse_denominator,
+        numerator_y * inverse_denominator,
+    );
+    if !projected.x.is_finite() || !projected.y.is_finite() {
+        return None;
+    }
+    let x_jacobian = [
+        x * inverse_denominator,
+        y * inverse_denominator,
+        inverse_denominator,
+        0.0,
+        0.0,
+        0.0,
+        -projected.x * x * inverse_denominator,
+        -projected.x * y * inverse_denominator,
+    ];
+    let y_jacobian = [
+        0.0,
+        0.0,
+        0.0,
+        x * inverse_denominator,
+        y * inverse_denominator,
+        inverse_denominator,
+        -projected.y * x * inverse_denominator,
+        -projected.y * y * inverse_denominator,
+    ];
+    Some((projected, x_jacobian, y_jacobian))
+}
+
+fn focus_match_points_for_region(
+    source_image: &ImageInfo,
+    target_image: &ImageInfo,
+    match_info: &MatchInfo,
+    normalized_y_range: (f64, f64),
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    let Some(source_foreground_range) = source_image.foreground_range else {
+        return Vec::new();
+    };
+    let Some(target_foreground_range) = target_image.foreground_range else {
+        return Vec::new();
+    };
+    let mut selected_points = match_info.dense_focus_points.clone();
+    selected_points.extend(match_info.foreground_feature_points.iter().copied());
+    if selected_points.len() < FOCUS_LOCAL_MODEL_MIN_INLIERS {
+        selected_points.extend(match_info.top_candidate_points.iter().copied());
+    }
+    let maximum_residual =
+        source_image.width.max(source_image.height) as f64 * FOCUS_LOCAL_MATCH_RESIDUAL_RATIO;
+    let filtered = selected_points
+        .iter()
+        .copied()
+        .filter(|(source, target)| {
+            let mapped = match_info.homography * Point3::new(source.x, source.y, 1.0);
+            if mapped.z.abs() < 1e-8 {
+                return false;
+            }
+            let predicted = Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+            if (predicted - *target).norm() > maximum_residual {
+                return false;
+            }
+            let source_y = source.y / source_image.height.max(1) as f64;
+            let target_y = target.y / target_image.height.max(1) as f64;
+            source_y >= normalized_y_range.0
+                && source_y <= normalized_y_range.1
+                && target_y >= normalized_y_range.0
+                && target_y <= normalized_y_range.1
+                && source_y >= source_foreground_range.0
+                && source_y <= source_foreground_range.1
+                && target_y >= target_foreground_range.0
+                && target_y <= target_foreground_range.1
+        })
+        .collect::<Vec<_>>();
+    if filtered.len() < FOCUS_LOCAL_MODEL_MIN_INLIERS {
+        return Vec::new();
+    }
+
+    // A narrow depth layer can provide only a few long, mostly one-dimensional edges.
+    // The general panorama homography solver intentionally requires 15 inliers,
+    // which rejects otherwise useful local models from a narrow foreground band.
+    // Fit an affine model here with the focus-specific minimum instead; the
+    // stability check below still prevents a sparse or degenerate fit from being
+    // applied to the rendered layer.
+    let Some(regional_fit) =
+        robust_transform_fit(&filtered, 3, 0x5EED_7A11_4F52_9B31, estimate_affine)
+    else {
+        return Vec::new();
+    };
+    let RobustTransformFit {
+        transform: regional_homography,
+        inlier_indices,
+        median_error: _,
+    } = regional_fit;
+    let inlier_points = inlier_indices
+        .iter()
+        .map(|&index| filtered[index])
+        .collect::<Vec<_>>();
+    if inlier_indices.len() < FOCUS_LOCAL_MODEL_MIN_INLIERS
+        || !transform_is_stable_for_focus_stack(&regional_homography, source_image.dimensions())
+        || !focus_regional_support_is_diverse(
+            &inlier_points,
+            source_image.dimensions(),
+            target_image.dimensions(),
+        )
+    {
+        return Vec::new();
+    }
+
+    let maximum_displacement = [0.0, 0.5, 1.0]
+        .into_iter()
+        .flat_map(|x| {
+            [normalized_y_range.0, normalized_y_range.1]
+                .into_iter()
+                .map(move |y| {
+                    Point2::new(
+                        source_image.width as f64 * x,
+                        source_image.height as f64 * y,
+                    )
+                })
+        })
+        .filter_map(|point| {
+            let local = regional_homography * nalgebra::Point3::new(point.x, point.y, 1.0);
+            let global = match_info.homography * nalgebra::Point3::new(point.x, point.y, 1.0);
+            if local.z.abs() < 1e-8 || global.z.abs() < 1e-8 {
+                return None;
+            }
+            Some(
+                (Point2::new(local.x / local.z, local.y / local.z)
+                    - Point2::new(global.x / global.z, global.y / global.z))
+                .norm(),
+            )
+        })
+        .fold(0.0, f64::max);
+    if maximum_displacement
+        <= source_image.width.max(source_image.height) as f64
+            * FOCUS_LOCAL_MODEL_MAX_DISPLACEMENT_RATIO
+    {
+        inlier_indices
+            .into_iter()
+            .map(|index| filtered[index])
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+fn focus_regional_support_is_diverse(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+) -> bool {
+    if points.len() < FOCUS_LOCAL_MODEL_MIN_INLIERS {
+        return false;
+    }
+    let source_min_x = points
+        .iter()
+        .map(|(source, _)| source.x)
+        .fold(f64::INFINITY, f64::min);
+    let source_max_x = points
+        .iter()
+        .map(|(source, _)| source.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let source_min_y = points
+        .iter()
+        .map(|(source, _)| source.y)
+        .fold(f64::INFINITY, f64::min);
+    let source_max_y = points
+        .iter()
+        .map(|(source, _)| source.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let target_min_x = points
+        .iter()
+        .map(|(_, target)| target.x)
+        .fold(f64::INFINITY, f64::min);
+    let target_max_x = points
+        .iter()
+        .map(|(_, target)| target.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let target_min_y = points
+        .iter()
+        .map(|(_, target)| target.y)
+        .fold(f64::INFINITY, f64::min);
+    let target_max_y = points
+        .iter()
+        .map(|(_, target)| target.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let source_width = source_dimensions.0.max(1) as f64;
+    let source_height = source_dimensions.1.max(1) as f64;
+    let target_width = target_dimensions.0.max(1) as f64;
+    let target_height = target_dimensions.1.max(1) as f64;
+    let source_span_x = (source_max_x - source_min_x) / source_width;
+    let source_span_y = (source_max_y - source_min_y) / source_height;
+    let target_span_x = (target_max_x - target_min_x) / target_width;
+    let target_span_y = (target_max_y - target_min_y) / target_height;
+    let source_area = source_span_x * source_span_y;
+    let target_area = target_span_x * target_span_y;
+
+    // A local model needs support in both axes. The area fallback permits a
+    // long, thin object such as a mat edge, but a single screw/corner cluster
+    // cannot satisfy it and therefore cannot extrapolate a warp over the band.
+    let source_supported =
+        (source_span_x >= 0.10 && source_span_y >= 0.035) || source_area >= 0.006;
+    let target_supported =
+        (target_span_x >= 0.10 && target_span_y >= 0.035) || target_area >= 0.006;
+    source_supported && target_supported
+}
+
+fn focus_global_observations(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    coordinate_scale: f64,
+    normalized_y_range: Option<(f64, f64)>,
+) -> Vec<FocusGlobalObservation> {
+    focus_global_observations_with_mode(images, matches, coordinate_scale, normalized_y_range, true)
+}
+
+fn focus_global_observations_for_generic_region(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    coordinate_scale: f64,
+    normalized_y_range: (f64, f64),
+) -> Vec<FocusGlobalObservation> {
+    focus_global_observations_with_mode(
+        images,
+        matches,
+        coordinate_scale,
+        Some(normalized_y_range),
+        false,
+    )
+}
+
+fn focus_global_observations_with_mode(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    coordinate_scale: f64,
+    normalized_y_range: Option<(f64, f64)>,
+    use_foreground_region_matches: bool,
+) -> Vec<FocusGlobalObservation> {
+    let mut observations = Vec::new();
+    for (&(source_index, target_index), match_info) in matches {
+        if source_index >= images.len() || target_index >= images.len() {
+            continue;
+        }
+        let selected_points = normalized_y_range
+            .map(|range| {
+                if use_foreground_region_matches {
+                    focus_match_points_for_region(
+                        &images[source_index],
+                        &images[target_index],
+                        match_info,
+                        range,
+                    )
+                } else {
+                    focus_match_points_for_generic_region(
+                        match_info,
+                        &images[source_index],
+                        &images[target_index],
+                        range,
+                    )
+                }
+            })
+            .unwrap_or_else(|| match_info.points.clone());
+        let point_count = selected_points.len().min(FOCUS_GLOBAL_MAX_POINTS_PER_EDGE);
+        for sample_index in 0..point_count {
+            let point_index = if point_count == selected_points.len() {
+                sample_index
+            } else {
+                sample_index * (selected_points.len() - 1) / (point_count - 1).max(1)
+            };
+            let (source, target) = selected_points[point_index];
+            if source.x.is_finite()
+                && source.y.is_finite()
+                && target.x.is_finite()
+                && target.y.is_finite()
+            {
+                let source =
+                    focus_normalized_point(&images[source_index], source, coordinate_scale);
+                let target =
+                    focus_normalized_point(&images[target_index], target, coordinate_scale);
+                observations.push(FocusGlobalObservation {
+                    source_index,
+                    target_index,
+                    source,
+                    target,
+                });
+            }
+        }
+    }
+    observations
+}
+
+fn focus_match_points_for_generic_region(
+    match_info: &MatchInfo,
+    source_image: &ImageInfo,
+    target_image: &ImageInfo,
+    normalized_y_range: (f64, f64),
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    // Ordinary keypoint inliers provide the reliable identity signal, while the
+    // dense patch matches carry the sub-pixel residual that a broad homography
+    // cannot explain. Keep both for generic regions; restricting this to
+    // keypoints made the "generic" bands numerically different but visually
+    // inert on texture-poor or near-field parts of a scan.
+    let mut candidates = match_info.points.clone();
+    candidates.extend(match_info.dense_focus_points.iter().copied());
+    let maximum_residual = source_image.width.max(source_image.height).max(1) as f64
+        * FOCUS_LOCAL_MATCH_RESIDUAL_RATIO;
+    candidates
+        .into_iter()
+        .filter(|(source, target)| {
+            if !source.x.is_finite()
+                || !source.y.is_finite()
+                || !target.x.is_finite()
+                || !target.y.is_finite()
+            {
+                return false;
+            }
+            let mapped = match_info.homography * Point3::new(source.x, source.y, 1.0);
+            if mapped.z.abs() < 1e-8 {
+                return false;
+            }
+            let predicted = Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+            if (predicted - *target).norm() > maximum_residual {
+                return false;
+            }
+            let source_y = source.y / source_image.height.max(1) as f64;
+            let target_y = target.y / target_image.height.max(1) as f64;
+            // A moving mosaic can move the same physical strip to a different
+            // normalized y coordinate in the adjacent frame. Associate a
+            // correspondence with a band when either endpoint lies in it;
+            // requiring both endpoints silently dropped exactly those residuals.
+            (normalized_y_range.0..=normalized_y_range.1).contains(&source_y)
+                || (normalized_y_range.0..=normalized_y_range.1).contains(&target_y)
+        })
+        .collect()
+}
+
+fn focus_global_poses_are_valid(
+    poses: &[FocusPose],
+    images: &[ImageInfo],
+    reference: &ImageInfo,
+    coordinate_scale: f64,
+) -> bool {
+    if poses.len() != images.len()
+        || poses.iter().any(|pose| {
+            pose.iter()
+                .any(|value| !value.is_finite() || value.abs() > 100.0)
+        })
+    {
+        return false;
+    }
+    poses.iter().zip(images).all(|(pose, image)| {
+        let corners = [
+            Point2::new(0.0, 0.0),
+            Point2::new(image.width as f64, 0.0),
+            Point2::new(image.width as f64, image.height as f64),
+            Point2::new(0.0, image.height as f64),
+        ];
+        let normalized_corners = corners
+            .into_iter()
+            .map(|corner| focus_normalized_point(image, corner, coordinate_scale));
+        if normalized_corners
+            .filter_map(|corner| focus_pose_projection(pose, corner))
+            .count()
+            != 4
+        {
+            return false;
+        }
+        let Some(full) = focus_pose_to_full_homography(pose, image, reference, coordinate_scale)
+        else {
+            return false;
+        };
+        full.try_inverse().is_some()
+    })
+}
+
+fn focus_global_robust_cost(
+    poses: &[FocusPose],
+    initial_poses: &[FocusPose],
+    observations: &[FocusGlobalObservation],
+) -> f64 {
+    let mut cost = 0.0;
+    for observation in observations {
+        let Some((source, _, _)) =
+            focus_pose_projection(&poses[observation.source_index], observation.source)
+        else {
+            return f64::INFINITY;
+        };
+        let Some((target, _, _)) =
+            focus_pose_projection(&poses[observation.target_index], observation.target)
+        else {
+            return f64::INFINITY;
+        };
+        let residual = source - target;
+        let magnitude = residual.norm();
+        if !magnitude.is_finite() {
+            return f64::INFINITY;
+        }
+        cost += if magnitude <= FOCUS_GLOBAL_HUBER_THRESHOLD {
+            0.5 * magnitude * magnitude
+        } else {
+            FOCUS_GLOBAL_HUBER_THRESHOLD * (magnitude - 0.5 * FOCUS_GLOBAL_HUBER_THRESHOLD)
+        };
+    }
+    for (image_index, pose) in poses.iter().enumerate().skip(1) {
+        for parameter in 0..8 {
+            let prior_weight = if parameter >= 6 {
+                FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT
+            } else {
+                FOCUS_GLOBAL_PRIOR_WEIGHT
+            };
+            let difference = pose[parameter] - initial_poses[image_index][parameter];
+            cost += 0.5 * prior_weight * difference * difference;
+        }
+    }
+    cost
+}
+
+fn focus_global_normal_equations(
+    poses: &[FocusPose],
+    initial_poses: &[FocusPose],
+    observations: &[FocusGlobalObservation],
+) -> (nalgebra::DMatrix<f64>, nalgebra::DVector<f64>) {
+    let variable_count = poses.len().saturating_sub(1) * 8;
+    let mut normal = nalgebra::DMatrix::zeros(variable_count, variable_count);
+    let mut gradient = nalgebra::DVector::zeros(variable_count);
+
+    for observation in observations {
+        let Some((source, source_x_jacobian, source_y_jacobian)) =
+            focus_pose_projection(&poses[observation.source_index], observation.source)
+        else {
+            continue;
+        };
+        let Some((target, target_x_jacobian, target_y_jacobian)) =
+            focus_pose_projection(&poses[observation.target_index], observation.target)
+        else {
+            continue;
+        };
+        let residual = source - target;
+        let magnitude = residual.norm();
+        if !magnitude.is_finite() {
+            continue;
+        }
+        let robust_weight = if magnitude <= FOCUS_GLOBAL_HUBER_THRESHOLD {
+            1.0
+        } else {
+            FOCUS_GLOBAL_HUBER_THRESHOLD / magnitude
+        };
+
+        for (residual_component, source_jacobian, target_jacobian) in [
+            (residual.x, source_x_jacobian, target_x_jacobian),
+            (residual.y, source_y_jacobian, target_y_jacobian),
+        ] {
+            let mut jacobian_entries = Vec::with_capacity(16);
+            if observation.source_index > 0 {
+                let base = (observation.source_index - 1) * 8;
+                for parameter in 0..8 {
+                    jacobian_entries.push((base + parameter, source_jacobian[parameter]));
+                }
+            }
+            if observation.target_index > 0 {
+                let base = (observation.target_index - 1) * 8;
+                for parameter in 0..8 {
+                    jacobian_entries.push((base + parameter, -target_jacobian[parameter]));
+                }
+            }
+            for &(column, jacobian) in &jacobian_entries {
+                gradient[column] += robust_weight * jacobian * residual_component;
+                for &(row, other_jacobian) in &jacobian_entries {
+                    normal[(column, row)] += robust_weight * jacobian * other_jacobian;
+                }
+            }
+        }
+    }
+
+    for (image_index, pose) in poses.iter().enumerate().skip(1) {
+        let base = (image_index - 1) * 8;
+        for parameter in 0..8 {
+            let prior_weight = if parameter >= 6 {
+                FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT
+            } else {
+                FOCUS_GLOBAL_PRIOR_WEIGHT
+            };
+            normal[(base + parameter, base + parameter)] += prior_weight + FOCUS_GLOBAL_DAMPING;
+            gradient[base + parameter] +=
+                prior_weight * (pose[parameter] - initial_poses[image_index][parameter]);
+        }
+    }
+    (normal, gradient)
+}
+
+fn optimize_focus_stack_global_homographies(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> HashMap<usize, Matrix3<f64>> {
+    optimize_focus_stack_global_homographies_in_region_mode(
+        images,
+        matches,
+        initial_homographies,
+        None,
+        false,
+    )
+}
+
+fn optimize_focus_stack_global_homographies_in_region(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    normalized_y_range: Option<(f64, f64)>,
+) -> HashMap<usize, Matrix3<f64>> {
+    optimize_focus_stack_global_homographies_in_region_mode(
+        images,
+        matches,
+        initial_homographies,
+        normalized_y_range,
+        true,
+    )
+}
+
+fn optimize_focus_stack_global_homographies_in_generic_region(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    normalized_y_range: (f64, f64),
+) -> HashMap<usize, Matrix3<f64>> {
+    optimize_focus_stack_global_homographies_in_region_mode(
+        images,
+        matches,
+        initial_homographies,
+        Some(normalized_y_range),
+        false,
+    )
+}
+
+fn optimize_focus_stack_global_homographies_in_region_mode(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    normalized_y_range: Option<(f64, f64)>,
+    use_foreground_region_matches: bool,
+) -> HashMap<usize, Matrix3<f64>> {
+    if images.len() < 2 {
+        return initial_homographies.clone();
+    }
+    let Some(reference) = images.first() else {
+        return initial_homographies.clone();
+    };
+    let coordinate_scale = images
+        .iter()
+        .map(|image| image.width.max(image.height) as f64)
+        .fold(1.0, f64::max);
+    let mut initial_poses = Vec::with_capacity(images.len());
+    for image in images {
+        let Some(homography) = initial_homographies.get(&image.id) else {
+            return initial_homographies.clone();
+        };
+        let Some(pose) = focus_homography_to_pose(homography, image, reference, coordinate_scale)
+        else {
+            return initial_homographies.clone();
+        };
+        initial_poses.push(pose);
+    }
+    initial_poses[0] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+    let initial_pose_maxima = (0..8)
+        .map(|parameter| {
+            initial_poses
+                .iter()
+                .map(|pose| pose[parameter].abs())
+                .fold(0.0, f64::max)
+        })
+        .collect::<Vec<_>>();
+    println!(
+        "  - Focus global initial pose maxima: {:?}",
+        initial_pose_maxima
+    );
+
+    let observations = if use_foreground_region_matches {
+        focus_global_observations(images, matches, coordinate_scale, normalized_y_range)
+    } else if let Some(range) = normalized_y_range {
+        focus_global_observations_for_generic_region(images, matches, coordinate_scale, range)
+    } else {
+        focus_global_observations(images, matches, coordinate_scale, None)
+    };
+    let minimum_observations = if normalized_y_range.is_some() {
+        if use_foreground_region_matches {
+            FOCUS_LOCAL_MODEL_MIN_INLIERS
+        } else {
+            FOCUS_MODEL_MIN_INLIERS
+        }
+    } else {
+        processing::MIN_INLIERS_FOR_CONNECTION
+    };
+    if observations.len() < minimum_observations {
+        return initial_homographies.clone();
+    }
+    let mut poses = initial_poses.clone();
+    let mut current_cost = focus_global_robust_cost(&poses, &initial_poses, &observations);
+    if !current_cost.is_finite() {
+        return initial_homographies.clone();
+    }
+    let initial_poses_valid =
+        focus_global_poses_are_valid(&poses, images, reference, coordinate_scale);
+    println!("  - Focus global registration initial geometry valid: {initial_poses_valid}");
+    let initial_cost = current_cost;
+    let mut accepted_iterations = 0;
+
+    for _ in 0..FOCUS_GLOBAL_MAX_ITERATIONS {
+        let (normal, gradient) =
+            focus_global_normal_equations(&poses, &initial_poses, &observations);
+        let right_hand_side = -gradient;
+        let Some(delta) = normal.lu().solve(&right_hand_side) else {
+            break;
+        };
+        let delta_norm = delta.norm();
+        if !delta_norm.is_finite() || delta_norm < 1e-9 {
+            break;
+        }
+        let max_parameter_delta = delta
+            .as_slice()
+            .iter()
+            .map(|value| value.abs())
+            .fold(0.0, f64::max);
+        println!(
+            "  - Focus global pose step: norm {:.6}, max {:.6}",
+            delta_norm, max_parameter_delta
+        );
+
+        let mut accepted = None;
+        for step in [1.0, 0.5, 0.25, 0.125, 0.0625] {
+            let mut candidate = poses.clone();
+            for (image_index, pose) in candidate.iter_mut().enumerate().skip(1) {
+                let base = (image_index - 1) * 8;
+                for parameter in 0..8 {
+                    pose[parameter] += step * delta[base + parameter];
+                }
+            }
+            if candidate
+                .iter()
+                .enumerate()
+                .skip(1)
+                .any(|(image_index, pose)| {
+                    pose.iter().enumerate().any(|(parameter, value)| {
+                        let limit = match parameter {
+                            2 | 5 => FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT,
+                            6 | 7 => FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT,
+                            _ => FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT,
+                        };
+                        (value - initial_poses[image_index][parameter]).abs() > limit
+                    })
+                })
+            {
+                continue;
+            }
+            if !focus_global_poses_are_valid(&candidate, images, reference, coordinate_scale) {
+                continue;
+            }
+            let candidate_cost =
+                focus_global_robust_cost(&candidate, &initial_poses, &observations);
+            if candidate_cost.is_finite() && candidate_cost + 1e-12 < current_cost {
+                accepted = Some((candidate, candidate_cost));
+                break;
+            }
+        }
+        let Some((candidate, candidate_cost)) = accepted else {
+            break;
+        };
+        poses = candidate;
+        current_cost = candidate_cost;
+        accepted_iterations += 1;
+    }
+
+    if accepted_iterations == 0 || current_cost >= initial_cost {
+        return initial_homographies.clone();
+    }
+
+    let mut optimized = HashMap::new();
+    for (image_index, image) in images.iter().enumerate() {
+        let Some(homography) =
+            focus_pose_to_full_homography(&poses[image_index], image, reference, coordinate_scale)
+        else {
+            return initial_homographies.clone();
+        };
+        optimized.insert(image.id, homography);
+    }
+    println!(
+        "  - Focus global registration used {} observations over {} edges: robust cost {:.6} -> {:.6} in {} iteration(s)",
+        observations.len(),
+        matches
+            .values()
+            .filter(|match_info| !match_info.points.is_empty())
+            .count(),
+        initial_cost,
+        current_cost,
+        accepted_iterations,
+    );
+    optimized
+}
+
+fn build_focus_layer_warp(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> FocusLayerWarp {
+    let mut bands = Vec::new();
+
+    // A real capture can contain small depth/lens residuals even on the artwork
+    // plane. Estimate overlapping local models from the ordinary inlier matches,
+    // so the focus stack remains useful when there is no bright foreground object
+    // at all. Each model is bounded against the global pose before it can reach
+    // the renderer; sparse/unstable regional fits simply fall back to global.
+    for &(minimum_source_y, maximum_source_y) in &FOCUS_GENERIC_BAND_RANGES {
+        let optimized = optimize_focus_stack_global_homographies_in_generic_region(
+            images,
+            matches,
+            global_homographies,
+            (minimum_source_y, maximum_source_y),
+        );
+        let (homographies, changed) = constrain_focus_band_homographies(
+            images,
+            global_homographies,
+            &optimized,
+            (minimum_source_y, maximum_source_y),
+            FOCUS_GENERIC_BAND_MAX_DISPLACEMENT_RATIO,
+        );
+        if !changed {
+            continue;
+        }
+        let source_ranges: HashMap<usize, (f64, f64)> = images
+            .iter()
+            .map(|image| (image.id, (minimum_source_y, maximum_source_y)))
+            .collect();
+        bands.push(FocusWarpBand {
+            homographies,
+            source_ranges,
+        });
+    }
+
+    // A detected near-field/occlusion layer gets a narrower model only when the
+    // source frame actually contains it. This is deliberately an optional depth
+    // layer, not a rule for white bars or any other named object.
+    let minimum_source_y = 0.0;
+    let maximum_source_y = FOCUS_FOREGROUND_SCAN_MAX_Y;
+    let mut foreground_homographies = optimize_focus_stack_global_homographies_in_region(
+        images,
+        matches,
+        global_homographies,
+        Some((minimum_source_y, maximum_source_y)),
+    );
+    align_focus_foreground_edges(images, &mut foreground_homographies);
+    let (foreground_homographies, _) = constrain_focus_band_homographies(
+        images,
+        global_homographies,
+        &foreground_homographies,
+        (minimum_source_y, maximum_source_y),
+        FOCUS_DEPTH_LAYER_MAX_DISPLACEMENT_RATIO,
+    );
+    let source_ranges: HashMap<usize, (f64, f64)> = images
+        .iter()
+        .filter_map(|image| {
+            let (minimum, maximum) = image.foreground_range?;
+            let minimum = minimum.max(minimum_source_y);
+            let maximum = maximum.min(maximum_source_y);
+            (minimum < maximum).then_some((image.id, (minimum, maximum)))
+        })
+        .collect();
+    if !source_ranges.is_empty() {
+        bands.push(FocusWarpBand {
+            homographies: foreground_homographies,
+            source_ranges,
+        });
+    }
+    FocusLayerWarp { bands }
+}
+
+fn constrain_focus_band_homographies(
+    images: &[ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    optimized_homographies: &HashMap<usize, Matrix3<f64>>,
+    normalized_source_y_range: (f64, f64),
+    maximum_displacement_ratio: f64,
+) -> (HashMap<usize, Matrix3<f64>>, bool) {
+    let mut constrained = HashMap::new();
+    let mut changed = false;
+    for image in images {
+        let Some(global) = global_homographies.get(&image.id).copied() else {
+            continue;
+        };
+        let candidate = optimized_homographies
+            .get(&image.id)
+            .copied()
+            .unwrap_or(global);
+        let displacement =
+            focus_band_maximum_displacement(image, &global, &candidate, normalized_source_y_range);
+        let maximum_allowed =
+            image.width.max(image.height).max(1) as f64 * maximum_displacement_ratio;
+        let use_candidate = candidate.try_inverse().is_some()
+            && displacement.is_finite()
+            && displacement <= maximum_allowed;
+        let selected = if use_candidate { candidate } else { global };
+        if use_candidate && displacement > 0.25 {
+            changed = true;
+        }
+        constrained.insert(image.id, selected);
+    }
+    (constrained, changed)
+}
+
+fn focus_band_maximum_displacement(
+    image: &ImageInfo,
+    global: &Matrix3<f64>,
+    candidate: &Matrix3<f64>,
+    normalized_source_y_range: (f64, f64),
+) -> f64 {
+    let source_x_fractions = [0.0, 0.25, 0.5, 0.75, 1.0];
+    let source_y_fractions = [
+        normalized_source_y_range.0,
+        (normalized_source_y_range.0 + normalized_source_y_range.1) * 0.5,
+        normalized_source_y_range.1,
+    ];
+    source_x_fractions
+        .into_iter()
+        .flat_map(|x_fraction| {
+            source_y_fractions.into_iter().map(move |y_fraction| {
+                Point2::new(
+                    image.width as f64 * x_fraction,
+                    image.height as f64 * y_fraction,
+                )
+            })
+        })
+        .filter_map(|point| {
+            let global_point = transformed_point(global, point)?;
+            let candidate_point = transformed_point(candidate, point)?;
+            Some((candidate_point - global_point).norm())
+        })
+        .fold(0.0, f64::max)
+}
+
+#[derive(Clone, Copy)]
+struct FocusForegroundEdgeSample {
+    source: Point2<f64>,
+    world: Point2<f64>,
+    top_edge: bool,
+}
+
+fn foreground_edge_samples(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+) -> Vec<FocusForegroundEdgeSample> {
+    let Some((minimum_y, maximum_y)) = image.foreground_range else {
+        return Vec::new();
+    };
+    let width = image.alignment_image.width();
+    let height = image.alignment_image.height();
+    if width < 64 || height < 128 || minimum_y >= maximum_y {
+        return Vec::new();
+    }
+
+    let scan_start = ((minimum_y * height as f64).floor() as i32).max(0);
+    let scan_end = ((maximum_y * height as f64).ceil() as i32).min(height.saturating_sub(1) as i32);
+    let minimum_run = ((height as f64 * 0.018).round() as i32).max(8);
+    let maximum_gap = ((height as f64 * 0.006).round() as i32).max(2);
+    let column_step = ((width as f64 / 64.0).round() as u32).max(1);
+    let source_scale = image.scale_factor;
+    let mut samples = Vec::new();
+
+    for x in (0..width).step_by(column_step as usize) {
+        let mut runs = Vec::new();
+        let mut run_start = None;
+        let mut last_occupied = None;
+        for y in scan_start..=scan_end {
+            let occupied =
+                image.alignment_image.get_pixel(x, y as u32)[0] >= FOCUS_FOREGROUND_LUMA_THRESHOLD;
+            if occupied {
+                if run_start.is_none() {
+                    run_start = Some(y);
+                }
+                last_occupied = Some(y);
+            } else if let (Some(start), Some(last)) = (run_start, last_occupied) {
+                if y - last > maximum_gap {
+                    runs.push((start, last));
+                    run_start = None;
+                    last_occupied = None;
+                }
+            }
+        }
+        if let (Some(start), Some(last)) = (run_start, last_occupied) {
+            runs.push((start, last));
+        }
+        let Some((start, end)) = runs
+            .into_iter()
+            .max_by_key(|(run_start, run_end)| run_end - run_start)
+            .filter(|(run_start, run_end)| run_end - run_start + 1 >= minimum_run)
+        else {
+            continue;
+        };
+
+        for (y, top_edge) in [(start, true), (end, false)] {
+            let source = Point2::new(x as f64 * source_scale, y as f64 * source_scale);
+            let Some(world) = transformed_point(homography, source) else {
+                continue;
+            };
+            samples.push(FocusForegroundEdgeSample {
+                source,
+                world,
+                top_edge,
+            });
+        }
+    }
+    samples
+}
+
+fn median_value(values: &mut [f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    Some(values[values.len() / 2])
+}
+
+fn fit_foreground_edge_line(samples: &[FocusForegroundEdgeSample]) -> Option<(f64, f64)> {
+    if samples.len() < 2 {
+        return None;
+    }
+    let mut slopes = Vec::new();
+    for (index, first) in samples.iter().enumerate() {
+        for second in samples.iter().skip(index + 1) {
+            let delta_x = second.world.x - first.world.x;
+            if delta_x.abs() < 1.0 {
+                continue;
+            }
+            let slope = (second.world.y - first.world.y) / delta_x;
+            if slope.is_finite() && slope.abs() < 0.5 {
+                slopes.push(slope);
+            }
+        }
+    }
+    let slope = median_value(&mut slopes)?;
+    let mut intercepts = samples
+        .iter()
+        .map(|sample| sample.world.y - slope * sample.world.x)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let intercept = median_value(&mut intercepts)?;
+    Some((slope, intercept))
+}
+
+fn estimate_vertical_foreground_correction(
+    samples: &[FocusForegroundEdgeSample],
+    top_line: (f64, f64),
+    bottom_line: (f64, f64),
+) -> Option<Matrix3<f64>> {
+    if samples.len() < 6 {
+        return None;
+    }
+    // Fit the two silhouettes independently before solving the correction. A
+    // single IRLS fit over all pixels can compromise both edges when one side
+    // contains a highlight or a gap; matching the two robust edge lines keeps
+    // the layer thickness stable across the whole overlap.
+    let top_samples = samples
+        .iter()
+        .copied()
+        .filter(|sample| sample.top_edge)
+        .collect::<Vec<_>>();
+    let bottom_samples = samples
+        .iter()
+        .copied()
+        .filter(|sample| !sample.top_edge)
+        .collect::<Vec<_>>();
+    let local_top_line = fit_foreground_edge_line(&top_samples)?;
+    let local_bottom_line = fit_foreground_edge_line(&bottom_samples)?;
+    let mut reference_x = samples
+        .iter()
+        .map(|sample| sample.world.x)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let reference_x = median_value(&mut reference_x)?;
+    let local_top_y = local_top_line.0 * reference_x + local_top_line.1;
+    let local_bottom_y = local_bottom_line.0 * reference_x + local_bottom_line.1;
+    let target_top_y = top_line.0 * reference_x + top_line.1;
+    let target_bottom_y = bottom_line.0 * reference_x + bottom_line.1;
+    let local_separation = local_bottom_y - local_top_y;
+    let target_separation = target_bottom_y - target_top_y;
+    if !local_separation.is_finite()
+        || !target_separation.is_finite()
+        || local_separation.abs() < 8.0
+    {
+        return None;
+    }
+    let vertical_scale = target_separation / local_separation;
+    let shear = top_line.0 - vertical_scale * local_top_line.0;
+    let translation = target_top_y - shear * reference_x - vertical_scale * local_top_y;
+    let correction = Matrix3::new(
+        1.0,
+        0.0,
+        0.0,
+        shear,
+        vertical_scale,
+        translation,
+        0.0,
+        0.0,
+        1.0,
+    );
+    if !correction.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+
+    // The edge fit is allowed to correct the near-field holder, but should not
+    // be able to turn a bad edge detection into a second panorama warp.
+    let vertical_scale = correction[(1, 1)];
+    let shear = correction[(1, 0)];
+    if !(0.75..=1.25).contains(&vertical_scale) || shear.abs() > 0.08 {
+        return None;
+    }
+    Some(correction)
+}
+
+fn align_focus_foreground_edges(
+    images: &[ImageInfo],
+    homographies: &mut HashMap<usize, Matrix3<f64>>,
+) {
+    let mut top_samples = Vec::new();
+    let mut bottom_samples = Vec::new();
+    let mut samples_by_image = HashMap::<usize, Vec<FocusForegroundEdgeSample>>::new();
+    for image in images {
+        let Some(homography) = homographies.get(&image.id) else {
+            continue;
+        };
+        let samples = foreground_edge_samples(image, homography);
+        top_samples.extend(samples.iter().copied().filter(|sample| sample.top_edge));
+        bottom_samples.extend(samples.iter().copied().filter(|sample| !sample.top_edge));
+        samples_by_image.insert(image.id, samples);
+    }
+    let Some(top_line) = fit_foreground_edge_line(&top_samples) else {
+        return;
+    };
+    let Some(bottom_line) = fit_foreground_edge_line(&bottom_samples) else {
+        return;
+    };
+
+    for (image_id, samples) in samples_by_image {
+        let Some(base_homography) = homographies.get(&image_id).copied() else {
+            continue;
+        };
+        let Some(correction) =
+            estimate_vertical_foreground_correction(&samples, top_line, bottom_line)
+        else {
+            continue;
+        };
+        let corrected = correction * base_homography;
+        if corrected.try_inverse().is_none() {
+            continue;
+        }
+        let displacement = samples
+            .iter()
+            .filter_map(|sample| {
+                let baseline = transformed_point(&base_homography, sample.source)?;
+                let adjusted = transformed_point(&corrected, sample.source)?;
+                Some((adjusted - baseline).norm())
+            })
+            .fold(0.0, f64::max);
+        if displacement.is_finite() && displacement <= 240.0 {
+            homographies.insert(image_id, corrected);
+        }
+    }
+}
+
 #[cfg(test)]
 mod alignment_tests {
     use super::*;
@@ -2208,6 +4297,9 @@ mod alignment_tests {
             full_image: None,
             scale_factor: 1.0,
             features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
         }
     }
 
@@ -2215,6 +4307,11 @@ mod alignment_tests {
         MatchInfo {
             homography: Matrix3::identity(),
             inliers,
+            points: Vec::new(),
+            candidate_points: Vec::new(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
         }
     }
 
@@ -2222,6 +4319,11 @@ mod alignment_tests {
         MatchInfo {
             homography: Matrix3::new(1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0),
             inliers,
+            points: Vec::new(),
+            candidate_points: Vec::new(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
         }
     }
 
@@ -2582,6 +4684,48 @@ mod alignment_tests {
             (9_504, 6_336)
         ));
     }
+
+    #[test]
+    fn generic_focus_registration_samples_frames_without_a_detected_depth_layer() {
+        let source = GrayImage::from_fn(320, 240, |x, y| {
+            image::Luma([((x * 17 + y * 29 + x * y * 3) % 255) as u8])
+        });
+        let target = GrayImage::from_fn(320, 240, |x, y| {
+            image::Luma([source.get_pixel(x.saturating_sub(5), y)[0]])
+        });
+        let mut source_info = test_image(0, "source.jpg");
+        source_info.width = 320;
+        source_info.height = 240;
+        source_info.alignment_image = source;
+        let mut target_info = test_image(1, "target.jpg");
+        target_info.width = 320;
+        target_info.height = 240;
+        target_info.alignment_image = target;
+
+        let points = collect_dense_focus_region_points(
+            &source_info,
+            &target_info,
+            &Matrix3::new(1.0, 0.0, 5.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+            Projection::Planar,
+        );
+
+        assert!(source_info.foreground_range.is_none());
+        assert!(target_info.foreground_range.is_none());
+        assert!(points.len() >= 8);
+    }
+
+    #[test]
+    fn generated_stack_outputs_and_macos_sidecars_are_not_reused_as_sources() {
+        assert!(is_generated_stitch_output("/tmp/DSC08897_FocusStack1.jpg"));
+        assert!(is_generated_stitch_output(
+            "/tmp/scan_Panorama_20260905.jpg"
+        ));
+        assert!(is_generated_stitch_output("/tmp/scan_Pano.png"));
+        assert!(!is_generated_stitch_output("/tmp/DSC08897.jpg"));
+        assert!(!is_generated_stitch_output("/tmp/focusstack_reference.jpg"));
+        assert!(is_auxiliary_stitch_file("/tmp/._DSC08897.jpg"));
+        assert!(!is_auxiliary_stitch_file("/tmp/DSC08897.jpg"));
+    }
 }
 
 #[cfg(test)]
@@ -2600,14 +4744,17 @@ mod acceptance_tests {
             .filter_map(Result::ok)
             .map(|entry| entry.path())
             .filter(|path| {
-                path.extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| {
-                        matches!(
-                            extension.to_ascii_lowercase().as_str(),
-                            "jpg" | "jpeg" | "png"
-                        )
-                    })
+                !is_auxiliary_stitch_file(&path.to_string_lossy())
+                    && !is_generated_stitch_output(&path.to_string_lossy())
+                    && path
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| {
+                            matches!(
+                                extension.to_ascii_lowercase().as_str(),
+                                "jpg" | "jpeg" | "png"
+                            )
+                        })
             })
             .collect::<Vec<_>>();
         paths.sort_by(|left, right| {
@@ -2623,6 +4770,14 @@ mod acceptance_tests {
         let alignment_name = std::env::var("RAW_EDITOR_ORDERED_PANORAMA_ALIGNMENT")
             .unwrap_or_else(|_| "auto".to_string());
         let alignment_mode = AlignmentMode::from_wire(&alignment_name.to_ascii_lowercase());
+        let blend_mode = match std::env::var("RAW_EDITOR_ORDERED_PANORAMA_BLEND")
+            .unwrap_or_else(|_| "panorama".to_string())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "focus" => BlendMode::FocusStack,
+            _ => BlendMode::Panorama,
+        };
         let paths = ordered_panorama_fixture_paths();
 
         let (max_dimension, max_features) = scalable_alignment_budget(paths.len());
@@ -2640,6 +4795,10 @@ mod acceptance_tests {
                     .to_luma8();
                 let features =
                     find_alignment_features(&alignment_image, &brief_pairs, max_features, true);
+                let foreground_range = detect_foreground_range(&alignment_image);
+                let top_features =
+                    find_top_alignment_features(&alignment_image, &brief_pairs, foreground_range);
+                let foreground_mask = build_foreground_mask(&alignment_image, foreground_range);
                 ImageInfo {
                     id,
                     filename: path.to_string_lossy().into_owned(),
@@ -2649,27 +4808,447 @@ mod acceptance_tests {
                     full_image: None,
                     scale_factor,
                     features,
+                    top_features,
+                    foreground_range,
+                    foreground_mask,
                 }
             })
             .collect::<Vec<_>>();
-
+        println!(
+            "focus top feature counts: min={} max={} total={}",
+            images
+                .iter()
+                .map(|image| image.top_features.len())
+                .min()
+                .unwrap_or(0),
+            images
+                .iter()
+                .map(|image| image.top_features.len())
+                .max()
+                .unwrap_or(0),
+            images
+                .iter()
+                .map(|image| image.top_features.len())
+                .sum::<usize>(),
+        );
+        println!(
+            "focus foreground ranges: {}",
+            images
+                .iter()
+                .map(|image| {
+                    let name = Path::new(&image.filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    match image.foreground_range {
+                        Some((minimum, maximum)) => format!("{name}=({minimum:.3},{maximum:.3})"),
+                        None => format!("{name}=none"),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        println!(
+            "focus foreground corner energy: {}",
+            images
+                .iter()
+                .filter_map(|image| {
+                    if image.top_features.is_empty() {
+                        return None;
+                    }
+                    let width = image.alignment_image.width() as i32;
+                    let height = image.alignment_image.height() as i32;
+                    let mut values = image
+                        .top_features
+                        .iter()
+                        .filter_map(|feature| {
+                            let x = feature.keypoint.x as i32;
+                            let y = feature.keypoint.y as i32;
+                            (x >= FOCUS_FOREGROUND_PATCH_RADIUS
+                                && y >= FOCUS_FOREGROUND_PATCH_RADIUS
+                                && x + FOCUS_FOREGROUND_PATCH_RADIUS < width
+                                && y + FOCUS_FOREGROUND_PATCH_RADIUS < height)
+                                .then(|| {
+                                    gradient_patch_corner_energy(
+                                        &LumaPlane::Gray(&image.alignment_image),
+                                        x,
+                                        y,
+                                        FOCUS_FOREGROUND_PATCH_RADIUS,
+                                    )
+                                })
+                        })
+                        .filter(|value| value.is_finite())
+                        .collect::<Vec<_>>();
+                    values.sort_unstable_by(f64::total_cmp);
+                    let percentile = |fraction: f64| {
+                        values
+                            .get(((values.len().saturating_sub(1)) as f64 * fraction) as usize)
+                            .copied()
+                            .unwrap_or(0.0)
+                    };
+                    Some(format!(
+                        "{} n={} p50={:.2} p75={:.2} p90={:.2} max={:.2}",
+                        Path::new(&image.filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy(),
+                        values.len(),
+                        percentile(0.50),
+                        percentile(0.75),
+                        percentile(0.90),
+                        percentile(1.0),
+                    ))
+                })
+                .collect::<Vec<_>>()
+                .join(" | ")
+        );
         let candidate_pairs = pairs_to_match_for_images(&images);
         let matches = candidate_pairs
             .par_iter()
             .filter_map(|&(source, target)| {
-                match_image_pair(
-                    &images[source],
-                    &images[target],
+                let (source_index, target_index, invert_for_storage) =
+                    if blend_mode == BlendMode::FocusStack {
+                        canonical_match_direction(&images, source, target)
+                    } else {
+                        (source, target, false)
+                    };
+                let mut match_info = match_image_pair(
+                    &images[source_index],
+                    &images[target_index],
                     Projection::Planar,
-                    BlendMode::Panorama,
+                    blend_mode,
                     alignment_mode,
                     true,
                     false,
-                )
-                .map(|match_info| ((source, target), match_info))
+                )?;
+                if invert_for_storage {
+                    match_info.homography = match_info.homography.try_inverse()?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info
+                        .candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.top_candidate_points = match_info
+                        .top_candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.dense_focus_points = match_info
+                        .dense_focus_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.foreground_feature_points = match_info
+                        .foreground_feature_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                }
+                Some(((source, target), match_info))
             })
             .collect::<HashMap<_, _>>();
-        let (connected_order, homographies) = build_stitching_order(&images, &matches);
+        for (&(source, target), match_info) in &matches {
+            let Some(source_range) = images[source].foreground_range else {
+                continue;
+            };
+            let Some(target_range) = images[target].foreground_range else {
+                continue;
+            };
+            let active_top_count = match_info
+                .top_candidate_points
+                .iter()
+                .filter(|(source_point, target_point)| {
+                    let source_y = source_point.y / images[source].height as f64;
+                    let target_y = target_point.y / images[target].height as f64;
+                    (source_range.0..=source_range.1).contains(&source_y)
+                        && (target_range.0..=target_range.1).contains(&target_y)
+                })
+                .count();
+            let active_dense_count = match_info
+                .dense_focus_points
+                .iter()
+                .filter(|(source_point, target_point)| {
+                    let source_y = source_point.y / images[source].height as f64;
+                    let target_y = target_point.y / images[target].height as f64;
+                    (source_range.0..=source_range.1).contains(&source_y)
+                        && (target_range.0..=target_range.1).contains(&target_y)
+                })
+                .count();
+            if active_top_count >= FOCUS_MODEL_MIN_INLIERS
+                || active_dense_count >= FOCUS_MODEL_MIN_INLIERS
+            {
+                println!(
+                    "focus active foreground pair {}<->{}: top={} dense={} local={}",
+                    Path::new(&images[source].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    Path::new(&images[target].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    active_top_count,
+                    active_dense_count,
+                    focus_match_points_for_region(
+                        &images[source],
+                        &images[target],
+                        match_info,
+                        (0.04, 0.34),
+                    )
+                    .len(),
+                );
+            }
+        }
+        let (connected_order, homographies) = if blend_mode == BlendMode::FocusStack {
+            build_focus_stack_stitching_order(&images, &matches)
+        } else {
+            build_stitching_order(&images, &matches)
+        };
+        if blend_mode == BlendMode::FocusStack {
+            let mut band_counts = [0usize; 6];
+            let mut band_error_sums = [0.0f64; 6];
+            let mut band_error_counts = [0usize; 6];
+            for (&(source, target), match_info) in &matches {
+                let Some(source_homography) = homographies.get(&images[source].id) else {
+                    continue;
+                };
+                let Some(target_homography) = homographies.get(&images[target].id) else {
+                    continue;
+                };
+                for &(source_point, target_point) in &match_info.points {
+                    let source_normalized_y = source_point.y / images[source].height as f64;
+                    let target_normalized_y = target_point.y / images[target].height as f64;
+                    let band = (((source_normalized_y + target_normalized_y) * 0.5) * 6.0)
+                        .floor()
+                        .clamp(0.0, 5.0) as usize;
+                    band_counts[band] += 1;
+                    let source_world = source_homography
+                        * nalgebra::Point3::new(source_point.x, source_point.y, 1.0);
+                    let target_world = target_homography
+                        * nalgebra::Point3::new(target_point.x, target_point.y, 1.0);
+                    if source_world.z.abs() >= 1e-8 && target_world.z.abs() >= 1e-8 {
+                        let source_world = nalgebra::Point2::new(
+                            source_world.x / source_world.z,
+                            source_world.y / source_world.z,
+                        );
+                        let target_world = nalgebra::Point2::new(
+                            target_world.x / target_world.z,
+                            target_world.y / target_world.z,
+                        );
+                        band_error_sums[band] += (source_world - target_world).norm();
+                        band_error_counts[band] += 1;
+                    }
+                }
+            }
+            println!(
+                "focus residual bands: counts={band_counts:?} mean_px={:?}",
+                band_error_sums
+                    .iter()
+                    .zip(band_error_counts.iter())
+                    .map(|(sum, count)| {
+                        if *count == 0 {
+                            0.0
+                        } else {
+                            *sum / *count as f64
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            );
+            let mut top_candidate_count = 0usize;
+            let mut top_local_count = 0usize;
+            for (&(source, target), match_info) in &matches {
+                let candidates = if !match_info.top_candidate_points.is_empty() {
+                    &match_info.top_candidate_points
+                } else if match_info.candidate_points.is_empty() {
+                    &match_info.points
+                } else {
+                    &match_info.candidate_points
+                };
+                top_candidate_count += candidates
+                    .iter()
+                    .filter(|(source_point, target_point)| {
+                        let source_y = source_point.y / images[source].height as f64;
+                        let target_y = target_point.y / images[target].height as f64;
+                        (0.12..=0.28).contains(&source_y) && (0.12..=0.28).contains(&target_y)
+                    })
+                    .count();
+                top_local_count += focus_match_points_for_region(
+                    &images[source],
+                    &images[target],
+                    match_info,
+                    (0.12, 0.28),
+                )
+                .len();
+            }
+            println!("focus top candidate/local points: {top_candidate_count}/{top_local_count}");
+            let mut dense_offsets = [Vec::<(f64, f64)>::new(), Vec::new(), Vec::new()];
+            for (&(source, target), match_info) in &matches {
+                if source.abs_diff(target) > 4 {
+                    continue;
+                }
+                let source_image = &images[source];
+                let target_image = &images[target];
+                for (band_index, y_fraction) in [0.12, 0.20, 0.28].into_iter().enumerate() {
+                    for x_fraction in [0.1, 0.3, 0.5, 0.7, 0.9] {
+                        let source_x = (source_image.width as f64 * x_fraction).round() as i32;
+                        let source_y = (source_image.height as f64 * y_fraction).round() as i32;
+                        let predicted = match_info.homography
+                            * nalgebra::Point3::new(source_x as f64, source_y as f64, 1.0);
+                        if predicted.z.abs() < 1e-8 {
+                            continue;
+                        }
+                        let target_x = (predicted.x / predicted.z).round() as i32;
+                        let target_y = (predicted.y / predicted.z).round() as i32;
+                        if target_x < 12
+                            || target_y < 12
+                            || target_x + 12 >= target_image.width as i32
+                            || target_y + 12 >= target_image.height as i32
+                        {
+                            continue;
+                        }
+                        let Some((best_x, best_y, subpixel_x, subpixel_y)) = refine_patch_position(
+                            &LumaPlane::Gray(&source_image.alignment_image),
+                            &LumaPlane::Gray(&target_image.alignment_image),
+                            source_x,
+                            source_y,
+                            target_x,
+                            target_y,
+                            10,
+                            20,
+                        ) else {
+                            continue;
+                        };
+                        dense_offsets[band_index].push((
+                            best_x as f64 + subpixel_x - predicted.x / predicted.z,
+                            best_y as f64 + subpixel_y - predicted.y / predicted.z,
+                        ));
+                    }
+                }
+            }
+            println!(
+                "focus dense top offsets: {:?}",
+                dense_offsets
+                    .iter()
+                    .map(|offsets| {
+                        let (sum_x, sum_y) = offsets
+                            .iter()
+                            .fold((0.0, 0.0), |(sum_x, sum_y), (x, y)| (sum_x + x, sum_y + y));
+                        if offsets.is_empty() {
+                            (0, 0.0, 0.0)
+                        } else {
+                            (
+                                offsets.len(),
+                                sum_x / offsets.len() as f64,
+                                sum_y / offsets.len() as f64,
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            );
+            let top_homographies = optimize_focus_stack_global_homographies_in_region(
+                &images,
+                &matches,
+                &homographies,
+                Some((0.12, 0.28)),
+            );
+            let mut maximum_top_delta = (0.0f64, String::new(), 0.0f64, 0.0f64);
+            for &index in connected_order.iter().take(6) {
+                let image = &images[index];
+                let point =
+                    nalgebra::Point3::new(image.width as f64 * 0.5, image.height as f64 * 0.2, 1.0);
+                let global = homographies[&image.id] * point;
+                let top = top_homographies[&image.id] * point;
+                println!(
+                    "focus top model {}: delta=({:.1},{:.1})",
+                    Path::new(&image.filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    top.x / top.z - global.x / global.z,
+                    top.y / top.z - global.y / global.z,
+                );
+            }
+            for image in &images {
+                let point =
+                    nalgebra::Point3::new(image.width as f64 * 0.5, image.height as f64 * 0.2, 1.0);
+                let global = homographies[&image.id] * point;
+                let top = top_homographies[&image.id] * point;
+                let delta_x = top.x / top.z - global.x / global.z;
+                let delta_y = top.y / top.z - global.y / global.z;
+                let magnitude = (delta_x * delta_x + delta_y * delta_y).sqrt();
+                if magnitude > maximum_top_delta.0 {
+                    maximum_top_delta = (
+                        magnitude,
+                        Path::new(&image.filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                        delta_x,
+                        delta_y,
+                    );
+                }
+            }
+            println!("focus top model maximum delta: {maximum_top_delta:?}");
+            for (&(source, target), match_info) in &matches {
+                let top_count = match_info
+                    .points
+                    .iter()
+                    .filter(|(source_point, target_point)| {
+                        source_point.y < images[source].height as f64 * 0.28
+                            || target_point.y < images[target].height as f64 * 0.28
+                    })
+                    .count();
+                if top_count >= 8 && (source.abs_diff(target) <= 4 || source == 0) {
+                    println!(
+                        "focus top-points {}<->{}: {}/{}",
+                        Path::new(&images[source].filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy(),
+                        Path::new(&images[target].filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy(),
+                        top_count,
+                        match_info.points.len(),
+                    );
+                }
+            }
+            for (position, &index) in connected_order.iter().enumerate() {
+                let image = &images[index];
+                let homography = homographies
+                    .get(&image.id)
+                    .expect("focus diagnostic image must have a transform");
+                let center = homography
+                    * nalgebra::Point3::new(
+                        image.width as f64 * 0.5,
+                        image.height as f64 * 0.5,
+                        1.0,
+                    );
+                let top_left = homography * nalgebra::Point3::new(0.0, 0.0, 1.0);
+                let top_right = homography * nalgebra::Point3::new(image.width as f64, 0.0, 1.0);
+                let top_left =
+                    nalgebra::Point2::new(top_left.x / top_left.z, top_left.y / top_left.z);
+                let top_right =
+                    nalgebra::Point2::new(top_right.x / top_right.z, top_right.y / top_right.z);
+                println!(
+                    "focus frame {position:02} {}: center=({:.1},{:.1}) top_scale={:.6}",
+                    Path::new(&image.filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    center.x / center.z,
+                    center.y / center.z,
+                    (top_right - top_left).norm() / image.width as f64,
+                );
+            }
+        }
         let minimum_features = images
             .iter()
             .map(|image| image.features.len())
@@ -2721,7 +5300,12 @@ mod acceptance_tests {
             Projection::Planar,
         );
         println!(
-            "ordered panorama diagnostics ({alignment_name}): {} images, {} candidate pairs, {} matched pairs, {} connected images, features {}..{}, canvas {}x{} ({} pixels, {:.2} GiB RGB32F), safe {}x{} ({:.1}%)",
+            "ordered {} diagnostics ({alignment_name}): {} images, {} candidate pairs, {} matched pairs, {} connected images, features {}..{}, canvas {}x{} ({} pixels, {:.2} GiB RGB32F), safe {}x{} ({:.1}%)",
+            if blend_mode == BlendMode::FocusStack {
+                "focus-stack"
+            } else {
+                "panorama"
+            },
             images.len(),
             candidate_pairs.len(),
             matches.len(),
@@ -2751,6 +5335,14 @@ mod acceptance_tests {
             .unwrap_or_else(|_| "auto".to_string())
             .to_ascii_lowercase();
         let alignment_mode = AlignmentMode::from_wire(&alignment_name);
+        let blend_mode = match std::env::var("RAW_EDITOR_ORDERED_PANORAMA_BLEND")
+            .unwrap_or_else(|_| "panorama".to_string())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "focus" => BlendMode::FocusStack,
+            _ => BlendMode::Panorama,
+        };
         let app = tauri::test::mock_app();
         crate::sidecar_storage::initialize(
             PathBuf::from("/private/tmp/raw-editor-ordered-panorama-sidecars").as_path(),
@@ -2762,7 +5354,7 @@ mod acceptance_tests {
             paths,
             app.handle().clone(),
             alignment_mode,
-            BlendMode::Panorama,
+            blend_mode,
             "test-image-stack-progress",
         )
         .expect("the complete ordered panorama fixture should align and render");

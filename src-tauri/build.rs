@@ -71,11 +71,11 @@ fn download_and_verify(
 fn main() {
     let ai_runtime_enabled = env::var("RAW_EDITOR_ENABLE_AI_RUNTIME")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+        // Release bundles need the local runtime for content-aware image
+        // features. Development builds remain offline until an AI tool is
+        // explicitly used, at which point it provisions a verified copy.
+        .unwrap_or_else(|_| env::var("PROFILE").is_ok_and(|profile| profile == "release"));
 
-    // Daily RAW is intentionally offline and non-AI by default. Keep the
-    // upstream AI modules available for later work, but do not download or
-    // bundle ONNX Runtime unless an explicit build flag opts in.
     if !ai_runtime_enabled {
         println!("cargo:warning=AI runtime disabled; skipping ONNX Runtime download");
         println!("cargo:rerun-if-env-changed=RAW_EDITOR_ENABLE_AI_RUNTIME");

@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "color-contract:check": "node tests/color-contract-boundary.mjs",
+    "batch-geometry-preview:check": "node tests/batch-geometry-preview-contract.mjs",
     "crop-transform:check": "node tests/crop-transform-contract.mjs",
     "export-dialog:check": "node tests/export-dialog-contract.mjs",
     "image-stack-preview:check": "node tests/image-stack-preview-contract.mjs",

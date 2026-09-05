@@ -87,6 +87,10 @@ export interface DenoiseModalState {
   isRaw: boolean;
 }
 
+export interface BatchGeometryModalState {
+  isOpen: boolean;
+}
+
 export interface NegativeConversionModalState {
   isOpen: boolean;
   targetPaths: Array<string>;
@@ -156,6 +160,7 @@ interface UIState {
   hdrModalState: HdrModalState;
   negativeModalState: NegativeConversionModalState;
   denoiseModalState: DenoiseModalState;
+  batchGeometryModalState: BatchGeometryModalState;
   cullingModalState: CullingModalState;
   collageModalState: CollageModalState;
 
@@ -283,6 +288,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     progressMessage: null,
     isRaw: false,
   },
+  batchGeometryModalState: { isOpen: false },
   cullingModalState: { isOpen: false, suggestions: null, progress: null, error: null, pathsToCull: [] },
   collageModalState: { isOpen: false, sourceImages: [] },
 

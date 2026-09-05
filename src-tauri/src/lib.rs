@@ -2073,8 +2073,10 @@ pub fn run() {
                         { "libonnxruntime.so" }
                     };
                     let ort_library_path = resource_path.join(ort_library_name);
-                    std::env::set_var("ORT_DYLIB_PATH", &ort_library_path);
-                    println!("Set ORT_DYLIB_PATH to: {}", ort_library_path.display());
+                    if ort_library_path.is_file() {
+                        std::env::set_var("ORT_DYLIB_PATH", &ort_library_path);
+                        println!("Set ORT_DYLIB_PATH to: {}", ort_library_path.display());
+                    }
                 }
             }
 
@@ -2379,6 +2381,9 @@ pub fn run() {
             panorama_stitching::stitch_panorama,
             panorama_stitching::save_panorama,
             export_processing::export_images,
+            export_processing::batch_geometry_correction,
+            export_processing::analyze_batch_geometry,
+            export_processing::preview_batch_geometry_correction,
             export_processing::import_watermark_image,
             export_processing::cancel_export,
             export_processing::estimate_export_sizes,

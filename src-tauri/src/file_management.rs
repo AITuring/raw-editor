@@ -1401,7 +1401,12 @@ fn apply_exif_orientation(img: DynamicImage, orientation: u32) -> DynamicImage {
     }
 }
 
-fn try_load_embedded_raw_preview(source_path: &Path, target_res: u32) -> Option<DynamicImage> {
+/// Reads an already-rendered RAW preview without creating sidecars or thumbnails.
+/// Transient image analysis uses this before falling back to a full RAW decode.
+pub(crate) fn try_load_embedded_raw_preview(
+    source_path: &Path,
+    target_res: u32,
+) -> Option<DynamicImage> {
     let mmap = read_file_mapped(source_path).ok()?;
     let exif = exif_processing::read_exif(&mmap)?;
 

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine as _, engine::general_purpose};
 use image::codecs::{jpeg::JpegEncoder, png::PngEncoder, tiff::TiffEncoder};
 use image::{
     DynamicImage, GenericImageView, GrayImage, ImageBuffer, ImageEncoder, ImageFormat, Luma,
@@ -15,6 +16,7 @@ use image::{
 };
 #[cfg(not(target_os = "android"))]
 use image::{Pixel, Rgba};
+use imageproc::drawing::draw_line_segment_mut;
 use jxl_encoder::{
     ImageMetadata as JxlImageMetadata, LosslessConfig, LossyConfig, PixelLayout,
     api::{calibrated_jxl_quality, quality_to_distance},
@@ -58,6 +60,7 @@ use crate::gpu_processing::process_and_stream_rgba_rows;
 use crate::gpu_processing::reclaim_gpu_resources_after_export;
 use crate::image_loader::{
     composite_patches_on_image, load_and_composite, load_base_image_from_bytes,
+    load_base_image_from_bytes_without_exif_persistence,
 };
 use crate::image_processing::{
     AllAdjustments, Crop, GeometryWarpRows, GpuContext, RenderRequest, downscale_f32_image,
@@ -126,6 +129,9 @@ pub(crate) enum ExportAdjustmentsMode {
         active_adjustments: Option<Value>,
     },
     GlobalOverride(Value),
+    /// A deliberate, per-source override for self-contained batch workflows.
+    /// Unlike sidecars this never reads or mutates an editor adjustment.
+    PerPathOverrides(Arc<HashMap<String, Value>>),
 }
 
 impl ExportAdjustmentsMode {
@@ -143,6 +149,7 @@ impl ExportAdjustmentsMode {
                 active_adjustments,
             },
             Self::GlobalOverride(adjustments) => Self::GlobalOverride(adjustments),
+            Self::PerPathOverrides(overrides) => Self::PerPathOverrides(overrides),
         }
     }
 }
@@ -533,7 +540,7 @@ fn ensure_export_not_cancelled(cancellation_token: &AtomicBool) -> Result<(), St
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ExportCancellationRequest {
     Requested,
     AlreadyRequested,
@@ -544,6 +551,39 @@ enum ExportCancellationRequest {
 struct BatchExportSummary {
     completed: usize,
     errors: Vec<String>,
+}
+
+#[derive(Clone, Copy)]
+struct ExportTaskEvents {
+    cancelled: &'static str,
+    complete: &'static str,
+    error: &'static str,
+    progress: &'static str,
+}
+
+#[derive(Clone, Copy)]
+enum ExportTaskEventScope {
+    Standard,
+    BatchGeometry,
+}
+
+impl ExportTaskEventScope {
+    const fn events(self) -> ExportTaskEvents {
+        match self {
+            Self::Standard => ExportTaskEvents {
+                cancelled: "export-cancelled",
+                complete: "export-complete",
+                error: "export-error",
+                progress: "batch-export-progress",
+            },
+            Self::BatchGeometry => ExportTaskEvents {
+                cancelled: "batch-geometry-cancelled",
+                complete: "batch-geometry-complete",
+                error: "batch-geometry-error",
+                progress: "batch-geometry-progress",
+            },
+        }
+    }
 }
 
 fn summarize_batch_export_results(
@@ -564,17 +604,20 @@ struct ExportTaskGuard {
     task_token: Arc<Mutex<Option<Arc<AtomicBool>>>>,
     cancellation_token: Arc<AtomicBool>,
     app_handle: Option<tauri::AppHandle>,
+    events: ExportTaskEvents,
 }
 
 impl ExportTaskGuard {
     fn new(
         task_token: Arc<Mutex<Option<Arc<AtomicBool>>>>,
         cancellation_token: Arc<AtomicBool>,
+        events: ExportTaskEvents,
     ) -> Self {
         Self {
             task_token,
             cancellation_token,
             app_handle: None,
+            events,
         }
     }
 
@@ -582,8 +625,9 @@ impl ExportTaskGuard {
         task_token: Arc<Mutex<Option<Arc<AtomicBool>>>>,
         cancellation_token: Arc<AtomicBool>,
         app_handle: tauri::AppHandle,
+        events: ExportTaskEvents,
     ) -> Self {
-        let mut guard = Self::new(task_token, cancellation_token);
+        let mut guard = Self::new(task_token, cancellation_token, events);
         guard.app_handle = Some(app_handle);
         guard
     }
@@ -648,15 +692,16 @@ where
 impl Drop for ExportTaskGuard {
     fn drop(&mut self) {
         let app_handle = self.app_handle.clone();
+        let events = self.events;
         let _ = finish_export_task(
             &self.task_token,
             &self.cancellation_token,
             |cancelled| match (cancelled, app_handle) {
                 (true, Some(app_handle)) => {
-                    let _ = app_handle.emit("export-cancelled", ());
+                    let _ = app_handle.emit(events.cancelled, ());
                 }
                 (false, Some(app_handle)) => {
-                    let _ = app_handle.emit("export-error", "Export task terminated unexpectedly");
+                    let _ = app_handle.emit(events.error, "Export task terminated unexpectedly");
                 }
                 _ => {}
             },
@@ -2805,7 +2850,7 @@ fn export_adjustments_as_lut(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn export_images_impl(
+async fn export_images_impl(
     paths: Vec<String>,
     output_folder_or_file: String,
     is_explicit_file_path: bool,
@@ -2816,15 +2861,18 @@ pub(crate) async fn export_images_impl(
     state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
     completion_tx: Option<tokio::sync::oneshot::Sender<Result<(), usize>>>,
+    event_scope: ExportTaskEventScope,
 ) -> Result<(), String> {
     // The editor can select a virtual copy (`?vc=N`), while each worker compares the
     // physical source path. Normalize once so the visible edit is always the one exported.
     let adjustments_mode = adjustments_mode.normalize_active_path();
+    let task_events = event_scope.events();
     let cancellation_token = register_export_task(&state.export_task_token)?;
     let task_guard = ExportTaskGuard::with_app_handle(
         Arc::clone(&state.export_task_token),
         Arc::clone(&cancellation_token),
         app_handle.clone(),
+        task_events,
     );
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
@@ -2928,6 +2976,7 @@ pub(crate) async fn export_images_impl(
             let settings = settings.clone();
             let cancellation_token_clone = Arc::clone(&cancellation_token);
             let adjustments_mode = adjustments_mode.clone();
+            let progress_event = task_events.progress;
 
             let handle = tokio::task::spawn_blocking(move || {
                 ensure_export_not_cancelled(&cancellation_token_clone)?;
@@ -2940,7 +2989,8 @@ pub(crate) async fn export_images_impl(
                     ExportAdjustmentsMode::UseSidecars { active_path, .. } => {
                         Some(&source_path_str) == active_path.as_ref()
                     }
-                    ExportAdjustmentsMode::GlobalOverride(_) => false,
+                    ExportAdjustmentsMode::GlobalOverride(_)
+                    | ExportAdjustmentsMode::PerPathOverrides(_) => false,
                 };
 
                 let mut js_adjustments = match &adjustments_mode {
@@ -2958,6 +3008,10 @@ pub(crate) async fn export_images_impl(
                         }
                     }
                     ExportAdjustmentsMode::GlobalOverride(adj) => adj.clone(),
+                    ExportAdjustmentsMode::PerPathOverrides(overrides) => overrides
+                        .get(&source_path_str)
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({})),
                 };
 
                 hydrate_adjustments(&state, &mut js_adjustments);
@@ -3157,7 +3211,7 @@ pub(crate) async fn export_images_impl(
                     let current_progress =
                         progress_counter_clone.fetch_add(1, Ordering::SeqCst) + 1;
                     let _ = app_handle_clone.emit(
-                        "batch-export-progress",
+                        progress_event,
                         serde_json::json!({
                             "current": current_progress,
                             "total": total_paths,
@@ -3198,28 +3252,28 @@ pub(crate) async fn export_images_impl(
             |cancelled| {
                 if cancelled {
                     log::info!("Batch export cancelled and worker cleanup completed");
-                    let _ = app_handle.emit("export-cancelled", ());
+                    let _ = app_handle.emit(task_events.cancelled, ());
                     return;
                 }
 
                 for error in &errors {
                     log::error!("Export error: {}", error);
                     if total_paths == 1 {
-                        let _ = app_handle.emit("export-error", error.clone());
+                        let _ = app_handle.emit(task_events.error, error.clone());
                     }
                 }
 
                 if error_count > 0 && total_paths > 1 {
                     let _ = app_handle.emit(
-                        "export-error",
+                        task_events.error,
                         format!("{error_count} of {total_paths} exports failed"),
                     );
                 } else if error_count == 0 {
                     let _ = app_handle.emit(
-                        "batch-export-progress",
+                        task_events.progress,
                         serde_json::json!({ "current": total_paths, "total": total_paths, "path": "" }),
                     );
-                    let _ = app_handle.emit("export-complete", ());
+                    let _ = app_handle.emit(task_events.complete, ());
                 }
             },
         );
@@ -3276,6 +3330,7 @@ pub async fn export_images(
         state,
         app_handle,
         completion_tx,
+        ExportTaskEventScope::Standard,
     )
     .await?;
 
@@ -3286,6 +3341,817 @@ pub async fn export_images(
             Err(_) => Err("Export task ended before reporting completion.".to_string()),
         },
         None => Ok(()),
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchGeometryCorrectionResult {
+    pub output_folder: String,
+    pub processed_count: usize,
+    pub content_orientation_corrected_count: usize,
+    pub distortion_corrected_count: usize,
+    pub missing_distortion_profile_count: usize,
+}
+
+/// A compact, rendered comparison for one source. Both images are generated
+/// from the same geometry adjustments that the full-resolution exporter uses.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchGeometryPreviewItem {
+    pub source_path: String,
+    pub before_preview: String,
+    pub after_preview: String,
+    pub suggested_orientation_steps: u8,
+    pub orientation_steps: u8,
+    pub auto_corrected: bool,
+    pub content_confidence: f32,
+    pub distortion_applied: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchGeometryAnalysisResult {
+    pub items: Vec<BatchGeometryPreviewItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchGeometryOrientationOverride {
+    pub path: String,
+    pub orientation_steps: u8,
+}
+
+fn normalize_batch_geometry_output_format(value: &str) -> Result<&'static str, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" => Ok("jpg"),
+        "png" => Ok("png"),
+        "tif" | "tiff" => Ok("tiff"),
+        _ => Err("Batch correction supports JPEG, PNG, and TIFF output.".to_string()),
+    }
+}
+
+fn create_batch_geometry_output_folder(output_root: &Path) -> Result<PathBuf, String> {
+    if output_root.as_os_str().is_empty() {
+        return Err("Choose a folder for the corrected images.".to_string());
+    }
+
+    fs::create_dir_all(output_root).map_err(|error| {
+        format!(
+            "Failed to create the selected output folder '{}': {error}",
+            output_root.display()
+        )
+    })?;
+
+    for index in 1..=9_999usize {
+        let folder_name = if index == 1 {
+            "RAW Editor Corrected".to_string()
+        } else {
+            format!("RAW Editor Corrected {index}")
+        };
+        let candidate = output_root.join(folder_name);
+
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Failed to create the result folder '{}': {error}",
+                    candidate.display()
+                ));
+            }
+        }
+    }
+
+    Err("Could not create a unique result folder. Please choose another location.".to_string())
+}
+
+fn parse_batch_geometry_exif_number(value: Option<&String>) -> Option<f32> {
+    let value = value?.trim();
+    let mut number = String::new();
+    let mut started = false;
+
+    for character in value.chars() {
+        let is_number_character =
+            character.is_ascii_digit() || character == '.' || character == '-';
+        if !started {
+            if is_number_character {
+                started = true;
+                number.push(character);
+            }
+        } else if is_number_character {
+            number.push(character);
+        } else {
+            break;
+        }
+    }
+
+    number
+        .parse::<f32>()
+        .ok()
+        .filter(|number| number.is_finite())
+}
+
+fn has_usable_distortion_params(params: &Value) -> bool {
+    ["k1", "k2", "k3"].into_iter().any(|key| {
+        params
+            .get(key)
+            .and_then(Value::as_f64)
+            .is_some_and(|value| value.abs() > 1e-6)
+    })
+}
+
+fn find_batch_distortion_params(
+    lens_database: Option<&crate::lens_correction::LensDatabase>,
+    metadata: &HashMap<String, String>,
+) -> Option<Value> {
+    let lens_database = lens_database?;
+    let maker = metadata
+        .get("LensMake")
+        .or_else(|| metadata.get("Make"))?
+        .trim();
+    let model = metadata.get("LensModel")?.trim();
+    let focal_length = parse_batch_geometry_exif_number(metadata.get("FocalLength"))?;
+    if maker.is_empty() || model.is_empty() || focal_length <= 0.0 {
+        return None;
+    }
+
+    let (matched_maker, matched_model) =
+        crate::lens_correction::find_best_lens_match(lens_database, maker, model)?;
+    let aperture = parse_batch_geometry_exif_number(metadata.get("FNumber"));
+    let distance = parse_batch_geometry_exif_number(metadata.get("SubjectDistance"));
+    let params = crate::lens_correction::resolve_lens_params(
+        lens_database,
+        &matched_maker,
+        &matched_model,
+        focal_length,
+        aperture,
+        distance,
+    )?;
+
+    serde_json::to_value(params).ok()
+}
+
+fn build_batch_geometry_adjustments(
+    content_orientation_steps: u8,
+    distortion_params: Option<Value>,
+    apply_distortion: bool,
+) -> Value {
+    let has_distortion = apply_distortion
+        && distortion_params
+            .as_ref()
+            .is_some_and(has_usable_distortion_params);
+
+    serde_json::json!({
+        "crop": Value::Null,
+        "flipHorizontal": false,
+        "flipVertical": false,
+        "orientationSteps": content_orientation_steps.min(3),
+        "rotation": 0.0,
+        "sectionVisibility": {
+            "geometry": true,
+            "optics": true,
+        },
+        "transformAspect": 0.0,
+        "transformDistortion": 0.0,
+        "transformHorizontal": 0.0,
+        "transformProjection": 0.0,
+        "transformRotate": 0.0,
+        "transformScale": 100.0,
+        "transformVertical": 0.0,
+        "transformXOffset": 0.0,
+        "transformYOffset": 0.0,
+        "lensDistortionAmount": 100.0,
+        "lensDistortionEnabled": has_distortion,
+        "lensDistortionParams": distortion_params,
+        "lensTcaAmount": 100.0,
+        "lensTcaEnabled": false,
+        "lensVignetteAmount": 100.0,
+        "lensVignetteEnabled": false,
+        "masks": [],
+    })
+}
+
+const CONTENT_ORIENTATION_ANALYSIS_EDGE: u32 = 640;
+const BATCH_GEOMETRY_PREVIEW_EDGE: u32 = 1600;
+const BATCH_GEOMETRY_PREVIEW_JPEG_QUALITY: u8 = 90;
+const CONTENT_ORIENTATION_MIN_UPRIGHT_SCORE: f32 = 0.62;
+const CONTENT_ORIENTATION_MIN_CURRENT_MARGIN: f32 = 0.14;
+const CONTENT_ORIENTATION_MIN_RUNNER_UP_MARGIN: f32 = 0.08;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ContentOrientationDecision {
+    orientation_steps: u8,
+    corrected: bool,
+    confidence: f32,
+}
+
+impl ContentOrientationDecision {
+    const fn preserve_current() -> Self {
+        Self {
+            orientation_steps: 0,
+            corrected: false,
+            confidence: 0.0,
+        }
+    }
+}
+
+/// Applies a content model's four upright scores conservatively. Index zero is the
+/// image as decoded by the normal loader (including its EXIF handling); indexes
+/// one through three are the same preview rotated by 90, 180, and 270 degrees.
+///
+/// EXIF is therefore only a starting point. A non-zero rotation must be both
+/// convincingly upright and materially better than the starting image before the
+/// batch exporter is allowed to change a source's physical direction.
+fn decide_content_orientation(scores: [f32; 4]) -> ContentOrientationDecision {
+    let mut best_index = 0usize;
+    let mut best_score = f32::NEG_INFINITY;
+    let mut runner_up_score = f32::NEG_INFINITY;
+
+    for (index, raw_score) in scores.into_iter().enumerate() {
+        let score = if raw_score.is_finite() {
+            raw_score
+        } else {
+            f32::NEG_INFINITY
+        };
+        if score > best_score {
+            runner_up_score = best_score;
+            best_score = score;
+            best_index = index;
+        } else if score > runner_up_score {
+            runner_up_score = score;
+        }
+    }
+
+    let current_score = if scores[0].is_finite() {
+        scores[0]
+    } else {
+        f32::NEG_INFINITY
+    };
+    let is_confident_non_zero_rotation = best_index != 0
+        && best_score >= CONTENT_ORIENTATION_MIN_UPRIGHT_SCORE
+        && best_score - current_score >= CONTENT_ORIENTATION_MIN_CURRENT_MARGIN
+        && best_score - runner_up_score >= CONTENT_ORIENTATION_MIN_RUNNER_UP_MARGIN;
+
+    if is_confident_non_zero_rotation {
+        ContentOrientationDecision {
+            orientation_steps: best_index as u8,
+            corrected: true,
+            confidence: best_score.clamp(0.0, 1.0),
+        }
+    } else {
+        ContentOrientationDecision {
+            orientation_steps: 0,
+            corrected: false,
+            confidence: 0.0,
+        }
+    }
+}
+
+fn load_batch_content_orientation_preview(
+    source_path: &Path,
+    source_bytes: &[u8],
+    settings: &crate::app_settings::AppSettings,
+    target_edge: u32,
+) -> Result<DynamicImage, String> {
+    let source_path_string = source_path.to_string_lossy();
+    let preview = if is_raw_file(source_path) {
+        crate::file_management::try_load_embedded_raw_preview(source_path, target_edge)
+            .or_else(|| {
+                load_base_image_from_bytes_without_exif_persistence(
+                    source_bytes,
+                    &source_path_string,
+                    true,
+                    settings,
+                    None,
+                )
+                .ok()
+            })
+            .ok_or_else(|| {
+                format!(
+                    "Failed to load a content-analysis preview for '{}'.",
+                    source_path.display()
+                )
+            })?
+    } else {
+        crate::image_loader::load_image_with_orientation(source_bytes, None).map_err(|error| {
+            format!(
+                "Failed to load a content-analysis preview for '{}': {error}",
+                source_path.display()
+            )
+        })?
+    };
+
+    Ok(downscale_f32_image(&preview, target_edge, target_edge))
+}
+
+fn analyze_batch_content_orientation(
+    preview: &DynamicImage,
+    source_path: &Path,
+    clip_models: &crate::ai_processing::ClipModels,
+) -> Result<ContentOrientationDecision, String> {
+    let mut scores = [0.0f32; 4];
+
+    for (orientation_steps, score) in scores.iter_mut().enumerate() {
+        let candidate = match orientation_steps {
+            0 => Cow::Borrowed(preview),
+            1 => Cow::Owned(preview.rotate90()),
+            2 => Cow::Owned(preview.rotate180()),
+            3 => Cow::Owned(preview.rotate270()),
+            _ => unreachable!(),
+        };
+        *score = crate::tagging::score_content_orientation_with_clip(
+            candidate.as_ref(),
+            &clip_models.model,
+            &clip_models.tokenizer,
+        )
+        .map_err(|error| {
+            format!(
+                "Content orientation analysis failed for '{}': {error}",
+                source_path.display()
+            )
+        })?;
+    }
+
+    Ok(decide_content_orientation(scores))
+}
+
+#[derive(Debug)]
+struct BatchGeometryPreviewImages {
+    before_preview: String,
+    after_preview: String,
+}
+
+fn encode_batch_geometry_preview(image: &DynamicImage) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    JpegEncoder::new_with_quality(&mut bytes, BATCH_GEOMETRY_PREVIEW_JPEG_QUALITY)
+        .encode_image(&image.to_rgb8())
+        .map_err(|error| format!("Failed to encode batch correction preview: {error}"))?;
+
+    Ok(format!(
+        "data:image/jpeg;base64,{}",
+        general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+/// Draws the guide before applying the transform so the corrected preview
+/// shows the same lines after distortion/orientation processing. This makes a
+/// subtle lens profile visible without changing the exported pixels.
+fn overlay_batch_geometry_grid(image: &DynamicImage) -> DynamicImage {
+    let mut visualization = image.to_rgba8();
+    let width = visualization.width().saturating_sub(1) as f32;
+    let height = visualization.height().saturating_sub(1) as f32;
+    let minor_color = image::Rgba([255, 255, 255, 92]);
+    let major_color = image::Rgba([92, 224, 255, 176]);
+
+    for index in 1..10 {
+        let fraction = index as f32 / 10.0;
+        let color = if index == 5 { major_color } else { minor_color };
+        let x = width * fraction;
+        let y = height * fraction;
+        draw_line_segment_mut(&mut visualization, (x, 0.0), (x, height), color);
+        draw_line_segment_mut(&mut visualization, (0.0, y), (width, y), color);
+    }
+
+    DynamicImage::ImageRgba8(visualization)
+}
+
+fn render_batch_geometry_preview_images(
+    preview: &DynamicImage,
+    adjustments: &Value,
+    show_guides: bool,
+) -> Result<BatchGeometryPreviewImages, String> {
+    let preview_source = if show_guides {
+        overlay_batch_geometry_grid(preview)
+    } else {
+        preview.clone()
+    };
+    let before_preview = encode_batch_geometry_preview(&preview_source)?;
+    let after_preview = apply_all_transformations(Cow::Borrowed(&preview_source), adjustments)
+        .0
+        .into_owned();
+
+    Ok(BatchGeometryPreviewImages {
+        before_preview,
+        after_preview: encode_batch_geometry_preview(&after_preview)?,
+    })
+}
+
+struct PreparedBatchGeometrySource {
+    content_orientation: ContentOrientationDecision,
+    distortion_params: Option<Value>,
+    orientation_steps: u8,
+    preview_images: Option<BatchGeometryPreviewImages>,
+    source_path: String,
+}
+
+/// Does the per-source disk IO and CPU work away from the Tauri async executor.
+/// The outer command awaits one source at a time because the shared CLIP session
+/// serializes inference anyway; this bounds decoded-image and RAW-byte memory.
+fn prepare_batch_geometry_source(
+    image_path: String,
+    apply_distortion: bool,
+    preview_settings: Option<crate::app_settings::AppSettings>,
+    clip_models: Option<Arc<crate::ai_processing::ClipModels>>,
+    lens_database: Option<Arc<crate::lens_correction::LensDatabase>>,
+    orientation_override: Option<u8>,
+    include_preview: bool,
+    show_guides: bool,
+) -> Result<PreparedBatchGeometrySource, String> {
+    let (source_path, _) = parse_virtual_path(&image_path);
+    if !source_path.is_file() {
+        return Err(format!(
+            "Selected source image does not exist: {}",
+            source_path.display()
+        ));
+    }
+
+    let source_path_string = source_path.to_string_lossy().into_owned();
+    let file_bytes = fs::read(&source_path)
+        .map_err(|error| format!("Failed to read '{}': {error}", source_path.display()))?;
+    let metadata = exif_processing::read_exif_data_from_bytes(&source_path_string, &file_bytes);
+    let needs_source_preview = include_preview || clip_models.is_some();
+    let source_preview = if needs_source_preview {
+        let settings = preview_settings.as_ref().ok_or_else(|| {
+            "Batch correction preview settings were unavailable while loading the source."
+                .to_string()
+        })?;
+        Some(load_batch_content_orientation_preview(
+            &source_path,
+            &file_bytes,
+            settings,
+            BATCH_GEOMETRY_PREVIEW_EDGE,
+        )?)
+    } else {
+        None
+    };
+    let content_orientation = match (source_preview.as_ref(), clip_models.as_ref()) {
+        (Some(preview), Some(clip_models)) => {
+            let analysis_preview = downscale_f32_image(
+                preview,
+                CONTENT_ORIENTATION_ANALYSIS_EDGE,
+                CONTENT_ORIENTATION_ANALYSIS_EDGE,
+            );
+            analyze_batch_content_orientation(&analysis_preview, &source_path, clip_models)?
+        }
+        _ => ContentOrientationDecision::preserve_current(),
+    };
+    let distortion_params = apply_distortion
+        .then(|| find_batch_distortion_params(lens_database.as_deref(), &metadata))
+        .flatten();
+    let orientation_steps = orientation_override
+        .unwrap_or(content_orientation.orientation_steps)
+        .min(3);
+    let preview_images = if include_preview {
+        let preview = source_preview
+            .as_ref()
+            .ok_or_else(|| "Batch correction could not prepare a source preview.".to_string())?;
+        let adjustments = build_batch_geometry_adjustments(
+            orientation_steps,
+            distortion_params.clone(),
+            apply_distortion,
+        );
+        Some(render_batch_geometry_preview_images(
+            preview,
+            &adjustments,
+            show_guides,
+        )?)
+    } else {
+        None
+    };
+
+    Ok(PreparedBatchGeometrySource {
+        content_orientation,
+        distortion_params,
+        orientation_steps,
+        preview_images,
+        source_path: source_path_string,
+    })
+}
+
+fn batch_geometry_preview_item_from_prepared(
+    prepared: PreparedBatchGeometrySource,
+) -> Result<BatchGeometryPreviewItem, String> {
+    let preview_images = prepared.preview_images.ok_or_else(|| {
+        "Batch correction did not generate a visual preview for this source.".to_string()
+    })?;
+    let distortion_applied = prepared
+        .distortion_params
+        .as_ref()
+        .is_some_and(has_usable_distortion_params);
+
+    Ok(BatchGeometryPreviewItem {
+        source_path: prepared.source_path,
+        before_preview: preview_images.before_preview,
+        after_preview: preview_images.after_preview,
+        suggested_orientation_steps: prepared.content_orientation.orientation_steps,
+        orientation_steps: prepared.orientation_steps,
+        auto_corrected: prepared.content_orientation.corrected,
+        content_confidence: prepared.content_orientation.confidence,
+        distortion_applied,
+    })
+}
+
+/// Analyzes selected sources one at a time and streams each visual comparison
+/// to the modal. Nothing is exported here: the user reviews these previews and
+/// can override a direction before a separate export is started.
+#[tauri::command]
+pub async fn analyze_batch_geometry(
+    paths: Vec<String>,
+    apply_distortion: bool,
+    show_guides: Option<bool>,
+    use_content_orientation: Option<bool>,
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<BatchGeometryAnalysisResult, String> {
+    if paths.is_empty() {
+        return Err("Select at least one image to analyze.".to_string());
+    }
+
+    let show_guides = show_guides.unwrap_or(false);
+    let use_content_orientation = use_content_orientation.unwrap_or(true);
+    let clip_models = if use_content_orientation {
+        let _ = app_handle.emit(
+            "batch-geometry-orientation-progress",
+            serde_json::json!({ "current": 0, "total": paths.len(), "path": "" }),
+        );
+        Some(
+            crate::ai_processing::get_or_init_clip_models(
+                &app_handle,
+                &state.ai_state,
+                &state.ai_init_lock,
+            )
+            .await
+            .map_err(|error| format!("Could not start the content orientation model: {error}"))?,
+        )
+    } else {
+        None
+    };
+    let preview_settings = load_settings(app_handle.clone())?;
+    let lens_database = state
+        .lens_db
+        .lock()
+        .map_err(|error| format!("Lens database lock poisoned: {error}"))?
+        .clone();
+    let mut items = Vec::with_capacity(paths.len());
+
+    for (index, image_path) in paths.iter().enumerate() {
+        let prepared = tokio::task::spawn_blocking({
+            let image_path = image_path.clone();
+            let preview_settings = preview_settings.clone();
+            let clip_models = clip_models.clone();
+            let lens_database = lens_database.clone();
+            move || {
+                prepare_batch_geometry_source(
+                    image_path,
+                    apply_distortion,
+                    Some(preview_settings),
+                    clip_models,
+                    lens_database,
+                    None,
+                    true,
+                    show_guides,
+                )
+            }
+        })
+        .await
+        .map_err(|error| format!("Batch preview task failed: {error}"))??;
+        let item = batch_geometry_preview_item_from_prepared(prepared)?;
+
+        if use_content_orientation {
+            let _ = app_handle.emit(
+                "batch-geometry-orientation-progress",
+                serde_json::json!({
+                    "current": index + 1,
+                    "total": paths.len(),
+                    "path": item.source_path.clone(),
+                }),
+            );
+        }
+        let _ = app_handle.emit("batch-geometry-preview", item.clone());
+        items.push(item);
+    }
+
+    Ok(BatchGeometryAnalysisResult { items })
+}
+
+/// Re-renders one reviewed source after a manual right-angle override without
+/// invoking the content model again. This keeps the review controls immediate
+/// while preserving the exact distortion and geometry path used for export.
+#[tauri::command]
+pub async fn preview_batch_geometry_correction(
+    path: String,
+    orientation_steps: u8,
+    apply_distortion: bool,
+    show_guides: Option<bool>,
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<BatchGeometryPreviewItem, String> {
+    let preview_settings = load_settings(app_handle.clone())?;
+    let lens_database = state
+        .lens_db
+        .lock()
+        .map_err(|error| format!("Lens database lock poisoned: {error}"))?
+        .clone();
+    let prepared = tokio::task::spawn_blocking(move || {
+        prepare_batch_geometry_source(
+            path,
+            apply_distortion,
+            Some(preview_settings),
+            None,
+            lens_database,
+            Some(orientation_steps),
+            true,
+            show_guides.unwrap_or(false),
+        )
+    })
+    .await
+    .map_err(|error| format!("Batch preview render task failed: {error}"))??;
+
+    batch_geometry_preview_item_from_prepared(prepared)
+}
+
+/// Exports a clean batch of originals using content-aware orientation analysis and,
+/// when available, the matching Lensfun distortion calibration. It deliberately
+/// bypasses existing editor sidecars so the workflow never changes source edits or files.
+#[tauri::command]
+pub async fn batch_geometry_correction(
+    paths: Vec<String>,
+    output_folder: String,
+    output_format: String,
+    jpeg_quality: u8,
+    apply_distortion: bool,
+    use_content_orientation: Option<bool>,
+    orientation_overrides: Option<Vec<BatchGeometryOrientationOverride>>,
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<BatchGeometryCorrectionResult, String> {
+    if paths.is_empty() {
+        return Err("Select at least one image to correct.".to_string());
+    }
+
+    let output_format = normalize_batch_geometry_output_format(&output_format)?;
+    let use_content_orientation = use_content_orientation.unwrap_or(true);
+    let orientation_overrides = orientation_overrides.map(|overrides| {
+        let mut normalized = HashMap::with_capacity(overrides.len());
+        for override_item in overrides {
+            let (source_path, _) = parse_virtual_path(&override_item.path);
+            normalized.insert(
+                source_path.to_string_lossy().into_owned(),
+                override_item.orientation_steps.min(3),
+            );
+        }
+        normalized
+    });
+    // A reviewed override is authoritative. Do not make the user wait for a
+    // second model pass after they have already inspected every preview.
+    let should_analyze_content = use_content_orientation && orientation_overrides.is_none();
+    let clip_models = if should_analyze_content {
+        let _ = app_handle.emit(
+            "batch-geometry-orientation-progress",
+            serde_json::json!({ "current": 0, "total": paths.len(), "path": "" }),
+        );
+        Some(
+            crate::ai_processing::get_or_init_clip_models(
+                &app_handle,
+                &state.ai_state,
+                &state.ai_init_lock,
+            )
+            .await
+            .map_err(|error| format!("Could not start the content orientation model: {error}"))?,
+        )
+    } else {
+        None
+    };
+    let preview_settings = should_analyze_content
+        .then(|| load_settings(app_handle.clone()))
+        .transpose()?;
+    let lens_database = state
+        .lens_db
+        .lock()
+        .map_err(|error| format!("Lens database lock poisoned: {error}"))?
+        .clone();
+
+    let mut per_path_adjustments = HashMap::with_capacity(paths.len());
+    let mut content_orientation_corrected_count = 0usize;
+    let mut distortion_corrected_count = 0usize;
+    let mut missing_distortion_profile_count = 0usize;
+
+    for (index, image_path) in paths.iter().enumerate() {
+        let (source_path, _) = parse_virtual_path(image_path);
+        let source_path_key = source_path.to_string_lossy().into_owned();
+        let orientation_override = match orientation_overrides.as_ref() {
+            Some(overrides) => Some(*overrides.get(&source_path_key).ok_or_else(|| {
+                format!(
+                    "Missing a reviewed orientation for '{}'.",
+                    source_path.display()
+                )
+            })?),
+            None => None,
+        };
+        let prepared = tokio::task::spawn_blocking({
+            let image_path = image_path.clone();
+            let preview_settings = preview_settings.clone();
+            let clip_models = clip_models.clone();
+            let lens_database = lens_database.clone();
+            move || {
+                prepare_batch_geometry_source(
+                    image_path,
+                    apply_distortion,
+                    preview_settings,
+                    clip_models,
+                    lens_database,
+                    orientation_override,
+                    false,
+                    false,
+                )
+            }
+        })
+        .await
+        .map_err(|error| format!("Batch source preparation task failed: {error}"))??;
+
+        if should_analyze_content {
+            let _ = app_handle.emit(
+                "batch-geometry-orientation-progress",
+                serde_json::json!({
+                    "current": index + 1,
+                    "total": paths.len(),
+                    "path": prepared.source_path.clone(),
+                }),
+            );
+        }
+
+        if prepared.orientation_steps != 0 {
+            content_orientation_corrected_count += 1;
+        }
+
+        let has_distortion = prepared
+            .distortion_params
+            .as_ref()
+            .is_some_and(has_usable_distortion_params);
+
+        if apply_distortion {
+            if has_distortion {
+                distortion_corrected_count += 1;
+            } else {
+                missing_distortion_profile_count += 1;
+            }
+        }
+
+        per_path_adjustments.insert(
+            prepared.source_path,
+            build_batch_geometry_adjustments(
+                prepared.orientation_steps,
+                prepared.distortion_params,
+                apply_distortion,
+            ),
+        );
+    }
+    let batch_output_folder = create_batch_geometry_output_folder(Path::new(&output_folder))?;
+    let result = BatchGeometryCorrectionResult {
+        output_folder: batch_output_folder.to_string_lossy().into_owned(),
+        processed_count: paths.len(),
+        content_orientation_corrected_count,
+        distortion_corrected_count,
+        missing_distortion_profile_count,
+    };
+
+    let export_settings = ExportSettings {
+        jpeg_quality: jpeg_quality.clamp(1, 100),
+        resize: None,
+        keep_metadata: true,
+        metadata_overrides: None,
+        preserve_timestamps: true,
+        strip_gps: false,
+        embed_color_profile: true,
+        filename_template: Some("{original_filename}_corrected_{sequence}".to_string()),
+        watermark: None,
+        export_masks: false,
+        preserve_folders: false,
+    };
+    let (completion_tx, completion_rx) = tokio::sync::oneshot::channel();
+
+    export_images_impl(
+        paths,
+        result.output_folder.clone(),
+        false,
+        Vec::new(),
+        export_settings,
+        output_format.to_string(),
+        ExportAdjustmentsMode::PerPathOverrides(Arc::new(per_path_adjustments)),
+        state,
+        app_handle,
+        Some(completion_tx),
+        ExportTaskEventScope::BatchGeometry,
+    )
+    .await?;
+
+    match completion_rx.await {
+        Ok(Ok(())) => Ok(result),
+        Ok(Err(error_count)) => Err(format!(
+            "Batch correction completed with {error_count} export error(s)."
+        )),
+        Err(_) => Err("Batch correction stopped before reporting completion.".to_string()),
     }
 }
 
@@ -3381,6 +4247,7 @@ pub async fn run_headless_export(
         state.clone(),
         app_handle.clone(),
         Some(tx),
+        ExportTaskEventScope::Standard,
     )
     .await?;
 
@@ -3746,8 +4613,70 @@ mod tests {
                     Some(serde_json::json!({ "exposure": 1.0 }))
                 );
             }
-            ExportAdjustmentsMode::GlobalOverride(_) => panic!("unexpected global override"),
+            ExportAdjustmentsMode::GlobalOverride(_)
+            | ExportAdjustmentsMode::PerPathOverrides(_) => panic!("unexpected override"),
         }
+    }
+
+    #[test]
+    fn batch_geometry_adjustments_only_enable_a_usable_distortion_profile() {
+        let usable_params = serde_json::json!({ "k1": 0.012, "k2": 0.0, "k3": 0.0, "model": 0 });
+        let adjustments = build_batch_geometry_adjustments(2, Some(usable_params.clone()), true);
+
+        assert_eq!(adjustments["lensDistortionEnabled"], true);
+        assert_eq!(adjustments["lensDistortionParams"], usable_params);
+        assert_eq!(adjustments["lensTcaEnabled"], false);
+        assert_eq!(adjustments["lensVignetteEnabled"], false);
+        assert_eq!(adjustments["orientationSteps"], 2);
+
+        let unavailable =
+            build_batch_geometry_adjustments(0, Some(serde_json::json!({ "k1": 0.0 })), true);
+        assert_eq!(unavailable["lensDistortionEnabled"], false);
+
+        let disabled =
+            build_batch_geometry_adjustments(0, Some(serde_json::json!({ "k1": 0.012 })), false);
+        assert_eq!(disabled["lensDistortionEnabled"], false);
+    }
+
+    #[test]
+    fn batch_geometry_output_folders_are_created_without_overwriting_previous_runs() {
+        let temporary_directory = tempfile::tempdir().expect("create temporary output root");
+
+        let first = create_batch_geometry_output_folder(temporary_directory.path())
+            .expect("create first batch output folder");
+        let second = create_batch_geometry_output_folder(temporary_directory.path())
+            .expect("create second batch output folder");
+
+        assert_eq!(
+            first.file_name().and_then(|name| name.to_str()),
+            Some("RAW Editor Corrected")
+        );
+        assert_eq!(
+            second.file_name().and_then(|name| name.to_str()),
+            Some("RAW Editor Corrected 2")
+        );
+        assert!(first.is_dir());
+        assert!(second.is_dir());
+    }
+
+    #[test]
+    fn batch_geometry_content_orientation_requires_a_clear_win_over_the_current_direction() {
+        let decision = decide_content_orientation([0.44, 0.48, 0.78, 0.53]);
+
+        assert_eq!(
+            decision,
+            ContentOrientationDecision {
+                orientation_steps: 2,
+                corrected: true,
+                confidence: 0.78,
+            }
+        );
+
+        let ambiguous = decide_content_orientation([0.72, 0.74, 0.77, 0.73]);
+        assert_eq!(ambiguous, ContentOrientationDecision::preserve_current());
+
+        let weak = decide_content_orientation([0.35, 0.38, 0.57, 0.41]);
+        assert_eq!(weak, ContentOrientationDecision::preserve_current());
     }
 
     #[test]

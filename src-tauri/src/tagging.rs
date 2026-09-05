@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
-use image::{DynamicImage, imageops::FilterType};
+use image::{DynamicImage, Rgb, RgbImage, imageops::FilterType};
 use ndarray::{Array, Axis};
 use ort::session::Session;
 use ort::value::Tensor;
@@ -22,21 +22,45 @@ use crate::{AppState, candidates::TAG_CANDIDATES};
 pub const COLOR_TAG_PREFIX: &str = "color:";
 pub const USER_TAG_PREFIX: &str = "user:";
 
-fn preprocess_clip_image(image: &DynamicImage) -> Array<f32, ndarray::Dim<[usize; 4]>> {
-    let input_size = 224;
-    let resized = image.resize_to_fill(input_size, input_size, FilterType::Triangle);
-    let rgb_image = resized.to_rgb8();
+const CLIP_INPUT_SIZE: u32 = 224;
+
+fn preprocess_clip_rgb_image(rgb_image: &RgbImage) -> Array<f32, ndarray::Dim<[usize; 4]>> {
+    debug_assert_eq!(rgb_image.dimensions(), (CLIP_INPUT_SIZE, CLIP_INPUT_SIZE));
 
     let mean = [0.48145466, 0.4578275, 0.40821073];
     let std = [0.26862954, 0.261_302_6, 0.275_777_1];
 
-    let mut array = Array::zeros((1, 3, input_size as usize, input_size as usize));
+    let mut array = Array::zeros((1, 3, CLIP_INPUT_SIZE as usize, CLIP_INPUT_SIZE as usize));
     for (x, y, pixel) in rgb_image.enumerate_pixels() {
         array[[0, 0, y as usize, x as usize]] = (pixel[0] as f32 / 255.0 - mean[0]) / std[0];
         array[[0, 1, y as usize, x as usize]] = (pixel[1] as f32 / 255.0 - mean[1]) / std[1];
         array[[0, 2, y as usize, x as usize]] = (pixel[2] as f32 / 255.0 - mean[2]) / std[2];
     }
     array
+}
+
+fn preprocess_clip_image(image: &DynamicImage) -> Array<f32, ndarray::Dim<[usize; 4]>> {
+    let rgb_image = image
+        .resize_to_fill(CLIP_INPUT_SIZE, CLIP_INPUT_SIZE, FilterType::Triangle)
+        .to_rgb8();
+    preprocess_clip_rgb_image(&rgb_image)
+}
+
+fn preprocess_clip_orientation_image(image: &DynamicImage) -> Array<f32, ndarray::Dim<[usize; 4]>> {
+    let resized = image
+        .resize(CLIP_INPUT_SIZE, CLIP_INPUT_SIZE, FilterType::Triangle)
+        .to_rgb8();
+    let (resized_width, resized_height) = resized.dimensions();
+    let mut letterboxed =
+        RgbImage::from_pixel(CLIP_INPUT_SIZE, CLIP_INPUT_SIZE, Rgb([127, 127, 127]));
+    let offset_x = (CLIP_INPUT_SIZE - resized_width) / 2;
+    let offset_y = (CLIP_INPUT_SIZE - resized_height) / 2;
+
+    for (x, y, pixel) in resized.enumerate_pixels() {
+        letterboxed.put_pixel(offset_x + x, offset_y + y, *pixel);
+    }
+
+    preprocess_clip_rgb_image(&letterboxed)
 }
 
 fn softmax(array: &Array<f32, ndarray::Dim<[usize; 2]>>) -> Array<f32, ndarray::Dim<[usize; 2]>> {
@@ -50,6 +74,112 @@ fn softmax(array: &Array<f32, ndarray::Dim<[usize; 2]>>) -> Array<f32, ndarray::
         }
     }
     new_array
+}
+
+fn run_clip_prompt_logits(
+    image: &DynamicImage,
+    clip_session_mutex: &Mutex<Session>,
+    tokenizer: &Tokenizer,
+    text_inputs: &[String],
+    preserve_full_frame: bool,
+) -> Result<Array<f32, ndarray::Dim<[usize; 2]>>> {
+    if text_inputs.is_empty() {
+        return Err(anyhow::anyhow!("CLIP needs at least one text prompt."));
+    }
+
+    let image_input = if preserve_full_frame {
+        preprocess_clip_orientation_image(image)
+    } else {
+        preprocess_clip_image(image)
+    };
+    let encodings = tokenizer
+        .encode_batch(text_inputs.to_vec(), true)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    let max_len = encodings
+        .iter()
+        .map(|encoding| encoding.get_ids().len())
+        .max()
+        .unwrap_or(0);
+
+    let mut ids_data = Vec::new();
+    let mut mask_data = Vec::new();
+    for encoding in encodings {
+        let mut ids = encoding
+            .get_ids()
+            .iter()
+            .map(|&id| id as i64)
+            .collect::<Vec<_>>();
+        let mut mask = encoding
+            .get_attention_mask()
+            .iter()
+            .map(|&value| value as i64)
+            .collect::<Vec<_>>();
+        ids.resize(max_len, 0);
+        mask.resize(max_len, 0);
+        ids_data.extend_from_slice(&ids);
+        mask_data.extend_from_slice(&mask);
+    }
+
+    let ids_array = Array::from_shape_vec((text_inputs.len(), max_len), ids_data)?;
+    let mask_array = Array::from_shape_vec((text_inputs.len(), max_len), mask_data)?;
+
+    let image_input_dyn = image_input.into_dyn();
+    let ids_array_dyn = ids_array.into_dyn();
+    let mask_array_dyn = mask_array.into_dyn();
+
+    let image_layout = image_input_dyn.as_standard_layout();
+    let ids_layout = ids_array_dyn.as_standard_layout();
+    let mask_layout = mask_array_dyn.as_standard_layout();
+
+    let image_val = Tensor::from_array(image_layout.into_owned())?;
+    let ids_val = Tensor::from_array(ids_layout.into_owned())?;
+    let mask_val = Tensor::from_array(mask_layout.into_owned())?;
+
+    let mut clip_session = clip_session_mutex.lock().unwrap();
+    let outputs = clip_session.run(ort::inputs![ids_val, image_val, mask_val])?;
+    let logits_dyn = outputs[0].try_extract_array::<f32>()?.to_owned();
+    Ok(logits_dyn.into_dimensionality::<ndarray::Dim<[usize; 2]>>()?)
+}
+
+/// Scores whether a preview looks naturally upright using the on-device CLIP model.
+///
+/// The batch orientation workflow compares this score across the four orthogonal
+/// rotations and only rotates a source when one candidate wins decisively. The
+/// deliberately broad prompts make non-photographic and ambiguous images settle
+/// on a conservative no-change result instead of inventing a direction.
+pub(crate) fn score_content_orientation_with_clip(
+    image: &DynamicImage,
+    clip_session_mutex: &Mutex<Session>,
+    tokenizer: &Tokenizer,
+) -> Result<f32> {
+    let prompts = [
+        "a photograph displayed upright in its natural orientation",
+        "a right-side-up photograph with subjects and scenery in their natural direction",
+        "an upside-down or sideways photograph",
+        "a photograph rotated the wrong way",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect::<Vec<_>>();
+
+    let logits = run_clip_prompt_logits(image, clip_session_mutex, tokenizer, &prompts, true)?;
+    let probabilities = softmax(&logits);
+    let values = probabilities.row(0);
+    if values.len() != prompts.len() {
+        return Err(anyhow::anyhow!(
+            "CLIP returned an unexpected orientation score shape."
+        ));
+    }
+
+    let upright = values[0] + values[1];
+    let rotated = values[2] + values[3];
+    let total = upright + rotated;
+    if total.is_finite() && total > f32::EPSILON {
+        Ok((upright / total).clamp(0.0, 1.0))
+    } else {
+        Err(anyhow::anyhow!("CLIP returned invalid orientation scores."))
+    }
 }
 
 fn rgb_to_hsv((r, g, b): (u8, u8, u8)) -> (f32, f32, f32) {
@@ -148,64 +278,13 @@ pub fn generate_tags_with_clip(
     custom_tags: Option<Vec<String>>,
     max_tags: usize,
 ) -> Result<Vec<String>> {
-    let image_input = preprocess_clip_image(image);
-
     let is_custom = custom_tags.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
     let text_inputs: Vec<String> = if is_custom {
         custom_tags.as_ref().unwrap().clone()
     } else {
         TAG_CANDIDATES.iter().map(|&s| s.to_string()).collect()
     };
-
-    let encodings = tokenizer
-        .encode_batch(text_inputs.clone(), true)
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-
-    let max_len = encodings
-        .iter()
-        .map(|e| e.get_ids().len())
-        .max()
-        .unwrap_or(0);
-
-    let mut ids_data = Vec::new();
-    let mut mask_data = Vec::new();
-    for encoding in encodings {
-        let mut ids = encoding
-            .get_ids()
-            .iter()
-            .map(|&i| i as i64)
-            .collect::<Vec<_>>();
-        let mut mask = encoding
-            .get_attention_mask()
-            .iter()
-            .map(|&m| m as i64)
-            .collect::<Vec<_>>();
-        ids.resize(max_len, 0);
-        mask.resize(max_len, 0);
-        ids_data.extend_from_slice(&ids);
-        mask_data.extend_from_slice(&mask);
-    }
-
-    let ids_array = Array::from_shape_vec((text_inputs.len(), max_len), ids_data)?;
-    let mask_array = Array::from_shape_vec((text_inputs.len(), max_len), mask_data)?;
-
-    let image_input_dyn = image_input.into_dyn();
-    let ids_array_dyn = ids_array.into_dyn();
-    let mask_array_dyn = mask_array.into_dyn();
-
-    let image_layout = image_input_dyn.as_standard_layout();
-    let ids_layout = ids_array_dyn.as_standard_layout();
-    let mask_layout = mask_array_dyn.as_standard_layout();
-
-    let image_val = Tensor::from_array(image_layout.into_owned())?;
-    let ids_val = Tensor::from_array(ids_layout.into_owned())?;
-    let mask_val = Tensor::from_array(mask_layout.into_owned())?;
-
-    let mut clip_session = clip_session_mutex.lock().unwrap();
-    let outputs = clip_session.run(ort::inputs![ids_val, image_val, mask_val])?;
-
-    let logits_dyn = outputs[0].try_extract_array::<f32>()?.to_owned();
-    let logits = logits_dyn.into_dimensionality::<ndarray::Dim<[usize; 2]>>()?;
+    let logits = run_clip_prompt_logits(image, clip_session_mutex, tokenizer, &text_inputs, false)?;
     let probs = softmax(&logits);
 
     let confidence_threshold = 0.005;

@@ -313,6 +313,10 @@ function App() {
     });
   }, [handlePickWorkflowImages, setUI]);
 
+  const handleOpenBatchGeometryWorkflow = useCallback(() => {
+    setUI({ batchGeometryModalState: { isOpen: true } });
+  }, [setUI]);
+
   const {
     externalEditSession,
     isFinishing: isExternalEditFinishing,
@@ -905,6 +909,7 @@ function App() {
                     handleMainLibraryContextMenu={handleMainLibraryContextMenu}
                     handleGoHome={handleGoHome}
                     handleOpenImage={handleOpenImage}
+                    handleOpenBatchGeometryWorkflow={handleOpenBatchGeometryWorkflow}
                     handleOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
                     handleOpenFolder={handleOpenFolder}
                     handleImportClick={handleImportClick}

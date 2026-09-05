@@ -4885,6 +4885,574 @@ button {
 
 /* Denoise uses a split stage/footer layout, so its insets are explicit on
  * each region instead of depending on a utility padding class on the shell. */
+.batch-geometry-modal-surface {
+  display: flex;
+  width: min(100%, 1180px);
+  max-width: 1180px;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.batch-geometry-modal-body {
+  min-height: 0;
+  max-height: min(82dvh, 900px);
+  overflow-y: auto;
+  padding: var(--ui-space-5);
+}
+
+.batch-geometry-review {
+  border: var(--ui-border-width) solid var(--ui-border-floating);
+  border-radius: var(--ui-radius-card);
+  background: color-mix(in srgb, var(--app-surface) 84%, var(--app-bg));
+  padding: var(--ui-space-4);
+}
+
+.batch-geometry-preview-strip {
+  display: flex;
+  gap: var(--ui-space-2);
+  min-height: 64px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-color: var(--ui-border-floating) transparent;
+}
+
+.batch-geometry-preview-chip {
+  display: grid;
+  width: 136px;
+  min-width: 136px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--ui-space-2);
+  overflow: hidden;
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-control);
+  background: var(--app-bg);
+  color: var(--app-text-secondary);
+  padding: var(--ui-space-1);
+  font-size: 11px;
+  text-align: left;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.batch-geometry-preview-chip:hover:not(:disabled) {
+  background: var(--app-surface-hover);
+  color: var(--app-text-primary);
+}
+
+.batch-geometry-preview-chip:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.batch-geometry-preview-chip--active {
+  background: color-mix(in srgb, var(--app-accent) 12%, var(--app-surface));
+  color: var(--app-text-primary);
+  box-shadow: inset 0 0 0 1px var(--app-accent);
+}
+
+.batch-geometry-preview-chip img {
+  width: 48px;
+  height: 52px;
+  border-radius: calc(var(--ui-radius-control) - 2px);
+  background: var(--app-bg);
+  object-fit: cover;
+}
+
+.batch-geometry-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+}
+
+.batch-geometry-preview-stage-wrap {
+  min-width: 0;
+}
+
+.batch-geometry-preview-stage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: clamp(320px, 48dvh, 560px);
+  min-height: 320px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: var(--ui-border-width) solid var(--ui-border-floating);
+  border-radius: var(--ui-radius-card);
+  background-color: color-mix(in srgb, var(--app-bg) 90%, var(--app-text-secondary));
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--app-text-secondary) 9%, transparent) 75%);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+  isolation: isolate;
+  touch-action: none;
+}
+
+.batch-geometry-preview-stage.is-zoomed {
+  cursor: grab;
+}
+
+.batch-geometry-preview-stage.is-panning {
+  cursor: grabbing;
+}
+
+.batch-geometry-wipe-canvas,
+.batch-geometry-side-by-side {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+  transition: transform 120ms ease-out;
+  will-change: transform;
+}
+
+.batch-geometry-wipe-canvas {
+  overflow: hidden;
+}
+
+.batch-geometry-preview-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.batch-geometry-before-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.batch-geometry-preview-image--after {
+  z-index: 0;
+}
+
+.batch-geometry-before-layer .batch-geometry-preview-image {
+  z-index: 1;
+}
+
+.batch-geometry-stage-label {
+  position: absolute;
+  z-index: 3;
+  top: var(--ui-space-3);
+  border: var(--ui-border-width) solid rgb(255 255 255 / 26%);
+  border-radius: var(--ui-radius-control);
+  background: rgb(0 0 0 / 48%);
+  padding: 4px 8px;
+  color: rgb(255 255 255 / 92%);
+  font-size: var(--ui-font-size-caption);
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.batch-geometry-stage-label--left {
+  left: var(--ui-space-3);
+}
+
+.batch-geometry-stage-label--right {
+  right: var(--ui-space-3);
+}
+
+.batch-geometry-compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 44px;
+  cursor: ew-resize;
+  outline: none;
+  touch-action: none;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.batch-geometry-compare-line::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 32%);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.batch-geometry-compare-line > span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 94%);
+  border-radius: 50%;
+  background: var(--app-bg-primary);
+  color: var(--app-text-primary);
+  box-shadow: 0 2px 9px rgb(0 0 0 / 38%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    box-shadow 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.batch-geometry-compare-line:hover > span,
+.batch-geometry-compare-line:focus-visible > span {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--app-accent) 42%, transparent),
+    0 3px 11px rgb(0 0 0 / 42%);
+}
+
+.batch-geometry-compare-line:active > span {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+
+.batch-geometry-preview-stage--loading .batch-geometry-preview-skeleton {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  opacity: 0.55;
+}
+
+.batch-geometry-side-by-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+  min-width: 100%;
+  min-height: 100%;
+  padding: var(--ui-space-3);
+}
+
+.batch-geometry-side-by-side .batch-geometry-preview-frame {
+  min-height: 0;
+  height: 100%;
+}
+
+.batch-geometry-side-by-side .batch-geometry-preview-frame img {
+  min-height: 0;
+  height: 100%;
+  aspect-ratio: auto;
+}
+
+.batch-geometry-preview-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
+}
+
+.batch-geometry-preview-status__item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-1-5);
+  border: var(--ui-border-width) solid color-mix(in srgb, var(--app-text-secondary) 25%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-bg-primary) 80%, transparent);
+  padding: 4px 8px;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  line-height: 1.2;
+}
+
+.batch-geometry-preview-status__item strong {
+  color: var(--app-text-primary);
+  font-weight: 600;
+}
+
+.batch-geometry-preview-status__item[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--app-status-success) 40%, transparent);
+  color: var(--app-status-success);
+}
+
+.batch-geometry-preview-status__item[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--app-status-warning) 40%, transparent);
+  color: var(--app-status-warning);
+}
+
+.batch-geometry-preview-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-top: 0;
+  background: color-mix(in srgb, var(--app-surface) 92%, var(--app-bg));
+  padding: var(--ui-space-2) var(--ui-space-3);
+}
+
+.batch-geometry-view-mode,
+.batch-geometry-preview-zoom {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.batch-geometry-view-mode {
+  overflow: hidden;
+  border-radius: var(--ui-radius-control);
+  background: var(--app-bg);
+  padding: 2px;
+}
+
+.batch-geometry-view-mode__button,
+.batch-geometry-guide-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border-radius: var(--ui-radius-control);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.batch-geometry-view-mode__button {
+  padding: 0 var(--ui-space-2-5);
+}
+
+.batch-geometry-view-mode__button:hover:not(:disabled),
+.batch-geometry-guide-button:hover:not(:disabled) {
+  background: var(--app-surface-hover);
+  color: var(--app-text-primary);
+}
+
+.batch-geometry-view-mode__button.is-active,
+.batch-geometry-guide-button.is-active {
+  background: var(--ui-surface-tool-selected);
+  color: var(--app-accent);
+  box-shadow: var(--ui-shadow-button-selected);
+}
+
+.batch-geometry-guide-button {
+  border: var(--ui-border-width) solid var(--ui-border-control);
+  padding: 0 var(--ui-space-2-5);
+}
+
+.batch-geometry-guide-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.batch-geometry-preview-zoom {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+}
+
+.batch-geometry-preview-zoom .ui-icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+.batch-geometry-preview-zoom__value {
+  width: 42px;
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.batch-geometry-compare-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ui-space-2-5);
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-top: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  padding: var(--ui-space-2) var(--ui-space-3);
+}
+
+.batch-geometry-compare-control input {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--app-accent);
+}
+
+.batch-geometry-preview-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ui-space-2);
+  margin-top: var(--ui-space-3);
+}
+
+.batch-geometry-preview-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--app-bg-primary) 58%, transparent);
+  padding: var(--ui-space-2) var(--ui-space-2-5);
+}
+
+.batch-geometry-preview-facts span,
+.batch-geometry-preview-facts small {
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+}
+
+.batch-geometry-preview-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-geometry-preview-facts small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-geometry-preview-frame {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-card);
+  background: var(--app-bg);
+}
+
+.batch-geometry-preview-frame--after {
+  border-color: color-mix(in srgb, var(--app-accent) 48%, var(--ui-border-floating));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 52%, transparent);
+}
+
+.batch-geometry-preview-frame figcaption {
+  position: absolute;
+  z-index: 1;
+  top: var(--ui-space-2);
+  left: var(--ui-space-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-bg) 88%, transparent);
+  padding: 3px 8px;
+  color: var(--app-text-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.batch-geometry-preview-frame img,
+.batch-geometry-preview-skeleton {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  aspect-ratio: 4 / 3;
+  background: color-mix(in srgb, var(--app-bg) 84%, var(--app-surface));
+  object-fit: contain;
+}
+
+.batch-geometry-preview-skeleton {
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-card);
+}
+
+.batch-geometry-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+  background: color-mix(in srgb, var(--app-bg) 72%, transparent);
+  color: var(--app-text-primary);
+  font-size: 12px;
+}
+
+.batch-geometry-rotation-button {
+  min-height: 32px;
+  border: var(--ui-border-width) solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-control);
+  background: var(--app-surface);
+  padding: 0 var(--ui-space-2);
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.batch-geometry-rotation-button:hover:not(:disabled) {
+  background: var(--app-surface-hover);
+  color: var(--app-text-primary);
+}
+
+.batch-geometry-rotation-button:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.batch-geometry-rotation-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+@media (max-width: 720px) {
+  .batch-geometry-modal-body {
+    max-height: min(78dvh, 820px);
+    padding: var(--ui-space-4);
+  }
+
+  .batch-geometry-comparison-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .batch-geometry-preview-stage {
+    height: clamp(280px, 52dvh, 460px);
+    min-height: 280px;
+  }
+
+  .batch-geometry-preview-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .batch-geometry-preview-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .batch-geometry-preview-frame img,
+  .batch-geometry-preview-skeleton {
+    min-height: 180px;
+  }
+}
+
 .denoise-modal-surface {
   display: flex;
   width: min(100%, var(--ui-denoise-dialog-max-width));
@@ -5495,6 +6063,7 @@ button {
   display: grid;
   grid-template-areas:
     'folder image settings'
+    'batch batch batch'
     'stack stack stack';
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
   gap: 8px;
@@ -5510,6 +6079,10 @@ button {
 
 .splash-action-stack {
   grid-area: stack;
+}
+
+.splash-action-batch {
+  grid-area: batch;
 }
 
 .splash-action-settings {
@@ -5533,8 +6106,8 @@ button {
 
 @container (min-width: 500px) {
   .splash-action-grid {
-    grid-template-areas: 'folder image stack settings';
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+    grid-template-areas: 'folder image batch stack settings';
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 44px;
   }
 }
 

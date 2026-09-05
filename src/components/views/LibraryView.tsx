@@ -32,6 +32,7 @@ interface LibraryViewProps {
   handleMainLibraryContextMenu: (...args: any) => void;
   handleGoHome: (...args: any) => void;
   handleOpenImage: (...args: any) => void;
+  handleOpenBatchGeometryWorkflow: () => void;
   handleOpenMultiImageWorkflow: () => void;
   handleOpenFolder: (...args: any) => void;
   handleImportClick: (path: string) => void;
@@ -60,6 +61,7 @@ export default function LibraryView({
   handleMainLibraryContextMenu,
   handleGoHome,
   handleOpenImage,
+  handleOpenBatchGeometryWorkflow,
   handleOpenMultiImageWorkflow,
   handleOpenFolder,
   handleImportClick,
@@ -186,6 +188,7 @@ export default function LibraryView({
           onLibraryRefresh={handleLibraryRefresh}
           onRate={handleRate}
           onOpenImage={handleOpenImage}
+          onOpenBatchGeometryWorkflow={handleOpenBatchGeometryWorkflow}
           onOpenMultiImageWorkflow={handleOpenMultiImageWorkflow}
           onOpenFolder={handleOpenFolder}
           onSettingsChange={handleSettingsChange}
