@@ -482,7 +482,7 @@ export default function ColorPanel({
             <div className="camera-raw-white-balance-control">
               <select
                 aria-label={t('adjustments.color.whiteBalance')}
-                className="camera-raw-select"
+                className="camera-raw-select ui-native-select"
                 disabled={isCalculatingWhiteBalance}
                 id={whiteBalanceModeId}
                 onChange={(event) => void handleWhiteBalanceModeChange(event.target.value as WhiteBalanceMode)}

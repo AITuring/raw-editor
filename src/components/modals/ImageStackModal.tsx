@@ -406,7 +406,7 @@ export default function ImageStackModal({
   };
 
   const handleExport = async (settings: ExportDialogSettings) => {
-    if (isSaving || savedPath || !finalImageBase64) return null;
+    if (isSaving || !finalImageBase64) return null;
     setIsSaving(true);
     try {
       return await onSave(blendMode, settings);
@@ -769,7 +769,7 @@ export default function ImageStackModal({
             </Button>
             {finalImageBase64 && (
               <Button
-                disabled={isSaving || isProcessing || Boolean(savedPath)}
+                disabled={isSaving || isProcessing}
                 onClick={() => setIsExportDialogOpen(true)}
               >
                 {isSaving ? (

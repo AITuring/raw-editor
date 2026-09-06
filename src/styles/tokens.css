@@ -125,6 +125,15 @@
   --ui-message-gap: var(--ui-space-2);
   --ui-message-padding-block: var(--ui-space-1-5);
   --ui-message-padding-inline: var(--ui-space-3);
+  /* Select values and their indicators need a calmer inset than text inputs. */
+  --ui-select-padding-inline: var(--ui-space-5);
+  --ui-select-indicator-reserve: var(--ui-space-5);
+  /* The slider rail must remain distinguishable from every app surface, not
+   * disappear behind the thumb in darker themes. */
+  --ui-slider-rail-height: var(--ui-space-1);
+  --ui-slider-rail: color-mix(in srgb, var(--app-text-secondary) 82%, var(--app-bg-secondary));
+  --ui-slider-fill: color-mix(in srgb, var(--app-accent) 82%, var(--app-text-primary));
+  --ui-slider-fill-active: color-mix(in srgb, var(--app-accent) 72%, var(--app-text-primary));
   --ui-popover-z-index: 90;
   --ui-panel-z-index: 30;
 

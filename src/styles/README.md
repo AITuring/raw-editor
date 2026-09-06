@@ -33,6 +33,8 @@ The main density controls are:
 | Right tool rail        | `--ui-tool-rail-width`                                                                          | `48px`           |
 | Standard control       | `--ui-size-control`                                                                             | `32px`           |
 | Compact icon target    | `--ui-size-icon-hit`                                                                            | `28px`           |
+| Select content inset   | `--ui-select-padding-inline` / `--ui-select-indicator-reserve`                                  | `20px` / `20px`  |
+| Slider contrast        | `--ui-slider-rail` / `--ui-slider-fill`                                                         | theme-aware      |
 | Develop slider rhythm  | `--ui-editor-subsection-header-height` / `--ui-editor-slider-row-gap`                           | `24px` / `4px`   |
 | App panel gap          | `--ui-shell-gap`                                                                                | `8px`            |
 | Message surface        | `--ui-message-min-height` / `--ui-message-max-width`                                            | `34px` / `420px` |

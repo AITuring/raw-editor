@@ -37,7 +37,7 @@ export default function BasicAdjustments({
           <span className="camera-raw-field-label">{t('adjustments.basic.toneMapper')}</span>
           <select
             aria-label={t('adjustments.basic.toneMapper')}
-            className="camera-raw-select"
+            className="camera-raw-select ui-native-select"
             onChange={(event) =>
               setAdjustments((prev: Partial<Adjustments>) => ({
                 ...prev,

@@ -262,7 +262,6 @@
     border: 0;
     border-radius: var(--ui-radius-control);
     background: var(--app-surface);
-    padding-inline: var(--ui-field-padding-inline);
     color: var(--app-text-primary);
     box-shadow: var(--ui-shadow-button-rest);
     font-size: var(--ui-font-size-body);
@@ -298,7 +297,7 @@
     align-items: center;
     justify-content: space-between;
     border-radius: var(--ui-radius-control);
-    padding: var(--ui-space-1-5) var(--ui-field-padding-inline);
+    padding-block: var(--ui-space-1-5);
     text-align: left;
     transition: background-color var(--ui-duration-fast) ease-out;
   }
@@ -631,6 +630,25 @@
 
   .slider-input.slider-thumb-active::-moz-range-thumb {
     @apply scale-110;
+  }
+
+  .ui-slider-track-height,
+  .ui-slider-fill {
+    height: var(--ui-slider-rail-height);
+  }
+
+  .ui-slider-rail {
+    background: var(--ui-slider-rail);
+  }
+
+  .ui-slider-fill {
+    background: var(--ui-slider-fill);
+    transition: background-color var(--ui-duration-fast) ease-out;
+  }
+
+  .develop-slider:hover .ui-slider-fill,
+  .ui-slider-fill.is-active {
+    background: var(--ui-slider-fill-active);
   }
 
   .temperature-gradient-track {
@@ -1543,7 +1561,6 @@
     border: var(--ui-border-width) solid var(--ui-border-control);
     border-radius: var(--ui-radius-control);
     background: var(--app-surface);
-    padding: 0 26px 0 8px;
     color: var(--app-text-primary);
     font-size: 11px;
   }
@@ -2127,7 +2144,6 @@
 
   .crop-select {
     width: 100%;
-    padding: 0 7px;
   }
 
   .crop-select:hover,
@@ -6055,18 +6071,216 @@ button {
   }
 }
 
+/* Select padding is deliberately outside Tailwind's component layer so page
+ * utilities cannot collapse the shared value/indicator breathing room. */
+.ui-select-trigger,
+.ui-select-option {
+  padding-inline: var(--ui-select-padding-inline);
+}
+
+.ui-native-select {
+  padding-inline: var(--ui-select-padding-inline)
+    calc(var(--ui-select-padding-inline) + var(--ui-select-indicator-reserve));
+}
+
+/* Settings is an information-dense workspace, not a landing page. Keep its
+ * title, category controls, and form rows on one compact rhythm. */
+.settings-panel {
+  --settings-content-inline-size: min(100%, 860px);
+  --settings-scrollbar-reserve: var(--ui-space-2);
+
+  width: min(100%, 960px);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.settings-panel-header {
+  display: flex;
+  width: var(--settings-content-inline-size);
+  max-width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ui-space-3);
+  margin-bottom: var(--ui-space-6);
+  padding-inline-end: var(--settings-scrollbar-reserve);
+  padding-top: var(--ui-space-1);
+}
+
+.settings-panel-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+.settings-panel-back {
+  margin: 0;
+  border-radius: var(--ui-radius-control);
+  color: var(--app-text-secondary);
+}
+
+.settings-panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.settings-category-tabs {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-category-tab {
+  width: 100%;
+  justify-content: center;
+  gap: 0;
+  padding-inline: var(--ui-space-3);
+}
+
+.settings-category-tab-label {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.settings-category-content {
+  width: 100%;
+  min-width: 0;
+  padding-bottom: var(--ui-space-6);
+}
+
+.settings-panel-scroll {
+  width: var(--settings-content-inline-size);
+  max-width: 100%;
+  min-width: 0;
+  scrollbar-gutter: stable;
+}
+
+.settings-category-content > :not([hidden]) ~ :not([hidden]) {
+  margin-top: var(--ui-space-6);
+}
+
+.settings-category-content > div {
+  border: var(--ui-border-width) solid color-mix(in srgb, var(--app-border-color) 44%, var(--app-bg-secondary));
+  border-radius: var(--ui-radius-surface);
+  background: color-mix(in srgb, var(--app-surface) 72%, var(--app-bg-secondary));
+  padding: var(--ui-space-5);
+  box-shadow: none;
+}
+
+.settings-category-content > div > h2 {
+  margin-bottom: var(--ui-space-4);
+  color: var(--app-text-primary);
+  font-size: var(--ui-font-size-title);
+  font-weight: 600;
+  line-height: var(--ui-line-height-compact);
+}
+
+.settings-category-content > div > .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: var(--ui-space-5);
+}
+
+.settings-item > :not(:first-child) {
+  margin-top: var(--ui-space-2);
+}
+
+.settings-item .settings-item-description {
+  margin-top: var(--ui-space-1);
+  color: var(--app-text-secondary);
+}
+
+@media (max-width: 520px) {
+  .settings-category-tab {
+    padding-inline: var(--ui-space-2);
+  }
+
+  .settings-category-content > div {
+    padding: var(--ui-space-4);
+  }
+}
+
 .splash-actions-container {
   container-type: inline-size;
 }
 
 .splash-action-grid {
+  width: min(100%, 32rem);
   display: grid;
   grid-template-areas:
-    'folder image settings'
-    'batch batch batch'
-    'stack stack stack';
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
-  gap: 8px;
+    'folder image'
+    'stack style-transfer'
+    'batch settings';
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+}
+
+.splash-actions-container .ui-button {
+  border: var(--ui-border-width) solid transparent;
+  border-radius: var(--ui-radius-control);
+  box-shadow: none;
+  transition:
+    transform var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out,
+    border-color var(--ui-duration-fast) ease-out,
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out;
+}
+
+.splash-actions-container .ui-button:hover:not(:disabled) {
+  box-shadow: 0 1px 3px rgb(0 0 0 / 9%);
+  transform: translateY(-1px);
+}
+
+.splash-actions-container .ui-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.splash-action-grid > .ui-button {
+  justify-content: flex-start;
+  gap: var(--ui-space-4);
+  padding-inline: var(--ui-space-4);
+}
+
+/* Secondary splash actions should read as part of the dark canvas at rest.
+ * On hover, the complete tile changes to one higher-contrast surface rather
+ * than looking like a dark button with a separately coloured outline. */
+.splash-action-grid > .ui-button:not(.splash-action-folder) {
+  border-color: color-mix(in srgb, var(--app-border-color) 28%, var(--app-bg-secondary));
+  background: color-mix(in srgb, var(--app-surface) 72%, var(--app-bg-secondary));
+}
+
+.splash-action-grid > .ui-button:not(.splash-action-folder):hover:not(:disabled) {
+  --splash-action-highlight-surface: color-mix(in srgb, var(--app-card-active) 78%, var(--app-surface));
+
+  border-color: var(--splash-action-highlight-surface);
+  background: var(--splash-action-highlight-surface);
+}
+
+.splash-action-grid > .splash-action-settings {
+  justify-self: start;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+  background: color-mix(in srgb, var(--app-surface) 72%, var(--app-bg-secondary));
+  color: var(--app-text-secondary);
+}
+
+.splash-action-icon {
+  display: inline-flex;
+  width: var(--ui-size-control);
+  min-width: var(--ui-size-control);
+  height: var(--ui-size-control);
+  flex: 0 0 var(--ui-size-control);
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-action-icon > svg {
+  display: block;
 }
 
 .splash-action-folder {
@@ -6090,24 +6304,21 @@ button {
 }
 
 .splash-action-style-transfer {
+  grid-area: style-transfer;
   width: 100%;
   min-width: 0;
-  justify-content: center;
-  transition: transform var(--ui-duration-fast) ease-out;
 }
 
-.splash-action-style-transfer:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.splash-action-style-transfer:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-@container (min-width: 500px) {
+@container (max-width: 360px) {
   .splash-action-grid {
-    grid-template-areas: 'folder image batch stack settings';
-    grid-template-columns: repeat(4, minmax(0, 1fr)) 44px;
+    grid-template-areas:
+      'folder'
+      'image'
+      'stack'
+      'style-transfer'
+      'batch'
+      'settings';
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -6225,7 +6436,6 @@ button {
 
 .develop-controls-panel > .develop-profile-strip .camera-raw-select {
   height: var(--ui-size-control-compact);
-  padding-inline: var(--ui-space-2) var(--ui-space-6);
   font-size: var(--ui-font-size-label);
   line-height: 18px;
 }

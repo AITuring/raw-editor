@@ -1187,7 +1187,7 @@ export default function CropPanel() {
                 <div className="crop-aspect-controls">
                   <select
                     aria-label={t('editor.crop.aspectRatioHeading')}
-                    className="crop-select"
+                    className="crop-select ui-native-select"
                     id="crop-aspect-preset"
                     onChange={(event) => handlePresetChange(event.target.value)}
                     value={displayPresetId}

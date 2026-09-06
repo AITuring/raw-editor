@@ -11,13 +11,13 @@ import {
   Loader2,
   RefreshCw,
   ScanLine,
-  Settings,
   Search,
   LayoutGrid,
   Layers3,
   Columns,
   SlidersHorizontal,
   Rows3,
+  Settings2,
   ArrowDownAZ,
   ArrowUpAZ,
   ChevronDown,
@@ -554,83 +554,98 @@ export default function MainLibrary(props: MainLibraryProps) {
                     <div className="splash-actions-container relative z-10 flex w-full flex-col gap-4">
                       <div className={props.isAndroid ? 'flex items-center gap-2' : 'splash-action-grid'}>
                         <Button
-                          className="splash-action-folder flex h-11 min-w-0 justify-center rounded-md transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                          className="splash-action-folder flex h-11 min-w-0 justify-center"
                           onClick={props.onOpenFolder}
                           size="lg"
                         >
-                          <Folder aria-hidden="true" className="shrink-0" size={20} />
+                          <span aria-hidden="true" className="splash-action-icon">
+                            <Folder size={20} />
+                          </span>
                           <span className="truncate">
                             {props.isAndroid ? t('library.splash.openLibrary') : t('library.splash.openFolder')}
                           </span>
                         </Button>
                         {!props.isAndroid && (
                           <Button
-                            className="splash-action-image flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
+                            className="splash-action-image flex h-11 min-w-0 justify-center bg-surface text-text-primary"
                             onClick={props.onOpenImage}
                             size="lg"
                           >
-                            <ImagePlus aria-hidden="true" className="shrink-0" size={20} />
+                            <span aria-hidden="true" className="splash-action-icon">
+                              <ImagePlus size={20} />
+                            </span>
                             <span className="truncate">{t('library.splash.openImage')}</span>
                           </Button>
                         )}
                         {!props.isAndroid && (
                           <Button
-                            className="splash-action-batch flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
+                            className="splash-action-batch flex h-11 min-w-0 justify-center bg-surface text-text-primary"
                             data-tooltip={t('modals.batchGeometry.description')}
                             onClick={props.onOpenBatchGeometryWorkflow}
                             size="lg"
                             type="button"
                           >
-                            <ScanLine aria-hidden="true" className="shrink-0" size={20} />
+                            <span aria-hidden="true" className="splash-action-icon">
+                              <ScanLine size={20} />
+                            </span>
                             <span className="truncate">{t('modals.batchGeometry.entryTitle')}</span>
                           </Button>
                         )}
                         {!props.isAndroid && (
                           <Button
-                            className="splash-action-stack flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] hover:bg-card-active active:scale-[.98]"
+                            className="splash-action-stack flex h-11 min-w-0 justify-center bg-surface text-text-primary"
                             data-tooltip={t('library.splash.multiImageSelectionHint')}
                             onClick={props.onOpenMultiImageWorkflow}
                             size="lg"
                             type="button"
                           >
-                            <Layers3 aria-hidden="true" className="shrink-0" size={20} />
+                            <span aria-hidden="true" className="splash-action-icon">
+                              <Layers3 size={20} />
+                            </span>
                             <span className="truncate">{t('modals.imageStack.title')}</span>
+                          </Button>
+                        )}
+                        {!props.isAndroid && (
+                          <Button
+                            aria-label={t('styleTransfer.open', { defaultValue: 'Open Style Lab' })}
+                            className="splash-action-style-transfer flex h-11 min-w-0 justify-center bg-surface text-text-primary"
+                            onClick={() =>
+                              setUI({
+                                activeView: 'style-transfer',
+                                isLibraryQuickPreviewOpen: false,
+                                isSettingsOpen: false,
+                                libraryContextPanel: null,
+                              })
+                            }
+                            size="lg"
+                            type="button"
+                            variant="secondary"
+                          >
+                            <span aria-hidden="true" className="splash-action-icon">
+                              <Blend size={20} strokeWidth={1.7} />
+                            </span>
+                            <span className="truncate">
+                              {t('styleTransfer.entryTitle', { defaultValue: 'Transfer a look' })}
+                            </span>
                           </Button>
                         )}
                         <Button
                           aria-label={t('settings.general.title')}
-                          className="splash-action-settings h-11 w-11 shrink-0 bg-surface px-0 text-text-primary transition-transform duration-200 hover:scale-[1.03] active:scale-[.96]"
+                          className={clsx(
+                            'splash-action-settings flex h-11 min-w-0 justify-center bg-transparent text-text-primary',
+                            'w-11 shrink-0 px-0',
+                          )}
                           onClick={() => setUI({ isSettingsOpen: true })}
                           size="lg"
                           data-tooltip={t('settings.general.title')}
                           type="button"
                           variant="ghost"
                         >
-                          <Settings aria-hidden="true" size={20} />
-                        </Button>
-                      </div>
-                      {!props.isAndroid && (
-                        <Button
-                          aria-label={t('styleTransfer.open', { defaultValue: 'Open Style Lab' })}
-                          className="splash-action-style-transfer flex h-11 min-w-0 justify-center rounded-md bg-surface text-text-primary transition-transform duration-200 hover:scale-[1.01] active:scale-[.98]"
-                          onClick={() =>
-                            setUI({
-                              activeView: 'style-transfer',
-                              isLibraryQuickPreviewOpen: false,
-                              isSettingsOpen: false,
-                              libraryContextPanel: null,
-                            })
-                          }
-                          size="lg"
-                          type="button"
-                          variant="secondary"
-                        >
-                          <Blend aria-hidden="true" size={20} strokeWidth={1.7} />
-                          <span className="truncate">
-                            {t('styleTransfer.entryTitle', { defaultValue: 'Transfer a look' })}
+                          <span aria-hidden="true" className="splash-action-icon">
+                            <Settings2 size={20} strokeWidth={1.7} />
                           </span>
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
 

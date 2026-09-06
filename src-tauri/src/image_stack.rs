@@ -1179,7 +1179,7 @@ pub async fn save_image_stack(
     let result_handle = state.image_stack_result.clone();
 
     tokio::task::spawn_blocking(move || {
-        let mut result = result_handle
+        let result = result_handle
             .lock()
             .map_err(|_| "The image-stack result store is unavailable.".to_string())?;
         let (stored_result_id, image) = result
@@ -1199,10 +1199,12 @@ pub async fn save_image_stack(
             &export_settings,
             &sidecar_source,
         )?;
-        *result = None;
         drop(result);
-        // The encoded file is the export contract. Copying the source sidecar here would
-        // silently restore EXIF/GPS fields that the user explicitly removed in the dialog.
+        // Keep the canonical result cached so the same stack can be exported again in
+        // another format or to another destination without running the expensive alignment
+        // pass a second time. The encoded file is the export contract. Copying the source
+        // sidecar here would silently restore EXIF/GPS fields that the user explicitly
+        // removed in the dialog.
         Ok(output_path_for_task.to_string_lossy().into_owned())
     })
     .await

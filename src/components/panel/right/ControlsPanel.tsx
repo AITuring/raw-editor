@@ -296,7 +296,7 @@ export default function Controls() {
           <span>{t('adjustments.optics.profile')}</span>
           <select
             aria-label={t('adjustments.optics.profile')}
-            className="camera-raw-select"
+            className="camera-raw-select ui-native-select"
             onChange={(event) =>
               setAdjustments((previous: Adjustments) => ({
                 ...previous,

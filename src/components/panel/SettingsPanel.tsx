@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  Cpu,
   ExternalLink as ExternalLinkIcon,
   Info,
   Trash2,
   Plus,
   X,
-  SlidersHorizontal,
-  Keyboard,
   Bookmark,
   Scaling,
   Image as ImageIcon,
@@ -208,13 +205,13 @@ const KeybindRow = ({
 };
 
 const SettingItem = ({ children, description, label }: SettingItemProps) => (
-  <div>
-    <Text variant={TextVariants.heading} className="block mb-2">
+  <div className="settings-item">
+    <Text variant={TextVariants.label} weight={TextWeights.semibold} color={TextColors.primary} className="block">
       {label}
     </Text>
     {children}
     {description && (
-      <Text variant={TextVariants.small} className="mt-2">
+      <Text variant={TextVariants.small} className="settings-item-description">
         {description}
       </Text>
     )}
@@ -235,7 +232,7 @@ const DataActionItem = ({
 
   return (
     <div className="pb-8 border-b border-border-color last:border-b-0 last:pb-0">
-      <Text variant={TextVariants.heading} className="mb-2">
+      <Text variant={TextVariants.label} weight={TextWeights.semibold} color={TextColors.primary} className="mb-2">
         {title}
       </Text>
       <Text variant={TextVariants.small} className="mb-3">
@@ -401,9 +398,9 @@ export default function SettingsPanel({
 
   const settingCategories = useMemo(
     () => [
-      { id: 'general', label: t('settings.categories.general'), icon: SlidersHorizontal },
-      { id: 'processing', label: t('settings.categories.processing'), icon: Cpu },
-      { id: 'shortcuts', label: t('settings.categories.shortcuts'), icon: Keyboard },
+      { id: 'general', label: t('settings.categories.general') },
+      { id: 'processing', label: t('settings.categories.processing') },
+      { id: 'shortcuts', label: t('settings.categories.shortcuts') },
     ],
     [t],
   );
@@ -808,11 +805,11 @@ export default function SettingsPanel({
     <>
       <ConfirmModal {...confirmModalState} onClose={closeConfirmModal} />
       <LayoutGroup id="settings-panel">
-        <div className="flex flex-col h-full w-full text-text-primary">
-          <header className="shrink-0 flex flex-wrap items-center justify-between gap-y-4 mb-8 pt-4">
-            <div className="flex items-center shrink-0">
+        <div className="settings-panel flex h-full w-full flex-col text-text-primary">
+          <header className="settings-panel-header shrink-0">
+            <div className="settings-panel-heading">
               <Button
-                className="mr-4 hover:bg-surface text-text-primary rounded-full"
+                className="settings-panel-back"
                 onClick={onBack}
                 size="icon"
                 variant="ghost"
@@ -820,18 +817,26 @@ export default function SettingsPanel({
               >
                 <ArrowLeft />
               </Button>
-              <Text variant={TextVariants.display} color={TextColors.accent} className="whitespace-nowrap">
+              <Text
+                variant={TextVariants.title}
+                color={TextColors.primary}
+                className="settings-panel-title whitespace-nowrap"
+              >
                 {t('settings.title')}
               </Text>
             </div>
-
-            <div className="ui-segmented-frame relative flex w-full min-[1200px]:w-112.5">
+            <nav aria-label={t('settings.title')} className="settings-category-tabs ui-segmented-frame relative">
               {settingCategories.map((category) => (
                 <button
+                  aria-current={activeCategory === category.id ? 'page' : undefined}
                   key={category.id}
                   onClick={() => setActiveCategory(category.id)}
-                  className={clsx('ui-segmented-option', activeCategory === category.id && 'is-active')}
+                  className={clsx(
+                    'ui-segmented-option settings-category-tab',
+                    activeCategory === category.id && 'is-active',
+                  )}
                   style={{ WebkitTapHighlightColor: 'transparent' }}
+                  type="button"
                 >
                   {activeCategory === category.id && (
                     <motion.span
@@ -841,16 +846,13 @@ export default function SettingsPanel({
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                     />
                   )}
-                  <span className="relative z-10 flex items-center">
-                    <category.icon size={16} className="mr-2 shrink-0" />
-                    <span className="truncate">{category.label}</span>
-                  </span>
+                  <span className="settings-category-tab-label relative z-10 truncate">{category.label}</span>
                 </button>
               ))}
-            </div>
+            </nav>
           </header>
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 -mr-2 custom-scrollbar">
+          <div className="settings-panel-scroll flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
             <AnimatePresence mode="wait">
               {activeCategory === 'general' && (
                 <motion.div
@@ -859,7 +861,7 @@ export default function SettingsPanel({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="space-y-10"
+                  className="settings-category-content space-y-10"
                 >
                   <div className="p-6 bg-surface rounded-xl shadow-md">
                     <Text variant={TextVariants.title} color={TextColors.accent} className="mb-8">
@@ -1395,7 +1397,7 @@ export default function SettingsPanel({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="space-y-10"
+                  className="settings-category-content space-y-10"
                 >
                   <div className="p-6 bg-surface rounded-xl shadow-md">
                     <Text variant={TextVariants.title} color={TextColors.accent} className="mb-8">
@@ -1910,7 +1912,7 @@ export default function SettingsPanel({
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="space-y-10"
+                  className="settings-category-content space-y-10"
                 >
                   <div className="p-6 bg-surface rounded-xl shadow-md">
                     <Text variant={TextVariants.title} color={TextColors.accent} className="mb-8">

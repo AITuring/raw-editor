@@ -653,13 +653,13 @@ const Slider = ({
 
       <div className="camera-raw-slider-track relative h-3.5 w-full">
         <div
-          className={`camera-raw-slider-rail absolute left-0 top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full pointer-events-none ${
-            trackClassName || ''
-          }`}
+          className={`camera-raw-slider-rail ui-slider-track-height absolute left-0 top-1/2 w-full -translate-y-1/2 rounded-full pointer-events-none ${
+            trackClassName ? '' : 'ui-slider-rail'
+          } ${trackClassName || ''}`}
         />
         {!trackClassName && (
           <div
-            className={`camera-raw-slider-fill absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full pointer-events-none ${
+            className={`camera-raw-slider-fill ui-slider-fill absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none ${
               isDragging ? 'is-active' : ''
             }`}
             style={{

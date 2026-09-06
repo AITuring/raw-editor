@@ -31,6 +31,9 @@ interface ExportImageDialogProps {
 const fieldClassName =
   'h-8 w-full rounded-md border border-border-color bg-bg-primary/55 px-2.5 text-xs text-text-primary outline-none transition-colors placeholder:text-text-secondary/55 focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-50';
 
+const selectFieldClassName =
+  'h-8 w-full rounded-md border border-border-color bg-bg-primary/55 text-xs text-text-primary outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent/30 disabled:opacity-50 ui-native-select';
+
 const sectionClassName = 'rounded-lg border border-border-color bg-bg-primary/26 p-3';
 
 const formatMetadataKey = (key: string): string =>
@@ -476,12 +479,12 @@ export default function ExportImageDialog({
                   <label className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-2 text-xs text-text-secondary">
                     <span>{t('export.exportDialog.resample')}</span>
                     <span className="relative">
-                      <select className={`${fieldClassName} appearance-none pr-8`} disabled value="lanczos3">
+                      <select className={`${selectFieldClassName} appearance-none`} disabled value="lanczos3">
                         <option value="lanczos3">{t('export.exportDialog.resampleLanczos')}</option>
                       </select>
                       <ChevronDown
                         aria-hidden="true"
-                        className="pointer-events-none absolute right-2.5 top-2.5"
+                        className="pointer-events-none absolute right-4 top-2.5"
                         size={14}
                       />
                     </span>

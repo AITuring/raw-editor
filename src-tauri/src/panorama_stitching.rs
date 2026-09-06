@@ -27,6 +27,13 @@ const FULL_RES_RANSAC_INLIER_THRESHOLD: f64 = 12.0;
 const FULL_RES_REFINEMENT_THRESHOLD: f64 = 2.5;
 const MATCH_REFINE_PATCH_RADIUS: i32 = 14;
 const MATCH_REFINE_SEARCH_RADIUS: i32 = 14;
+// Full-resolution focus stacks need a wider local search than ordinary panorama
+// matches. The alignment keypoints are extracted from a reduced image, so a
+// small residual can still be several full-resolution pixels at a face or a
+// painted contour. Refine the native images without changing the cheaper
+// panorama path.
+const FOCUS_MATCH_REFINE_PATCH_RADIUS: i32 = 20;
+const FOCUS_MATCH_REFINE_SEARCH_RADIUS: i32 = 24;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
@@ -58,6 +65,35 @@ pub(crate) const FOCUS_FOREGROUND_LUMA_THRESHOLD: u8 = 150;
 const FOCUS_FOREGROUND_MIN_BRIGHT_FRACTION: f64 = 0.35;
 const FOCUS_FOREGROUND_SCAN_MAX_Y: f64 = 0.45;
 const FOCUS_FOREGROUND_MIN_HEIGHT_RATIO: f64 = 0.025;
+const FOCUS_HORIZONTAL_EDGE_MAX_ROWS: usize = 8;
+const FOCUS_HORIZONTAL_EDGE_MIN_SEPARATION_RATIO: f64 = 0.025;
+const FOCUS_HORIZONTAL_EDGE_SEARCH_RADIUS: i32 = 32;
+const FOCUS_HORIZONTAL_EDGE_SAMPLE_COUNT: usize = 64;
+const FOCUS_HORIZONTAL_EDGE_MIN_SAMPLES: usize = 12;
+const FOCUS_HORIZONTAL_EDGE_MIN_SOURCE_SPAN_RATIO: f64 = 0.45;
+const FOCUS_HORIZONTAL_EDGE_FOREGROUND_MIN_SOURCE_SPAN_RATIO: f64 = 0.25;
+const FOCUS_HORIZONTAL_EDGE_MIN_GRADIENT: f64 = 6.0;
+const FOCUS_HORIZONTAL_EDGE_MAX_LINE_RESIDUAL_RATIO: f64 = 0.004;
+const FOCUS_HORIZONTAL_EDGE_CLUSTER_TOLERANCE_RATIO: f64 = 0.012;
+const FOCUS_HORIZONTAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
+const FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
+const FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES: usize = 2;
+const FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO: f64 = 0.025;
+const FOCUS_HORIZONTAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
+const FOCUS_VERTICAL_EDGE_MAX_COLUMNS: usize = 8;
+const FOCUS_VERTICAL_EDGE_MIN_SEPARATION_RATIO: f64 = 0.025;
+const FOCUS_VERTICAL_EDGE_SEARCH_RADIUS: i32 = 32;
+const FOCUS_VERTICAL_EDGE_SAMPLE_COUNT: usize = 64;
+const FOCUS_VERTICAL_EDGE_MIN_SAMPLES: usize = 12;
+const FOCUS_VERTICAL_EDGE_MIN_SOURCE_SPAN_RATIO: f64 = 0.08;
+const FOCUS_VERTICAL_EDGE_MIN_GRADIENT: f64 = 6.0;
+const FOCUS_VERTICAL_EDGE_MAX_LINE_RESIDUAL_RATIO: f64 = 0.004;
+const FOCUS_VERTICAL_EDGE_CLUSTER_TOLERANCE_RATIO: f64 = 0.012;
+const FOCUS_VERTICAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
+const FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
+const FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES: usize = 2;
+const FOCUS_VERTICAL_EDGE_BAND_HALF_WIDTH_RATIO: f64 = 0.025;
+const FOCUS_VERTICAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
 // Overlapping source-coordinate bands let a moving-camera stack absorb small
 // residual lens/plane deformation without making the whole algorithm depend on
 // a particular foreground object. A narrower detected depth layer, when it is
@@ -105,6 +141,8 @@ pub struct ImageInfo {
     pub top_features: Vec<Feature>,
     pub foreground_range: Option<(f64, f64)>,
     pub foreground_mask: Option<GrayImage>,
+    pub horizontal_edge_rows: Vec<f64>,
+    pub vertical_edge_columns: Vec<f64>,
 }
 
 impl ImageInfo {
@@ -136,11 +174,36 @@ pub struct MatchInfo {
 pub(crate) struct FocusWarpBand {
     pub(crate) homographies: HashMap<usize, Matrix3<f64>>,
     pub(crate) source_ranges: HashMap<usize, (f64, f64)>,
+    pub(crate) source_x_ranges: HashMap<usize, (f64, f64)>,
+    // A repeated, content-independent long edge may safely change ownership
+    // at its narrow silhouette. Generic/depth bands keep the stricter
+    // foreground ownership rule so a repeated stroke cannot be reintroduced.
+    pub(crate) relax_foreground_seam: bool,
 }
 
 #[derive(Clone)]
 pub(crate) struct FocusLayerWarp {
     pub(crate) bands: Vec<FocusWarpBand>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FocusHorizontalEdgeLine {
+    image_id: usize,
+    source_row: f64,
+    world_x_center: f64,
+    slope: f64,
+    intercept: f64,
+    median_error: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FocusVerticalEdgeLine {
+    image_id: usize,
+    source_column: f64,
+    world_y_center: f64,
+    slope: f64,
+    intercept: f64,
+    median_error: f64,
 }
 
 pub(crate) struct StitchOutcome {
@@ -238,6 +301,8 @@ fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
         top_features: Vec::new(),
         foreground_range: image.foreground_range,
         foreground_mask: image.foreground_mask.clone(),
+        horizontal_edge_rows: image.horizontal_edge_rows.clone(),
+        vertical_edge_columns: image.vertical_edge_columns.clone(),
     }
 }
 
@@ -545,6 +610,852 @@ fn detect_foreground_range(alignment_image: &GrayImage) -> Option<(f64, f64)> {
     let minimum = ((first as f64 - padding) / height as f64).clamp(0.0, 1.0);
     let maximum = (((last + 1) as f64 + padding) / height as f64).clamp(0.0, 1.0);
     Some((minimum, maximum))
+}
+
+fn detect_horizontal_edge_rows(alignment_image: &GrayImage) -> Vec<f64> {
+    let (width, height) = alignment_image.dimensions();
+    if width < 96 || height < 96 {
+        return Vec::new();
+    }
+
+    // A long paper/holder boundary has vertical gradient support across a large
+    // fraction of the frame. Measuring that support rather than looking for a
+    // particular luminance keeps this cue useful for white, dark, or coloured
+    // borders alike, while suppressing the short horizontal strokes of text.
+    let pixels = alignment_image.as_raw();
+    let stride = width as usize;
+    let interior_width = width.saturating_sub(2) as f64;
+    let mut profile = vec![0.0f64; height as usize];
+    for y in 1..height.saturating_sub(1) {
+        let mut gradient_sum = 0.0f64;
+        let mut supported = 0usize;
+        for x in 1..width.saturating_sub(1) {
+            let above = pixels[(y as usize - 1) * stride + x as usize] as i32;
+            let below = pixels[(y as usize + 1) * stride + x as usize] as i32;
+            let gradient = (below - above).unsigned_abs() as f64 * 0.5;
+            gradient_sum += gradient;
+            if gradient >= 14.0 {
+                supported += 1;
+            }
+        }
+        let mean_gradient = gradient_sum / interior_width;
+        let support_ratio = supported as f64 / interior_width;
+        profile[y as usize] = mean_gradient * (0.35 + support_ratio * 0.65);
+    }
+
+    let peak = profile.iter().copied().fold(0.0f64, f64::max);
+    if !peak.is_finite() || peak < 4.0 {
+        return Vec::new();
+    }
+    // Keep the detector permissive enough for a low-contrast paper/holder
+    // boundary. Short character strokes still lose at the later line-fit
+    // stage because they cannot form a low-residual line across the frame.
+    let threshold = (peak * 0.10).max(2.5);
+    let minimum_separation =
+        ((height as f64 * FOCUS_HORIZONTAL_EDGE_MIN_SEPARATION_RATIO).round() as usize).max(16);
+    let mut candidates = (1..height.saturating_sub(1))
+        .filter(|&y| {
+            let score = profile[y as usize];
+            score >= threshold
+                && score >= profile[y as usize - 1]
+                && score >= profile[y as usize + 1]
+        })
+        .map(|y| (y, profile[y as usize]))
+        .collect::<Vec<_>>();
+    candidates.sort_unstable_by(|(_, left), (_, right)| right.total_cmp(left));
+
+    let mut selected = Vec::with_capacity(FOCUS_HORIZONTAL_EDGE_MAX_ROWS);
+    for (row, _) in candidates {
+        if selected.iter().all(|selected_row: &u32| {
+            (*selected_row as usize).abs_diff(row as usize) >= minimum_separation
+        }) {
+            selected.push(row);
+            if selected.len() == FOCUS_HORIZONTAL_EDGE_MAX_ROWS {
+                break;
+            }
+        }
+    }
+    selected.sort_unstable();
+    selected
+        .into_iter()
+        .map(|row| row as f64 / height.max(1) as f64)
+        .collect()
+}
+
+fn horizontal_edge_row_candidates(
+    alignment_image: &GrayImage,
+    optional_region: Option<(f64, f64)>,
+) -> Vec<f64> {
+    let mut rows = detect_horizontal_edge_rows(alignment_image);
+    // The gradient profile is the primary, object-agnostic detector. When the
+    // existing optional near-field detector has already found a bright/dark
+    // region, also probe its silhouettes: a boundary can be partially cropped
+    // or low-contrast enough to miss the broad profile while still being a
+    // valid long edge. These are only extra candidates and still need the
+    // robust line fit plus multi-image consensus below.
+    if let Some((minimum, maximum)) = optional_region {
+        for row in [minimum, maximum] {
+            if row.is_finite()
+                && (0.0..=1.0).contains(&row)
+                && rows.iter().all(|existing| (*existing - row).abs() >= 0.005)
+            {
+                rows.push(row);
+            }
+        }
+    }
+    rows.sort_unstable_by(f64::total_cmp);
+    rows
+}
+
+fn horizontal_edge_line_samples(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    normalized_row: f64,
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    let (width, height) = image.alignment_image.dimensions();
+    if width < 96 || height < 96 || !normalized_row.is_finite() {
+        return Vec::new();
+    }
+
+    let center_y = (normalized_row.clamp(0.02, 0.98) * height as f64).round() as i32;
+    let search_radius = ((height as f64 * 0.025).round() as i32)
+        .max(FOCUS_HORIZONTAL_EDGE_SEARCH_RADIUS)
+        .min((height as i32 / 5).max(FOCUS_HORIZONTAL_EDGE_SEARCH_RADIUS));
+    let x_start = ((width as f64 * 0.04).round() as i32).max(2);
+    let x_end = ((width as f64 * 0.96).round() as i32).min(width as i32 - 3);
+    if x_end <= x_start {
+        return Vec::new();
+    }
+    let pixels = image.alignment_image.as_raw();
+    let stride = width as usize;
+    let y_start = (center_y - search_radius).max(2);
+    let y_end = (center_y + search_radius).min(height as i32 - 3);
+    let responses = (x_start..=x_end)
+        .map(|x| {
+            (y_start..=y_end)
+                .map(|y| {
+                    let above = pixels[(y as usize - 1) * stride + x as usize] as i32;
+                    let below = pixels[(y as usize + 1) * stride + x as usize] as i32;
+                    (y, (below - above).unsigned_abs() as f64 * 0.5)
+                })
+                .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                .unwrap_or((center_y, 0.0))
+        })
+        .collect::<Vec<_>>();
+    let maximum_gap = ((width as f64 * 0.01).round() as usize).max(2);
+    let mut runs = Vec::<(usize, usize)>::new();
+    let mut run_start = None;
+    let mut last_supported = None;
+    let mut gap = 0usize;
+    for (index, (_, gradient)) in responses.iter().enumerate() {
+        if *gradient >= FOCUS_HORIZONTAL_EDGE_MIN_GRADIENT {
+            if run_start.is_none() {
+                run_start = Some(index);
+            }
+            last_supported = Some(index);
+            gap = 0;
+        } else if let (Some(start), Some(last)) = (run_start, last_supported) {
+            gap += 1;
+            if gap > maximum_gap {
+                runs.push((start, last));
+                run_start = None;
+                last_supported = None;
+                gap = 0;
+            }
+        }
+    }
+    if let (Some(start), Some(last)) = (run_start, last_supported) {
+        runs.push((start, last));
+    }
+    let Some((run_start, run_end)) = runs
+        .into_iter()
+        .max_by_key(|(start, end)| end.saturating_sub(*start) + 1)
+    else {
+        return Vec::new();
+    };
+    let minimum_span = if image.foreground_range.is_some() {
+        FOCUS_HORIZONTAL_EDGE_FOREGROUND_MIN_SOURCE_SPAN_RATIO
+    } else {
+        FOCUS_HORIZONTAL_EDGE_MIN_SOURCE_SPAN_RATIO
+    };
+    if run_end.saturating_sub(run_start) + 1 < (width as f64 * minimum_span).round() as usize {
+        return Vec::new();
+    }
+
+    let run_length = run_end.saturating_sub(run_start) + 1;
+    let sample_count = FOCUS_HORIZONTAL_EDGE_SAMPLE_COUNT.min(run_length).max(1);
+    let mut samples = Vec::with_capacity(sample_count);
+    for sample_index in 0..sample_count {
+        let fraction = if sample_count == 1 {
+            0.0
+        } else {
+            sample_index as f64 / (sample_count - 1) as f64
+        };
+        let response_index =
+            run_start + (run_length.saturating_sub(1) as f64 * fraction).round() as usize;
+        let x = x_start + response_index as i32;
+        let (best_y, _) = responses[response_index];
+        let source = Point2::new(
+            x as f64 * image.scale_factor,
+            best_y as f64 * image.scale_factor,
+        );
+        let Some(world) = transformed_point(homography, source) else {
+            continue;
+        };
+        samples.push((source, world));
+    }
+    samples
+}
+
+fn fit_focus_horizontal_edge_line(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    normalized_row: f64,
+) -> Option<FocusHorizontalEdgeLine> {
+    let samples = horizontal_edge_line_samples(image, homography, normalized_row);
+    if samples.len() < FOCUS_HORIZONTAL_EDGE_MIN_SAMPLES {
+        return None;
+    }
+    let source_min_x = samples
+        .iter()
+        .map(|(source, _)| source.x)
+        .fold(f64::INFINITY, f64::min);
+    let source_max_x = samples
+        .iter()
+        .map(|(source, _)| source.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let minimum_source_span = if image.foreground_range.is_some() {
+        FOCUS_HORIZONTAL_EDGE_FOREGROUND_MIN_SOURCE_SPAN_RATIO
+    } else {
+        FOCUS_HORIZONTAL_EDGE_MIN_SOURCE_SPAN_RATIO
+    };
+    if source_max_x - source_min_x < image.width as f64 * minimum_source_span {
+        return None;
+    }
+
+    let mut slopes = Vec::new();
+    for (index, (_, first)) in samples.iter().enumerate() {
+        for (_, second) in samples.iter().skip(index + 1) {
+            let delta_x = second.x - first.x;
+            if delta_x.abs() < image.width as f64 * 0.02 {
+                continue;
+            }
+            let slope = (second.y - first.y) / delta_x;
+            if slope.is_finite() && slope.abs() <= FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA * 2.0 {
+                slopes.push(slope);
+            }
+        }
+    }
+    let slope = median_value(&mut slopes)?;
+    let mut intercepts = samples
+        .iter()
+        .map(|(_, world)| world.y - slope * world.x)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let intercept = median_value(&mut intercepts)?;
+    let mut errors = samples
+        .iter()
+        .map(|(_, world)| (world.y - (slope * world.x + intercept)).abs())
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let median_error = median_value(&mut errors)?;
+    let maximum_error =
+        image.width.max(image.height) as f64 * FOCUS_HORIZONTAL_EDGE_MAX_LINE_RESIDUAL_RATIO;
+    if !median_error.is_finite() || median_error > maximum_error {
+        return None;
+    }
+    let mut source_rows = samples
+        .iter()
+        .map(|(source, _)| source.y / image.height.max(1) as f64)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let source_row = median_value(&mut source_rows)?;
+    let mut world_xs = samples
+        .iter()
+        .map(|(_, world)| world.x)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let world_x_center = median_value(&mut world_xs)?;
+    Some(FocusHorizontalEdgeLine {
+        image_id: image.id,
+        source_row,
+        world_x_center,
+        slope,
+        intercept,
+        median_error,
+    })
+}
+
+fn deduplicate_focus_horizontal_edge_lines(
+    lines: Vec<FocusHorizontalEdgeLine>,
+    coordinate_scale: f64,
+) -> Vec<FocusHorizontalEdgeLine> {
+    if lines.len() < 2 {
+        return lines;
+    }
+    let tolerance = coordinate_scale.max(1.0) * FOCUS_HORIZONTAL_EDGE_DEDUP_TOLERANCE_RATIO;
+    let mut deduplicated = Vec::with_capacity(lines.len());
+    for line in lines {
+        let duplicate_index = deduplicated
+            .iter()
+            .position(|existing: &FocusHorizontalEdgeLine| {
+                if existing.image_id != line.image_id
+                    || (existing.slope - line.slope).abs() > FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA
+                {
+                    return false;
+                }
+                let reference_x = (existing.world_x_center + line.world_x_center) * 0.5;
+                (focus_horizontal_edge_line_y(existing, reference_x)
+                    - focus_horizontal_edge_line_y(&line, reference_x))
+                .abs()
+                    <= tolerance
+            });
+        if let Some(index) = duplicate_index {
+            if line.median_error < deduplicated[index].median_error {
+                deduplicated[index] = line;
+            }
+        } else {
+            deduplicated.push(line);
+        }
+    }
+    deduplicated
+}
+
+fn detect_vertical_edge_columns(
+    alignment_image: &GrayImage,
+    optional_region: Option<(f64, f64)>,
+) -> Vec<f64> {
+    let (width, height) = alignment_image.dimensions();
+    if width < 96 || height < 96 {
+        return Vec::new();
+    }
+
+    // This is the transposed counterpart of the horizontal long-edge detector.
+    // A vertical holder end or frame edge has horizontal-gradient support over
+    // a long part of the frame, whereas individual character strokes are
+    // rejected later by the robust line fit and cross-image consensus.
+    let pixels = alignment_image.as_raw();
+    let stride = width as usize;
+    let region_start = optional_region
+        .map(|(minimum, _)| (minimum.clamp(0.0, 1.0) * height as f64).round() as u32)
+        .unwrap_or(1)
+        .max(1)
+        .min(height.saturating_sub(2));
+    let region_end = optional_region
+        .map(|(_, maximum)| (maximum.clamp(0.0, 1.0) * height as f64).round() as u32)
+        .unwrap_or(height.saturating_sub(2))
+        .max(region_start + 1)
+        .min(height.saturating_sub(2));
+    let interior_height = region_end.saturating_sub(region_start) as f64;
+    if interior_height < 8.0 {
+        return Vec::new();
+    }
+    let mut profile = vec![0.0f64; width as usize];
+    for x in 1..width.saturating_sub(1) {
+        let mut gradient_sum = 0.0f64;
+        let mut supported = 0usize;
+        for y in region_start..region_end {
+            let left = pixels[y as usize * stride + (x as usize - 1)] as i32;
+            let right = pixels[y as usize * stride + (x as usize + 1)] as i32;
+            let gradient = (right - left).unsigned_abs() as f64 * 0.5;
+            gradient_sum += gradient;
+            if gradient >= 14.0 {
+                supported += 1;
+            }
+        }
+        let mean_gradient = gradient_sum / interior_height;
+        let support_ratio = supported as f64 / interior_height;
+        profile[x as usize] = mean_gradient * (0.35 + support_ratio * 0.65);
+    }
+
+    let peak = profile.iter().copied().fold(0.0f64, f64::max);
+    if !peak.is_finite() || peak < 4.0 {
+        return Vec::new();
+    }
+    let threshold = (peak * 0.10).max(2.5);
+    let minimum_separation =
+        ((width as f64 * FOCUS_VERTICAL_EDGE_MIN_SEPARATION_RATIO).round() as usize).max(16);
+    let mut candidates = (1..width.saturating_sub(1))
+        .filter(|&x| {
+            let score = profile[x as usize];
+            score >= threshold
+                && score >= profile[x as usize - 1]
+                && score >= profile[x as usize + 1]
+        })
+        .map(|x| (x, profile[x as usize]))
+        .collect::<Vec<_>>();
+    candidates.sort_unstable_by(|(_, left), (_, right)| right.total_cmp(left));
+
+    let mut selected = Vec::with_capacity(FOCUS_VERTICAL_EDGE_MAX_COLUMNS);
+    for (column, _) in candidates {
+        if selected.iter().all(|selected_column: &u32| {
+            (*selected_column as usize).abs_diff(column as usize) >= minimum_separation
+        }) {
+            selected.push(column);
+            if selected.len() == FOCUS_VERTICAL_EDGE_MAX_COLUMNS {
+                break;
+            }
+        }
+    }
+    selected.sort_unstable();
+    selected
+        .into_iter()
+        .map(|column| column as f64 / width.max(1) as f64)
+        .collect()
+}
+
+fn vertical_edge_line_samples(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    normalized_column: f64,
+    optional_region: Option<(f64, f64)>,
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    let (width, height) = image.alignment_image.dimensions();
+    if width < 96 || height < 96 || !normalized_column.is_finite() {
+        return Vec::new();
+    }
+
+    let center_x = (normalized_column.clamp(0.02, 0.98) * width as f64).round() as i32;
+    let search_radius = ((width as f64 * 0.025).round() as i32)
+        .max(FOCUS_VERTICAL_EDGE_SEARCH_RADIUS)
+        .min((width as i32 / 5).max(FOCUS_VERTICAL_EDGE_SEARCH_RADIUS));
+    let y_start = optional_region
+        .map(|(minimum, _)| (minimum.clamp(0.0, 1.0) * height as f64).round() as i32)
+        .unwrap_or_else(|| (height as f64 * 0.04).round() as i32)
+        .max(2);
+    let y_end = optional_region
+        .map(|(_, maximum)| (maximum.clamp(0.0, 1.0) * height as f64).round() as i32)
+        .unwrap_or_else(|| (height as f64 * 0.96).round() as i32)
+        .min(height as i32 - 3);
+    if y_end <= y_start {
+        return Vec::new();
+    }
+    let pixels = image.alignment_image.as_raw();
+    let stride = width as usize;
+    let x_start = (center_x - search_radius).max(2);
+    let x_end = (center_x + search_radius).min(width as i32 - 3);
+    let responses = (y_start..=y_end)
+        .map(|y| {
+            (x_start..=x_end)
+                .map(|x| {
+                    let left = pixels[y as usize * stride + (x as usize - 1)] as i32;
+                    let right = pixels[y as usize * stride + (x as usize + 1)] as i32;
+                    (x, (right - left).unsigned_abs() as f64 * 0.5)
+                })
+                .max_by(|(_, left), (_, right)| left.total_cmp(right))
+                .unwrap_or((center_x, 0.0))
+        })
+        .collect::<Vec<_>>();
+    let maximum_gap = ((height as f64 * 0.01).round() as usize).max(2);
+    let mut runs = Vec::<(usize, usize)>::new();
+    let mut run_start = None;
+    let mut last_supported = None;
+    let mut gap = 0usize;
+    for (index, (_, gradient)) in responses.iter().enumerate() {
+        if *gradient >= FOCUS_VERTICAL_EDGE_MIN_GRADIENT {
+            if run_start.is_none() {
+                run_start = Some(index);
+            }
+            last_supported = Some(index);
+            gap = 0;
+        } else if let (Some(start), Some(last)) = (run_start, last_supported) {
+            gap += 1;
+            if gap > maximum_gap {
+                runs.push((start, last));
+                run_start = None;
+                last_supported = None;
+                gap = 0;
+            }
+        }
+    }
+    if let (Some(start), Some(last)) = (run_start, last_supported) {
+        runs.push((start, last));
+    }
+    let Some((run_start, run_end)) = runs
+        .into_iter()
+        .max_by_key(|(start, end)| end.saturating_sub(*start) + 1)
+    else {
+        return Vec::new();
+    };
+    if run_end.saturating_sub(run_start) + 1
+        < (height as f64 * FOCUS_VERTICAL_EDGE_MIN_SOURCE_SPAN_RATIO).round() as usize
+    {
+        return Vec::new();
+    }
+
+    let run_length = run_end.saturating_sub(run_start) + 1;
+    let sample_count = FOCUS_VERTICAL_EDGE_SAMPLE_COUNT.min(run_length).max(1);
+    let mut samples = Vec::with_capacity(sample_count);
+    for sample_index in 0..sample_count {
+        let fraction = if sample_count == 1 {
+            0.0
+        } else {
+            sample_index as f64 / (sample_count - 1) as f64
+        };
+        let response_index =
+            run_start + (run_length.saturating_sub(1) as f64 * fraction).round() as usize;
+        let y = y_start + response_index as i32;
+        let (best_x, _) = responses[response_index];
+        let source = Point2::new(
+            best_x as f64 * image.scale_factor,
+            y as f64 * image.scale_factor,
+        );
+        let Some(world) = transformed_point(homography, source) else {
+            continue;
+        };
+        samples.push((source, world));
+    }
+    samples
+}
+
+fn fit_focus_vertical_edge_line(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    normalized_column: f64,
+    optional_region: Option<(f64, f64)>,
+) -> Option<FocusVerticalEdgeLine> {
+    let samples = vertical_edge_line_samples(image, homography, normalized_column, optional_region);
+    if samples.len() < FOCUS_VERTICAL_EDGE_MIN_SAMPLES {
+        return None;
+    }
+    let source_min_y = samples
+        .iter()
+        .map(|(source, _)| source.y)
+        .fold(f64::INFINITY, f64::min);
+    let source_max_y = samples
+        .iter()
+        .map(|(source, _)| source.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if source_max_y - source_min_y < image.height as f64 * FOCUS_VERTICAL_EDGE_MIN_SOURCE_SPAN_RATIO
+    {
+        return None;
+    }
+
+    let mut slopes = Vec::new();
+    for (index, (_, first)) in samples.iter().enumerate() {
+        for (_, second) in samples.iter().skip(index + 1) {
+            let delta_y = second.y - first.y;
+            if delta_y.abs() < image.height as f64 * 0.02 {
+                continue;
+            }
+            let slope = (second.x - first.x) / delta_y;
+            if slope.is_finite() && slope.abs() <= FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA * 2.0 {
+                slopes.push(slope);
+            }
+        }
+    }
+    let slope = median_value(&mut slopes)?;
+    let mut intercepts = samples
+        .iter()
+        .map(|(_, world)| world.x - slope * world.y)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let intercept = median_value(&mut intercepts)?;
+    let mut errors = samples
+        .iter()
+        .map(|(_, world)| (world.x - (slope * world.y + intercept)).abs())
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let median_error = median_value(&mut errors)?;
+    let maximum_error =
+        image.width.max(image.height) as f64 * FOCUS_VERTICAL_EDGE_MAX_LINE_RESIDUAL_RATIO;
+    if !median_error.is_finite() || median_error > maximum_error {
+        return None;
+    }
+    let mut source_columns = samples
+        .iter()
+        .map(|(source, _)| source.x / image.width.max(1) as f64)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let source_column = median_value(&mut source_columns)?;
+    let mut world_ys = samples
+        .iter()
+        .map(|(_, world)| world.y)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let world_y_center = median_value(&mut world_ys)?;
+    Some(FocusVerticalEdgeLine {
+        image_id: image.id,
+        source_column,
+        world_y_center,
+        slope,
+        intercept,
+        median_error,
+    })
+}
+
+fn deduplicate_focus_vertical_edge_lines(
+    lines: Vec<FocusVerticalEdgeLine>,
+    coordinate_scale: f64,
+) -> Vec<FocusVerticalEdgeLine> {
+    if lines.len() < 2 {
+        return lines;
+    }
+    let tolerance = coordinate_scale.max(1.0) * FOCUS_VERTICAL_EDGE_DEDUP_TOLERANCE_RATIO;
+    let mut deduplicated = Vec::with_capacity(lines.len());
+    for line in lines {
+        let duplicate_index = deduplicated
+            .iter()
+            .position(|existing: &FocusVerticalEdgeLine| {
+                if existing.image_id != line.image_id
+                    || (existing.slope - line.slope).abs() > FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA
+                {
+                    return false;
+                }
+                let reference_y = (existing.world_y_center + line.world_y_center) * 0.5;
+                (focus_vertical_edge_line_x(existing, reference_y)
+                    - focus_vertical_edge_line_x(&line, reference_y))
+                .abs()
+                    <= tolerance
+            });
+        if let Some(index) = duplicate_index {
+            if line.median_error < deduplicated[index].median_error {
+                deduplicated[index] = line;
+            }
+        } else {
+            deduplicated.push(line);
+        }
+    }
+    deduplicated
+}
+
+fn focus_vertical_edge_line_x(line: &FocusVerticalEdgeLine, reference_y: f64) -> f64 {
+    line.slope * reference_y + line.intercept
+}
+
+fn focus_vertical_edge_line_clusters(
+    lines: &[FocusVerticalEdgeLine],
+    coordinate_scale: f64,
+) -> Vec<Vec<usize>> {
+    if lines.len() < FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES {
+        return Vec::new();
+    }
+    let mut center_ys = lines
+        .iter()
+        .map(|line| line.world_y_center)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let Some(reference_y) = median_value(&mut center_ys) else {
+        return Vec::new();
+    };
+    let tolerance = coordinate_scale.max(1.0) * FOCUS_VERTICAL_EDGE_CLUSTER_TOLERANCE_RATIO;
+    let mut ordered_indices = (0..lines.len()).collect::<Vec<_>>();
+    ordered_indices.sort_unstable_by(|left, right| {
+        focus_vertical_edge_line_x(&lines[*left], reference_y)
+            .total_cmp(&focus_vertical_edge_line_x(&lines[*right], reference_y))
+    });
+
+    let mut clusters = Vec::<Vec<usize>>::new();
+    for index in ordered_indices {
+        let line = &lines[index];
+        let line_x = focus_vertical_edge_line_x(line, reference_y);
+        let mut best_cluster = None;
+        let mut best_distance = f64::INFINITY;
+        for (cluster_index, cluster) in clusters.iter().enumerate() {
+            if cluster
+                .iter()
+                .any(|member| lines[*member].image_id == line.image_id)
+            {
+                continue;
+            }
+            let mut cluster_xs = cluster
+                .iter()
+                .map(|member| focus_vertical_edge_line_x(&lines[*member], reference_y))
+                .collect::<Vec<_>>();
+            let Some(cluster_x) = median_value(&mut cluster_xs) else {
+                continue;
+            };
+            let mut cluster_slopes = cluster
+                .iter()
+                .map(|member| lines[*member].slope)
+                .collect::<Vec<_>>();
+            let Some(cluster_slope) = median_value(&mut cluster_slopes) else {
+                continue;
+            };
+            let distance = (line_x - cluster_x).abs();
+            if distance <= tolerance
+                && (line.slope - cluster_slope).abs() <= FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA
+                && distance < best_distance
+            {
+                best_cluster = Some(cluster_index);
+                best_distance = distance;
+            }
+        }
+        if let Some(cluster_index) = best_cluster {
+            clusters[cluster_index].push(index);
+        } else {
+            clusters.push(vec![index]);
+        }
+    }
+
+    clusters
+        .into_iter()
+        .filter(|cluster| {
+            cluster
+                .iter()
+                .map(|index| lines[*index].image_id)
+                .collect::<HashSet<_>>()
+                .len()
+                >= FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES
+        })
+        .collect()
+}
+
+fn focus_vertical_edge_correction(
+    local_line: &FocusVerticalEdgeLine,
+    target_slope: f64,
+    target_intercept: f64,
+) -> Option<Matrix3<f64>> {
+    let shear = target_slope - local_line.slope;
+    let translation = target_intercept - local_line.intercept;
+    if !shear.is_finite()
+        || !translation.is_finite()
+        || shear.abs() > FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA
+    {
+        return None;
+    }
+    Some(Matrix3::new(
+        1.0,
+        shear,
+        translation,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ))
+}
+
+fn build_focus_vertical_edge_bands(
+    images: &[ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> Vec<FocusWarpBand> {
+    let mut lines = Vec::new();
+    for image in images {
+        let Some(homography) = global_homographies.get(&image.id) else {
+            continue;
+        };
+        for &normalized_column in &image.vertical_edge_columns {
+            if let Some(line) = fit_focus_vertical_edge_line(
+                image,
+                homography,
+                normalized_column,
+                image.foreground_range,
+            ) {
+                lines.push(line);
+            }
+        }
+    }
+    let coordinate_scale = images
+        .iter()
+        .map(|image| image.width.max(image.height) as f64)
+        .fold(1.0, f64::max);
+    let raw_line_count = lines.len();
+    let lines = deduplicate_focus_vertical_edge_lines(lines, coordinate_scale);
+    println!(
+        "  - Vertical-edge fitted candidates: {raw_line_count} (after dedup: {})",
+        lines.len()
+    );
+    if raw_line_count != lines.len() {
+        println!(
+            "  - Collapsed {} duplicate vertical-edge candidate line(s)",
+            raw_line_count - lines.len()
+        );
+    }
+    if lines.len() < FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES {
+        return Vec::new();
+    }
+    let clusters = focus_vertical_edge_line_clusters(&lines, coordinate_scale);
+    if clusters.is_empty() {
+        println!(
+            "  - No repeated vertical-edge consensus found from {} detected edge line(s)",
+            lines.len()
+        );
+        return Vec::new();
+    }
+
+    let reference_y = {
+        let mut center_ys = lines
+            .iter()
+            .map(|line| line.world_y_center)
+            .collect::<Vec<_>>();
+        median_value(&mut center_ys).unwrap_or(0.0)
+    };
+    let mut bands = Vec::new();
+    for cluster in clusters {
+        let mut slopes = cluster
+            .iter()
+            .map(|index| lines[*index].slope)
+            .collect::<Vec<_>>();
+        let Some(target_slope) = median_value(&mut slopes) else {
+            continue;
+        };
+        let mut target_xs = cluster
+            .iter()
+            .map(|index| focus_vertical_edge_line_x(&lines[*index], reference_y))
+            .collect::<Vec<_>>();
+        let Some(target_x_at_reference) = median_value(&mut target_xs) else {
+            continue;
+        };
+        let target_intercept = target_x_at_reference - target_slope * reference_y;
+        let mut homographies = HashMap::new();
+        let mut source_ranges = HashMap::new();
+        let mut source_x_ranges = HashMap::new();
+        for &index in &cluster {
+            let line = lines[index];
+            let Some(global) = global_homographies.get(&line.image_id).copied() else {
+                continue;
+            };
+            let Some(image) = images.iter().find(|image| image.id == line.image_id) else {
+                continue;
+            };
+            let Some(correction) =
+                focus_vertical_edge_correction(&line, target_slope, target_intercept)
+            else {
+                continue;
+            };
+            let corrected = correction * global;
+            if corrected.try_inverse().is_none() {
+                continue;
+            }
+            let minimum_source_x =
+                (line.source_column - FOCUS_VERTICAL_EDGE_BAND_HALF_WIDTH_RATIO).max(0.0);
+            let maximum_source_x =
+                (line.source_column + FOCUS_VERTICAL_EDGE_BAND_HALF_WIDTH_RATIO).min(1.0);
+            let displacement =
+                focus_band_maximum_displacement(image, &global, &corrected, (0.0, 1.0));
+            let maximum_allowed = image.width.max(image.height).max(1) as f64
+                * FOCUS_VERTICAL_EDGE_MAX_DISPLACEMENT_RATIO;
+            if !displacement.is_finite() || displacement > maximum_allowed {
+                continue;
+            }
+            homographies.insert(line.image_id, corrected);
+            source_ranges.insert(line.image_id, (0.0, 1.0));
+            source_x_ranges.insert(line.image_id, (minimum_source_x, maximum_source_x));
+        }
+        if homographies.len() < FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES {
+            continue;
+        }
+        let average_error = cluster
+            .iter()
+            .map(|index| lines[*index].median_error)
+            .sum::<f64>()
+            / cluster.len().max(1) as f64;
+        println!(
+            "  - Vertical-edge consensus band: {} image(s), world x {:.1}, fit error {:.2}px",
+            homographies.len(),
+            target_x_at_reference,
+            average_error
+        );
+        bands.push(FocusWarpBand {
+            homographies,
+            source_ranges,
+            source_x_ranges,
+            relax_foreground_seam: true,
+        });
+    }
+    bands
 }
 
 fn dilate_binary_mask(
@@ -973,6 +1884,7 @@ fn match_image_pair(
                 projection,
                 &projected_homography,
                 false,
+                blend_mode == BlendMode::FocusStack,
             )
             .unwrap_or(projected_match_points[index])
         })
@@ -1099,10 +2011,24 @@ fn collect_dense_focus_region_points(
         source_y_fractions.sort_unstable_by(f64::total_cmp);
         source_y_fractions.dedup_by(|left, right| (*left - *right).abs() < 0.005);
     }
+    let mut sample_rows = source_y_fractions
+        .into_iter()
+        .map(|fraction| (fraction, 14))
+        .collect::<Vec<_>>();
+    for &edge_row in &source_image.horizontal_edge_rows {
+        if edge_row.is_finite()
+            && (0.02..=0.98).contains(&edge_row)
+            && sample_rows
+                .iter()
+                .all(|(row, _)| (*row - edge_row).abs() >= 0.005)
+        {
+            sample_rows.push((edge_row, FOCUS_HORIZONTAL_EDGE_SEARCH_RADIUS));
+        }
+    }
+    sample_rows.sort_unstable_by(|(left, _), (right, _)| left.total_cmp(right));
     let source_x_fractions = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95];
     let patch_radius = 8;
-    let search_radius = 14;
-    for source_y_fraction in source_y_fractions {
+    for (source_y_fraction, search_radius) in sample_rows {
         for source_x_fraction in source_x_fractions {
             let source_x = (source_width * source_x_fraction).round() as i32;
             let source_y = (source_height * source_y_fraction).round() as i32;
@@ -1400,15 +2326,10 @@ pub async fn save_panorama(
     first_path_str: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    let panorama_image = state
-        .panorama_result
-        .lock()
-        .unwrap()
-        .take()
-        .ok_or_else(|| {
-            "No panorama image found in memory to save. It might have already been saved."
-                .to_string()
-        })?;
+    let panorama_result = state.panorama_result.lock().unwrap();
+    let panorama_image = panorama_result.as_ref().ok_or_else(|| {
+        "No panorama image found in memory to save. Please generate the panorama first.".to_string()
+    })?;
 
     let (first_path, _) = parse_virtual_path(&first_path_str);
     let parent_dir = first_path
@@ -1419,26 +2340,27 @@ pub async fn save_panorama(
         .and_then(|s| s.to_str())
         .unwrap_or("panorama");
 
-    let (output_filename, image_to_save): (String, DynamicImage) =
-        if panorama_image.color().has_alpha() {
-            (
-                format!("{}_Pano.png", stem),
-                DynamicImage::ImageRgba8(panorama_image.to_rgba8()),
-            )
-        } else if panorama_image.as_rgb32f().is_some() {
-            (format!("{}_Pano.tiff", stem), panorama_image)
-        } else {
-            (
-                format!("{}_Pano.png", stem),
-                DynamicImage::ImageRgb8(panorama_image.to_rgb8()),
-            )
-        };
+    let output_path = if panorama_image.color().has_alpha() {
+        parent_dir.join(format!("{}_Pano.png", stem))
+    } else if panorama_image.as_rgb32f().is_some() {
+        parent_dir.join(format!("{}_Pano.tiff", stem))
+    } else {
+        parent_dir.join(format!("{}_Pano.png", stem))
+    };
 
-    let output_path = parent_dir.join(output_filename);
-
-    image_to_save
-        .save(&output_path)
-        .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+    if panorama_image.color().has_alpha() {
+        DynamicImage::ImageRgba8(panorama_image.to_rgba8())
+            .save(&output_path)
+            .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+    } else if panorama_image.as_rgb32f().is_some() {
+        panorama_image
+            .save(&output_path)
+            .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+    } else {
+        DynamicImage::ImageRgb8(panorama_image.to_rgb8())
+            .save(&output_path)
+            .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+    }
 
     let (real_path, _) = crate::file_management::parse_virtual_path(&first_path_str);
     let _ =
@@ -1548,6 +2470,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 } else {
                     None
                 };
+                let horizontal_edge_rows = if focus_stack {
+                    horizontal_edge_row_candidates(&alignment_image, foreground_range)
+                } else {
+                    Vec::new()
+                };
+                let vertical_edge_columns = if focus_stack {
+                    detect_vertical_edge_columns(&alignment_image, foreground_range)
+                } else {
+                    Vec::new()
+                };
                 let top_features = if focus_stack {
                     find_top_alignment_features(&alignment_image, &brief_pairs, foreground_range)
                 } else {
@@ -1587,6 +2519,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     top_features,
                     foreground_range,
                     foreground_mask,
+                    horizontal_edge_rows,
+                    vertical_edge_columns,
                 })
             })
             .collect::<Vec<Result<ImageInfo, String>>>()
@@ -2321,6 +3255,7 @@ fn refine_match_point_from_homography(
     projection: Projection,
     homography: &Matrix3<f64>,
     prefer_feature_center: bool,
+    high_precision: bool,
 ) -> Option<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)> {
     let source_full_x = (keypoint1.x as f64 * image1.scale_factor).round() as i32;
     let source_full_y = (keypoint1.y as f64 * image1.scale_factor).round() as i32;
@@ -2361,8 +3296,16 @@ fn refine_match_point_from_homography(
             target_full_x,
             target_full_y,
             1.0,
-            MATCH_REFINE_PATCH_RADIUS,
-            MATCH_REFINE_SEARCH_RADIUS,
+            if high_precision {
+                FOCUS_MATCH_REFINE_PATCH_RADIUS
+            } else {
+                MATCH_REFINE_PATCH_RADIUS
+            },
+            if high_precision {
+                FOCUS_MATCH_REFINE_SEARCH_RADIUS
+            } else {
+                MATCH_REFINE_SEARCH_RADIUS
+            },
         )
     } else {
         (
@@ -2373,8 +3316,8 @@ fn refine_match_point_from_homography(
             (target_full_x as f64 / image2.scale_factor).round() as i32,
             (target_full_y as f64 / image2.scale_factor).round() as i32,
             image2.scale_factor,
-            4,
-            6,
+            if high_precision { 8 } else { 4 },
+            if high_precision { 12 } else { 6 },
         )
     };
 
@@ -3416,10 +4359,16 @@ fn focus_regional_support_is_diverse(
     // A local model needs support in both axes. The area fallback permits a
     // long, thin object such as a mat edge, but a single screw/corner cluster
     // cannot satisfy it and therefore cannot extrapolate a warp over the band.
-    let source_supported =
-        (source_span_x >= 0.10 && source_span_y >= 0.035) || source_area >= 0.006;
-    let target_supported =
-        (target_span_x >= 0.10 && target_span_y >= 0.035) || target_area >= 0.006;
+    let source_supported = (source_span_x >= 0.10 && source_span_y >= 0.035)
+        || source_area >= 0.006
+        // A long, well-supported edge is intentionally one-dimensional. It
+        // constrains the vertical translation/shear that causes a stepped
+        // holder or paper boundary, while the global pose prior still keeps
+        // the under-constrained horizontal parameters stable.
+        || (source_span_x >= 0.40 && source_span_y >= 0.001);
+    let target_supported = (target_span_x >= 0.10 && target_span_y >= 0.035)
+        || target_area >= 0.006
+        || (target_span_x >= 0.40 && target_span_y >= 0.001);
     source_supported && target_supported
 }
 
@@ -3950,8 +4899,20 @@ fn build_focus_layer_warp(
         bands.push(FocusWarpBand {
             homographies,
             source_ranges,
+            source_x_ranges: HashMap::new(),
+            relax_foreground_seam: false,
         });
     }
+
+    // Long, content-independent physical boundaries are stronger geometric
+    // evidence than repeated characters in a narrow local band. Build a band
+    // only when the same edge is observed in multiple source images; a rail or
+    // other one-off object therefore cannot force a warp by itself.
+    bands.extend(build_focus_horizontal_edge_bands(
+        images,
+        global_homographies,
+    ));
+    bands.extend(build_focus_vertical_edge_bands(images, global_homographies));
 
     // A detected near-field/occlusion layer gets a narrower model only when the
     // source frame actually contains it. This is deliberately an optional depth
@@ -3985,6 +4946,8 @@ fn build_focus_layer_warp(
         bands.push(FocusWarpBand {
             homographies: foreground_homographies,
             source_ranges,
+            source_x_ranges: HashMap::new(),
+            relax_foreground_seam: false,
         });
     }
     FocusLayerWarp { bands }
@@ -4282,6 +5245,248 @@ fn align_focus_foreground_edges(
     }
 }
 
+fn focus_horizontal_edge_line_y(line: &FocusHorizontalEdgeLine, reference_x: f64) -> f64 {
+    line.slope * reference_x + line.intercept
+}
+
+fn focus_horizontal_edge_line_clusters(
+    lines: &[FocusHorizontalEdgeLine],
+    coordinate_scale: f64,
+) -> Vec<Vec<usize>> {
+    if lines.len() < FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES {
+        return Vec::new();
+    }
+    let mut center_xs = lines
+        .iter()
+        .map(|line| line.world_x_center)
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    let Some(reference_x) = median_value(&mut center_xs) else {
+        return Vec::new();
+    };
+    let tolerance = coordinate_scale.max(1.0) * FOCUS_HORIZONTAL_EDGE_CLUSTER_TOLERANCE_RATIO;
+    let mut ordered_indices = (0..lines.len()).collect::<Vec<_>>();
+    ordered_indices.sort_unstable_by(|left, right| {
+        focus_horizontal_edge_line_y(&lines[*left], reference_x)
+            .total_cmp(&focus_horizontal_edge_line_y(&lines[*right], reference_x))
+    });
+
+    let mut clusters = Vec::<Vec<usize>>::new();
+    for index in ordered_indices {
+        let line = &lines[index];
+        let line_y = focus_horizontal_edge_line_y(line, reference_x);
+        let mut best_cluster = None;
+        let mut best_distance = f64::INFINITY;
+        for (cluster_index, cluster) in clusters.iter().enumerate() {
+            if cluster
+                .iter()
+                .any(|member| lines[*member].image_id == line.image_id)
+            {
+                continue;
+            }
+            let mut cluster_ys = cluster
+                .iter()
+                .map(|member| focus_horizontal_edge_line_y(&lines[*member], reference_x))
+                .collect::<Vec<_>>();
+            let Some(cluster_y) = median_value(&mut cluster_ys) else {
+                continue;
+            };
+            let mut cluster_slopes = cluster
+                .iter()
+                .map(|member| lines[*member].slope)
+                .collect::<Vec<_>>();
+            let Some(cluster_slope) = median_value(&mut cluster_slopes) else {
+                continue;
+            };
+            let distance = (line_y - cluster_y).abs();
+            if distance <= tolerance
+                && (line.slope - cluster_slope).abs() <= FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA
+                && distance < best_distance
+            {
+                best_cluster = Some(cluster_index);
+                best_distance = distance;
+            }
+        }
+        if let Some(cluster_index) = best_cluster {
+            clusters[cluster_index].push(index);
+        } else {
+            clusters.push(vec![index]);
+        }
+    }
+
+    clusters
+        .into_iter()
+        .filter(|cluster| {
+            cluster
+                .iter()
+                .map(|index| lines[*index].image_id)
+                .collect::<HashSet<_>>()
+                .len()
+                >= FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES
+        })
+        .collect()
+}
+
+fn focus_horizontal_edge_correction(
+    local_line: &FocusHorizontalEdgeLine,
+    target_slope: f64,
+    target_intercept: f64,
+) -> Option<Matrix3<f64>> {
+    let shear = target_slope - local_line.slope;
+    let translation = target_intercept - local_line.intercept;
+    if !shear.is_finite()
+        || !translation.is_finite()
+        || shear.abs() > FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA
+    {
+        return None;
+    }
+    Some(Matrix3::new(
+        1.0,
+        0.0,
+        0.0,
+        shear,
+        1.0,
+        translation,
+        0.0,
+        0.0,
+        1.0,
+    ))
+}
+
+fn focus_horizontal_cluster_geometry(
+    lines: &[FocusHorizontalEdgeLine],
+    cluster: &[usize],
+    reference_x: f64,
+) -> Option<(f64, f64, f64)> {
+    let mut slopes = cluster
+        .iter()
+        .map(|index| lines[*index].slope)
+        .collect::<Vec<_>>();
+    let target_slope = median_value(&mut slopes)?;
+    let mut target_ys = cluster
+        .iter()
+        .map(|index| focus_horizontal_edge_line_y(&lines[*index], reference_x))
+        .collect::<Vec<_>>();
+    let target_y_at_reference = median_value(&mut target_ys)?;
+    let target_intercept = target_y_at_reference - target_slope * reference_x;
+    Some((target_slope, target_intercept, target_y_at_reference))
+}
+
+fn build_focus_horizontal_edge_bands(
+    images: &[ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> Vec<FocusWarpBand> {
+    let mut lines = Vec::new();
+    for image in images {
+        let Some(homography) = global_homographies.get(&image.id) else {
+            continue;
+        };
+        for &normalized_row in &image.horizontal_edge_rows {
+            if let Some(line) = fit_focus_horizontal_edge_line(image, homography, normalized_row) {
+                lines.push(line);
+            }
+        }
+    }
+    let coordinate_scale = images
+        .iter()
+        .map(|image| image.width.max(image.height) as f64)
+        .fold(1.0, f64::max);
+    let raw_line_count = lines.len();
+    let lines = deduplicate_focus_horizontal_edge_lines(lines, coordinate_scale);
+    if raw_line_count != lines.len() {
+        println!(
+            "  - Collapsed {} duplicate long-edge candidate line(s)",
+            raw_line_count - lines.len()
+        );
+    }
+    if lines.len() < FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES {
+        return Vec::new();
+    }
+    let clusters = focus_horizontal_edge_line_clusters(&lines, coordinate_scale);
+    if clusters.is_empty() {
+        println!(
+            "  - No repeated long-edge consensus found from {} detected edge line(s)",
+            lines.len()
+        );
+        return Vec::new();
+    }
+
+    let reference_x = {
+        let mut center_xs = lines
+            .iter()
+            .map(|line| line.world_x_center)
+            .collect::<Vec<_>>();
+        median_value(&mut center_xs).unwrap_or(0.0)
+    };
+    let mut bands = Vec::new();
+    for cluster in &clusters {
+        let Some((target_slope, target_intercept, target_y_at_reference)) =
+            focus_horizontal_cluster_geometry(&lines, cluster, reference_x)
+        else {
+            continue;
+        };
+        let mut homographies = HashMap::new();
+        let mut source_ranges = HashMap::new();
+        for &index in cluster {
+            let line = lines[index];
+            let Some(global) = global_homographies.get(&line.image_id).copied() else {
+                continue;
+            };
+            let Some(image) = images.iter().find(|image| image.id == line.image_id) else {
+                continue;
+            };
+            let Some(correction) =
+                focus_horizontal_edge_correction(&line, target_slope, target_intercept)
+            else {
+                continue;
+            };
+            let corrected = correction * global;
+            if corrected.try_inverse().is_none() {
+                continue;
+            }
+            let minimum_source_y =
+                (line.source_row - FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO).max(0.0);
+            let maximum_source_y =
+                (line.source_row + FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO).min(1.0);
+            let displacement = focus_band_maximum_displacement(
+                image,
+                &global,
+                &corrected,
+                (minimum_source_y, maximum_source_y),
+            );
+            let maximum_allowed = image.width.max(image.height).max(1) as f64
+                * FOCUS_HORIZONTAL_EDGE_MAX_DISPLACEMENT_RATIO;
+            if !displacement.is_finite() || displacement > maximum_allowed {
+                continue;
+            }
+            homographies.insert(line.image_id, corrected);
+            source_ranges.insert(line.image_id, (minimum_source_y, maximum_source_y));
+        }
+        if homographies.len() < FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES {
+            continue;
+        }
+        let average_error = cluster
+            .iter()
+            .map(|index| lines[*index].median_error)
+            .sum::<f64>()
+            / cluster.len().max(1) as f64;
+        println!(
+            "  - Long-edge consensus band: {} image(s), world y {:.1}, fit error {:.2}px",
+            homographies.len(),
+            target_y_at_reference,
+            average_error
+        );
+        bands.push(FocusWarpBand {
+            homographies,
+            source_ranges,
+            source_x_ranges: HashMap::new(),
+            relax_foreground_seam: false,
+        });
+    }
+
+    bands
+}
+
 #[cfg(test)]
 mod alignment_tests {
     use super::*;
@@ -4300,6 +5505,8 @@ mod alignment_tests {
             top_features: Vec::new(),
             foreground_range: None,
             foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
         }
     }
 
@@ -4715,6 +5922,176 @@ mod alignment_tests {
     }
 
     #[test]
+    fn long_edge_consensus_groups_only_distinct_images() {
+        let lines = vec![
+            FocusHorizontalEdgeLine {
+                image_id: 0,
+                source_row: 0.20,
+                world_x_center: 500.0,
+                slope: 0.01,
+                intercept: 995.0,
+                median_error: 2.0,
+            },
+            FocusHorizontalEdgeLine {
+                image_id: 1,
+                source_row: 0.18,
+                world_x_center: 700.0,
+                slope: 0.011,
+                intercept: 994.0,
+                median_error: 2.0,
+            },
+            FocusHorizontalEdgeLine {
+                image_id: 2,
+                source_row: 0.22,
+                world_x_center: 900.0,
+                slope: 0.009,
+                intercept: 996.0,
+                median_error: 2.0,
+            },
+            FocusHorizontalEdgeLine {
+                image_id: 0,
+                source_row: 0.40,
+                world_x_center: 500.0,
+                slope: 0.01,
+                intercept: 2_000.0,
+                median_error: 2.0,
+            },
+        ];
+
+        let clusters = focus_horizontal_edge_line_clusters(&lines, 9_504.0);
+        assert_eq!(clusters.len(), 1);
+        assert_eq!(clusters[0].len(), 3);
+    }
+
+    #[test]
+    fn long_edge_duplicate_candidates_keep_the_best_fit_per_image() {
+        let lines = vec![
+            FocusHorizontalEdgeLine {
+                image_id: 0,
+                source_row: 0.20,
+                world_x_center: 500.0,
+                slope: 0.01,
+                intercept: 995.0,
+                median_error: 4.0,
+            },
+            FocusHorizontalEdgeLine {
+                image_id: 0,
+                source_row: 0.201,
+                world_x_center: 500.0,
+                slope: 0.0105,
+                intercept: 995.2,
+                median_error: 1.5,
+            },
+            FocusHorizontalEdgeLine {
+                image_id: 0,
+                source_row: 0.31,
+                world_x_center: 500.0,
+                slope: 0.01,
+                intercept: 1_500.0,
+                median_error: 2.0,
+            },
+        ];
+
+        let deduplicated = deduplicate_focus_horizontal_edge_lines(lines, 9_504.0);
+        assert_eq!(deduplicated.len(), 2);
+        assert!(
+            deduplicated
+                .iter()
+                .any(|line| (line.median_error - 1.5).abs() < f64::EPSILON)
+        );
+        assert!(
+            deduplicated
+                .iter()
+                .any(|line| (line.source_row - 0.31).abs() < f64::EPSILON)
+        );
+    }
+
+    #[test]
+    fn vertical_long_edge_consensus_groups_only_distinct_images() {
+        let lines = vec![
+            FocusVerticalEdgeLine {
+                image_id: 0,
+                source_column: 0.20,
+                world_y_center: 500.0,
+                slope: 0.01,
+                intercept: 995.0,
+                median_error: 2.0,
+            },
+            FocusVerticalEdgeLine {
+                image_id: 1,
+                source_column: 0.18,
+                world_y_center: 700.0,
+                slope: 0.011,
+                intercept: 994.0,
+                median_error: 2.0,
+            },
+            FocusVerticalEdgeLine {
+                image_id: 2,
+                source_column: 0.22,
+                world_y_center: 900.0,
+                slope: 0.009,
+                intercept: 996.0,
+                median_error: 2.0,
+            },
+            FocusVerticalEdgeLine {
+                image_id: 0,
+                source_column: 0.40,
+                world_y_center: 500.0,
+                slope: 0.01,
+                intercept: 2_000.0,
+                median_error: 2.0,
+            },
+        ];
+
+        let clusters = focus_vertical_edge_line_clusters(&lines, 9_504.0);
+        assert_eq!(clusters.len(), 1);
+        assert_eq!(clusters[0].len(), 3);
+    }
+
+    #[test]
+    fn vertical_edge_duplicate_candidates_keep_the_best_fit_per_image() {
+        let lines = vec![
+            FocusVerticalEdgeLine {
+                image_id: 0,
+                source_column: 0.20,
+                world_y_center: 500.0,
+                slope: 0.01,
+                intercept: 995.0,
+                median_error: 4.0,
+            },
+            FocusVerticalEdgeLine {
+                image_id: 0,
+                source_column: 0.201,
+                world_y_center: 500.0,
+                slope: 0.0105,
+                intercept: 995.2,
+                median_error: 1.5,
+            },
+            FocusVerticalEdgeLine {
+                image_id: 0,
+                source_column: 0.31,
+                world_y_center: 500.0,
+                slope: 0.01,
+                intercept: 1_500.0,
+                median_error: 2.0,
+            },
+        ];
+
+        let deduplicated = deduplicate_focus_vertical_edge_lines(lines, 9_504.0);
+        assert_eq!(deduplicated.len(), 2);
+        assert!(
+            deduplicated
+                .iter()
+                .any(|line| (line.median_error - 1.5).abs() < f64::EPSILON)
+        );
+        assert!(
+            deduplicated
+                .iter()
+                .any(|line| (line.source_column - 0.31).abs() < f64::EPSILON)
+        );
+    }
+
+    #[test]
     fn generated_stack_outputs_and_macos_sidecars_are_not_reused_as_sources() {
         assert!(is_generated_stitch_output("/tmp/DSC08897_FocusStack1.jpg"));
         assert!(is_generated_stitch_output(
@@ -4799,6 +6176,10 @@ mod acceptance_tests {
                 let top_features =
                     find_top_alignment_features(&alignment_image, &brief_pairs, foreground_range);
                 let foreground_mask = build_foreground_mask(&alignment_image, foreground_range);
+                let horizontal_edge_rows =
+                    horizontal_edge_row_candidates(&alignment_image, foreground_range);
+                let vertical_edge_columns =
+                    detect_vertical_edge_columns(&alignment_image, foreground_range);
                 ImageInfo {
                     id,
                     filename: path.to_string_lossy().into_owned(),
@@ -4811,6 +6192,8 @@ mod acceptance_tests {
                     top_features,
                     foreground_range,
                     foreground_mask,
+                    horizontal_edge_rows,
+                    vertical_edge_columns,
                 }
             })
             .collect::<Vec<_>>();
@@ -5364,7 +6747,13 @@ mod acceptance_tests {
         let render_scale = outcome.render_scale;
         let rendered_pixels = u64::from(rendered_width) * u64::from(rendered_height);
         assert!(rendered_width > 0 && rendered_height > 0);
-        assert!(rendered_pixels <= MAX_IN_MEMORY_PANORAMA_PIXELS + 1_000_000);
+        // Panorama renders are memory-bounded by the production path. Focus stacks
+        // intentionally keep the source resolution so the exported TIFF does not
+        // lose detail; their large canvas is therefore expected in this visual
+        // acceptance fixture too.
+        if blend_mode == BlendMode::Panorama {
+            assert!(rendered_pixels <= MAX_IN_MEMORY_PANORAMA_PIXELS + 1_000_000);
+        }
         assert!(outcome.full_canvas_width >= rendered_width);
         assert!(outcome.full_canvas_height >= rendered_height);
 

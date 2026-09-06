@@ -14,6 +14,7 @@ const productivitySource = read('src/hooks/useProductivityActions.ts');
 const exportProcessingSource = read('src-tauri/src/export_processing.rs');
 const exifProcessingSource = read('src-tauri/src/exif_processing.rs');
 const stackProcessingSource = read('src-tauri/src/image_stack.rs');
+const stackSaveSource = stackProcessingSource.slice(stackProcessingSource.indexOf('pub async fn save_image_stack'));
 
 assert.match(dialogSource, /import ZoomableImagePreview from/);
 assert.match(dialogSource, /role="dialog"/);
@@ -25,6 +26,9 @@ assert.match(dialogSource, /sourceSize=\{\{ width: settings\.resizeWidth, height
 assert.match(appModalsSource, /<ExportImageDialog/);
 assert.match(appModalsSource, /onEstimateSize=\{handleEstimateEditorExportSize\}/);
 assert.match(stackModalSource, /<ExportImageDialog/);
+assert.match(stackModalSource, /if \(isSaving \|\| !finalImageBase64\) return null;/);
+assert.match(stackModalSource, /disabled=\{isSaving \|\| isProcessing\}/);
+assert.doesNotMatch(stackModalSource, /disabled=\{isSaving \|\| isProcessing \|\| Boolean\(savedPath\)\}/);
 assert.match(appModalsSource, /buildBackendExportSettings\(settings/);
 assert.match(appModalsSource, /waitForCompletion:\s*true/);
 assert.match(productivitySource, /buildBackendExportSettings\(settings/);
@@ -36,6 +40,8 @@ assert.match(exifProcessingSource, /ExifTag::Copyright/);
 assert.match(exifProcessingSource, /ExifTag::UserComment/);
 assert.match(stackProcessingSource, /apply_export_resize_and_watermark/);
 assert.match(stackProcessingSource, /write_image_stack_output_with_settings/);
+assert.match(stackSaveSource, /let \(stored_result_id, image\) = result\s*\.as_ref\(\)/);
+assert.doesNotMatch(stackSaveSource, /\*result\s*=\s*None/);
 
 const bundled = await build({
   entryPoints: [path.join(repoRoot, 'src/features/export/exportDialog.ts')],
