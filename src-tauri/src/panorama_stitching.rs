@@ -39,8 +39,6 @@ const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
 const FOCUS_LOCAL_MODEL_MIN_INLIERS: usize = 6;
 const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
-const FOCUS_SEQUENCE_LINK_WINDOW: usize = 2;
-const FOCUS_SEQUENCE_GAP_PENALTY: f64 = 96.0;
 const FOCUS_GLOBAL_MAX_POINTS_PER_EDGE: usize = 256;
 const FOCUS_GLOBAL_MAX_ITERATIONS: usize = 12;
 const FOCUS_GLOBAL_HUBER_THRESHOLD: f64 = 0.0012;
@@ -51,6 +49,14 @@ const FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT: f64 = 0.12;
 const FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT: f64 = 0.18;
 const FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT: f64 = 0.02;
 const FOCUS_LOCAL_MODEL_MAX_DISPLACEMENT_RATIO: f64 = 0.08;
+// A random file-picker order must not become the focus-stack layer order. For
+// a medium-sized stack, inspect every pair so the capture path can be rebuilt
+// from image evidence rather than from filenames or import order.
+const FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES: usize = 64;
+const FOCUS_AUTO_ORDER_MOTION_SCALE_FLOOR: f64 = 0.01;
+const FOCUS_AUTO_ORDER_MOTION_EXPONENT: f64 = 4.0;
+const FOCUS_AUTO_ORDER_GAP_PENALTY: f64 = 4.0;
+const FOCUS_AUTO_ORDER_MISSING_EDGE_PENALTY: f64 = 32.0;
 // Regional matches are measured against the already registered global model.
 // Keep this close to the dense-search radius after conversion back to the
 // source coordinate system. A wide gate can accept a different repeated stroke
@@ -434,6 +440,12 @@ fn pairs_to_match(image_count: usize) -> Vec<(usize, usize)> {
         .collect()
 }
 
+fn all_image_pairs(image_count: usize) -> Vec<(usize, usize)> {
+    (0..image_count)
+        .flat_map(|first| (first + 1..image_count).map(move |second| (first, second)))
+        .collect()
+}
+
 fn natural_path_cmp(left: &str, right: &str) -> Ordering {
     let left = Path::new(left)
         .file_name()
@@ -510,9 +522,14 @@ fn add_neighbor_pairs(
     }
 }
 
-fn pairs_to_match_for_images(images: &[ImageInfo]) -> Vec<(usize, usize)> {
+fn pairs_to_match_for_images(images: &[ImageInfo], blend_mode: BlendMode) -> Vec<(usize, usize)> {
     if images.len() <= SCALABLE_STACK_THRESHOLD {
         return pairs_to_match(images.len());
+    }
+    if blend_mode == BlendMode::FocusStack
+        && images.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES
+    {
+        return all_image_pairs(images.len());
     }
 
     let input_order = (0..images.len()).collect::<Vec<_>>();
@@ -2550,19 +2567,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     );
 
     let start_time = Instant::now();
-    let _ = app_handle.emit(progress_event, "Finding image matches...");
-    println!(
-        "Finding {} matches (in parallel)...",
-        if scalable_stack {
-            "ordered-neighbor"
-        } else {
-            "all pairwise"
-        }
+    let exhaustive_focus_order = blend_mode == BlendMode::FocusStack
+        && image_data.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES;
+    let matching_strategy = if exhaustive_focus_order || !scalable_stack {
+        "all pairwise"
+    } else {
+        "ordered-neighbor"
+    };
+    let _ = app_handle.emit(
+        progress_event,
+        format!("Finding image matches ({matching_strategy})..."),
     );
+    println!("Finding {matching_strategy} matches (in parallel)...");
     let projection = alignment_mode.projection_for(blend_mode);
     let mut pairwise_matches: HashMap<(usize, usize), MatchInfo> = HashMap::new();
 
-    let pairs_to_check = pairs_to_match_for_images(&image_data);
+    let pairs_to_check = pairs_to_match_for_images(&image_data, blend_mode);
     let matched_pair_count = Mutex::new(0);
     let pair_progress_step = (pairs_to_check.len() / 100).max(1);
 
@@ -2640,8 +2660,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     );
 
     if pairwise_matches.is_empty() {
-        return Err(if scalable_stack {
-            "No overlap was found between nearby images. For large stacks, arrange the source layers in shooting order and make sure consecutive images overlap."
+        return Err(if scalable_stack && focus_stack {
+            "No overlap was found among the automatic focus-stack candidate pairs. Large stacks use a bounded search; use frames with sufficient overlap or reduce the number of layers."
+                .to_string()
+        } else if scalable_stack {
+            "No overlap was found between nearby images. For large panoramas, make sure consecutive images overlap."
                 .to_string()
         } else {
             "No suitable matches found between any pair of images. Cannot create a panorama."
@@ -2696,9 +2719,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         println!("{}", warning_msg);
         let _ = app_handle.emit(progress_event, warning_msg);
-        return Err(if scalable_stack {
+        return Err(if scalable_stack && focus_stack {
             format!(
-                "Could not align all selected images; {unstitched_count} image(s) were not connected to nearby layers. Reorder the sources into shooting order and retry."
+                "Could not automatically order all selected focus-stack images; {unstitched_count} image(s) were not connected by the bounded candidate search. Try fewer layers or ensure each layer has enough visual overlap."
+            )
+        } else if scalable_stack {
+            format!(
+                "Could not align all selected images; {unstitched_count} image(s) were not connected to nearby layers. Make sure consecutive panorama images overlap and retry."
             )
         } else {
             format!(
@@ -3817,6 +3844,19 @@ fn build_stitching_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
+    build_graph_stitching_order(images, matches, |_, _, match_info| {
+        match_info.inliers as f64
+    })
+}
+
+fn build_graph_stitching_order<F>(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    edge_weight: F,
+) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>)
+where
+    F: Fn(&ImageInfo, &ImageInfo, &MatchInfo) -> f64,
+{
     if images.is_empty() {
         return (vec![], HashMap::new());
     }
@@ -3829,10 +3869,15 @@ fn build_stitching_order(
         return ((0..n).collect(), homographies);
     }
 
-    let mut edges = Vec::new();
-    for (&(i, j), m) in matches {
-        edges.push((m.inliers, i, j));
-    }
+    let mut edges = matches
+        .iter()
+        .filter_map(|(&(i, j), match_info)| {
+            let source = images.get(i)?;
+            let target = images.get(j)?;
+            let weight = edge_weight(source, target, match_info);
+            weight.is_finite().then_some((weight, i, j))
+        })
+        .collect::<Vec<_>>();
     edges.sort_by(|left, right| {
         let left_names = {
             let first = images[left.1].filename.as_str();
@@ -3854,7 +3899,7 @@ fn build_stitching_order(
         };
         right
             .0
-            .cmp(&left.0)
+            .total_cmp(&left.0)
             .then_with(|| left_names.cmp(&right_names))
     });
 
@@ -3926,96 +3971,80 @@ fn build_stitching_order(
     (ordered_indices, global_homographies)
 }
 
-fn build_focus_stack_stitching_order(
+fn focus_match_center_motion_ratio(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    match_info: &MatchInfo,
+) -> Option<f64> {
+    let source_center = Point2::new(source.width as f64 * 0.5, source.height as f64 * 0.5);
+    let target_center = Point2::new(target.width as f64 * 0.5, target.height as f64 * 0.5);
+    let mapped_center = transformed_point(&match_info.homography, source_center)?;
+    let scale = source
+        .width
+        .max(source.height)
+        .max(target.width.max(target.height))
+        .max(1) as f64;
+    let displacement = (mapped_center - target_center).norm();
+    (displacement.is_finite()).then_some(displacement / scale)
+}
+
+fn focus_auto_order_motion_scale(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
-) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
-    if images.len() < 2 {
-        let mut homographies = HashMap::new();
-        if let Some(image) = images.first() {
-            homographies.insert(image.id, Matrix3::identity());
-        }
-        return ((0..images.len()).collect(), homographies);
-    }
-
-    // Focus stacking is a source-order operation: later layers must compete
-    // with the pixels already selected from earlier layers. For a moving scan,
-    // using the panorama MST here can reorder frames around high-texture areas
-    // and then compound unrelated transforms. Keep the user/import order and
-    // choose a strong nearby link for each frame instead.
-    let ordered_indices = (0..images.len()).collect::<Vec<_>>();
-    let mut global_homographies = HashMap::new();
-    global_homographies.insert(ordered_indices[0], Matrix3::identity());
-
-    for position in 1..ordered_indices.len() {
-        let current = ordered_indices[position];
-        let preferred_gap = position.min(FOCUS_SEQUENCE_LINK_WINDOW);
-        let mut best_link: Option<(f64, usize, usize, Matrix3<f64>)> = None;
-
-        for gap in 1..=preferred_gap {
-            let previous = ordered_indices[position - gap];
-            let Some((inliers, current_to_previous)) =
-                focus_stack_link_transform(matches, current, previous)
-            else {
-                continue;
-            };
-            let score =
-                inliers as f64 - (gap.saturating_sub(1) as f64) * FOCUS_SEQUENCE_GAP_PENALTY;
-            let should_replace =
-                best_link
-                    .as_ref()
-                    .is_none_or(|(best_score, best_inliers, best_gap, _)| {
-                        score > *best_score
-                            || (score == *best_score
-                                && (inliers > *best_inliers
-                                    || (inliers == *best_inliers && gap < *best_gap)))
-                    });
-            if should_replace {
-                best_link = Some((score, inliers, gap, current_to_previous));
-            }
-        }
-
-        // The normal scalable matcher considers a four-frame window. If the
-        // preferred one/two-frame path has a missing edge, use the remaining
-        // nearby links before falling back to the generic graph order.
-        if best_link.is_none() {
-            for gap in (preferred_gap + 1)..=position.min(LARGE_STACK_NEIGHBOR_WINDOW) {
-                let previous = ordered_indices[position - gap];
-                let Some((inliers, current_to_previous)) =
-                    focus_stack_link_transform(matches, current, previous)
-                else {
-                    continue;
-                };
-                let score =
-                    inliers as f64 - (gap.saturating_sub(1) as f64) * FOCUS_SEQUENCE_GAP_PENALTY;
-                let should_replace =
-                    best_link
-                        .as_ref()
-                        .is_none_or(|(best_score, best_inliers, best_gap, _)| {
-                            score > *best_score
-                                || (score == *best_score
-                                    && (inliers > *best_inliers
-                                        || (inliers == *best_inliers && gap < *best_gap)))
-                        });
-                if should_replace {
-                    best_link = Some((score, inliers, gap, current_to_previous));
-                }
-            }
-        }
-
-        let Some((_, _, gap, current_to_previous)) = best_link else {
-            return build_stitching_order(images, matches);
+) -> f64 {
+    let mut minimum_motion_by_image = vec![f64::INFINITY; images.len()];
+    for (&(source_index, target_index), match_info) in matches {
+        let Some(source) = images.get(source_index) else {
+            continue;
         };
-        let previous = ordered_indices[position - gap];
-        let Some(previous_global) = global_homographies.get(&previous).copied() else {
-            return build_stitching_order(images, matches);
+        let Some(target) = images.get(target_index) else {
+            continue;
         };
-        global_homographies.insert(current, previous_global * current_to_previous);
+        let Some(motion) = focus_match_center_motion_ratio(source, target, match_info) else {
+            continue;
+        };
+        if motion <= FOCUS_AUTO_ORDER_MOTION_SCALE_FLOOR * 0.1 {
+            continue;
+        }
+        minimum_motion_by_image[source_index] = minimum_motion_by_image[source_index].min(motion);
+        minimum_motion_by_image[target_index] = minimum_motion_by_image[target_index].min(motion);
     }
+    let mut finite_minimums = minimum_motion_by_image
+        .into_iter()
+        .filter(|motion| motion.is_finite())
+        .collect::<Vec<_>>();
+    median_value(&mut finite_minimums).unwrap_or(0.0)
+}
 
-    let global_homographies =
-        optimize_focus_stack_global_homographies(images, matches, &global_homographies);
-    (ordered_indices, global_homographies)
+fn focus_auto_order_edge_weight(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    match_info: &MatchInfo,
+    motion_scale: f64,
+) -> f64 {
+    let support = (match_info.inliers.max(1) as f64).sqrt();
+    let precision = if match_info.points.len() >= 4 {
+        let error = median_symmetric_error(&match_info.homography, &match_info.points);
+        if error.is_finite() {
+            1.0 / (1.0 + error / FOCUS_MODEL_INLIER_THRESHOLD)
+        } else {
+            0.0
+        }
+    } else {
+        1.0
+    };
+    let motion_factor = if motion_scale > FOCUS_AUTO_ORDER_MOTION_SCALE_FLOOR {
+        let motion =
+            focus_match_center_motion_ratio(source, target, match_info).unwrap_or(f64::INFINITY);
+        if motion.is_finite() {
+            1.0 / (1.0 + (motion / motion_scale).powf(FOCUS_AUTO_ORDER_MOTION_EXPONENT))
+        } else {
+            0.0
+        }
+    } else {
+        1.0
+    };
+    support * precision * motion_factor
 }
 
 fn focus_stack_link_transform(
@@ -4032,6 +4061,340 @@ fn focus_stack_link_transform(
             .try_inverse()
             .map(|transform| (match_info.inliers, transform))
     })
+}
+
+fn focus_auto_order_edge_weight_between(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    left: usize,
+    right: usize,
+    motion_scale: f64,
+) -> Option<f64> {
+    if let Some(match_info) = matches.get(&(left, right)) {
+        return Some(focus_auto_order_edge_weight(
+            &images[left],
+            &images[right],
+            match_info,
+            motion_scale,
+        ));
+    }
+    matches.get(&(right, left)).map(|match_info| {
+        focus_auto_order_edge_weight(&images[right], &images[left], match_info, motion_scale)
+    })
+}
+
+fn focus_auto_order_path_score(
+    order: &[usize],
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    motion_scale: f64,
+) -> (usize, f64) {
+    let mut matched_edges = 0usize;
+    let mut score = 0.0;
+    for pair in order.windows(2) {
+        if let Some(edge_weight) =
+            focus_auto_order_edge_weight_between(images, matches, pair[0], pair[1], motion_scale)
+        {
+            matched_edges += 1;
+            score += edge_weight;
+        } else {
+            score -= FOCUS_AUTO_ORDER_MISSING_EDGE_PENALTY;
+        }
+    }
+    (matched_edges, score)
+}
+
+fn focus_auto_order_path_motion_cost(
+    order: &[usize],
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> f64 {
+    order
+        .windows(2)
+        .filter_map(|pair| {
+            if let Some(match_info) = matches.get(&(pair[0], pair[1])) {
+                focus_match_center_motion_ratio(&images[pair[0]], &images[pair[1]], match_info)
+            } else {
+                matches.get(&(pair[1], pair[0])).and_then(|match_info| {
+                    focus_match_center_motion_ratio(&images[pair[1]], &images[pair[0]], match_info)
+                })
+            }
+        })
+        .sum()
+}
+
+fn canonical_focus_order_direction(order: &[usize], images: &[ImageInfo]) -> Vec<usize> {
+    if order.len() < 2 {
+        return order.to_vec();
+    }
+    let first = order[0];
+    let last = *order
+        .last()
+        .expect("an order with two images has a last image");
+    let direction = natural_path_cmp(&images[first].filename, &images[last].filename)
+        .then_with(|| first.cmp(&last));
+    if direction == Ordering::Greater {
+        order.iter().rev().copied().collect()
+    } else {
+        order.to_vec()
+    }
+}
+
+fn focus_auto_order_adjacency(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    motion_scale: f64,
+) -> Vec<Vec<(usize, f64)>> {
+    let mut adjacency = vec![Vec::new(); images.len()];
+    for (&(left, right), match_info) in matches {
+        if left >= images.len() || right >= images.len() || left == right {
+            continue;
+        }
+        let weight =
+            focus_auto_order_edge_weight(&images[left], &images[right], match_info, motion_scale);
+        if !weight.is_finite() {
+            continue;
+        }
+        adjacency[left].push((right, weight));
+        adjacency[right].push((left, weight));
+    }
+    for neighbors in &mut adjacency {
+        neighbors.sort_by(|(left_index, left_weight), (right_index, right_weight)| {
+            right_weight
+                .total_cmp(left_weight)
+                .then_with(|| {
+                    natural_path_cmp(
+                        &images[*left_index].filename,
+                        &images[*right_index].filename,
+                    )
+                })
+                .then_with(|| left_index.cmp(right_index))
+        });
+    }
+    adjacency
+}
+
+fn focus_auto_order_greedy_path(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    motion_scale: f64,
+) -> Vec<usize> {
+    if images.len() < 2 {
+        return (0..images.len()).collect();
+    }
+    let adjacency = focus_auto_order_adjacency(images, matches, motion_scale);
+    let mut best_order = Vec::new();
+    let mut best_matched_edges = 0usize;
+    let mut best_score = f64::NEG_INFINITY;
+
+    for start in 0..images.len() {
+        let mut order = vec![start];
+        let mut used = vec![false; images.len()];
+        used[start] = true;
+        while order.len() < images.len() {
+            let current = *order
+                .last()
+                .expect("a greedy path always has a current image");
+            let next = adjacency[current]
+                .iter()
+                .filter(|(neighbor, _)| !used[*neighbor])
+                .max_by(|(left, left_weight), (right, right_weight)| {
+                    let left_future = adjacency[*left]
+                        .iter()
+                        .filter(|(neighbor, _)| !used[*neighbor] && *neighbor != current)
+                        .map(|(_, weight)| *weight)
+                        .max_by(f64::total_cmp)
+                        .unwrap_or(0.0);
+                    let right_future = adjacency[*right]
+                        .iter()
+                        .filter(|(neighbor, _)| !used[*neighbor] && *neighbor != current)
+                        .map(|(_, weight)| *weight)
+                        .max_by(f64::total_cmp)
+                        .unwrap_or(0.0);
+                    (left_weight + left_future * 0.25)
+                        .total_cmp(&(right_weight + right_future * 0.25))
+                        .then_with(|| {
+                            natural_path_cmp(&images[*left].filename, &images[*right].filename)
+                                .reverse()
+                        })
+                })
+                .map(|(neighbor, _)| *neighbor)
+                .or_else(|| {
+                    (0..images.len())
+                        .filter(|neighbor| !used[*neighbor])
+                        .min_by(|left, right| {
+                            natural_path_cmp(&images[*left].filename, &images[*right].filename)
+                                .then_with(|| left.cmp(right))
+                        })
+                });
+            let Some(next) = next else {
+                break;
+            };
+            used[next] = true;
+            order.push(next);
+        }
+
+        let (matched_edges, score) =
+            focus_auto_order_path_score(&order, images, matches, motion_scale);
+        let motion_cost = focus_auto_order_path_motion_cost(&order, images, matches);
+        let best_motion_cost = focus_auto_order_path_motion_cost(&best_order, images, matches);
+        if best_order.is_empty()
+            || matched_edges > best_matched_edges
+            || (matched_edges == best_matched_edges
+                && (motion_cost < best_motion_cost
+                    || (motion_cost == best_motion_cost && score > best_score)))
+        {
+            best_order = order;
+            best_matched_edges = matched_edges;
+            best_score = score;
+        }
+    }
+    best_order
+}
+
+fn build_focus_sequence_homographies(
+    order: &[usize],
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    motion_scale: f64,
+) -> Option<HashMap<usize, Matrix3<f64>>> {
+    let first = *order.first()?;
+    let mut global_homographies = HashMap::new();
+    global_homographies.insert(first, Matrix3::identity());
+
+    for (position, &current) in order.iter().enumerate().skip(1) {
+        let mut best_link: Option<(f64, f64, usize, usize, Matrix3<f64>)> = None;
+        for previous_position in (0..position).rev() {
+            let previous = order[previous_position];
+            let Some((_, current_to_previous)) =
+                focus_stack_link_transform(matches, current, previous)
+            else {
+                continue;
+            };
+            let Some(edge_weight) = focus_auto_order_edge_weight_between(
+                images,
+                matches,
+                current,
+                previous,
+                motion_scale,
+            ) else {
+                continue;
+            };
+            let gap = position - previous_position;
+            let score = edge_weight - gap.saturating_sub(1) as f64 * FOCUS_AUTO_ORDER_GAP_PENALTY;
+            let should_replace =
+                best_link
+                    .as_ref()
+                    .is_none_or(|(best_score, best_weight, best_gap, _, _)| {
+                        score > *best_score
+                            || (score == *best_score
+                                && (edge_weight > *best_weight
+                                    || (edge_weight == *best_weight && gap < *best_gap)))
+                    });
+            if should_replace {
+                best_link = Some((score, edge_weight, gap, previous, current_to_previous));
+            }
+        }
+        let (_, _, _, previous, current_to_previous) = best_link?;
+        let previous_global = global_homographies.get(&previous).copied()?;
+        global_homographies.insert(current, previous_global * current_to_previous);
+    }
+    Some(global_homographies)
+}
+
+fn build_focus_stack_stitching_order(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
+    if images.len() < 2 {
+        let mut homographies = HashMap::new();
+        if let Some(image) = images.first() {
+            homographies.insert(image.id, Matrix3::identity());
+        }
+        return ((0..images.len()).collect(), homographies);
+    }
+
+    // Focus stacking still has an order-sensitive ownership pass, but that
+    // order must come from the image evidence rather than from upload order.
+    // Build a maximum-confidence overlap graph, preferring strong, precise,
+    // spatially-near matches. Compare several deterministic paths against the
+    // graph: upload order, natural filename order, a graph traversal, and a
+    // greedy visual path. This lets a camera sequence encoded in filenames win
+    // when it is genuinely supported by image evidence, while still working
+    // when filenames carry no useful order.
+    let motion_scale = focus_auto_order_motion_scale(images, matches);
+    let (graph_order, graph_homographies) =
+        build_graph_stitching_order(images, matches, |source, target, match_info| {
+            focus_auto_order_edge_weight(source, target, match_info, motion_scale)
+        });
+    let mut filename_order = (0..images.len()).collect::<Vec<_>>();
+    filename_order.sort_by(|&left, &right| {
+        natural_path_cmp(&images[left].filename, &images[right].filename)
+            .then_with(|| left.cmp(&right))
+    });
+    let input_order =
+        canonical_focus_order_direction(&(0..images.len()).collect::<Vec<_>>(), images);
+    let filename_order = canonical_focus_order_direction(&filename_order, images);
+    let graph_order = canonical_focus_order_direction(&graph_order, images);
+    let greedy_order = canonical_focus_order_direction(
+        &focus_auto_order_greedy_path(images, matches, motion_scale),
+        images,
+    );
+    let candidate_orders = vec![
+        ("input", input_order, 0u8),
+        ("filename", filename_order, 3u8),
+        ("graph", graph_order.clone(), 1u8),
+        ("visual", greedy_order, 2u8),
+    ];
+    let mut candidate_summaries = Vec::new();
+    let mut selected = candidate_orders
+        .into_iter()
+        .filter(|(_, order, _)| order.len() == images.len())
+        .map(|(name, order, priority)| {
+            let (matched_edges, score) =
+                focus_auto_order_path_score(&order, images, matches, motion_scale);
+            let motion_cost = focus_auto_order_path_motion_cost(&order, images, matches);
+            candidate_summaries.push(format!(
+                "{name}={matched_edges}/{}:{score:.2}/motion{motion_cost:.3}",
+                images.len().saturating_sub(1),
+            ));
+            (name, order, matched_edges, score, motion_cost, priority)
+        })
+        .max_by(|left, right| {
+            left.2
+                .cmp(&right.2)
+                .then_with(|| right.4.total_cmp(&left.4))
+                .then_with(|| left.3.total_cmp(&right.3))
+                .then_with(|| left.5.cmp(&right.5))
+        });
+    let Some((selected_name, selected_order, matched_edges, selected_score, _, _)) =
+        selected.take()
+    else {
+        return (graph_order, graph_homographies);
+    };
+    let initial_homographies = if selected_name == "graph" {
+        Some(graph_homographies)
+    } else {
+        build_focus_sequence_homographies(&selected_order, images, matches, motion_scale)
+            .or_else(|| (graph_order.len() == images.len()).then_some(graph_homographies))
+    };
+    let Some(initial_homographies) = initial_homographies else {
+        return (graph_order, HashMap::new());
+    };
+    let reference_index = selected_order[0];
+    let global_homographies = optimize_focus_stack_global_homographies_with_reference(
+        images,
+        matches,
+        &initial_homographies,
+        reference_index,
+    );
+    println!(
+        "Focus auto-order selected {selected_name} path with {matched_edges}/{} adjacent matches and score {selected_score:.2} (candidates: {}; local motion scale {:.3}%)",
+        images.len().saturating_sub(1),
+        candidate_summaries.join(", "),
+        motion_scale * 100.0,
+    );
+    (selected_order, global_homographies)
 }
 
 type FocusPose = [f64; 8];
@@ -4544,6 +4907,7 @@ fn focus_global_robust_cost(
     poses: &[FocusPose],
     initial_poses: &[FocusPose],
     observations: &[FocusGlobalObservation],
+    reference_index: usize,
 ) -> f64 {
     let mut cost = 0.0;
     for observation in observations {
@@ -4568,7 +4932,10 @@ fn focus_global_robust_cost(
             FOCUS_GLOBAL_HUBER_THRESHOLD * (magnitude - 0.5 * FOCUS_GLOBAL_HUBER_THRESHOLD)
         };
     }
-    for (image_index, pose) in poses.iter().enumerate().skip(1) {
+    for (image_index, pose) in poses.iter().enumerate() {
+        if image_index == reference_index {
+            continue;
+        }
         for parameter in 0..8 {
             let prior_weight = if parameter >= 6 {
                 FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT
@@ -4586,6 +4953,7 @@ fn focus_global_normal_equations(
     poses: &[FocusPose],
     initial_poses: &[FocusPose],
     observations: &[FocusGlobalObservation],
+    reference_index: usize,
 ) -> (nalgebra::DMatrix<f64>, nalgebra::DVector<f64>) {
     let variable_count = poses.len().saturating_sub(1) * 8;
     let mut normal = nalgebra::DMatrix::zeros(variable_count, variable_count);
@@ -4618,16 +4986,24 @@ fn focus_global_normal_equations(
             (residual.y, source_y_jacobian, target_y_jacobian),
         ] {
             let mut jacobian_entries = Vec::with_capacity(16);
-            if observation.source_index > 0 {
-                let base = (observation.source_index - 1) * 8;
-                for parameter in 0..8 {
-                    jacobian_entries.push((base + parameter, source_jacobian[parameter]));
+            if observation.source_index != reference_index {
+                let base = if observation.source_index < reference_index {
+                    observation.source_index * 8
+                } else {
+                    (observation.source_index - 1) * 8
+                };
+                for (parameter, &value) in source_jacobian.iter().enumerate() {
+                    jacobian_entries.push((base + parameter, value));
                 }
             }
-            if observation.target_index > 0 {
-                let base = (observation.target_index - 1) * 8;
-                for parameter in 0..8 {
-                    jacobian_entries.push((base + parameter, -target_jacobian[parameter]));
+            if observation.target_index != reference_index {
+                let base = if observation.target_index < reference_index {
+                    observation.target_index * 8
+                } else {
+                    (observation.target_index - 1) * 8
+                };
+                for (parameter, &value) in target_jacobian.iter().enumerate() {
+                    jacobian_entries.push((base + parameter, -value));
                 }
             }
             for &(column, jacobian) in &jacobian_entries {
@@ -4639,8 +5015,15 @@ fn focus_global_normal_equations(
         }
     }
 
-    for (image_index, pose) in poses.iter().enumerate().skip(1) {
-        let base = (image_index - 1) * 8;
+    for (image_index, pose) in poses.iter().enumerate() {
+        if image_index == reference_index {
+            continue;
+        }
+        let base = if image_index < reference_index {
+            image_index * 8
+        } else {
+            (image_index - 1) * 8
+        };
         for parameter in 0..8 {
             let prior_weight = if parameter >= 6 {
                 FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT
@@ -4655,17 +5038,19 @@ fn focus_global_normal_equations(
     (normal, gradient)
 }
 
-fn optimize_focus_stack_global_homographies(
+fn optimize_focus_stack_global_homographies_with_reference(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    reference_index: usize,
 ) -> HashMap<usize, Matrix3<f64>> {
-    optimize_focus_stack_global_homographies_in_region_mode(
+    optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         images,
         matches,
         initial_homographies,
         None,
         false,
+        reference_index,
     )
 }
 
@@ -4675,12 +5060,13 @@ fn optimize_focus_stack_global_homographies_in_region(
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     normalized_y_range: Option<(f64, f64)>,
 ) -> HashMap<usize, Matrix3<f64>> {
-    optimize_focus_stack_global_homographies_in_region_mode(
+    optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         images,
         matches,
         initial_homographies,
         normalized_y_range,
         true,
+        0,
     )
 }
 
@@ -4690,28 +5076,28 @@ fn optimize_focus_stack_global_homographies_in_generic_region(
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     normalized_y_range: (f64, f64),
 ) -> HashMap<usize, Matrix3<f64>> {
-    optimize_focus_stack_global_homographies_in_region_mode(
+    optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         images,
         matches,
         initial_homographies,
         Some(normalized_y_range),
         false,
+        0,
     )
 }
 
-fn optimize_focus_stack_global_homographies_in_region_mode(
+fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     normalized_y_range: Option<(f64, f64)>,
     use_foreground_region_matches: bool,
+    reference_index: usize,
 ) -> HashMap<usize, Matrix3<f64>> {
-    if images.len() < 2 {
+    if images.len() < 2 || reference_index >= images.len() {
         return initial_homographies.clone();
     }
-    let Some(reference) = images.first() else {
-        return initial_homographies.clone();
-    };
+    let reference = &images[reference_index];
     let coordinate_scale = images
         .iter()
         .map(|image| image.width.max(image.height) as f64)
@@ -4727,7 +5113,7 @@ fn optimize_focus_stack_global_homographies_in_region_mode(
         };
         initial_poses.push(pose);
     }
-    initial_poses[0] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+    initial_poses[reference_index] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
     let initial_pose_maxima = (0..8)
         .map(|parameter| {
             initial_poses
@@ -4761,7 +5147,8 @@ fn optimize_focus_stack_global_homographies_in_region_mode(
         return initial_homographies.clone();
     }
     let mut poses = initial_poses.clone();
-    let mut current_cost = focus_global_robust_cost(&poses, &initial_poses, &observations);
+    let mut current_cost =
+        focus_global_robust_cost(&poses, &initial_poses, &observations, reference_index);
     if !current_cost.is_finite() {
         return initial_homographies.clone();
     }
@@ -4773,7 +5160,7 @@ fn optimize_focus_stack_global_homographies_in_region_mode(
 
     for _ in 0..FOCUS_GLOBAL_MAX_ITERATIONS {
         let (normal, gradient) =
-            focus_global_normal_equations(&poses, &initial_poses, &observations);
+            focus_global_normal_equations(&poses, &initial_poses, &observations, reference_index);
         let right_hand_side = -gradient;
         let Some(delta) = normal.lu().solve(&right_hand_side) else {
             break;
@@ -4821,8 +5208,12 @@ fn optimize_focus_stack_global_homographies_in_region_mode(
             if !focus_global_poses_are_valid(&candidate, images, reference, coordinate_scale) {
                 continue;
             }
-            let candidate_cost =
-                focus_global_robust_cost(&candidate, &initial_poses, &observations);
+            let candidate_cost = focus_global_robust_cost(
+                &candidate,
+                &initial_poses,
+                &observations,
+                reference_index,
+            );
             if candidate_cost.is_finite() && candidate_cost + 1e-12 < current_cost {
                 accepted = Some((candidate, candidate_cost));
                 break;
@@ -5510,6 +5901,13 @@ mod alignment_tests {
         }
     }
 
+    fn focus_test_image(id: usize, filename: &str) -> ImageInfo {
+        let mut image = test_image(id, filename);
+        image.width = 1_000;
+        image.height = 1_000;
+        image
+    }
+
     fn identity_match(inliers: usize) -> MatchInfo {
         MatchInfo {
             homography: Matrix3::identity(),
@@ -5576,7 +5974,7 @@ mod alignment_tests {
                 test_image(index, &format!("tile-{number}.jpg"))
             })
             .collect::<Vec<_>>();
-        let pairs = pairs_to_match_for_images(&images);
+        let pairs = pairs_to_match_for_images(&images, BlendMode::Panorama);
         let index_for_number = |number: usize| {
             images
                 .iter()
@@ -5593,6 +5991,22 @@ mod alignment_tests {
     }
 
     #[test]
+    fn medium_focus_stack_candidates_are_independent_of_upload_order() {
+        let images = (0..45)
+            .map(|index| test_image(index, &format!("upload-random-{index}.jpg")))
+            .collect::<Vec<_>>();
+        let pairs = pairs_to_match_for_images(&images, BlendMode::FocusStack);
+
+        assert_eq!(
+            pairs.len(),
+            45 * 44 / 2,
+            "a medium focus stack must inspect every possible overlap before ordering"
+        );
+        assert!(pairs.contains(&(0, 44)));
+        assert!(pairs.contains(&(7, 31)));
+    }
+
+    #[test]
     fn natural_path_order_compares_numeric_filename_runs() {
         let mut paths = ["tile-10.jpg", "tile-2.jpg", "tile-001.jpg", "tile-1.jpg"];
         paths.sort_by(|left, right| natural_path_cmp(left, right));
@@ -5604,30 +6018,29 @@ mod alignment_tests {
     }
 
     #[test]
-    fn focus_stack_order_preserves_input_sequence_over_a_high_inlier_mst() {
+    fn focus_stack_order_is_rebuilt_from_overlap_evidence() {
         let images = vec![
-            test_image(0, "DSC08854.jpg"),
-            test_image(1, "DSC08855.jpg"),
-            test_image(2, "DSC08856.jpg"),
-            test_image(3, "DSC08857.jpg"),
+            focus_test_image(0, "random-c.jpg"),
+            focus_test_image(1, "random-a.jpg"),
+            focus_test_image(2, "random-d.jpg"),
+            focus_test_image(3, "random-b.jpg"),
         ];
         let matches = HashMap::from([
-            ((0, 1), translation_match(100.0, 0.0, 30)),
-            ((1, 2), translation_match(100.0, 0.0, 35)),
-            ((2, 3), translation_match(100.0, 0.0, 25)),
-            // The generic panorama MST would prefer these long links and can
-            // traverse the source layers in a non-capture order.
-            ((0, 2), translation_match(200.0, 0.0, 400)),
-            ((0, 3), translation_match(300.0, 0.0, 350)),
+            ((0, 2), translation_match(100.0, 0.0, 30)),
+            ((2, 3), translation_match(100.0, 0.0, 35)),
+            ((3, 1), translation_match(100.0, 0.0, 25)),
+            // A long overlap can have more descriptors than its immediate
+            // neighbor. Motion-aware graph weights must still prefer the
+            // local capture path.
+            ((0, 3), translation_match(200.0, 0.0, 400)),
+            ((0, 1), translation_match(300.0, 0.0, 350)),
         ]);
 
         let (order, homographies) = build_focus_stack_stitching_order(&images, &matches);
 
-        assert_eq!(order, vec![0, 1, 2, 3]);
-        assert_eq!(homographies[&0], Matrix3::identity());
-        assert_eq!(homographies[&1][(0, 2)], -100.0);
-        assert_eq!(homographies[&2][(0, 2)], -200.0);
-        assert_eq!(homographies[&3][(0, 2)], -300.0);
+        assert_eq!(order.len(), images.len());
+        assert!(order == vec![1, 3, 2, 0] || order == vec![0, 2, 3, 1]);
+        assert_eq!(homographies[&order[0]], Matrix3::identity());
     }
 
     #[test]
@@ -6137,6 +6550,9 @@ mod acceptance_tests {
         paths.sort_by(|left, right| {
             natural_path_cmp(&left.to_string_lossy(), &right.to_string_lossy())
         });
+        if std::env::var_os("RAW_EDITOR_ORDERED_PANORAMA_REVERSE_INPUT").is_some() {
+            paths.reverse();
+        }
         assert!(paths.len() >= 2, "fixture must contain at least two images");
         paths
     }
@@ -6285,7 +6701,7 @@ mod acceptance_tests {
                 .collect::<Vec<_>>()
                 .join(" | ")
         );
-        let candidate_pairs = pairs_to_match_for_images(&images);
+        let candidate_pairs = pairs_to_match_for_images(&images, blend_mode);
         let matches = candidate_pairs
             .par_iter()
             .filter_map(|&(source, target)| {

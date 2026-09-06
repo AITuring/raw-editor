@@ -24,6 +24,8 @@ const screenTransformSource = fs.readFileSync(
   path.join(repoRoot, 'src/hooks/useScreenSpacePreviewTransform.ts'),
   'utf8',
 );
+const appSource = fs.readFileSync(path.join(repoRoot, 'src/App.tsx'), 'utf8');
+const contextMenuSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useAppContextMenus.ts'), 'utf8');
 const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
 const rustStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
 const rustStitchingSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/panorama_stitching.rs'), 'utf8');
@@ -54,6 +56,8 @@ assert.match(listenerSource, /fullCanvasWidth/);
 assert.match(listenerSource, /fullCanvasHeight/);
 assert.match(listenerSource, /renderScale/);
 assert.match(previewSource, /modals\.imageStack\.memorySafeResult/);
+assert.match(appSource, /sourcePaths: paths/);
+assert.match(contextMenuSource, /sourcePaths: finalSelection/);
 
 const cleanupMatch = reusablePreviewSource.match(/useEffect\(\s*\(\) => \(\) => \{([\s\S]*?)\}\s*,\s*\[\]\s*,?\s*\);/);
 
