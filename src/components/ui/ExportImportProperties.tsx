@@ -33,7 +33,10 @@ export const FILENAME_VARIABLES: Array<string> = [
   '{mm}',
 ];
 
+export type ExportBitDepth = 8 | 16;
+
 export interface ExportSettings {
+  bitDepth?: ExportBitDepth;
   embedColorProfile?: boolean;
   filenameTemplate: string | null;
   jpegQuality: number;
@@ -111,6 +114,7 @@ export interface ExportPreset {
   id: string;
   name: string;
   fileFormat: string;
+  bitDepth?: ExportBitDepth;
   jpegQuality: number;
   enableResize: boolean;
   resizeMode: string;

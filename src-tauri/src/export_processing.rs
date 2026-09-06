@@ -41,7 +41,8 @@ use tiff::Directory as TiffDirectory;
 #[cfg(not(target_os = "android"))]
 use tiff::encoder::{
     DirectoryEncoder as TiffDirectoryEncoder, TiffEncoder as StreamingTiffEncoder,
-    TiffKindStandard, colortype::RGB16,
+    TiffKindStandard, TiffValue, colortype::ColorType as TiffColorType, colortype::RGB8,
+    colortype::RGB16,
 };
 #[cfg(not(target_os = "android"))]
 use tiff::tags::{Tag as TiffTag, Type as TiffType};
@@ -100,6 +101,8 @@ pub struct ResizeOptions {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSettings {
+    #[serde(default = "default_export_bit_depth")]
+    pub bit_depth: u8,
     pub jpeg_quality: u8,
     pub resize: Option<ResizeOptions>,
     pub keep_metadata: bool,
@@ -120,6 +123,30 @@ pub struct ExportSettings {
 
 const fn default_embed_color_profile() -> bool {
     true
+}
+
+pub(crate) fn default_export_bit_depth_for_format(output_format: &str) -> u8 {
+    match output_format.to_ascii_lowercase().as_str() {
+        "png" | "tif" | "tiff" => 16,
+        _ => 8,
+    }
+}
+
+pub(crate) fn effective_export_bit_depth(output_format: &str, requested_bit_depth: u8) -> u8 {
+    if requested_bit_depth == 16
+        && matches!(
+            output_format.to_ascii_lowercase().as_str(),
+            "png" | "tif" | "tiff"
+        )
+    {
+        16
+    } else {
+        8
+    }
+}
+
+const fn default_export_bit_depth() -> u8 {
+    8
 }
 
 #[derive(Clone)]
@@ -928,6 +955,7 @@ fn save_image_with_metadata(
         &extension,
         export_settings.jpeg_quality,
         export_settings.embed_color_profile,
+        export_settings.bit_depth,
     )?;
     ensure_export_not_cancelled(cancellation_token)?;
 
@@ -1802,6 +1830,7 @@ fn encode_streaming_png<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    bit_depth: u8,
     embed_color_profile: bool,
     export_exif: Option<&[u8]>,
     render_rows: F,
@@ -1809,9 +1838,14 @@ fn encode_streaming_png<F>(
 where
     F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
 {
+    let bit_depth = effective_export_bit_depth("png", bit_depth);
     let mut info = PngInfo::with_size(width, height);
     info.color_type = PngColorType::Rgba;
-    info.bit_depth = BitDepth::Eight;
+    info.bit_depth = if bit_depth == 16 {
+        BitDepth::Sixteen
+    } else {
+        BitDepth::Eight
+    };
     info.icc_profile = embed_color_profile.then(|| Cow::Owned(srgb_v4_profile().to_vec()));
     info.exif_metadata = export_exif.map(|metadata| Cow::Owned(metadata.to_vec()));
     let writer = BufWriter::new(output);
@@ -1823,12 +1857,31 @@ where
     let mut stream = png_writer
         .stream_writer_with_size(64 * 1024)
         .map_err(|error| format!("Failed to start streaming PNG encoder: {error}"))?;
+    let mut rgba16_row = if bit_depth == 16 {
+        vec![
+            0_u8;
+            (width as usize)
+                .checked_mul(8)
+                .ok_or_else(|| format!("PNG width {width} exceeds the row size limit"))?
+        ]
+    } else {
+        Vec::new()
+    };
     let mut written_rows = 0_u32;
     {
         let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
             validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+            let row = if bit_depth == 16 {
+                for (index, sample) in rgba_row.iter().copied().enumerate() {
+                    let bytes = (u16::from(sample) * 257).to_be_bytes();
+                    rgba16_row[index * 2..index * 2 + 2].copy_from_slice(&bytes);
+                }
+                rgba16_row.as_slice()
+            } else {
+                rgba_row
+            };
             stream
-                .write_all(rgba_row)
+                .write_all(row)
                 .map_err(|error| format!("Failed to stream PNG row {written_rows}: {error}"))?;
             written_rows += 1;
             Ok(())
@@ -1926,11 +1979,50 @@ fn encode_streaming_tiff<F>(
     output: &mut fs::File,
     width: u32,
     height: u32,
+    bit_depth: u8,
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
     render_rows: F,
 ) -> Result<(), String>
 where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    if effective_export_bit_depth("tiff", bit_depth) == 16 {
+        encode_streaming_tiff_typed::<RGB16, _>(
+            output,
+            width,
+            height,
+            embed_color_profile,
+            export_metadata,
+            |sample| u16::from(sample) * 257,
+            render_rows,
+        )
+    } else {
+        encode_streaming_tiff_typed::<RGB8, _>(
+            output,
+            width,
+            height,
+            embed_color_profile,
+            export_metadata,
+            |sample| sample,
+            render_rows,
+        )
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_streaming_tiff_typed<C, F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+    to_sample: fn(u8) -> C::Inner,
+    render_rows: F,
+) -> Result<(), String>
+where
+    C: TiffColorType,
+    [C::Inner]: TiffValue,
     F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
 {
     const ROWS_PER_STRIP: u32 = 64;
@@ -1989,7 +2081,7 @@ where
     };
 
     let mut image = encoder
-        .new_image::<RGB16>(width, height)
+        .new_image::<C>(width, height)
         .map_err(|error| format!("Failed to configure streaming TIFF image: {error}"))?;
     if let Some(metadata) = export_metadata
         && has_writable_tiff_metadata_group(metadata, ExifTagGroup::GENERIC)
@@ -2022,7 +2114,7 @@ where
         .checked_mul(3)
         .and_then(|samples_per_row| samples_per_row.checked_mul(ROWS_PER_STRIP as usize))
         .ok_or_else(|| format!("TIFF width {width} exceeds the strip size limit"))?;
-    let mut strip = Vec::<u16>::new();
+    let mut strip = Vec::<C::Inner>::new();
     strip
         .try_reserve_exact(strip_capacity)
         .map_err(|error| format!("Failed to reserve the TIFF strip buffer: {error}"))?;
@@ -2031,9 +2123,9 @@ where
         let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
             validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
             for pixel in rgba_row.chunks_exact(4) {
-                strip.push(u16::from(pixel[0]) * 257);
-                strip.push(u16::from(pixel[1]) * 257);
-                strip.push(u16::from(pixel[2]) * 257);
+                strip.push(to_sample(pixel[0]));
+                strip.push(to_sample(pixel[1]));
+                strip.push(to_sample(pixel[2]));
             }
             written_rows += 1;
 
@@ -2072,21 +2164,61 @@ pub(crate) fn encode_rgb16_tiff_with_metadata(
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
+    encode_rgb_tiff_with_metadata::<RGB16>(
+        output,
+        width,
+        height,
+        rgb16,
+        embed_color_profile,
+        export_metadata,
+    )
+}
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgb8_tiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgb8: &[u8],
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_rgb_tiff_with_metadata::<RGB8>(
+        output,
+        width,
+        height,
+        rgb8,
+        embed_color_profile,
+        export_metadata,
+    )
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_rgb_tiff_with_metadata<C>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    data: &[C::Inner],
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String>
+where
+    C: TiffColorType,
+    [C::Inner]: TiffValue,
+{
     let expected_samples = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(3))
-        .ok_or_else(|| {
-            "The RGB16 TIFF dimensions exceed the addressable sample count".to_string()
-        })?;
-    if rgb16.len() != expected_samples {
+        .ok_or_else(|| "The RGB TIFF dimensions exceed the addressable sample count".to_string())?;
+    if data.len() != expected_samples {
         return Err(format!(
-            "RGB16 TIFF received {} samples; expected {expected_samples}",
-            rgb16.len()
+            "RGB TIFF received {} samples; expected {expected_samples}",
+            data.len()
         ));
     }
 
     let mut encoder = StreamingTiffEncoder::new(output)
-        .map_err(|error| format!("Failed to start RGB16 TIFF encoder: {error}"))?;
+        .map_err(|error| format!("Failed to start RGB TIFF encoder: {error}"))?;
     let interoperability_directory = match export_metadata {
         Some(metadata) if has_writable_tiff_metadata_group(metadata, ExifTagGroup::INTEROP) => {
             let mut directory = encoder.extra_directory().map_err(|error| {
@@ -2136,8 +2268,8 @@ pub(crate) fn encode_rgb16_tiff_with_metadata(
     };
 
     let mut image = encoder
-        .new_image::<RGB16>(width, height)
-        .map_err(|error| format!("Failed to configure RGB16 TIFF image: {error}"))?;
+        .new_image::<C>(width, height)
+        .map_err(|error| format!("Failed to configure RGB TIFF image: {error}"))?;
     if let Some(metadata) = export_metadata
         && has_writable_tiff_metadata_group(metadata, ExifTagGroup::GENERIC)
     {
@@ -2162,8 +2294,8 @@ pub(crate) fn encode_rgb16_tiff_with_metadata(
             .map_err(|error| format!("Failed to attach TIFF ICC profile: {error}"))?;
     }
     image
-        .write_data(rgb16)
-        .map_err(|error| format!("Failed to encode RGB16 TIFF pixels: {error}"))
+        .write_data(data)
+        .map_err(|error| format!("Failed to encode RGB TIFF pixels: {error}"))
 }
 
 #[cfg(not(target_os = "android"))]
@@ -2182,6 +2314,7 @@ fn encode_streaming_rgba_rows<F>(
     height: u32,
     output_format: &str,
     jpeg_quality: u8,
+    bit_depth: u8,
     embed_color_profile: bool,
     export_metadata: StreamingExportMetadata<'_>,
     render_rows: F,
@@ -2214,6 +2347,7 @@ where
                 output,
                 width,
                 height,
+                bit_depth,
                 embed_color_profile,
                 exif,
                 render_rows,
@@ -2228,6 +2362,7 @@ where
                 output,
                 width,
                 height,
+                bit_depth,
                 embed_color_profile,
                 metadata,
                 render_rows,
@@ -2313,6 +2448,7 @@ fn process_and_save_streaming_export(
         target_height,
         output_format,
         export_settings.jpeg_quality,
+        export_settings.bit_depth,
         export_settings.embed_color_profile,
         streaming_metadata,
         |encoder_sink| {
@@ -2445,7 +2581,13 @@ pub(crate) fn encode_image_to_bytes(
     output_format: &str,
     jpeg_quality: u8,
 ) -> Result<Vec<u8>, String> {
-    encode_image_to_bytes_with_profile(image, output_format, jpeg_quality, true)
+    encode_image_to_bytes_with_profile(
+        image,
+        output_format,
+        jpeg_quality,
+        true,
+        default_export_bit_depth_for_format(output_format),
+    )
 }
 
 fn encode_image_to_bytes_with_profile(
@@ -2453,6 +2595,7 @@ fn encode_image_to_bytes_with_profile(
     output_format: &str,
     jpeg_quality: u8,
     embed_color_profile: bool,
+    bit_depth: u8,
 ) -> Result<Vec<u8>, String> {
     let mut image_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut image_bytes);
@@ -2535,10 +2678,18 @@ fn encode_image_to_bytes_with_profile(
                 .map_err(|e| e.to_string())?;
         }
         "png" => {
-            let image_to_encode = if image.as_rgb32f().is_some() {
-                DynamicImage::ImageRgb16(image.to_rgb16())
+            let image_to_encode = if effective_export_bit_depth("png", bit_depth) == 16 {
+                if image.color().has_alpha() {
+                    DynamicImage::ImageRgba16(image.to_rgba16())
+                } else {
+                    DynamicImage::ImageRgb16(image.to_rgb16())
+                }
             } else {
-                image.clone()
+                if image.color().has_alpha() {
+                    DynamicImage::ImageRgba8(image.to_rgba8())
+                } else {
+                    DynamicImage::ImageRgb8(image.to_rgb8())
+                }
             };
 
             let mut encoder = PngEncoder::new(&mut cursor);
@@ -2551,16 +2702,20 @@ fn encode_image_to_bytes_with_profile(
                 .write_with_encoder(encoder)
                 .map_err(|e| e.to_string())?;
         }
-        "tiff" => {
+        "tif" | "tiff" => {
             let mut encoder = TiffEncoder::new(&mut cursor);
             if embed_color_profile {
                 encoder
                     .set_icc_profile(srgb_v4_profile().to_vec())
                     .map_err(|e| format!("Failed to attach TIFF ICC profile: {e}"))?;
             }
-            DynamicImage::ImageRgb16(image.to_rgb16())
-                .write_with_encoder(encoder)
-                .map_err(|e| e.to_string())?;
+            if effective_export_bit_depth("tiff", bit_depth) == 16 {
+                DynamicImage::ImageRgb16(image.to_rgb16())
+            } else {
+                DynamicImage::ImageRgb8(image.to_rgb8())
+            }
+            .write_with_encoder(encoder)
+            .map_err(|e| e.to_string())?;
         }
         "avif" => {
             image
@@ -4117,6 +4272,7 @@ pub async fn batch_geometry_correction(
     };
 
     let export_settings = ExportSettings {
+        bit_depth: default_export_bit_depth_for_format(&output_format),
         jpeg_quality: jpeg_quality.clamp(1, 100),
         resize: None,
         keep_metadata: true,
@@ -4199,6 +4355,7 @@ pub async fn run_headless_export(
     println!("Found {} images to export. Processing...", paths.len());
 
     let export_settings = ExportSettings {
+        bit_depth: default_export_bit_depth_for_format(&session.format),
         jpeg_quality: session.quality,
         resize: None,
         keep_metadata: session.keep_metadata,
@@ -4401,6 +4558,7 @@ pub async fn estimate_export_sizes(
             &output_format,
             export_settings.jpeg_quality,
             export_settings.embed_color_profile,
+            export_settings.bit_depth,
         )?;
         let preview_byte_size = preview_bytes.len();
 
@@ -4540,6 +4698,7 @@ pub async fn estimate_export_sizes(
             &output_format,
             export_settings.jpeg_quality,
             export_settings.embed_color_profile,
+            export_settings.bit_depth,
         )?;
         let single_image_estimated_size = preview_bytes.len();
 
@@ -4790,6 +4949,7 @@ mod tests {
             height,
             output_format,
             jpeg_quality,
+            default_export_bit_depth_for_format(output_format),
             true,
             export_metadata,
             |sink| {
@@ -5315,6 +5475,7 @@ mod tests {
             3,
             "png",
             90,
+            8,
             true,
             StreamingExportMetadata::None,
             |sink| {
@@ -5333,6 +5494,7 @@ mod tests {
             1,
             "png",
             90,
+            8,
             true,
             StreamingExportMetadata::None,
             |sink| {
@@ -5354,6 +5516,7 @@ mod tests {
             1,
             "jpeg",
             90,
+            8,
             true,
             StreamingExportMetadata::None,
             |_| Ok(()),
@@ -5362,6 +5525,7 @@ mod tests {
         assert!(error.contains("65535"), "unexpected error: {error}");
 
         let settings = ExportSettings {
+            bit_depth: 8,
             jpeg_quality: 90,
             resize: None,
             keep_metadata: false,
@@ -5402,6 +5566,7 @@ mod tests {
     fn streaming_resize_matches_the_bounded_batch_reference() {
         let image = fixture_image(37, 23);
         let settings = ExportSettings {
+            bit_depth: 8,
             jpeg_quality: 92,
             resize: Some(ResizeOptions {
                 mode: ResizeMode::Width,
@@ -5529,6 +5694,7 @@ mod tests {
         });
         watermark.save(&watermark_path).expect("save watermark");
         let settings = ExportSettings {
+            bit_depth: 8,
             jpeg_quality: 92,
             resize: None,
             keep_metadata: false,
@@ -5812,6 +5978,7 @@ mod tests {
             target_height,
             &output_format,
             92,
+            default_export_bit_depth_for_format(&output_format),
             true,
             if let Some(metadata) = benchmark_metadata.as_ref().filter(|_| is_tiff_output) {
                 StreamingExportMetadata::TiffDirectories(metadata)
@@ -5877,9 +6044,43 @@ mod tests {
     }
 
     #[test]
+    fn export_bit_depth_controls_png_and_tiff_sample_precision() {
+        let image = DynamicImage::ImageRgb16(ImageBuffer::from_fn(4, 3, |x, y| {
+            Rgb([
+                (x * 12_000 + 1_000) as u16,
+                (y * 15_000 + 2_000) as u16,
+                ((x + y) * 8_000 + 3_000) as u16,
+            ])
+        }));
+
+        for (output_format, image_format) in [
+            ("png", ImageFormat::Png),
+            ("tif", ImageFormat::Tiff),
+            ("tiff", ImageFormat::Tiff),
+        ] {
+            for bit_depth in [8_u8, 16_u8] {
+                let bytes =
+                    encode_image_to_bytes_with_profile(&image, output_format, 95, false, bit_depth)
+                        .expect("encode selected export bit depth");
+                let decoded = image::load_from_memory_with_format(&bytes, image_format)
+                    .expect("decode selected export bit depth");
+                assert_eq!(
+                    decoded.color(),
+                    if bit_depth == 16 {
+                        image::ColorType::Rgb16
+                    } else {
+                        image::ColorType::Rgb8
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
     fn no_resize_export_keeps_the_full_input_dimensions() {
         let image = fixture_image(2049, 1367);
         let settings = ExportSettings {
+            bit_depth: 8,
             jpeg_quality: 90,
             resize: None,
             keep_metadata: false,

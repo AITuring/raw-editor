@@ -34,6 +34,9 @@ assert.match(appModalsSource, /waitForCompletion:\s*true/);
 assert.match(productivitySource, /buildBackendExportSettings\(settings/);
 assert.match(exportProcessingSource, /metadata_overrides: Option<exif_processing::ExportMetadataOverrides>/);
 assert.match(exportProcessingSource, /embed_color_profile: bool/);
+assert.match(exportProcessingSource, /bit_depth: u8/);
+assert.match(dialogSource, /supports16BitExport/);
+assert.match(dialogSource, /settings\.bitDepth/);
 assert.match(exportProcessingSource, /wait_for_completion: Option<bool>/);
 assert.match(exifProcessingSource, /ExifTag::Artist/);
 assert.match(exifProcessingSource, /ExifTag::Copyright/);
@@ -69,8 +72,13 @@ const initial = createInitialExportDialogSettings({ width: 6480, height: 9664 },
 assert.equal(initial.resizePercent, 100);
 assert.equal(initial.sourceWidth, 6480);
 assert.equal(initial.artist, 'Museum Team');
+assert.equal(initial.bitDepth, 8);
 assert.equal(buildBackendExportSettings(initial, null).resize, null);
 assert.equal(buildBackendExportSettings(initial, null).metadataOverrides, null);
+
+const stackInitial = createInitialExportDialogSettings({ width: 6480, height: 9664 }, 'tiff');
+assert.equal(stackInitial.bitDepth, 16);
+assert.equal(buildBackendExportSettings(stackInitial, null).bitDepth, 16);
 
 const resized = { ...initial, resizeWidth: 6479, resizeHeight: 9663, resizePercent: 100 };
 assert.deepEqual(buildBackendExportSettings(resized, null).resize, {
@@ -85,6 +93,8 @@ const pngEstimate = estimateExportFileSize('png', 6480, 9664, 95);
 const tiffEstimate = estimateExportFileSize('tiff', 6480, 9664, 95);
 assert.ok(jpegEstimate < pngEstimate);
 assert.ok(pngEstimate < tiffEstimate);
+assert.ok(estimateExportFileSize('png', 6480, 9664, 95, 16) > estimateExportFileSize('png', 6480, 9664, 95, 8));
+assert.ok(estimateExportFileSize('tiff', 6480, 9664, 95, 16) > estimateExportFileSize('tiff', 6480, 9664, 95, 8));
 assert.ok(estimateExportFileSize('jpeg', 6480, 9664, 100) > estimateExportFileSize('jpeg', 6480, 9664, 50));
 
 const copyrightOnly = buildBackendExportSettings(

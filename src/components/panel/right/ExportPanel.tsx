@@ -221,6 +221,8 @@ export default function ExportPanel({
   const {
     fileFormat,
     setFileFormat,
+    bitDepth,
+    setBitDepth,
     jpegQuality,
     setJpegQuality,
     enableResize,
@@ -423,6 +425,7 @@ export default function ExportPanel({
     if (!isPanelReallyActive) return;
 
     const exportSettings: ExportSettings = {
+      bitDepth,
       filenameTemplate,
       jpegQuality,
       keepMetadata,
@@ -457,6 +460,7 @@ export default function ExportPanel({
     pathsToExport,
     selectedImage?.path,
     fileFormat,
+    bitDepth,
     jpegQuality,
     enableResize,
     resizeMode,
@@ -501,6 +505,7 @@ export default function ExportPanel({
     }
 
     const exportSettings: ExportSettings = {
+      bitDepth,
       filenameTemplate: finalFilenameTemplate,
       jpegQuality,
       keepMetadata,
@@ -648,6 +653,46 @@ export default function ExportPanel({
                     value={jpegQuality}
                     fillOrigin="min"
                   />
+                </div>
+              )}
+              {fileFormat !== FileFormats.Cube && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Text color={TextColors.secondary}>{t('export.exportDialog.bitDepth')}</Text>
+                    <Text color={TextColors.primary}>
+                      {t(bitDepth === 16 ? 'export.exportDialog.bitDepth16' : 'export.exportDialog.bitDepth8')}
+                    </Text>
+                  </div>
+                  <div
+                    aria-label={t('export.exportDialog.bitDepth')}
+                    className="grid grid-cols-2 gap-2"
+                    role="radiogroup"
+                  >
+                    {[8, 16].map((depth) => {
+                      const isUnsupported =
+                        depth === 16 && ![FileFormats.Png, FileFormats.Tiff].includes(fileFormat as FileFormats);
+                      return (
+                        <button
+                          aria-checked={bitDepth === depth}
+                          className={`rounded-md px-2 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            bitDepth === depth
+                              ? 'bg-accent text-text-primary'
+                              : 'bg-surface text-text-secondary hover:bg-card-active'
+                          }`}
+                          disabled={isExporting || isUnsupported}
+                          key={depth}
+                          onClick={() => setBitDepth(depth as 8 | 16)}
+                          role="radio"
+                          type="button"
+                        >
+                          {t(depth === 16 ? 'export.exportDialog.bitDepth16' : 'export.exportDialog.bitDepth8')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {![FileFormats.Png, FileFormats.Tiff].includes(fileFormat as FileFormats) && (
+                    <p className="text-[10px] text-text-secondary">{t('export.exportDialog.bitDepth8Only')}</p>
+                  )}
                 </div>
               )}
             </Section>

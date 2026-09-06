@@ -107,10 +107,10 @@ impl ImageStackOutputFormat {
         }
     }
 
-    fn encoded_color_type(self) -> ColorType {
-        match self {
-            Self::Tiff | Self::Png => ColorType::Rgb16,
-            Self::Jpeg => ColorType::Rgb8,
+    fn encoded_color_type(self, bit_depth: u8) -> ColorType {
+        match (self, bit_depth) {
+            (Self::Tiff | Self::Png, 16) => ColorType::Rgb16,
+            _ => ColorType::Rgb8,
         }
     }
 }
@@ -158,9 +158,14 @@ fn encode_srgb_image_stack<W: Write + Seek>(
     writer: W,
     output_format: ImageStackOutputFormat,
     jpeg_quality: u8,
+    bit_depth: u8,
     embed_color_profile: bool,
     export_exif: Option<&[u8]>,
 ) -> Result<(), String> {
+    let bit_depth = crate::export_processing::effective_export_bit_depth(
+        output_format.canonical_extension(),
+        bit_depth,
+    );
     let profile = crate::color_management::srgb_v4_profile().to_vec();
     match output_format {
         ImageStackOutputFormat::Tiff => {
@@ -170,7 +175,12 @@ fn encode_srgb_image_stack<W: Write + Seek>(
                     format!("Failed to attach the image-stack TIFF color profile: {error}")
                 })?;
             }
-            image
+            let image_to_encode = if bit_depth == 16 {
+                DynamicImage::ImageRgb16(image.to_rgb16())
+            } else {
+                DynamicImage::ImageRgb8(image.to_rgb8())
+            };
+            image_to_encode
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
         }
@@ -186,7 +196,12 @@ fn encode_srgb_image_stack<W: Write + Seek>(
                     format!("Failed to attach image-stack PNG metadata: {error}")
                 })?;
             }
-            image
+            let image_to_encode = if bit_depth == 16 {
+                DynamicImage::ImageRgb16(image.to_rgb16())
+            } else {
+                DynamicImage::ImageRgb8(image.to_rgb8())
+            };
+            image_to_encode
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack PNG: {error}"))
         }
@@ -211,7 +226,15 @@ fn encode_srgb_image_stack<W: Write + Seek>(
 
 #[cfg(test)]
 fn encode_srgb_tiff<W: Write + Seek>(image: &DynamicImage, writer: W) -> Result<(), String> {
-    encode_srgb_image_stack(image, writer, ImageStackOutputFormat::Tiff, 95, true, None)
+    encode_srgb_image_stack(
+        image,
+        writer,
+        ImageStackOutputFormat::Tiff,
+        95,
+        16,
+        true,
+        None,
+    )
 }
 
 #[cfg(not(target_os = "android"))]
@@ -264,6 +287,10 @@ fn encode_image_stack_file(
     export_settings: &ExportSettings,
     source_path: &str,
 ) -> Result<(), String> {
+    let bit_depth = crate::export_processing::effective_export_bit_depth(
+        output_format.canonical_extension(),
+        export_settings.bit_depth,
+    );
     let export_exif = if output_format == ImageStackOutputFormat::Tiff {
         None
     } else {
@@ -301,11 +328,22 @@ fn encode_image_stack_file(
         let rgb16 = image
             .as_rgb16()
             .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
-        return crate::export_processing::encode_rgb16_tiff_with_metadata(
+        if bit_depth == 16 {
+            return crate::export_processing::encode_rgb16_tiff_with_metadata(
+                output,
+                rgb16.width(),
+                rgb16.height(),
+                rgb16.as_raw(),
+                export_settings.embed_color_profile,
+                metadata.as_ref(),
+            );
+        }
+        let rgb8 = image.to_rgb8();
+        return crate::export_processing::encode_rgb8_tiff_with_metadata(
             output,
-            rgb16.width(),
-            rgb16.height(),
-            rgb16.as_raw(),
+            rgb8.width(),
+            rgb8.height(),
+            rgb8.as_raw(),
             export_settings.embed_color_profile,
             metadata.as_ref(),
         );
@@ -317,6 +355,7 @@ fn encode_image_stack_file(
         &mut writer,
         output_format,
         export_settings.jpeg_quality,
+        bit_depth,
         export_settings.embed_color_profile,
         export_exif.as_deref(),
     )?;
@@ -332,6 +371,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
     mut decoder: D,
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
+    bit_depth: u8,
     expect_color_profile: bool,
 ) -> Result<(), String> {
     if decoder.dimensions() != dimensions {
@@ -343,7 +383,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
             decoder.dimensions().1
         ));
     }
-    if decoder.color_type() != output_format.encoded_color_type() {
+    if decoder.color_type() != output_format.encoded_color_type(bit_depth) {
         return Err(format!(
             "Saved image-stack {} has an unexpected pixel format ({:?}).",
             output_format.label(),
@@ -376,6 +416,7 @@ fn validate_image_stack_output(
     output_path: &Path,
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
+    bit_depth: u8,
     expect_color_profile: bool,
 ) -> Result<(), String> {
     let open = || {
@@ -395,6 +436,7 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            bit_depth,
             expect_color_profile,
         ),
         ImageStackOutputFormat::Png => validate_image_stack_decoder(
@@ -403,6 +445,7 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            bit_depth,
             expect_color_profile,
         ),
         ImageStackOutputFormat::Jpeg => validate_image_stack_decoder(
@@ -411,6 +454,7 @@ fn validate_image_stack_output(
             })?,
             dimensions,
             output_format,
+            bit_depth,
             expect_color_profile,
         ),
     }
@@ -419,6 +463,7 @@ fn validate_image_stack_output(
 #[cfg(test)]
 fn default_image_stack_export_settings() -> ExportSettings {
     ExportSettings {
+        bit_depth: 16,
         jpeg_quality: IMAGE_STACK_JPEG_QUALITY,
         resize: None,
         keep_metadata: false,
@@ -507,6 +552,10 @@ fn write_image_stack_output_with_settings(
         temporary.path(),
         dimensions,
         output_format,
+        crate::export_processing::effective_export_bit_depth(
+            output_format.canonical_extension(),
+            export_settings.bit_depth,
+        ),
         export_settings.embed_color_profile,
     )?;
 
@@ -797,16 +846,19 @@ mod tests {
     use std::io::{BufReader, Cursor};
     use std::path::Path;
 
-    use image::codecs::{jpeg::JpegDecoder, tiff::TiffDecoder};
-    use image::{DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage};
+    use image::codecs::{jpeg::JpegDecoder, png::PngDecoder, tiff::TiffDecoder};
+    use image::{
+        ColorType, DynamicImage, GenericImageView, ImageBuffer, ImageDecoder, Rgb, Rgb32FImage,
+    };
 
     use super::{
         DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, IMAGE_STACK_MAX_SOURCES,
         IMAGE_STACK_PIPELINE_VERSION, ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE,
-        PREVIEW_MAX_PIXELS, canonicalize_image_stack_result, detail_preview_dimensions,
-        encode_srgb_tiff, preview_dimensions, resolve_image_stack_output_path,
-        validate_image_stack_pipeline_version, validate_image_stack_source_count,
-        write_image_stack_output, write_image_stack_output_with_settings, write_srgb_tiff,
+        PREVIEW_MAX_PIXELS, canonicalize_image_stack_result, default_image_stack_export_settings,
+        detail_preview_dimensions, encode_srgb_tiff, preview_dimensions,
+        resolve_image_stack_output_path, validate_image_stack_pipeline_version,
+        validate_image_stack_source_count, write_image_stack_output,
+        write_image_stack_output_with_settings, write_srgb_tiff,
     };
 
     #[test]
@@ -1023,6 +1075,61 @@ mod tests {
     }
 
     #[test]
+    fn stack_export_respects_selected_bit_depth_for_lossless_formats() {
+        let directory = tempfile::tempdir().expect("temporary image-stack output directory");
+        let source = DynamicImage::ImageRgb16(ImageBuffer::from_fn(8, 5, |x, y| {
+            Rgb([
+                ((x + 1) * 4_096) as u16,
+                ((y + 1) * 8_192) as u16,
+                ((x + y + 1) * 2_048) as u16,
+            ])
+        }));
+
+        for bit_depth in [8_u8, 16_u8] {
+            for (format, extension) in [
+                (ImageStackOutputFormat::Tiff, "tiff"),
+                (ImageStackOutputFormat::Png, "png"),
+            ] {
+                let output_path = directory
+                    .path()
+                    .join(format!("stack-result-{bit_depth}.{extension}"));
+                let mut settings = default_image_stack_export_settings();
+                settings.bit_depth = bit_depth;
+                write_image_stack_output_with_settings(
+                    &source,
+                    &output_path,
+                    format,
+                    &settings,
+                    "",
+                )
+                .expect("save selected image-stack bit depth");
+
+                let actual_color_type = match format {
+                    ImageStackOutputFormat::Tiff => TiffDecoder::new(BufReader::new(
+                        File::open(&output_path).expect("open saved TIFF"),
+                    ))
+                    .expect("decode saved TIFF")
+                    .color_type(),
+                    ImageStackOutputFormat::Png => PngDecoder::new(BufReader::new(
+                        File::open(&output_path).expect("open saved PNG"),
+                    ))
+                    .expect("decode saved PNG")
+                    .color_type(),
+                    ImageStackOutputFormat::Jpeg => unreachable!(),
+                };
+                assert_eq!(
+                    actual_color_type,
+                    if bit_depth == 16 {
+                        ColorType::Rgb16
+                    } else {
+                        ColorType::Rgb8
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
     fn shared_export_settings_resize_stack_output_and_write_selected_metadata() {
         fn ascii_tag(exif_data: &exif::Exif, tag: exif::Tag) -> Option<String> {
             let field = exif_data.get_field(tag, exif::In::PRIMARY)?;
@@ -1052,6 +1159,7 @@ mod tests {
             ])
         }));
         let settings = crate::export_processing::ExportSettings {
+            bit_depth: 8,
             jpeg_quality: 37,
             resize: Some(crate::export_processing::ResizeOptions {
                 mode: crate::export_processing::ResizeMode::Width,

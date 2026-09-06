@@ -1,4 +1,8 @@
-import type { ExportMetadataOverrides, ExportSettings } from '../../components/ui/ExportImportProperties';
+import type {
+  ExportBitDepth,
+  ExportMetadataOverrides,
+  ExportSettings,
+} from '../../components/ui/ExportImportProperties';
 
 export type ExportDialogFormat = 'jpeg' | 'png' | 'tiff';
 export type ExportMetadataMode = 'none' | 'copyright' | 'all';
@@ -13,6 +17,7 @@ export interface ExportDialogSource {
 
 export interface ExportDialogSettings {
   artist: string;
+  bitDepth: ExportBitDepth;
   contact: string;
   copyright: string;
   description: string;
@@ -48,6 +53,8 @@ export const EXPORT_DIALOG_FORMATS: ReadonlyArray<{
   { id: 'tiff', label: 'TIFF', extensions: ['tif', 'tiff'] },
 ];
 
+export const supports16BitExport = (format: ExportDialogFormat): boolean => format === 'png' || format === 'tiff';
+
 export const clampExportDimension = (value: number): number =>
   Math.max(1, Math.min(65_535, Math.round(Number.isFinite(value) ? value : 1)));
 
@@ -76,19 +83,22 @@ export const widthFromHeight = (sourceWidth: number, sourceHeight: number, heigh
  * Gives the export dialog a fast, deliberately approximate size indication.
  * JPEG and PNG depend heavily on image detail, so the coefficients represent
  * photographic content rather than promising a byte-accurate result. TIFF is
- * emitted as uncompressed 16-bit RGB and can therefore be estimated closely.
+ * emitted as uncompressed RGB and can therefore be estimated closely at the
+ * selected bit depth.
  */
 export const estimateExportFileSize = (
   format: ExportDialogFormat,
   width: number,
   height: number,
   jpegQuality: number,
+  bitDepth: ExportBitDepth = 8,
 ): number => {
   const pixelCount = clampExportDimension(width) * clampExportDimension(height);
   const containerOverhead = 64 * 1_024;
+  const bytesPerSample = bitDepth === 16 ? 2 : 1;
 
-  if (format === 'tiff') return Math.round(pixelCount * 6 + containerOverhead);
-  if (format === 'png') return Math.round(pixelCount * 2.8 + containerOverhead);
+  if (format === 'tiff') return Math.round(pixelCount * 3 * bytesPerSample + containerOverhead);
+  if (format === 'png') return Math.round(pixelCount * (bitDepth === 16 ? 2.8 : 1.45) + containerOverhead);
 
   const normalizedQuality = Math.max(0.01, Math.min(1, jpegQuality / 100));
   const highQualityPenalty = 0.55 * Math.pow(Math.max(0, (normalizedQuality - 0.9) / 0.1), 2);
@@ -195,6 +205,7 @@ export const buildBackendExportSettings = (
   const widthChanged = settings.resizeWidth !== settings.sourceWidth;
   const heightChanged = settings.resizeHeight !== settings.sourceHeight;
   return {
+    bitDepth: settings.bitDepth,
     embedColorProfile: settings.embedColorProfile,
     filenameTemplate,
     jpegQuality: settings.jpegQuality,
@@ -232,6 +243,7 @@ export const createInitialExportDialogSettings = (
   metadata?: Record<string, unknown> | null,
 ): ExportDialogSettings => ({
   artist: readMetadataText(metadata, ['Artist', 'Creator', 'Author']),
+  bitDepth: initialFormat === 'jpeg' ? 8 : 16,
   contact: readMetadataText(metadata, ['Contact', 'OwnerName']),
   copyright: readMetadataText(metadata, ['Copyright']),
   description: readMetadataText(metadata, ['ImageDescription', 'Description', 'Caption']),

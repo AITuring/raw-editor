@@ -819,8 +819,10 @@
     },
     "exportDialog": {
       "artist": "Creator",
-      "bitDepth16": "PNG / TIFF use lossless encoding",
-      "bitDepth8": "JPEG exports at 8-bit precision",
+      "bitDepth": "Bit depth",
+      "bitDepth16": "16-bit",
+      "bitDepth8": "8-bit",
+      "bitDepth8Only": "This format supports 8-bit output only.",
       "cancel": "Cancel",
       "close": "Close export window",
       "colorSpace": "Color space",

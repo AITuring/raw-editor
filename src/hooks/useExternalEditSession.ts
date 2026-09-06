@@ -54,6 +54,7 @@ export function useExternalEditSession(handleImageSelect: (path: string) => void
     debouncedSave.flush();
 
     const exportSettings: ExportSettings = {
+      bitDepth: 8,
       filenameTemplate: null,
       jpegQuality: session.jpegQuality,
       keepMetadata: true,

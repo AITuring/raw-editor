@@ -828,8 +828,10 @@
     },
     "exportDialog": {
       "artist": "創作者",
-      "bitDepth16": "PNG / TIFF 使用無損編碼",
-      "bitDepth8": "JPEG 以 8 位元精度匯出",
+      "bitDepth": "位元深度",
+      "bitDepth16": "16 位元",
+      "bitDepth8": "8 位元",
+      "bitDepth8Only": "目前格式僅支援 8 位元輸出",
       "cancel": "取消",
       "close": "關閉匯出視窗",
       "colorSpace": "色彩空間",

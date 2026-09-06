@@ -1,4 +1,4 @@
-use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
+use crate::panorama_stitching::{FocusLayerWarp, ImageInfo, FOCUS_FOREGROUND_LUMA_THRESHOLD};
 use image::{GrayImage, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
@@ -25,22 +25,15 @@ const FOCUS_SEAM_BLEND_RADIUS: usize = 512;
 const FOCUS_FOREGROUND_HARD_EDGE_RADIUS_AT_2400: f32 = 8.0;
 const FOCUS_SEAM_TONE_MIN_SAMPLES: usize = 128;
 const FOCUS_SEAM_TONE_MAX_ADJUSTMENT: f32 = 0.075;
-#[cfg(test)]
 const FOCUS_COLOR_SAMPLE_BUDGET: u64 = 12_000;
-#[cfg(test)]
 const FOCUS_COLOR_MIN_SAMPLES: usize = 96;
-#[cfg(test)]
 const FOCUS_COLOR_MIN_CHANNEL_VALUE: f32 = 0.025;
-#[cfg(test)]
 const FOCUS_COLOR_MIN_GAIN: f32 = 0.78;
-#[cfg(test)]
 const FOCUS_COLOR_MAX_GAIN: f32 = 1.28;
-#[cfg(test)]
 const FOCUS_COLOR_MAX_OFFSET: f32 = 0.06;
 // Bright plastic, glass, or paper edges can sit above the normal colour-sample
 // ceiling. Admit those pixels only inside a matched foreground consensus band;
 // ordinary bright highlights remain excluded from exposure estimation.
-#[cfg(test)]
 const FOCUS_COLOR_MAX_RELAXED_LUMA: f32 = 0.995;
 // Focus stacks must not average a displaced subject at a seam. The seam path
 // therefore blends only the low-frequency tone bands and restores protected
@@ -52,21 +45,15 @@ const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = true;
 // brush strokes or the canvas weave to become a colour reference. The field is
 // sampled in candidate-image space, then interpolated while the layer is
 // copied into the final canvas.
-#[cfg(test)]
 const FOCUS_COLOR_CELL_SIZE: u32 = 768;
-#[cfg(test)]
 const FOCUS_COLOR_MIN_CELL_SAMPLES: usize = 12;
-#[cfg(test)]
 const FOCUS_COLOR_SPATIAL_VARIATION_THRESHOLD: f32 = 0.015;
-#[cfg(test)]
 const FOCUS_COLOR_SPATIAL_OFFSET_THRESHOLD: f32 = 0.004;
 // Overlap samples do not cover the newly exposed side of every shifted frame.
 // Let a measured local correction fade into nearby unsampled cells instead of
 // stopping at a grid boundary, but keep the reach and strength bounded so an
 // isolated overlap cannot recolour an entire new region.
-#[cfg(test)]
 const FOCUS_COLOR_PROPAGATION_RADIUS_CELLS: i32 = 3;
-#[cfg(test)]
 const FOCUS_COLOR_PROPAGATION_MAX_CONFIDENCE: f32 = 0.65;
 // The final canvas can still contain a broad, source-sized exposure step when
 // a newly exposed background region has no direct overlap samples. Work on a
@@ -1162,6 +1149,31 @@ fn luminance(pixel: &Rgb<f32>) -> f32 {
     pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114
 }
 
+fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
+    if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
+        return false;
+    }
+    let red = pixel[0].clamp(0.0, 1.0);
+    let green = pixel[1].clamp(0.0, 1.0);
+    let blue = pixel[2].clamp(0.0, 1.0);
+    let luma = red * 0.299 + green * 0.587 + blue * 0.114;
+    let red_floor = red.max(0.001);
+    let green_ratio = green / red_floor;
+    let blue_ratio = blue / red_floor;
+    // The source canvas is a warm, moderately desaturated brown. This gate
+    // deliberately rejects the red skirt, green sash, near-black robe, and
+    // pale faces/hands before a low-frequency exposure field is applied. The
+    // limits are broad enough to retain the darker and lighter canvas tiles.
+    luma >= 0.12
+        && luma <= 0.78
+        && red >= green
+        && green >= blue
+        && green_ratio >= 0.42
+        && blue_ratio >= 0.24
+        && red - green >= 0.025
+        && green - blue >= 0.015
+}
+
 struct RenderedFocusLayer {
     image: Rgb32FImage,
     mask: GrayImage,
@@ -1181,7 +1193,6 @@ struct RenderedFocusAnalysisLayer {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg(test)]
 struct FocusColorCorrection {
     gains: [f32; 3],
     offsets: [f32; 3],
@@ -1192,7 +1203,6 @@ struct FocusColorCorrection {
     spatial_offsets: Option<Vec<[f32; 3]>>,
 }
 
-#[cfg(test)]
 impl FocusColorCorrection {
     const IDENTITY: Self = Self {
         gains: [1.0; 3],
@@ -1254,7 +1264,6 @@ impl FocusColorCorrection {
     }
 }
 
-#[cfg(test)]
 fn median_f32(values: &mut [f32]) -> Option<f32> {
     if values.is_empty() {
         return None;
@@ -1263,12 +1272,12 @@ fn median_f32(values: &mut [f32]) -> Option<f32> {
     Some(values[values.len() / 2])
 }
 
-#[cfg(test)]
 fn estimate_focus_color_correction(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
     merged_foreground_mask: &GrayImage,
     candidate: &RenderedFocusLayer,
+    canvas_only: bool,
 ) -> FocusColorCorrection {
     let (layer_width, layer_height) = candidate.image.dimensions();
     if layer_width == 0
@@ -1328,6 +1337,12 @@ fn estimate_focus_color_correction(
             }
             let base_pixel = base.get_pixel(global_x, global_y);
             let candidate_pixel = candidate.image.get_pixel(x, y);
+            if canvas_only
+                && (!focus_stack_pixel_is_canvas_like(base_pixel.0.as_slice())
+                    || !focus_stack_pixel_is_canvas_like(candidate_pixel.0.as_slice()))
+            {
+                continue;
+            }
             let base_luma = luminance(base_pixel);
             let candidate_luma = luminance(candidate_pixel);
             let maximum_luma = if relaxed_foreground_overlap {
@@ -1679,11 +1694,11 @@ fn estimate_focus_color_correction(
     }
 }
 
-#[cfg(test)]
 fn apply_focus_color_correction(
     image: &mut Rgb32FImage,
     correction: &FocusColorCorrection,
     protected_mask: &GrayImage,
+    canvas_only: bool,
 ) {
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 {
@@ -1707,6 +1722,9 @@ fn apply_focus_color_correction(
                 let x = (index % width) as u32;
                 let y = (index / width) as u32;
                 if has_protected_mask && protected_mask.get_pixel(x, y)[0] > 0 {
+                    return;
+                }
+                if canvas_only && !focus_stack_pixel_is_canvas_like(pixel) {
                     return;
                 }
                 let gains = correction.gain_at(x, y);
@@ -1733,7 +1751,12 @@ fn apply_focus_color_correction(
         .par_chunks_mut(3)
         .enumerate()
         .for_each(|(index, delta)| {
-            if analysis_protected.as_raw()[index] > 0 {
+            if analysis_protected.as_raw()[index] > 0
+                || (canvas_only
+                    && !focus_stack_pixel_is_canvas_like(
+                        &analysis.as_raw()[index * 3..index * 3 + 3],
+                    ))
+            {
                 return;
             }
             let x = (index % analysis_width_usize) as f64;
@@ -1782,8 +1805,11 @@ fn apply_focus_color_correction(
                     [bottom_row + x_sample.lower * 3..bottom_row + x_sample.lower * 3 + 3];
                 let bottom_right = &low_frequency_delta
                     [bottom_row + x_sample.upper * 3..bottom_row + x_sample.upper * 3 + 3];
-                let x_weight = x_sample.upper_weight;
                 let start = x * 3;
+                if canvas_only && !focus_stack_pixel_is_canvas_like(&row[start..start + 3]) {
+                    continue;
+                }
+                let x_weight = x_sample.upper_weight;
                 for channel in 0..3 {
                     let top = top_left[channel] * (1.0 - x_weight) + top_right[channel] * x_weight;
                     let bottom =
@@ -4843,6 +4869,23 @@ where
         // the candidate is the correct sharp source. Tone matching is limited
         // to the narrow, background-only ownership transition in
         // `blend_focus_seam_band`.
+        // The overlap correction below is intentionally narrower than that
+        // older candidate-wide transform: it can only learn from and modify
+        // warm-brown canvas pixels, while the candidate foreground remains
+        // protected by its ownership mask.
+        let color_correction = estimate_focus_color_correction(
+            &merged,
+            &merged_mask,
+            &merged_foreground_mask,
+            &candidate,
+            true,
+        );
+        apply_focus_color_correction(
+            &mut candidate.image,
+            &color_correction,
+            &candidate.foreground_mask,
+            true,
+        );
         let candidate_analysis = render_focus_analysis_layer(
             &candidate,
             out_width,
@@ -4968,6 +5011,12 @@ where
             String::new()
         }
     );
+    // A newly exposed canvas region may have no overlap samples from which to
+    // estimate a source-specific colour transform. Once ownership is final,
+    // remove only the remaining source-sized low-frequency tone steps across
+    // the complete mosaic. The strict canvas gate preserves the original
+    // weave and painted foreground instead of treating it as a background.
+    harmonize_focus_background_tone(&mut merged, &merged_mask, &merged_foreground_mask);
     Ok(merged)
 }
 
@@ -5606,16 +5655,24 @@ mod interpolation_tests {
             top: 0,
         };
 
-        let correction =
-            estimate_focus_color_correction(&base, &base_mask, &GrayImage::new(40, 16), &candidate);
-        assert!(
-            correction
-                .gains
-                .iter()
-                .all(|gain| (*gain - 0.8).abs() < 0.01)
+        let correction = estimate_focus_color_correction(
+            &base,
+            &base_mask,
+            &GrayImage::new(40, 16),
+            &candidate,
+            false,
         );
+        assert!(correction
+            .gains
+            .iter()
+            .all(|gain| (*gain - 0.8).abs() < 0.01));
 
-        apply_focus_color_correction(&mut candidate_image, &correction, &GrayImage::new(32, 16));
+        apply_focus_color_correction(
+            &mut candidate_image,
+            &correction,
+            &GrayImage::new(32, 16),
+            false,
+        );
         let corrected = candidate_image.get_pixel(0, 0);
         assert!((corrected[0] - 0.4).abs() < 0.01);
         assert!((corrected[1] - 0.5).abs() < 0.01);
@@ -5651,14 +5708,13 @@ mod interpolation_tests {
             &GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
             &foreground_mask,
             &candidate,
+            false,
         );
 
-        assert!(
-            correction
-                .gains
-                .iter()
-                .all(|gain| (*gain - 0.8).abs() < 0.01)
-        );
+        assert!(correction
+            .gains
+            .iter()
+            .all(|gain| (*gain - 0.8).abs() < 0.01));
     }
 
     #[test]
@@ -5680,14 +5736,13 @@ mod interpolation_tests {
             &GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
             &GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
             &candidate,
+            false,
         );
 
-        assert!(
-            correction
-                .gains
-                .iter()
-                .all(|gain| (*gain - (0.94 / 0.98)).abs() < 0.01)
-        );
+        assert!(correction
+            .gains
+            .iter()
+            .all(|gain| (*gain - (0.94 / 0.98)).abs() < 0.01));
     }
 
     #[test]
@@ -5716,11 +5771,17 @@ mod interpolation_tests {
             &base_mask,
             &GrayImage::new(WIDTH, HEIGHT),
             &candidate,
+            false,
         );
         assert!(correction.spatial_gains.is_some());
 
         let mut corrected = candidate_image;
-        apply_focus_color_correction(&mut corrected, &correction, &GrayImage::new(WIDTH, HEIGHT));
+        apply_focus_color_correction(
+            &mut corrected,
+            &correction,
+            &GrayImage::new(WIDTH, HEIGHT),
+            false,
+        );
         let input_step = 0.5f32 - 0.4;
         let corrected_step =
             (corrected.get_pixel(100, 10)[0] - corrected.get_pixel(1_300, 10)[0]).abs();

@@ -1,11 +1,12 @@
 import { useState, useMemo, useCallback } from 'react';
-import { ExportPreset, WatermarkAnchor } from '../components/ui/ExportImportProperties';
+import { ExportBitDepth, ExportPreset, FileFormats, WatermarkAnchor } from '../components/ui/ExportImportProperties';
 import { DEFAULT_WATERMARK_PATH, normalizeWatermarkPath } from '../features/export/watermark';
 
 const WATERMARK_ANCHORS = new Set<string>(Object.values(WatermarkAnchor));
 
 export function useExportSettings() {
-  const [fileFormat, setFileFormat] = useState('jpeg');
+  const [fileFormat, setFileFormatState] = useState('jpeg');
+  const [bitDepth, setBitDepth] = useState<ExportBitDepth>(8);
   const [jpegQuality, setJpegQuality] = useState(90);
   const [enableResize, setEnableResize] = useState(false);
   const [resizeMode, setResizeMode] = useState('longEdge');
@@ -24,9 +25,21 @@ export function useExportSettings() {
   const [watermarkSpacing, setWatermarkSpacing] = useState(5);
   const [watermarkOpacity, setWatermarkOpacity] = useState(80);
 
+  const setFileFormat = useCallback((format: string) => {
+    setFileFormatState(format);
+    setBitDepth(format === FileFormats.Png || format === FileFormats.Tiff ? 16 : 8);
+  }, []);
+
   const handleApplyPreset = useCallback((preset: ExportPreset) => {
     const usesLegacyEmptyWatermark = !preset.watermarkPath;
-    setFileFormat(preset.fileFormat);
+    setFileFormatState(preset.fileFormat);
+    setBitDepth(
+      (preset.bitDepth ??
+        (preset.fileFormat === FileFormats.Png || preset.fileFormat === FileFormats.Tiff ? 16 : 8)) === 16 &&
+        (preset.fileFormat === FileFormats.Png || preset.fileFormat === FileFormats.Tiff)
+        ? 16
+        : 8,
+    );
     setJpegQuality(preset.jpegQuality);
     setEnableResize(preset.enableResize);
     setResizeMode(preset.resizeMode);
@@ -53,6 +66,7 @@ export function useExportSettings() {
   const currentSettingsObject = useMemo(
     () => ({
       fileFormat,
+      bitDepth,
       jpegQuality,
       enableResize,
       resizeMode,
@@ -73,6 +87,7 @@ export function useExportSettings() {
     }),
     [
       fileFormat,
+      bitDepth,
       jpegQuality,
       enableResize,
       resizeMode,
@@ -96,6 +111,8 @@ export function useExportSettings() {
   return {
     fileFormat,
     setFileFormat,
+    bitDepth,
+    setBitDepth,
     jpegQuality,
     setJpegQuality,
     enableResize,

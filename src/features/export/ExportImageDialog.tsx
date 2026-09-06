@@ -13,6 +13,7 @@ import {
   dimensionsFromPercent,
   estimateExportFileSize,
   heightFromWidth,
+  supports16BitExport,
   widthFromHeight,
 } from './exportDialog';
 import type { ExportDialogFormat, ExportDialogSettings, ExportDialogSource, ExportMetadataMode } from './exportDialog';
@@ -154,6 +155,7 @@ export default function ExportImageDialog({
     ? [
         source?.fileName,
         settings.format,
+        settings.bitDepth,
         settings.resizeWidth,
         settings.resizeHeight,
         settings.jpegQuality,
@@ -240,6 +242,13 @@ export default function ExportImageDialog({
   const updateSettings = (patch: Partial<ExportDialogSettings>) =>
     setSettings((current) => (current ? { ...current, ...patch } : current));
 
+  const handleFormatChange = (format: ExportDialogFormat) => {
+    updateSettings({
+      bitDepth: format === 'jpeg' ? 8 : settings.bitDepth,
+      format,
+    });
+  };
+
   const updateMetadataField = (field: 'artist' | 'contact' | 'copyright' | 'description', value: string) =>
     setSettings((current) =>
       current
@@ -314,11 +323,18 @@ export default function ExportImageDialog({
   }
   const outputPixels = settings.resizeWidth * settings.resizeHeight;
   const pixelRatio = sourcePixels > 0 ? outputPixels / sourcePixels : 1;
+  const supports16Bit = supports16BitExport(settings.format);
   const metadataEntries = buildExportMetadataEntries(metadata, settings);
   const estimatedFileSizes = Object.fromEntries(
     EXPORT_DIALOG_FORMATS.map((format) => [
       format.id,
-      estimateExportFileSize(format.id, settings.resizeWidth, settings.resizeHeight, settings.jpegQuality),
+      estimateExportFileSize(
+        format.id,
+        settings.resizeWidth,
+        settings.resizeHeight,
+        settings.jpegQuality,
+        settings.bitDepth,
+      ),
     ]),
   ) as Record<ExportDialogFormat, number>;
   if (refinedSizeEstimate?.signature === estimateSignature) {
@@ -412,7 +428,7 @@ export default function ExportImageDialog({
                           : 'bg-bg-primary/45 text-text-secondary hover:bg-card-active hover:text-text-primary'
                       }`}
                       key={format.id}
-                      onClick={() => updateSettings({ format: format.id })}
+                      onClick={() => handleFormatChange(format.id)}
                       role="radio"
                       type="button"
                     >
@@ -444,6 +460,43 @@ export default function ExportImageDialog({
                     />
                   </label>
                 )}
+                <div className="mt-3">
+                  <div className="mb-1.5 flex items-center justify-between text-xs text-text-secondary">
+                    <span>{t('export.exportDialog.bitDepth')}</span>
+                    <strong className="font-medium text-text-primary">
+                      {t(settings.bitDepth === 16 ? 'export.exportDialog.bitDepth16' : 'export.exportDialog.bitDepth8')}
+                    </strong>
+                  </div>
+                  <div
+                    aria-label={t('export.exportDialog.bitDepth')}
+                    className="grid grid-cols-2 gap-1.5"
+                    role="radiogroup"
+                  >
+                    {[8, 16].map((depth) => {
+                      const isUnsupported = depth === 16 && !supports16Bit;
+                      return (
+                        <button
+                          aria-checked={settings.bitDepth === depth}
+                          className={`ui-surface-button min-h-8 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45 ${
+                            settings.bitDepth === depth
+                              ? 'bg-accent/13 text-text-primary'
+                              : 'bg-bg-primary/45 text-text-secondary hover:bg-card-active hover:text-text-primary'
+                          }`}
+                          disabled={isExporting || isUnsupported}
+                          key={depth}
+                          onClick={() => updateSettings({ bitDepth: depth as 8 | 16 })}
+                          role="radio"
+                          type="button"
+                        >
+                          {t(depth === 16 ? 'export.exportDialog.bitDepth16' : 'export.exportDialog.bitDepth8')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!supports16Bit && (
+                    <p className="mt-1.5 text-[10px] text-text-secondary">{t('export.exportDialog.bitDepth8Only')}</p>
+                  )}
+                </div>
               </section>
 
               <section className={sectionClassName}>
@@ -617,9 +670,7 @@ export default function ExportImageDialog({
               </p>
             ) : (
               <p className="text-[11px] text-text-secondary">
-                {settings.format === 'tiff' || settings.format === 'png'
-                  ? t('export.exportDialog.bitDepth16')
-                  : t('export.exportDialog.bitDepth8')}
+                {settings.bitDepth === 16 ? t('export.exportDialog.bitDepth16') : t('export.exportDialog.bitDepth8')}
               </p>
             )}
           </div>
