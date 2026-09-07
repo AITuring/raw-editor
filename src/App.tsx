@@ -305,6 +305,7 @@ function App() {
         progressMessage: null,
         requestId: null,
         resultId: null,
+        lastSavedPath: null,
         resultSize: null,
         sourcePaths: paths,
         blendMode: 'focus',

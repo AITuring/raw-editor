@@ -1525,6 +1525,8 @@
       "exitFocusPreview": "Sair da visualização focada",
       "failed": "Image stack failed",
       "fitPreview": "Ajustar à janela",
+      "focusAutoOrderHint": "Ordem automática",
+      "focusAutoOrderSourceHint": "O empilhamento de foco analisa a sobreposição das imagens e cria automaticamente a melhor ordem; a ordem de envio não afeta o resultado.",
       "focusPreview": "Visualização focada",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

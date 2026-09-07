@@ -255,6 +255,7 @@ export default function AppModals(props: AppModalsProps) {
         error: null,
         requestId: null,
         resultId: null,
+        lastSavedPath: null,
         resultSize: null,
         sourcePaths: [],
         blendMode: 'focus',
@@ -351,6 +352,7 @@ export default function AppModals(props: AppModalsProps) {
               progressMessage: null,
               requestId: null,
               resultId: null,
+              lastSavedPath: null,
               resultSize: null,
             },
           }))

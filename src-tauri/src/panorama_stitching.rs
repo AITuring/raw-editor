@@ -83,7 +83,8 @@ const FOCUS_HORIZONTAL_EDGE_MAX_LINE_RESIDUAL_RATIO: f64 = 0.004;
 const FOCUS_HORIZONTAL_EDGE_CLUSTER_TOLERANCE_RATIO: f64 = 0.012;
 const FOCUS_HORIZONTAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
 const FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
-const FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES: usize = 2;
+const FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES: usize = 3;
+const FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX: f64 = 6.0;
 const FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO: f64 = 0.025;
 const FOCUS_HORIZONTAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
 const FOCUS_VERTICAL_EDGE_MAX_COLUMNS: usize = 8;
@@ -97,7 +98,8 @@ const FOCUS_VERTICAL_EDGE_MAX_LINE_RESIDUAL_RATIO: f64 = 0.004;
 const FOCUS_VERTICAL_EDGE_CLUSTER_TOLERANCE_RATIO: f64 = 0.012;
 const FOCUS_VERTICAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
 const FOCUS_VERTICAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
-const FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES: usize = 2;
+const FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES: usize = 3;
+const FOCUS_VERTICAL_EDGE_MAX_CONSENSUS_ERROR_PX: f64 = 6.0;
 const FOCUS_VERTICAL_EDGE_BAND_HALF_WIDTH_RATIO: f64 = 0.025;
 const FOCUS_VERTICAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
 // Overlapping source-coordinate bands let a moving-camera stack absorb small
@@ -185,6 +187,14 @@ pub(crate) struct FocusWarpBand {
     // at its narrow silhouette. Generic/depth bands keep the stricter
     // foreground ownership rule so a repeated stroke cannot be reintroduced.
     pub(crate) relax_foreground_seam: bool,
+    // A depth-layer correction is only valid for pixels that belong to the
+    // detected layer. Keeping this bit on the band prevents a near-field
+    // correction from bending the continuous paper plane beside it.
+    pub(crate) foreground_only: bool,
+    // Long-edge consensus is a separate, content-independent geometry cue.
+    // It may be retained in a shifted mosaic to keep a physical frame/rail
+    // continuous, while generic regional focus fits remain disabled there.
+    pub(crate) physical_edge: bool,
 }
 
 #[derive(Clone)]
@@ -217,6 +227,7 @@ pub(crate) struct StitchOutcome {
     pub full_canvas_width: u32,
     pub full_canvas_height: u32,
     pub render_scale: f64,
+    pub ordered_paths: Vec<String>,
 }
 
 fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
@@ -1433,7 +1444,7 @@ fn build_focus_vertical_edge_bands(
                 continue;
             };
             let corrected = correction * global;
-            if corrected.try_inverse().is_none() {
+            if !transform_is_stable_for_focus_stack(&corrected, image.dimensions()) {
                 continue;
             }
             let minimum_source_x =
@@ -1459,6 +1470,17 @@ fn build_focus_vertical_edge_bands(
             .map(|index| lines[*index].median_error)
             .sum::<f64>()
             / cluster.len().max(1) as f64;
+        let maximum_consensus_error =
+            FOCUS_VERTICAL_EDGE_MAX_CONSENSUS_ERROR_PX.max(coordinate_scale * 0.0005);
+        if !average_error.is_finite() || average_error > maximum_consensus_error {
+            println!(
+                "  - Rejected vertical-edge consensus band: {} image(s), fit error {:.2}px exceeds {:.2}px",
+                homographies.len(),
+                average_error,
+                maximum_consensus_error
+            );
+            continue;
+        }
         println!(
             "  - Vertical-edge consensus band: {} image(s), world x {:.1}, fit error {:.2}px",
             homographies.len(),
@@ -1470,6 +1492,8 @@ fn build_focus_vertical_edge_bands(
             source_ranges,
             source_x_ranges,
             relax_foreground_seam: true,
+            foreground_only: false,
+            physical_edge: true,
         });
     }
     bands
@@ -2680,8 +2704,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
     };
-    let focus_layer_warp = (blend_mode == BlendMode::FocusStack)
-        .then(|| build_focus_layer_warp(&image_data, &pairwise_matches, &global_homographies));
+    let focus_layer_warp = (blend_mode == BlendMode::FocusStack).then(|| {
+        build_focus_layer_warp(
+            &image_data,
+            &pairwise_matches,
+            &global_homographies,
+            projection,
+        )
+    });
 
     if ordered_indices.len() < 2 {
         return Err("Could not find a connected sequence of at least two images.".to_string());
@@ -2702,6 +2732,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         progress_event,
         format!("Stitching order: {}", ordered_filenames.join(" -> ")),
     );
+    let ordered_paths = ordered_indices
+        .iter()
+        .map(|&index| image_data[index].filename.clone())
+        .collect::<Vec<_>>();
 
     let mut retained_full_images = HashMap::new();
     for image in &mut image_data {
@@ -2836,6 +2870,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         full_canvas_width,
         full_canvas_height,
         render_scale,
+        ordered_paths,
     })
 }
 
@@ -2967,6 +3002,47 @@ fn transformed_point(
     }
     let mapped = nalgebra::Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
     (mapped.x.is_finite() && mapped.y.is_finite()).then_some(mapped)
+}
+
+fn homography_preserves_focus_orientation(
+    transform: &Matrix3<f64>,
+    dimensions: (u32, u32),
+) -> bool {
+    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
+    if width <= 1.0 || height <= 1.0 {
+        return false;
+    }
+    let source_corners = [
+        Point2::new(0.0, 0.0),
+        Point2::new(width, 0.0),
+        Point2::new(width, height),
+        Point2::new(0.0, height),
+    ];
+    let mut mapped_corners = Vec::with_capacity(source_corners.len());
+    let mut depth_sign = 0.0;
+    for corner in source_corners {
+        let mapped = transform * Point3::new(corner.x, corner.y, 1.0);
+        if !mapped.iter().all(|value| value.is_finite()) || mapped.z.abs() < 1e-8 {
+            return false;
+        }
+        let sign = mapped.z.signum();
+        if depth_sign == 0.0 {
+            depth_sign = sign;
+        } else if sign != depth_sign {
+            // A corner crossing the projective horizon can fold the image even
+            // when the matrix is numerically invertible. Such a pose is never
+            // a valid focus-stack registration.
+            return false;
+        }
+        mapped_corners.push(Point2::new(mapped.x / mapped.z, mapped.y / mapped.z));
+    }
+    let signed_double_area = mapped_corners
+        .iter()
+        .zip(mapped_corners.iter().cycle().skip(1))
+        .take(4)
+        .map(|(left, right)| left.x * right.y - right.x * left.y)
+        .sum::<f64>();
+    signed_double_area.is_finite() && signed_double_area > 0.0
 }
 
 fn transform_is_stable_for_focus_stack(transform: &Matrix3<f64>, dimensions: (u32, u32)) -> bool {
@@ -4123,6 +4199,31 @@ fn focus_auto_order_path_motion_cost(
         .sum()
 }
 
+fn focus_auto_order_path_max_motion(
+    order: &[usize],
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> f64 {
+    let mut maximum = 0.0f64;
+    for pair in order.windows(2) {
+        let Some(motion) = matches
+            .get(&(pair[0], pair[1]))
+            .and_then(|match_info| {
+                focus_match_center_motion_ratio(&images[pair[0]], &images[pair[1]], match_info)
+            })
+            .or_else(|| {
+                matches.get(&(pair[1], pair[0])).and_then(|match_info| {
+                    focus_match_center_motion_ratio(&images[pair[1]], &images[pair[0]], match_info)
+                })
+            })
+        else {
+            return f64::INFINITY;
+        };
+        maximum = maximum.max(motion);
+    }
+    maximum
+}
+
 fn canonical_focus_order_direction(order: &[usize], images: &[ImageInfo]) -> Vec<usize> {
     if order.len() < 2 {
         return order.to_vec();
@@ -4353,21 +4454,36 @@ fn build_focus_stack_stitching_order(
         .map(|(name, order, priority)| {
             let (matched_edges, score) =
                 focus_auto_order_path_score(&order, images, matches, motion_scale);
+            let maximum_motion = focus_auto_order_path_max_motion(&order, images, matches);
             let motion_cost = focus_auto_order_path_motion_cost(&order, images, matches);
             candidate_summaries.push(format!(
-                "{name}={matched_edges}/{}:{score:.2}/motion{motion_cost:.3}",
+                "{name}={matched_edges}/{}:{score:.2}/motion{motion_cost:.3}/max{maximum_motion:.3}",
                 images.len().saturating_sub(1),
             ));
-            (name, order, matched_edges, score, motion_cost, priority)
+            (
+                name,
+                order,
+                matched_edges,
+                score,
+                motion_cost,
+                maximum_motion,
+                priority,
+            )
         })
         .max_by(|left, right| {
             left.2
                 .cmp(&right.2)
+                // A direct match across several captured positions can have
+                // many inliers, but letting it become one edge of the path
+                // makes the ownership pass jump over the intermediate focus
+                // layers. Prefer the path with the smallest single jump
+                // before comparing its total travel distance.
+                .then_with(|| right.5.total_cmp(&left.5))
                 .then_with(|| right.4.total_cmp(&left.4))
                 .then_with(|| left.3.total_cmp(&right.3))
-                .then_with(|| left.5.cmp(&right.5))
+                .then_with(|| left.6.cmp(&right.6))
         });
-    let Some((selected_name, selected_order, matched_edges, selected_score, _, _)) =
+    let Some((selected_name, selected_order, matched_edges, selected_score, _, _, _)) =
         selected.take()
     else {
         return (graph_order, graph_homographies);
@@ -4900,6 +5016,7 @@ fn focus_global_poses_are_valid(
             return false;
         };
         full.try_inverse().is_some()
+            && homography_preserves_focus_orientation(&full, (image.width, image.height))
     })
 }
 
@@ -5155,6 +5272,13 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
     let initial_poses_valid =
         focus_global_poses_are_valid(&poses, images, reference, coordinate_scale);
     println!("  - Focus global registration initial geometry valid: {initial_poses_valid}");
+    if !initial_poses_valid {
+        // Do not let the optimizer turn a bad pairwise registration into a
+        // plausible-looking mirrored canvas. The original homographies are the
+        // safer fallback; pairwise model validation remains responsible for
+        // finding a usable non-mirrored path on the next stage.
+        return initial_homographies.clone();
+    }
     let initial_cost = current_cost;
     let mut accepted_iterations = 0;
 
@@ -5258,6 +5382,7 @@ fn build_focus_layer_warp(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
     global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
 ) -> FocusLayerWarp {
     let mut bands = Vec::new();
 
@@ -5292,6 +5417,8 @@ fn build_focus_layer_warp(
             source_ranges,
             source_x_ranges: HashMap::new(),
             relax_foreground_seam: false,
+            foreground_only: false,
+            physical_edge: false,
         });
     }
 
@@ -5339,9 +5466,72 @@ fn build_focus_layer_warp(
             source_ranges,
             source_x_ranges: HashMap::new(),
             relax_foreground_seam: false,
+            foreground_only: true,
+            physical_edge: false,
         });
     }
+    let shifted_mosaic =
+        focus_stack_homographies_have_large_shift(images, global_homographies, projection);
+    if shifted_mosaic {
+        let before = bands.len();
+        bands.retain(|band| band.foreground_only || band.physical_edge);
+        println!(
+            "  - Shifted focus mosaic: retained {} foreground/physical-edge local warp band(s), filtered {} generic paper-plane band(s)",
+            bands.len(),
+            before.saturating_sub(bands.len())
+        );
+    }
     FocusLayerWarp { bands }
+}
+
+fn focus_stack_homographies_have_large_shift(
+    images: &[ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+) -> bool {
+    let Some(first) = images.first() else {
+        return false;
+    };
+    let Some(first_homography) = global_homographies.get(&first.id) else {
+        return false;
+    };
+    let Some(reference_center) =
+        mapped_image_center_for_focus_warp(first, first_homography, projection)
+    else {
+        return false;
+    };
+    let reference_width = first.width.max(1) as f64;
+    let reference_height = first.height.max(1) as f64;
+    images.iter().skip(1).any(|image| {
+        global_homographies
+            .get(&image.id)
+            .and_then(|homography| {
+                mapped_image_center_for_focus_warp(image, homography, projection)
+            })
+            .is_some_and(|center| {
+                (center.x - reference_center.x).abs() > reference_width * 0.08
+                    || (center.y - reference_center.y).abs() > reference_height * 0.08
+            })
+    })
+}
+
+fn mapped_image_center_for_focus_warp(
+    image: &ImageInfo,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+) -> Option<Point2<f64>> {
+    let center = project_point(
+        image,
+        image.width as f64 * 0.5,
+        image.height as f64 * 0.5,
+        projection,
+    )?;
+    let mapped = homography * Point3::new(center.x, center.y, 1.0);
+    if mapped.z.abs() < 1e-8 {
+        return None;
+    }
+    let point = Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+    (point.x.is_finite() && point.y.is_finite()).then_some(point)
 }
 
 fn constrain_focus_band_homographies(
@@ -5365,7 +5555,7 @@ fn constrain_focus_band_homographies(
             focus_band_maximum_displacement(image, &global, &candidate, normalized_source_y_range);
         let maximum_allowed =
             image.width.max(image.height).max(1) as f64 * maximum_displacement_ratio;
-        let use_candidate = candidate.try_inverse().is_some()
+        let use_candidate = transform_is_stable_for_focus_stack(&candidate, image.dimensions())
             && displacement.is_finite()
             && displacement <= maximum_allowed;
         let selected = if use_candidate { candidate } else { global };
@@ -5613,13 +5803,16 @@ fn align_focus_foreground_edges(
         let Some(base_homography) = homographies.get(&image_id).copied() else {
             continue;
         };
+        let Some(image_info) = images.iter().find(|image| image.id == image_id) else {
+            continue;
+        };
         let Some(correction) =
             estimate_vertical_foreground_correction(&samples, top_line, bottom_line)
         else {
             continue;
         };
         let corrected = correction * base_homography;
-        if corrected.try_inverse().is_none() {
+        if !transform_is_stable_for_focus_stack(&corrected, image_info.dimensions()) {
             continue;
         }
         let displacement = samples
@@ -5832,7 +6025,7 @@ fn build_focus_horizontal_edge_bands(
                 continue;
             };
             let corrected = correction * global;
-            if corrected.try_inverse().is_none() {
+            if !transform_is_stable_for_focus_stack(&corrected, image.dimensions()) {
                 continue;
             }
             let minimum_source_y =
@@ -5861,6 +6054,17 @@ fn build_focus_horizontal_edge_bands(
             .map(|index| lines[*index].median_error)
             .sum::<f64>()
             / cluster.len().max(1) as f64;
+        let maximum_consensus_error =
+            FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX.max(coordinate_scale * 0.0005);
+        if !average_error.is_finite() || average_error > maximum_consensus_error {
+            println!(
+                "  - Rejected long-edge consensus band: {} image(s), fit error {:.2}px exceeds {:.2}px",
+                homographies.len(),
+                average_error,
+                maximum_consensus_error
+            );
+            continue;
+        }
         println!(
             "  - Long-edge consensus band: {} image(s), world y {:.1}, fit error {:.2}px",
             homographies.len(),
@@ -5872,6 +6076,8 @@ fn build_focus_horizontal_edge_bands(
             source_ranges,
             source_x_ranges: HashMap::new(),
             relax_foreground_seam: false,
+            foreground_only: false,
+            physical_edge: true,
         });
     }
 
@@ -6301,6 +6507,21 @@ mod alignment_tests {
         assert!(transform_is_stable_for_focus_stack(&stable, (9_504, 6_336)));
         assert!(!transform_is_stable_for_focus_stack(
             &unstable,
+            (9_504, 6_336)
+        ));
+    }
+
+    #[test]
+    fn focus_registration_rejects_mirrored_image_orientation() {
+        let identity = Matrix3::identity();
+        let mirrored = Matrix3::new(-1.0, 0.0, 9_504.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+
+        assert!(homography_preserves_focus_orientation(
+            &identity,
+            (9_504, 6_336)
+        ));
+        assert!(!homography_preserves_focus_orientation(
+            &mirrored,
             (9_504, 6_336)
         ));
     }

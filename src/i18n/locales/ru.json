@@ -1552,6 +1552,8 @@
       "exitFocusPreview": "Выйти из режима просмотра",
       "failed": "Image stack failed",
       "fitPreview": "По размеру окна",
+      "focusAutoOrderHint": "Автосортировка",
+      "focusAutoOrderSourceHint": "Фокус-стекинг анализирует перекрытие кадров и автоматически строит лучший порядок, поэтому порядок загрузки не влияет на результат.",
       "focusPreview": "Режим просмотра",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

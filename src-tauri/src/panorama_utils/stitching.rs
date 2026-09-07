@@ -12,12 +12,26 @@ const PANORAMA_DETAIL_SEAM_FEATHER_RADIUS: f32 = 4.0;
 // levels tied to the optimal seam; broader bands may follow the overlap-wide
 // illumination ramp without visibly doubling normal photographic detail.
 const PANORAMA_GLOBAL_TONE_FIRST_BAND: usize = 5;
-const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 1536;
+// Keep enough native detail in the focus decision for thin brush strokes and
+// seal edges. The final canvas may be much wider than one source frame, so the
+// analysis scale is still bounded by the per-source dimension in
+// `focus_analysis_dimensions`.
+const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 2048;
 const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 24_000_000;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
 const FOCUS_EDGE_PROTECTION_AT_1024: f32 = 12.0;
 const FOCUS_EDGE_CLAIM_THRESHOLD: f32 = 0.08;
+// The analysis canvas is still sampled from the native frame (roughly 4-5
+// source pixels per analysis pixel for the Lanting fixture). Keep the focus
+// metric local at that scale: a large blur makes a sharp character claim its
+// neighbour and is the main way a focus stack can become softer than either
+// input frame.
+const FOCUS_SCORE_BLUR_RADIUS_DIVISOR: f32 = 1_024.0;
+const FOCUS_SCORE_MAX_BLUR_RADIUS: usize = 4;
+const FOCUS_DECISION_COHERENCE_RADIUS_DIVISOR: f32 = 1_024.0;
+const FOCUS_DECISION_MAX_COHERENCE_RADIUS: usize = 5;
+const FOCUS_EDGE_PROTECTION_SCALE: f32 = 0.35;
 // The broad tone transition is limited to the canvas-only low-frequency mask
 // below. Keep enough room for a source-sized exposure step to meet smoothly,
 // while all foreground pixels and all detail bands remain source-selected.
@@ -40,7 +54,7 @@ const FOCUS_COLOR_MAX_RELAXED_LUMA: f32 = 0.995;
 // foreground pixels after reconstruction; the visible detail bands stay on a
 // single source. This lets a shifted scan remove exposure blocks without
 // turning a displaced brush stroke into a double contour.
-const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = true;
+const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = false;
 // Correct broad local illumination differences without allowing individual
 // brush strokes or the canvas weave to become a colour reference. The field is
 // sampled in candidate-image space, then interpolated while the layer is
@@ -70,6 +84,24 @@ const FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO: f32 = 0.018;
 // parallel strip. The radius is derived from the source layer, not from any
 // particular colour or holder shape.
 const FOCUS_FOREGROUND_OWNERSHIP_RADIUS_RATIO: f32 = 0.025;
+// The mask-only foreground refinement is a last-mile correction, not a second
+// registration pass. A larger search can match a repeated rail/seal edge and
+// move an otherwise valid foreground layer onto the wrong instance. Residual
+// motion beyond this bound must be resolved by the image-backed homography and
+// edge-consensus stages above.
+const FOCUS_FOREGROUND_REFINEMENT_MAX_SHIFT: i32 = 32;
+// Scalable stacks register on a reduced analysis image. Refine the committed
+// full-resolution layer only when several independent overlap patches agree on
+// the same small translation; ambiguous texture and isolated repeated strokes
+// are deliberately left unchanged.
+const FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS: i32 = 8;
+const FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT: i32 = 16;
+const FOCUS_FULL_RES_ALIGNMENT_GRID_SIZE: i32 = 4;
+const FOCUS_FULL_RES_ALIGNMENT_MIN_NCC: f64 = 0.52;
+const FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN: f64 = 0.025;
+const FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY: f64 = 0.008;
+const FOCUS_FULL_RES_ALIGNMENT_MIN_PATCHES: usize = 4;
+const FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION: f64 = 0.25;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -1174,15 +1206,25 @@ fn focus_stack_pixel_is_tone_foreground(pixel: &[f32]) -> bool {
     let blue = pixel[2].clamp(0.0, 1.0);
     let luma = red * 0.299 + green * 0.587 + blue * 0.114;
     let chroma = red.max(green).max(blue) - red.min(green).min(blue);
+    let red_dominance = red - 2.0 * green + blue;
     let red_paint = red - green >= 0.14 && red - blue >= 0.17 && red - 2.0 * green + blue >= 0.08;
-    let green_or_cool_paint = green - red >= 0.03 || blue - green >= 0.03;
+    let green_or_cool_paint = green - red >= 0.05 || blue - green >= 0.05;
     let dark_neutral_paint =
         luma <= 0.18 && (red - green).abs() <= 0.07 && (green - blue).abs() <= 0.07;
+    // Faces and hands can have nearly the same average luminance as the
+    // canvas, but their blue channel is much closer to green and their red
+    // dominance is stronger. Keep this warm-pale paint out of the canvas-only
+    // correction without admitting the flatter brown paper tone.
+    let warm_light_paint = luma >= 0.22
+        && red - green >= 0.05
+        && red - blue >= 0.08
+        && green - blue <= 0.08
+        && red_dominance >= 0.04;
     // Very pale sleeves, hands, and faces are outside the brown canvas range.
     // This is intentionally narrower than a generic bright-pixel detector so
     // a lighter canvas exposure can still be harmonized.
     let pale_paint = luma >= 0.78 && chroma <= 0.22;
-    red_paint || green_or_cool_paint || dark_neutral_paint || pale_paint
+    red_paint || green_or_cool_paint || dark_neutral_paint || warm_light_paint || pale_paint
 }
 
 struct RenderedFocusLayer {
@@ -1982,6 +2024,7 @@ fn render_focus_layer(
                 correction_inverse,
                 axis,
                 band.relax_foreground_seam,
+                band.foreground_only,
             ))
         })
         .collect::<Vec<_>>();
@@ -2032,6 +2075,7 @@ fn render_focus_layer(
                         ref correction_inverse,
                         axis,
                         relax_foreground_seam,
+                        foreground_only,
                     ) in &band_inverses
                     {
                         let Some(candidate) =
@@ -2044,6 +2088,9 @@ fn render_focus_layer(
                             || candidate.x >= source_image.width() as f64
                             || candidate.y >= source_image.height() as f64
                         {
+                            continue;
+                        }
+                        if foreground_only && !source_is_focus_foreground(image, candidate) {
                             continue;
                         }
                         let normalized_x = candidate.x / image.width().max(1) as f64;
@@ -2078,6 +2125,7 @@ fn render_focus_layer(
                             candidate,
                             *correction_inverse,
                             relax_foreground_seam,
+                            foreground_only,
                         ));
                     }
                     let select_local_candidate = |axis: u8| {
@@ -2109,7 +2157,7 @@ fn render_focus_layer(
                     let selected_vertical = select_local_candidate(0);
                     let selected_horizontal = select_local_candidate(1);
                     let local_strength_for =
-                        |candidate: &(f64, f64, f64, u8, Point2<f64>, Matrix3<f64>, bool)| {
+                        |candidate: &(f64, f64, f64, u8, Point2<f64>, Matrix3<f64>, bool, bool)| {
                             (1.0 - (candidate.1 - candidate.2).abs() / (candidate.0 * 0.5))
                                 .clamp(0.0, 1.0)
                         };
@@ -2192,16 +2240,15 @@ fn render_focus_layer(
                     }
                     let pixel =
                         get_high_quality_interpolated_pixel(source_image, source.x, source.y);
-                    // The luminance-based foreground detector is intentionally
-                    // conservative, but a dark painting can contain no bright
-                    // row at all. Keep a colour-based foreground seed as well
-                    // so later canvas-only tone correction cannot claim red,
-                    // green, or near-black painted regions.
-                    let color_foreground = !focus_stack_pixel_is_canvas_like(pixel.0.as_slice());
                     let start = local_x as usize * 3;
                     row[start..start + 3].copy_from_slice(&pixel.0);
                     mask_row[local_x as usize] = 255;
-                    if source_is_focus_foreground(image, source) || color_foreground {
+                    // This mask controls focus ownership and duplicate suppression;
+                    // it must stay geometric. Colour classification belongs only
+                    // to the final canvas-tone protection below. Marking every
+                    // black stroke or red seal here would make the first soft
+                    // sample win forever and produce the reported ghosting.
+                    if source_is_focus_foreground(image, source) {
                         foreground_mask_row[local_x as usize] = 255;
                         if relax_foreground_seam {
                             relaxed_row[local_x as usize] = 255;
@@ -2334,10 +2381,12 @@ fn focus_score_map(image: &Rgb32FImage, mask: &GrayImage) -> Vec<f32> {
             });
     }
 
-    // Focus ownership is decided on a bounded analysis canvas. An approximately
-    // 8px window at 1536px suppresses sensor/JPEG noise and texture-scale flips,
-    // while the final pixels still come from the full-resolution aligned layer.
-    let radius = ((width.max(height) as f32 / 192.0).round() as usize).clamp(1, 8);
+    // Focus ownership is decided on a bounded analysis canvas. Keep the score
+    // window local enough that one clear stroke cannot claim an adjacent
+    // character; the final pixels still come from the full-resolution aligned
+    // layer.
+    let radius = ((width.max(height) as f32 / FOCUS_SCORE_BLUR_RADIUS_DIVISOR).round() as usize)
+        .clamp(1, FOCUS_SCORE_MAX_BLUR_RADIUS);
     box_blur_focus_map(&raw_score, width, height, radius)
 }
 
@@ -2368,7 +2417,13 @@ fn focus_decision_mask(
             };
         });
 
-    let coherence_radius = ((width.max(height) as f32 / 96.0).round() as usize).clamp(2, 16);
+    // The old radius was effectively ~100 source pixels for a 9504px frame.
+    // That let a clear stroke in one region claim a neighbouring blurred
+    // character. Keep the decision coherent, but make the neighbourhood local
+    // enough that each character can select its own sharp source.
+    let coherence_radius = ((width.max(height) as f32 / FOCUS_DECISION_COHERENCE_RADIUS_DIVISOR)
+        .round() as usize)
+        .clamp(2, FOCUS_DECISION_MAX_COHERENCE_RADIUS);
     let coarse_advantage = box_blur_focus_map(&fine_advantage, width, height, coherence_radius);
 
     let sample_step = (pixel_count / 4096).max(1);
@@ -2410,9 +2465,10 @@ fn focus_decision_mask(
                 *candidate_claim = 1.0;
             }
         });
-    let protection_radius = ((width.max(height) as f32 / 1024.0) * FOCUS_EDGE_PROTECTION_AT_1024)
+    let protection_radius = ((width.max(height) as f32 / 2048.0)
+        * (FOCUS_EDGE_PROTECTION_AT_1024 * FOCUS_EDGE_PROTECTION_SCALE))
         .round()
-        .max(1.0) as usize;
+        .clamp(2.0, 6.0) as usize;
     let base_claim = box_blur_focus_map(&strong_base, width, height, protection_radius);
     let candidate_claim = box_blur_focus_map(&strong_candidate, width, height, protection_radius);
 
@@ -2446,6 +2502,49 @@ fn focus_decision_mask(
     })
 }
 
+fn suppress_focus_canvas_switches(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &Rgb32FImage,
+    base_mask: &GrayImage,
+    candidate_mask: &GrayImage,
+) {
+    if decision_mask.dimensions() != base.dimensions()
+        || base.dimensions() != candidate.dimensions()
+        || base_mask.dimensions() != base.dimensions()
+        || candidate_mask.dimensions() != base.dimensions()
+    {
+        return;
+    }
+
+    decision_mask
+        .as_mut()
+        .par_iter_mut()
+        .zip(base.as_raw().par_chunks(3))
+        .zip(candidate.as_raw().par_chunks(3))
+        .zip(base_mask.as_raw().par_iter())
+        .zip(candidate_mask.as_raw().par_iter())
+        .for_each(
+            |((((decision, base_pixel), candidate_pixel), base_valid), candidate_valid)| {
+                // The canvas is one planar surface. Sharpness fluctuations in its
+                // weave must not make the focus score swap the source for an
+                // already-covered pixel; those swaps are the rectangular exposure
+                // blocks visible in a shifted scan. A painted pixel can still win
+                // normally, and a new candidate can still fill an uncovered hole.
+                if *decision > 0
+                    && *base_valid > 0
+                    && *candidate_valid > 0
+                    && focus_stack_pixel_is_canvas_like(base_pixel)
+                    && focus_stack_pixel_is_canvas_like(candidate_pixel)
+                    && !focus_stack_pixel_is_tone_foreground(base_pixel)
+                    && !focus_stack_pixel_is_tone_foreground(candidate_pixel)
+                {
+                    *decision = 0;
+                }
+            },
+        );
+}
+
 fn resize_binary_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
     image::imageops::resize(
         mask,
@@ -2472,6 +2571,75 @@ fn dilate_focus_binary_mask(mask: &GrayImage, radius: usize) -> GrayImage {
     })
 }
 
+fn open_focus_binary_mask(mask: &GrayImage, radius: usize) -> GrayImage {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 || radius == 0 {
+        return mask.clone();
+    }
+    let seed = mask
+        .as_raw()
+        .iter()
+        .map(|&value| f32::from(value > 0))
+        .collect::<Vec<_>>();
+    let eroded = box_blur_focus_map(&seed, width, height, radius);
+    let eroded = GrayImage::from_fn(width, height, |x, y| {
+        let index = y as usize * width as usize + x as usize;
+        image::Luma([u8::from(eroded[index] >= 0.999) * 255])
+    });
+    dilate_focus_binary_mask(&eroded, radius)
+}
+
+fn fill_focus_foreground_holes(mask: &GrayImage) -> GrayImage {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 {
+        return mask.clone();
+    }
+    let width = width as usize;
+    let height = height as usize;
+    let source = mask.as_raw();
+    let mut outside = vec![false; source.len()];
+    let mut pending = Vec::new();
+    let enqueue = |index: usize, outside: &mut [bool], pending: &mut Vec<usize>| {
+        if source[index] == 0 && !outside[index] {
+            outside[index] = true;
+            pending.push(index);
+        }
+    };
+    for x in 0..width {
+        enqueue(x, &mut outside, &mut pending);
+        enqueue((height - 1) * width + x, &mut outside, &mut pending);
+    }
+    for y in 0..height {
+        enqueue(y * width, &mut outside, &mut pending);
+        enqueue(y * width + width - 1, &mut outside, &mut pending);
+    }
+    while let Some(index) = pending.pop() {
+        let x = index % width;
+        let y = index / width;
+        if x > 0 {
+            enqueue(index - 1, &mut outside, &mut pending);
+        }
+        if x + 1 < width {
+            enqueue(index + 1, &mut outside, &mut pending);
+        }
+        if y > 0 {
+            enqueue(index - width, &mut outside, &mut pending);
+        }
+        if y + 1 < height {
+            enqueue(index + width, &mut outside, &mut pending);
+        }
+    }
+
+    let mut filled = source.to_vec();
+    for (index, value) in filled.iter_mut().enumerate() {
+        if *value == 0 && !outside[index] {
+            *value = 255;
+        }
+    }
+    GrayImage::from_raw(width as u32, height as u32, filled)
+        .expect("focus hole-filled foreground mask dimensions must match")
+}
+
 fn retain_focus_foreground_components(
     foreground_mask: &GrayImage,
     seed_mask: &GrayImage,
@@ -2487,6 +2655,9 @@ fn retain_focus_foreground_components(
     let seeds = seed_mask.as_raw();
     let mut visited = vec![false; width_usize * height_usize];
     let mut retained = vec![0u8; width_usize * height_usize];
+    let minimum_component_size = ((width as u64 * height as u64) as f64 * 0.00018)
+        .round()
+        .clamp(24.0, 512.0) as usize;
     for start in 0..foreground.len() {
         if foreground[start] == 0 || visited[start] {
             continue;
@@ -2495,11 +2666,19 @@ fn retain_focus_foreground_components(
         let mut pending = vec![start];
         let mut component = Vec::new();
         let mut has_seed = false;
+        let mut minimum_x = start % width_usize;
+        let mut maximum_x = minimum_x;
+        let mut minimum_y = start / width_usize;
+        let mut maximum_y = minimum_y;
         while let Some(index) = pending.pop() {
             component.push(index);
             has_seed |= seeds[index] > 0;
             let x = index % width_usize;
             let y = index / width_usize;
+            minimum_x = minimum_x.min(x);
+            maximum_x = maximum_x.max(x);
+            minimum_y = minimum_y.min(y);
+            maximum_y = maximum_y.max(y);
             if x > 0 {
                 let neighbor = index - 1;
                 if foreground[neighbor] > 0 && !visited[neighbor] {
@@ -2529,7 +2708,17 @@ fn retain_focus_foreground_components(
                 }
             }
         }
-        if has_seed {
+        // Exposure-shifted canvas noise can satisfy a colour seed locally, but
+        // it should not become a protected island. Real painted regions in this
+        // stack are much larger and remain connected at analysis resolution.
+        let component_width = maximum_x - minimum_x + 1;
+        let component_height = maximum_y - minimum_y + 1;
+        let minimum_component_width = (width as f32 * 0.006).round().clamp(8.0, 32.0) as usize;
+        if has_seed
+            && component.len() >= minimum_component_size
+            && component_width >= minimum_component_width
+            && component_height >= minimum_component_width
+        {
             for index in component {
                 retained[index] = 255;
             }
@@ -2538,6 +2727,198 @@ fn retain_focus_foreground_components(
 
     GrayImage::from_raw(width, height, retained)
         .expect("focus retained foreground mask dimensions must match")
+}
+
+fn build_focus_background_foreground_envelope(
+    analysis_image: &Rgb32FImage,
+    analysis_mask: &GrayImage,
+    existing_foreground_mask: &GrayImage,
+) -> GrayImage {
+    let (width, height) = analysis_image.dimensions();
+    if width == 0
+        || height == 0
+        || analysis_mask.dimensions() != (width, height)
+        || existing_foreground_mask.dimensions() != (width, height)
+    {
+        return GrayImage::new(width, height);
+    }
+
+    // A raw colour mask contains isolated canvas-weave outliers. Keep only
+    // connected components that have enough support to be painted content,
+    // then expand the retained silhouette so skin/highlights between the dark
+    // hair and robe are protected as one object rather than treated as paper.
+    let tone_seed = GrayImage::from_fn(width, height, |x, y| {
+        let index = y as usize * width as usize + x as usize;
+        let covered = analysis_mask.as_raw()[index] > 0;
+        let start = index * 3;
+        image::Luma([u8::from(
+            covered
+                && focus_stack_pixel_is_tone_foreground(&analysis_image.as_raw()[start..start + 3]),
+        ) * 255])
+    });
+    // Canvas weave can create long, one-pixel colour runs that connect to a
+    // real silhouette. Open the seed before connected-component filtering so
+    // those runs cannot become foreground exclusions across an entire source
+    // tile. The radius is only a few analysis pixels and is applied to the
+    // mask, never to the final image.
+    let seed_cleanup_radius = (width.max(height) as f32 * 0.0015).round().clamp(2.0, 4.0) as usize;
+    let cleaned_tone_seed = open_focus_binary_mask(&tone_seed, seed_cleanup_radius);
+    let retained_seed = retain_focus_foreground_components(&cleaned_tone_seed, &cleaned_tone_seed);
+    let retained_seed = fill_focus_foreground_holes(&retained_seed);
+    let retained_count = retained_seed
+        .as_raw()
+        .iter()
+        .filter(|&&value| value > 0)
+        .count();
+    let mut envelope = if retained_count >= 24 {
+        let radius = (width.max(height) as f32 * FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO)
+            .round()
+            .clamp(8.0, 64.0) as usize;
+        dilate_focus_binary_mask(&retained_seed, radius)
+    } else {
+        GrayImage::new(width, height)
+    };
+
+    // The geometric mask is an additional safety net when a caller has a
+    // detected depth layer. It is intentionally dilated by the same bounded
+    // halo so the tone pass cannot nibble at its silhouette edge.
+    let existing_count = existing_foreground_mask
+        .as_raw()
+        .iter()
+        .filter(|&&value| value > 0)
+        .count();
+    if existing_count > 0 {
+        let radius = (width.max(height) as f32 * 0.01).round().clamp(4.0, 32.0) as usize;
+        let existing = dilate_focus_binary_mask(existing_foreground_mask, radius);
+        for (destination, source) in envelope.as_mut().iter_mut().zip(existing.as_raw()) {
+            *destination = (*destination).max(*source);
+        }
+    }
+    envelope
+}
+
+fn build_focus_background_reference_mask(
+    analysis_image: &Rgb32FImage,
+    analysis_mask: &GrayImage,
+    existing_foreground_mask: &GrayImage,
+) -> GrayImage {
+    let (width, height) = analysis_image.dimensions();
+    if width == 0
+        || height == 0
+        || analysis_mask.dimensions() != (width, height)
+        || existing_foreground_mask.dimensions() != (width, height)
+    {
+        return GrayImage::new(width, height);
+    }
+
+    // Do not use a colour threshold here. The same paper can be considerably
+    // darker or lighter in different source frames, which is exactly the
+    // exposure step this reference is meant to remove. The foreground
+    // envelope is content-derived and is the only exclusion needed here.
+    let foreground_envelope = build_focus_background_foreground_envelope(
+        analysis_image,
+        analysis_mask,
+        existing_foreground_mask,
+    );
+    GrayImage::from_fn(width, height, |x, y| {
+        let index = y as usize * width as usize + x as usize;
+        image::Luma([u8::from(
+            analysis_mask.as_raw()[index] > 0 && foreground_envelope.as_raw()[index] == 0,
+        ) * 255])
+    })
+}
+
+fn update_focus_background_reference(
+    reference_image: &mut Rgb32FImage,
+    reference_mask: &mut GrayImage,
+    reference_counts: &mut [u16],
+    candidate_image: &Rgb32FImage,
+    candidate_mask: &GrayImage,
+) -> [f32; 3] {
+    let (width, height) = reference_image.dimensions();
+    if width == 0
+        || height == 0
+        || candidate_image.dimensions() != (width, height)
+        || reference_mask.dimensions() != (width, height)
+        || candidate_mask.dimensions() != (width, height)
+        || reference_counts.len() != width as usize * height as usize
+    {
+        return [0.0; 3];
+    }
+
+    let reference_pixels = reference_image.as_raw();
+    let reference_mask_pixels = reference_mask.as_raw();
+    let candidate_pixels = candidate_image.as_raw();
+    let candidate_mask_pixels = candidate_mask.as_raw();
+    let sample_step = ((u64::from(width) * u64::from(height) / 120_000) as f64)
+        .sqrt()
+        .ceil()
+        .max(1.0) as usize;
+    let mut channel_differences = [Vec::new(), Vec::new(), Vec::new()];
+    for y in (0..height as usize).step_by(sample_step) {
+        for x in (0..width as usize).step_by(sample_step) {
+            let index = y * width as usize + x;
+            if reference_mask_pixels[index] == 0 || candidate_mask_pixels[index] == 0 {
+                continue;
+            }
+            let start = index * 3;
+            for channel in 0..3 {
+                channel_differences[channel]
+                    .push(reference_pixels[start + channel] - candidate_pixels[start + channel]);
+            }
+        }
+    }
+
+    let correction = [
+        median_f32(&mut channel_differences[0])
+            .unwrap_or(0.0)
+            .clamp(
+                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            ),
+        median_f32(&mut channel_differences[1])
+            .unwrap_or(0.0)
+            .clamp(
+                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            ),
+        median_f32(&mut channel_differences[2])
+            .unwrap_or(0.0)
+            .clamp(
+                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            ),
+    ];
+
+    let reference_pixels = reference_image.as_mut();
+    let reference_mask_pixels = reference_mask.as_mut();
+    for index in 0..candidate_mask_pixels.len() {
+        if candidate_mask_pixels[index] == 0 {
+            continue;
+        }
+        let start = index * 3;
+        let mut normalized = [0.0f32; 3];
+        for channel in 0..3 {
+            normalized[channel] =
+                (candidate_pixels[start + channel] + correction[channel]).clamp(0.0, 1.0);
+        }
+        let count = reference_counts[index];
+        if count == 0 || reference_mask_pixels[index] == 0 {
+            reference_pixels[start..start + 3].copy_from_slice(&normalized);
+            reference_counts[index] = 1;
+            reference_mask_pixels[index] = 255;
+            continue;
+        }
+        let old_weight = f32::from(count);
+        let next_weight = old_weight + 1.0;
+        for channel in 0..3 {
+            reference_pixels[start + channel] = (reference_pixels[start + channel] * old_weight
+                + normalized[channel])
+                / next_weight;
+        }
+        reference_counts[index] = count.saturating_add(1);
+    }
+    correction
 }
 
 fn hard_select_focus_pixels(
@@ -2643,6 +3024,421 @@ fn place_focus_foreground_mask(base: &mut GrayImage, candidate: &RenderedFocusLa
         });
 }
 
+fn focus_rgb_luma_at(image: &Rgb32FImage, x: i32, y: i32) -> Option<f64> {
+    let (width, height) = image.dimensions();
+    if x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+        return None;
+    }
+    let pixel = image.get_pixel(x as u32, y as u32);
+    pixel
+        .0
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(pixel[0] as f64 * 0.299 + pixel[1] as f64 * 0.587 + pixel[2] as f64 * 0.114)
+}
+
+fn focus_alignment_gradient_at(
+    image: &Rgb32FImage,
+    mask: &GrayImage,
+    x: i32,
+    y: i32,
+) -> Option<(f64, f64)> {
+    let (width, height) = image.dimensions();
+    if x < 1 || y < 1 || x + 1 >= width as i32 || y + 1 >= height as i32 {
+        return None;
+    }
+    let valid =
+        |sample_x: i32, sample_y: i32| mask.get_pixel(sample_x as u32, sample_y as u32)[0] > 0;
+    if !valid(x, y) || !valid(x - 1, y) || !valid(x + 1, y) || !valid(x, y - 1) || !valid(x, y + 1)
+    {
+        return None;
+    }
+    let horizontal = focus_rgb_luma_at(image, x + 1, y)? - focus_rgb_luma_at(image, x - 1, y)?;
+    let vertical = focus_rgb_luma_at(image, x, y + 1)? - focus_rgb_luma_at(image, x, y - 1)?;
+    Some((horizontal, vertical))
+}
+
+fn focus_full_resolution_patch_score(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    center_x: i32,
+    center_y: i32,
+    delta_x: i32,
+    delta_y: i32,
+    radius: i32,
+) -> Option<(f64, f64, f64)> {
+    let (candidate_width, candidate_height) = candidate.image.dimensions();
+    let mut candidate_horizontal_sum = 0.0;
+    let mut candidate_vertical_sum = 0.0;
+    let mut merged_horizontal_sum = 0.0;
+    let mut merged_vertical_sum = 0.0;
+    let mut candidate_squared_sum = 0.0;
+    let mut merged_squared_sum = 0.0;
+    let mut product_sum = 0.0;
+    let mut sample_count = 0usize;
+    let mut foreground_count = 0usize;
+    let mut patch_count = 0usize;
+    for offset_y in -radius..=radius {
+        for offset_x in -radius..=radius {
+            let local_x = center_x + offset_x;
+            let local_y = center_y + offset_y;
+            if local_x >= 0
+                && local_y >= 0
+                && local_x < candidate_width as i32
+                && local_y < candidate_height as i32
+            {
+                patch_count += 1;
+                if candidate
+                    .foreground_mask
+                    .get_pixel(local_x as u32, local_y as u32)[0]
+                    > 0
+                {
+                    foreground_count += 1;
+                }
+            }
+            let Some((candidate_horizontal, candidate_vertical)) =
+                focus_alignment_gradient_at(&candidate.image, &candidate.mask, local_x, local_y)
+            else {
+                continue;
+            };
+            let merged_x = candidate.left as i32 + local_x + delta_x;
+            let merged_y = candidate.top as i32 + local_y + delta_y;
+            let Some((merged_horizontal, merged_vertical)) =
+                focus_alignment_gradient_at(merged, merged_mask, merged_x, merged_y)
+            else {
+                continue;
+            };
+            candidate_horizontal_sum += candidate_horizontal;
+            candidate_vertical_sum += candidate_vertical;
+            merged_horizontal_sum += merged_horizontal;
+            merged_vertical_sum += merged_vertical;
+            candidate_squared_sum += candidate_horizontal * candidate_horizontal
+                + candidate_vertical * candidate_vertical;
+            merged_squared_sum +=
+                merged_horizontal * merged_horizontal + merged_vertical * merged_vertical;
+            product_sum +=
+                candidate_horizontal * merged_horizontal + candidate_vertical * merged_vertical;
+            sample_count += 1;
+        }
+    }
+    let minimum_samples = (((radius * 2 + 1) * (radius * 2 + 1)) as f64 * 0.45)
+        .round()
+        .max(48.0) as usize;
+    if sample_count < minimum_samples || patch_count == 0 {
+        return None;
+    }
+    let sample_count_f64 = sample_count as f64;
+    let candidate_variance = candidate_squared_sum
+        - (candidate_horizontal_sum * candidate_horizontal_sum
+            + candidate_vertical_sum * candidate_vertical_sum)
+            / sample_count_f64;
+    let merged_variance = merged_squared_sum
+        - (merged_horizontal_sum * merged_horizontal_sum
+            + merged_vertical_sum * merged_vertical_sum)
+            / sample_count_f64;
+    if candidate_variance <= f64::EPSILON || merged_variance <= f64::EPSILON {
+        return None;
+    }
+    let covariance = product_sum
+        - (candidate_horizontal_sum * merged_horizontal_sum
+            + candidate_vertical_sum * merged_vertical_sum)
+            / sample_count_f64;
+    let score = covariance / (candidate_variance * merged_variance).sqrt();
+    let candidate_energy = (candidate_variance / sample_count_f64).sqrt();
+    let merged_energy = (merged_variance / sample_count_f64).sqrt();
+    let foreground_fraction = foreground_count as f64 / patch_count as f64;
+    (score.is_finite() && candidate_energy.is_finite() && merged_energy.is_finite()).then_some((
+        score,
+        candidate_energy.min(merged_energy),
+        foreground_fraction,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_focus_full_resolution_shift(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    center_x: i32,
+    center_y: i32,
+    delta_x: i32,
+    delta_y: i32,
+    radius: i32,
+    best: &mut Option<(f64, f64, i32, i32)>,
+    second_best: &mut f64,
+    current_score: &mut f64,
+) {
+    let Some((score, energy, foreground_fraction)) = focus_full_resolution_patch_score(
+        candidate,
+        merged,
+        merged_mask,
+        center_x,
+        center_y,
+        delta_x,
+        delta_y,
+        radius,
+    ) else {
+        return;
+    };
+    if foreground_fraction > FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION
+        || energy < FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY
+        || score < FOCUS_FULL_RES_ALIGNMENT_MIN_NCC
+    {
+        return;
+    }
+    if delta_x == 0 && delta_y == 0 {
+        *current_score = score;
+    }
+    let replaces_best = best.as_ref().is_none_or(|(best_score, _, best_x, best_y)| {
+        score > *best_score
+            || (score == *best_score
+                && (delta_x.abs() + delta_y.abs() < best_x.abs() + best_y.abs()))
+    });
+    if replaces_best {
+        if let Some((best_score, _, _, _)) = *best {
+            *second_best = (*second_best).max(best_score);
+        }
+        *best = Some((score, energy, delta_x, delta_y));
+    } else {
+        *second_best = (*second_best).max(score);
+    }
+}
+
+fn estimate_focus_layer_translation(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+) -> Option<(i32, i32, f64, usize, usize)> {
+    let (candidate_width, candidate_height) = candidate.image.dimensions();
+    let (merged_width, merged_height) = merged.dimensions();
+    if candidate_width < 2 * (FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS + 2) as u32
+        || candidate_height < 2 * (FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS + 2) as u32
+        || merged_width < 2
+        || merged_height < 2
+        || merged_mask.dimensions() != merged.dimensions()
+    {
+        return None;
+    }
+
+    let patch_radius = FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS;
+    let overlap_left = candidate.left.max(0).min(merged_width.saturating_sub(1)) as i32;
+    let overlap_top = candidate.top.max(0).min(merged_height.saturating_sub(1)) as i32;
+    let overlap_right = (candidate
+        .left
+        .saturating_add(candidate_width)
+        .saturating_sub(1))
+    .min(merged_width.saturating_sub(1)) as i32;
+    let overlap_bottom = (candidate
+        .top
+        .saturating_add(candidate_height)
+        .saturating_sub(1))
+    .min(merged_height.saturating_sub(1)) as i32;
+    if overlap_right - overlap_left < patch_radius * 2 + 2
+        || overlap_bottom - overlap_top < patch_radius * 2 + 2
+    {
+        return None;
+    }
+
+    let grid_size = FOCUS_FULL_RES_ALIGNMENT_GRID_SIZE;
+    let mut patch_centers = Vec::with_capacity((grid_size * grid_size) as usize);
+    for grid_y in 0..grid_size {
+        let global_y =
+            overlap_top + ((overlap_bottom - overlap_top) * (grid_y + 1) / (grid_size + 1));
+        for grid_x in 0..grid_size {
+            let global_x =
+                overlap_left + ((overlap_right - overlap_left) * (grid_x + 1) / (grid_size + 1));
+            let local_x = global_x - candidate.left as i32;
+            let local_y = global_y - candidate.top as i32;
+            patch_centers.push((local_x, local_y));
+        }
+    }
+
+    let mut patch_deltas = Vec::new();
+    let mut score_sum = 0.0;
+    for (center_x, center_y) in patch_centers.iter().copied() {
+        let mut best: Option<(f64, f64, i32, i32)> = None;
+        let mut second_best = f64::NEG_INFINITY;
+        let mut current_score = f64::NEG_INFINITY;
+        // A coarse pass limits the expensive full-resolution correlation to a
+        // small neighbourhood around its best integer displacement. The fine
+        // pass still checks every pixel shift around that candidate, so a
+        // one-pixel residual is not rounded away.
+        let coarse_step = 4;
+        for delta_y in (-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT..=FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT)
+            .step_by(coarse_step as usize)
+        {
+            for delta_x in (-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT
+                ..=FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT)
+                .step_by(coarse_step as usize)
+            {
+                evaluate_focus_full_resolution_shift(
+                    candidate,
+                    merged,
+                    merged_mask,
+                    center_x,
+                    center_y,
+                    delta_x,
+                    delta_y,
+                    patch_radius,
+                    &mut best,
+                    &mut second_best,
+                    &mut current_score,
+                );
+            }
+        }
+        let Some((_, _, coarse_x, coarse_y)) = best else {
+            continue;
+        };
+        let fine_min_x = (coarse_x - coarse_step + 1).max(-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
+        let fine_max_x = (coarse_x + coarse_step - 1).min(FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
+        let fine_min_y = (coarse_y - coarse_step + 1).max(-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
+        let fine_max_y = (coarse_y + coarse_step - 1).min(FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
+        for delta_y in fine_min_y..=fine_max_y {
+            for delta_x in fine_min_x..=fine_max_x {
+                if delta_x == coarse_x && delta_y == coarse_y {
+                    continue;
+                }
+                evaluate_focus_full_resolution_shift(
+                    candidate,
+                    merged,
+                    merged_mask,
+                    center_x,
+                    center_y,
+                    delta_x,
+                    delta_y,
+                    patch_radius,
+                    &mut best,
+                    &mut second_best,
+                    &mut current_score,
+                );
+            }
+        }
+        let Some((best_score, _, best_x, best_y)) = best else {
+            continue;
+        };
+        let margin = best_score - second_best.max(current_score);
+        if best_score < FOCUS_FULL_RES_ALIGNMENT_MIN_NCC
+            || !margin.is_finite()
+            || margin < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN
+            || (best_x != 0 || best_y != 0)
+                && (!current_score.is_finite()
+                    || best_score - current_score < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN)
+        {
+            continue;
+        }
+        patch_deltas.push((best_x, best_y));
+        score_sum += best_score;
+    }
+    if patch_deltas.is_empty() {
+        return None;
+    }
+
+    let mut x_values = patch_deltas.iter().map(|(x, _)| *x).collect::<Vec<_>>();
+    let mut y_values = patch_deltas.iter().map(|(_, y)| *y).collect::<Vec<_>>();
+    x_values.sort_unstable();
+    y_values.sort_unstable();
+    let median_x = x_values[x_values.len() / 2];
+    let median_y = y_values[y_values.len() / 2];
+    let support = patch_deltas
+        .iter()
+        .filter(|(x, y)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
+        .count();
+    let minimum_support = FOCUS_FULL_RES_ALIGNMENT_MIN_PATCHES;
+    if support < minimum_support
+        || (support as f64) < patch_deltas.len() as f64 * 0.5
+        || (median_x == 0 && median_y == 0)
+    {
+        return None;
+    }
+    Some((
+        median_x,
+        median_y,
+        score_sum / patch_deltas.len() as f64,
+        support,
+        patch_deltas.len(),
+    ))
+}
+
+fn translate_rendered_focus_layer(
+    candidate: RenderedFocusLayer,
+    delta_x: i32,
+    delta_y: i32,
+    out_width: u32,
+    out_height: u32,
+) -> RenderedFocusLayer {
+    if delta_x == 0 && delta_y == 0 {
+        return candidate;
+    }
+    let (width, height) = candidate.image.dimensions();
+    if width == 0 || height == 0 || out_width == 0 || out_height == 0 {
+        return candidate;
+    }
+    let old_left = candidate.left as i64;
+    let old_top = candidate.top as i64;
+    let old_right = old_left + width as i64 - 1;
+    let old_bottom = old_top + height as i64 - 1;
+    let new_left = (old_left + i64::from(delta_x)).clamp(0, i64::from(out_width - 1));
+    let new_top = (old_top + i64::from(delta_y)).clamp(0, i64::from(out_height - 1));
+    let new_right = (old_right + i64::from(delta_x)).clamp(0, i64::from(out_width - 1));
+    let new_bottom = (old_bottom + i64::from(delta_y)).clamp(0, i64::from(out_height - 1));
+    if new_left > new_right || new_top > new_bottom {
+        return RenderedFocusLayer {
+            image: Rgb32FImage::new(0, 0),
+            mask: GrayImage::new(0, 0),
+            foreground_mask: GrayImage::new(0, 0),
+            relaxed_foreground_mask: GrayImage::new(0, 0),
+            left: 0,
+            top: 0,
+        };
+    }
+    let new_width = (new_right - new_left + 1) as u32;
+    let new_height = (new_bottom - new_top + 1) as u32;
+    let mut image_pixels = vec![0.0f32; new_width as usize * new_height as usize * 3];
+    let mut mask_pixels = vec![0u8; new_width as usize * new_height as usize];
+    let mut foreground_pixels = vec![0u8; new_width as usize * new_height as usize];
+    let mut relaxed_pixels = vec![0u8; new_width as usize * new_height as usize];
+    let source_image = candidate.image.as_raw();
+    let source_mask = candidate.mask.as_raw();
+    let source_foreground = candidate.foreground_mask.as_raw();
+    let source_relaxed = candidate.relaxed_foreground_mask.as_raw();
+    for source_y in 0..height as i64 {
+        for source_x in 0..width as i64 {
+            let destination_x = old_left + source_x + i64::from(delta_x);
+            let destination_y = old_top + source_y + i64::from(delta_y);
+            if destination_x < new_left
+                || destination_x > new_right
+                || destination_y < new_top
+                || destination_y > new_bottom
+            {
+                continue;
+            }
+            let source_index = source_y as usize * width as usize + source_x as usize;
+            let destination_index = (destination_y - new_top) as usize * new_width as usize
+                + (destination_x - new_left) as usize;
+            let source_start = source_index * 3;
+            let destination_start = destination_index * 3;
+            image_pixels[destination_start..destination_start + 3]
+                .copy_from_slice(&source_image[source_start..source_start + 3]);
+            mask_pixels[destination_index] = source_mask[source_index];
+            foreground_pixels[destination_index] = source_foreground[source_index];
+            relaxed_pixels[destination_index] = source_relaxed[source_index];
+        }
+    }
+    RenderedFocusLayer {
+        image: Rgb32FImage::from_raw(new_width, new_height, image_pixels)
+            .expect("translated focus layer image dimensions must match"),
+        mask: GrayImage::from_raw(new_width, new_height, mask_pixels)
+            .expect("translated focus layer mask dimensions must match"),
+        foreground_mask: GrayImage::from_raw(new_width, new_height, foreground_pixels)
+            .expect("translated focus foreground mask dimensions must match"),
+        relaxed_foreground_mask: GrayImage::from_raw(new_width, new_height, relaxed_pixels)
+            .expect("translated focus relaxed foreground mask dimensions must match"),
+        left: new_left as u32,
+        top: new_top as u32,
+    }
+}
+
 fn align_focus_foreground_layer_to_existing(
     candidate: RenderedFocusLayer,
     merged_foreground_mask: &GrayImage,
@@ -2689,7 +3485,7 @@ fn align_focus_foreground_layer_to_existing(
     let base_pixels = merged_foreground_mask.as_raw();
     let search_radius = ((layer_width.max(layer_height) as f32) * 0.01)
         .round()
-        .clamp(4.0, 96.0) as i32;
+        .clamp(4.0, FOCUS_FOREGROUND_REFINEMENT_MAX_SHIFT as f32) as i32;
     let coarse_step = (search_radius / 24).max(1);
     let hit_count = |delta_x: i32, delta_y: i32| -> usize {
         anchors
@@ -2723,8 +3519,12 @@ fn align_focus_foreground_layer_to_existing(
     // still selected by the focus score below.
     if coarse_step > 1 {
         let (coarse_x, coarse_y) = best_delta;
-        for delta_y in (coarse_y - coarse_step + 1)..=(coarse_y + coarse_step - 1) {
-            for delta_x in (coarse_x - coarse_step + 1)..=(coarse_x + coarse_step - 1) {
+        let fine_min_y = (coarse_y - coarse_step + 1).max(-search_radius);
+        let fine_max_y = (coarse_y + coarse_step - 1).min(search_radius);
+        let fine_min_x = (coarse_x - coarse_step + 1).max(-search_radius);
+        let fine_max_x = (coarse_x + coarse_step - 1).min(search_radius);
+        for delta_y in fine_min_y..=fine_max_y {
+            for delta_x in fine_min_x..=fine_max_x {
                 let hits = hit_count(delta_x, delta_y);
                 if hits > best_hits {
                     best_hits = hits;
@@ -3235,6 +4035,39 @@ fn hard_select_focus_layer(
         );
 }
 
+fn mark_focus_owner_pixels(
+    owner: &mut GrayImage,
+    candidate: &RenderedFocusLayer,
+    decision_mask: &GrayImage,
+    owner_id: u8,
+) {
+    let (layer_width, layer_height) = candidate.mask.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.left + layer_width > owner.width()
+        || candidate.top + layer_height > owner.height()
+    {
+        return;
+    }
+    let owner_width = owner.width() as usize;
+    owner
+        .as_mut()
+        .par_chunks_mut(owner_width)
+        .skip(candidate.top as usize)
+        .take(layer_height as usize)
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .zip(decision_mask.as_raw().par_chunks(layer_width as usize))
+        .for_each(|((owner_row, candidate_row), decision_row)| {
+            let start = candidate.left as usize;
+            for local_x in 0..layer_width as usize {
+                if candidate_row[local_x] > 0 && decision_row[local_x] > 0 {
+                    owner_row[start + local_x] = owner_id;
+                }
+            }
+        });
+}
+
 fn scaled_region_start(value: u32, source_size: u32, target_size: u32) -> u32 {
     ((value as u64 * target_size as u64) / source_size.max(1) as u64) as u32
 }
@@ -3382,6 +4215,79 @@ fn focus_decision_for_layer(
             .min(analysis_height.saturating_sub(1) as u64) as u32;
         *analysis_decision.get_pixel(analysis_x, analysis_y)
     })
+}
+
+fn commit_focus_analysis_scores(
+    best_focus: &mut [f32],
+    candidate_focus: &[f32],
+    candidate_analysis_mask: &GrayImage,
+    candidate: &RenderedFocusLayer,
+    full_resolution_decision: &GrayImage,
+    out_width: u32,
+    out_height: u32,
+    analysis_width: u32,
+    analysis_height: u32,
+) {
+    if out_width == 0
+        || out_height == 0
+        || analysis_width == 0
+        || analysis_height == 0
+        || candidate_analysis_mask.dimensions() != (analysis_width, analysis_height)
+        || candidate_focus.len() != analysis_width as usize * analysis_height as usize
+        || best_focus.len() != candidate_focus.len()
+        || full_resolution_decision.dimensions() != candidate.image.dimensions()
+    {
+        return;
+    }
+
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || candidate.left >= out_width
+        || candidate.top >= out_height
+        || candidate.left.saturating_add(layer_width) > out_width
+        || candidate.top.saturating_add(layer_height) > out_height
+    {
+        return;
+    }
+
+    // The full-resolution ownership guards can veto part of an analysis cell.
+    // Downsample the committed decision, rather than blindly copying the
+    // low-resolution decision, so the score table remains tied to pixels that
+    // really entered the merged image.
+    let left = scaled_region_start(candidate.left, out_width, analysis_width).min(analysis_width);
+    let top = scaled_region_start(candidate.top, out_height, analysis_height).min(analysis_height);
+    let right = scaled_region_end(
+        candidate.left.saturating_add(layer_width),
+        out_width,
+        analysis_width,
+    )
+    .min(analysis_width);
+    let bottom = scaled_region_end(
+        candidate.top.saturating_add(layer_height),
+        out_height,
+        analysis_height,
+    )
+    .min(analysis_height);
+    if left >= right || top >= bottom {
+        return;
+    }
+    let committed_width = right - left;
+    let committed_height = bottom - top;
+    let committed = resize_binary_mask(full_resolution_decision, committed_width, committed_height);
+    let candidate_mask = candidate_analysis_mask.as_raw();
+    for local_y in 0..committed_height as usize {
+        for local_x in 0..committed_width as usize {
+            let analysis_x = left as usize + local_x;
+            let analysis_y = top as usize + local_y;
+            let analysis_index = analysis_y * analysis_width as usize + analysis_x;
+            if committed.as_raw()[local_y * committed_width as usize + local_x] > 0
+                && candidate_mask[analysis_index] > 0
+            {
+                best_focus[analysis_index] = candidate_focus[analysis_index];
+            }
+        }
+    }
 }
 
 fn resize_rgb(image: &Rgb32FImage, width: u32, height: u32) -> Rgb32FImage {
@@ -4158,6 +5064,7 @@ fn masked_box_blur_focus_map(
     output
 }
 
+#[cfg(test)]
 fn harmonize_focus_background_tone(
     image: &mut Rgb32FImage,
     image_mask: &GrayImage,
@@ -4176,35 +5083,38 @@ fn harmonize_focus_background_tone(
         focus_analysis_dimensions(width, height, width.max(height));
     let analysis_image = resize_rgb(image, analysis_width, analysis_height);
     let analysis_mask = resize_binary_mask(image_mask, analysis_width, analysis_height);
-    // The final ownership mask is not a safe tone mask: exposure-shifted canvas
-    // tiles can be non-brown enough to appear as foreground. Build a separate,
-    // conservative seed from unmistakable garment/robe colours, then expand
-    // only that seed by a scale-aware halo to cover the pale interior of a
-    // figure without protecting distant exposure-shifted canvas blocks.
-    let analysis_tone_seed = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
+    // Do not derive the correction domain from the focus ownership mask. That
+    // mask is made from sharpness decisions and may contain source-shaped
+    // islands on the canvas. Instead, sample only pixels that still look like
+    // the warm-brown paper itself; this makes an exposure block eligible for
+    // correction while keeping painted colours out of the estimator.
+    let analysis_background_like = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
         let covered = analysis_mask.get_pixel(x, y)[0] > 0;
         let index = y as usize * analysis_width as usize + x as usize;
         let pixel_start = index * 3;
-        let tone_foreground = focus_stack_pixel_is_tone_foreground(
-            &analysis_image.as_raw()[pixel_start..pixel_start + 3],
-        );
-        image::Luma([u8::from(covered && tone_foreground) * 255])
+        let pixel = &analysis_image.as_raw()[pixel_start..pixel_start + 3];
+        let canvas_like = focus_stack_pixel_is_canvas_like(pixel);
+        let tone_foreground = focus_stack_pixel_is_tone_foreground(pixel);
+        image::Luma([u8::from(covered && canvas_like && !tone_foreground) * 255])
     });
-    let analysis_existing_foreground =
-        resize_binary_mask(foreground_mask, analysis_width, analysis_height);
-    let analysis_component_foreground =
-        retain_focus_foreground_components(&analysis_existing_foreground, &analysis_tone_seed);
-    let foreground_radius = (analysis_width.max(analysis_height) as f32
-        * FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO)
+    let foreground_soft_radius = (analysis_width.max(analysis_height) as f32 * 0.005)
         .round()
-        .clamp(8.0, 64.0) as usize;
-    let analysis_tone_foreground =
-        dilate_focus_binary_mask(&analysis_component_foreground, foreground_radius);
-    let analysis_background = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
-        let covered = analysis_mask.get_pixel(x, y)[0] > 0;
-        let foreground = analysis_tone_foreground.get_pixel(x, y)[0] > 0;
-        image::Luma([u8::from(covered && !foreground) * 255])
-    });
+        .clamp(2.0, 12.0) as usize;
+    let analysis_background_values = analysis_background_like
+        .as_raw()
+        .iter()
+        .map(|&value| f32::from(value > 0))
+        .collect::<Vec<_>>();
+    let analysis_background_weight = box_blur_focus_map(
+        &analysis_background_values,
+        analysis_width,
+        analysis_height,
+        foreground_soft_radius,
+    )
+    .into_iter()
+    .map(|value| value.clamp(0.0, 1.0))
+    .collect::<Vec<_>>();
+    let analysis_background = analysis_background_like.clone();
     let background_samples = analysis_background
         .as_raw()
         .iter()
@@ -4282,6 +5192,7 @@ fn harmonize_focus_background_tone(
     let x_samples = linear_samples(analysis_width, width);
     let y_samples = linear_samples(analysis_height, height);
     let analysis_stride = analysis_width as usize;
+    let background_weight_ref = &analysis_background_weight;
     let correction_ref = &correction;
     let full_mask = image_mask.as_raw();
     image
@@ -4296,21 +5207,28 @@ fn harmonize_focus_background_tone(
                     continue;
                 }
                 let start = x * 3;
-                let x_sample = x_samples[x];
-                let analysis_x = if x_sample.upper_weight >= 0.5 {
-                    x_sample.upper
-                } else {
-                    x_sample.lower
-                } as usize;
-                let analysis_y = if y_sample.upper_weight >= 0.5 {
-                    y_sample.upper
-                } else {
-                    y_sample.lower
-                } as usize;
-                if analysis_background_like.as_raw()
-                    [analysis_y * analysis_width as usize + analysis_x]
-                    == 0
+                if !focus_stack_pixel_is_canvas_like(&row[start..start + 3])
+                    || focus_stack_pixel_is_tone_foreground(&row[start..start + 3])
                 {
+                    continue;
+                }
+                let x_sample = x_samples[x];
+                let top_left_weight =
+                    background_weight_ref[y_sample.lower * analysis_stride + x_sample.lower];
+                let top_right_weight =
+                    background_weight_ref[y_sample.lower * analysis_stride + x_sample.upper];
+                let bottom_left_weight =
+                    background_weight_ref[y_sample.upper * analysis_stride + x_sample.lower];
+                let bottom_right_weight =
+                    background_weight_ref[y_sample.upper * analysis_stride + x_sample.upper];
+                let top_weight = top_left_weight * (1.0 - x_sample.upper_weight)
+                    + top_right_weight * x_sample.upper_weight;
+                let bottom_weight = bottom_left_weight * (1.0 - x_sample.upper_weight)
+                    + bottom_right_weight * x_sample.upper_weight;
+                let background_weight = (top_weight * (1.0 - y_sample.upper_weight)
+                    + bottom_weight * y_sample.upper_weight)
+                    .clamp(0.0, 1.0);
+                if background_weight <= 0.001 {
                     continue;
                 }
                 let top_left = correction_ref[y_sample.lower * analysis_stride + x_sample.lower];
@@ -4324,14 +5242,514 @@ fn harmonize_focus_background_tone(
                         + top_right[channel] * x_sample.upper_weight;
                     let bottom = bottom_left[channel] * (1.0 - x_sample.upper_weight)
                         + bottom_right[channel] * x_sample.upper_weight;
-                    delta[channel] =
-                        top * (1.0 - y_sample.upper_weight) + bottom * y_sample.upper_weight;
+                    delta[channel] = (top * (1.0 - y_sample.upper_weight)
+                        + bottom * y_sample.upper_weight)
+                        * background_weight;
                 }
                 for channel in 0..3 {
                     row[start + channel] = (row[start + channel] + delta[channel]).clamp(0.0, 1.0);
                 }
             }
         });
+}
+
+fn harmonize_focus_background_tone_with_owners(
+    image: &mut Rgb32FImage,
+    image_mask: &GrayImage,
+    foreground_mask: &GrayImage,
+    owner_map: &GrayImage,
+) {
+    let (width, height) = image.dimensions();
+    if width == 0
+        || height == 0
+        || image_mask.dimensions() != (width, height)
+        || foreground_mask.dimensions() != (width, height)
+        || owner_map.dimensions() != (width, height)
+    {
+        return;
+    }
+
+    let (analysis_width, analysis_height) =
+        focus_analysis_dimensions(width, height, width.max(height));
+    let analysis_image = resize_rgb(image, analysis_width, analysis_height);
+    let analysis_mask = resize_binary_mask(image_mask, analysis_width, analysis_height);
+    let analysis_foreground = resize_binary_mask(foreground_mask, analysis_width, analysis_height);
+    let foreground_envelope = build_focus_background_foreground_envelope(
+        &analysis_image,
+        &analysis_mask,
+        &analysis_foreground,
+    );
+    let background = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
+        let index = y as usize * analysis_width as usize + x as usize;
+        let start = index * 3;
+        let pixel = &analysis_image.as_raw()[start..start + 3];
+        image::Luma([u8::from(
+            analysis_mask.as_raw()[index] > 0
+                && foreground_envelope.as_raw()[index] == 0
+                && focus_stack_pixel_is_canvas_like(pixel)
+                && !focus_stack_pixel_is_tone_foreground(pixel),
+        ) * 255])
+    });
+    let background_pixels = background
+        .as_raw()
+        .iter()
+        .filter(|&&value| value > 0)
+        .count();
+    if background_pixels < 128 {
+        return;
+    }
+
+    let owner_analysis = image::imageops::resize(
+        owner_map,
+        analysis_width,
+        analysis_height,
+        image::imageops::FilterType::Nearest,
+    );
+    let sample_step = ((u64::from(analysis_width) * u64::from(analysis_height) / 120_000) as f64)
+        .sqrt()
+        .ceil()
+        .max(1.0) as usize;
+    let mut global_channels = [Vec::new(), Vec::new(), Vec::new()];
+    let mut owner_channels: Vec<[Vec<f32>; 3]> = (0..=u8::MAX as usize)
+        .map(|_| [Vec::new(), Vec::new(), Vec::new()])
+        .collect();
+    for y in (0..analysis_height as usize).step_by(sample_step) {
+        for x in (0..analysis_width as usize).step_by(sample_step) {
+            let index = y * analysis_width as usize + x;
+            if background.as_raw()[index] == 0 {
+                continue;
+            }
+            let start = index * 3;
+            let owner = owner_analysis.as_raw()[index] as usize;
+            for channel in 0..3 {
+                let value = analysis_image.as_raw()[start + channel];
+                global_channels[channel].push(value);
+                if owner > 0 {
+                    owner_channels[owner][channel].push(value);
+                }
+            }
+        }
+    }
+    let global_tone = [
+        median_f32(&mut global_channels[0]).unwrap_or(0.0),
+        median_f32(&mut global_channels[1]).unwrap_or(0.0),
+        median_f32(&mut global_channels[2]).unwrap_or(0.0),
+    ];
+    let mut owner_corrections = vec![[0.0f32; 3]; u8::MAX as usize + 1];
+    let mut corrected_owner_count = 0usize;
+    for (owner, channels) in owner_channels.iter_mut().enumerate().skip(1) {
+        if channels[0].len() < FOCUS_COLOR_MIN_SAMPLES {
+            continue;
+        }
+        let mut has_adjustment = false;
+        for channel in 0..3 {
+            if channels[channel].len() < FOCUS_COLOR_MIN_SAMPLES {
+                continue;
+            }
+            let owner_tone = median_f32(&mut channels[channel]).unwrap_or(global_tone[channel]);
+            let correction = (global_tone[channel] - owner_tone).clamp(
+                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            );
+            owner_corrections[owner][channel] = correction;
+            has_adjustment |= correction.abs() >= 0.002;
+        }
+        if has_adjustment {
+            corrected_owner_count += 1;
+        }
+    }
+    // Estimate a low-frequency tone field from the final image itself. These
+    // frames cover one continuous piece of paper, so a broad source-sized
+    // brightness step is an acquisition artefact, not detail that should
+    // survive stacking. The small blur measures each tile's current tone; the
+    // wide blur only softens the correction at the edge of an owner region.
+    let local_tone = masked_box_blur_rgb(
+        &analysis_image,
+        &background,
+        FOCUS_BACKGROUND_TONE_LOCAL_RADIUS,
+    );
+    let smooth_tone = masked_box_blur_rgb(
+        &local_tone,
+        &background,
+        FOCUS_BACKGROUND_TONE_SMOOTH_RADIUS,
+    );
+    let local_pixels = local_tone.as_raw();
+    let smooth_pixels = smooth_tone.as_raw();
+
+    // Store the measured low-frequency correction only on protected background
+    // samples, then blur that field across the same mask. The blur removes the
+    // source-owner rectangle as a colour boundary while adding the correction
+    // back to the full-resolution image leaves its weave and brush detail
+    // untouched.
+    let mut correction_pixels =
+        vec![0.0f32; analysis_width as usize * analysis_height as usize * 3];
+    for index in 0..background.as_raw().len() {
+        if background.as_raw()[index] == 0 {
+            continue;
+        }
+        let start = index * 3;
+        let owner_correction = owner_corrections[owner_analysis.as_raw()[index] as usize];
+        for channel in 0..3 {
+            let target = smooth_pixels[start + channel]
+                * (1.0 - FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT)
+                + global_tone[channel] * FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT;
+            let local_correction = (target - local_pixels[start + channel]).clamp(
+                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            );
+            // The owner median stabilizes very large regions whose local blur
+            // is interrupted by a figure; it is only a supplement to the
+            // pixel-local low-frequency estimate.
+            correction_pixels[start + channel] =
+                local_correction * 0.8 + owner_correction[channel] * 0.2;
+        }
+    }
+    let correction_image =
+        Rgb32FImage::from_raw(analysis_width, analysis_height, correction_pixels)
+            .expect("focus owner correction dimensions must match");
+    let correction_radius = (analysis_width.max(analysis_height) as f32 * 0.006)
+        .round()
+        .clamp(4.0, 16.0) as usize;
+    let smoothed_correction =
+        masked_box_blur_rgb(&correction_image, &background, correction_radius);
+    let background_values = background
+        .as_raw()
+        .iter()
+        .map(|&value| f32::from(value > 0))
+        .collect::<Vec<_>>();
+    let background_radius = (analysis_width.max(analysis_height) as f32 * 0.006)
+        .round()
+        .clamp(4.0, 16.0) as usize;
+    let background_weight = box_blur_focus_map(
+        &background_values,
+        analysis_width,
+        analysis_height,
+        background_radius,
+    );
+    let x_samples = linear_samples(analysis_width, width);
+    let y_samples = linear_samples(analysis_height, height);
+    let analysis_stride = analysis_width as usize;
+    let correction_ref = smoothed_correction.as_raw();
+    let background_weight_ref = &background_weight;
+    let image_mask_ref = image_mask.as_raw();
+    image
+        .as_mut()
+        .par_chunks_mut(width as usize * 3)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_sample = y_samples[y];
+            for x in 0..width as usize {
+                if image_mask_ref[y * width as usize + x] == 0 {
+                    continue;
+                }
+                // The cleaned analysis envelope is the protection boundary.
+                // Do not gate this by the current full-resolution colour: the
+                // darkest/lightest exposure tiles are precisely the background
+                // pixels that need correction, and the low-frequency field does
+                // not replace their weave or brush detail.
+                let start = x * 3;
+                let x_sample = x_samples[x];
+                let top_weight = background_weight_ref
+                    [y_sample.lower * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + background_weight_ref[y_sample.lower * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let bottom_weight = background_weight_ref
+                    [y_sample.upper * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + background_weight_ref[y_sample.upper * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let background_weight = (top_weight * (1.0 - y_sample.upper_weight)
+                    + bottom_weight * y_sample.upper_weight)
+                    .clamp(0.0, 1.0);
+                if background_weight <= 0.001 {
+                    continue;
+                }
+                let top_left = &correction_ref[(y_sample.lower * analysis_stride + x_sample.lower)
+                    * 3
+                    ..(y_sample.lower * analysis_stride + x_sample.lower) * 3 + 3];
+                let top_right = &correction_ref[(y_sample.lower * analysis_stride + x_sample.upper)
+                    * 3
+                    ..(y_sample.lower * analysis_stride + x_sample.upper) * 3 + 3];
+                let bottom_left =
+                    &correction_ref[(y_sample.upper * analysis_stride + x_sample.lower) * 3
+                        ..(y_sample.upper * analysis_stride + x_sample.lower) * 3 + 3];
+                let bottom_right =
+                    &correction_ref[(y_sample.upper * analysis_stride + x_sample.upper) * 3
+                        ..(y_sample.upper * analysis_stride + x_sample.upper) * 3 + 3];
+                for channel in 0..3 {
+                    let top = top_left[channel] * (1.0 - x_sample.upper_weight)
+                        + top_right[channel] * x_sample.upper_weight;
+                    let bottom = bottom_left[channel] * (1.0 - x_sample.upper_weight)
+                        + bottom_right[channel] * x_sample.upper_weight;
+                    row[start + channel] = (row[start + channel]
+                        + (top * (1.0 - y_sample.upper_weight) + bottom * y_sample.upper_weight)
+                            * background_weight)
+                        .clamp(0.0, 1.0);
+                }
+            }
+        });
+    println!(
+        "  - Owner-based background harmonization: samples={} owners_adjusted={} radius={}px",
+        background_pixels, corrected_owner_count, correction_radius
+    );
+}
+
+fn harmonize_focus_background_with_reference(
+    image: &mut Rgb32FImage,
+    image_mask: &GrayImage,
+    foreground_mask: &GrayImage,
+    reference_image: &Rgb32FImage,
+    reference_mask: &GrayImage,
+    owner_map: &GrayImage,
+    owner_corrections: &[[f32; 3]],
+) {
+    let (width, height) = image.dimensions();
+    let (analysis_width, analysis_height) = reference_image.dimensions();
+    if width == 0
+        || height == 0
+        || analysis_width == 0
+        || analysis_height == 0
+        || image_mask.dimensions() != (width, height)
+        || foreground_mask.dimensions() != (width, height)
+        || reference_mask.dimensions() != (analysis_width, analysis_height)
+        || owner_map.dimensions() != (width, height)
+        || owner_corrections.is_empty()
+    {
+        return;
+    }
+
+    let analysis_image = resize_rgb(image, analysis_width, analysis_height);
+    let analysis_mask = resize_binary_mask(image_mask, analysis_width, analysis_height);
+    let analysis_foreground = resize_binary_mask(foreground_mask, analysis_width, analysis_height);
+    let foreground_envelope = build_focus_background_foreground_envelope(
+        &analysis_image,
+        &analysis_mask,
+        &analysis_foreground,
+    );
+    let background = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
+        let index = y as usize * analysis_width as usize + x as usize;
+        image::Luma([u8::from(
+            analysis_mask.as_raw()[index] > 0
+                && reference_mask.as_raw()[index] > 0
+                && foreground_envelope.as_raw()[index] == 0,
+        ) * 255])
+    });
+    let background_pixels = background
+        .as_raw()
+        .iter()
+        .filter(|&&value| value > 0)
+        .count();
+    if background_pixels < 128 {
+        return;
+    }
+
+    let all_background = GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
+        let index = y as usize * analysis_width as usize + x as usize;
+        image::Luma([u8::from(
+            analysis_mask.as_raw()[index] > 0 && foreground_envelope.as_raw()[index] == 0,
+        ) * 255])
+    });
+    let owner_analysis = image::imageops::resize(
+        owner_map,
+        analysis_width,
+        analysis_height,
+        image::imageops::FilterType::Nearest,
+    );
+    let owner_correction_pixels = all_background
+        .as_raw()
+        .iter()
+        .enumerate()
+        .flat_map(|(index, &value)| {
+            if value == 0 {
+                return [0.0; 3];
+            }
+            owner_corrections
+                .get(owner_analysis.as_raw()[index] as usize)
+                .copied()
+                .unwrap_or([0.0; 3])
+        })
+        .collect::<Vec<_>>();
+    let owner_correction_image =
+        Rgb32FImage::from_raw(analysis_width, analysis_height, owner_correction_pixels)
+            .expect("focus owner correction dimensions must match");
+    let owner_correction_radius = (analysis_width.max(analysis_height) as f32 * 0.06)
+        .round()
+        .clamp(24.0, 96.0) as usize;
+    let smoothed_owner_correction = masked_box_blur_rgb(
+        &owner_correction_image,
+        &all_background,
+        owner_correction_radius,
+    );
+
+    // The reference is an average of every source's canvas-only pixels after a
+    // robust per-frame offset. Compare it to the selected focus image only at a
+    // broad scale. The final image keeps its own high-frequency samples, so the
+    // operation cannot soften a face, sleeve, brush line, or the canvas weave.
+    let focus_low = masked_box_blur_rgb(
+        &analysis_image,
+        &background,
+        FOCUS_BACKGROUND_TONE_LOCAL_RADIUS,
+    );
+    let reference_low = masked_box_blur_rgb(
+        reference_image,
+        &background,
+        FOCUS_BACKGROUND_TONE_LOCAL_RADIUS,
+    );
+    let focus_pixels = focus_low.as_raw();
+    let reference_pixels = reference_low.as_raw();
+    let mut correction_pixels =
+        vec![0.0f32; analysis_width as usize * analysis_height as usize * 3];
+    for index in 0..background.as_raw().len() {
+        if background.as_raw()[index] == 0 {
+            continue;
+        }
+        let start = index * 3;
+        for channel in 0..3 {
+            correction_pixels[start + channel] =
+                (reference_pixels[start + channel] - focus_pixels[start + channel]).clamp(
+                    -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                    FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+                );
+        }
+    }
+    let correction_image =
+        Rgb32FImage::from_raw(analysis_width, analysis_height, correction_pixels)
+            .expect("focus reference correction dimensions must match");
+    let correction_radius = (analysis_width.max(analysis_height) as f32 * 0.06)
+        .round()
+        .clamp(24.0, 96.0) as usize;
+    let smoothed_correction =
+        masked_box_blur_rgb(&correction_image, &background, correction_radius);
+    let reference_background_values = background
+        .as_raw()
+        .iter()
+        .map(|&value| f32::from(value > 0))
+        .collect::<Vec<_>>();
+    let all_background_values = all_background
+        .as_raw()
+        .iter()
+        .map(|&value| f32::from(value > 0))
+        .collect::<Vec<_>>();
+    let background_radius = (analysis_width.max(analysis_height) as f32 * 0.006)
+        .round()
+        .clamp(4.0, 16.0) as usize;
+    let reference_background_weight = box_blur_focus_map(
+        &reference_background_values,
+        analysis_width,
+        analysis_height,
+        background_radius,
+    );
+    let all_background_weight = box_blur_focus_map(
+        &all_background_values,
+        analysis_width,
+        analysis_height,
+        background_radius,
+    );
+    let x_samples = linear_samples(analysis_width, width);
+    let y_samples = linear_samples(analysis_height, height);
+    let analysis_stride = analysis_width as usize;
+    let correction_ref = smoothed_correction.as_raw();
+    let owner_correction_ref = smoothed_owner_correction.as_raw();
+    let reference_background_weight_ref = &reference_background_weight;
+    let all_background_weight_ref = &all_background_weight;
+    let image_mask_ref = image_mask.as_raw();
+    image
+        .as_mut()
+        .par_chunks_mut(width as usize * 3)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y_sample = y_samples[y];
+            for x in 0..width as usize {
+                if image_mask_ref[y * width as usize + x] == 0 {
+                    continue;
+                }
+                let x_sample = x_samples[x];
+                let top_weight = all_background_weight_ref
+                    [y_sample.lower * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + all_background_weight_ref[y_sample.lower * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let bottom_weight = all_background_weight_ref
+                    [y_sample.upper * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + all_background_weight_ref[y_sample.upper * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let all_background_weight = (top_weight * (1.0 - y_sample.upper_weight)
+                    + bottom_weight * y_sample.upper_weight)
+                    .clamp(0.0, 1.0);
+                if all_background_weight <= 0.001 {
+                    continue;
+                }
+                let reference_top_weight = reference_background_weight_ref
+                    [y_sample.lower * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + reference_background_weight_ref
+                        [y_sample.lower * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let reference_bottom_weight = reference_background_weight_ref
+                    [y_sample.upper * analysis_stride + x_sample.lower]
+                    * (1.0 - x_sample.upper_weight)
+                    + reference_background_weight_ref
+                        [y_sample.upper * analysis_stride + x_sample.upper]
+                        * x_sample.upper_weight;
+                let reference_background_weight = (reference_top_weight
+                    * (1.0 - y_sample.upper_weight)
+                    + reference_bottom_weight * y_sample.upper_weight)
+                    .clamp(0.0, 1.0);
+                let top_left = &correction_ref[(y_sample.lower * analysis_stride + x_sample.lower)
+                    * 3
+                    ..(y_sample.lower * analysis_stride + x_sample.lower) * 3 + 3];
+                let top_right = &correction_ref[(y_sample.lower * analysis_stride + x_sample.upper)
+                    * 3
+                    ..(y_sample.lower * analysis_stride + x_sample.upper) * 3 + 3];
+                let bottom_left =
+                    &correction_ref[(y_sample.upper * analysis_stride + x_sample.lower) * 3
+                        ..(y_sample.upper * analysis_stride + x_sample.lower) * 3 + 3];
+                let bottom_right =
+                    &correction_ref[(y_sample.upper * analysis_stride + x_sample.upper) * 3
+                        ..(y_sample.upper * analysis_stride + x_sample.upper) * 3 + 3];
+                let start = x * 3;
+                for channel in 0..3 {
+                    let top = top_left[channel] * (1.0 - x_sample.upper_weight)
+                        + top_right[channel] * x_sample.upper_weight;
+                    let bottom = bottom_left[channel] * (1.0 - x_sample.upper_weight)
+                        + bottom_right[channel] * x_sample.upper_weight;
+                    let delta = (top * (1.0 - y_sample.upper_weight)
+                        + bottom * y_sample.upper_weight)
+                        * reference_background_weight;
+                    let owner_top_left = &owner_correction_ref[(y_sample.lower * analysis_stride
+                        + x_sample.lower)
+                        * 3
+                        ..(y_sample.lower * analysis_stride + x_sample.lower) * 3 + 3];
+                    let owner_top_right = &owner_correction_ref[(y_sample.lower * analysis_stride
+                        + x_sample.upper)
+                        * 3
+                        ..(y_sample.lower * analysis_stride + x_sample.upper) * 3 + 3];
+                    let owner_bottom_left = &owner_correction_ref[(y_sample.upper * analysis_stride
+                        + x_sample.lower)
+                        * 3
+                        ..(y_sample.upper * analysis_stride + x_sample.lower) * 3 + 3];
+                    let owner_bottom_right =
+                        &owner_correction_ref[(y_sample.upper * analysis_stride + x_sample.upper)
+                            * 3
+                            ..(y_sample.upper * analysis_stride + x_sample.upper) * 3 + 3];
+                    let owner_top = owner_top_left[channel] * (1.0 - x_sample.upper_weight)
+                        + owner_top_right[channel] * x_sample.upper_weight;
+                    let owner_bottom = owner_bottom_left[channel] * (1.0 - x_sample.upper_weight)
+                        + owner_bottom_right[channel] * x_sample.upper_weight;
+                    let owner_delta = (owner_top * (1.0 - y_sample.upper_weight)
+                        + owner_bottom * y_sample.upper_weight)
+                        * all_background_weight;
+                    row[start + channel] =
+                        (row[start + channel] + owner_delta + delta).clamp(0.0, 1.0);
+                }
+            }
+        });
+    println!(
+        "  - Reference background harmonization: samples={} radius={}px owner_radius={}px",
+        background_pixels, correction_radius, owner_correction_radius
+    );
 }
 
 fn multiband_blend(
@@ -4510,10 +5928,48 @@ fn blend_focus_seam_band(
     }
 
     let radius = FOCUS_SEAM_BLEND_RADIUS.min(layer_width.max(layer_height) as usize);
-    let patch_left = seam_left.saturating_sub(radius as u32);
-    let patch_right = (seam_right + radius as u32).min(layer_width - 1);
-    let patch_top = seam_top.saturating_sub(radius as u32);
-    let patch_bottom = (seam_bottom + radius as u32).min(layer_height - 1);
+    // The focus seam is used for detail ownership, but the exposure step can
+    // extend across the complete shared canvas area. Build the low-frequency
+    // pyramid over that overlap, not only over a rectangle around the sharpness
+    // transition; otherwise a source-sized canvas block outside the seam box is
+    // copied unchanged into the final stack.
+    let mut overlap_left = layer_width;
+    let mut overlap_right = 0u32;
+    let mut overlap_top = layer_height;
+    let mut overlap_bottom = 0u32;
+    for y in 0..layer_height {
+        for x in 0..layer_width {
+            if candidate.mask.get_pixel(x, y)[0] == 0
+                || base_mask.get_pixel(candidate.left + x, candidate.top + y)[0] == 0
+            {
+                continue;
+            }
+            overlap_left = overlap_left.min(x);
+            overlap_right = overlap_right.max(x);
+            overlap_top = overlap_top.min(y);
+            overlap_bottom = overlap_bottom.max(y);
+        }
+    }
+    let patch_left = if overlap_left <= overlap_right {
+        overlap_left
+    } else {
+        seam_left.saturating_sub(radius as u32)
+    };
+    let patch_right = if overlap_left <= overlap_right {
+        overlap_right
+    } else {
+        (seam_right + radius as u32).min(layer_width - 1)
+    };
+    let patch_top = if overlap_top <= overlap_bottom {
+        overlap_top
+    } else {
+        seam_top.saturating_sub(radius as u32)
+    };
+    let patch_bottom = if overlap_top <= overlap_bottom {
+        overlap_bottom
+    } else {
+        (seam_bottom + radius as u32).min(layer_height - 1)
+    };
     let patch_width = patch_right - patch_left + 1;
     let patch_height = patch_bottom - patch_top + 1;
     if patch_width < 8 || patch_height < 8 {
@@ -4580,7 +6036,17 @@ fn blend_focus_seam_band(
                     let existing_foreground = foreground_overlap
                         [source_y as usize * layer_width as usize + source_x as usize]
                         > 0;
-                    let artwork_foreground = candidate_foreground || existing_foreground;
+                    // Black ink, red seals, and other painted content are not part
+                    // of the geometric depth mask. They still must not enter the
+                    // low-frequency pyramid: averaging two sub-pixel-shifted
+                    // strokes is exactly the blur/double-contour regression this
+                    // path is intended to prevent. Keep the canvas gate separate
+                    // so a darker/lighter paper exposure can still be harmonized.
+                    let tone_foreground =
+                        focus_stack_pixel_is_tone_foreground(base_pixel.0.as_slice())
+                            || focus_stack_pixel_is_tone_foreground(candidate_pixel.0.as_slice());
+                    let artwork_foreground =
+                        candidate_foreground || existing_foreground || tone_foreground;
                     // Blend the broad tone over the union of the two valid
                     // canvas regions. When only one source exists, the
                     // missing side below is copied from that same source, so
@@ -4892,7 +6358,7 @@ where
     let shifted_mosaic = focus_stack_is_shifted_mosaic(images, global_homographies, projection);
     if shifted_mosaic {
         println!(
-            "  - Large framing shift detected; keeping local sharpness ownership across overlaps"
+            "  - Large framing shift detected; using foreground-scoped local geometry and global paper registration"
         );
         let _ = app_handle.emit(
             progress_event,
@@ -4926,8 +6392,20 @@ where
     let mut merged = Rgb32FImage::new(out_width, out_height);
     let mut merged_mask = GrayImage::new(out_width, out_height);
     let mut merged_foreground_mask = GrayImage::new(out_width, out_height);
+    let mut merged_owner = GrayImage::new(out_width, out_height);
     place_focus_layer(&mut merged, &mut merged_mask, &first_layer);
     place_focus_foreground_mask(&mut merged_foreground_mask, &first_layer);
+    merged_owner
+        .as_mut()
+        .par_chunks_mut(out_width as usize)
+        .zip(merged_mask.as_raw().par_chunks(out_width as usize))
+        .for_each(|(owner_row, mask_row)| {
+            for (owner, mask) in owner_row.iter_mut().zip(mask_row) {
+                if *mask > 0 {
+                    *owner = 1;
+                }
+            }
+        });
     let source_longest_dimension = images
         .iter()
         .map(|image| image.width().max(image.height()))
@@ -4960,21 +6438,34 @@ where
             out_height,
         );
         drop(source_image);
+        if let Some((delta_x, delta_y, score, support, patch_count)) =
+            estimate_focus_layer_translation(&candidate, &merged, &merged_mask)
+        {
+            println!(
+                "  - Full-resolution focus refinement: delta=({delta_x},{delta_y}), score={score:.3}, consensus={support}/{patch_count} patches"
+            );
+            candidate =
+                translate_rendered_focus_layer(candidate, delta_x, delta_y, out_width, out_height);
+        }
         // A regional warp can still leave a small residual translation on a
         // depth-discontinuous layer. Refine only the detected foreground
-        // ownership mask against the already selected foreground; ordinary
-        // artwork pixels keep the global/local geometric mapping unchanged.
-        candidate = align_focus_foreground_layer_to_existing(candidate, &merged_foreground_mask);
-        // Keep source pixels unchanged until focus ownership is decided. In
-        // particular, do not apply a candidate-wide exposure/white-balance
-        // transform here: it changes brush strokes and canvas weave even when
-        // the candidate is the correct sharp source. Tone matching is limited
-        // to the narrow, background-only ownership transition in
-        // `blend_focus_seam_band`.
-        // The overlap correction below is intentionally narrower than that
-        // older candidate-wide transform: it can only learn from and modify
-        // warm-brown canvas pixels, while the candidate foreground remains
-        // protected by its ownership mask.
+        // ownership mask against the already selected foreground when the
+        // stack is a normal, mostly-overlapping focus capture. In a shifted
+        // mosaic the existing mask can contain a different physical instance
+        // of a repeated rail/seal, so mask-only matching is not image-backed
+        // registration and can move the whole foreground onto the wrong copy.
+        // The shifted-mosaic path has already used the bounded edge-consensus
+        // geometry above; leave its residuals to that model and the focus
+        // ownership pass.
+        if !shifted_mosaic {
+            candidate =
+                align_focus_foreground_layer_to_existing(candidate, &merged_foreground_mask);
+        }
+        // Match only the slowly varying canvas illumination before focus scoring.
+        // The estimator excludes detected foreground and the application is
+        // canvas-gated, so brush strokes, seals, and the source weave remain
+        // unchanged while the sharpness comparison is not biased by exposure
+        // blocks between frames.
         let color_correction = estimate_focus_color_correction(
             &merged,
             &merged_mask,
@@ -4988,6 +6479,9 @@ where
             &candidate.foreground_mask,
             true,
         );
+        // Keep the source pixels untouched until focus ownership is decided.
+        // The correction above is deliberately low-frequency and canvas-only;
+        // final ownership still decides all detail pixels independently.
         let candidate_analysis = render_focus_analysis_layer(
             &candidate,
             out_width,
@@ -5020,31 +6514,13 @@ where
             &candidate_analysis.mask,
             &candidate_analysis.relaxed_foreground_mask,
         );
-
-        // Keep the focus score synchronized with the actual selected source. The old
-        // pipeline stored max scores while repeatedly averaging pixels, so later layers
-        // were compared against a score that no longer described the image underneath.
-        merged_focus
-            .par_iter_mut()
-            .zip(candidate_focus.par_iter())
-            .zip(merged_analysis_mask.as_raw().par_iter())
-            .zip(candidate_analysis.mask.as_raw().par_iter())
-            .zip(analysis_decision.as_raw().par_iter())
-            .for_each(
-                |((((base_focus, candidate_focus), base_valid), candidate_valid), decision)| {
-                    if *candidate_valid > 0 && (*base_valid == 0 || *decision > 0) {
-                        *base_focus = *candidate_focus;
-                    }
-                },
-            );
-        hard_select_focus_pixels(
-            &mut merged_analysis,
-            &mut merged_analysis_mask,
+        suppress_focus_canvas_switches(
+            &mut analysis_decision,
+            &merged_analysis,
             &candidate_analysis.image,
+            &merged_analysis_mask,
             &candidate_analysis.mask,
-            &analysis_decision,
         );
-
         let mut full_resolution_decision =
             focus_decision_for_layer(&analysis_decision, &candidate, out_width, out_height);
         // A detected near-field layer is geometrically separate from the main
@@ -5093,9 +6569,31 @@ where
             &candidate,
             &full_resolution_decision,
         );
-        // The full-resolution pass is authoritative for ownership. Rebuilding
-        // the analysis mask from it prevents a later candidate from inheriting
-        // a foreground claim that was rejected after upsampling the decision.
+        mark_focus_owner_pixels(
+            &mut merged_owner,
+            &candidate,
+            &full_resolution_decision,
+            (index + 2).min(u8::MAX as usize) as u8,
+        );
+        commit_focus_analysis_scores(
+            &mut merged_focus,
+            &candidate_focus,
+            &candidate_analysis.mask,
+            &candidate,
+            &full_resolution_decision,
+            out_width,
+            out_height,
+            analysis_width,
+            analysis_height,
+        );
+        // Rebuild the analysis image from the authoritative full-resolution
+        // result for the canvas/foreground guards. Focus scores intentionally
+        // stay in the separate best-score table above: recomputing them from
+        // this image would make a selected seam, a sub-pixel warp, or a cubic
+        // resample look like a new focus layer and would reintroduce order-
+        // dependent blur.
+        merged_analysis = resize_rgb(&merged, analysis_width, analysis_height);
+        merged_analysis_mask = resize_binary_mask(&merged_mask, analysis_width, analysis_height);
         merged_analysis_foreground_mask =
             resize_binary_mask(&merged_foreground_mask, analysis_width, analysis_height);
     }
@@ -5118,7 +6616,12 @@ where
     // remove only the remaining source-sized low-frequency tone steps across
     // the complete mosaic. The strict canvas gate preserves the original
     // weave and painted foreground instead of treating it as a background.
-    harmonize_focus_background_tone(&mut merged, &merged_mask, &merged_foreground_mask);
+    harmonize_focus_background_tone_with_owners(
+        &mut merged,
+        &merged_mask,
+        &merged_foreground_mask,
+        &merged_owner,
+    );
     Ok(merged)
 }
 
@@ -5720,6 +7223,69 @@ mod interpolation_tests {
     }
 
     #[test]
+    fn focus_canvas_switch_suppression_keeps_canvas_owner_but_allows_ink() {
+        let mut decision = GrayImage::from_pixel(2, 1, image::Luma([255]));
+        let base = Rgb32FImage::from_fn(2, 1, |x, _| {
+            if x == 0 {
+                Rgb([0.32, 0.28, 0.24])
+            } else {
+                Rgb([0.05, 0.05, 0.05])
+            }
+        });
+        let candidate = Rgb32FImage::from_fn(2, 1, |x, _| {
+            if x == 0 {
+                Rgb([0.40, 0.36, 0.32])
+            } else {
+                Rgb([0.01, 0.01, 0.01])
+            }
+        });
+        let mask = GrayImage::from_pixel(2, 1, image::Luma([255]));
+
+        suppress_focus_canvas_switches(&mut decision, &base, &candidate, &mask, &mask);
+
+        assert_eq!(decision.as_raw(), &[0, 255]);
+    }
+
+    #[test]
+    fn focus_seam_keeps_painted_detail_on_one_source() {
+        const WIDTH: u32 = 64;
+        const HEIGHT: u32 = 64;
+        let canvas = Rgb([0.32, 0.28, 0.24]);
+        let candidate_canvas = Rgb([0.40, 0.36, 0.32]);
+        let mut base = Rgb32FImage::from_pixel(WIDTH, HEIGHT, canvas);
+        let candidate_image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            if x == 32 && (16..48).contains(&y) {
+                Rgb([0.01, 0.01, 0.01])
+            } else {
+                candidate_canvas
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: candidate_image,
+            mask: GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
+            foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            relaxed_foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            left: 0,
+            top: 0,
+        };
+        let mut base_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let merged_foreground_mask = GrayImage::new(WIDTH, HEIGHT);
+        let decision = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            image::Luma([u8::from(x >= WIDTH / 2) * 255])
+        });
+
+        blend_focus_seam_band(
+            &mut base,
+            &mut base_mask,
+            &merged_foreground_mask,
+            &candidate,
+            &decision,
+        );
+
+        assert_eq!(base.get_pixel(32, 32).0, [0.01, 0.01, 0.01]);
+    }
+
+    #[test]
     fn hard_focus_selection_copies_source_pixels_without_averaging() {
         let mut base =
             Rgb32FImage::from_raw(3, 1, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]).unwrap();
@@ -5917,6 +7483,39 @@ mod interpolation_tests {
 
         let input_step = (image.get_pixel(20, 48)[0] - image.get_pixel(172, 48)[0]).abs();
         harmonize_focus_background_tone(&mut image, &image_mask, &foreground_mask);
+        let output_step = (image.get_pixel(20, 48)[0] - image.get_pixel(172, 48)[0]).abs();
+
+        assert!(output_step < input_step * 0.5);
+        assert_eq!(*image.get_pixel(96, 48), original_foreground_pixel);
+    }
+
+    #[test]
+    fn focus_owner_tone_harmonization_matches_source_blocks_without_touching_detail() {
+        const WIDTH: u32 = 192;
+        const HEIGHT: u32 = 96;
+        let mut image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            if (80..112).contains(&x) && (32..64).contains(&y) {
+                Rgb([0.65, 0.10, 0.08])
+            } else if x < WIDTH / 2 {
+                Rgb([0.32, 0.28, 0.24])
+            } else {
+                Rgb([0.40, 0.36, 0.32])
+            }
+        });
+        let original_foreground_pixel = *image.get_pixel(96, 48);
+        let image_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let foreground_mask = GrayImage::new(WIDTH, HEIGHT);
+        let owner_map = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            image::Luma([if x < WIDTH / 2 { 1 } else { 2 }])
+        });
+
+        let input_step = (image.get_pixel(20, 48)[0] - image.get_pixel(172, 48)[0]).abs();
+        harmonize_focus_background_tone_with_owners(
+            &mut image,
+            &image_mask,
+            &foreground_mask,
+            &owner_map,
+        );
         let output_step = (image.get_pixel(20, 48)[0] - image.get_pixel(172, 48)[0]).abs();
 
         assert!(output_step < input_step * 0.5);

@@ -1552,6 +1552,8 @@
       "exitFocusPreview": "Wyjdź z podglądu skupionego",
       "failed": "Image stack failed",
       "fitPreview": "Dopasuj do okna",
+      "focusAutoOrderHint": "Automatyczna kolejność",
+      "focusAutoOrderSourceHint": "Stackowanie ostrości analizuje nakładanie się obrazów i automatycznie tworzy najlepszą kolejność, więc kolejność przesyłania nie wpływa na wynik.",
       "focusPreview": "Podgląd skupiony",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

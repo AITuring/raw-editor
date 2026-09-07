@@ -61,6 +61,7 @@ export interface ImageStackModalState {
   progressMessage: string | null;
   requestId: string | null;
   resultId: string | null;
+  lastSavedPath: string | null;
   resultSize: ImageStackResultSize | null;
   sourcePaths: string[];
   blendMode: ImageStackBlendMode;
@@ -265,6 +266,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     progressMessage: null,
     requestId: null,
     resultId: null,
+    lastSavedPath: null,
     resultSize: null,
     sourcePaths: [],
     blendMode: 'focus',

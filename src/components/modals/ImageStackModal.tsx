@@ -613,7 +613,9 @@ export default function ImageStackModal({
                     </p>
                   </div>
                   <span className="rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
-                    {t('modals.imageStack.orderHint')}
+                    {blendMode === 'focus'
+                      ? t('modals.imageStack.focusAutoOrderHint')
+                      : t('modals.imageStack.orderHint')}
                   </span>
                 </div>
 
@@ -642,7 +644,9 @@ export default function ImageStackModal({
                 </DndContext>
 
                 <p className="mt-3 border-t border-border-color pt-3 text-[11px] leading-relaxed text-text-secondary">
-                  {t('modals.imageStack.sourceHint')}
+                  {blendMode === 'focus'
+                    ? t('modals.imageStack.focusAutoOrderSourceHint')
+                    : t('modals.imageStack.sourceHint')}
                 </p>
               </section>
 
@@ -757,7 +761,11 @@ export default function ImageStackModal({
             <Button disabled={isSaving} onClick={onClose} type="button" variant="secondary">
               {t('modals.imageStack.cancel')}
             </Button>
-            <Button className="bg-surface text-text-primary hover:bg-card-active" disabled={!canProcess} onClick={handleProcess}>
+            <Button
+              className="bg-surface text-text-primary hover:bg-card-active"
+              disabled={!canProcess}
+              onClick={handleProcess}
+            >
               {isProcessing ? (
                 <Loader2 aria-hidden="true" className="animate-spin" size={15} />
               ) : finalImageBase64 ? (
@@ -768,10 +776,7 @@ export default function ImageStackModal({
               {finalImageBase64 ? t('modals.imageStack.realign') : t('modals.imageStack.start')}
             </Button>
             {finalImageBase64 && (
-              <Button
-                disabled={isSaving || isProcessing}
-                onClick={() => setIsExportDialogOpen(true)}
-              >
+              <Button disabled={isSaving || isProcessing} onClick={() => setIsExportDialogOpen(true)}>
                 {isSaving ? (
                   <Loader2 aria-hidden="true" className="animate-spin" size={15} />
                 ) : (

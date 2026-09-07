@@ -1525,6 +1525,8 @@
       "exitFocusPreview": "Esci dall'anteprima focalizzata",
       "failed": "Image stack failed",
       "fitPreview": "Adatta alla finestra",
+      "focusAutoOrderHint": "Ordine automatico",
+      "focusAutoOrderSourceHint": "Il focus stacking analizza la sovrapposizione delle immagini e crea automaticamente l'ordine migliore; l'ordine di caricamento non influisce sul risultato.",
       "focusPreview": "Anteprima focalizzata",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

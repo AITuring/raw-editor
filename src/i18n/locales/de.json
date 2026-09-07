@@ -1498,6 +1498,8 @@
       "exitFocusPreview": "Fokusvorschau beenden",
       "failed": "Image stack failed",
       "fitPreview": "An Fenster anpassen",
+      "focusAutoOrderHint": "Automatisch sortiert",
+      "focusAutoOrderSourceHint": "Das Fokus-Stacking analysiert die Bildüberlappung und erstellt automatisch die beste Reihenfolge. Die Upload-Reihenfolge beeinflusst das Ergebnis nicht.",
       "focusPreview": "Fokusvorschau",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

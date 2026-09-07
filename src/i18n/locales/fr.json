@@ -1526,6 +1526,8 @@
       "exitFocusPreview": "Quitter l’aperçu ciblé",
       "failed": "Image stack failed",
       "fitPreview": "Ajuster à la fenêtre",
+      "focusAutoOrderHint": "Tri automatique",
+      "focusAutoOrderSourceHint": "L'empilement de mise au point analyse le chevauchement des images et crée automatiquement le meilleur ordre ; l'ordre d'importation n'affecte pas le résultat.",
       "focusPreview": "Aperçu ciblé",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

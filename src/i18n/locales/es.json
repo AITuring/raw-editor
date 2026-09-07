@@ -1525,6 +1525,8 @@
       "exitFocusPreview": "Salir de la vista enfocada",
       "failed": "Image stack failed",
       "fitPreview": "Ajustar a la ventana",
+      "focusAutoOrderHint": "Orden automático",
+      "focusAutoOrderSourceHint": "El apilado de enfoque analiza el solapamiento y crea automáticamente el mejor orden; el orden de carga no afecta al resultado.",
       "focusPreview": "Vista enfocada",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

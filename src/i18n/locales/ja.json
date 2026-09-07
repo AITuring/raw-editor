@@ -1496,6 +1496,8 @@
       "exitFocusPreview": "集中プレビューを終了",
       "failed": "Image stack failed",
       "fitPreview": "ウィンドウに合わせる",
+      "focusAutoOrderHint": "自動並べ替え",
+      "focusAutoOrderSourceHint": "フォーカススタックは画像の重なりを分析して最適な順序を自動生成するため、アップロード順は結果に影響しません。",
       "focusPreview": "集中プレビュー",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

@@ -7,7 +7,11 @@ import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useU
 import { Invokes } from '../components/ui/AppProperties';
 import i18n from '../i18n';
 import { IMAGE_STACK_MAX_SOURCES, IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
-import { buildSuggestedExportPath, buildBackendExportSettings } from '../features/export/exportDialog';
+import {
+  buildSuggestedExportPath,
+  buildBackendExportSettings,
+  ensureExportPathExtension,
+} from '../features/export/exportDialog';
 import type { ExportDialogFormat, ExportDialogSettings } from '../features/export/exportDialog';
 
 const IMAGE_STACK_EXPORT_FORMATS: Record<ExportDialogFormat, { filterName: string; extensions: string[] }> = {
@@ -91,6 +95,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           progressMessage: 'Starting image alignment process…',
           requestId,
           resultId: null,
+          lastSavedPath: null,
           resultSize: null,
           sourcePaths: paths,
           blendMode,
@@ -146,7 +151,9 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
             ? null
             : await save({
                 title: i18n.t('modals.imageStack.save'),
-                defaultPath: getImageStackSuggestedPath(firstPath, blendMode, exportFormat),
+                defaultPath: imageStackModalState.lastSavedPath
+                  ? ensureExportPathExtension(imageStackModalState.lastSavedPath, exportFormat)
+                  : getImageStackSuggestedPath(firstPath, blendMode, exportFormat),
                 filters: [{ name: format.filterName, extensions: format.extensions }],
               });
         if (useSettingsStore.getState().osPlatform !== 'android' && !outputPath) return null;
@@ -158,6 +165,16 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           exportSettings: buildBackendExportSettings(settings, null),
           resultId: imageStackModalState.resultId,
           outputPathStr: outputPath,
+        });
+        setUI((state) => {
+          if (state.imageStackModalState.resultId !== imageStackModalState.resultId) return state;
+          return {
+            imageStackModalState: {
+              ...state.imageStackModalState,
+              error: null,
+              lastSavedPath: savedPath,
+            },
+          };
         });
         try {
           await refreshImageList();

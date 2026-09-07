@@ -1496,6 +1496,8 @@
       "exitFocusPreview": "집중 미리보기 종료",
       "failed": "Image stack failed",
       "fitPreview": "창에 맞춤",
+      "focusAutoOrderHint": "자동 정렬",
+      "focusAutoOrderSourceHint": "포커스 스태킹은 이미지 겹침을 분석해 최적의 순서를 자동으로 만들므로 업로드 순서는 결과에 영향을 주지 않습니다.",
       "focusPreview": "집중 미리보기",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

@@ -1507,6 +1507,8 @@
       "exitFocusPreview": "結束專注預覽",
       "failed": "Image stack failed",
       "fitPreview": "適合視窗",
+      "focusAutoOrderHint": "自動排序",
+      "focusAutoOrderSourceHint": "景深堆疊會自動分析影像重疊關係並產生最佳順序，隨機上傳也不會影響結果。",
       "focusPreview": "專注預覽",
       "focusStack": "Focus stack",
       "focusStackDescription": "Select the sharpest regions and blend them across scales.",

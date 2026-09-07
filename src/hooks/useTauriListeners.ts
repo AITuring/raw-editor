@@ -17,6 +17,41 @@ interface TauriListenerProps {
   markGenerated: (path: string) => void;
 }
 
+const normalizeImageStackPath = (path: string): string => path.split('?vc=')[0].replace(/\\/g, '/');
+
+const imageStackBasename = (path: string): string => {
+  const normalized = normalizeImageStackPath(path);
+  return normalized.slice(normalized.lastIndexOf('/') + 1);
+};
+
+const resolveImageStackOrder = (orderedPaths: unknown, sourcePaths: string[]): string[] | null => {
+  if (
+    !Array.isArray(orderedPaths) ||
+    orderedPaths.length !== sourcePaths.length ||
+    orderedPaths.some((path) => typeof path !== 'string' || path.length === 0)
+  ) {
+    return null;
+  }
+
+  const unused = new Set(sourcePaths);
+  const resolved: string[] = [];
+  for (const orderedPath of orderedPaths as string[]) {
+    const normalized = normalizeImageStackPath(orderedPath);
+    const exact = sourcePaths.find(
+      (sourcePath) => unused.has(sourcePath) && normalizeImageStackPath(sourcePath) === normalized,
+    );
+    const match =
+      exact ??
+      sourcePaths.find(
+        (sourcePath) => unused.has(sourcePath) && imageStackBasename(sourcePath) === imageStackBasename(orderedPath),
+      );
+    if (!match) return null;
+    unused.delete(match);
+    resolved.push(match);
+  }
+  return unused.size === 0 ? resolved : null;
+};
+
 export function useTauriListeners({
   refreshAllFolderTrees,
   handleSelectSubfolder,
@@ -301,6 +336,7 @@ export function useTauriListeners({
           const fullCanvasWidth = event.payload?.fullCanvasWidth;
           const fullCanvasHeight = event.payload?.fullCanvasHeight;
           const renderScale = event.payload?.renderScale;
+          const orderedPaths = event.payload?.orderedPaths;
           const resultSize =
             typeof sourceWidth === 'number' &&
             Number.isFinite(sourceWidth) &&
@@ -347,6 +383,7 @@ export function useTauriListeners({
                   isProcessing: false,
                   progressMessage: null,
                   resultId: null,
+                  lastSavedPath: null,
                   resultSize: null,
                 },
               };
@@ -354,6 +391,7 @@ export function useTauriListeners({
             if (typeof resultId !== 'string' || !previewSource) {
               return state;
             }
+            const resolvedOrder = resolveImageStackOrder(orderedPaths, state.imageStackModalState.sourcePaths);
             return {
               imageStackModalState: {
                 ...state.imageStackModalState,
@@ -363,7 +401,9 @@ export function useTauriListeners({
                 isProcessing: false,
                 progressMessage: null,
                 resultId,
+                lastSavedPath: null,
                 resultSize,
+                ...(resolvedOrder ? { sourcePaths: resolvedOrder } : {}),
               },
             };
           });
@@ -384,6 +424,7 @@ export function useTauriListeners({
                 isProcessing: false,
                 progressMessage: null,
                 resultId: null,
+                lastSavedPath: null,
                 resultSize: null,
               },
             };
