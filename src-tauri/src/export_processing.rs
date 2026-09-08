@@ -64,21 +64,24 @@ use crate::image_loader::{
     load_base_image_from_bytes_without_exif_persistence,
 };
 use crate::image_processing::{
-    AllAdjustments, Crop, GeometryWarpRows, GpuContext, RenderRequest, downscale_f32_image,
-    get_all_adjustments_from_json, get_geometry_params_from_json, get_or_init_gpu_context,
-    is_geometry_identity, process_and_get_dynamic_image, resolve_tonemapper_override_from_handle,
+    AllAdjustments, Crop, GeometryWarpRows, GeometryWarpSampler, GpuContext, RenderRequest,
+    downscale_f32_image, get_all_adjustments_from_json, get_geometry_params_from_json,
+    get_or_init_gpu_context, is_geometry_identity, process_and_get_dynamic_image,
+    resolve_tonemapper_override_from_handle,
 };
 use crate::lut_processing::{
     Lut, convert_image_to_cube_lut, generate_identity_lut_image, get_or_load_lut,
 };
-use crate::mask_generation::{MaskDefinition, generate_mask_bitmap};
+use crate::mask_generation::{
+    MaskDefinition, RangeMaskSource, generate_mask_bitmap, prepare_range_mask_source_image,
+};
 use crate::render_strategy::RenderTier;
 
 use crate::cache_utils::{calculate_full_job_hash, calculate_transform_hash};
 use crate::color_management::srgb_v4_profile;
 use crate::{
     apply_all_transformations, generate_transformed_preview, get_cached_or_generate_mask,
-    hydrate_adjustments, load_settings, resolve_warped_image_for_masks,
+    hydrate_adjustments, load_settings,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -768,7 +771,6 @@ struct PreparedExportRender<'a> {
 fn can_stream_geometry_output(
     adjustments: &Value,
     geometry_params: &crate::image_processing::GeometryParams,
-    masks: &[MaskDefinition],
 ) -> bool {
     !is_geometry_identity(geometry_params)
         && adjustments["rotation"]
@@ -777,7 +779,6 @@ fn can_stream_geometry_output(
             .rem_euclid(360.0)
             == 0.0
         && !adjustments["lensBlurEnabled"].as_bool().unwrap_or(false)
-        && !masks.iter().any(MaskDefinition::requires_warped_image)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -795,8 +796,7 @@ fn prepare_export_render<'a>(
         .and_then(|m| serde_json::from_value(m.clone()).ok())
         .unwrap_or_default();
     let geometry_params = get_geometry_params_from_json(js_adjustments);
-    let can_stream_geometry =
-        can_stream_geometry_output(js_adjustments, &geometry_params, &mask_definitions);
+    let can_stream_geometry = can_stream_geometry_output(js_adjustments, &geometry_params);
 
     let orientation_steps = js_adjustments["orientationSteps"].as_u64().unwrap_or(0) as u8;
     let flip_horizontal = js_adjustments["flipHorizontal"].as_bool().unwrap_or(false);
@@ -845,7 +845,10 @@ fn prepare_export_render<'a>(
         img_h
     );
 
-    let warped_image = resolve_warped_image_for_masks(state, js_adjustments, &mask_definitions);
+    let range_source_image = prepare_range_mask_source_image(base_image, is_raw, &mask_definitions);
+    let range_source = range_source_image.as_deref().map(|image| {
+        GeometryWarpSampler::new(image, get_geometry_params_from_json(js_adjustments))
+    });
     let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
         .iter()
         .filter_map(|def| {
@@ -855,11 +858,21 @@ fn prepare_export_render<'a>(
                 img_h,
                 1.0,
                 unscaled_crop_offset,
-                warped_image.as_deref(),
+                range_source
+                    .as_ref()
+                    .map(|source| source as &dyn RangeMaskSource),
             )
             .map(Arc::new)
         })
         .collect();
+    if let Some(source) = range_source.as_ref() {
+        log::info!(
+            "[{}] range masks sampled geometry on demand (checkpoints={} B, maximum={} B)",
+            debug_tag,
+            source.checkpoint_bytes(),
+            source.max_checkpoint_bytes(),
+        );
+    }
 
     let tm_override = resolve_tonemapper_override_from_handle(app_handle, is_raw);
     let mut all_adjustments = get_all_adjustments_from_json(js_adjustments, is_raw, tm_override);
@@ -2844,7 +2857,10 @@ fn export_masks_for_image(
         .and_then(|m| serde_json::from_value(m.clone()).ok())
         .unwrap_or_default();
 
-    let warped_image = resolve_warped_image_for_masks(state, js_adjustments, &mask_definitions);
+    let range_source_image = prepare_range_mask_source_image(base_image, is_raw, &mask_definitions);
+    let range_source = range_source_image.as_deref().map(|image| {
+        GeometryWarpSampler::new(image, get_geometry_params_from_json(js_adjustments))
+    });
     let mut mask_bitmaps = Vec::with_capacity(mask_definitions.len());
     for definition in &mask_definitions {
         ensure_export_not_cancelled(cancellation_token)?;
@@ -2854,7 +2870,9 @@ fn export_masks_for_image(
             img_h,
             1.0,
             unscaled_crop_offset,
-            warped_image.as_deref(),
+            range_source
+                .as_ref()
+                .map(|source| source as &dyn RangeMaskSource),
         ) {
             mask_bitmaps.push(Arc::new(bitmap));
         }
@@ -4845,7 +4863,7 @@ mod tests {
             "crop": { "unit": "px", "x": 4.0, "y": 3.0, "width": 80.0, "height": 60.0 }
         });
         let params = get_geometry_params_from_json(&adjustments);
-        assert!(can_stream_geometry_output(&adjustments, &params, &[]));
+        assert!(can_stream_geometry_output(&adjustments, &params));
 
         for compatible in [
             serde_json::json!({ "transformVertical": 18.0, "orientationSteps": 1 }),
@@ -4854,7 +4872,7 @@ mod tests {
             serde_json::json!({ "transformVertical": 18.0, "flipHorizontal": true, "flipVertical": true }),
         ] {
             let params = get_geometry_params_from_json(&compatible);
-            assert!(can_stream_geometry_output(&compatible, &params, &[]));
+            assert!(can_stream_geometry_output(&compatible, &params));
         }
 
         for incompatible in [
@@ -4862,7 +4880,7 @@ mod tests {
             serde_json::json!({ "transformVertical": 18.0, "lensBlurEnabled": true }),
         ] {
             let params = get_geometry_params_from_json(&incompatible);
-            assert!(!can_stream_geometry_output(&incompatible, &params, &[]));
+            assert!(!can_stream_geometry_output(&incompatible, &params));
         }
 
         let color_mask: MaskDefinition = serde_json::from_value(serde_json::json!({
@@ -4883,11 +4901,8 @@ mod tests {
             }]
         }))
         .expect("color mask fixture");
-        assert!(!can_stream_geometry_output(
-            &adjustments,
-            &params,
-            &[color_mask]
-        ));
+        assert!(color_mask.requires_range_source());
+        assert!(can_stream_geometry_output(&adjustments, &params));
     }
 
     fn encode_streaming_fixture(

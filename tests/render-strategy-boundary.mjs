@@ -10,6 +10,8 @@ const previewResolution = read('src/utils/previewResolution.ts');
 const imageProcessingHook = read('src/hooks/useImageProcessing.ts');
 const slider = read('src/components/ui/Slider.tsx');
 const appState = read('src-tauri/src/app_state.rs');
+const cacheUtils = read('src-tauri/src/cache_utils.rs');
+const imageLoader = read('src-tauri/src/image_loader.rs');
 const renderStrategy = read('src-tauri/src/render_strategy.rs');
 const lib = read('src-tauri/src/lib.rs');
 const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
@@ -46,6 +48,10 @@ assert.ok(
   'slider must notify the preview scheduler before its first drag value change',
 );
 assert.match(appState, /render_tier: Option<RenderTier>/);
+assert.match(appState, /pub type RangeMaskSourceCache/);
+assert.match(appState, /range_mask_source_cache: Mutex<Option<RangeMaskSourceCache>>/);
+assert.match(cacheUtils, /state\.range_mask_source_cache\.lock\(\)/);
+assert.match(imageLoader, /state\.range_mask_source_cache\.lock\(\)\.unwrap\(\)/);
 assert.match(lib, /resolve_preview_render_tier\(/);
 const processPreviewStart = lib.indexOf('fn process_preview_job(');
 const processPreviewEnd = lib.indexOf('\nfn start_analytics_worker(', processPreviewStart);
@@ -159,6 +165,11 @@ assert.match(imageProcessing, /GEOMETRY_ROW_CHECKPOINT_COLUMNS: u32 = 64/);
 assert.match(imageProcessing, /pub struct GeometryWarpRows/);
 assert.match(imageProcessing, /pub fn write_rgba16f_row/);
 assert.match(imageProcessing, /pub fn write_rgba16f_band/);
+assert.match(imageProcessing, /pub struct GeometryWarpSampler/);
+assert.match(imageProcessing, /pub fn sample_rgba8_points/);
+assert.match(imageProcessing, /GeometrySampleData::Rgba8/);
+assert.match(imageProcessing, /GeometrySampleData::Rgba16/);
+assert.match(imageProcessing, /GeometrySampleData::Rgba32F/);
 assert.match(imageProcessing, /context\s*\.write_rgba32f_row/);
 const geometryWarpStart = imageProcessing.indexOf('pub fn warp_image_geometry(');
 const geometryWarpEnd = imageProcessing.indexOf('\npub fn unwarp_image_geometry(', geometryWarpStart);
@@ -173,6 +184,27 @@ assert.match(exportProcessing, /StreamedGeometry\(Box<GeometryWarpRows/);
 assert.match(exportProcessing, /fn can_stream_geometry_output/);
 assert.match(exportProcessing, /GeometryWarpRows::try_new_transformed_borrowed/);
 assert.match(exportProcessing, /prepared\.source\.gpu_input\(\)/);
+assert.match(exportProcessing, /GeometryWarpSampler::new/);
+const canStreamGeometryStart = exportProcessing.indexOf('fn can_stream_geometry_output(');
+const canStreamGeometryEnd = exportProcessing.indexOf('\nfn prepare_export_render', canStreamGeometryStart);
+assert.ok(canStreamGeometryStart >= 0 && canStreamGeometryEnd > canStreamGeometryStart);
+assert.doesNotMatch(
+  exportProcessing.slice(canStreamGeometryStart, canStreamGeometryEnd),
+  /requires_range_source|requires_warped_image/,
+  'range masks must not disable streamed geometry output',
+);
+
+assert.match(maskGeneration, /pub trait RangeMaskSource: Sync/);
+assert.match(maskGeneration, /impl RangeMaskSource for DynamicImage/);
+assert.match(maskGeneration, /impl RangeMaskSource for GeometryWarpSampler/);
+assert.match(maskGeneration, /pub fn resolve_range_mask_source_image/);
+assert.match(maskGeneration, /RangeMaskCoordinateMapper/);
+assert.match(maskGeneration, /source\.sample_rgba8_points/);
+assert.match(maskGeneration, /calculate_geometry_hash\(adjustments\)\.hash/);
+assert.match(maskGeneration, /state\.full_warped_cache\.lock\(\)/);
+assert.doesNotMatch(maskGeneration, /resolve_warped_image_for_masks/);
+assert.match(lib, /range_mask_source_cache[\s\S]*?cache\.take\(\)/);
+assert.match(lib, /\*range_source_cache = None/);
 
 assert.match(exportProcessing, /supports_streaming_export/);
 assert.match(exportProcessing, /encode_streaming_jpeg/);
@@ -257,6 +289,7 @@ assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes, 968_343_552);
 assert.equal(geometryRgba32fBytes + gpuRgba16fUploadBandBytes - gpuRgba16fUploadBandBytes, geometryRgba32fBytes);
 assert.equal(rotatedGpuRgba16fUploadBandBytes, 3_244_032);
 assert.equal(geometryCheckpointBytes, 11_328_768);
+assert.equal(geometryRgba32fBytes - geometryCheckpointBytes, 952_148_736);
 assert.equal(rotatedGeometryTransposeBytes, 3_244_032);
 assert.equal(geometryRgba32fBytes * 2 + rotatedGpuRgba16fUploadBandBytes, 1_930_199_040);
 assert.equal(rotatedGpuRgba16fUploadBandBytes + geometryCheckpointBytes + rotatedGeometryTransposeBytes, 17_816_832);
@@ -275,6 +308,7 @@ assert.match(packageJson.scripts['gpu-mask:check'], /tiled_mask_gpu_sampling/);
 assert.match(packageJson.scripts['synthetic-mask:bench'], /synthetic_60mp_mask_cache_ownership/);
 assert.match(packageJson.scripts['synthetic-mask-compose:bench'], /synthetic_60mp_mask_composition_scratch/);
 assert.match(packageJson.scripts['synthetic-range-mask:bench'], /synthetic_60mp_range_mask_overlap_scratch/);
+assert.match(packageJson.scripts['synthetic-range-source:bench'], /synthetic_60mp_range_mask_geometry_source/);
 assert.match(packageJson.scripts['synthetic-ai-mask:bench'], /synthetic_60mp_ai_mask_overlap_scratch/);
 assert.match(packageJson.scripts['synthetic-raw-handoff:bench'], /synthetic_60mp_raw_rgb_handoff/);
 assert.match(packageJson.scripts['synthetic-geometry-output:bench'], /synthetic_60mp_geometry_output/);
@@ -284,5 +318,5 @@ assert.match(
 );
 
 console.log(
-  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, row/band-streamed orthogonal geometry output, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
+  'Validated four render tiers, zero-copy RAW RGB handoff and in-place enhancement, row/band-streamed orthogonal geometry output, on-demand borrowed geometry sampling for range masks, bounded float-to-RGBA16F upload bands, shared CPU mask ownership, bounded programmatic/brush/range/AI mask generation, exact grow/feather/depth halos, tile-local active-mask textures, borrowed float geometry sources, direct JPEG/PNG/TIFF row pipelines, bounded WebP YUVA/file output, in-encoder JPEG/PNG/TIFF EXIF, bounded resize/watermark transforms, CPU-only GPU textures, and export high-water reclamation.',
 );

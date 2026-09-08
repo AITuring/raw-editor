@@ -148,6 +148,7 @@ impl MetadataManager {
 
 pub type TransformedImageCache = (u64, Arc<DynamicImage>, (f32, f32));
 pub type SharedMaskBitmap = Arc<GrayImage>;
+pub type RangeMaskSourceCache = (Arc<DynamicImage>, Arc<DynamicImage>);
 
 pub struct AppState {
     pub window_setup_complete: AtomicBool,
@@ -180,6 +181,7 @@ pub struct AppState {
     pub lens_db: Mutex<Option<Arc<LensDatabase>>>,
     pub load_image_generation: Arc<AtomicUsize>,
     pub full_warped_cache: Mutex<Option<(u64, Arc<DynamicImage>)>>,
+    pub range_mask_source_cache: Mutex<Option<RangeMaskSourceCache>>,
     pub full_transformed_cache: Mutex<Option<TransformedImageCache>>,
     pub decoded_image_cache: Mutex<DecodedImageCache>,
     pub thumbnail_manager: Arc<ThumbnailManager>,

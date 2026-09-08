@@ -7,9 +7,13 @@ use serde_json::Value;
 use crate::ai_processing;
 use crate::app_state::AppState;
 use crate::image_loader::composite_patches_on_image;
-use crate::image_processing::apply_linear_to_srgb;
-use crate::mask_generation::{AiPatchDefinition, MaskDefinition, generate_mask_bitmap};
-use crate::resolve_warped_image_for_masks;
+use crate::image_processing::{
+    GeometryWarpSampler, apply_linear_to_srgb, get_geometry_params_from_json,
+};
+use crate::mask_generation::{
+    AiPatchDefinition, MaskDefinition, RangeMaskSource, generate_mask_bitmap,
+    resolve_range_mask_source_image,
+};
 
 #[tauri::command]
 pub async fn generate_manual_cleanup_patch(
@@ -63,11 +67,11 @@ pub async fn generate_manual_cleanup_patch(
         sub_masks: patch_definition.sub_masks.clone(),
     };
 
-    let warped_image = resolve_warped_image_for_masks(
-        &state,
-        &current_adjustments,
-        std::slice::from_ref(&mask_def_for_generation),
-    );
+    let range_source_image =
+        resolve_range_mask_source_image(&state, std::slice::from_ref(&mask_def_for_generation));
+    let range_source = range_source_image.as_deref().map(|image| {
+        GeometryWarpSampler::new(image, get_geometry_params_from_json(&current_adjustments))
+    });
 
     let mask_bitmap = generate_mask_bitmap(
         &mask_def_for_generation,
@@ -75,7 +79,9 @@ pub async fn generate_manual_cleanup_patch(
         trans_h,
         1.0,
         (0.0, 0.0),
-        warped_image.as_deref(),
+        range_source
+            .as_ref()
+            .map(|source| source as &dyn RangeMaskSource),
     )
     .ok_or("Failed to generate mask bitmap for manual cleanup")?;
 
@@ -375,11 +381,11 @@ pub async fn invoke_generative_replace_with_mask_def(
         sub_masks: patch_definition.sub_masks.clone(),
     };
 
-    let warped_image = resolve_warped_image_for_masks(
-        &state,
-        &current_adjustments,
-        std::slice::from_ref(&mask_def_for_generation),
-    );
+    let range_source_image =
+        resolve_range_mask_source_image(&state, std::slice::from_ref(&mask_def_for_generation));
+    let range_source = range_source_image.as_deref().map(|image| {
+        GeometryWarpSampler::new(image, get_geometry_params_from_json(&current_adjustments))
+    });
 
     let mask_bitmap = generate_mask_bitmap(
         &mask_def_for_generation,
@@ -387,7 +393,9 @@ pub async fn invoke_generative_replace_with_mask_def(
         trans_h,
         1.0,
         (0.0, 0.0),
-        warped_image.as_deref(),
+        range_source
+            .as_ref()
+            .map(|source| source as &dyn RangeMaskSource),
     )
     .ok_or("Failed to generate mask bitmap for AI replace")?;
 

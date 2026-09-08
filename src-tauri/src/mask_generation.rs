@@ -6,6 +6,7 @@ use image::{DynamicImage, GenericImageView, GrayImage, ImageFormat, Luma, Rgba, 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::f32::consts::PI;
 use std::hash::{Hash, Hasher};
@@ -14,7 +15,9 @@ use std::sync::Arc; // Required for parallel rasterization
 use tauri::ipc::Response;
 
 use crate::app_state::{AppState, SharedMaskBitmap};
-use crate::get_cached_full_warped_image;
+use crate::image_processing::{
+    GeometryWarpSampler, apply_cpu_default_raw_processing, get_geometry_params_from_json,
+};
 use crate::render_strategy::GPU_TILE_SIZE;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,11 +64,66 @@ pub struct MaskDefinition {
 }
 
 impl MaskDefinition {
-    pub fn requires_warped_image(&self) -> bool {
+    pub fn requires_range_source(&self) -> bool {
         self.sub_masks
             .iter()
             .any(|sm| sm.mask_type == "color" || sm.mask_type == "luminance")
     }
+}
+
+pub trait RangeMaskSource: Sync {
+    fn source_dimensions(&self) -> (u32, u32);
+    fn sample_rgba8_points(&self, points: &[(u32, u32)], output: &mut [Rgba<u8>]) -> bool;
+
+    fn sample_rgba8(&self, x: u32, y: u32) -> Option<Rgba<u8>> {
+        let mut output = [Rgba([0, 0, 0, 0])];
+        self.sample_rgba8_points(&[(x, y)], &mut output)
+            .then_some(output[0])
+    }
+}
+
+impl RangeMaskSource for DynamicImage {
+    fn source_dimensions(&self) -> (u32, u32) {
+        GenericImageView::dimensions(self)
+    }
+
+    fn sample_rgba8_points(&self, points: &[(u32, u32)], output: &mut [Rgba<u8>]) -> bool {
+        let (width, height) = GenericImageView::dimensions(self);
+        if points.len() != output.len() || points.iter().any(|(x, y)| *x >= width || *y >= height) {
+            return false;
+        }
+        for ((x, y), output) in points.iter().copied().zip(output) {
+            *output = GenericImageView::get_pixel(self, x, y);
+        }
+        true
+    }
+}
+
+impl RangeMaskSource for GeometryWarpSampler<'_> {
+    fn source_dimensions(&self) -> (u32, u32) {
+        GeometryWarpSampler::dimensions(self)
+    }
+
+    fn sample_rgba8_points(&self, points: &[(u32, u32)], output: &mut [Rgba<u8>]) -> bool {
+        GeometryWarpSampler::sample_rgba8_points(self, points, output)
+    }
+}
+
+pub fn prepare_range_mask_source_image<'a>(
+    image: &'a DynamicImage,
+    is_raw: bool,
+    masks: &[MaskDefinition],
+) -> Option<Cow<'a, DynamicImage>> {
+    if !masks.iter().any(MaskDefinition::requires_range_source) {
+        return None;
+    }
+    if !is_raw {
+        return Some(Cow::Borrowed(image));
+    }
+
+    let mut display_image = image.clone();
+    apply_cpu_default_raw_processing(&mut display_image);
+    Some(Cow::Owned(display_image))
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -1328,16 +1386,146 @@ fn generate_ai_subject_bitmap(
     Some(mask)
 }
 
-fn generate_color_bitmap_from_parameters(
+#[derive(Clone, Copy)]
+struct RangeMaskCoordinateMapper {
+    full_width: u32,
+    full_height: u32,
+    scaled_coarse_width: f32,
+    scaled_coarse_height: f32,
+    center_x: f32,
+    center_y: f32,
+    cos_angle: f32,
+    sin_angle: f32,
+    inverse_scale: f32,
+    flip_horizontal: bool,
+    flip_vertical: bool,
+    orientation_steps: u8,
+}
+
+impl RangeMaskCoordinateMapper {
+    fn new(
+        params: &ParametricMaskParameters,
+        full_width: u32,
+        full_height: u32,
+        scale: f32,
+    ) -> Self {
+        let angle_radians = params.rotation * PI / 180.0;
+        let cos_angle = angle_radians.cos();
+        let sin_angle = angle_radians.sin();
+        let (coarse_width, coarse_height) = if params.orientation_steps % 2 == 1 {
+            (full_height, full_width)
+        } else {
+            (full_width, full_height)
+        };
+        let scaled_coarse_width = coarse_width as f32 * scale;
+        let scaled_coarse_height = coarse_height as f32 * scale;
+        Self {
+            full_width,
+            full_height,
+            scaled_coarse_width,
+            scaled_coarse_height,
+            center_x: scaled_coarse_width / 2.0,
+            center_y: scaled_coarse_height / 2.0,
+            cos_angle,
+            sin_angle,
+            inverse_scale: 1.0 / scale,
+            flip_horizontal: params.flip_horizontal,
+            flip_vertical: params.flip_vertical,
+            orientation_steps: params.orientation_steps,
+        }
+    }
+
+    fn source_coordinates(
+        self,
+        output_x: u32,
+        output_y: u32,
+        crop_offset: (f32, f32),
+        output_origin: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        let x_uncropped = (output_x + output_origin.0) as f32 + crop_offset.0;
+        let y_uncropped = (output_y + output_origin.1) as f32 + crop_offset.1;
+        let x_centered = x_uncropped - self.center_x;
+        let y_centered = y_uncropped - self.center_y;
+        let x_unrotated = x_centered * self.cos_angle + y_centered * self.sin_angle + self.center_x;
+        let y_unrotated =
+            -x_centered * self.sin_angle + y_centered * self.cos_angle + self.center_y;
+        let x_unflipped = if self.flip_horizontal {
+            self.scaled_coarse_width - x_unrotated
+        } else {
+            x_unrotated
+        };
+        let y_unflipped = if self.flip_vertical {
+            self.scaled_coarse_height - y_unrotated
+        } else {
+            y_unrotated
+        };
+        let (x_unrotated_coarse, y_unrotated_coarse) = match self.orientation_steps {
+            0 => (x_unflipped, y_unflipped),
+            1 => (y_unflipped, self.scaled_coarse_width - x_unflipped),
+            2 => (
+                self.scaled_coarse_width - x_unflipped,
+                self.scaled_coarse_height - y_unflipped,
+            ),
+            3 => (self.scaled_coarse_height - y_unflipped, x_unflipped),
+            _ => (x_unflipped, y_unflipped),
+        };
+        if x_unrotated_coarse < 0.0 || y_unrotated_coarse < 0.0 {
+            return None;
+        }
+        let source_x = (x_unrotated_coarse * self.inverse_scale) as u32;
+        let source_y = (y_unrotated_coarse * self.inverse_scale) as u32;
+        (source_x < self.full_width && source_y < self.full_height).then_some((source_x, source_y))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RangeMaskMatch {
+    Color { tolerance_squared: f32 },
+    Luminance { tolerance: f32 },
+}
+
+impl RangeMaskMatch {
+    fn intensity(self, pixel: Rgba<u8>, reference: Rgba<u8>) -> u8 {
+        match self {
+            Self::Color { tolerance_squared } => {
+                let distance_squared = (pixel[0] as f32 - reference[0] as f32).powi(2)
+                    + (pixel[1] as f32 - reference[1] as f32).powi(2)
+                    + (pixel[2] as f32 - reference[2] as f32).powi(2);
+                if distance_squared <= tolerance_squared {
+                    ((1.0 - distance_squared.sqrt() / tolerance_squared.sqrt()) * 255.0) as u8
+                } else {
+                    0
+                }
+            }
+            Self::Luminance { tolerance } => {
+                let reference_luma = 0.299 * reference[0] as f32
+                    + 0.587 * reference[1] as f32
+                    + 0.114 * reference[2] as f32;
+                let luma =
+                    0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
+                let distance = (luma - reference_luma).abs();
+                if distance <= tolerance {
+                    ((1.0 - distance / tolerance) * 255.0) as u8
+                } else {
+                    0
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn generate_range_bitmap_from_parameters(
     params: &ParametricMaskParameters,
     width: u32,
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
     output_origin: (u32, u32),
-    warped: &image::DynamicImage,
+    source: &dyn RangeMaskSource,
+    range_match: RangeMaskMatch,
 ) -> Option<GrayImage> {
-    let (full_w, full_h) = warped.dimensions();
+    let (full_w, full_h) = source.source_dimensions();
 
     let target_x = params.target_x.round() as i32;
     let target_y = params.target_y.round() as i32;
@@ -1345,86 +1533,65 @@ fn generate_color_bitmap_from_parameters(
         return None;
     }
 
-    let ref_pixel = warped.get_pixel(target_x as u32, target_y as u32);
-    let ref_r = ref_pixel[0] as f32;
-    let ref_g = ref_pixel[1] as f32;
-    let ref_b = ref_pixel[2] as f32;
-
+    let reference = source.sample_rgba8(target_x as u32, target_y as u32)?;
     let mut mask = GrayImage::new(width, height);
-
-    let angle_rad = params.rotation * PI / 180.0;
-    let cos_a = angle_rad.cos();
-    let sin_a = angle_rad.sin();
-
-    let (coarse_rotated_w, coarse_rotated_h) = if params.orientation_steps % 2 == 1 {
-        (full_h, full_w)
-    } else {
-        (full_w, full_h)
-    };
-
-    let scaled_coarse_rotated_w = coarse_rotated_w as f32 * scale;
-    let scaled_coarse_rotated_h = coarse_rotated_h as f32 * scale;
-    let center_x = scaled_coarse_rotated_w / 2.0;
-    let center_y = scaled_coarse_rotated_h / 2.0;
-
-    let tolerance_sq = (params.tolerance * 2.55).max(1.0).powi(2) * 3.0;
-    let inv_scale = 1.0 / scale;
-
-    for y_out in 0..height {
-        let y_uncrop = (y_out + output_origin.1) as f32 + crop_offset.1;
-        let y_centered = y_uncrop - center_y;
-        let y_sin = y_centered * sin_a;
-        let y_cos = y_centered * cos_a;
-
-        for x_out in 0..width {
-            let x_uncrop = (x_out + output_origin.0) as f32 + crop_offset.0;
-            let x_centered = x_uncrop - center_x;
-
-            let x_unrotated = x_centered * cos_a + y_sin + center_x;
-            let y_unrotated = -x_centered * sin_a + y_cos + center_y;
-
-            let x_unflipped = if params.flip_horizontal {
-                scaled_coarse_rotated_w - x_unrotated
-            } else {
-                x_unrotated
-            };
-            let y_unflipped = if params.flip_vertical {
-                scaled_coarse_rotated_h - y_unrotated
-            } else {
-                y_unrotated
-            };
-
-            let (x_unrotated_coarse, y_unrotated_coarse) = match params.orientation_steps {
-                0 => (x_unflipped, y_unflipped),
-                1 => (y_unflipped, scaled_coarse_rotated_w - x_unflipped),
-                2 => (
-                    scaled_coarse_rotated_w - x_unflipped,
-                    scaled_coarse_rotated_h - y_unflipped,
-                ),
-                3 => (scaled_coarse_rotated_h - y_unflipped, x_unflipped),
-                _ => (x_unflipped, y_unflipped),
-            };
-
-            if x_unrotated_coarse >= 0.0 && y_unrotated_coarse >= 0.0 {
-                let x_src = (x_unrotated_coarse * inv_scale) as u32;
-                let y_src = (y_unrotated_coarse * inv_scale) as u32;
-
-                if x_src < full_w && y_src < full_h {
-                    let pixel = warped.get_pixel(x_src, y_src);
-                    let dist_sq = (pixel[0] as f32 - ref_r).powi(2)
-                        + (pixel[1] as f32 - ref_g).powi(2)
-                        + (pixel[2] as f32 - ref_b).powi(2);
-
-                    if dist_sq <= tolerance_sq {
-                        let intensity = 1.0 - (dist_sq.sqrt() / tolerance_sq.sqrt());
-                        mask.put_pixel(x_out, y_out, Luma([(intensity * 255.0) as u8]));
-                    }
+    if width == 0 || height == 0 {
+        return Some(mask);
+    }
+    let mapper = RangeMaskCoordinateMapper::new(params, full_w, full_h, scale);
+    mask.as_mut()
+        .par_chunks_mut(width as usize)
+        .enumerate()
+        .for_each(|(output_y, mask_row)| {
+            let mut source_coordinates = Vec::with_capacity(width as usize);
+            let mut output_columns = Vec::with_capacity(width as usize);
+            for output_x in 0..width {
+                if let Some(coordinates) =
+                    mapper.source_coordinates(output_x, output_y as u32, crop_offset, output_origin)
+                {
+                    source_coordinates.push(coordinates);
+                    output_columns.push(output_x as usize);
                 }
             }
-        }
-    }
+            let mut source_pixels = vec![Rgba([0, 0, 0, 0]); source_coordinates.len()];
+            let sampled = source.sample_rgba8_points(&source_coordinates, &mut source_pixels);
+            debug_assert!(
+                sampled,
+                "validated range-mask source coordinates must be readable"
+            );
+            if !sampled {
+                return;
+            }
+            for (output_x, pixel) in output_columns.into_iter().zip(source_pixels) {
+                mask_row[output_x] = range_match.intensity(pixel, reference);
+            }
+        });
 
     Some(mask)
+}
+
+fn generate_color_bitmap_from_parameters(
+    params: &ParametricMaskParameters,
+    width: u32,
+    height: u32,
+    scale: f32,
+    crop_offset: (f32, f32),
+    output_origin: (u32, u32),
+    source: &dyn RangeMaskSource,
+) -> Option<GrayImage> {
+    let tolerance = (params.tolerance * 2.55).max(1.0);
+    generate_range_bitmap_from_parameters(
+        params,
+        width,
+        height,
+        scale,
+        crop_offset,
+        output_origin,
+        source,
+        RangeMaskMatch::Color {
+            tolerance_squared: tolerance.powi(2) * 3.0,
+        },
+    )
 }
 
 fn generate_color_bitmap(
@@ -1433,7 +1600,7 @@ fn generate_color_bitmap(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&image::DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
 ) -> Option<GrayImage> {
     let params: ParametricMaskParameters = serde_json::from_value(params_value.clone()).ok()?;
     let mut mask = generate_color_bitmap_from_parameters(
@@ -1443,7 +1610,7 @@ fn generate_color_bitmap(
         scale,
         crop_offset,
         (0, 0),
-        warped_image?,
+        range_source?,
     )?;
     apply_grow_and_feather(&mut mask, params.grow, params.feather, width, height);
     Some(mask)
@@ -1456,95 +1623,20 @@ fn generate_luminance_bitmap_from_parameters(
     scale: f32,
     crop_offset: (f32, f32),
     output_origin: (u32, u32),
-    warped: &image::DynamicImage,
+    source: &dyn RangeMaskSource,
 ) -> Option<GrayImage> {
-    let (full_w, full_h) = warped.dimensions();
-
-    let target_x = params.target_x.round() as i32;
-    let target_y = params.target_y.round() as i32;
-    if target_x < 0 || target_y < 0 || target_x >= full_w as i32 || target_y >= full_h as i32 {
-        return None;
-    }
-
-    let ref_pixel = warped.get_pixel(target_x as u32, target_y as u32);
-    let ref_luma =
-        0.299 * ref_pixel[0] as f32 + 0.587 * ref_pixel[1] as f32 + 0.114 * ref_pixel[2] as f32;
-
-    let mut mask = GrayImage::new(width, height);
-
-    let angle_rad = params.rotation * PI / 180.0;
-    let cos_a = angle_rad.cos();
-    let sin_a = angle_rad.sin();
-
-    let (coarse_rotated_w, coarse_rotated_h) = if params.orientation_steps % 2 == 1 {
-        (full_h, full_w)
-    } else {
-        (full_w, full_h)
-    };
-
-    let scaled_coarse_rotated_w = coarse_rotated_w as f32 * scale;
-    let scaled_coarse_rotated_h = coarse_rotated_h as f32 * scale;
-    let center_x = scaled_coarse_rotated_w / 2.0;
-    let center_y = scaled_coarse_rotated_h / 2.0;
-
-    let tolerance_val = (params.tolerance * 2.55).max(1.0);
-    let inv_scale = 1.0 / scale;
-
-    for y_out in 0..height {
-        let y_uncrop = (y_out + output_origin.1) as f32 + crop_offset.1;
-        let y_centered = y_uncrop - center_y;
-        let y_sin = y_centered * sin_a;
-        let y_cos = y_centered * cos_a;
-
-        for x_out in 0..width {
-            let x_uncrop = (x_out + output_origin.0) as f32 + crop_offset.0;
-            let x_centered = x_uncrop - center_x;
-
-            let x_unrotated = x_centered * cos_a + y_sin + center_x;
-            let y_unrotated = -x_centered * sin_a + y_cos + center_y;
-
-            let x_unflipped = if params.flip_horizontal {
-                scaled_coarse_rotated_w - x_unrotated
-            } else {
-                x_unrotated
-            };
-            let y_unflipped = if params.flip_vertical {
-                scaled_coarse_rotated_h - y_unrotated
-            } else {
-                y_unrotated
-            };
-
-            let (x_unrotated_coarse, y_unrotated_coarse) = match params.orientation_steps {
-                0 => (x_unflipped, y_unflipped),
-                1 => (y_unflipped, scaled_coarse_rotated_w - x_unflipped),
-                2 => (
-                    scaled_coarse_rotated_w - x_unflipped,
-                    scaled_coarse_rotated_h - y_unflipped,
-                ),
-                3 => (scaled_coarse_rotated_h - y_unflipped, x_unflipped),
-                _ => (x_unflipped, y_unflipped),
-            };
-
-            if x_unrotated_coarse >= 0.0 && y_unrotated_coarse >= 0.0 {
-                let x_src = (x_unrotated_coarse * inv_scale) as u32;
-                let y_src = (y_unrotated_coarse * inv_scale) as u32;
-
-                if x_src < full_w && y_src < full_h {
-                    let pixel = warped.get_pixel(x_src, y_src);
-                    let luma =
-                        0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
-                    let dist = (luma - ref_luma).abs();
-
-                    if dist <= tolerance_val {
-                        let intensity = 1.0 - (dist / tolerance_val);
-                        mask.put_pixel(x_out, y_out, Luma([(intensity * 255.0) as u8]));
-                    }
-                }
-            }
-        }
-    }
-
-    Some(mask)
+    generate_range_bitmap_from_parameters(
+        params,
+        width,
+        height,
+        scale,
+        crop_offset,
+        output_origin,
+        source,
+        RangeMaskMatch::Luminance {
+            tolerance: (params.tolerance * 2.55).max(1.0),
+        },
+    )
 }
 
 fn generate_luminance_bitmap(
@@ -1553,7 +1645,7 @@ fn generate_luminance_bitmap(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&image::DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
 ) -> Option<GrayImage> {
     let params: ParametricMaskParameters = serde_json::from_value(params_value.clone()).ok()?;
     let mut mask = generate_luminance_bitmap_from_parameters(
@@ -1563,7 +1655,7 @@ fn generate_luminance_bitmap(
         scale,
         crop_offset,
         (0, 0),
-        warped_image?,
+        range_source?,
     )?;
     apply_grow_and_feather(&mut mask, params.grow, params.feather, width, height);
     Some(mask)
@@ -1579,7 +1671,7 @@ fn generate_sub_mask_bitmap(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
 ) -> Option<GrayImage> {
     if !sub_mask.visible {
         return None;
@@ -1640,7 +1732,7 @@ fn generate_sub_mask_bitmap(
             height,
             scale,
             crop_offset,
-            warped_image,
+            range_source,
         ),
         "luminance" => generate_luminance_bitmap(
             &sub_mask.parameters,
@@ -1648,7 +1740,7 @@ fn generate_sub_mask_bitmap(
             height,
             scale,
             crop_offset,
-            warped_image,
+            range_source,
         ),
         "ai-subject" => {
             generate_ai_subject_bitmap(&sub_mask.parameters, width, height, scale, crop_offset)
@@ -1715,7 +1807,7 @@ impl TiledSubMaskRasterizer {
         scale: f32,
         crop_offset: (f32, f32),
         output_origin: (u32, u32),
-        warped_image: Option<&DynamicImage>,
+        range_source: Option<&dyn RangeMaskSource>,
     ) -> Option<GrayImage> {
         match self {
             Self::Radial(parameters) => Some(generate_radial_bitmap(
@@ -1757,7 +1849,7 @@ impl TiledSubMaskRasterizer {
                 scale,
                 crop_offset,
                 output_origin,
-                warped_image?,
+                range_source?,
             ),
             Self::Luminance(parameters) => generate_luminance_bitmap_from_parameters(
                 parameters,
@@ -1766,7 +1858,7 @@ impl TiledSubMaskRasterizer {
                 scale,
                 crop_offset,
                 output_origin,
-                warped_image?,
+                range_source?,
             ),
             Self::Ai(rasterizer) => {
                 Some(rasterizer.rasterize(width, height, scale, crop_offset, output_origin))
@@ -1798,11 +1890,11 @@ impl TiledSubMaskRasterizer {
         }
     }
 
-    fn is_ready(&self, warped_image: Option<&DynamicImage>) -> bool {
+    fn is_ready(&self, range_source: Option<&dyn RangeMaskSource>) -> bool {
         match self {
             Self::Color(parameters) | Self::Luminance(parameters) => {
-                warped_image.is_some_and(|warped| {
-                    let (width, height) = warped.dimensions();
+                range_source.is_some_and(|source| {
+                    let (width, height) = source.source_dimensions();
                     let target_x = parameters.target_x.round() as i32;
                     let target_y = parameters.target_y.round() as i32;
                     target_x >= 0
@@ -1823,7 +1915,7 @@ pub fn generate_mask_bitmap(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
 ) -> Option<GrayImage> {
     if !mask_def.visible || mask_def.sub_masks.is_empty() {
         return None;
@@ -1846,13 +1938,13 @@ pub fn generate_mask_bitmap(
                 height,
                 scale,
                 crop_offset,
-                warped_image,
+                range_source,
             )
         {
             continue;
         }
         if let Some(mut sub_bitmap) =
-            generate_sub_mask_bitmap(sub_mask, width, height, scale, crop_offset, warped_image)
+            generate_sub_mask_bitmap(sub_mask, width, height, scale, crop_offset, range_source)
         {
             apply_sub_mask_modifiers(&mut sub_bitmap, sub_mask);
             composite_sub_mask(&mut final_mask, sub_bitmap, sub_mask.mode);
@@ -1956,7 +2048,7 @@ fn composite_sub_mask_tiled(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
 ) -> bool {
     composite_sub_mask_tiled_with_edge(
         final_mask,
@@ -1965,7 +2057,7 @@ fn composite_sub_mask_tiled(
         height,
         scale,
         crop_offset,
-        warped_image,
+        range_source,
         GPU_TILE_SIZE,
     )
 }
@@ -1978,7 +2070,7 @@ fn composite_sub_mask_tiled_with_edge(
     height: u32,
     scale: f32,
     crop_offset: (f32, f32),
-    warped_image: Option<&DynamicImage>,
+    range_source: Option<&dyn RangeMaskSource>,
     tile_edge: u32,
 ) -> bool {
     debug_assert!(tile_edge > 0);
@@ -1986,7 +2078,7 @@ fn composite_sub_mask_tiled_with_edge(
     let Some(rasterizer) = TiledSubMaskRasterizer::new(sub_mask) else {
         return false;
     };
-    if !rasterizer.is_ready(warped_image) {
+    if !rasterizer.is_ready(range_source) {
         return false;
     }
     let halo = rasterizer.halo(width, height);
@@ -2015,7 +2107,7 @@ fn composite_sub_mask_tiled_with_edge(
                     scale,
                     crop_offset,
                     (expanded_x, expanded_y),
-                    warped_image,
+                    range_source,
                 )
                 .expect("validated tiled mask rasterizer");
             rasterizer.apply_cross_pixel_filters(&mut tile, width, height);
@@ -2164,9 +2256,15 @@ pub fn generate_mask_overlay(
 
     let scaled_crop_offset = (crop_offset.0 * scale, crop_offset.1 * scale);
 
-    let warped_image = js_adjustments.as_ref().and_then(|adj| {
-        resolve_warped_image_for_masks(&state, adj, std::slice::from_ref(&parsed_mask_def))
+    let range_source_image = js_adjustments.as_ref().and_then(|_| {
+        resolve_range_mask_source_image(&state, std::slice::from_ref(&parsed_mask_def))
     });
+    let range_source = js_adjustments
+        .as_ref()
+        .zip(range_source_image.as_deref())
+        .map(|(adjustments, image)| {
+            GeometryWarpSampler::new(image, get_geometry_params_from_json(adjustments))
+        });
 
     if let Some(gray_mask) = generate_mask_bitmap(
         &parsed_mask_def,
@@ -2174,7 +2272,9 @@ pub fn generate_mask_overlay(
         height,
         scale,
         scaled_crop_offset,
-        warped_image.as_deref(),
+        range_source
+            .as_ref()
+            .map(|source| source as &dyn RangeMaskSource),
     ) {
         let mut rgba_mask = RgbaImage::new(width, height);
         for (x, y, pixel) in gray_mask.enumerate_pixels() {
@@ -2194,16 +2294,34 @@ pub fn generate_mask_overlay(
     }
 }
 
-pub fn resolve_warped_image_for_masks(
+pub fn resolve_range_mask_source_image(
     state: &tauri::State<AppState>,
-    adjustments: &serde_json::Value,
     masks: &[MaskDefinition],
 ) -> Option<Arc<DynamicImage>> {
-    if masks.iter().any(|m| m.requires_warped_image()) {
-        get_cached_full_warped_image(state, adjustments).ok()
-    } else {
-        None
+    if !masks.iter().any(MaskDefinition::requires_range_source) {
+        return None;
     }
+
+    let (base_image, is_raw) = crate::get_original_image(state).ok()?;
+    if !is_raw {
+        return Some(base_image);
+    }
+
+    if let Ok(mut full_warped_cache) = state.full_warped_cache.lock() {
+        *full_warped_cache = None;
+    }
+    let mut cache = state.range_mask_source_cache.lock().ok()?;
+    if let Some((cached_base, cached_source)) = cache.as_ref()
+        && Arc::ptr_eq(cached_base, &base_image)
+    {
+        return Some(Arc::clone(cached_source));
+    }
+
+    let mut display_image = base_image.as_ref().clone();
+    apply_cpu_default_raw_processing(&mut display_image);
+    let display_image = Arc::new(display_image);
+    *cache = Some((base_image, Arc::clone(&display_image)));
+    Some(display_image)
 }
 
 pub fn get_cached_or_generate_mask(
@@ -2227,6 +2345,9 @@ pub fn get_cached_or_generate_mask(
     scale.to_bits().hash(&mut hasher);
     crop_offset.0.to_bits().hash(&mut hasher);
     crop_offset.1.to_bits().hash(&mut hasher);
+    if def.requires_range_source() {
+        crate::cache_utils::calculate_geometry_hash(adjustments).hash(&mut hasher);
+    }
 
     let key = hasher.finish();
 
@@ -2237,8 +2358,10 @@ pub fn get_cached_or_generate_mask(
         }
     }
 
-    let warped_image =
-        resolve_warped_image_for_masks(state, adjustments, std::slice::from_ref(def));
+    let range_source_image = resolve_range_mask_source_image(state, std::slice::from_ref(def));
+    let range_source = range_source_image
+        .as_deref()
+        .map(|image| GeometryWarpSampler::new(image, get_geometry_params_from_json(adjustments)));
 
     let generated = generate_mask_bitmap(
         def,
@@ -2246,7 +2369,9 @@ pub fn get_cached_or_generate_mask(
         height,
         scale,
         crop_offset,
-        warped_image.as_deref(),
+        range_source
+            .as_ref()
+            .map(|source| source as &dyn RangeMaskSource),
     )
     .map(Arc::new);
 
@@ -2334,6 +2459,49 @@ mod tests {
         assert!(Arc::ptr_eq(&mask, &caller));
         assert_eq!(mask.as_raw().as_ptr(), caller.as_raw().as_ptr());
         assert_eq!(MASK_BYTES * 2 - MASK_BYTES, MASK_BYTES);
+    }
+
+    #[test]
+    fn range_mask_source_preparation_borrows_non_raw_and_preserves_raw_display_semantics() {
+        let source = DynamicImage::ImageRgb32F(image::Rgb32FImage::from_fn(7, 5, |x, y| {
+            image::Rgb([
+                (x + 1) as f32 / 8.0,
+                (y + 1) as f32 / 6.0,
+                (x + y + 1) as f32 / 12.0,
+            ])
+        }));
+        let original = source.clone();
+        let range_mask = MaskDefinition {
+            id: "range-source".to_string(),
+            name: "Range source".to_string(),
+            visible: true,
+            invert: false,
+            opacity: 100.0,
+            adjustments: Value::Null,
+            sub_masks: vec![test_sub_mask(
+                "color",
+                serde_json::json!({}),
+                SubMaskMode::Additive,
+            )],
+        };
+
+        assert!(prepare_range_mask_source_image(&source, false, &[]).is_none());
+        let borrowed =
+            prepare_range_mask_source_image(&source, false, std::slice::from_ref(&range_mask))
+                .expect("non-RAW range masks need a source");
+        assert!(matches!(borrowed, Cow::Borrowed(image) if std::ptr::eq(image, &source)));
+
+        let mut expected = source.clone();
+        apply_cpu_default_raw_processing(&mut expected);
+        let processed =
+            prepare_range_mask_source_image(&source, true, std::slice::from_ref(&range_mask))
+                .expect("RAW range masks need a display source")
+                .into_owned();
+        assert_eq!(processed, expected);
+        assert_eq!(
+            source, original,
+            "RAW preparation must not mutate the source"
+        );
     }
 
     fn test_sub_mask(mask_type: &str, parameters: Value, mode: SubMaskMode) -> SubMask {
@@ -2518,14 +2686,14 @@ mod tests {
     }
 
     #[test]
-    fn tiled_color_and_luminance_masks_match_full_frame_with_exact_halo() {
+    fn tiled_geometry_sampled_color_and_luminance_masks_match_full_frame_with_exact_halo() {
         const WIDTH: u32 = 141;
         const HEIGHT: u32 = 109;
         const TEST_TILE_EDGE: u32 = 37;
         const SCALE: f32 = 1.25;
         const CROP_OFFSET: (f32, f32) = (11.5, 7.25);
 
-        let warped = DynamicImage::ImageRgba8(RgbaImage::from_fn(181, 137, |x, y| {
+        let source_image = DynamicImage::ImageRgba8(RgbaImage::from_fn(181, 137, |x, y| {
             Rgba([
                 x.wrapping_mul(17).wrapping_add(y * 3) as u8,
                 x.wrapping_mul(5).wrapping_add(y * 19) as u8,
@@ -2533,6 +2701,24 @@ mod tests {
                 255,
             ])
         }));
+        let geometry_params = crate::image_processing::GeometryParams {
+            distortion: 8.0,
+            projection: 14.0,
+            vertical: 9.0,
+            horizontal: -7.0,
+            rotate: 2.0,
+            aspect: 3.0,
+            scale: 98.0,
+            x_offset: 1.0,
+            y_offset: -1.0,
+            lens_dist_k1: 0.008,
+            tca_vr: 1.001,
+            tca_vb: 0.999,
+            vig_k1: -0.04,
+            ..crate::image_processing::GeometryParams::default()
+        };
+        let warped = crate::image_processing::warp_image_geometry(&source_image, geometry_params);
+        let range_source = GeometryWarpSampler::new(&source_image, geometry_params);
         let cases = [
             (
                 "color",
@@ -2601,7 +2787,7 @@ mod tests {
                     HEIGHT,
                     SCALE,
                     CROP_OFFSET,
-                    Some(&warped),
+                    Some(&range_source),
                     TEST_TILE_EDGE,
                 ));
 
@@ -3032,6 +3218,143 @@ mod tests {
             sample_hash,
         );
         std::hint::black_box(composition);
+    }
+
+    #[test]
+    #[ignore = "manual deterministic 60MP range-mask geometry-source benchmark"]
+    fn synthetic_60mp_range_mask_geometry_source_harness() {
+        let width = std::env::var("RAW_EDITOR_BENCH_WIDTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(9_504_u32);
+        let height = std::env::var("RAW_EDITOR_BENCH_HEIGHT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(6_336_u32);
+        let mode = std::env::var("RAW_EDITOR_RANGE_SOURCE_BENCH_MODE")
+            .unwrap_or_else(|_| "sampled".to_string());
+        assert!(matches!(mode.as_str(), "full" | "sampled"));
+
+        let source =
+            DynamicImage::ImageRgb32F(image::Rgb32FImage::from_fn(width, height, |x, y| {
+                image::Rgb([
+                    (x.wrapping_mul(17).wrapping_add(y * 13) & 1023) as f32 / 1023.0,
+                    (x.wrapping_mul(5).wrapping_add(y * 19) & 1023) as f32 / 1023.0,
+                    (x.wrapping_mul(11).wrapping_add(y * 7) & 1023) as f32 / 1023.0,
+                ])
+            }));
+        let geometry_params = crate::image_processing::GeometryParams {
+            distortion: 5.0,
+            projection: 8.0,
+            vertical: 6.0,
+            horizontal: -4.0,
+            rotate: 1.0,
+            aspect: 2.0,
+            scale: 99.0,
+            x_offset: 0.5,
+            y_offset: -0.5,
+            lens_dist_k1: 0.004,
+            tca_vr: 1.0005,
+            tca_vb: 0.9995,
+            vig_k1: -0.02,
+            ..crate::image_processing::GeometryParams::default()
+        };
+        let mask_parameters = ParametricMaskParameters {
+            target_x: f64::from(width / 2),
+            target_y: f64::from(height / 2),
+            tolerance: 28.0,
+            grow: 0.0,
+            feather: 0.0,
+            rotation: 0.0,
+            flip_horizontal: false,
+            flip_vertical: false,
+            orientation_steps: 0,
+        };
+
+        let pid = sysinfo::get_current_pid().expect("resolve benchmark process id");
+        let mut baseline_system = sysinfo::System::new();
+        baseline_system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let baseline_rss = baseline_system
+            .process(pid)
+            .expect("read benchmark process after source allocation")
+            .memory();
+        let running = Arc::new(AtomicBool::new(true));
+        let peak_rss = Arc::new(AtomicU64::new(baseline_rss));
+        let sampler_running = Arc::clone(&running);
+        let sampler_peak = Arc::clone(&peak_rss);
+        let rss_sampler = std::thread::spawn(move || {
+            let mut system = sysinfo::System::new();
+            while sampler_running.load(Ordering::Relaxed) {
+                system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+                if let Some(process) = system.process(pid) {
+                    sampler_peak.fetch_max(process.memory(), Ordering::Relaxed);
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let started = Instant::now();
+        let (mask, checkpoint_bytes, maximum_checkpoint_bytes) = if mode == "full" {
+            let warped = crate::image_processing::warp_image_geometry(&source, geometry_params);
+            let mask = generate_color_bitmap_from_parameters(
+                &mask_parameters,
+                width,
+                height,
+                1.0,
+                (0.0, 0.0),
+                (0, 0),
+                &warped,
+            )
+            .expect("materialized range mask must rasterize");
+            std::hint::black_box(warped);
+            (mask, 0, 0)
+        } else {
+            let geometry_source = GeometryWarpSampler::new(&source, geometry_params);
+            let mask = generate_color_bitmap_from_parameters(
+                &mask_parameters,
+                width,
+                height,
+                1.0,
+                (0.0, 0.0),
+                (0, 0),
+                &geometry_source,
+            )
+            .expect("sampled range mask must rasterize");
+            let checkpoint_bytes = geometry_source.checkpoint_bytes();
+            let maximum_checkpoint_bytes = geometry_source.max_checkpoint_bytes();
+            (mask, checkpoint_bytes, maximum_checkpoint_bytes)
+        };
+        let elapsed = started.elapsed();
+        std::thread::sleep(Duration::from_millis(10));
+        running.store(false, Ordering::Relaxed);
+        rss_sampler.join().expect("join range-source RSS sampler");
+
+        let sample_stride = (mask.as_raw().len() / 4_096).max(1);
+        let sample_hash = mask
+            .as_raw()
+            .iter()
+            .step_by(sample_stride)
+            .fold(0xcbf2_9ce4_8422_2325_u64, |hash, sample| {
+                (hash ^ u64::from(*sample)).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        let peak_rss = peak_rss.load(Ordering::Relaxed);
+        let materialized_source_bytes = u64::from(width) * u64::from(height) * 4 * 4;
+        println!(
+            "{{\"mode\":\"{}\",\"width\":{},\"height\":{},\"elapsedMs\":{},\"baselineRssBytes\":{},\"peakRssBytes\":{},\"peakDeltaBytes\":{},\"materializedSourceBytes\":{},\"checkpointBytes\":{},\"maximumCheckpointBytes\":{},\"sampleHash\":\"{:016x}\"}}",
+            mode,
+            width,
+            height,
+            elapsed.as_millis(),
+            baseline_rss,
+            peak_rss,
+            peak_rss.saturating_sub(baseline_rss),
+            materialized_source_bytes,
+            checkpoint_bytes,
+            maximum_checkpoint_bytes,
+            sample_hash,
+        );
+        std::hint::black_box(mask);
+        std::hint::black_box(source);
     }
 
     #[test]

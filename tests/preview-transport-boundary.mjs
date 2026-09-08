@@ -37,7 +37,7 @@ const rustSections = [
   sectionBetween(
     maskGeneration,
     'pub fn generate_mask_overlay(',
-    'pub fn resolve_warped_image_for_masks(',
+    'pub fn resolve_range_mask_source_image(',
     'mask overlay',
   ),
 ];

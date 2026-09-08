@@ -87,14 +87,15 @@ use crate::formats::is_raw_file;
 use crate::hdr_deghosting::{align_hdr_frames, assert_uniform_dimensions, load_hdr_frames};
 use crate::image_loader::{composite_patches_on_image, load_and_composite};
 use crate::image_processing::{
-    GeometryParams, RenderRequest, apply_coarse_rotation, apply_cpu_default_raw_processing,
-    apply_flip, apply_geometry_warp, apply_linear_to_srgb, downscale_f32_image,
-    get_all_adjustments_from_json, get_or_init_gpu_context, process_and_get_dynamic_image,
-    resolve_tonemapper_override, resolve_tonemapper_override_from_handle, warp_image_geometry,
+    GeometryParams, GeometryWarpSampler, RenderRequest, apply_coarse_rotation,
+    apply_cpu_default_raw_processing, apply_flip, apply_geometry_warp, apply_linear_to_srgb,
+    downscale_f32_image, get_all_adjustments_from_json, get_geometry_params_from_json,
+    get_or_init_gpu_context, process_and_get_dynamic_image, resolve_tonemapper_override,
+    resolve_tonemapper_override_from_handle, warp_image_geometry,
 };
 use crate::mask_generation::{
-    MaskDefinition, generate_mask_bitmap, get_cached_or_generate_mask,
-    resolve_warped_image_for_masks,
+    MaskDefinition, RangeMaskSource, generate_mask_bitmap, get_cached_or_generate_mask,
+    prepare_range_mask_source_image,
 };
 use crate::preview_protocol::{encode_preview_patch, normalized_roi_to_pixels};
 use crate::render_strategy::{RenderTier, resolve_preview_render_tier};
@@ -297,19 +298,41 @@ pub fn get_cached_full_warped_image(
 ) -> Result<Arc<DynamicImage>, String> {
     let geo_hash = calculate_geometry_hash(js_adjustments);
 
-    {
+    let cached_warped = {
         let cache_lock = state.full_warped_cache.lock().unwrap();
         if let Some((hash, img)) = cache_lock.as_ref()
             && *hash == geo_hash
         {
-            return Ok(Arc::clone(img));
+            Some(Arc::clone(img))
+        } else {
+            None
         }
+    };
+    if let Some(cached_warped) = cached_warped {
+        if let Ok(mut range_source_cache) = state.range_mask_source_cache.lock() {
+            *range_source_cache = None;
+        }
+        return Ok(cached_warped);
     }
 
     let (base_arc, is_raw) = get_original_image(state)?;
-    let mut cow_image = Cow::Borrowed(base_arc.as_ref());
+    let cached_range_source = if is_raw {
+        state
+            .range_mask_source_cache
+            .lock()
+            .ok()
+            .and_then(|mut cache| cache.take())
+            .and_then(|(cached_base, cached_source)| {
+                Arc::ptr_eq(&cached_base, &base_arc).then_some(cached_source)
+            })
+    } else {
+        None
+    };
+    let mut cow_image = cached_range_source
+        .as_deref()
+        .map_or_else(|| Cow::Borrowed(base_arc.as_ref()), Cow::Borrowed);
 
-    if is_raw {
+    if is_raw && cached_range_source.is_none() {
         apply_cpu_default_raw_processing(cow_image.to_mut());
     }
 
@@ -319,6 +342,9 @@ pub fn get_cached_full_warped_image(
     {
         let mut cache_lock = state.full_warped_cache.lock().unwrap();
         *cache_lock = Some((geo_hash, Arc::clone(&warped_arc)));
+    }
+    if let Ok(mut range_source_cache) = state.range_mask_source_cache.lock() {
+        *range_source_cache = None;
     }
 
     Ok(warped_arc)
@@ -1602,8 +1628,11 @@ async fn generate_preview_for_path(
             .and_then(|m| serde_json::from_value(m.clone()).ok())
             .unwrap_or_default();
 
-        let warped_image =
-            resolve_warped_image_for_masks(&state, &js_adjustments, &mask_definitions);
+        let range_source_image =
+            prepare_range_mask_source_image(&base_image, is_raw, &mask_definitions);
+        let range_source = range_source_image.as_deref().map(|image| {
+            GeometryWarpSampler::new(image, get_geometry_params_from_json(&js_adjustments))
+        });
         let mask_bitmaps: Vec<SharedMaskBitmap> = mask_definitions
             .iter()
             .filter_map(|def| {
@@ -1613,7 +1642,9 @@ async fn generate_preview_for_path(
                     img_h,
                     1.0,
                     unscaled_crop_offset,
-                    warped_image.as_deref(),
+                    range_source
+                        .as_ref()
+                        .map(|source| source as &dyn RangeMaskSource),
                 )
                 .map(Arc::new)
             })
@@ -2322,6 +2353,7 @@ pub fn run() {
             lens_db: Mutex::new(None),
             load_image_generation: Arc::new(AtomicUsize::new(0)),
             full_warped_cache: Mutex::new(None),
+            range_mask_source_cache: Mutex::new(None),
             full_transformed_cache: Mutex::new(None),
             decoded_image_cache: Mutex::new(DecodedImageCache::new(
                 5,

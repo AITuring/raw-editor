@@ -96,7 +96,7 @@ npm run start            # Tauri 2 开发窗口
 简体中文和繁体中文作为当前优先维护语言；上游已有的其他语言资源继续保留。新增界面文案
 必须同时补齐英语与中文，并通过 `npm run i18n:check` 后才能合并。
 
-### 当前进度（2026-08-17）
+### 当前进度（2026-09-08）
 
 当前处于 **M0 基础整合完成、M1 RAW 与色彩基线建设阶段**。用户授权的 `DSC05363.ARW` 已建立
 α7R V `lossy-arw` 单样片真实管线与本机 60MP 性能基线；其余光照、ISO、曝光和 RAW 压缩模式仍
@@ -189,8 +189,21 @@ npm run start            # Tauri 2 开发窗口
   127px，单个扩展 tile 最多 2302×2302；过滤期三张灰度 scratch 从 180,652,032 B 降至
   15,897,612 B，减少 164,754,420 B（91.2%）。同机 60MP 独立进程以 grow=2、feather=1 同时覆盖
   形态学和模糊，对照 scratch RSS 增量从 186,531,840 B 降至 18,055,168 B，减少 168,476,672 B
-  （90.3%），稀疏哈希同为 `22b2b2054060aa43`。每个最终 CPU 灰度 bitmap 与供范围匹配使用的完整
-  warped source 仍存在。
+  （90.3%），稀疏哈希同为 `22b2b2054060aa43`。每个最终 CPU 灰度 bitmap 仍存在；下一项继续消除
+  当时供范围匹配使用的完整 warped source。
+- ✅ 颜色/明度范围匹配现通过 `GeometryWarpSampler` 按输出行成批读取实际需要的几何像素，不再预先
+  物化完整 RGBA32F warped source。采样器直接借用 `DynamicImage` 的 8/16/32 位、灰度/RGB/RGBA
+  存储，并按源行每 64 列惰性保存一次与旧 warp 相同的浮点累加检查点；复杂几何、裁剪、粗方向、翻转
+  及 tile overlap 的结果均与旧完整帧逐像素一致。RAW 仍先执行一次默认 CPU 显示变换并缓存完整
+  RGB32F 源，但不再为范围匹配追加 RGBA32F warp；范围蒙版也不再阻止符合条件的全尺寸几何导出使用
+  `GeometryWarpRows`。9504×6336 的检查点像素数据上限从 963,477,504 B 降至 11,328,768 B，减少
+  952,148,736 B（98.8%）。本机 Apple M2 Max（12 核）、32 GB、macOS 15.6.1 的确定性 RGB32F
+  对照中，完整物化路径为 739 ms / 1,756,987,392 B 峰值 RSS，按需路径为 658 ms / 804,995,072 B；源分配后
+  的 RSS 增量从 1,028,898,816 B 降至 77,070,336 B（减少 92.5%），稀疏蒙版哈希同为
+  `18e331080673aa4b`。RAW 默认显示源缓存与旧 AI 全量 warp 缓存互斥；需要全量 warp 时会先接管并复用
+  已处理的 RAW 源，完成后回收范围源，避免两张约 689 MiB 的 RGB32F 图长期并存。该 harness 不解码
+  RAW、不初始化 WGPU；两种模式共用当前并行匹配器，因此耗时只比较匹配源策略，不代表迁移前代码或
+  真实相机的端到端性能。
 - ✅ 主体、前景、天空、深度与快速橡皮擦 AI 子蒙版现只解码一次 base64 灰度源，并以 2048px core
   加精确 halo 完成几何映射和后续过滤；深度选区先就地计算，再把 `image` Gaussian 的有限核半径与
   通用 grow/feather 半径相加，过滤后只合成 core。首个无过滤加法蒙版仍直接成为最终 bitmap，避免
@@ -221,16 +234,16 @@ npm run start            # Tauri 2 开发窗口
   staging 从 968,343,552 B 降至 4,866,048 B，减少 963,477,504 B（99.5%）。同机独立进程对照的
   峰值 RSS 从 1,704,247,296 B 降至 740,605,952 B，减少 963,641,344 B（56.5%）；188 ms 与
   179 ms 基本持平，稀疏 RGBA16F 哈希同为 `8ea96650e5e63553`。该基础路径当时不包含粗旋转/翻转；
-  精细旋转、镜头模糊、非浮点源和依赖完整 warped source 的颜色/明度蒙版仍保留旧完整帧回退；GPU
-  输入 texture 也仍是完整尺寸，因此本项只收敛符合条件的导出 CPU 几何输出。
+  精细旋转、镜头模糊和非浮点源仍保留旧完整帧回退，颜色/明度蒙版则已由上面的按需采样源解除该
+  回退条件。GPU 输入 texture 也仍是完整尺寸，因此本项只收敛符合条件的导出 CPU 几何输出。
 - ✅ `GpuInputSource` 与 `GeometryWarpRows` 现支持直接填充整个 64 行上传带，把 90°/180°/270° 粗旋转
   及水平/垂直翻转作为精确坐标置换融合进生产者；换轴时按源图每 64 列保存一次与旧逐行浮点累加一致的
   11,328,768 B 检查点，只生成最多 3,244,032 B 的几何转置小块。9504×6336 经 90° 旋转并水平翻转时，
   旧完整 warp/旋转/翻转 + staging 的逻辑 CPU 峰值为 1,930,199,040 B，新路径为 17,816,832 B，减少
   1,912,382,208 B（99.1%）；同机独立进程峰值 RSS 从 2,667,528,192 B 降至 753,811,456 B，减少
   1,913,716,736 B（71.7%），588 ms 降至 264 ms，稀疏 RGBA16F 哈希同为 `c616c5f75cc28bf6`。
-  四个方向、四种翻转组合、变换后裁剪、尾带和行对齐 padding 均与旧路径逐值一致；精细旋转、镜头
-  模糊及颜色/明度范围蒙版仍未进入该流式边界。
+  四个方向、四种翻转组合、变换后裁剪、尾带和行对齐 padding 均与旧路径逐值一致；颜色/明度范围
+  蒙版现在可与该流式边界并存，精细旋转和镜头模糊仍未进入。
 - ✅ 全尺寸几何 warp 对 RGB32F/RGBA32F 源直接借用底层浮点切片，只有其他存储格式才回退到
   RGBA32F 转换，不再为 9504×6336 RGB32F 输入额外 staging 一张 963,477,504 B 的 RGBA32F 源图。
   同机合成 60MP 连续对照中，旧 staging 路径为 291 ms / 2,613,788,672 B 峰值 RSS，新借用路径为
@@ -288,16 +301,15 @@ Sony α7R V 60MP ARW 已有一个用户授权的 ISO 125、25 秒、Sony 有损�
 因此不会用合成图或这一个长曝光样片冒充完整机型结论。无需新增样片的 RGB 输入 ICC 与日常 SDR
 显示链路已经闭环；CMYK/Gray/CICP-only 输入、自定义显示 profile 和软打样仍属于后续能力。
 四级渲染策略、RAW 开发 RGB 零拷贝交接/原位预处理/有界 RGBA16F 带状上传、活动蒙版 GPU tile、CPU
-共享所有权、程序化/画笔分块生成、颜色/明度精确 overlap 与 AI 蒙版变换/过滤 tile、几何 warp 浮点
-输入借用及常见/正交全尺寸导出的逐行/逐带输出、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
+共享所有权、程序化/画笔分块生成、颜色/明度精确 overlap 与按需几何源、AI 蒙版变换/过滤 tile、几何
+warp 浮点输入借用及常见/正交全尺寸导出的逐行/逐带输出、桌面端 JPEG/PNG/TIFF tile-to-encoder、逐行 resize/watermark、
 内置默认水印、GPU 高水位回收、JPEG/WebP 压缩码流直接写文件、JPEG/PNG/TIFF 编码期 EXIF 和合成
 大图 harness 已经闭环。
 WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不再复制完整 ARGB 图或缓冲完整
-压缩输出；RAW 解码器内部 mosaic 与开发帧、每个活动蒙版的最终 CPU bitmap、AI 蒙版解码源、供
-颜色/明度匹配使用的完整 warped source、精细旋转/镜头模糊等二次重采样回退以及 JXL/AVIF 导出仍走
-完整帧路径。当前锁定的 rawler 上游没有公开行式/分块 `Intermediate` 开发接口；下一阶段优先让
-颜色/明度范围蒙版按几何 tile 读取匹配源，消除完整 warped source，再继续评估精细旋转、上游 RAW
-API、替换开发器或可替换的 JXL/AVIF 分块编码器。待新 α7R V 样片到位后，再扩充 RAW → GPU → 文件
+压缩输出；RAW 解码器内部 mosaic 与开发帧、每个活动蒙版的最终 CPU bitmap、AI 蒙版解码源、精细
+旋转/镜头模糊等二次重采样回退以及 JXL/AVIF 导出仍走完整帧路径。当前锁定的 rawler 上游没有公开
+行式/分块 `Intermediate` 开发接口；下一阶段优先评估精细旋转/镜头模糊的二次重采样节点，再继续评估
+上游 RAW API、替换开发器或可替换的 JXL/AVIF 分块编码器。待新 α7R V 样片到位后，再扩充 RAW → GPU → 文件
 的场景画质、交互耗时和峰值基线。
 
 本轮已通过 `npm run typecheck`、`npm run lint`、`npm run i18n:check`、`npm run crop-transform:check`、
@@ -308,13 +320,14 @@ API、替换开发器或可替换的 JXL/AVIF 分块编码器。待新 α7R V �
 `npm run synthetic-geometry-output:bench`、
 `npm run synthetic-orthogonal-geometry-output:bench`、
 `npm run synthetic-mask:bench`、`npm run synthetic-mask-compose:bench`、
-`npm run synthetic-range-mask:bench`、`npm run synthetic-ai-mask:bench`、
+`npm run synthetic-range-mask:bench`、`npm run synthetic-range-source:bench`、`npm run synthetic-ai-mask:bench`、
 `npm run synthetic-raw-handoff:bench`、`npm run gpu-mask:check`、
 `cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、
-`cargo check --manifest-path src-tauri/Cargo.toml --lib --locked`、109 项默认执行的 Rust 单元/回归测试和
-严格 Clippy。默认忽略十二项：一项需要本地授权 RAW，十项是手动 60MP JPEG/PNG/TIFF、WebP、几何
-输入、基础/正交几何输出、RAW RGB 交接、蒙版所有权、蒙版组合、范围与 AI 蒙版 overlap harness，另一项需要
-本机 GPU；本轮已显式执行跨 tile 的
+`cargo check --manifest-path src-tauri/Cargo.toml --lib --locked`、
+`cargo test --manifest-path src-tauri/Cargo.toml --lib --locked`（187 项默认执行的 Rust 单元/回归测试）和
+普通 Clippy。Clippy 1.97 的 `-D warnings` 严格门槛仍会报告现存的 batch geometry、panorama 与焦点堆栈
+告警，本次范围源代码没有新增 Clippy 告警，因此不把严格门槛记作通过。默认忽略十九项：六项需要本地
+授权或外部图像 fixture，十二项是手动大图/内存 benchmark，另一项需要本机 GPU；本轮已显式执行跨 tile 的
 Metal 蒙版像素回归，几何阶段的 `borrowed`/`staged` 以及蒙版阶段的 `shared`/`cloned`、
 `tiled`/`full`、范围与 AI 蒙版 `tiled`/`full`、RAW 交接 `reused`/`expanded`、几何输出
 基础与正交 `streamed`/`materialized` 对照都保持相同稀疏输出哈希。`git diff --check` 也保持通过。

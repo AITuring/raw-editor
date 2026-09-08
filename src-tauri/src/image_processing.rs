@@ -14,7 +14,7 @@ use serde_json::json;
 use std::borrow::Cow;
 use std::f32::consts::PI;
 use std::mem::size_of;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 pub use crate::gpu_processing::{
     RenderRequest, get_or_init_gpu_context, process_and_get_dynamic_image,
@@ -488,6 +488,14 @@ fn interpolate_pixel(
 }
 
 enum GeometryPixelSource<'a> {
+    Luma8(&'a [u8]),
+    LumaA8(&'a [u8]),
+    Rgb8(&'a [u8]),
+    Rgba8(&'a [u8]),
+    Luma16(&'a [u16]),
+    LumaA16(&'a [u16]),
+    Rgb16(&'a [u16]),
+    Rgba16(&'a [u16]),
     Rgb32F(&'a [f32]),
     Rgba32F(&'a [f32]),
     ConvertedRgba32F(Rgba32FImage),
@@ -502,24 +510,111 @@ impl<'a> GeometryPixelSource<'a> {
         }
     }
 
-    fn raw(&self) -> &[f32] {
-        match self {
-            Self::Rgb32F(raw) | Self::Rgba32F(raw) => raw,
-            Self::ConvertedRgba32F(source) => source.as_raw(),
+    fn borrowed(image: &'a DynamicImage) -> Self {
+        match image {
+            DynamicImage::ImageLuma8(source) => Self::Luma8(source.as_raw()),
+            DynamicImage::ImageLumaA8(source) => Self::LumaA8(source.as_raw()),
+            DynamicImage::ImageRgb8(source) => Self::Rgb8(source.as_raw()),
+            DynamicImage::ImageRgba8(source) => Self::Rgba8(source.as_raw()),
+            DynamicImage::ImageLuma16(source) => Self::Luma16(source.as_raw()),
+            DynamicImage::ImageLumaA16(source) => Self::LumaA16(source.as_raw()),
+            DynamicImage::ImageRgb16(source) => Self::Rgb16(source.as_raw()),
+            DynamicImage::ImageRgba16(source) => Self::Rgba16(source.as_raw()),
+            DynamicImage::ImageRgb32F(source) => Self::Rgb32F(source.as_raw()),
+            DynamicImage::ImageRgba32F(source) => Self::Rgba32F(source.as_raw()),
+            _ => Self::ConvertedRgba32F(image.to_rgba32f()),
         }
     }
 
-    fn channels(&self) -> usize {
+    fn sample_data(&self) -> GeometrySampleData<'_> {
         match self {
-            Self::Rgb32F(_) => 3,
-            Self::Rgba32F(_) | Self::ConvertedRgba32F(_) => 4,
+            Self::Luma8(raw) => GeometrySampleData::Luma8(raw),
+            Self::LumaA8(raw) => GeometrySampleData::LumaA8(raw),
+            Self::Rgb8(raw) => GeometrySampleData::Rgb8(raw),
+            Self::Rgba8(raw) => GeometrySampleData::Rgba8(raw),
+            Self::Luma16(raw) => GeometrySampleData::Luma16(raw),
+            Self::LumaA16(raw) => GeometrySampleData::LumaA16(raw),
+            Self::Rgb16(raw) => GeometrySampleData::Rgb16(raw),
+            Self::Rgba16(raw) => GeometrySampleData::Rgba16(raw),
+            Self::Rgb32F(raw) => GeometrySampleData::Rgb32F(raw),
+            Self::Rgba32F(raw) => GeometrySampleData::Rgba32F(raw),
+            Self::ConvertedRgba32F(source) => GeometrySampleData::Rgba32F(source.as_raw()),
         }
     }
 
     fn conversion_bytes(&self) -> usize {
         match self {
             Self::ConvertedRgba32F(source) => source.as_raw().len() * size_of::<f32>(),
-            Self::Rgb32F(_) | Self::Rgba32F(_) => 0,
+            _ => 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum GeometrySampleData<'a> {
+    Luma8(&'a [u8]),
+    LumaA8(&'a [u8]),
+    Rgb8(&'a [u8]),
+    Rgba8(&'a [u8]),
+    Luma16(&'a [u16]),
+    LumaA16(&'a [u16]),
+    Rgb16(&'a [u16]),
+    Rgba16(&'a [u16]),
+    Rgb32F(&'a [f32]),
+    Rgba32F(&'a [f32]),
+}
+
+impl GeometrySampleData<'_> {
+    #[inline(always)]
+    fn sample(self, pixel: usize, channel: usize) -> f32 {
+        debug_assert!(channel < 4);
+        match self {
+            Self::Luma8(raw) => {
+                if channel == 3 {
+                    1.0
+                } else {
+                    f32::from(raw[pixel]) / 255.0
+                }
+            }
+            Self::LumaA8(raw) => {
+                let component = if channel == 3 { 1 } else { 0 };
+                f32::from(raw[pixel * 2 + component]) / 255.0
+            }
+            Self::Rgb8(raw) => {
+                if channel == 3 {
+                    1.0
+                } else {
+                    f32::from(raw[pixel * 3 + channel]) / 255.0
+                }
+            }
+            Self::Rgba8(raw) => f32::from(raw[pixel * 4 + channel]) / 255.0,
+            Self::Luma16(raw) => {
+                if channel == 3 {
+                    1.0
+                } else {
+                    f32::from(raw[pixel]) / 65_535.0
+                }
+            }
+            Self::LumaA16(raw) => {
+                let component = if channel == 3 { 1 } else { 0 };
+                f32::from(raw[pixel * 2 + component]) / 65_535.0
+            }
+            Self::Rgb16(raw) => {
+                if channel == 3 {
+                    1.0
+                } else {
+                    f32::from(raw[pixel * 3 + channel]) / 65_535.0
+                }
+            }
+            Self::Rgba16(raw) => f32::from(raw[pixel * 4 + channel]) / 65_535.0,
+            Self::Rgb32F(raw) => {
+                if channel == 3 {
+                    1.0
+                } else {
+                    raw[pixel * 3 + channel]
+                }
+            }
+            Self::Rgba32F(raw) => raw[pixel * 4 + channel],
         }
     }
 }
@@ -553,10 +648,9 @@ impl GeometryWarpBufferPlan {
 
 #[derive(Clone, Copy)]
 struct GeometrySampleContext<'a> {
-    src_raw: &'a [f32],
+    source: GeometrySampleData<'a>,
     src_width: usize,
     src_height: usize,
-    src_channels: usize,
     cx: f32,
     cy: f32,
 }
@@ -577,10 +671,6 @@ impl GeometrySampleContext<'_> {
         if !x.is_finite() || !y.is_finite() {
             return 0.0;
         }
-        if channel == 3 && self.src_channels == 3 {
-            return 1.0;
-        }
-
         let x = x.clamp(0.0, self.src_width as f32 - 1.0);
         let y = y.clamp(0.0, self.src_height as f32 - 1.0);
         let mut x0 = x.floor() as usize;
@@ -596,24 +686,15 @@ impl GeometrySampleContext<'_> {
         let wy = y - y0 as f32;
         let one_minus_wx = 1.0 - wx;
         let one_minus_wy = 1.0 - wy;
-        let stride = self.src_width * self.src_channels;
-        let idx_row0 = y0 * stride;
-        let idx_row1 = idx_row0 + stride;
-        let idx_p00 = idx_row0 + x0 * self.src_channels + channel;
-
-        unsafe {
-            let p00 = *self.src_raw.get_unchecked(idx_p00);
-            let p10 = *self.src_raw.get_unchecked(idx_p00 + self.src_channels);
-            let p01 = *self
-                .src_raw
-                .get_unchecked(idx_row1 + x0 * self.src_channels + channel);
-            let p11 = *self
-                .src_raw
-                .get_unchecked(idx_row1 + x0 * self.src_channels + self.src_channels + channel);
-            let top = p00 * one_minus_wx + p10 * wx;
-            let bottom = p01 * one_minus_wx + p11 * wx;
-            top * one_minus_wy + bottom * wy
-        }
+        let row0 = y0 * self.src_width;
+        let row1 = row0 + self.src_width;
+        let p00 = self.source.sample(row0 + x0, channel);
+        let p10 = self.source.sample(row0 + x0 + 1, channel);
+        let p01 = self.source.sample(row1 + x0, channel);
+        let p11 = self.source.sample(row1 + x0 + 1, channel);
+        let top = p00 * one_minus_wx + p10 * wx;
+        let bottom = p01 * one_minus_wx + p11 * wx;
+        top * one_minus_wy + bottom * wy
     }
 }
 
@@ -947,8 +1028,19 @@ struct GeometryWarpContext<'a> {
 
 impl<'a> GeometryWarpContext<'a> {
     fn new(image: &'a DynamicImage, params: GeometryParams) -> Self {
+        Self::with_source(image, params, GeometryPixelSource::new(image))
+    }
+
+    fn new_borrowed(image: &'a DynamicImage, params: GeometryParams) -> Self {
+        Self::with_source(image, params, GeometryPixelSource::borrowed(image))
+    }
+
+    fn with_source(
+        image: &'a DynamicImage,
+        params: GeometryParams,
+        source: GeometryPixelSource<'a>,
+    ) -> Self {
         let (width, height) = image.dimensions();
-        let source = GeometryPixelSource::new(image);
         let (forward_transform, cx, cy, half_diagonal) =
             build_transform_matrices(&params, width as f32, height as f32);
         let inv = forward_transform
@@ -1021,10 +1113,9 @@ impl<'a> GeometryWarpContext<'a> {
 
     fn sample_context(&self) -> GeometrySampleContext<'_> {
         GeometrySampleContext {
-            src_raw: self.source.raw(),
+            source: self.source.sample_data(),
             src_width: self.width as usize,
             src_height: self.height as usize,
-            src_channels: self.source.channels(),
             cx: self.cx,
             cy: self.cy,
         }
@@ -1199,6 +1290,137 @@ impl<'a> GeometryWarpContext<'a> {
         }
         Ok(())
     }
+}
+
+/// A borrowed, pixel-addressable view of the geometry-warped image.
+///
+/// Unlike [`warp_image_geometry`], this source does not allocate the complete RGBA32F output.
+/// Integer output pixels are sampled on demand with the same transform and interpolation kernel.
+/// All current `DynamicImage` storage variants are borrowed directly, so range masks can consume
+/// geometry pixels tile by tile without first expanding an 8-bit or 16-bit source to RGBA32F.
+pub struct GeometryWarpSampler<'a> {
+    context: GeometryWarpContext<'a>,
+    rows: GeometrySamplerRows,
+}
+
+impl<'a> GeometryWarpSampler<'a> {
+    pub fn new(image: &'a DynamicImage, params: GeometryParams) -> Self {
+        let context = GeometryWarpContext::new_borrowed(image, params);
+        Self {
+            rows: GeometrySamplerRows::new(context.height),
+            context,
+        }
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.context.width, self.context.height)
+    }
+
+    #[cfg(test)]
+    pub fn sample_rgba8(&self, x: u32, y: u32) -> Option<Rgba<u8>> {
+        if x >= self.context.width || y >= self.context.height {
+            return None;
+        }
+
+        let mut output = [Rgba([0, 0, 0, 0])];
+        self.sample_rgba8_points(&[(x, y)], &mut output)
+            .then_some(output[0])
+    }
+
+    pub fn sample_rgba8_points(&self, points: &[(u32, u32)], output: &mut [Rgba<u8>]) -> bool {
+        if points.len() != output.len()
+            || points
+                .iter()
+                .any(|(x, y)| *x >= self.context.width || *y >= self.context.height)
+        {
+            return false;
+        }
+
+        let sample_context = self.context.sample_context();
+        let mut cursor: Option<(u32, u32, NaVector3<f32>)> = None;
+        for ((x, y), output) in points.iter().copied().zip(output) {
+            let current_vec = match cursor {
+                Some((cursor_x, cursor_y, mut current)) if cursor_y == y && x >= cursor_x => {
+                    for _ in cursor_x..x {
+                        current += self.context.step_vec_x;
+                    }
+                    current
+                }
+                _ => self.rows.row_start(&self.context, y, x),
+            };
+            let mut pixel = [0.0_f32; 4];
+            self.context
+                .sample_pixel(&sample_context, current_vec, &mut pixel);
+            *output = Rgba(pixel.map(normalized_f32_to_u8));
+            cursor = Some((x, y, current_vec));
+        }
+        true
+    }
+
+    pub fn checkpoint_bytes(&self) -> usize {
+        self.rows.allocated_bytes()
+    }
+
+    pub fn max_checkpoint_bytes(&self) -> usize {
+        (self.context.height as usize)
+            .saturating_mul(
+                (self.context.width as usize)
+                    .div_ceil(GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS as usize),
+            )
+            .saturating_mul(size_of::<NaVector3<f32>>())
+    }
+}
+
+const GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS: u32 = 64;
+
+struct GeometrySamplerRows {
+    checkpoints: Vec<OnceLock<Box<[NaVector3<f32>]>>>,
+}
+
+impl GeometrySamplerRows {
+    fn new(height: u32) -> Self {
+        Self {
+            checkpoints: (0..height).map(|_| OnceLock::new()).collect(),
+        }
+    }
+
+    fn row_start(&self, context: &GeometryWarpContext<'_>, y: u32, x: u32) -> NaVector3<f32> {
+        let checkpoints = self.checkpoints[y as usize].get_or_init(|| {
+            let mut checkpoints = Vec::with_capacity(
+                (context.width as usize).div_ceil(GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS as usize),
+            );
+            let mut current = context.row_start(y, 0);
+            for source_x in 0..context.width {
+                if source_x.is_multiple_of(GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS) {
+                    checkpoints.push(current);
+                }
+                current += context.step_vec_x;
+            }
+            checkpoints.into_boxed_slice()
+        });
+        let checkpoint_column = x / GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS;
+        let checkpoint_x = checkpoint_column * GEOMETRY_SAMPLER_CHECKPOINT_COLUMNS;
+        let mut current = checkpoints[checkpoint_column as usize];
+        for _ in checkpoint_x..x {
+            current += context.step_vec_x;
+        }
+        current
+    }
+
+    fn allocated_bytes(&self) -> usize {
+        self.checkpoints
+            .iter()
+            .filter_map(OnceLock::get)
+            .map(|row| row.len() * size_of::<NaVector3<f32>>())
+            .sum()
+    }
+}
+
+#[inline]
+fn normalized_f32_to_u8(value: f32) -> u8 {
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    let clamped = if !(value < 1.0) { 1.0 } else { value.max(0.0) };
+    (clamped * 255.0).round() as u8
 }
 
 struct GeometryRowCheckpoints {
@@ -4450,9 +4672,11 @@ mod geometry_transform_tests {
             .expect("fixture must use RGB32F storage")
             .as_raw();
         let rgb_source = GeometryPixelSource::new(&rgb);
-        assert_eq!(rgb_source.channels(), 3);
         assert_eq!(rgb_source.conversion_bytes(), 0);
-        assert_eq!(rgb_source.raw().as_ptr(), rgb_raw.as_ptr());
+        let GeometrySampleData::Rgb32F(rgb_samples) = rgb_source.sample_data() else {
+            panic!("RGB32F source must remain borrowed");
+        };
+        assert_eq!(rgb_samples.as_ptr(), rgb_raw.as_ptr());
 
         let rgba = DynamicImage::ImageRgba32F(rgb.to_rgba32f());
         let rgba_raw = rgba
@@ -4460,14 +4684,160 @@ mod geometry_transform_tests {
             .expect("fixture must use RGBA32F storage")
             .as_raw();
         let rgba_source = GeometryPixelSource::new(&rgba);
-        assert_eq!(rgba_source.channels(), 4);
         assert_eq!(rgba_source.conversion_bytes(), 0);
-        assert_eq!(rgba_source.raw().as_ptr(), rgba_raw.as_ptr());
+        let GeometrySampleData::Rgba32F(rgba_samples) = rgba_source.sample_data() else {
+            panic!("RGBA32F source must remain borrowed");
+        };
+        assert_eq!(rgba_samples.as_ptr(), rgba_raw.as_ptr());
 
         let rgb8 = DynamicImage::ImageRgb8(RgbImage::new(97, 73));
         let converted = GeometryPixelSource::new(&rgb8);
-        assert_eq!(converted.channels(), 4);
         assert_eq!(converted.conversion_bytes(), 97 * 73 * 4 * size_of::<f32>());
+        assert!(matches!(
+            converted.sample_data(),
+            GeometrySampleData::Rgba32F(_)
+        ));
+
+        let borrowed = GeometryPixelSource::borrowed(&rgb8);
+        assert_eq!(borrowed.conversion_bytes(), 0);
+        assert!(matches!(
+            borrowed.sample_data(),
+            GeometrySampleData::Rgb8(_)
+        ));
+    }
+
+    #[test]
+    fn borrowed_geometry_sampler_matches_materialized_pixels_for_all_storage_types() {
+        const WIDTH: u32 = 31;
+        const HEIGHT: u32 = 23;
+        let images = vec![
+            DynamicImage::ImageLuma8(image::GrayImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Luma([x.wrapping_mul(17).wrapping_add(y * 13) as u8])
+            })),
+            DynamicImage::ImageLumaA8(image::GrayAlphaImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::LumaA([
+                    x.wrapping_mul(17).wrapping_add(y * 13) as u8,
+                    x.wrapping_mul(7).wrapping_add(y * 3) as u8,
+                ])
+            })),
+            DynamicImage::ImageRgb8(RgbImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Rgb([
+                    x.wrapping_mul(17).wrapping_add(y * 13) as u8,
+                    x.wrapping_mul(5).wrapping_add(y * 19) as u8,
+                    x.wrapping_mul(11).wrapping_add(y * 7) as u8,
+                ])
+            })),
+            DynamicImage::ImageRgba8(image::RgbaImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Rgba([
+                    x.wrapping_mul(17).wrapping_add(y * 13) as u8,
+                    x.wrapping_mul(5).wrapping_add(y * 19) as u8,
+                    x.wrapping_mul(11).wrapping_add(y * 7) as u8,
+                    x.wrapping_mul(3).wrapping_add(y * 23) as u8,
+                ])
+            })),
+            DynamicImage::ImageLuma16(image::ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Luma([x.wrapping_mul(3_071).wrapping_add(y * 2_053) as u16])
+            })),
+            DynamicImage::ImageLumaA16(image::ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::LumaA([
+                    x.wrapping_mul(3_071).wrapping_add(y * 2_053) as u16,
+                    x.wrapping_mul(1_013).wrapping_add(y * 997) as u16,
+                ])
+            })),
+            DynamicImage::ImageRgb16(image::ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Rgb([
+                    x.wrapping_mul(3_071).wrapping_add(y * 2_053) as u16,
+                    x.wrapping_mul(1_009).wrapping_add(y * 4_093) as u16,
+                    x.wrapping_mul(2_039).wrapping_add(y * 1_021) as u16,
+                ])
+            })),
+            DynamicImage::ImageRgba16(image::ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Rgba([
+                    x.wrapping_mul(3_071).wrapping_add(y * 2_053) as u16,
+                    x.wrapping_mul(1_009).wrapping_add(y * 4_093) as u16,
+                    x.wrapping_mul(2_039).wrapping_add(y * 1_021) as u16,
+                    x.wrapping_mul(509).wrapping_add(y * 4_099) as u16,
+                ])
+            })),
+            coordinate_gradient(WIDTH, HEIGHT),
+            DynamicImage::ImageRgba32F(image::Rgba32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+                image::Rgba([
+                    x as f32 / (WIDTH - 1) as f32,
+                    y as f32 / (HEIGHT - 1) as f32,
+                    ((x * 7 + y * 11) % 31) as f32 / 30.0,
+                    ((x * 13 + y * 5) % 29) as f32 / 28.0,
+                ])
+            })),
+        ];
+        let params = GeometryParams {
+            distortion: 9.0,
+            projection: 17.0,
+            vertical: 11.0,
+            horizontal: -8.0,
+            rotate: 2.5,
+            aspect: 3.0,
+            scale: 98.0,
+            x_offset: 1.0,
+            y_offset: -1.5,
+            lens_dist_k1: 0.01,
+            lens_dist_k2: -0.002,
+            tca_vr: 1.002,
+            tca_vb: 0.998,
+            vig_k1: -0.06,
+            ..GeometryParams::default()
+        };
+
+        for source in images {
+            let expected = warp_image_geometry(&source, params);
+            let sampler = GeometryWarpSampler::new(&source, params);
+            assert_eq!(sampler.dimensions(), expected.dimensions());
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    assert_eq!(
+                        sampler.sample_rgba8(x, y),
+                        Some(expected.get_pixel(x, y)),
+                        "{:?} changed at ({x}, {y})",
+                        source.color()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn borrowed_geometry_sampler_matches_materialized_pixels_at_60mp_row_width() {
+        const WIDTH: u32 = 9_504;
+        const HEIGHT: u32 = 19;
+        let source = coordinate_gradient(WIDTH, HEIGHT);
+        let params = GeometryParams {
+            distortion: 9.0,
+            projection: 17.0,
+            vertical: 11.0,
+            horizontal: -8.0,
+            rotate: 2.5,
+            aspect: 3.0,
+            scale: 98.0,
+            x_offset: 1.0,
+            y_offset: -1.5,
+            lens_dist_k1: 0.01,
+            lens_dist_k2: -0.002,
+            tca_vr: 1.002,
+            tca_vb: 0.998,
+            vig_k1: -0.06,
+            ..GeometryParams::default()
+        };
+        let expected = warp_image_geometry(&source, params);
+        let sampler = GeometryWarpSampler::new(&source, params);
+
+        for y in [0, 1, 7, 11, HEIGHT - 1] {
+            for x in [0, 1, 63, 64, 2_047, 2_048, 4_751, 7_999, WIDTH - 1] {
+                assert_eq!(
+                    sampler.sample_rgba8(x, y),
+                    Some(expected.get_pixel(x, y)),
+                    "geometry sampler changed the materialized pixel at ({x}, {y})"
+                );
+            }
+        }
     }
 
     #[test]

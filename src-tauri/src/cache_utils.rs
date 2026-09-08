@@ -554,6 +554,9 @@ pub fn clear_image_caches(state: tauri::State<AppState>) {
     if let Ok(mut warped_cache) = state.full_warped_cache.lock() {
         *warped_cache = None;
     }
+    if let Ok(mut range_mask_source_cache) = state.range_mask_source_cache.lock() {
+        *range_mask_source_cache = None;
+    }
     if let Ok(mut transformed_cache) = state.full_transformed_cache.lock() {
         *transformed_cache = None;
     }
