@@ -70,6 +70,110 @@ pub fn find_features(img: &GrayImage, brief_pairs: &[(Point2<i32>, Point2<i32>)]
     )
 }
 
+/// Detect BRIEF features on a small image pyramid and map every keypoint back
+/// into the input image's coordinate system.
+///
+/// FAST/BRIEF by itself has no scale invariant descriptor.  That is especially
+/// noticeable when a phone changes from its wide camera to a telephoto camera:
+/// the same brush stroke can be two or three times larger in the second frame.
+/// Sampling a few downscaled copies gives the matcher descriptors whose support
+/// covers the same physical area in both images, while retaining the original
+/// (full-size) level for ordinary stacks.  The returned coordinates always use
+/// the input image coordinate system, so callers do not need a second transform.
+pub fn find_features_multiscale(
+    img: &GrayImage,
+    brief_pairs: &[(Point2<i32>, Point2<i32>)],
+    max_features: usize,
+    scales: &[f32],
+) -> Vec<Feature> {
+    if img.width() == 0 || img.height() == 0 || max_features == 0 {
+        return Vec::new();
+    }
+
+    // Always include the native level even when a caller supplies a custom
+    // list.  Stable ordering makes the result deterministic across rayon
+    // worker counts and gives native descriptors first choice when a location
+    // is represented at more than one scale.
+    let mut levels = Vec::with_capacity(scales.len() + 1);
+    levels.push(1.0f32);
+    for &scale in scales {
+        if scale.is_finite() && scale > 0.05 && scale < 4.0 {
+            let duplicate = levels
+                .iter()
+                .any(|existing| (*existing - scale).abs() < 0.01);
+            if !duplicate {
+                levels.push(scale);
+            }
+        }
+    }
+
+    let mut per_level = Vec::<Vec<Feature>>::with_capacity(levels.len());
+    for &scale in &levels {
+        let width = ((img.width() as f32 * scale).round() as u32).max(1);
+        let height = ((img.height() as f32 * scale).round() as u32).max(1);
+        let level = if (width, height) == img.dimensions() {
+            img.clone()
+        } else {
+            image::imageops::resize(img, width, height, image::imageops::FilterType::Triangle)
+        };
+        let mut features = find_features(&level, brief_pairs);
+        let scale_x = level.width() as f64 / img.width().max(1) as f64;
+        let scale_y = level.height() as f64 / img.height().max(1) as f64;
+        for feature in &mut features {
+            feature.keypoint.x = ((feature.keypoint.x as f64 / scale_x).round())
+                .clamp(0.0, img.width().saturating_sub(1) as f64)
+                as u32;
+            feature.keypoint.y = ((feature.keypoint.y as f64 / scale_y).round())
+                .clamp(0.0, img.height().saturating_sub(1) as f64)
+                as u32;
+        }
+        per_level.push(features);
+    }
+
+    // Reserve most slots for the native image and distribute the remainder
+    // across pyramid levels.  This preserves the established behaviour on
+    // normal same-scale pairs while still guaranteeing cross-scale support.
+    let native_quota = if per_level.len() == 1 {
+        max_features
+    } else {
+        (max_features * 2 / 5).max(1)
+    };
+    let remaining_levels = per_level.len().saturating_sub(1);
+    let secondary_quota = max_features
+        .saturating_sub(native_quota)
+        .checked_div(remaining_levels)
+        .unwrap_or(0)
+        .max(1);
+    let mut selected = Vec::with_capacity(max_features);
+    let mut quotas = Vec::with_capacity(per_level.len());
+    quotas.push(native_quota);
+    quotas.extend(std::iter::repeat_n(secondary_quota, remaining_levels));
+    for (features, quota) in per_level.iter_mut().zip(quotas) {
+        // Drain only the consumed prefix. `drain(..).take(quota)` also drops
+        // every unused feature when the iterator is destroyed, so low-texture
+        // levels could never lend their spare quota to the useful scales.
+        let count = quota.min(features.len());
+        selected.extend(features.drain(..count));
+    }
+
+    // If a low-texture level did not fill its quota, use the unused candidates
+    // from all levels before giving up.  Do not deduplicate by position: two
+    // descriptors at one location but different support scales are precisely
+    // what lets a 35mm/85mm pair match.
+    if selected.len() < max_features {
+        for features in &mut per_level {
+            if selected.len() >= max_features {
+                break;
+            }
+            let count = max_features - selected.len();
+            let count = count.min(features.len());
+            selected.extend(features.drain(..count));
+        }
+    }
+    selected.truncate(max_features);
+    selected
+}
+
 pub fn find_features_tuned(
     img: &GrayImage,
     brief_pairs: &[(Point2<i32>, Point2<i32>)],
@@ -235,6 +339,18 @@ fn hamming_distance(d1: &Descriptor, d2: &Descriptor) -> u32 {
 }
 
 pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match> {
+    match_features_with_ratio(features1, features2, MATCH_RATIO_THRESHOLD)
+}
+
+/// Match BRIEF descriptors with a caller-selected Lowe ratio.  The default
+/// matcher keeps the historical threshold; scalable stacks can use a slightly
+/// looser ratio because pyramid levels intentionally contribute near-duplicate
+/// descriptors at different support sizes.
+pub fn match_features_with_ratio(
+    features1: &[Feature],
+    features2: &[Feature],
+    ratio_threshold: f32,
+) -> Vec<Match> {
     if features1.is_empty() || features2.is_empty() {
         return Vec::new();
     }
@@ -290,7 +406,7 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
         .enumerate()
         .filter_map(|(index1, (index2, best_dist, second_best_dist))| {
             if second_best_dist > 0
-                && (best_dist as f32 / second_best_dist as f32) < MATCH_RATIO_THRESHOLD
+                && (best_dist as f32 / second_best_dist as f32) < ratio_threshold
                 && best_for_second[index2] == index1
             {
                 Some(Match { index1, index2 })
@@ -299,6 +415,64 @@ pub fn match_features(features1: &[Feature], features2: &[Feature]) -> Vec<Match
             }
         })
         .collect()
+}
+
+/// Count reliable descriptor correspondences without allocating the complete
+/// distance matrix.  Large stacks use this as a cheap image-retrieval pass to
+/// discover a few non-neighbouring overlap candidates; the selected pairs are
+/// then passed through the full geometric/RANSAC matcher.  Keeping this pass
+/// allocation-free is important for 100–200 image selections.
+pub fn count_mutual_descriptor_matches_with_ratio(
+    features1: &[Feature],
+    features2: &[Feature],
+    ratio_threshold: f32,
+) -> usize {
+    if features1.is_empty() || features2.is_empty() {
+        return 0;
+    }
+
+    let mut best_for_first = Vec::with_capacity(features1.len());
+    for feature1 in features1 {
+        let mut best_distance = u32::MAX;
+        let mut second_distance = u32::MAX;
+        let mut best_index = 0usize;
+        for (index, feature2) in features2.iter().enumerate() {
+            let distance = hamming_distance(&feature1.descriptor, &feature2.descriptor);
+            if distance < best_distance {
+                second_distance = best_distance;
+                best_distance = distance;
+                best_index = index;
+            } else if distance < second_distance {
+                second_distance = distance;
+            }
+        }
+        best_for_first.push((best_index, best_distance, second_distance));
+    }
+
+    let mut best_for_second = vec![0usize; features2.len()];
+    for (second_index, best_index) in best_for_second.iter_mut().enumerate() {
+        let mut distance = u32::MAX;
+        for (first_index, feature1) in features1.iter().enumerate() {
+            let candidate =
+                hamming_distance(&feature1.descriptor, &features2[second_index].descriptor);
+            if candidate < distance {
+                distance = candidate;
+                *best_index = first_index;
+            }
+        }
+    }
+
+    best_for_first
+        .into_iter()
+        .enumerate()
+        .filter(
+            |(first_index, (second_index, best_distance, second_distance))| {
+                *second_distance > 0
+                    && (*best_distance as f32 / *second_distance as f32) < ratio_threshold
+                    && best_for_second[*second_index] == *first_index
+            },
+        )
+        .count()
 }
 
 pub fn find_homography_ransac(
@@ -331,7 +505,12 @@ pub fn find_homography_ransac_points(
     points: &[(Point2<f64>, Point2<f64>)],
     inlier_threshold: f64,
 ) -> Option<(Matrix3<f64>, Vec<usize>)> {
-    find_homography_ransac_points_with_solver(points, inlier_threshold, false)
+    find_homography_ransac_points_with_solver(
+        points,
+        inlier_threshold,
+        false,
+        MIN_INLIERS_FOR_CONNECTION,
+    )
 }
 
 pub fn find_homography_ransac_points_stable(
@@ -342,13 +521,31 @@ pub fn find_homography_ransac_points_stable(
     // minimum sample size while avoiding the missing null-space row in
     // nalgebra's thin 8x9 SVD. The legacy solver remains above so established
     // <=30-image output bytes do not change.
-    find_homography_ransac_points_with_solver(points, inlier_threshold, true)
+    find_homography_ransac_points_stable_with_min_inliers(
+        points,
+        inlier_threshold,
+        MIN_INLIERS_FOR_CONNECTION,
+    )
+}
+
+pub fn find_homography_ransac_points_stable_with_min_inliers(
+    points: &[(Point2<f64>, Point2<f64>)],
+    inlier_threshold: f64,
+    minimum_inliers: usize,
+) -> Option<(Matrix3<f64>, Vec<usize>)> {
+    find_homography_ransac_points_with_solver(
+        points,
+        inlier_threshold,
+        true,
+        minimum_inliers.max(4),
+    )
 }
 
 fn find_homography_ransac_points_with_solver(
     points: &[(Point2<f64>, Point2<f64>)],
     inlier_threshold: f64,
     stable_four_point_solver: bool,
+    minimum_inliers: usize,
 ) -> Option<(Matrix3<f64>, Vec<usize>)> {
     let mut rng = StdRng::seed_from_u64(
         0x9E37_79B9_7F4A_7C15u64 ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93),
@@ -434,7 +631,7 @@ fn find_homography_ransac_points_with_solver(
         }
     }
 
-    if best_inliers.len() >= MIN_INLIERS_FOR_CONNECTION {
+    if best_inliers.len() >= minimum_inliers {
         Some((best_h.unwrap(), best_inliers))
     } else {
         None
@@ -653,6 +850,75 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!((matches[0].index1, matches[0].index2), (0, 0));
         assert_eq!((matches[1].index1, matches[1].index2), (1, 1));
+    }
+
+    #[test]
+    fn multiscale_features_bridge_a_scaled_pair() {
+        let source = GrayImage::from_fn(640, 480, |x, y| {
+            let mut value = 28.0f32;
+            // Distinct, comfortably sized marks make the test exercise the
+            // pyramid support rather than high-frequency aliasing. Their
+            // centres are deterministic and spread over the complete frame.
+            for index in 0..24u32 {
+                let cx = 32.0 + ((index * 193) % 576) as f32;
+                let cy = 30.0 + ((index * 157) % 420) as f32;
+                let radius = 8.0 + (index % 5) as f32 * 2.5;
+                let dx = x as f32 - cx;
+                let dy = y as f32 - cy;
+                let distance = (dx * dx + dy * dy).sqrt();
+                if distance <= radius {
+                    value = 210.0 + (index % 4) as f32 * 10.0;
+                }
+                if (dx + dy * 0.37).abs() < 1.5 && distance < radius * 2.2 {
+                    value = 120.0 + (index % 5) as f32 * 12.0;
+                }
+            }
+            Luma([value.round() as u8])
+        });
+        let target =
+            image::imageops::resize(&source, 320, 240, image::imageops::FilterType::Triangle);
+        let pairs = crate::panorama_utils::processing::generate_brief_pairs();
+        let source_features = find_features_multiscale(&source, &pairs, 1_000, &[0.5]);
+        let target_features = find_features_multiscale(&target, &pairs, 1_000, &[0.5]);
+        let matches = match_features_with_ratio(&source_features, &target_features, 0.9);
+        assert!(
+            source_features.len() >= 100,
+            "source={}",
+            source_features.len()
+        );
+        assert!(
+            target_features.len() >= 20,
+            "target={}",
+            target_features.len()
+        );
+        assert!(matches.len() >= 8, "matches={}", matches.len());
+
+        let points = matches
+            .iter()
+            .map(|matched| {
+                (
+                    Point2::new(
+                        source_features[matched.index1].keypoint.x as f64,
+                        source_features[matched.index1].keypoint.y as f64,
+                    ),
+                    Point2::new(
+                        target_features[matched.index2].keypoint.x as f64,
+                        target_features[matched.index2].keypoint.y as f64,
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        let (transform, inliers) = find_homography_ransac_points_stable(&points, 8.0)
+            .expect("the scaled texture should produce a geometric consensus");
+        assert!(inliers.len() >= 8, "inliers={}", inliers.len());
+        assert!(
+            (transform[(0, 0)] - 0.5).abs() < 0.08,
+            "transform={transform:?}"
+        );
+        assert!(
+            (transform[(1, 1)] - 0.5).abs() < 0.08,
+            "transform={transform:?}"
+        );
     }
 
     #[test]

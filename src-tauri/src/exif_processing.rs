@@ -1706,6 +1706,18 @@ pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<Strin
     exif_data
 }
 
+/// Return the 35mm-equivalent focal length when the source embeds one. Image
+/// stacks use this as a geometry hint only; the original metadata is never
+/// rewritten. A physical focal length is intentionally not used as a fallback:
+/// without the sensor crop factor it cannot be compared across camera modules.
+pub fn focal_length_35mm_from_bytes(file_bytes: &[u8]) -> Option<f64> {
+    let exif = read_exif(file_bytes)?;
+    exif.get_field(exif::Tag::FocalLengthIn35mmFilm, exif::In::PRIMARY)
+        .and_then(|field| field.value.get_uint(0))
+        .map(f64::from)
+        .filter(|value| value.is_finite() && (10.0..=300.0).contains(value))
+}
+
 fn enrich_raw_white_balance(
     path: &str,
     file_bytes: &[u8],

@@ -18,6 +18,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_cpu_default_raw_processing;
+use crate::panorama_utils::registration;
 use crate::panorama_utils::stitching::{Projection, project_point};
 use crate::panorama_utils::{processing, stitching};
 
@@ -53,6 +54,8 @@ const FOCUS_LOCAL_MODEL_MAX_DISPLACEMENT_RATIO: f64 = 0.08;
 // a medium-sized stack, inspect every pair so the capture path can be rebuilt
 // from image evidence rather than from filenames or import order.
 const FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES: usize = 64;
+const SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES: usize = 65;
+const SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES: usize = 96;
 const FOCUS_AUTO_ORDER_MOTION_SCALE_FLOOR: f64 = 0.01;
 const FOCUS_AUTO_ORDER_MOTION_EXPONENT: f64 = 4.0;
 const FOCUS_AUTO_ORDER_GAP_PENALTY: f64 = 4.0;
@@ -113,10 +116,51 @@ const LARGE_STACK_NEIGHBOR_WINDOW: usize = 4;
 const SCALABLE_LOW_TEXTURE_FEATURE_TARGET: usize = 96;
 const SCALABLE_LOW_TEXTURE_FAST_THRESHOLD: u8 = 7;
 const SCALABLE_LOW_TEXTURE_NMS_RADIUS: f32 = 10.0;
+// A cheap descriptor-retrieval pass supplements filename/input neighbours for
+// large selections.  It is deliberately small: only the best few visual
+// neighbours per image are promoted to full RANSAC matching.
+const LARGE_STACK_RETRIEVAL_FEATURES: usize = 64;
+const LARGE_STACK_RETRIEVAL_NEIGHBORS: usize = 6;
+const LARGE_STACK_RETRIEVAL_MIN_MATCHES: usize = 6;
+const SCALABLE_MATCH_RATIO_THRESHOLD: f32 = 0.88;
+const SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION: usize = 10;
+const PANORAMA_MODEL_INLIER_THRESHOLD: f64 = 8.0;
+const PANORAMA_MODEL_MIN_INLIERS: usize = 8;
+const PANORAMA_MODEL_MIN_ERROR_GAIN: f64 = 0.12;
+const PANORAMA_MODEL_RELATIVE_ERROR_GAIN: f64 = 0.90;
+const PANORAMA_MODEL_SCALE_EPSILON: f64 = 0.012;
+const PANORAMA_MODEL_ROTATION_EPSILON: f64 = 0.004;
+const MIXED_FOCAL_LENGTH_RATIO: f64 = 1.12;
+// EXIF focal lengths are approximate and a phone may crop one module, so keep
+// a broad tolerance.  Still reject a visually convincing repeated wall patch
+// whose fitted transform has no relationship to the lens switch; accepting
+// that edge would create a false bridge between two independent scenes.
+const MIXED_FOCAL_SCALE_MIN_RATIO: f64 = 0.62;
+const MIXED_FOCAL_SCALE_MAX_RATIO: f64 = 1.62;
 const MAX_SCALABLE_PREPARATION_WORKERS: usize = 6;
 const PREPARATION_RAM_PER_WORKER_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_IN_MEMORY_PANORAMA_PIXELS: u64 = 240_000_000;
 const MAX_STITCH_SOURCE_IMAGES: usize = 200;
+const MAX_RETAINED_STACK_PIXELS: u64 = 120_000_000;
+
+fn stack_requires_bounded_memory(image_paths: &[String]) -> bool {
+    if image_paths.len() > SCALABLE_STACK_THRESHOLD {
+        return true;
+    }
+    let mut pixels = 0u64;
+    for path in image_paths {
+        // Unknown/RAW dimensions use the bounded path as well. A count-only
+        // limit lets even two 200MP phone frames retain several GiB of floats.
+        let Ok((width, height)) = image::image_dimensions(path) else {
+            return true;
+        };
+        pixels = pixels.saturating_add(u64::from(width) * u64::from(height));
+        if pixels > MAX_RETAINED_STACK_PIXELS {
+            return true;
+        }
+    }
+    false
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPoint {
@@ -124,6 +168,7 @@ pub struct KeyPoint {
     pub y: u32,
 }
 
+#[derive(Clone)]
 pub struct Feature {
     pub keypoint: KeyPoint,
     pub descriptor: Descriptor,
@@ -143,6 +188,9 @@ pub struct ImageInfo {
     pub alignment_image: GrayImage,
     pub full_image: Option<Rgb32FImage>,
     pub scale_factor: f64,
+    /// 35mm-equivalent focal length when available in source metadata.  This
+    /// is an alignment hint; it does not alter exported metadata or pixels.
+    pub focal_length_35mm: Option<f64>,
     pub features: Vec<Feature>,
     pub top_features: Vec<Feature>,
     pub foreground_range: Option<(f64, f64)>,
@@ -229,6 +277,38 @@ fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
     }
 }
 
+fn focal_lengths_span_multiple_lenses<I>(focal_lengths: I) -> bool
+where
+    I: IntoIterator<Item = f64>,
+{
+    let mut minimum = f64::INFINITY;
+    let mut maximum = f64::NEG_INFINITY;
+    let mut count = 0usize;
+    for focal_length in focal_lengths {
+        if !focal_length.is_finite() || focal_length <= 0.0 {
+            continue;
+        }
+        minimum = minimum.min(focal_length);
+        maximum = maximum.max(focal_length);
+        count += 1;
+    }
+    count >= 2
+        && minimum.is_finite()
+        && maximum.is_finite()
+        && maximum / minimum >= MIXED_FOCAL_LENGTH_RATIO
+}
+
+fn selection_has_mixed_focal_lengths(image_paths: &[String]) -> bool {
+    // Large stacks already use the scale-robust path.  This lightweight EXIF
+    // pass exists for small selections, where the old count-only switch would
+    // otherwise miss a 35mm/85mm camera-module change.
+    focal_lengths_span_multiple_lenses(image_paths.iter().filter_map(|filename| {
+        read_file_mapped(Path::new(filename))
+            .ok()
+            .and_then(|bytes| crate::exif_processing::focal_length_35mm_from_bytes(&bytes))
+    }))
+}
+
 fn bounded_preparation_worker_count(
     image_count: usize,
     available_threads: usize,
@@ -303,6 +383,7 @@ fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
         alignment_image: GrayImage::new(0, 0),
         full_image: None,
         scale_factor: image.scale_factor,
+        focal_length_35mm: image.focal_length_35mm,
         features: Vec::new(),
         top_features: Vec::new(),
         foreground_range: image.foreground_range,
@@ -526,6 +607,16 @@ fn pairs_to_match_for_images(images: &[ImageInfo], blend_mode: BlendMode) -> Vec
     if images.len() <= SCALABLE_STACK_THRESHOLD {
         return pairs_to_match(images.len());
     }
+    // The 65–96 image range is common for high-resolution artwork scans and is
+    // still small enough for an exhaustive bounded-resolution pass.  A lens
+    // switch can move the only useful bridge dozens of filenames away, so a
+    // neighbour-only graph is too brittle here.  Larger selections retain the
+    // bounded visual-retrieval path below.
+    if (SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES..=SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES)
+        .contains(&images.len())
+    {
+        return all_image_pairs(images.len());
+    }
     if blend_mode == BlendMode::FocusStack
         && images.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES
     {
@@ -548,7 +639,90 @@ fn pairs_to_match_for_images(images: &[ImageInfo], blend_mode: BlendMode) -> Vec
     );
     let mut pairs = unique_pairs.into_iter().collect::<Vec<_>>();
     pairs.sort_unstable();
+    augment_large_stack_candidate_pairs(images, &mut pairs);
     pairs
+}
+
+fn retrieval_feature_subset(features: &[Feature], limit: usize) -> Vec<Feature> {
+    if features.len() <= limit {
+        return features.to_vec();
+    }
+    // Feature vectors are ordered by detector strength.  Evenly sampling the
+    // vector retains strong corners throughout the image instead of taking only
+    // the first (often high-contrast) region.
+    (0..limit)
+        .map(|slot| {
+            let index = slot
+                .saturating_mul(features.len())
+                .checked_div(limit)
+                .unwrap_or(0)
+                .min(features.len().saturating_sub(1));
+            features[index].clone()
+        })
+        .collect()
+}
+
+/// Add a bounded set of visually likely pairs to the normal input/filename
+/// neighbour graph.  File-picker order is often random, and a focal-length
+/// switch can put the first useful bridge well outside the neighbour window.
+/// The retrieval pass only counts compact descriptor matches; full-resolution
+/// geometric verification still decides whether a pair is accepted.
+fn augment_large_stack_candidate_pairs(images: &[ImageInfo], pairs: &mut Vec<(usize, usize)>) {
+    if images.len() <= SCALABLE_STACK_THRESHOLD || images.len() < 2 {
+        return;
+    }
+    let compact_features = images
+        .iter()
+        .map(|image| retrieval_feature_subset(&image.features, LARGE_STACK_RETRIEVAL_FEATURES))
+        .collect::<Vec<_>>();
+    if compact_features.iter().all(Vec::is_empty) {
+        return;
+    }
+
+    let existing = pairs.iter().copied().collect::<HashSet<_>>();
+    let scores = all_image_pairs(images.len())
+        .into_par_iter()
+        .filter_map(|(left, right)| {
+            let score = processing::count_mutual_descriptor_matches_with_ratio(
+                &compact_features[left],
+                &compact_features[right],
+                SCALABLE_MATCH_RATIO_THRESHOLD,
+            );
+            (score >= LARGE_STACK_RETRIEVAL_MIN_MATCHES).then_some((score, left, right))
+        })
+        .collect::<Vec<_>>();
+    if scores.is_empty() {
+        return;
+    }
+
+    let mut by_image = vec![Vec::<(usize, usize)>::new(); images.len()];
+    for (score, left, right) in scores {
+        by_image[left].push((score, right));
+        by_image[right].push((score, left));
+    }
+    let mut additions = HashSet::new();
+    for (image_index, neighbours) in by_image.iter_mut().enumerate() {
+        neighbours.sort_by(|(left_score, left_index), (right_score, right_index)| {
+            right_score
+                .cmp(left_score)
+                .then_with(|| {
+                    natural_path_cmp(
+                        &images[*left_index].filename,
+                        &images[*right_index].filename,
+                    )
+                })
+                .then_with(|| left_index.cmp(right_index))
+        });
+        for &(_, neighbour) in neighbours.iter().take(LARGE_STACK_RETRIEVAL_NEIGHBORS) {
+            let pair = (image_index.min(neighbour), image_index.max(neighbour));
+            if !existing.contains(&pair) {
+                additions.insert(pair);
+            }
+        }
+    }
+    pairs.extend(additions);
+    pairs.sort_unstable();
+    pairs.dedup();
 }
 
 fn find_alignment_features(
@@ -556,8 +730,31 @@ fn find_alignment_features(
     brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
     max_features: usize,
     scalable_stack: bool,
+    focal_length_35mm: Option<f64>,
 ) -> Vec<Feature> {
-    let mut features = processing::find_features(alignment_image, brief_pairs);
+    // A fixed-size BRIEF patch is not scale invariant.  Large phone stacks can
+    // switch lenses midway through a capture (for example 35mm -> 85mm), so
+    // keep descriptors from a small image pyramid on the bounded-memory path.
+    // The native level remains dominant; the extra levels only provide a bridge
+    // when the same detail is rendered at a different magnification.
+    let mut features = if scalable_stack {
+        let mut scales = vec![0.38, 0.5, std::f32::consts::FRAC_1_SQRT_2];
+        // A metadata-guided level places the two camera modules on a common
+        // support scale.  The generic levels remain in place for cropped or
+        // non-EXIF sources.
+        if let Some(focal) = focal_length_35mm.filter(|value| value.is_finite() && *value > 0.0) {
+            let metadata_scale = (50.0 / focal).clamp(0.28, 2.5) as f32;
+            if scales
+                .iter()
+                .all(|existing| (*existing - metadata_scale).abs() >= 0.04)
+            {
+                scales.push(metadata_scale);
+            }
+        }
+        processing::find_features_multiscale(alignment_image, brief_pairs, max_features, &scales)
+    } else {
+        processing::find_features(alignment_image, brief_pairs)
+    };
     if scalable_stack && features.len() < SCALABLE_LOW_TEXTURE_FEATURE_TARGET {
         let normalized = processing::normalize_grayscale(alignment_image);
         let fallback = processing::find_features_tuned(
@@ -567,7 +764,12 @@ fn find_alignment_features(
             SCALABLE_LOW_TEXTURE_NMS_RADIUS,
         );
         if fallback.len() > features.len() {
-            features = fallback;
+            // Keep the pyramid descriptors even when the normalized native
+            // pass finds more corners. Replacing the vector here used to erase
+            // the only scale bridge on a low-texture frame—the exact case in
+            // which the 35mm/85mm pair is hardest to register.
+            let remaining = max_features.saturating_sub(features.len());
+            features.extend(fallback.into_iter().take(remaining));
         }
     }
     features.truncate(max_features);
@@ -1673,12 +1875,18 @@ impl<R: Runtime> Drop for PairMatchProgress<'_, R> {
     }
 }
 
+struct PreparedStackSource {
+    image: DynamicImage,
+    focal_length_35mm: Option<f64>,
+}
+
 fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
-) -> Result<DynamicImage, String> {
+) -> Result<PreparedStackSource, String> {
     let file_data = read_file_mapped(Path::new(filename))
         .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
+    let focal_length_35mm = crate::exif_processing::focal_length_35mm_from_bytes(&file_data);
     let mut image = crate::image_loader::load_base_image_from_bytes(
         &file_data, filename, false, settings, None,
     )
@@ -1686,7 +1894,10 @@ fn load_prepared_stack_source(
     if is_raw_file(filename) {
         apply_cpu_default_raw_processing(&mut image);
     }
-    Ok(image)
+    Ok(PreparedStackSource {
+        image,
+        focal_length_35mm,
+    })
 }
 
 fn canonical_match_direction(
@@ -1699,6 +1910,63 @@ fn canonical_match_direction(
     } else {
         (second, first, true)
     }
+}
+
+fn match_has_spatial_support(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+) -> bool {
+    if points.len() < PANORAMA_MODEL_MIN_INLIERS {
+        return false;
+    }
+    let spread = |side: usize, dimensions: (u32, u32)| {
+        let mut xs = points
+            .iter()
+            .map(
+                |(source, target)| {
+                    if side == 0 { source.x } else { target.x }
+                },
+            )
+            .filter(|value| value.is_finite())
+            .collect::<Vec<_>>();
+        let mut ys = points
+            .iter()
+            .map(
+                |(source, target)| {
+                    if side == 0 { source.y } else { target.y }
+                },
+            )
+            .filter(|value| value.is_finite())
+            .collect::<Vec<_>>();
+        if xs.len() < PANORAMA_MODEL_MIN_INLIERS || ys.len() < PANORAMA_MODEL_MIN_INLIERS {
+            return (0.0, 0.0, 0.0);
+        }
+        xs.sort_unstable_by(f64::total_cmp);
+        ys.sort_unstable_by(f64::total_cmp);
+        let lower = ((xs.len() as f64 - 1.0) * 0.05).round() as usize;
+        let upper = ((xs.len() as f64 - 1.0) * 0.95).round() as usize;
+        let y_lower = ((ys.len() as f64 - 1.0) * 0.05).round() as usize;
+        let y_upper = ((ys.len() as f64 - 1.0) * 0.95).round() as usize;
+        let span_x = (xs[upper] - xs[lower]) / dimensions.0.max(1) as f64;
+        let span_y = (ys[y_upper] - ys[y_lower]) / dimensions.1.max(1) as f64;
+        (span_x, span_y, span_x.max(0.0) * span_y.max(0.0))
+    };
+    let (source_x, source_y, source_area) = spread(0, source_dimensions);
+    let (target_x, target_y, target_area) = spread(1, target_dimensions);
+    let source_long = source_x.max(source_y);
+    let target_long = target_x.max(target_y);
+    let source_short = source_x.min(source_y);
+    let target_short = target_x.min(target_y);
+    // A valid tile overlap normally covers a broad strip.  Permit a very thin
+    // strip (for a scan along a long edge), but reject compact repeated-stroke
+    // clusters that otherwise satisfy the minimum inlier count.
+    source_long >= 0.12
+        && target_long >= 0.12
+        && source_short >= 0.006
+        && target_short >= 0.006
+        && source_area >= 0.0012
+        && target_area >= 0.0012
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1749,10 +2017,27 @@ fn match_image_pair(
     stable_four_point_solver: bool,
     log_match: bool,
 ) -> Option<MatchInfo> {
+    let mixed_focal_pair = focal_lengths_span_multiple_lenses(
+        [
+            source_image.focal_length_35mm,
+            target_image.focal_length_35mm,
+        ]
+        .into_iter()
+        .flatten(),
+    );
     let features1 = &source_image.features;
     let features2 = &target_image.features;
-    let initial_matches = processing::match_features(features1, features2);
-    if initial_matches.len() < processing::MIN_INLIERS_FOR_CONNECTION {
+    let minimum_inliers = if stable_four_point_solver {
+        SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION
+    } else {
+        processing::MIN_INLIERS_FOR_CONNECTION
+    };
+    let initial_matches = if stable_four_point_solver {
+        processing::match_features_with_ratio(features1, features2, SCALABLE_MATCH_RATIO_THRESHOLD)
+    } else {
+        processing::match_features(features1, features2)
+    };
+    if initial_matches.len() < minimum_inliers {
         return None;
     }
 
@@ -1822,8 +2107,7 @@ fn match_image_pair(
     // If a pair contains too little background, retain the old all-point solver
     // so unusual stacks do not become disconnected merely because an object
     // detector fired.
-    let solver_indices = if background_match_indices.len() >= processing::MIN_INLIERS_FOR_CONNECTION
-    {
+    let solver_indices = if background_match_indices.len() >= minimum_inliers {
         background_match_indices
     } else {
         (0..projected_match_points.len()).collect::<Vec<_>>()
@@ -1855,18 +2139,61 @@ fn match_image_pair(
             ))
         })
         .collect::<Vec<_>>();
+    // The detector works in analysis pixels. The 12px native-image gate is
+    // smaller than two quantized detector pixels on 200MP phone photographs.
+    let seed_threshold = FULL_RES_RANSAC_INLIER_THRESHOLD
+        .max(source_image.scale_factor.max(target_image.scale_factor) * 3.5);
     let (projected_homography, projected_inlier_indices) = if stable_four_point_solver {
-        processing::find_homography_ransac_points_stable(
+        processing::find_homography_ransac_points_stable_with_min_inliers(
             &solver_points,
-            FULL_RES_RANSAC_INLIER_THRESHOLD,
+            seed_threshold,
+            minimum_inliers,
         )
     } else {
-        processing::find_homography_ransac_points(&solver_points, FULL_RES_RANSAC_INLIER_THRESHOLD)
+        processing::find_homography_ransac_points(&solver_points, seed_threshold)
     }?;
+    if mixed_focal_pair
+        && projection == Projection::Planar
+        && let (Some(source_focal), Some(target_focal)) = (
+            source_image.focal_length_35mm,
+            target_image.focal_length_35mm,
+        )
+        && !mixed_focal_scale_is_plausible(&projected_homography, source_focal, target_focal)
+    {
+        return None;
+    }
     let projected_inlier_indices = projected_inlier_indices
         .into_iter()
         .map(|index| solver_indices[index])
         .collect::<Vec<_>>();
+    if mixed_focal_pair
+        && projection == Projection::Planar
+        && (source_image.foreground_range.is_some() || target_image.foreground_range.is_some())
+    {
+        let foreground_support = projected_inlier_indices
+            .iter()
+            .filter(|&&index| {
+                let matched = initial_matches[index];
+                focus_alignment_keypoint_is_foreground(source_image, keypoints1[matched.index1])
+                    || focus_alignment_keypoint_is_foreground(
+                        target_image,
+                        keypoints2[matched.index2],
+                    )
+            })
+            .count();
+        if log_match {
+            println!(
+                "  - Mixed-focal foreground support: {foreground_support}/{} inliers",
+                projected_inlier_indices.len()
+            );
+        }
+        // A scale-correct homography supported only by a repeated wall weave
+        // is still a false bridge between independent phone captures. When
+        // foreground masks exist, require a few identity-bearing points too.
+        if foreground_support < minimum_inliers.min(8) {
+            return None;
+        }
+    }
     let (dense_focus_points, foreground_feature_points) = if blend_mode == BlendMode::FocusStack {
         let dense_focus_points = collect_dense_focus_region_points(
             source_image,
@@ -1893,33 +2220,135 @@ fn match_image_pair(
         .iter()
         .map(|&index| {
             let matched = initial_matches[index];
-            refine_match_point_from_homography(
-                source_image,
-                target_image,
-                keypoints1[matched.index1],
-                keypoints2[matched.index2],
-                projection,
-                &projected_homography,
-                false,
-                blend_mode == BlendMode::FocusStack,
-            )
-            .unwrap_or(projected_match_points[index])
+            if mixed_focal_pair && projection == Projection::Planar {
+                // Refine the complete patch under the scale-aware model below.
+                // Returning the descriptor point here is only a fallback for a
+                // low-texture patch; a fixed-size native NCC patch compares the
+                // wrong physical support after a 35mm/85mm module switch.
+                projected_match_points[index]
+            } else {
+                refine_match_point_from_homography(
+                    source_image,
+                    target_image,
+                    keypoints1[matched.index1],
+                    keypoints2[matched.index2],
+                    projection,
+                    &projected_homography,
+                    false,
+                    blend_mode == BlendMode::FocusStack,
+                )
+                .unwrap_or(projected_match_points[index])
+            }
         })
         .collect::<Vec<_>>();
+    if mixed_focal_pair && projection == Projection::Planar {
+        // The descriptors live in the reduced alignment images while the RANSAC
+        // model above lives in source pixels. Convert the model back into the
+        // descriptor coordinate system, warp every patch sample, then convert
+        // the refined target observations to source pixels. This removes the
+        // several-pixel quantisation error that otherwise becomes a visible
+        // soft edge at 85mm/35mm overlaps.
+        let source_scale = source_image.scale_factor.max(1e-9);
+        let target_scale = target_image.scale_factor.max(1e-9);
+        let to_target_alignment = Matrix3::new(
+            target_scale.recip(),
+            0.0,
+            0.0,
+            0.0,
+            target_scale.recip(),
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let from_source_alignment = Matrix3::new(
+            source_scale,
+            0.0,
+            0.0,
+            0.0,
+            source_scale,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let alignment_homography =
+            to_target_alignment * projected_homography * from_source_alignment;
+        let mut refined_points = Vec::new();
+        for &index in &projected_inlier_indices {
+            let matched = initial_matches[index];
+            let center = Point2::new(
+                keypoints1[matched.index1].x as f64,
+                keypoints1[matched.index1].y as f64,
+            );
+            if let Some(refined) = registration::refine_warped_patch(
+                &source_image.alignment_image,
+                &target_image.alignment_image,
+                &alignment_homography,
+                center,
+                7,
+                4,
+            ) {
+                let source = projected_match_points[index].0;
+                let target = Point2::new(
+                    refined.target.x * target_scale,
+                    refined.target.y * target_scale,
+                );
+                if target.x.is_finite() && target.y.is_finite() {
+                    refined_points.push((source, target));
+                }
+            }
+        }
+        if refined_points.len() >= minimum_inliers
+            && match_has_spatial_support(
+                &refined_points,
+                source_image.dimensions(),
+                target_image.dimensions(),
+            )
+        {
+            println!(
+                "  - Cross-scale warped-patch refinement retained {}/{} observations",
+                refined_points.len(),
+                projected_inlier_indices.len()
+            );
+            inlier_points = refined_points;
+        }
+    }
     let model_refinement_threshold = if blend_mode == BlendMode::FocusStack {
         FOCUS_MODEL_INLIER_THRESHOLD
     } else {
         FULL_RES_REFINEMENT_THRESHOLD
     };
-    let refinement_threshold =
-        if source_image.full_image.is_some() && target_image.full_image.is_some() {
-            model_refinement_threshold
-        } else {
-            model_refinement_threshold
-                .max(source_image.scale_factor.max(target_image.scale_factor) * 1.5)
-        };
-    let refined_homography = refine_homography_inliers(&mut inlier_points, refinement_threshold)?;
+    let alignment_quantization = source_image.scale_factor.max(target_image.scale_factor) * 1.5;
+    let refinement_threshold = if source_image.full_image.is_some()
+        && target_image.full_image.is_some()
+        && !mixed_focal_pair
+    {
+        model_refinement_threshold
+    } else {
+        model_refinement_threshold
+            .max(alignment_quantization)
+            .max(if mixed_focal_pair {
+                PANORAMA_MODEL_INLIER_THRESHOLD
+            } else {
+                0.0
+            })
+    };
+    let refined_homography =
+        refine_homography_inliers(&mut inlier_points, refinement_threshold, minimum_inliers)?;
     let inlier_count = inlier_points.len();
+    if stable_four_point_solver
+        && !match_has_spatial_support(
+            &inlier_points,
+            source_image.dimensions(),
+            target_image.dimensions(),
+        )
+    {
+        // Descriptor consensus concentrated on one repeated face/stroke is not
+        // enough to place a large tile. Reject it before it can become a strong
+        // graph edge and pull an otherwise coherent mosaic into a false overlap.
+        return None;
+    }
     if log_match {
         println!(
             "  - Good match found: '{}' <-> '{}' ({} inliers)",
@@ -1958,7 +2387,12 @@ fn match_image_pair(
             alignment_mode,
         )
     } else if stable_four_point_solver && alignment_mode == AlignmentMode::Auto {
-        select_large_panorama_transform(&inlier_points, log_match)
+        select_large_panorama_transform(
+            &refined_homography,
+            &inlier_points,
+            source_image.dimensions(),
+            log_match,
+        )
     } else {
         refined_homography
     };
@@ -2243,20 +2677,223 @@ fn collect_foreground_feature_points(
     points
 }
 
+fn panorama_transform_is_stable(transform: &Matrix3<f64>, dimensions: (u32, u32)) -> bool {
+    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
+    if width <= 1.0 || height <= 1.0 || transform.try_inverse().is_none() {
+        return false;
+    }
+    let corners = [
+        Point2::new(0.0, 0.0),
+        Point2::new(width, 0.0),
+        Point2::new(width, height),
+        Point2::new(0.0, height),
+    ]
+    .into_iter()
+    .map(|point| transformed_point(transform, point))
+    .collect::<Option<Vec<_>>>();
+    let Some(corners) = corners else {
+        return false;
+    };
+
+    let edge_scales = [
+        (corners[1] - corners[0]).norm() / width.max(1.0),
+        (corners[2] - corners[1]).norm() / height.max(1.0),
+        (corners[2] - corners[3]).norm() / width.max(1.0),
+        (corners[3] - corners[0]).norm() / height.max(1.0),
+    ];
+    if edge_scales
+        .iter()
+        .any(|scale| !scale.is_finite() || *scale < 0.18 || *scale > 5.5)
+    {
+        return false;
+    }
+    let min_scale = edge_scales.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_scale = edge_scales
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    if !min_scale.is_finite() || max_scale / min_scale > 6.0 {
+        return false;
+    }
+
+    let signed_double_area = corners
+        .iter()
+        .zip(corners.iter().cycle().skip(1))
+        .take(4)
+        .map(|(left, right)| left.x * right.y - right.x * left.y)
+        .sum::<f64>();
+    let area_ratio = signed_double_area / (2.0 * width * height);
+    area_ratio.is_finite() && area_ratio.abs() >= 0.025 && area_ratio.abs() <= 30.0
+}
+
+fn panorama_model_fit(
+    transform: Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+) -> Option<(Matrix3<f64>, Vec<usize>, f64)> {
+    let inliers = symmetric_inlier_indices(&transform, points, PANORAMA_MODEL_INLIER_THRESHOLD);
+    if inliers.len() < PANORAMA_MODEL_MIN_INLIERS {
+        return None;
+    }
+    let inlier_points = inliers
+        .iter()
+        .map(|&index| points[index])
+        .collect::<Vec<_>>();
+    // One deterministic refit removes the small bias introduced when a model
+    // was estimated from a mixed set of descriptor inliers.
+    let refitted = if transform[(2, 0)].abs() < 1e-14 && transform[(2, 1)].abs() < 1e-14 {
+        // Keep the model family (translation/similarity/affine) selected by the
+        // caller; a generic projective refit here would reintroduce drift.
+        transform
+    } else {
+        processing::compute_homography(&inlier_points).unwrap_or(transform)
+    };
+    let error = median_symmetric_error(&refitted, &inlier_points);
+    error.is_finite().then_some((refitted, inliers, error))
+}
+
+fn panorama_model_linear_characteristics(transform: &Matrix3<f64>) -> (f64, f64, f64) {
+    let a = transform[(0, 0)];
+    let b = transform[(0, 1)];
+    let c = transform[(1, 0)];
+    let d = transform[(1, 1)];
+    let scale_x = (a * a + c * c).sqrt();
+    let scale_y = (b * b + d * d).sqrt();
+    let scale = ((scale_x * scale_y).max(0.0)).sqrt();
+    let rotation = 0.5 * (c - b).atan2(a + d);
+    let anisotropy = if scale_x.max(scale_y) > f64::EPSILON {
+        (scale_x - scale_y).abs() / scale_x.max(scale_y)
+    } else {
+        f64::INFINITY
+    };
+    (scale, rotation, anisotropy)
+}
+
+fn mixed_focal_scale_is_plausible(
+    transform: &Matrix3<f64>,
+    source_focal: f64,
+    target_focal: f64,
+) -> bool {
+    if !source_focal.is_finite()
+        || !target_focal.is_finite()
+        || source_focal <= 0.0
+        || target_focal <= 0.0
+    {
+        return true;
+    }
+    let expected = target_focal / source_focal;
+    let (scale, _, anisotropy) = panorama_model_linear_characteristics(transform);
+    if !expected.is_finite() || !scale.is_finite() || anisotropy > 0.35 {
+        return false;
+    }
+    let ratio = scale / expected;
+    ratio.is_finite()
+        && (MIXED_FOCAL_SCALE_MIN_RATIO..=MIXED_FOCAL_SCALE_MAX_RATIO).contains(&ratio)
+}
+
 fn select_large_panorama_transform(
+    projective: &Matrix3<f64>,
     points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
+    source_dimensions: (u32, u32),
     log_selection: bool,
 ) -> Matrix3<f64> {
-    // A tiny scale/rotation bias compounds catastrophically across a 100-200
-    // image chain. Large automatic mosaics are normally captured from one
-    // camera angle, so keep their global pose translation-stable. Users who
-    // intentionally changed viewpoint can still select Perspective explicitly.
-    let selected = estimate_translation(points);
+    if points.len() < PANORAMA_MODEL_MIN_INLIERS {
+        return *projective;
+    }
+
+    let translation = panorama_model_fit(estimate_translation(points), points);
+    let similarity = estimate_similarity(points).and_then(|model| {
+        panorama_transform_is_stable(&model, source_dimensions)
+            .then(|| panorama_model_fit(model, points))
+            .flatten()
+    });
+    let affine = estimate_affine(points).and_then(|model| {
+        panorama_transform_is_stable(&model, source_dimensions)
+            .then(|| panorama_model_fit(model, points))
+            .flatten()
+    });
+    let projective_fit = panorama_transform_is_stable(projective, source_dimensions)
+        .then(|| panorama_model_fit(*projective, points))
+        .flatten();
+
+    let mut selected = translation
+        .clone()
+        .or_else(|| similarity.clone())
+        .or_else(|| affine.clone())
+        .or_else(|| projective_fit.clone());
+    let mut selected_name = if translation.is_some() {
+        "translation"
+    } else if similarity.is_some() {
+        "similarity"
+    } else if affine.is_some() {
+        "affine"
+    } else {
+        "projective"
+    };
+
+    // A pure translation is still the safest model for a conventional long
+    // panorama.  Promote it only when the data demonstrates a real scale or
+    // rotation change, or when the lower-DOF model cannot explain the overlap.
+    if let (Some(current), Some(candidate)) = (selected.as_ref(), similarity.as_ref()) {
+        let (scale, rotation, _) = panorama_model_linear_characteristics(&candidate.0);
+        let current_error = current.2;
+        let meaningful_motion = (scale - 1.0).abs() > PANORAMA_MODEL_SCALE_EPSILON
+            || rotation.abs() > PANORAMA_MODEL_ROTATION_EPSILON;
+        let materially_better = candidate.2 + PANORAMA_MODEL_MIN_ERROR_GAIN < current_error
+            || candidate.2 <= current_error * PANORAMA_MODEL_RELATIVE_ERROR_GAIN;
+        let sufficient_support = candidate.1.len() + 2 >= current.1.len();
+        if meaningful_motion && materially_better && sufficient_support {
+            selected = Some(candidate.clone());
+            selected_name = "similarity";
+        }
+    }
+
+    if let (Some(current), Some(candidate)) = (selected.as_ref(), affine.as_ref()) {
+        let (_, _, anisotropy) = panorama_model_linear_characteristics(&candidate.0);
+        let meaningful_deformation = anisotropy > 0.018
+            || candidate.0[(2, 0)].abs() > 1e-8
+            || candidate.0[(2, 1)].abs() > 1e-8;
+        let materially_better = candidate.2 + PANORAMA_MODEL_MIN_ERROR_GAIN < current.2
+            && candidate.2 <= current.2 * 0.92;
+        if meaningful_deformation && materially_better && candidate.1.len() + 2 >= current.1.len() {
+            selected = Some(candidate.clone());
+            selected_name = "affine";
+        }
+    }
+
+    if let (Some(current), Some(candidate)) = (selected.as_ref(), projective_fit.as_ref()) {
+        let perspective_strength = projective[(2, 0)].abs() + projective[(2, 1)].abs();
+        let materially_better = candidate.2 + 0.2 < current.2 && candidate.2 <= current.2 * 0.82;
+        if perspective_strength > 1e-8
+            && materially_better
+            && candidate.1.len() + 3 >= current.1.len()
+        {
+            selected = Some(candidate.clone());
+            selected_name = "projective";
+        }
+    }
+
+    let selected = selected.map(|fit| fit.0).unwrap_or_else(|| {
+        // Never hand an unbounded projective fit to the graph merely because
+        // every scored model missed the minimum support. A finite translation
+        // is the conservative fallback and cannot fold the output canvas.
+        if panorama_transform_is_stable(projective, source_dimensions) {
+            *projective
+        } else {
+            estimate_translation(points)
+        }
+    });
     if log_selection {
+        let describe = |fit: &Option<(Matrix3<f64>, Vec<usize>, f64)>| {
+            fit.as_ref()
+                .map(|(_, inliers, error)| format!("{error:.3}px/{}", inliers.len()))
+                .unwrap_or_else(|| "n/a".to_string())
+        };
         println!(
-            "  - Large-panorama alignment selected translation-stable: median symmetric error {:.3}px with {} inliers",
-            median_symmetric_error(&selected, points),
-            points.len(),
+            "  - Large-panorama alignment selected {selected_name}: translation {}, similarity {}, affine {}, projective {}",
+            describe(&translation),
+            describe(&similarity),
+            describe(&affine),
+            describe(&projective_fit),
         );
     }
     selected
@@ -2412,18 +3049,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         image_paths.len()
     );
 
+    let focus_stack = blend_mode == BlendMode::FocusStack;
+    let scalable_stack = stack_requires_bounded_memory(&image_paths);
+    let mixed_focal_stack = !scalable_stack && selection_has_mixed_focal_lengths(&image_paths);
+    let scale_robust_alignment = scalable_stack || mixed_focal_stack;
     let settings = load_settings_for_runtime(&app_handle).unwrap_or_default();
 
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Loading and preparing images...");
-    let focus_stack = blend_mode == BlendMode::FocusStack;
-    let scalable_stack = image_paths.len() > SCALABLE_STACK_THRESHOLD;
     let (alignment_max_dimension, alignment_max_features) =
         scalable_alignment_budget(image_paths.len());
     println!(
         "Loading and preparing images ({} mode)...",
         if scalable_stack {
             "bounded-memory"
+        } else if mixed_focal_stack {
+            "full-resolution, mixed-focal"
         } else {
             "full-resolution"
         }
@@ -2436,7 +3077,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .enumerate()
             .map(|(i, filename)| {
                 println!("  - Processing '{}'", filename);
-                let dynamic_image = load_prepared_stack_source(filename, &settings)?;
+                let prepared_source = load_prepared_stack_source(filename, &settings)?;
+                let dynamic_image = prepared_source.image;
+                let focal_length_35mm = prepared_source.focal_length_35mm;
                 let (width, height) = dynamic_image.dimensions();
                 let (new_width, new_height, scale_factor) = if scalable_stack {
                     processing::calculate_downscale_dimensions_capped(
@@ -2475,7 +3118,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     &alignment_image,
                     &brief_pairs,
                     alignment_max_features,
-                    scalable_stack,
+                    scale_robust_alignment,
+                    focal_length_35mm,
                 );
                 let foreground_range = if focus_stack {
                     detect_foreground_range(&alignment_image)
@@ -2532,6 +3176,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     alignment_image,
                     full_image,
                     scale_factor,
+                    focal_length_35mm,
                     features,
                     top_features,
                     foreground_range,
@@ -2567,12 +3212,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     );
 
     let start_time = Instant::now();
-    let exhaustive_focus_order = blend_mode == BlendMode::FocusStack
-        && image_data.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES;
-    let matching_strategy = if exhaustive_focus_order || !scalable_stack {
+    let exhaustive_search = !scalable_stack
+        || (blend_mode == BlendMode::FocusStack
+            && image_data.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES)
+        || (SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES..=SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES)
+            .contains(&image_data.len());
+    let matching_strategy = if exhaustive_search {
         "all pairwise"
     } else {
-        "ordered-neighbor"
+        "ordered-neighbor + visual retrieval"
     };
     let _ = app_handle.emit(
         progress_event,
@@ -2616,7 +3264,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 projection,
                 blend_mode,
                 alignment_mode,
-                scalable_stack,
+                scale_robust_alignment,
                 true,
             )?;
             if invert_for_storage {
@@ -2661,11 +3309,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     if pairwise_matches.is_empty() {
         return Err(if scalable_stack && focus_stack {
-            "No overlap was found among the automatic focus-stack candidate pairs. Large stacks use a bounded search; use frames with sufficient overlap or reduce the number of layers."
-                .to_string()
+            if exhaustive_search {
+                "No overlap was found among the selected focus-stack images. Make sure the selection is one contiguous scene with sufficient overlap."
+                    .to_string()
+            } else {
+                "No overlap was found among the automatic focus-stack candidate pairs. Large stacks use a bounded search; use frames with sufficient overlap or reduce the number of layers."
+                    .to_string()
+            }
         } else if scalable_stack {
-            "No overlap was found between nearby images. For large panoramas, make sure consecutive images overlap."
-                .to_string()
+            if exhaustive_search {
+                "No overlap was found among the selected panorama images. Make sure the selection is one contiguous scene with sufficient overlap."
+                    .to_string()
+            } else {
+                "No overlap was found between nearby images. For large panoramas, make sure consecutive images overlap."
+                    .to_string()
+            }
         } else {
             "No suitable matches found between any pair of images. Cannot create a panorama."
                 .to_string()
@@ -2719,17 +3377,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         println!("{}", warning_msg);
         let _ = app_handle.emit(progress_event, warning_msg);
+        let search_description = if exhaustive_search {
+            "the full pairwise search"
+        } else {
+            "the bounded candidate search"
+        };
         return Err(if scalable_stack && focus_stack {
             format!(
-                "Could not automatically order all selected focus-stack images; {unstitched_count} image(s) were not connected by the bounded candidate search. Try fewer layers or ensure each layer has enough visual overlap."
+                "Could not automatically order all selected focus-stack images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure each layer has enough visual overlap."
             )
         } else if scalable_stack {
             format!(
-                "Could not align all selected images; {unstitched_count} image(s) were not connected to nearby layers. Make sure consecutive panorama images overlap and retry."
+                "Could not align all selected panorama images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure consecutive images overlap."
             )
         } else {
             format!(
-                "Could not align all selected images; {unstitched_count} image(s) were not connected."
+                "Could not align all selected images; {unstitched_count} image(s) have no verified overlap. The selection may contain multiple independent scenes; select one contiguous scene and retry."
             )
         });
     }
@@ -2804,7 +3467,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             }
         } else {
             load_prepared_stack_source(&image.filename, &settings)
-                .map(|source| source_to_render_rgb32f(source, image.width, image.height))
+                .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
         }
     };
     let panorama = match blend_mode {
@@ -3169,6 +3832,18 @@ fn select_focus_stack_transform(
     source_dimensions: (u32, u32),
     alignment_mode: AlignmentMode,
 ) -> Matrix3<f64> {
+    // A scale change is a shifted mosaic even when the optical centres line up
+    // perfectly.  Use the broader, bounded geometry guard for that case; the
+    // normal focus-stack guard intentionally rejects large scale changes so a
+    // bad repeated-stroke match cannot bend a fixed-camera stack.
+    let shifted_mosaic = focus_stack_motion_is_shifted_mosaic(points, source_dimensions);
+    let stable_transform = |transform: &Matrix3<f64>| {
+        if shifted_mosaic {
+            panorama_transform_is_stable(transform, source_dimensions)
+        } else {
+            transform_is_stable_for_focus_stack(transform, source_dimensions)
+        }
+    };
     let translation = estimate_translation(points);
     let translation_inliers =
         symmetric_inlier_indices(&translation, points, FOCUS_MODEL_INLIER_THRESHOLD);
@@ -3194,7 +3869,7 @@ fn select_focus_stack_transform(
 
     let similarity = robust_transform_fit(points, 2, 0xA24B_AED4_963E_E407, estimate_similarity);
     if let Some(model) = similarity.as_ref()
-        && transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+        && stable_transform(&model.transform)
         && focus_fit_is_competitive(model, &selected)
     {
         selected = model.clone();
@@ -3203,7 +3878,7 @@ fn select_focus_stack_transform(
 
     let affine = robust_transform_fit(points, 3, 0x9FB2_1C65_1E98_DF25, estimate_affine);
     if let Some(model) = affine.as_ref()
-        && transform_is_stable_for_focus_stack(&model.transform, source_dimensions)
+        && stable_transform(&model.transform)
         && focus_fit_is_competitive(model, &selected)
     {
         selected = model.clone();
@@ -3218,10 +3893,9 @@ fn select_focus_stack_transform(
     // A moving focus stack is also a planar scan/mosaic. Auto may use the
     // projective fit for that case, while a genuinely fixed-camera stack keeps
     // the lower-DOF model that is safer against defocus-driven false matches.
-    let shifted_mosaic = focus_stack_motion_is_shifted_mosaic(points, source_dimensions);
     let allow_projective = explicit_projective || shifted_mosaic;
     if allow_projective
-        && transform_is_stable_for_focus_stack(projective, source_dimensions)
+        && stable_transform(projective)
         && projective_error + 0.15 < selected.median_error
         && projective_error <= selected.median_error * 0.80
     {
@@ -3269,9 +3943,22 @@ fn focus_stack_motion_is_shifted_mosaic(
     let translation = estimate_translation(points);
     let motion = nalgebra::Vector2::new(translation[(0, 2)], translation[(1, 2)]).norm();
     let image_scale = source_dimensions.0.max(source_dimensions.1) as f64;
-    motion.is_finite()
+    let translation_shift = motion.is_finite()
         && image_scale > 1.0
-        && motion > image_scale * FOCUS_SHIFTED_MOSAIC_MOTION_RATIO
+        && motion > image_scale * FOCUS_SHIFTED_MOSAIC_MOTION_RATIO;
+    let scale_or_rotation_shift = estimate_similarity(points)
+        .map(|similarity| {
+            let scale_x = similarity[(0, 0)].hypot(similarity[(1, 0)]);
+            let scale_y = similarity[(0, 1)].hypot(similarity[(1, 1)]);
+            let scale = (scale_x.max(0.0) * scale_y.max(0.0)).sqrt();
+            let rotation = 0.5
+                * (similarity[(1, 0)] - similarity[(0, 1)])
+                    .atan2(similarity[(0, 0)] + similarity[(1, 1)]);
+            (scale.is_finite() && (scale - 1.0).abs() > 0.10)
+                || (rotation.is_finite() && rotation.abs() > 0.035)
+        })
+        .unwrap_or(false);
+    translation_shift || scale_or_rotation_shift
 }
 
 fn refine_match_point_from_homography(
@@ -3722,8 +4409,9 @@ fn patch_ncc(
 fn refine_homography_inliers(
     points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
     refinement_threshold: f64,
+    minimum_inliers: usize,
 ) -> Option<Matrix3<f64>> {
-    if points.len() < processing::MIN_INLIERS_FOR_CONNECTION {
+    if points.len() < minimum_inliers {
         return None;
     }
 
@@ -3733,8 +4421,12 @@ fn refine_homography_inliers(
     // points exceeds the later residual threshold. Re-run a deterministic robust
     // fit at full resolution before optimizing all remaining correspondences.
     let (_, robust_inlier_indices) =
-        processing::find_homography_ransac_points_stable(points, refinement_threshold)?;
-    if robust_inlier_indices.len() < processing::MIN_INLIERS_FOR_CONNECTION {
+        processing::find_homography_ransac_points_stable_with_min_inliers(
+            points,
+            refinement_threshold,
+            minimum_inliers,
+        )?;
+    if robust_inlier_indices.len() < minimum_inliers {
         return None;
     }
     if robust_inlier_indices.len() < points.len() {
@@ -3757,9 +4449,7 @@ fn refine_homography_inliers(
                     <= refinement_threshold
             })
             .collect();
-        if refined_points.len() < processing::MIN_INLIERS_FOR_CONNECTION
-            || refined_points.len() == points.len()
-        {
+        if refined_points.len() < minimum_inliers || refined_points.len() == points.len() {
             break;
         }
         *points = refined_points;
@@ -3844,9 +4534,129 @@ fn build_stitching_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
-    build_graph_stitching_order(images, matches, |_, _, match_info| {
-        match_info.inliers as f64
+    build_graph_stitching_order(images, matches, |source, target, match_info| {
+        panorama_edge_weight(source, target, match_info)
     })
+}
+
+fn panorama_edge_weight(source: &ImageInfo, target: &ImageInfo, match_info: &MatchInfo) -> f64 {
+    if match_info.points.len() < 4 || match_info.candidate_points.len() < 4 {
+        // Unit/test callers may provide only an inlier count. Keep that API
+        // behaviour deterministic while real matches use the stronger quality
+        // terms below.
+        return match_info.inliers as f64;
+    }
+    let candidate_count = match_info
+        .candidate_points
+        .len()
+        .max(match_info.points.len());
+    let inlier_ratio = match_info.points.len() as f64 / candidate_count as f64;
+    let error = median_symmetric_error(&match_info.homography, &match_info.points);
+    let precision = if error.is_finite() {
+        1.0 / (1.0 + error / FULL_RES_RANSAC_INLIER_THRESHOLD)
+    } else {
+        0.0
+    };
+    let spatial =
+        panorama_spatial_support(&match_info.points, source.dimensions(), target.dimensions());
+    let overlap = panorama_transform_overlap_support(
+        &match_info.homography,
+        source.dimensions(),
+        target.dimensions(),
+    );
+    // A repeated brush pattern can produce many descriptor inliers in a tiny
+    // region.  Inlier count alone then makes that false edge the MST backbone.
+    // Keep the count dominant, but make broad, low-error, bidirectionally
+    // visible overlaps win over compact coincidences.
+    (match_info.inliers as f64)
+        * (0.35 + 0.65 * inlier_ratio.clamp(0.0, 1.0))
+        * (0.35 + 0.65 * precision.clamp(0.0, 1.0))
+        * (0.25 + 0.75 * spatial.clamp(0.0, 1.0))
+        * (0.25 + 0.75 * overlap.clamp(0.0, 1.0))
+}
+
+fn panorama_spatial_support(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+) -> f64 {
+    if points.len() < 4 {
+        return 0.0;
+    }
+    let side_support = |side: usize, dimensions: (u32, u32)| {
+        let width = dimensions.0.max(1) as f64;
+        let height = dimensions.1.max(1) as f64;
+        let mut xs = Vec::with_capacity(points.len());
+        let mut ys = Vec::with_capacity(points.len());
+        let mut occupied = HashSet::new();
+        for &(source, target) in points {
+            let point = if side == 0 { source } else { target };
+            if !point.x.is_finite() || !point.y.is_finite() {
+                continue;
+            }
+            xs.push(point.x);
+            ys.push(point.y);
+            let cell_x = ((point.x / width).clamp(0.0, 0.999_999) * 4.0).floor() as u8;
+            let cell_y = ((point.y / height).clamp(0.0, 0.999_999) * 4.0).floor() as u8;
+            occupied.insert((cell_x, cell_y));
+        }
+        if xs.len() < 4 {
+            return 0.0;
+        }
+        xs.sort_unstable_by(f64::total_cmp);
+        ys.sort_unstable_by(f64::total_cmp);
+        let lower = ((xs.len() - 1) as f64 * 0.05).round() as usize;
+        let upper = ((xs.len() - 1) as f64 * 0.95).round() as usize;
+        let y_lower = ((ys.len() - 1) as f64 * 0.05).round() as usize;
+        let y_upper = ((ys.len() - 1) as f64 * 0.95).round() as usize;
+        let area = ((xs[upper] - xs[lower]) / width).max(0.0)
+            * ((ys[y_upper] - ys[y_lower]) / height).max(0.0);
+        let occupancy = occupied.len() as f64 / 16.0;
+        (area.sqrt() * 0.7 + occupancy * 0.3).clamp(0.0, 1.0)
+    };
+    side_support(0, source_dimensions)
+        .min(side_support(1, target_dimensions))
+        .clamp(0.0, 1.0)
+}
+
+fn panorama_transform_overlap_support(
+    transform: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+) -> f64 {
+    let Some(inverse) = transform.try_inverse() else {
+        return 0.0;
+    };
+    let inside = |mapped: Point3<f64>, dimensions: (u32, u32)| {
+        mapped.z.abs() >= 1e-8 && {
+            let x = mapped.x / mapped.z;
+            let y = mapped.y / mapped.z;
+            x >= 0.0 && y >= 0.0 && x < dimensions.0 as f64 && y < dimensions.1 as f64
+        }
+    };
+    let mut forward = 0usize;
+    let mut reverse = 0usize;
+    for row in 0..=4 {
+        for column in 0..=4 {
+            let source = Point3::new(
+                source_dimensions.0 as f64 * column as f64 / 4.0,
+                source_dimensions.1 as f64 * row as f64 / 4.0,
+                1.0,
+            );
+            if inside(*transform * source, target_dimensions) {
+                forward += 1;
+            }
+            let target = Point3::new(
+                target_dimensions.0 as f64 * column as f64 / 4.0,
+                target_dimensions.1 as f64 * row as f64 / 4.0,
+                1.0,
+            );
+            if inside(inverse * target, source_dimensions) {
+                reverse += 1;
+            }
+        }
+    }
+    (forward.min(reverse) as f64 / 25.0).clamp(0.0, 1.0)
 }
 
 fn build_graph_stitching_order<F>(
@@ -3864,7 +4674,7 @@ where
     if n < 2 {
         let mut homographies = HashMap::new();
         if n == 1 {
-            homographies.insert(0, Matrix3::identity());
+            homographies.insert(images[0].id, Matrix3::identity());
         }
         return ((0..n).collect(), homographies);
     }
@@ -3902,7 +4712,6 @@ where
             .total_cmp(&left.0)
             .then_with(|| left_names.cmp(&right_names))
     });
-
     let mut mst_adj: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut dsu = Dsu::new(n);
     let mut num_edges = 0;
@@ -3919,8 +4728,51 @@ where
         }
     }
 
-    let start_node = (0..n)
-        .filter(|i| mst_adj.contains_key(i))
+    // Kruskal produces a forest when the source selection contains separate
+    // scenes.  The previous code chose a start node across the whole forest,
+    // so a tiny two-image component could win merely because it had a low
+    // degree.  Traverse the largest connected component deterministically.
+    let mut component_visited = HashSet::new();
+    let mut components = Vec::<Vec<usize>>::new();
+    for root in 0..n {
+        if component_visited.contains(&root) || !mst_adj.contains_key(&root) {
+            continue;
+        }
+        let mut component = Vec::new();
+        let mut pending = vec![root];
+        component_visited.insert(root);
+        while let Some(node) = pending.pop() {
+            component.push(node);
+            if let Some(neighbours) = mst_adj.get(&node) {
+                for &neighbour in neighbours {
+                    if component_visited.insert(neighbour) {
+                        pending.push(neighbour);
+                    }
+                }
+            }
+        }
+        component.sort_unstable();
+        components.push(component);
+    }
+    components.sort_by(|left, right| {
+        right.len().cmp(&left.len()).then_with(|| {
+            let left_name = left
+                .iter()
+                .map(|&index| images[index].filename.as_str())
+                .min()
+                .unwrap_or("");
+            let right_name = right
+                .iter()
+                .map(|&index| images[index].filename.as_str())
+                .min()
+                .unwrap_or("");
+            natural_path_cmp(left_name, right_name)
+        })
+    });
+    let selected_component = components.first();
+    let start_node = selected_component
+        .into_iter()
+        .flat_map(|component| component.iter().copied())
         .min_by(|&left, &right| {
             mst_adj
                 .get(&left)
@@ -4327,6 +5179,7 @@ fn build_focus_stack_stitching_order(
         build_graph_stitching_order(images, matches, |source, target, match_info| {
             focus_auto_order_edge_weight(source, target, match_info, motion_scale)
         });
+    let fallback_graph_homographies = graph_homographies.clone();
     let mut filename_order = (0..images.len()).collect::<Vec<_>>();
     filename_order.sort_by(|&left, &right| {
         natural_path_cmp(&images[left].filename, &images[right].filename)
@@ -4379,7 +5232,7 @@ fn build_focus_stack_stitching_order(
             .or_else(|| (graph_order.len() == images.len()).then_some(graph_homographies))
     };
     let Some(initial_homographies) = initial_homographies else {
-        return (graph_order, HashMap::new());
+        return (graph_order, fallback_graph_homographies);
     };
     let reference_index = selected_order[0];
     let global_homographies = optimize_focus_stack_global_homographies_with_reference(
@@ -5182,8 +6035,15 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         let mut accepted = None;
         for step in [1.0, 0.5, 0.25, 0.125, 0.0625] {
             let mut candidate = poses.clone();
-            for (image_index, pose) in candidate.iter_mut().enumerate().skip(1) {
-                let base = (image_index - 1) * 8;
+            for (image_index, pose) in candidate.iter_mut().enumerate() {
+                if image_index == reference_index {
+                    continue;
+                }
+                let base = if image_index < reference_index {
+                    image_index * 8
+                } else {
+                    (image_index - 1) * 8
+                };
                 for parameter in 0..8 {
                     pose[parameter] += step * delta[base + parameter];
                 }
@@ -5191,7 +6051,7 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
             if candidate
                 .iter()
                 .enumerate()
-                .skip(1)
+                .filter(|(image_index, _)| *image_index != reference_index)
                 .any(|(image_index, pose)| {
                     pose.iter().enumerate().any(|(parameter, value)| {
                         let limit = match parameter {
@@ -5892,6 +6752,7 @@ mod alignment_tests {
             alignment_image: GrayImage::new(1, 1),
             full_image: None,
             scale_factor: 1.0,
+            focal_length_35mm: None,
             features: Vec::new(),
             top_features: Vec::new(),
             foreground_range: None,
@@ -6007,6 +6868,17 @@ mod alignment_tests {
     }
 
     #[test]
+    fn medium_panorama_candidates_cover_a_possible_lens_switch() {
+        let images = (0..69)
+            .map(|index| test_image(index, &format!("frame-{index}.jpg")))
+            .collect::<Vec<_>>();
+        let pairs = pairs_to_match_for_images(&images, BlendMode::Panorama);
+
+        assert_eq!(pairs.len(), 69 * 68 / 2);
+        assert!(pairs.contains(&(0, 68)));
+    }
+
+    #[test]
     fn natural_path_order_compares_numeric_filename_runs() {
         let mut paths = ["tile-10.jpg", "tile-2.jpg", "tile-001.jpg", "tile-1.jpg"];
         paths.sort_by(|left, right| natural_path_cmp(left, right));
@@ -6069,6 +6941,18 @@ mod alignment_tests {
             &shifted,
             (9_504, 6_336)
         ));
+
+        let scale_only = points
+            .iter()
+            .map(|(source, _)| {
+                let centered = *source - Point2::new(4_752.0, 3_168.0);
+                (*source, Point2::new(4_752.0, 3_168.0) + centered * 1.24)
+            })
+            .collect::<Vec<_>>();
+        assert!(focus_stack_motion_is_shifted_mosaic(
+            &scale_only,
+            (9_504, 6_336)
+        ));
     }
 
     #[test]
@@ -6076,6 +6960,13 @@ mod alignment_tests {
         assert_eq!(scalable_alignment_budget(64), (2_400, 1_600));
         assert_eq!(scalable_alignment_budget(128), (1_800, 1_100));
         assert_eq!(scalable_alignment_budget(200), (1_536, 800));
+    }
+
+    #[test]
+    fn mixed_focal_detection_distinguishes_lens_changes_from_rounding_noise() {
+        assert!(focal_lengths_span_multiple_lenses([35.0, 85.0]));
+        assert!(!focal_lengths_span_multiple_lenses([34.0, 35.0, 36.0]));
+        assert!(!focal_lengths_span_multiple_lenses([f64::NAN, -1.0, 85.0]));
     }
 
     #[test]
@@ -6185,8 +7076,12 @@ mod alignment_tests {
             points.push((source, target));
         }
 
-        let refined = refine_homography_inliers(&mut points, FULL_RES_REFINEMENT_THRESHOLD)
-            .expect("the accurate correspondence grid should remain connected");
+        let refined = refine_homography_inliers(
+            &mut points,
+            FULL_RES_REFINEMENT_THRESHOLD,
+            processing::MIN_INLIERS_FOR_CONNECTION,
+        )
+        .expect("the accurate correspondence grid should remain connected");
 
         assert_eq!(points.len(), 24);
         assert!(symmetric_reprojection_rmse(&refined, &points) < 0.35);
@@ -6240,6 +7135,30 @@ mod alignment_tests {
     }
 
     #[test]
+    fn disconnected_stitch_graph_selects_the_largest_component() {
+        let images = (0..7)
+            .map(|index| test_image(index, &format!("tile-{index}.jpg")))
+            .collect::<Vec<_>>();
+        let matches = HashMap::from([
+            ((0, 1), identity_match(80)),
+            // The four-image component must win even though every one of its
+            // edges has fewer inliers than the isolated two-image component.
+            ((2, 3), identity_match(30)),
+            ((3, 4), identity_match(30)),
+            ((4, 5), identity_match(30)),
+        ]);
+
+        let (order, homographies) = build_stitching_order(&images, &matches);
+
+        assert_eq!(order.len(), 4);
+        assert_eq!(
+            order.iter().copied().collect::<HashSet<_>>(),
+            HashSet::from([2, 3, 4, 5])
+        );
+        assert_eq!(homographies.len(), 4);
+    }
+
+    #[test]
     fn robust_affine_fit_rejects_false_correspondences() {
         let expected = Matrix3::new(1.012, -0.008, 420.0, 0.006, 0.994, -730.0, 0.0, 0.0, 1.0);
         let mut points = Vec::new();
@@ -6270,6 +7189,85 @@ mod alignment_tests {
         let expected_probe = transformed_point(&expected, probe).unwrap();
         let actual_probe = transformed_point(&fit.transform, probe).unwrap();
         assert!((actual_probe - expected_probe).norm() < 0.5);
+    }
+
+    #[test]
+    fn large_panorama_auto_alignment_preserves_real_focal_scale() {
+        let expected = Matrix3::new(2.35, -0.08, 410.0, 0.08, 2.35, -270.0, 0.0, 0.0, 1.0);
+        let points = (0..5)
+            .flat_map(|row| {
+                (0..6).map(move |column| {
+                    let source =
+                        Point2::new(100.0 + column as f64 * 140.0, 80.0 + row as f64 * 120.0);
+                    (source, transformed_point(&expected, source).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        let projective = processing::compute_homography(&points).unwrap();
+
+        let selected = select_large_panorama_transform(&projective, &points, (1_000, 800), false);
+        let (scale, _, _) = panorama_model_linear_characteristics(&selected);
+
+        assert!((scale - 2.351).abs() < 0.02, "scale={scale}");
+        assert!(median_symmetric_error(&selected, &points) < 0.05);
+    }
+
+    #[test]
+    fn large_panorama_auto_alignment_keeps_true_translation_stable() {
+        let expected = Matrix3::new(1.0, 0.0, 330.0, 0.0, 1.0, -140.0, 0.0, 0.0, 1.0);
+        let points = (0..5)
+            .flat_map(|row| {
+                (0..6).map(move |column| {
+                    let source =
+                        Point2::new(100.0 + column as f64 * 140.0, 80.0 + row as f64 * 120.0);
+                    (source, transformed_point(&expected, source).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        let projective = processing::compute_homography(&points).unwrap();
+
+        let selected = select_large_panorama_transform(&projective, &points, (1_000, 800), false);
+
+        assert_eq!(selected, expected);
+    }
+
+    #[test]
+    fn focus_alignment_accepts_a_real_lens_scale_change() {
+        let expected = Matrix3::new(2.35, 0.0, -640.0, 0.0, 2.35, -510.0, 0.0, 0.0, 1.0);
+        let points = (0..5)
+            .flat_map(|row| {
+                (0..6).map(move |column| {
+                    let source =
+                        Point2::new(100.0 + column as f64 * 140.0, 80.0 + row as f64 * 120.0);
+                    (source, transformed_point(&expected, source).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        let projective = processing::compute_homography(&points).unwrap();
+
+        let selected =
+            select_focus_stack_transform(&projective, &points, (1_000, 800), AlignmentMode::Auto);
+        let (scale, _, _) = panorama_model_linear_characteristics(&selected);
+
+        assert!((scale - 2.35).abs() < 0.03, "scale={scale}");
+    }
+
+    #[test]
+    fn mixed_focal_registration_rejects_a_repeated_texture_bridge() {
+        let identity = Matrix3::identity();
+        assert!(!mixed_focal_scale_is_plausible(&identity, 35.0, 85.0));
+        let expected = Matrix3::new(
+            85.0 / 35.0,
+            0.0,
+            -640.0,
+            0.0,
+            85.0 / 35.0,
+            -510.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        assert!(mixed_focal_scale_is_plausible(&expected, 35.0, 85.0));
     }
 
     #[test]
@@ -6581,13 +7579,21 @@ mod acceptance_tests {
             .map(|(id, path)| {
                 let source = image::open(path).expect("fixture image must decode");
                 let (width, height) = source.dimensions();
+                let focal_length_35mm = fs::read(path)
+                    .ok()
+                    .and_then(|bytes| crate::exif_processing::focal_length_35mm_from_bytes(&bytes));
                 let (new_width, new_height, scale_factor) =
                     processing::calculate_downscale_dimensions_capped(width, height, max_dimension);
                 let alignment_image = source
                     .resize_exact(new_width, new_height, image::imageops::FilterType::Triangle)
                     .to_luma8();
-                let features =
-                    find_alignment_features(&alignment_image, &brief_pairs, max_features, true);
+                let features = find_alignment_features(
+                    &alignment_image,
+                    &brief_pairs,
+                    max_features,
+                    true,
+                    focal_length_35mm,
+                );
                 let foreground_range = detect_foreground_range(&alignment_image);
                 let top_features =
                     find_top_alignment_features(&alignment_image, &brief_pairs, foreground_range);
@@ -6604,6 +7610,7 @@ mod acceptance_tests {
                     alignment_image,
                     full_image: None,
                     scale_factor,
+                    focal_length_35mm,
                     features,
                     top_features,
                     foreground_range,
@@ -7212,6 +8219,145 @@ mod acceptance_tests {
                 .map(|path| format!("\nfull: {}", path.display()))
                 .unwrap_or_default(),
         );
+    }
+
+    #[test]
+    #[ignore = "temporary fixture diagnostics"]
+    fn temporary_pair_probe() {
+        let root = std::env::var("RAW_EDITOR_ORDERED_PANORAMA_DIR").expect("fixture dir");
+        crate::sidecar_storage::initialize(
+            PathBuf::from("/private/tmp/raw-editor-temporary-pair-probe-sidecars").as_path(),
+        )
+        .expect("temporary probe sidecar storage should initialize");
+        let mut paths = fs::read_dir(&root)
+            .expect("fixture dir")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("jpg"))
+            })
+            .collect::<Vec<_>>();
+        paths.sort_by(|a, b| natural_path_cmp(&a.to_string_lossy(), &b.to_string_lossy()));
+        let (max_dimension, max_features) = scalable_alignment_budget(paths.len());
+        let pairs = processing::generate_brief_pairs();
+        let images = paths
+            .iter()
+            .enumerate()
+            .map(|(id, path)| {
+                let bytes = fs::read(path).unwrap();
+                let focal = crate::exif_processing::focal_length_35mm_from_bytes(&bytes);
+                let source = crate::image_loader::load_base_image_from_bytes(
+                    &bytes,
+                    &path.to_string_lossy(),
+                    false,
+                    &AppSettings::default(),
+                    None,
+                )
+                .unwrap();
+                let (w, h, sf) = processing::calculate_downscale_dimensions_capped(
+                    source.width(),
+                    source.height(),
+                    max_dimension,
+                );
+                let alignment = source
+                    .resize_exact(w, h, image::imageops::FilterType::Triangle)
+                    .to_luma8();
+                let features =
+                    find_alignment_features(&alignment, &pairs, max_features, true, focal);
+                ImageInfo {
+                    id,
+                    filename: path.to_string_lossy().into_owned(),
+                    width: source.width(),
+                    height: source.height(),
+                    alignment_image: alignment,
+                    full_image: Some(source.to_rgb32f()),
+                    scale_factor: sf,
+                    focal_length_35mm: focal,
+                    features,
+                    top_features: Vec::new(),
+                    foreground_range: None,
+                    foreground_mask: None,
+                    horizontal_edge_rows: Vec::new(),
+                    vertical_edge_columns: Vec::new(),
+                }
+            })
+            .collect::<Vec<_>>();
+        for i in 0..images.len() {
+            for j in i + 1..images.len() {
+                let a = &images[i];
+                let b = &images[j];
+                let raw = processing::match_features_with_ratio(
+                    &a.features,
+                    &b.features,
+                    SCALABLE_MATCH_RATIO_THRESHOLD,
+                );
+                if raw.len() < 5 {
+                    continue;
+                }
+                let kp1 = a.features.iter().map(|f| f.keypoint).collect::<Vec<_>>();
+                let kp2 = b.features.iter().map(|f| f.keypoint).collect::<Vec<_>>();
+                let pts = raw
+                    .iter()
+                    .map(|m| {
+                        (
+                            Point2::new(
+                                kp1[m.index1].x as f64 * a.scale_factor,
+                                kp1[m.index1].y as f64 * a.scale_factor,
+                            ),
+                            Point2::new(
+                                kp2[m.index2].x as f64 * b.scale_factor,
+                                kp2[m.index2].y as f64 * b.scale_factor,
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let r = processing::find_homography_ransac_points_stable(
+                    &pts,
+                    FULL_RES_RANSAC_INLIER_THRESHOLD,
+                );
+                let (n, spread) = r
+                    .as_ref()
+                    .map(|(_, idx)| {
+                        let p = idx.iter().map(|&k| pts[k]).collect::<Vec<_>>();
+                        (
+                            idx.len(),
+                            match_has_spatial_support(&p, a.dimensions(), b.dimensions()),
+                        )
+                    })
+                    .unwrap_or((0, false));
+                if n >= 5 {
+                    let accepted = match_image_pair(
+                        a,
+                        b,
+                        Projection::Planar,
+                        BlendMode::Panorama,
+                        AlignmentMode::Auto,
+                        true,
+                        false,
+                    )
+                    .is_some();
+                    println!(
+                        "PAIR {} {} focal={:?}/{:?} raw={} inliers={} spatial={} accepted={}",
+                        Path::new(&a.filename)
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy(),
+                        Path::new(&b.filename)
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy(),
+                        a.focal_length_35mm,
+                        b.focal_length_35mm,
+                        raw.len(),
+                        n,
+                        spread,
+                        accepted
+                    );
+                }
+            }
+        }
     }
 
     fn synthetic_texture_pixel(x: u32, y: u32) -> Rgb<u8> {

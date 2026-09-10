@@ -150,7 +150,7 @@ fn unproject_point(
     }
 }
 
-fn map_target_to_source(
+pub(super) fn map_target_to_source(
     inverse_homography: &Matrix3<f64>,
     target: Point3<f64>,
     image: &ImageInfo,
@@ -168,7 +168,7 @@ fn map_target_to_source(
     )
 }
 
-fn output_bounds(
+pub(super) fn output_bounds(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
@@ -207,7 +207,7 @@ fn output_bounds(
     (min_x, max_x, min_y, max_y)
 }
 
-fn pixel_aligned_canvas(minimum: f64, maximum: f64) -> (f64, u32) {
+pub(super) fn pixel_aligned_canvas(minimum: f64, maximum: f64) -> (f64, u32) {
     // The first image is the global reference and normally has an identity
     // transform. Keep its samples on integer output coordinates; using the exact
     // fractional bound as the offset would unnecessarily interpolate every
@@ -253,7 +253,7 @@ pub(crate) fn output_canvas_dimensions_with_focus_warp(
     (width, height)
 }
 
-fn transformed_image_region(
+pub(super) fn transformed_image_region(
     image: &ImageInfo,
     homography: &Matrix3<f64>,
     projection: Projection,
@@ -644,7 +644,9 @@ where
     let base_img_info = images[0];
     let base_image = load_image(base_img_info)?;
     let h_base = &global_homographies[&base_img_info.id];
-    let h_base_inv = h_base.try_inverse().unwrap();
+    let h_base_inv = h_base
+        .try_inverse()
+        .ok_or_else(|| "The base image alignment is not invertible.".to_string())?;
     println!("  - Placing base image: '{}'", base_img_info.filename);
 
     let num_pixels_per_row = out_width as usize * 3;
@@ -707,7 +709,12 @@ where
         println!("  - Progressively stitching '{}'", img_to_add_info.filename);
 
         let h_add = &global_homographies[&img_to_add_info.id];
-        let h_add_inv = h_add.try_inverse().unwrap();
+        let h_add_inv = h_add.try_inverse().ok_or_else(|| {
+            format!(
+                "The alignment for '{}' is not invertible.",
+                img_to_add_info.filename
+            )
+        })?;
         let img_to_add = load_image(img_to_add_info)?;
         let (candidate_left, candidate_right, candidate_top, candidate_bottom) =
             transformed_image_region(
@@ -1103,7 +1110,11 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         mask,
         Some(low_frequency_mask),
         PANORAMA_BLEND_BANDS,
-        false,
+        // A residual sub-pixel registration error must never be averaged into
+        // the visible detail bands. Keep the source ownership hard for the
+        // finest and middle frequencies; only the coarse tone pyramid is
+        // allowed to feather across the seam.
+        true,
     );
 
     let panorama_rgb_stride = out_width as usize * 3;
@@ -3393,7 +3404,7 @@ fn resize_rgb(image: &Rgb32FImage, width: u32, height: u32) -> Rgb32FImage {
     )
 }
 
-fn downsample_rgb_half(image: &Rgb32FImage) -> Rgb32FImage {
+pub(super) fn downsample_rgb_half(image: &Rgb32FImage) -> Rgb32FImage {
     let (source_width, source_height) = image.dimensions();
     let target_width = source_width.div_ceil(2).max(1);
     let target_height = source_height.div_ceil(2).max(1);
@@ -3601,7 +3612,7 @@ fn combine_rgb(
     Rgb32FImage::from_raw(width, height, output).expect("combined image dimensions must match")
 }
 
-fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
+pub(super) fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 || mask.dimensions() != (width, height) {
         return image;
@@ -4830,23 +4841,77 @@ fn hard_select_focus_layer_outside_patch(
     }
 }
 
-fn mapped_image_center(
+#[derive(Clone, Copy)]
+struct MappedFrameGeometry {
+    center: Point2<f64>,
+    scale: f64,
+    rotation: f64,
+    area: f64,
+}
+
+fn mapped_frame_geometry(
     image: &ImageInfo,
     homography: &Matrix3<f64>,
     projection: Projection,
-) -> Option<Point2<f64>> {
-    let center = project_point(
-        image,
-        image.width() as f64 * 0.5,
-        image.height() as f64 * 0.5,
-        projection,
-    )?;
-    let mapped = homography * Point3::new(center.x, center.y, 1.0);
-    if mapped.z.abs() < 1e-8 {
-        None
-    } else {
-        Some(Point2::new(mapped.x / mapped.z, mapped.y / mapped.z))
+) -> Option<MappedFrameGeometry> {
+    let width = image.width.max(1) as f64;
+    let height = image.height.max(1) as f64;
+    let source_corners = [
+        Point2::new(0.0, 0.0),
+        Point2::new(width, 0.0),
+        Point2::new(width, height),
+        Point2::new(0.0, height),
+    ];
+    let mut corners = [Point2::new(0.0, 0.0); 4];
+    for (slot, source) in source_corners.into_iter().enumerate() {
+        let projected = project_point(image, source.x, source.y, projection)?;
+        let mapped = homography * Point3::new(projected.x, projected.y, 1.0);
+        if mapped.z.abs() < 1e-8 {
+            return None;
+        }
+        let point = Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return None;
+        }
+        corners[slot] = point;
     }
+
+    let center = corners
+        .iter()
+        .copied()
+        .fold(Point2::new(0.0, 0.0), |sum, point| sum + point.coords)
+        / 4.0;
+    let horizontal_scale =
+        ((corners[1] - corners[0]).norm() + (corners[2] - corners[3]).norm()) / (2.0 * width);
+    let vertical_scale =
+        ((corners[3] - corners[0]).norm() + (corners[2] - corners[1]).norm()) / (2.0 * height);
+    let scale = (horizontal_scale.max(0.0) * vertical_scale.max(0.0)).sqrt();
+    let top_edge = corners[1] - corners[0];
+    let rotation = top_edge.y.atan2(top_edge.x);
+    let signed_double_area = corners
+        .iter()
+        .zip(corners.iter().cycle().skip(1))
+        .take(4)
+        .map(|(left, right)| left.x * right.y - right.x * left.y)
+        .sum::<f64>();
+    let area = (signed_double_area / (2.0 * width * height)).abs();
+    (scale.is_finite() && rotation.is_finite() && area.is_finite()).then_some(MappedFrameGeometry {
+        center,
+        scale,
+        rotation,
+        area,
+    })
+}
+
+fn wrapped_angle_delta(left: f64, right: f64) -> f64 {
+    let mut delta = left - right;
+    while delta > std::f64::consts::PI {
+        delta -= 2.0 * std::f64::consts::PI;
+    }
+    while delta < -std::f64::consts::PI {
+        delta += 2.0 * std::f64::consts::PI;
+    }
+    delta.abs()
 }
 
 fn focus_stack_is_shifted_mosaic(
@@ -4857,20 +4922,42 @@ fn focus_stack_is_shifted_mosaic(
     let Some(first) = images.first() else {
         return false;
     };
-    let Some(reference_center) =
-        mapped_image_center(first, &global_homographies[&first.id], projection)
-    else {
+    let Some(reference_homography) = global_homographies.get(&first.id) else {
+        return false;
+    };
+    let Some(reference) = mapped_frame_geometry(first, reference_homography, projection) else {
         return false;
     };
     let reference_width = first.width().max(1) as f64;
     let reference_height = first.height().max(1) as f64;
+    // Some exported frames lose the equivalent-focal tag. Use the first tag
+    // available in the stack as a comparison anchor so a missing tag on the
+    // first frame does not hide a later 35mm/85mm switch.
+    let reference_focal = first
+        .focal_length_35mm
+        .or_else(|| images.iter().find_map(|image| image.focal_length_35mm));
     images.iter().skip(1).any(|image| {
-        mapped_image_center(image, &global_homographies[&image.id], projection).is_some_and(
-            |center| {
-                (center.x - reference_center.x).abs() > reference_width * 0.08
-                    || (center.y - reference_center.y).abs() > reference_height * 0.08
-            },
-        )
+        let Some(homography) = global_homographies.get(&image.id) else {
+            return false;
+        };
+        let Some(current) = mapped_frame_geometry(image, homography, projection) else {
+            return false;
+        };
+        let center_shift = (current.center.x - reference.center.x).abs() > reference_width * 0.08
+            || (current.center.y - reference.center.y).abs() > reference_height * 0.08;
+        let relative_scale = current.scale / reference.scale.max(1e-8);
+        let scale_shift = relative_scale.is_finite() && !(0.90..=1.10).contains(&relative_scale);
+        let relative_area = current.area / reference.area.max(1e-8);
+        let area_shift = relative_area.is_finite() && !(0.82..=1.22).contains(&relative_area);
+        let rotation_shift = wrapped_angle_delta(current.rotation, reference.rotation) > 0.035;
+        let focal_shift = reference_focal
+            .zip(image.focal_length_35mm)
+            .map(|(reference_focal, current_focal)| {
+                let ratio = current_focal / reference_focal.max(1e-8);
+                ratio.is_finite() && !(0.90..=1.10).contains(&ratio)
+            })
+            .unwrap_or(false);
+        center_shift || scale_shift || area_shift || rotation_shift || focal_shift
     })
 }
 
@@ -4892,11 +4979,19 @@ where
     let shifted_mosaic = focus_stack_is_shifted_mosaic(images, global_homographies, projection);
     if shifted_mosaic {
         println!(
-            "  - Large framing shift detected; keeping local sharpness ownership across overlaps"
+            "  - Framing/scale change detected; refining local registration and detail ownership"
         );
         let _ = app_handle.emit(
             progress_event,
-            "Large framing shift detected; selecting the sharpest source in each overlap...",
+            "Framing or lens change detected; refining registration and selecting sharp detail...",
+        );
+        return super::mosaic::detail_preserving_mosaic(
+            images,
+            global_homographies,
+            projection,
+            app_handle,
+            progress_event,
+            load_image,
         );
     }
     let (min_x, max_x, min_y, max_y) =
@@ -5123,7 +5218,7 @@ where
 }
 
 fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
-    let h_add_inv = ctx.h_add.try_inverse().unwrap();
+    let h_add_inv = ctx.h_add.try_inverse()?;
     let (w_add, h_add_img) = ctx.img_to_add.dimensions();
 
     let mut min_ox = u32::MAX;
@@ -5502,7 +5597,7 @@ fn cubic_sample(p0: f64, p1: f64, p2: f64, p3: f64, amount: f64) -> f64 {
             + amount * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + amount * (3.0 * (p1 - p2) + p3 - p0)))
 }
 
-fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
+pub(super) fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
     let (width, height) = img.dimensions();
     if width < 4
         || height < 4
@@ -5548,6 +5643,25 @@ fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb
 mod interpolation_tests {
     use super::*;
 
+    fn geometry_test_image(id: usize, focal_length_35mm: Option<f64>) -> ImageInfo {
+        ImageInfo {
+            id,
+            filename: format!("geometry-{id}.jpg"),
+            width: 1_000,
+            height: 800,
+            alignment_image: GrayImage::new(1, 1),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        }
+    }
+
     #[test]
     fn pixel_aligned_canvas_preserves_integer_reference_coordinates() {
         let (offset, size) = pixel_aligned_canvas(-123.4, 876.2);
@@ -5590,6 +5704,76 @@ mod interpolation_tests {
         assert!(
             u64::from(analysis_width) * u64::from(analysis_height) <= FOCUS_ANALYSIS_MAX_PIXELS
         );
+    }
+
+    #[test]
+    fn shifted_mosaic_detection_catches_a_lens_scale_change() {
+        let first = geometry_test_image(0, Some(35.0));
+        let second = geometry_test_image(1, Some(85.0));
+        let center_x = first.width as f64 * 0.5;
+        let center_y = first.height as f64 * 0.5;
+        let scale = 1.25;
+        let scale_about_center = Matrix3::new(
+            scale,
+            0.0,
+            center_x * (1.0 - scale),
+            0.0,
+            scale,
+            center_y * (1.0 - scale),
+            0.0,
+            0.0,
+            1.0,
+        );
+        let homographies = HashMap::from([(0, Matrix3::identity()), (1, scale_about_center)]);
+        let images = vec![&first, &second];
+
+        assert!(focus_stack_is_shifted_mosaic(
+            &images,
+            &homographies,
+            Projection::Planar
+        ));
+    }
+
+    #[test]
+    fn shifted_mosaic_detection_uses_focal_metadata_when_geometry_is_centered() {
+        let first = geometry_test_image(0, Some(35.0));
+        let second = geometry_test_image(1, Some(85.0));
+        let homographies = HashMap::from([(0, Matrix3::identity()), (1, Matrix3::identity())]);
+        let images = vec![&first, &second];
+
+        assert!(focus_stack_is_shifted_mosaic(
+            &images,
+            &homographies,
+            Projection::Planar
+        ));
+    }
+
+    #[test]
+    fn shifted_mosaic_detection_keeps_small_focus_breathing_on_the_focus_path() {
+        let first = geometry_test_image(0, Some(85.0));
+        let second = geometry_test_image(1, Some(85.0));
+        let center_x = first.width as f64 * 0.5;
+        let center_y = first.height as f64 * 0.5;
+        let scale = 1.025;
+        let small_breathing = Matrix3::new(
+            scale,
+            0.0,
+            center_x * (1.0 - scale) + 18.0,
+            0.0,
+            scale,
+            center_y * (1.0 - scale) + 12.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let homographies = HashMap::from([(0, Matrix3::identity()), (1, small_breathing)]);
+        let images = vec![&first, &second];
+
+        assert!(!focus_stack_is_shifted_mosaic(
+            &images,
+            &homographies,
+            Projection::Planar
+        ));
     }
 
     #[test]
