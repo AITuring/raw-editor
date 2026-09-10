@@ -12,6 +12,9 @@ struct Graph {
     edges: Vec<Vec<Edge>>,
 }
 
+const OWNERSHIP_PAIRWISE_BASE: f64 = 0.35;
+const OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT: f64 = 12.0;
+
 impl Graph {
     fn connect(&mut self, a: usize, b: usize, forward: f64, reverse: f64) {
         let ai = self.edges[a].len();
@@ -127,7 +130,9 @@ pub(super) fn cut_grid(
         .into_iter()
         .flatten()
         {
-            let weight = 0.12 + (disagreement[i] + disagreement[neighbour]) * 4.0;
+            let weight = OWNERSHIP_PAIRWISE_BASE
+                + (disagreement[i] + disagreement[neighbour])
+                    * OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT;
             graph.connect(i, neighbour, weight, weight);
         }
     }
@@ -165,7 +170,9 @@ mod tests {
                     .flatten()
                 {
                     if new != (mask & (1 << j) != 0) {
-                        cost += 0.12 + (disagreement[i] + disagreement[j]) * 4.0;
+                        cost += OWNERSHIP_PAIRWISE_BASE
+                            + (disagreement[i] + disagreement[j])
+                                * OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT;
                     }
                 }
             }

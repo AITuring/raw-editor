@@ -14,8 +14,13 @@ use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, Runtime};
 
 const ANALYSIS_LONG_SIDE: u32 = 1400;
-const SELECTION_LONG_SIDE: u32 = 320;
+// A 320-cell ownership grid makes a 24k canvas seam about 75px wide. A
+// Chinese brush stroke can fit entirely inside that cell, so a locally
+// misregistered sharp tile becomes a rectangular double exposure. Keep the
+// ownership grid fine enough that seams can route around individual strokes.
+const SELECTION_LONG_SIDE: u32 = 512;
 const GRID_STEP: u32 = 48;
+const OWNERSHIP_MISMATCH_PENALTY: f64 = 1.8;
 
 fn luma(p: Rgb<f32>) -> f64 {
     f64::from(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114)
@@ -568,6 +573,12 @@ fn ownership(
                 .map(|(a, b)| (*a - b).abs() as f64)
                 .sum::<f64>()
                 / 3.0;
+            // A sharp but displaced candidate can win the acutance test even
+            // though it would put a second contour next to the existing
+            // stroke. Penalise that candidate directly; otherwise the graph
+            // cut can legally place a seam through the high-contrast subject
+            // and leave a visible rectangular ghost.
+            preference[i] -= (disagreement[i] * OWNERSHIP_MISMATCH_PENALTY).min(1.0);
         }
     }
     // Average evidence over neighbouring native patches, never image pixels.

@@ -8649,7 +8649,16 @@ mod acceptance_tests {
             crate::image_stack::write_srgb_tiff(&canonical, &output_path)
                 .expect("full-resolution color-managed TIFF result should be writable");
         }
-        let preview = canonical.resize(1800, 1800, image::imageops::FilterType::Lanczos3);
+        let preview_edge = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_EDGE")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|&value| value >= 256)
+            .unwrap_or(1800);
+        let preview = canonical.resize(
+            preview_edge,
+            preview_edge,
+            image::imageops::FilterType::Lanczos3,
+        );
         let preview_path = output_path.with_extension("preview.jpg");
         preview
             .save_with_format(&preview_path, ImageFormat::Jpeg)
@@ -8676,7 +8685,11 @@ mod acceptance_tests {
             ] {
                 let crop = canonical
                     .crop_imm(x, y, crop_width.min(width - x), crop_height.min(height - y))
-                    .resize(1800, 1800, image::imageops::FilterType::Lanczos3);
+                    .resize(
+                        preview_edge,
+                        preview_edge,
+                        image::imageops::FilterType::Lanczos3,
+                    );
                 crop.save_with_format(
                     output_path.with_file_name(format!(
                         "{}.{}.jpg",
