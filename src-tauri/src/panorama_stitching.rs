@@ -6065,18 +6065,7 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
     if images.len() < 2 || reference_index >= images.len() {
         return initial_homographies.clone();
     }
-    if images_have_mixed_focal_lengths(images) {
-        // A mixed 35mm/85mm selection is connected by explicit cross-lens
-        // bridges, but it is not one camera model. Keep the verified path
-        // homographies as the global scaffold and let the scale-aware local
-        // mosaic refinement solve the remaining residual. Trying to fit both
-        // modules through one eight-parameter pose per image creates large
-        // cycle corrections and can bend otherwise sharp layers.
-        println!(
-            "  - Focus global registration skipped for mixed-focal stack; retaining verified path poses"
-        );
-        return initial_homographies.clone();
-    }
+    let mixed_focal_stack = images_have_mixed_focal_lengths(images);
     let reference = &images[reference_index];
     let coordinate_scale = images
         .iter()
@@ -6114,6 +6103,17 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
     } else {
         focus_global_observations(images, matches, coordinate_scale, None)
     };
+    if mixed_focal_stack {
+        // Cross-lens edges are filtered by focus_global_observations* above.
+        // The remaining observations are still valuable: they close loops
+        // within each 35mm or 85mm module without forcing the two modules
+        // into one camera model. The path homographies provide the initial
+        // bridge between modules, while the robust solve removes same-lens
+        // drift before local mosaic refinement.
+        println!(
+            "  - Focus global registration for mixed-focal stack: solving same-lens edges only"
+        );
+    }
     let minimum_observations = if normalized_y_range.is_some() {
         if use_foreground_region_matches {
             FOCUS_LOCAL_MODEL_MIN_INLIERS

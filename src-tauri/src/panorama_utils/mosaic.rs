@@ -19,8 +19,10 @@ const ANALYSIS_LONG_SIDE: u32 = 1400;
 // misregistered sharp tile becomes a rectangular double exposure. Keep the
 // ownership grid fine enough that seams can route around individual strokes.
 const SELECTION_LONG_SIDE: u32 = 512;
-const GRID_STEP: u32 = 48;
-const OWNERSHIP_MISMATCH_PENALTY: f64 = 1.8;
+const GRID_STEP: u32 = 32;
+const NATIVE_REFINE_STEP: u32 = 16;
+const NATIVE_FIELD_RADIUS: f64 = 32.0;
+const OWNERSHIP_MISMATCH_PENALTY: f64 = 2.4;
 
 fn luma(p: Rgb<f32>) -> f64 {
     f64::from(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114)
@@ -278,8 +280,8 @@ fn refine_native_layer(
     // These tiny patches keep native refinement independent of canvas size.
     for spacing in [2.0, 1.0] {
         let mut observations = Vec::<(Point2<f64>, [f64; 2], f64)>::new();
-        for y in (20..height.saturating_sub(20)).step_by(GRID_STEP as usize) {
-            for x in (20..width.saturating_sub(20)).step_by(GRID_STEP as usize) {
+        for y in (20..height.saturating_sub(20)).step_by(NATIVE_REFINE_STEP as usize) {
+            for x in (20..width.saturating_sub(20)).step_by(NATIVE_REFINE_STEP as usize) {
                 let lx = x as f64 * sampler.scale;
                 let ly = y as f64 * sampler.scale;
                 let mut a = GrayImage::new(57, 57);
@@ -352,8 +354,10 @@ fn refine_native_layer(
                 let mut sum = [0.0; 2];
                 let mut total = 0.0f64;
                 for (q, d, correlation) in &observations {
-                    let weight =
-                        (-(p - q).norm_squared() / (2.0 * 48.0 * 48.0)).exp() * correlation.powi(8);
+                    let weight = (-(p - q).norm_squared()
+                        / (2.0 * NATIVE_FIELD_RADIUS * NATIVE_FIELD_RADIUS))
+                        .exp()
+                        * correlation.powi(8);
                     sum[0] += weight * d[0];
                     sum[1] += weight * d[1];
                     total += weight;
@@ -503,6 +507,58 @@ fn acutance(mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>, x: f64, y: f64
     (energy / 49.0).sqrt() / (level / 49.0).max(0.04)
 }
 
+fn ownership_disagreement(
+    base: &Rgb32FImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    ax: f64,
+    ay: f64,
+    cell_size: f64,
+) -> f64 {
+    // A single sample at the cell centre can land on canvas and miss a brush
+    // stroke that crosses the same cell near an edge. Sample the whole cell
+    // instead, and retain a high percentile so a displaced contour vetoes the
+    // candidate even when most of the cell is quiet paper.
+    const OFFSETS: [f64; 5] = [0.15, 0.325, 0.5, 0.675, 0.85];
+    let mut disagreements = Vec::with_capacity(OFFSETS.len() * OFFSETS.len());
+    for y_offset in OFFSETS {
+        for x_offset in OFFSETS {
+            let sample_ax = ax + cell_size * x_offset;
+            let sample_ay = ay + cell_size * y_offset;
+            let lx = sample_ax * sampler.scale;
+            let ly = sample_ay * sampler.scale;
+            let gx = sampler.left as f64 + lx;
+            let gy = sampler.top as f64 + ly;
+            let Some(candidate) = sampler
+                .sample(lx, ly)
+                .map(|pixel| adjusted(pixel, tone.at(sample_ax, sample_ay)))
+            else {
+                continue;
+            };
+            let Some(base_pixel) = rgb_at(base, gx, gy) else {
+                continue;
+            };
+            let disagreement = candidate
+                .0
+                .iter()
+                .zip(base_pixel.0)
+                .map(|(a, b)| (*a - b).abs() as f64)
+                .sum::<f64>()
+                / 3.0;
+            if disagreement.is_finite() {
+                disagreements.push(disagreement);
+            }
+        }
+    }
+    if disagreements.is_empty() {
+        return 1.0;
+    }
+    disagreements.sort_by(f64::total_cmp);
+    let mean = disagreements.iter().sum::<f64>() / disagreements.len() as f64;
+    let high = disagreements[(disagreements.len() * 3 / 4).min(disagreements.len() - 1)];
+    (mean * 0.45 + high * 0.55).clamp(0.0, 1.0)
+}
+
 /// Binary ownership regularised on a bounded grid. Pairwise terms penalise
 /// seams through high contrast or disagreement. Fixed coverage labels ensure
 /// every newly observed pixel is admitted, including fully enclosed detail
@@ -552,8 +608,6 @@ fn ownership(
                 fixed[i] = -1;
                 continue;
             }
-            let candidate = adjusted(candidate.unwrap(), tone.at(ax, ay));
-            let base_pixel = *base.get_pixel(gx as u32, gy as u32);
             let base_focus = acutance(|x, y| rgb_at(base, x, y), gx, gy);
             let candidate_focus = acutance(
                 |x, y| sampler.sample(x, y).map(|p| adjusted(p, tone.at(ax, ay))),
@@ -566,13 +620,7 @@ fn ownership(
                 .ln()
                 .clamp(-2.0, 2.0)
                 - 0.06;
-            disagreement[i] = candidate
-                .0
-                .iter()
-                .zip(base_pixel.0)
-                .map(|(a, b)| (*a - b).abs() as f64)
-                .sum::<f64>()
-                / 3.0;
+            disagreement[i] = ownership_disagreement(base, sampler, tone, ax, ay, size);
             // A sharp but displaced candidate can win the acutance test even
             // though it would put a second contour next to the existing
             // stroke. Penalise that candidate directly; otherwise the graph
