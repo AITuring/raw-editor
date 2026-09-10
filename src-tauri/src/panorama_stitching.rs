@@ -42,7 +42,14 @@ const FOCUS_LOCAL_MODEL_MIN_INLIERS: usize = 6;
 const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
 const FOCUS_GLOBAL_MAX_POINTS_PER_EDGE: usize = 256;
 const FOCUS_GLOBAL_MAX_ITERATIONS: usize = 12;
-const FOCUS_GLOBAL_HUBER_THRESHOLD: f64 = 0.0012;
+// The global pose solve operates in coordinates normalised by the largest
+// source dimension. A 0.0012 Huber transition is roughly 19px on the phone
+// frames used by the focus-stack path; that is wide enough for a repeated
+// canvas stroke to pull a whole layer before the local mosaic refinement gets
+// a chance to correct it. Keep the robust solve focused on the identity
+// correspondences and let the regional/native passes handle the remaining
+// sub-pixel deformation.
+const FOCUS_GLOBAL_HUBER_THRESHOLD: f64 = 0.00065;
 const FOCUS_GLOBAL_PRIOR_WEIGHT: f64 = 0.01;
 const FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT: f64 = 0.5;
 const FOCUS_GLOBAL_DAMPING: f64 = 1e-6;
@@ -137,6 +144,12 @@ const MIXED_FOCAL_LENGTH_RATIO: f64 = 1.12;
 // that edge would create a false bridge between two independent scenes.
 const MIXED_FOCAL_SCALE_MIN_RATIO: f64 = 0.62;
 const MIXED_FOCAL_SCALE_MAX_RATIO: f64 = 1.62;
+// A 35mm/85mm bridge is allowed to connect the two lens groups only when it
+// has a broad, high-confidence consensus. Small repeated-texture consensuses
+// are particularly dangerous here: they can be geometrically plausible while
+// placing an entire telephoto tile on the wrong canvas stroke.
+const MIXED_FOCAL_MIN_INLIERS: usize = 16;
+const MIXED_FOCAL_MAX_MEDIAN_ERROR: f64 = 4.5;
 const MAX_SCALABLE_PREPARATION_WORKERS: usize = 6;
 const PREPARATION_RAM_PER_WORKER_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_IN_MEMORY_PANORAMA_PIXELS: u64 = 240_000_000;
@@ -307,6 +320,18 @@ fn selection_has_mixed_focal_lengths(image_paths: &[String]) -> bool {
             .ok()
             .and_then(|bytes| crate::exif_processing::focal_length_35mm_from_bytes(&bytes))
     }))
+}
+
+fn image_pair_has_mixed_focal_lengths(source: &ImageInfo, target: &ImageInfo) -> bool {
+    focal_lengths_span_multiple_lenses(
+        [source.focal_length_35mm, target.focal_length_35mm]
+            .into_iter()
+            .flatten(),
+    )
+}
+
+fn images_have_mixed_focal_lengths(images: &[ImageInfo]) -> bool {
+    focal_lengths_span_multiple_lenses(images.iter().filter_map(|image| image.focal_length_35mm))
 }
 
 fn bounded_preparation_worker_count(
@@ -2017,14 +2042,7 @@ fn match_image_pair(
     stable_four_point_solver: bool,
     log_match: bool,
 ) -> Option<MatchInfo> {
-    let mixed_focal_pair = focal_lengths_span_multiple_lenses(
-        [
-            source_image.focal_length_35mm,
-            target_image.focal_length_35mm,
-        ]
-        .into_iter()
-        .flatten(),
-    );
+    let mixed_focal_pair = image_pair_has_mixed_focal_lengths(source_image, target_image);
     let features1 = &source_image.features;
     let features2 = &target_image.features;
     let minimum_inliers = if stable_four_point_solver {
@@ -2336,7 +2354,6 @@ fn match_image_pair(
     };
     let refined_homography =
         refine_homography_inliers(&mut inlier_points, refinement_threshold, minimum_inliers)?;
-    let inlier_count = inlier_points.len();
     if stable_four_point_solver
         && !match_has_spatial_support(
             &inlier_points,
@@ -2348,34 +2365,6 @@ fn match_image_pair(
         // enough to place a large tile. Reject it before it can become a strong
         // graph edge and pull an otherwise coherent mosaic into a false overlap.
         return None;
-    }
-    if log_match {
-        println!(
-            "  - Good match found: '{}' <-> '{}' ({} inliers)",
-            Path::new(&source_image.filename)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy(),
-            Path::new(&target_image.filename)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy(),
-            inlier_count
-        );
-        let reprojection_error = symmetric_reprojection_rmse(&refined_homography, &inlier_points);
-        println!(
-            "  - Refined match: '{}' <-> '{}' ({} inliers, {:.3}px symmetric RMS)",
-            Path::new(&source_image.filename)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy(),
-            Path::new(&target_image.filename)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy(),
-            inlier_count,
-            reprojection_error
-        );
     }
     let homography = if alignment_mode == AlignmentMode::Position {
         estimate_translation(&inlier_points)
@@ -2396,6 +2385,70 @@ fn match_image_pair(
     } else {
         refined_homography
     };
+    if blend_mode == BlendMode::FocusStack
+        && !retain_model_inliers(
+            &mut inlier_points,
+            &homography,
+            FOCUS_MODEL_INLIER_THRESHOLD,
+            minimum_inliers,
+        )
+    {
+        // The projective RANSAC fit is only an intermediate consensus. A
+        // lower-DOF focus-stack model must get its own residual-consistent
+        // observations; otherwise the global pose solve receives points that
+        // support a different warp and can introduce a soft/double edge.
+        if log_match {
+            println!(
+                "  - Rejecting focus match after selected-model validation: fewer than {} consistent observations",
+                minimum_inliers
+            );
+        }
+        return None;
+    }
+    let inlier_count = inlier_points.len();
+    let median_error = median_symmetric_error(&homography, &inlier_points);
+    if mixed_focal_pair
+        && blend_mode == BlendMode::FocusStack
+        && (inlier_count < MIXED_FOCAL_MIN_INLIERS
+            || !median_error.is_finite()
+            || median_error > MIXED_FOCAL_MAX_MEDIAN_ERROR)
+    {
+        if log_match {
+            println!(
+                "  - Rejecting weak mixed-focal bridge: {} inliers, {:.3}px median symmetric error (need at least {} and <= {:.2}px)",
+                inlier_count, median_error, MIXED_FOCAL_MIN_INLIERS, MIXED_FOCAL_MAX_MEDIAN_ERROR
+            );
+        }
+        return None;
+    }
+    if log_match {
+        println!(
+            "  - Good match found: '{}' <-> '{}' ({} inliers)",
+            Path::new(&source_image.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            Path::new(&target_image.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            inlier_count
+        );
+        let reprojection_error = symmetric_reprojection_rmse(&homography, &inlier_points);
+        println!(
+            "  - Refined match: '{}' <-> '{}' ({} inliers, {:.3}px symmetric RMS)",
+            Path::new(&source_image.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            Path::new(&target_image.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            inlier_count,
+            reprojection_error
+        );
+    }
     Some(MatchInfo {
         homography,
         inliers: inlier_count,
@@ -3367,8 +3420,38 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             retained_full_images.insert(image.id, full_image);
         }
     }
-    let stitched_images_info: Vec<&ImageInfo> =
+    let mut stitched_images_info: Vec<&ImageInfo> =
         ordered_indices.iter().map(|&i| &image_data[i]).collect();
+    if blend_mode == BlendMode::FocusStack && images_have_mixed_focal_lengths(&image_data) {
+        // The alignment path may interleave 35mm scaffold frames with 85mm
+        // detail frames because that is the strongest overlap graph. Rendering
+        // in that same order can create rectangular exposure/detail islands
+        // where a later wide frame reclaims pixels from an earlier telephoto
+        // frame. Use the verified homographies from the path, but composite
+        // lower focal lengths first and telephoto frames last so the sharper
+        // module wins consistently where it covers the artwork.
+        stitched_images_info.sort_by(|left, right| {
+            left.focal_length_35mm
+                .unwrap_or(f64::NEG_INFINITY)
+                .total_cmp(&right.focal_length_35mm.unwrap_or(f64::NEG_INFINITY))
+        });
+        println!(
+            "Focus render order grouped by focal length: {:?}",
+            stitched_images_info
+                .iter()
+                .map(|image| {
+                    format!(
+                        "{}:{:.0}mm",
+                        Path::new(&image.filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy(),
+                        image.focal_length_35mm.unwrap_or(0.0)
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
+    }
     let unstitched_count = image_data.len() - stitched_images_info.len();
     if unstitched_count > 0 {
         let warning_msg = format!(
@@ -4456,6 +4539,29 @@ fn refine_homography_inliers(
         homography = processing::compute_homography(points)?;
     }
     Some(homography)
+}
+
+fn retain_model_inliers(
+    points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
+    transform: &Matrix3<f64>,
+    threshold: f64,
+    minimum_inliers: usize,
+) -> bool {
+    let Some(inverse) = transform.try_inverse() else {
+        return false;
+    };
+    let filtered = points
+        .iter()
+        .copied()
+        .filter(|(source, target)| {
+            symmetric_point_error(transform, &inverse, *source, *target) <= threshold
+        })
+        .collect::<Vec<_>>();
+    if filtered.len() < minimum_inliers {
+        return false;
+    }
+    *points = filtered;
+    true
 }
 
 fn symmetric_point_error(
@@ -5624,6 +5730,15 @@ fn focus_global_observations_with_mode(
         if source_index >= images.len() || target_index >= images.len() {
             continue;
         }
+        if image_pair_has_mixed_focal_lengths(&images[source_index], &images[target_index]) {
+            // Cross-module correspondences are still used to connect the
+            // 35mm/85mm capture groups and seed their initial homographies,
+            // but they are not allowed to drive the single-camera global pose
+            // solve. Their scale and lens distortion are different by design;
+            // forcing those residuals through one normalized pose is exactly
+            // what produces the very large mixed-stack optimizer steps.
+            continue;
+        }
         let selected_points = normalized_y_range
             .map(|range| {
                 if use_foreground_region_matches {
@@ -5948,6 +6063,18 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
     reference_index: usize,
 ) -> HashMap<usize, Matrix3<f64>> {
     if images.len() < 2 || reference_index >= images.len() {
+        return initial_homographies.clone();
+    }
+    if images_have_mixed_focal_lengths(images) {
+        // A mixed 35mm/85mm selection is connected by explicit cross-lens
+        // bridges, but it is not one camera model. Keep the verified path
+        // homographies as the global scaffold and let the scale-aware local
+        // mosaic refinement solve the remaining residual. Trying to fit both
+        // modules through one eight-parameter pose per image creates large
+        // cycle corrections and can bend otherwise sharp layers.
+        println!(
+            "  - Focus global registration skipped for mixed-focal stack; retaining verified path poses"
+        );
         return initial_homographies.clone();
     }
     let reference = &images[reference_index];
@@ -8517,19 +8644,62 @@ mod acceptance_tests {
                 ))
             });
         let canonical = crate::image_stack::canonicalize_image_stack_result(result.image);
-        crate::image_stack::write_srgb_tiff(&canonical, &output_path)
-            .expect("full-resolution color-managed TIFF result should be writable");
+        let preview_only = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_ONLY").is_some();
+        if !preview_only {
+            crate::image_stack::write_srgb_tiff(&canonical, &output_path)
+                .expect("full-resolution color-managed TIFF result should be writable");
+        }
         let preview = canonical.resize(1800, 1800, image::imageops::FilterType::Lanczos3);
         let preview_path = output_path.with_extension("preview.jpg");
         preview
             .save_with_format(&preview_path, ImageFormat::Jpeg)
             .expect("focus-stack preview should be writable");
+        if std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_CROPS").is_some() {
+            let (width, height) = canonical.dimensions();
+            let crop_width = (width / 3).max(1);
+            let crop_height = (height / 2).max(1);
+            for (name, x, y) in [
+                ("top-left", 0, 0),
+                ("top-center", width.saturating_sub(crop_width) / 2, 0),
+                ("top-right", width.saturating_sub(crop_width), 0),
+                ("bottom-left", 0, height.saturating_sub(crop_height)),
+                (
+                    "bottom-center",
+                    width.saturating_sub(crop_width) / 2,
+                    height.saturating_sub(crop_height),
+                ),
+                (
+                    "bottom-right",
+                    width.saturating_sub(crop_width),
+                    height.saturating_sub(crop_height),
+                ),
+            ] {
+                let crop = canonical
+                    .crop_imm(x, y, crop_width.min(width - x), crop_height.min(height - y))
+                    .resize(1800, 1800, image::imageops::FilterType::Lanczos3);
+                crop.save_with_format(
+                    output_path.with_file_name(format!(
+                        "{}.{}.jpg",
+                        output_path
+                            .file_stem()
+                            .and_then(|stem| stem.to_str())
+                            .unwrap_or("focus-stack"),
+                        name
+                    )),
+                    ImageFormat::Jpeg,
+                )
+                .expect("focus-stack crop preview should be writable");
+            }
+        }
         let app_jpeg_path = output_path.with_extension("app.jpg");
-        crate::image_stack::write_srgb_jpeg(&canonical, &app_jpeg_path)
-            .expect("full-resolution application JPEG should be writable");
+        if !preview_only {
+            crate::image_stack::write_srgb_jpeg(&canonical, &app_jpeg_path)
+                .expect("full-resolution application JPEG should be writable");
+        }
 
-        if let Some(reference_path) =
-            std::env::var_os("RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG").map(PathBuf::from)
+        if !preview_only
+            && let Some(reference_path) =
+                std::env::var_os("RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG").map(PathBuf::from)
         {
             let actual = fs::read(&app_jpeg_path)
                 .expect("read the full-resolution application JPEG for comparison");
