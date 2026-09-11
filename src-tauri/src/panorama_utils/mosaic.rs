@@ -13,11 +13,14 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, Runtime};
 
+#[cfg(test)]
+#[path = "mosaic_diagnostics.rs"]
+mod diagnostics;
+
 const ANALYSIS_LONG_SIDE: u32 = 1400;
-// A 320-cell ownership grid makes a 24k canvas seam about 75px wide. A
-// Chinese brush stroke can fit entirely inside that cell, so a locally
-// misregistered sharp tile becomes a rectangular double exposure. Keep the
-// ownership grid fine enough that seams can route around individual strokes.
+// Bound the grid per source layer, not by the full panorama width. At a
+// roughly 9504px layer footprint this yields approximately 19px cells, fine
+// enough for seams to route around individual strokes.
 const SELECTION_LONG_SIDE: u32 = 512;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
@@ -473,38 +476,90 @@ fn adjusted(pixel: Rgb<f32>, delta: [f64; 3]) -> Rgb<f32> {
     }))
 }
 
-// Native-output-pixel acutance, measured after a small binomial smoothing
-// kernel. A reduced thumbnail can make a blurred 200MP frame look just as
-// sharp as a telephoto detail tile, so ownership must inspect native samples.
+// Native focus evidence after a separable low-pass filter. Single-pixel
+// gradients confuse sensor grain with detail and miss faded coloured marks
+// whose luminance nearly matches the substrate. Keep luminance and two colour
+// differences, suppress pixel noise in both axes, then measure coherent edges.
 fn acutance(mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>, x: f64, y: f64) -> f64 {
-    let mut patch = [[0.0; 11]; 11];
+    let mut patch = [[[0.0; 3]; 13]; 13];
     for (j, row) in patch.iter_mut().enumerate() {
         for (i, value) in row.iter_mut().enumerate() {
-            let Some(p) = sample(x + i as f64 - 5.0, y + j as f64 - 5.0) else {
+            let Some(p) = sample(x + i as f64 - 6.0, y + j as f64 - 6.0) else {
                 return 0.0;
             };
-            *value = luma(p);
+            *value = [
+                luma(p),
+                f64::from(p[0] - p[1]) * 0.5,
+                f64::from(p[2] - p[1]) * 0.5,
+            ];
+        }
+    }
+    const KERNEL: [f64; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
+    let mut horizontal = [[[0.0; 3]; 9]; 13];
+    for y in 0..13 {
+        for x in 0..9 {
+            for c in 0..3 {
+                horizontal[y][x][c] = (0..5).map(|k| patch[y][x + k][c] * KERNEL[k]).sum();
+            }
+        }
+    }
+    let mut smooth = [[[0.0; 3]; 9]; 9];
+    for y in 0..9 {
+        for x in 0..9 {
+            for c in 0..3 {
+                smooth[y][x][c] = (0..5).map(|k| horizontal[y + k][x][c] * KERNEL[k]).sum();
+            }
         }
     }
     let mut energy = 0.0;
     let mut level = 0.0;
-    for y in 2..9 {
-        for x in 2..9 {
-            let dx = (patch[y - 1][x + 1] + 2.0 * patch[y][x + 1] + patch[y + 1][x + 1]
-                - patch[y - 1][x - 1]
-                - 2.0 * patch[y][x - 1]
-                - patch[y + 1][x - 1])
-                / 8.0;
-            let dy = (patch[y + 1][x - 1] + 2.0 * patch[y + 1][x] + patch[y + 1][x + 1]
-                - patch[y - 1][x - 1]
-                - 2.0 * patch[y - 1][x]
-                - patch[y - 1][x + 1])
-                / 8.0;
-            energy += dx * dx + dy * dy;
-            level += patch[y][x];
+    for y in 2..7 {
+        for x in 2..7 {
+            for c in 0..3 {
+                let dx = (smooth[y][x + 2][c] - smooth[y][x - 2][c]) * 0.25;
+                let dy = (smooth[y + 2][x][c] - smooth[y - 2][x][c]) * 0.25;
+                energy += dx * dx + dy * dy;
+            }
+            level += smooth[y][x][0];
         }
     }
-    (energy / 49.0).sqrt() / (level / 49.0).max(0.04)
+    (energy / 25.0).sqrt() / (level / 25.0).max(0.04)
+}
+
+/// Evaluate focus at several locations inside an ownership cell. The old
+/// single centre sample could land on quiet paper while the candidate held a
+/// sharp brush stroke a few pixels away. Average the two strongest spatial
+/// probes so sparse detail contributes; each probe filters pixel noise before
+/// measuring its edge response.
+fn cell_focus(
+    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+    cell_size: f64,
+) -> f64 {
+    let radius = (cell_size * 0.28).clamp(2.0, 18.0);
+    // Five probes cover the centre and all four corners. A stroke can cross
+    // any cell edge, so sampling only one diagonal can still land entirely
+    // on quiet paper and hide an in-focus candidate.
+    let offsets = [
+        (-radius, -radius),
+        (radius, -radius),
+        (0.0, 0.0),
+        (-radius, radius),
+        (radius, radius),
+    ];
+    let mut values = offsets
+        .iter()
+        .filter_map(|(dx, dy)| Some(acutance(&mut sample, x + dx, y + dy)))
+        .filter(|v| v.is_finite())
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(f64::total_cmp);
+    // Preserve sparse in-focus strokes even when other probes see only paper.
+    let first = values.len().saturating_sub(2);
+    (values[first] + values[first + 1.min(values.len() - 1)]) * 0.5
 }
 
 fn ownership_disagreement(
@@ -520,9 +575,11 @@ fn ownership_disagreement(
     // instead, and retain a high percentile so a displaced contour vetoes the
     // candidate even when most of the cell is quiet paper.
     const OFFSETS: [f64; 5] = [0.15, 0.325, 0.5, 0.675, 0.85];
-    let mut disagreements = Vec::with_capacity(OFFSETS.len() * OFFSETS.len());
-    for y_offset in OFFSETS {
-        for x_offset in OFFSETS {
+    let side = OFFSETS.len();
+    let mut samples = vec![None; side * side];
+    for (yi, y_offset) in OFFSETS.iter().copied().enumerate() {
+        for (xi, x_offset) in OFFSETS.iter().copied().enumerate() {
+            let sample_index = yi * side + xi;
             let sample_ax = ax + cell_size * x_offset;
             let sample_ay = ay + cell_size * y_offset;
             let lx = sample_ax * sampler.scale;
@@ -538,16 +595,57 @@ fn ownership_disagreement(
             let Some(base_pixel) = rgb_at(base, gx, gy) else {
                 continue;
             };
-            let disagreement = candidate
-                .0
+            let candidate = candidate.0.map(f64::from);
+            let base_pixel = base_pixel.0.map(f64::from);
+            if candidate
                 .iter()
-                .zip(base_pixel.0)
-                .map(|(a, b)| (*a - b).abs() as f64)
-                .sum::<f64>()
-                / 3.0;
-            if disagreement.is_finite() {
-                disagreements.push(disagreement);
+                .chain(base_pixel.iter())
+                .all(|v| v.is_finite())
+            {
+                samples[sample_index] = Some((candidate, base_pixel));
             }
+        }
+    }
+    if samples.is_empty() {
+        return 1.0;
+    }
+    // Compare low-pass colour evidence rather than individual high-frequency
+    // pixels. Defocus changes brush-edge samples substantially even when the
+    // geometry is correct; a displaced contour still changes the local mean
+    // over a 3×3 neighbourhood and remains penalised.
+    let side = side as isize;
+    let mut disagreements = Vec::with_capacity(samples.len());
+    for index in 0..samples.len() {
+        let row = index as isize / side;
+        let column = index as isize % side;
+        let mut candidate_sum = [0.0; 3];
+        let mut base_sum = [0.0; 3];
+        let mut count = 0.0;
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let y = row + dy;
+                let x = column + dx;
+                if y < 0 || x < 0 || y >= side || x >= side {
+                    continue;
+                }
+                let neighbour = y as usize * OFFSETS.len() + x as usize;
+                let Some(Some((candidate, base))) = samples.get(neighbour) else {
+                    continue;
+                };
+                for channel in 0..3 {
+                    candidate_sum[channel] += candidate[channel];
+                    base_sum[channel] += base[channel];
+                }
+                count += 1.0;
+            }
+        }
+        if count > 0.0 {
+            disagreements.push(
+                (0..3)
+                    .map(|channel| (candidate_sum[channel] - base_sum[channel]).abs() / count)
+                    .sum::<f64>()
+                    / 3.0,
+            );
         }
     }
     if disagreements.is_empty() {
@@ -572,12 +670,27 @@ fn ownership(
     height: u32,
 ) -> GrayImage {
     let size = (width.max(height) as f64 / SELECTION_LONG_SIDE as f64).max(1.0);
+    ownership_grid(base, base_mask, sampler, tone, width, height, size)
+}
+
+fn ownership_grid(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    width: u32,
+    height: u32,
+    size: f64,
+) -> GrayImage {
     let w = (width as f64 / size).ceil() as u32;
     let h = (height as f64 / size).ceil() as u32;
     let count = (w * h) as usize;
     let mut preference = vec![0.0f64; count];
     let mut disagreement = vec![0.0f64; count];
     let mut fixed = vec![0i8; count];
+    let mut energy_sum = 0.0;
+    let mut energy_count = 0usize;
+    let mut mismatch = vec![0.0f64; count];
     for y in 0..h {
         for x in 0..w {
             let i = (y * w + x) as usize;
@@ -608,48 +721,52 @@ fn ownership(
                 fixed[i] = -1;
                 continue;
             }
-            let base_focus = acutance(|x, y| rgb_at(base, x, y), gx, gy);
-            let candidate_focus = acutance(
+            let native_cell = size * sampler.scale;
+            let base_focus = cell_focus(
+                |x, y| rgb_at(base, x, y),
+                gx + native_cell * 0.5,
+                gy + native_cell * 0.5,
+                native_cell,
+            );
+            let candidate_focus = cell_focus(
                 |x, y| sampler.sample(x, y).map(|p| adjusted(p, tone.at(ax, ay))),
-                lx,
-                ly,
+                lx + native_cell * 0.5,
+                ly + native_cell * 0.5,
+                native_cell,
             );
             // Ties retain existing detail, making duplicate/identical frames
             // idempotent. Weak texture never wins solely from sensor noise.
-            preference[i] = ((candidate_focus + 0.002) / (base_focus + 0.002))
-                .ln()
-                .clamp(-2.0, 2.0)
-                - 0.06;
+            // Compare edge energy rather than per-cell log ratios. Defocus
+            // spreads a contour over more cells: ratios give its weak halo
+            // as many votes as a focused edge and can reject the sharp frame.
+            // Energy keeps quiet substrate votes small; the relative margin
+            // retains an existing source when its detail is equivalent.
+            preference[i] = candidate_focus.powi(2) - base_focus.powi(2) * 1.06;
+            energy_sum += (candidate_focus.powi(2) + base_focus.powi(2)) * 0.5;
+            energy_count += 1;
             disagreement[i] = ownership_disagreement(base, sampler, tone, ax, ay, size);
             // A sharp but displaced candidate can win the acutance test even
             // though it would put a second contour next to the existing
             // stroke. Penalise that candidate directly; otherwise the graph
             // cut can legally place a seam through the high-contrast subject
             // and leave a visible rectangular ghost.
-            preference[i] -= (disagreement[i] * OWNERSHIP_MISMATCH_PENALTY).min(1.0);
+            // Defocus changes high-frequency samples even when geometry is
+            // correct. When the candidate is demonstrably sharper, discount
+            // that photometric disagreement; a sharp source must be allowed
+            // to replace a soft source instead of being vetoed as a ghost.
+            let mismatch_scale = if candidate_focus > base_focus * 1.12 {
+                0.30
+            } else {
+                1.0
+            };
+            mismatch[i] = (disagreement[i] * OWNERSHIP_MISMATCH_PENALTY * mismatch_scale).min(1.0);
         }
     }
-    // Average evidence over neighbouring native patches, never image pixels.
-    let raw = preference.clone();
-    for y in 0..h as usize {
-        for x in 0..w as usize {
-            let i = y * w as usize + x;
-            if fixed[i] != 0 {
-                continue;
-            }
-            let mut sum = 0.0f64;
-            let mut total = 0.0f64;
-            for yy in y.saturating_sub(2)..=(y + 2).min(h as usize - 1) {
-                for xx in x.saturating_sub(2)..=(x + 2).min(w as usize - 1) {
-                    let j = yy * w as usize + xx;
-                    if fixed[j] == 0 {
-                        sum += raw[j];
-                        total += 1.0;
-                    }
-                }
-            }
-            preference[i] = sum / total.max(1.0);
-        }
+    // One shared scale preserves energy comparisons across the overlap. A
+    // cell-local denominator would again amplify weak paper/blur-halo votes.
+    let energy_scale = (energy_sum / energy_count.max(1) as f64).max(1e-6);
+    for i in 0..count {
+        preference[i] = (preference[i] / energy_scale).clamp(-12.0, 12.0) - mismatch[i];
     }
     // Solve the ownership globally so a seam can route around a contour and a
     // contained frame can be admitted without a block-shaped boundary.
@@ -745,6 +862,8 @@ where
             Field::new(aw, ah, 56.0)
         };
         let decision = ownership(&result, &mask, &sampler, &tone, aw, ah);
+        #[cfg(test)]
+        diagnostics::capture_layer(index, &sampler, &tone, &decision, aw, ah);
         let stride = width as usize * 3;
         result
             .as_mut()
@@ -782,6 +901,8 @@ where
     // An unsupported canvas margin is not photographic detail. Export only an
     // entirely covered rectangle; do not hide holes with stretched/reflected
     // source pixels, which looks like an unfused blur at the image boundary.
+    #[cfg(test)]
+    diagnostics::capture_crop(&mask);
     let output = crop_to_valid_rectangle(result, &mask);
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
@@ -822,6 +943,136 @@ mod tests {
                 + 0.03 * ((x + y) as f32 * 0.19).sin();
             Rgb([value * 1.1, value, value * 0.8])
         })
+    }
+
+    fn noisy_colour_stroke_pair() -> (Rgb32FImage, Rgb32FImage) {
+        let sharp = Rgb32FImage::from_fn(192, 160, |x, y| {
+            let stroke = (x as i32 - 96).abs() <= 3 && (20..140).contains(&y);
+            // A faded red mark can have almost the same luminance as its
+            // brown substrate; colour edges still carry genuine focus.
+            if stroke {
+                Rgb([0.46, 0.31, 0.27])
+            } else {
+                Rgb([0.40, 0.34, 0.27])
+            }
+        });
+        let blurred = image::imageops::blur(&sharp, 3.2);
+        let noisy = |im: &Rgb32FImage, amplitude: f32| {
+            Rgb32FImage::from_fn(im.width(), im.height(), |x, y| {
+                let hash = x.wrapping_mul(0x9e3779b9) ^ y.wrapping_mul(0x85ebca6b);
+                let hash = (hash ^ (hash >> 16)).wrapping_mul(0x7feb352d);
+                let noise = ((hash & 65535) as f32 / 65535.0 - 0.5) * amplitude;
+                Rgb(im.get_pixel(x, y).0.map(|v| (v + noise).clamp(0.0, 1.0)))
+            })
+        };
+        (noisy(&sharp, 0.020), noisy(&blurred, 0.080))
+    }
+
+    #[test]
+    fn sensor_noise_cannot_hide_a_sharper_faint_colour_stroke() {
+        let (sharp, noisy_blur) = noisy_colour_stroke_pair();
+        let info = image_info(1, &sharp);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(192, 160, 48.0),
+        };
+        let mask = GrayImage::from_pixel(192, 160, Luma([255]));
+        let chosen = ownership(
+            &noisy_blur,
+            &mask,
+            &sampler,
+            &Field::new(192, 160, 56.0),
+            192,
+            160,
+        );
+        let selected = (30..130)
+            .filter(|&y| chosen.get_pixel(96, y)[0] > 0)
+            .count();
+        assert!(
+            selected >= 90,
+            "faint focused colour must beat noisy defocus ({selected}/100)"
+        );
+    }
+
+    #[test]
+    fn extra_sensor_noise_cannot_reclaim_an_already_focused_stroke() {
+        let (sharp, noisy_blur) = noisy_colour_stroke_pair();
+        let info = image_info(1, &noisy_blur);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &noisy_blur,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(192, 160, 48.0),
+        };
+        let mask = GrayImage::from_pixel(192, 160, Luma([255]));
+        let chosen = ownership(
+            &sharp,
+            &mask,
+            &sampler,
+            &Field::new(192, 160, 56.0),
+            192,
+            160,
+        );
+        let selected = (30..130)
+            .filter(|&y| chosen.get_pixel(96, y)[0] > 0)
+            .count();
+        assert_eq!(
+            selected, 0,
+            "noisy defocus must not overwrite the focused stroke"
+        );
+    }
+
+    #[test]
+    fn diffuse_halo_cannot_outvote_a_narrow_focused_contour() {
+        let sharp = Rgb32FImage::from_fn(192, 160, |x, y| {
+            let line = (x as i32 - 96).abs() <= 1 && (20..140).contains(&y);
+            let paper = 0.40 + 0.003 * (x as f32 * 0.17).sin();
+            let value = if line { 0.28 } else { paper };
+            Rgb([value, value * 0.9, value * 0.8])
+        });
+        let base = image::imageops::blur(&sharp, 5.0);
+        let info = image_info(1, &sharp);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(192, 160, 48.0),
+        };
+        let chosen = ownership(
+            &base,
+            &GrayImage::from_pixel(192, 160, Luma([255])),
+            &sampler,
+            &Field::new(192, 160, 56.0),
+            192,
+            160,
+        );
+        let selected = (30..130)
+            .filter(|&y| chosen.get_pixel(96, y)[0] > 0)
+            .count();
+        assert!(
+            selected >= 90,
+            "focused contour lost to its spread halo: {selected}/100"
+        );
     }
 
     #[test]
@@ -903,6 +1154,187 @@ mod tests {
             .filter(|&(x, y)| selected.get_pixel(x, y)[0] != 0)
             .count();
         assert_eq!(switched, 0);
+    }
+
+    #[test]
+    fn sparse_in_focus_stroke_is_not_lost_to_cell_background() {
+        let sharp = Rgb32FImage::from_fn(160, 120, |x, y| {
+            let line = (x as i32 - 80).unsigned_abs() <= 1 && (12..108).contains(&y);
+            let value = if line { 0.04 } else { 0.42 };
+            Rgb([value, value, value])
+        });
+        let base = image::imageops::blur(&sharp, 3.0);
+        let info = image_info(1, &sharp);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(160, 120, 48.0),
+        };
+        let mask = GrayImage::from_pixel(160, 120, Luma([255]));
+        let selected = ownership(
+            &base,
+            &mask,
+            &sampler,
+            &Field::new(160, 120, 56.0),
+            160,
+            120,
+        );
+        let selected_on_stroke = (12..108)
+            .filter(|&y| selected.get_pixel(80, y)[0] != 0)
+            .count();
+        assert!(
+            selected_on_stroke > 70,
+            "a sparse sharp stroke must own its pixels ({selected_on_stroke}/96)"
+        );
+    }
+
+    #[test]
+    fn disagreement_is_lower_for_aligned_defocus_than_for_shifted_detail() {
+        let sharp = Rgb32FImage::from_fn(160, 120, |x, y| {
+            let value = 0.35 + 0.22 * (x as f32 * 0.37).sin() + 0.16 * (y as f32 * 0.29).cos();
+            Rgb([value, value * 0.9, value * 0.75])
+        });
+        let base = image::imageops::blur(&sharp, 2.5);
+        let info = image_info(1, &sharp);
+        let tone = Field::new(160, 120, 56.0);
+        let aligned = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(160, 120, 48.0),
+        };
+        let aligned_error = ownership_disagreement(&base, &aligned, &tone, 32.0, 32.0, 40.0);
+        let shifted = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::new(1.0, 0.0, 4.0, 0.0, 1.0, -3.0, 0.0, 0.0, 1.0),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(160, 120, 48.0),
+        };
+        let shifted_error = ownership_disagreement(&base, &shifted, &tone, 32.0, 32.0, 40.0);
+        assert!(
+            aligned_error < shifted_error,
+            "local averaging should preserve geometric mismatch signal: {aligned_error} vs {shifted_error}"
+        );
+    }
+
+    #[test]
+    fn invalid_sample_gap_cannot_cancel_disconnected_colour_mismatches() {
+        let base = Rgb32FImage::from_pixel(100, 100, Rgb([0.5; 3]));
+        let source = Rgb32FImage::from_fn(100, 100, |x, _| {
+            // Invalid samples must retain their positions. If the valid
+            // samples are packed into a smaller grid, these separated light
+            // and dark strips become neighbours and falsely cancel out.
+            let value = if x < 30 {
+                0.8
+            } else if x > 60 {
+                0.2
+            } else {
+                f32::NAN
+            };
+            Rgb([value; 3])
+        });
+        let info = image_info(1, &source);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &source,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(100, 100, 48.0),
+        };
+        let error =
+            ownership_disagreement(&base, &sampler, &Field::new(100, 100, 56.0), 0.0, 0.0, 80.0);
+        assert!(
+            (error - 0.3).abs() < 1e-6,
+            "missing samples must not hide a real colour mismatch: {error}"
+        );
+    }
+
+    #[test]
+    fn fully_invalid_overlap_is_not_treated_as_an_aligned_match() {
+        let source = Rgb32FImage::from_pixel(32, 32, Rgb([0.5; 3]));
+        let info = image_info(1, &source);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &source,
+            source_divisor: 1.0,
+            inverse: Matrix3::new(1.0, 0.0, 64.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(32, 32, 48.0),
+        };
+        assert_eq!(
+            ownership_disagreement(&source, &sampler, &Field::new(32, 32, 56.0), 0.0, 0.0, 24.0,),
+            1.0,
+            "absence of common samples must not remove the mismatch penalty"
+        );
+    }
+
+    #[test]
+    fn scaled_sparse_detail_is_sampled_at_the_native_cell_centre() {
+        let sharp = Rgb32FImage::from_fn(3_200, 1_600, |x, _| {
+            let value = if (x as i32 - 84).unsigned_abs() <= 2 {
+                0.04
+            } else {
+                0.42
+            };
+            Rgb([value; 3])
+        });
+        let base = image::imageops::blur(&sharp, 4.0);
+        let info = image_info(1, &sharp);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 8.0,
+            residual: Field::new(400, 200, 48.0),
+        };
+        let selected = ownership(
+            &base,
+            &GrayImage::from_pixel(3_200, 1_600, Luma([255])),
+            &sampler,
+            &Field::new(400, 200, 56.0),
+            400,
+            200,
+        );
+        let selected_on_stroke = (20..180)
+            .filter(|&y| selected.get_pixel(10, y)[0] != 0)
+            .count();
+        assert!(
+            selected_on_stroke > 100,
+            "a native sharp stroke at a scaled cell centre must own its detail ({selected_on_stroke}/160)"
+        );
     }
 
     #[test]

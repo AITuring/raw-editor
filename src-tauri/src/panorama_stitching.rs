@@ -38,6 +38,12 @@ const FOCUS_MATCH_REFINE_SEARCH_RADIUS: i32 = 24;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
 const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
+// A handheld angle change over a planar artwork can leave a real projective
+// residual even when the optical centre barely moves.  Do not force that
+// residual through an affine model: the resulting edge error is large enough
+// to make every focus layer look soft.  Requiring broad support keeps a small
+// repeated stroke from enabling a projective warp by itself.
+const FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT: f64 = 0.22;
 const FOCUS_LOCAL_MODEL_MIN_INLIERS: usize = 6;
 const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
 const FOCUS_GLOBAL_MAX_POINTS_PER_EDGE: usize = 256;
@@ -3531,6 +3537,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     if full_canvas_width == 0 || full_canvas_height == 0 {
         return Err("The aligned panorama canvas is empty or invalid.".to_string());
     }
+    // The acceptance harness can persist the expensive alignment result for
+    // offline ROI diagnostics.  This is compiled only into test binaries so
+    // the production path has no environment-controlled behavior.
+    #[cfg(test)]
+    if let Some(cache_path) = std::env::var_os("RAW_EDITOR_STACK_ALIGNMENT_CACHE") {
+        write_alignment_cache(
+            Path::new(&cache_path),
+            &image_data,
+            &ordered_indices,
+            &global_homographies,
+            focus_layer_warp.as_ref(),
+            projection,
+            full_canvas_width,
+            full_canvas_height,
+        )?;
+    }
     let render_scale = if blend_mode == BlendMode::Panorama {
         memory_safe_panorama_render_scale(full_canvas_width, full_canvas_height)
     } else {
@@ -3618,6 +3640,119 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         render_scale,
         ordered_paths,
     })
+}
+
+/// Persist the geometry needed to inspect a real focus stack without paying
+/// the feature matching cost again.  The cache intentionally contains source
+/// paths and dimensions alongside every matrix so it cannot silently be
+/// applied to a different selection.  This helper is test-only; normal builds
+/// never read an environment variable or write this file.
+#[cfg(test)]
+fn write_alignment_cache(
+    path: &Path,
+    images: &[ImageInfo],
+    ordered_indices: &[usize],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    focus_layer_warp: Option<&FocusLayerWarp>,
+    projection: Projection,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<(), String> {
+    fn matrix_values(matrix: &Matrix3<f64>) -> [f64; 9] {
+        [
+            matrix[(0, 0)],
+            matrix[(0, 1)],
+            matrix[(0, 2)],
+            matrix[(1, 0)],
+            matrix[(1, 1)],
+            matrix[(1, 2)],
+            matrix[(2, 0)],
+            matrix[(2, 1)],
+            matrix[(2, 2)],
+        ]
+    }
+
+    let source_records = images
+        .iter()
+        .map(|image| {
+            serde_json::json!({
+                "id": image.id,
+                "filename": image.filename,
+                "width": image.width,
+                "height": image.height,
+                "scale_factor": image.scale_factor,
+                "focal_length_35mm": image.focal_length_35mm,
+            })
+        })
+        .collect::<Vec<_>>();
+    let homographies = global_homographies
+        .iter()
+        .map(|(id, matrix)| (id.to_string(), serde_json::json!(matrix_values(matrix))))
+        .collect::<serde_json::Map<_, _>>();
+    let focus_bands = focus_layer_warp.map(|warp| {
+        warp.bands
+            .iter()
+            .map(|band| {
+                let homographies = band
+                    .homographies
+                    .iter()
+                    .map(|(id, matrix)| (id.to_string(), serde_json::json!(matrix_values(matrix))))
+                    .collect::<serde_json::Map<_, _>>();
+                let source_ranges = band
+                    .source_ranges
+                    .iter()
+                    .map(|(id, (start, end))| (id.to_string(), serde_json::json!([start, end])))
+                    .collect::<serde_json::Map<_, _>>();
+                let source_x_ranges = band
+                    .source_x_ranges
+                    .iter()
+                    .map(|(id, (start, end))| (id.to_string(), serde_json::json!([start, end])))
+                    .collect::<serde_json::Map<_, _>>();
+                serde_json::json!({
+                    "homographies": homographies,
+                    "source_ranges": source_ranges,
+                    "source_x_ranges": source_x_ranges,
+                    "relax_foreground_seam": band.relax_foreground_seam,
+                    "foreground_only": band.foreground_only,
+                    "physical_edge": band.physical_edge,
+                })
+            })
+            .collect::<Vec<_>>()
+    });
+    let projection_name = match projection {
+        Projection::Planar => "planar",
+        Projection::Cylindrical => "cylindrical",
+        Projection::Spherical => "spherical",
+    };
+    let cache = serde_json::json!({
+        "schema": 1,
+        "projection": projection_name,
+        "canvas": { "width": canvas_width, "height": canvas_height },
+        "sources": source_records,
+        "ordered_ids": ordered_indices.iter().map(|id| *id).collect::<Vec<_>>(),
+        "global_homographies": homographies,
+        "focus_warp": focus_bands,
+    });
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create alignment cache directory: {error}"))?;
+    }
+    let bytes = serde_json::to_vec_pretty(&cache)
+        .map_err(|error| format!("Failed to encode alignment cache: {error}"))?;
+    std::fs::write(path, bytes).map_err(|error| {
+        format!(
+            "Failed to write alignment cache {}: {error}",
+            path.display()
+        )
+    })?;
+    println!(
+        "Alignment cache written: {} ({} source poses, canvas {}x{})",
+        path.display(),
+        images.len(),
+        canvas_width,
+        canvas_height
+    );
+    Ok(())
 }
 
 fn is_generated_stitch_output(path: &str) -> bool {
@@ -4049,12 +4184,17 @@ fn select_focus_stack_transform(
         alignment_mode,
         AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
     );
-    // A moving focus stack is also a planar scan/mosaic. Auto may use the
-    // projective fit for that case, while a genuinely fixed-camera stack keeps
-    // the lower-DOF model that is safer against defocus-driven false matches.
-    let allow_projective = explicit_projective || shifted_mosaic;
+    // A moving focus stack is also a planar scan/mosaic. Handheld captures of
+    // a flat artwork can, however, have a meaningful perspective residual even
+    // when the camera centre hardly moves. In Auto mode allow that model when
+    // the observations cover a broad area of both frames; compact repeated
+    // strokes still stay on the lower-DOF model to avoid false bends.
+    let broad_support = panorama_spatial_support(points, source_dimensions, source_dimensions)
+        >= FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT;
+    let allow_projective = explicit_projective || shifted_mosaic || broad_support;
     if allow_projective
         && stable_transform(projective)
+        && projective_error <= FOCUS_MODEL_INLIER_THRESHOLD * 0.5
         && projective_error + 0.15 < selected.median_error
         && projective_error <= selected.median_error * 0.80
     {
@@ -7586,6 +7726,56 @@ mod alignment_tests {
     }
 
     #[test]
+    fn focus_alignment_auto_accepts_broad_handheld_perspective() {
+        // A small planar tilt is common when a focus stack is shot by hand.
+        // The projective residual is real even though the camera centre does
+        // not move enough to classify the stack as a shifted mosaic.
+        let expected = Matrix3::new(
+            1.0, 0.002, 3.0, -0.001, 1.0, -2.0, 0.000_018, -0.000_012, 1.0,
+        );
+        let points = (0..6)
+            .flat_map(|row| {
+                (0..7).map(move |column| {
+                    let source =
+                        Point2::new(70.0 + column as f64 * 140.0, 60.0 + row as f64 * 110.0);
+                    (source, transformed_point(&expected, source).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        let projective = processing::compute_homography(&points).unwrap();
+        let selected =
+            select_focus_stack_transform(&projective, &points, (1_000, 800), AlignmentMode::Auto);
+        let error = median_symmetric_error(&selected, &points);
+        assert!(error < 0.05, "selected model error={error}");
+        assert!(selected[(2, 0)].abs() > 1e-6 || selected[(2, 1)].abs() > 1e-6);
+    }
+
+    #[test]
+    fn focus_alignment_auto_rejects_compact_projective_stroke_support() {
+        // Four or five keypoints on one repeated calligraphic stroke can fit a
+        // projective model by accident.  The broad support gate must keep that
+        // local warp from bending the whole focus layer.
+        let expected = Matrix3::new(1.0, 0.003, 0.0, -0.002, 1.0, 0.0, 0.000_12, -0.000_09, 1.0);
+        let points = (0..3)
+            .flat_map(|row| {
+                (0..4).map(move |column| {
+                    let source =
+                        Point2::new(470.0 + column as f64 * 18.0, 370.0 + row as f64 * 16.0);
+                    (source, transformed_point(&expected, source).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        let projective = processing::compute_homography(&points).unwrap();
+        let selected =
+            select_focus_stack_transform(&projective, &points, (1_000, 800), AlignmentMode::Auto);
+        assert!(
+            selected[(2, 0)].abs() < 1e-8 && selected[(2, 1)].abs() < 1e-8,
+            "compact support unexpectedly selected projective model: {:?}",
+            selected
+        );
+    }
+
+    #[test]
     fn mixed_focal_registration_rejects_a_repeated_texture_bridge() {
         let identity = Matrix3::identity();
         assert!(!mixed_focal_scale_is_plausible(&identity, 35.0, 85.0));
@@ -8959,6 +9149,65 @@ mod acceptance_tests {
             output_path.display(),
             app_jpeg_path.display(),
             preview_path.display()
+        );
+    }
+
+    #[test]
+    #[ignore = "reads an alignment cache emitted by real_focus_stack_fixture_from_env"]
+    fn real_focus_stack_alignment_cache_contract() {
+        let cache_path = std::env::var_os("RAW_EDITOR_STACK_ALIGNMENT_CACHE")
+            .map(PathBuf::from)
+            .expect("RAW_EDITOR_STACK_ALIGNMENT_CACHE must point to an alignment cache");
+        let bytes = fs::read(&cache_path).expect("alignment cache should be readable");
+        let cache: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("alignment cache should be valid JSON");
+        assert_eq!(
+            cache.get("schema").and_then(|value| value.as_u64()),
+            Some(1)
+        );
+        let sources = cache
+            .get("sources")
+            .and_then(|value| value.as_array())
+            .expect("alignment cache should contain source records");
+        assert!(sources.len() >= 2, "alignment cache should contain a stack");
+        let homographies = cache
+            .get("global_homographies")
+            .and_then(|value| value.as_object())
+            .expect("alignment cache should contain global homographies");
+        for source in sources {
+            let id = source
+                .get("id")
+                .and_then(|value| value.as_u64())
+                .expect("source record should have an id");
+            let matrix = homographies
+                .get(&id.to_string())
+                .and_then(|value| value.as_array())
+                .expect("every source should have a global homography");
+            assert_eq!(matrix.len(), 9, "homography {id} should have nine values");
+        }
+        let canvas = cache
+            .get("canvas")
+            .and_then(|value| value.as_object())
+            .expect("alignment cache should contain canvas dimensions");
+        assert!(
+            canvas
+                .get("width")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0)
+                > 0
+        );
+        assert!(
+            canvas
+                .get("height")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0)
+                > 0
+        );
+        println!(
+            "alignment cache contract passed: {} sources, {} bytes, {}",
+            sources.len(),
+            bytes.len(),
+            cache_path.display()
         );
     }
 }
