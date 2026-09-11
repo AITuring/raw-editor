@@ -865,6 +865,12 @@ where
         #[cfg(test)]
         diagnostics::capture_layer(index, &sampler, &tone, &decision, aw, ah);
         let stride = width as usize * 3;
+        // Render only ownership cells assigned to this layer. The previous
+        // scan visited every pixel in the projected rectangle even when the
+        // graph cut had already rejected most of those cells. On large
+        // 31k×11k stacks that redundant decision check dominated runtime.
+        let decision_width = decision.width();
+        let decision_height = decision.height();
         result
             .as_mut()
             .par_chunks_mut(stride)
@@ -876,21 +882,31 @@ where
                 let ly = (y - top as usize) as f64;
                 let ay = ly / scale;
                 let dy =
-                    ((ay / ah as f64 * decision.height() as f64) as u32).min(decision.height() - 1);
-                for x in left..=right {
-                    let lx = (x - left) as f64;
-                    let ax = lx / scale;
-                    let dx = ((ax / aw as f64 * decision.width() as f64) as u32)
-                        .min(decision.width() - 1);
-                    if covered[x as usize] != 0 && decision.get_pixel(dx, dy)[0] == 0 {
+                    ((ay / ah as f64 * decision_height as f64) as u32).min(decision_height - 1);
+                for dx in 0..decision_width {
+                    if decision.get_pixel(dx, dy)[0] == 0 {
                         continue;
                     }
-                    let Some(pixel) = sampler.sample(lx, ly) else {
-                        continue;
-                    };
-                    let pixel = adjusted(pixel, tone.at(ax, ay));
-                    row[x as usize * 3..x as usize * 3 + 3].copy_from_slice(&pixel.0);
-                    covered[x as usize] = 255;
+                    // These bounds are the inverse of the decision lookup
+                    // above. Adjacent cells meet without leaving a pixel
+                    // gap, while rejected cells are never sampled.
+                    let cell_start =
+                        (dx as f64 * aw as f64 / decision_width as f64 * scale).ceil() as u32;
+                    let cell_end = (((dx + 1) as f64 * aw as f64 / decision_width as f64 * scale)
+                        .ceil() as u32)
+                        .min(layer_width);
+                    let x_start = left + cell_start.min(layer_width);
+                    let x_end = left + cell_end;
+                    for x in x_start..x_end {
+                        let lx = (x - left) as f64;
+                        let ax = lx / scale;
+                        let Some(pixel) = sampler.sample(lx, ly) else {
+                            continue;
+                        };
+                        let pixel = adjusted(pixel, tone.at(ax, ay));
+                        row[x as usize * 3..x as usize * 3 + 3].copy_from_slice(&pixel.0);
+                        covered[x as usize] = 255;
+                    }
                 }
             });
     }
