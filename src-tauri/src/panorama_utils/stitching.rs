@@ -16,12 +16,61 @@ const PANORAMA_GLOBAL_TONE_FIRST_BAND: usize = 5;
 // seal edges. The final canvas may be much wider than one source frame, so the
 // analysis scale is still bounded by the per-source dimension in
 // `focus_analysis_dimensions`.
-const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 2048;
-const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 24_000_000;
+// A 2048px analysis side is too coarse for the thin calligraphy in a 9504px
+// camera frame: one ownership cell spans roughly 4.6 source pixels and can
+// replace the middle of a stroke with paper. Keep the analysis bounded, but
+// retain enough source detail for fine-ink ownership decisions.
+const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 3072;
+const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 40_000_000;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
 const FOCUS_EDGE_PROTECTION_AT_1024: f32 = 12.0;
 const FOCUS_EDGE_CLAIM_THRESHOLD: f32 = 0.08;
+// A residual registration error can move a narrow ink stroke by one or two
+// output pixels.  The ordinary content-loss guard catches the paper side of
+// that move, but the displaced ink side can still be selected and becomes a
+// second, hairline contour.  Keep this radius small enough that neighbouring
+// characters remain independently selectable.
+const FOCUS_DISPLACED_CONTENT_RADIUS: i32 = 3;
+// If both aligned samples contain the same ink, a tiny sharpness/luminance
+// fluctuation must not make ownership alternate across the stroke. Require a
+// clear darker candidate before allowing that last-mile replacement; a real
+// focus improvement normally has a much larger centre-ink contrast than the
+// registration noise this guard is meant to reject.
+const FOCUS_CONTENT_DECISIVE_LUMA_ADVANTAGE: f32 = 0.035;
+// A sharp ink centre can be displaced from a lifted/defocused base centre by
+// a pixel or two. Allow that candidate to replace the nearby weak stroke only
+// when its local ink is materially darker; equal-dark candidates remain
+// protected as possible duplicate contours.
+const FOCUS_INK_RECOVERY_LUMA_ADVANTAGE: f32 = 0.045;
+// Ink promotion is a native-resolution recovery path, so contrast alone is
+// not enough: a defocused dark halo can also be darker than paper. Require a
+// measurable local focus response and a margin over the already selected
+// canvas before giving a previously rejected pixel to the candidate.
+const FOCUS_INK_PROMOTION_MIN_DETAIL: f32 = 0.055;
+const FOCUS_INK_PROMOTION_DETAIL_ADVANTAGE: f32 = 0.012;
+// The analysis decision is intentionally coarse, but it must not be allowed
+// to replace an already selected ink pixel with a lower-detail native sample
+// merely because that sample is a little darker. This margin is measured on
+// the full-resolution rendered layers.
+const FOCUS_NATIVE_DETAIL_VETO_MARGIN: f32 = 0.012;
+const FOCUS_NATIVE_DETAIL_RECOVERY_MARGIN: f32 = 0.020;
+const FOCUS_NATIVE_PATCH_ADVANTAGE_MARGIN: f32 = 0.018;
+// A gray anti-aliased ink edge can be too light for the strict dark guard but
+// still be damaged by the final low-frequency tone pass. Use a cheaper native
+// edge test for that last pass; it is intentionally separate from the content
+// ownership guard so it cannot make a soft paper texture win focus ownership.
+const FOCUS_INK_PROTECTION_MIN_DETAIL: f32 = 0.035;
+const FOCUS_INK_PROMOTION_BASE_LUMA_ADVANTAGE: f32 = 0.025;
+// Keep the native ownership of one selected stroke locally coherent. The
+// analysis canvas is intentionally bounded, so a single source decision cell
+// can otherwise split a 1--3px ink edge between the candidate and the paper.
+const FOCUS_NATIVE_INK_COHERENCE_RADIUS: usize = 2;
+// A native recovery candidate must belong to a small, connected ink patch.
+// This prevents a single interpolated hairline (or a paper weave spike) from
+// being promoted just because it happens to be darker than the current base.
+const FOCUS_NATIVE_INK_RECOVERY_RADIUS: i32 = 2;
+const FOCUS_NATIVE_INK_RECOVERY_MIN_SUPPORT: usize = 3;
 // The analysis canvas is still sampled from the native frame (roughly 4-5
 // source pixels per analysis pixel for the Lanting fixture). Keep the focus
 // metric local at that scale: a large blur makes a sharp character claim its
@@ -35,7 +84,7 @@ const FOCUS_EDGE_PROTECTION_SCALE: f32 = 0.35;
 // The broad tone transition is limited to the canvas-only low-frequency mask
 // below. Keep enough room for a source-sized exposure step to meet smoothly,
 // while all foreground pixels and all detail bands remain source-selected.
-const FOCUS_SEAM_BLEND_RADIUS: usize = 512;
+const FOCUS_SEAM_BLEND_RADIUS: usize = 2_048;
 const FOCUS_FOREGROUND_HARD_EDGE_RADIUS_AT_2400: f32 = 8.0;
 const FOCUS_SEAM_TONE_MIN_SAMPLES: usize = 128;
 const FOCUS_SEAM_TONE_MAX_ADJUSTMENT: f32 = 0.075;
@@ -54,7 +103,7 @@ const FOCUS_COLOR_MAX_RELAXED_LUMA: f32 = 0.995;
 // foreground pixels after reconstruction; the visible detail bands stay on a
 // single source. This lets a shifted scan remove exposure blocks without
 // turning a displaced brush stroke into a double contour.
-const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = false;
+const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = true;
 // Correct broad local illumination differences without allowing individual
 // brush strokes or the canvas weave to become a colour reference. The field is
 // sampled in candidate-image space, then interpolated while the layer is
@@ -102,6 +151,22 @@ const FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN: f64 = 0.025;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY: f64 = 0.008;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_PATCHES: usize = 4;
 const FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION: f64 = 0.25;
+// A shifted mosaic has a different panorama region in each source frame, so
+// the general full-resolution gradient matcher can be distracted by ink,
+// seals, or a repeated holder edge. This matcher is intentionally narrower:
+// it correlates only the paper/canvas texture, and only accepts a translation
+// when several independent patches agree. It is a residual correction for the
+// last few pixels, not a replacement for the image-backed homography.
+const FOCUS_CANVAS_RESIDUAL_PATCH_RADIUS: i32 = 16;
+const FOCUS_CANVAS_RESIDUAL_MAX_SHIFT: i32 = 8;
+const FOCUS_CANVAS_RESIDUAL_GRID_SIZE: i32 = 4;
+const FOCUS_CANVAS_RESIDUAL_SAMPLE_STEP: i32 = 2;
+const FOCUS_CANVAS_RESIDUAL_MIN_NCC: f64 = 0.60;
+const FOCUS_CANVAS_RESIDUAL_MIN_MARGIN: f64 = 0.018;
+const FOCUS_CANVAS_RESIDUAL_MIN_ENERGY: f64 = 0.004;
+const FOCUS_CANVAS_RESIDUAL_MIN_PATCHES: usize = 5;
+const FOCUS_CANVAS_RESIDUAL_MIN_SUBPIXEL_SHIFT: f64 = 0.10;
+const FOCUS_CANVAS_RESIDUAL_MAX_PATCH_RADIUS: i32 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -1227,6 +1292,537 @@ fn focus_stack_pixel_is_tone_foreground(pixel: &[f32]) -> bool {
     red_paint || green_or_cool_paint || dark_neutral_paint || warm_light_paint || pale_paint
 }
 
+fn focus_stack_pixel_is_dark_structure(pixel: &[f32]) -> bool {
+    if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
+        return false;
+    }
+    let red = pixel[0].clamp(0.0, 1.0);
+    let green = pixel[1].clamp(0.0, 1.0);
+    let blue = pixel[2].clamp(0.0, 1.0);
+    let luma = red * 0.299 + green * 0.587 + blue * 0.114;
+    let chroma = red.max(green).max(blue) - red.min(green).min(blue);
+    // Ink can be lifted by exposure and still remain a neutral dark stroke.
+    // Keep this guard separate from the broad tone-foreground classifier: it
+    // is used only when deciding whether a candidate may erase existing
+    // content, so a darker paper shadow cannot become a colour-reference mask.
+    luma <= 0.28 && chroma <= 0.13 && (red - green).abs() <= 0.09 && (green - blue).abs() <= 0.09
+}
+
+fn focus_stack_pixel_luminance(pixel: &[f32]) -> Option<f32> {
+    if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    Some(
+        pixel[0].clamp(0.0, 1.0) * 0.299
+            + pixel[1].clamp(0.0, 1.0) * 0.587
+            + pixel[2].clamp(0.0, 1.0) * 0.114,
+    )
+}
+
+fn focus_stack_pixel_is_neutral_ink(pixel: &[f32]) -> bool {
+    let Some(luma) = focus_stack_pixel_luminance(pixel) else {
+        return false;
+    };
+    let red = pixel[0].clamp(0.0, 1.0);
+    let green = pixel[1].clamp(0.0, 1.0);
+    let blue = pixel[2].clamp(0.0, 1.0);
+    let chroma = red.max(green).max(blue) - red.min(green).min(blue);
+    // A warped/interpolated ink pixel can be much lighter than the solid
+    // centre of the stroke. Keep this separate from the strict dark guard so
+    // it is only used together with local contrast, never as a colour mask.
+    luma <= 0.46 && chroma <= 0.18 && (red - green).abs() <= 0.12 && (green - blue).abs() <= 0.12
+}
+
+fn focus_stack_pixel_is_probable_ink(pixel: &[f32]) -> bool {
+    // The brown artwork support is close enough to neutral to pass the broad
+    // ink gate. It is still paper, though, and must not be protected from the
+    // low-frequency exposure match. Keep the broad neutral test for lifted
+    // gray strokes, then remove pixels that have the characteristic warm-paper
+    // ordering. Solid dark ink is accepted independently because it can be
+    // nearly achromatic after the source has been corrected.
+    focus_stack_pixel_is_dark_structure(pixel)
+        || (focus_stack_pixel_is_neutral_ink(pixel) && !focus_stack_pixel_is_canvas_like(pixel))
+}
+
+fn focus_stack_image_pixel_has_ink_contrast(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_neutral_ink(center.0.as_slice()) {
+        return false;
+    }
+    // A canvas pixel is by far the common case in a long scan. Do not spend a
+    // neighbourhood scan treating its ordinary weave as possible ink; the
+    // dedicated native edge classifier still handles a genuinely lifted gray
+    // stroke when it is needed for final protection.
+    if focus_stack_pixel_is_canvas_like(center.0.as_slice()) {
+        return false;
+    }
+    if focus_stack_pixel_is_dark_structure(center.0.as_slice()) {
+        return true;
+    }
+    let Some(center_luma) = focus_stack_pixel_luminance(center.0.as_slice()) else {
+        return false;
+    };
+    let mut brighter_neighbors = 0usize;
+    let mut neighbor_count = 0usize;
+    let mut neighbor_sum = 0.0f32;
+    for offset_y in -2i32..=2 {
+        for offset_x in -2i32..=2 {
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+            let neighbor_x = x as i32 + offset_x;
+            let neighbor_y = y as i32 + offset_y;
+            if neighbor_x < 0
+                || neighbor_y < 0
+                || neighbor_x >= width as i32
+                || neighbor_y >= height as i32
+            {
+                continue;
+            }
+            let neighbor = image.get_pixel(neighbor_x as u32, neighbor_y as u32);
+            let Some(neighbor_luma) = focus_stack_pixel_luminance(neighbor.0.as_slice()) else {
+                continue;
+            };
+            neighbor_sum += neighbor_luma;
+            neighbor_count += 1;
+            if neighbor_luma - center_luma >= 0.025 && neighbor_luma >= 0.25 {
+                brighter_neighbors += 1;
+            }
+        }
+    }
+    neighbor_count >= 6
+        && center_luma <= 0.44
+        && brighter_neighbors >= 2
+        && neighbor_sum / neighbor_count as f32 - center_luma >= 0.018
+}
+
+fn focus_stack_image_pixel_has_strong_ink_contrast(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_neutral_ink(center.0.as_slice()) {
+        return false;
+    }
+    if focus_stack_pixel_is_canvas_like(center.0.as_slice()) {
+        return false;
+    }
+    let Some(center_luma) = focus_stack_pixel_luminance(center.0.as_slice()) else {
+        return false;
+    };
+    let mut brighter_neighbors = 0usize;
+    let mut neighbor_count = 0usize;
+    let mut neighbor_sum = 0.0f32;
+    for offset_y in -2i32..=2 {
+        for offset_x in -2i32..=2 {
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+            let neighbor_x = x as i32 + offset_x;
+            let neighbor_y = y as i32 + offset_y;
+            if neighbor_x < 0
+                || neighbor_y < 0
+                || neighbor_x >= width as i32
+                || neighbor_y >= height as i32
+            {
+                continue;
+            }
+            let neighbor = image.get_pixel(neighbor_x as u32, neighbor_y as u32);
+            let Some(neighbor_luma) = focus_stack_pixel_luminance(neighbor.0.as_slice()) else {
+                continue;
+            };
+            neighbor_sum += neighbor_luma;
+            neighbor_count += 1;
+            if neighbor_luma - center_luma >= 0.045 && neighbor_luma >= 0.28 {
+                brighter_neighbors += 1;
+            }
+        }
+    }
+    neighbor_count >= 6
+        && center_luma <= 0.46
+        && brighter_neighbors >= 3
+        && neighbor_sum / neighbor_count as f32 - center_luma >= 0.032
+}
+
+fn focus_stack_image_local_detail_score(image: &Rgb32FImage, x: u32, y: u32) -> f32 {
+    let (width, height) = image.dimensions();
+    if width < 3 || height < 3 || x == 0 || y == 0 || x + 1 >= width || y + 1 >= height {
+        return 0.0;
+    }
+
+    let luma_at = |sample_x: u32, sample_y: u32| {
+        focus_stack_pixel_luminance(image.get_pixel(sample_x, sample_y).0.as_slice()).unwrap_or(0.0)
+    };
+    let center = luma_at(x, y);
+    let left = luma_at(x - 1, y);
+    let right = luma_at(x + 1, y);
+    let top = luma_at(x, y - 1);
+    let bottom = luma_at(x, y + 1);
+    // This is the same four-neighbour response used by the focus map, but it
+    // is evaluated on the native rendered layer. It distinguishes a sharp
+    // narrow stroke from a broad defocus halo without requiring another full
+    // resolution focus map allocation.
+    (4.0 * center - left - right - top - bottom).abs()
+}
+
+fn focus_stack_image_native_ink_detail_score(image: &Rgb32FImage, x: u32, y: u32) -> f32 {
+    // A one-pixel registration residual can move the strongest response onto a
+    // four-neighbour pixel. Compare a tiny cross around the ownership pixel,
+    // not a wide blur that would make adjacent characters compete.
+    [(0i32, 0i32), (-1, 0), (1, 0), (0, -1), (0, 1)]
+        .into_iter()
+        .filter_map(|(offset_x, offset_y)| {
+            let sample_x = x as i32 + offset_x;
+            let sample_y = y as i32 + offset_y;
+            (sample_x >= 0
+                && sample_y >= 0
+                && sample_x < image.width() as i32
+                && sample_y < image.height() as i32)
+                .then(|| {
+                    focus_stack_image_local_detail_score(image, sample_x as u32, sample_y as u32)
+                })
+        })
+        .fold(0.0, f32::max)
+}
+
+fn focus_stack_image_native_detail_energy(image: &Rgb32FImage, x: u32, y: u32) -> f32 {
+    // Ownership boundaries must be judged against a small stroke neighbourhood.
+    // A single-pixel maximum can make alternating edges from two displaced
+    // captures look equally good, which is precisely the gray parallel contour
+    // seen in the failed result.
+    let mut sum = 0.0f32;
+    let mut count = 0usize;
+    for offset_y in -2i32..=2 {
+        for offset_x in -2i32..=2 {
+            let sample_x = x as i32 + offset_x;
+            let sample_y = y as i32 + offset_y;
+            if sample_x < 0
+                || sample_y < 0
+                || sample_x >= image.width() as i32
+                || sample_y >= image.height() as i32
+            {
+                continue;
+            }
+            sum += focus_stack_image_local_detail_score(image, sample_x as u32, sample_y as u32);
+            count += 1;
+        }
+    }
+    if count == 0 { 0.0 } else { sum / count as f32 }
+}
+
+fn focus_stack_image_pixel_has_soft_ink_detail(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width < 3 || height < 3 || x == 0 || y == 0 || x + 1 >= width || y + 1 >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_neutral_ink(center.0.as_slice()) {
+        return false;
+    }
+    if focus_stack_pixel_is_canvas_like(center.0.as_slice()) {
+        return false;
+    }
+    let Some(center_luma) = focus_stack_pixel_luminance(center.0.as_slice()) else {
+        return false;
+    };
+    if center_luma > 0.52 {
+        return false;
+    }
+    let neighbors = [
+        image.get_pixel(x - 1, y),
+        image.get_pixel(x + 1, y),
+        image.get_pixel(x, y - 1),
+        image.get_pixel(x, y + 1),
+    ];
+    let neighbor_lumas = neighbors
+        .iter()
+        .filter_map(|pixel| focus_stack_pixel_luminance(pixel.0.as_slice()))
+        .collect::<Vec<_>>();
+    let brighter_neighbors = neighbor_lumas
+        .iter()
+        .filter(|&&luma| luma - center_luma >= 0.012 && luma >= 0.24)
+        .count();
+    let detail = focus_stack_image_local_detail_score(image, x, y);
+    brighter_neighbors >= 2 && detail >= 0.018
+}
+
+fn focus_stack_image_pixel_has_native_ink_detail(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width < 3 || height < 3 || x == 0 || y == 0 || x + 1 >= width || y + 1 >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if focus_stack_pixel_is_dark_structure(center.0.as_slice()) {
+        return true;
+    }
+    if !focus_stack_pixel_is_neutral_ink(center.0.as_slice()) {
+        return false;
+    }
+    let luma_at = |sample_x: u32, sample_y: u32| {
+        focus_stack_pixel_luminance(image.get_pixel(sample_x, sample_y).0.as_slice()).unwrap_or(0.0)
+    };
+    let center_luma = luma_at(x, y);
+    let neighbors = [
+        luma_at(x - 1, y),
+        luma_at(x + 1, y),
+        luma_at(x, y - 1),
+        luma_at(x, y + 1),
+    ];
+    let brighter_neighbors = neighbors
+        .iter()
+        .filter(|&&neighbor| neighbor - center_luma >= 0.018 && neighbor >= 0.24)
+        .count();
+    let detail = (4.0 * center_luma - neighbors.iter().sum::<f32>()).abs();
+    detail >= FOCUS_INK_PROTECTION_MIN_DETAIL && brighter_neighbors >= 2
+}
+
+fn focus_stack_image_pixel_has_native_ink_edge_detail(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width < 3 || height < 3 || x == 0 || y == 0 || x + 1 >= width || y + 1 >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_neutral_ink(center.0.as_slice()) {
+        return false;
+    }
+    let luma_at = |sample_x: u32, sample_y: u32| {
+        focus_stack_pixel_luminance(image.get_pixel(sample_x, sample_y).0.as_slice()).unwrap_or(0.0)
+    };
+    let center_luma = luma_at(x, y);
+    let neighbors = [
+        luma_at(x - 1, y),
+        luma_at(x + 1, y),
+        luma_at(x, y - 1),
+        luma_at(x, y + 1),
+    ];
+    let brighter_neighbors = neighbors
+        .iter()
+        .filter(|&&neighbor| neighbor - center_luma >= 0.018 && neighbor >= 0.24)
+        .count();
+    let detail = (4.0 * center_luma - neighbors.iter().sum::<f32>()).abs();
+    detail >= FOCUS_INK_PROTECTION_MIN_DETAIL && brighter_neighbors >= 2
+}
+
+fn focus_stack_image_has_nearby_native_ink_edge_detail(
+    image: &Rgb32FImage,
+    x: u32,
+    y: u32,
+    radius: i32,
+) -> bool {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return false;
+    }
+    let radius = radius.max(0);
+    for offset_y in -radius..=radius {
+        for offset_x in -radius..=radius {
+            let sample_x = x as i32 + offset_x;
+            let sample_y = y as i32 + offset_y;
+            if sample_x < 0 || sample_y < 0 || sample_x >= width as i32 || sample_y >= height as i32
+            {
+                continue;
+            }
+            if focus_stack_image_pixel_has_native_ink_edge_detail(
+                image,
+                sample_x as u32,
+                sample_y as u32,
+            ) || focus_stack_image_pixel_has_strong_ink_contrast(
+                image,
+                sample_x as u32,
+                sample_y as u32,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn focus_stack_image_pixel_has_connected_dark_ink(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return false;
+    }
+    let center = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_dark_structure(center.0.as_slice()) {
+        return false;
+    }
+
+    // A solid part of a brush stroke has intentionally little Laplacian
+    // response: its useful evidence is that it belongs to a connected dark
+    // component. Require two dark neighbours, then require a nearby paper
+    // boundary. The latter is important for this scan: a uniform black rail
+    // or holder can also be connected, but it is not a missing calligraphic
+    // stroke that should be promoted through the focus decision. The
+    // displaced-content guard still decides whether this connected component
+    // may replace the existing source.
+    let mut dark_neighbors = 0usize;
+    for offset_y in -1i32..=1 {
+        for offset_x in -1i32..=1 {
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+            let neighbor_x = x as i32 + offset_x;
+            let neighbor_y = y as i32 + offset_y;
+            if neighbor_x < 0
+                || neighbor_y < 0
+                || neighbor_x >= width as i32
+                || neighbor_y >= height as i32
+            {
+                continue;
+            }
+            if focus_stack_pixel_is_dark_structure(
+                image
+                    .get_pixel(neighbor_x as u32, neighbor_y as u32)
+                    .0
+                    .as_slice(),
+            ) {
+                dark_neighbors += 1;
+            }
+        }
+    }
+    if dark_neighbors < 2 {
+        return false;
+    }
+
+    let Some(center_luma) = focus_stack_pixel_luminance(center.0.as_slice()) else {
+        return false;
+    };
+    let mut brighter_outer_samples = 0usize;
+    for (offset_x, offset_y) in [(2i32, 0i32), (-2, 0), (0, 2), (0, -2)] {
+        let sample_x = x as i32 + offset_x;
+        let sample_y = y as i32 + offset_y;
+        if sample_x < 0 || sample_y < 0 || sample_x >= width as i32 || sample_y >= height as i32 {
+            continue;
+        }
+        let Some(sample_luma) = focus_stack_pixel_luminance(
+            image
+                .get_pixel(sample_x as u32, sample_y as u32)
+                .0
+                .as_slice(),
+        ) else {
+            continue;
+        };
+        if sample_luma >= 0.24 && sample_luma - center_luma >= 0.025 {
+            brighter_outer_samples += 1;
+        }
+    }
+    brighter_outer_samples > 0
+}
+
+fn focus_stack_image_pixel_has_content(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let pixel = image.get_pixel(x, y);
+    focus_stack_pixel_is_tone_foreground(pixel.0.as_slice())
+        || focus_stack_pixel_is_dark_structure(pixel.0.as_slice())
+        || focus_stack_image_pixel_has_ink_contrast(image, x, y)
+        // A thin, lifted brush edge can be too light for the dark/contrast
+        // gates above. It is still content when it has a coherent local edge;
+        // otherwise a later paper sample can replace it and create the
+        // reported fly-white through a stroke that exists in the source.
+        || focus_stack_image_pixel_has_native_ink_edge_detail(image, x, y)
+        || focus_stack_image_pixel_has_soft_ink_detail(image, x, y)
+}
+
+fn focus_stack_image_nearby_content_luminance(
+    image: &Rgb32FImage,
+    x: u32,
+    y: u32,
+    radius: i32,
+) -> Option<f32> {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return None;
+    }
+    let radius = radius.max(0);
+    let mut minimum_luma = f32::INFINITY;
+    for offset_y in -radius..=radius {
+        for offset_x in -radius..=radius {
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+            let neighbor_x = x as i32 + offset_x;
+            let neighbor_y = y as i32 + offset_y;
+            if neighbor_x < 0
+                || neighbor_y < 0
+                || neighbor_x >= width as i32
+                || neighbor_y >= height as i32
+            {
+                continue;
+            }
+            let neighbor_x = neighbor_x as u32;
+            let neighbor_y = neighbor_y as u32;
+            if !focus_stack_image_pixel_has_content(image, neighbor_x, neighbor_y) {
+                continue;
+            }
+            let Some(luma) =
+                focus_stack_pixel_luminance(image.get_pixel(neighbor_x, neighbor_y).0.as_slice())
+            else {
+                continue;
+            };
+            minimum_luma = minimum_luma.min(luma);
+        }
+    }
+    minimum_luma.is_finite().then_some(minimum_luma)
+}
+
+fn focus_stack_image_has_nearby_dark_structure(
+    image: &Rgb32FImage,
+    x: u32,
+    y: u32,
+    radius: i32,
+) -> bool {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return false;
+    }
+    let radius = radius.max(0);
+    for offset_y in -radius..=radius {
+        for offset_x in -radius..=radius {
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+            let neighbor_x = x as i32 + offset_x;
+            let neighbor_y = y as i32 + offset_y;
+            if neighbor_x < 0
+                || neighbor_y < 0
+                || neighbor_x >= width as i32
+                || neighbor_y >= height as i32
+            {
+                continue;
+            }
+            let neighbor_x = neighbor_x as u32;
+            let neighbor_y = neighbor_y as u32;
+            let pixel = image.get_pixel(neighbor_x, neighbor_y);
+            if focus_stack_pixel_is_dark_structure(pixel.0.as_slice()) {
+                return true;
+            }
+            // Lifted gray ink is often above the strict dark-structure cut.
+            // Do not classify warm paper as ink merely from its luminance: the
+            // near-neutral chroma gate plus a local Laplacian response keeps
+            // the inexpensive guard focused on a real thin stroke.
+            let red = pixel[0].clamp(0.0, 1.0);
+            let green = pixel[1].clamp(0.0, 1.0);
+            let blue = pixel[2].clamp(0.0, 1.0);
+            let chroma = red.max(green).max(blue) - red.min(green).min(blue);
+            if chroma <= 0.10
+                && focus_stack_pixel_luminance(pixel.0.as_slice()).is_some_and(|luma| {
+                    luma <= 0.44
+                        && focus_stack_image_local_detail_score(image, neighbor_x, neighbor_y)
+                            >= FOCUS_INK_PROMOTION_MIN_DETAIL
+                })
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 struct RenderedFocusLayer {
     image: Rgb32FImage,
     mask: GrayImage,
@@ -1777,6 +2373,9 @@ fn apply_focus_color_correction(
                 if has_protected_mask && protected_mask.get_pixel(x, y)[0] > 0 {
                     return;
                 }
+                if focus_stack_pixel_is_probable_ink(pixel) {
+                    return;
+                }
                 if canvas_only && !focus_stack_pixel_is_canvas_like(pixel) {
                     return;
                 }
@@ -1805,6 +2404,7 @@ fn apply_focus_color_correction(
         .enumerate()
         .for_each(|(index, delta)| {
             if analysis_protected.as_raw()[index] > 0
+                || focus_stack_pixel_is_probable_ink(&analysis.as_raw()[index * 3..index * 3 + 3])
                 || (canvas_only
                     && !focus_stack_pixel_is_canvas_like(
                         &analysis.as_raw()[index * 3..index * 3 + 3],
@@ -1847,7 +2447,11 @@ fn apply_focus_color_correction(
             let y_weight = y_sample.upper_weight;
             for (x, x_sample) in x_samples.iter().copied().enumerate() {
                 let index = y * width as usize + x;
+                let start = x * 3;
                 if has_protected_mask && protected_mask.as_raw()[index] > 0 {
+                    continue;
+                }
+                if focus_stack_pixel_is_probable_ink(&row[start..start + 3]) {
                     continue;
                 }
                 let top_left = &low_frequency_delta
@@ -1858,7 +2462,6 @@ fn apply_focus_color_correction(
                     [bottom_row + x_sample.lower * 3..bottom_row + x_sample.lower * 3 + 3];
                 let bottom_right = &low_frequency_delta
                     [bottom_row + x_sample.upper * 3..bottom_row + x_sample.upper * 3 + 3];
-                let start = x * 3;
                 if canvas_only && !focus_stack_pixel_is_canvas_like(&row[start..start + 3]) {
                     continue;
                 }
@@ -2025,6 +2628,7 @@ fn render_focus_layer(
                 axis,
                 band.relax_foreground_seam,
                 band.foreground_only,
+                band.physical_edge,
             ))
         })
         .collect::<Vec<_>>();
@@ -2076,6 +2680,7 @@ fn render_focus_layer(
                         axis,
                         relax_foreground_seam,
                         foreground_only,
+                        physical_edge,
                     ) in &band_inverses
                     {
                         let Some(candidate) =
@@ -2126,6 +2731,7 @@ fn render_focus_layer(
                             *correction_inverse,
                             relax_foreground_seam,
                             foreground_only,
+                            physical_edge,
                         ));
                     }
                     let select_local_candidate = |axis: u8| {
@@ -2156,16 +2762,26 @@ fn render_focus_layer(
                     };
                     let selected_vertical = select_local_candidate(0);
                     let selected_horizontal = select_local_candidate(1);
-                    let local_strength_for =
-                        |candidate: &(f64, f64, f64, u8, Point2<f64>, Matrix3<f64>, bool, bool)| {
-                            (1.0 - (candidate.1 - candidate.2).abs() / (candidate.0 * 0.5))
-                                .clamp(0.0, 1.0)
-                        };
+                    let local_strength_for = |candidate: &(
+                        f64,
+                        f64,
+                        f64,
+                        u8,
+                        Point2<f64>,
+                        Matrix3<f64>,
+                        bool,
+                        bool,
+                        bool,
+                    )| {
+                        (1.0 - (candidate.1 - candidate.2).abs() / (candidate.0 * 0.5))
+                            .clamp(0.0, 1.0)
+                    };
                     let vertical_strength = selected_vertical.map(local_strength_for);
                     let horizontal_strength = selected_horizontal.map(local_strength_for);
                     let mut local_source = None;
                     let mut local_strength = 0.0f64;
                     let mut relax_foreground_seam = false;
+                    let mut physical_edge = false;
                     match (selected_vertical, selected_horizontal) {
                         (Some(vertical), Some(horizontal)) => {
                             // The stored correction is a world-space correction
@@ -2191,38 +2807,43 @@ fn render_focus_layer(
                                 .unwrap_or(0.0)
                                 .min(horizontal_strength.unwrap_or(0.0));
                             relax_foreground_seam = vertical.6 || horizontal.6;
+                            physical_edge = vertical.8 || horizontal.8;
                         }
                         (Some(vertical), None) => {
                             local_source = Some(vertical.4);
                             local_strength = vertical_strength.unwrap_or(0.0);
                             relax_foreground_seam = vertical.6;
+                            physical_edge = vertical.8;
                         }
                         (None, Some(horizontal)) => {
                             local_source = Some(horizontal.4);
                             local_strength = horizontal_strength.unwrap_or(0.0);
                             relax_foreground_seam = horizontal.6;
+                            physical_edge = horizontal.8;
                         }
                         (None, None) => {}
                     }
                     if local_strength <= 0.0 {
                         local_source = None;
                         relax_foreground_seam = false;
+                        physical_edge = false;
                     }
-                    // Blend each selected regional correction into the global
-                    // mapping at the edges of its source band. A hard switch is
-                    // itself visible as a seam, especially when the corrected
-                    // object is a rail or paper boundary. Each axis' influence
-                    // falls continuously to zero at its band boundary; when both
-                    // axes are active their composed correction uses the smaller
-                    // overlap weight. If the global inverse is unavailable, the
-                    // local mapping remains a valid fallback.
+                    // Do not average two source coordinates. A regional model is
+                    // used to put one physical edge back on its measured line;
+                    // interpolating it with the global model samples between two
+                    // positions and can erode a narrow ink stroke into the
+                    // reported fly-white/ghost. The strength still provides a
+                    // gradual ownership boundary: use the regional mapping only
+                    // through the trusted inner half of its band, and the global
+                    // mapping in the outer transition. If the global inverse is
+                    // unavailable, the local mapping remains a valid fallback.
                     let source = match (global_source, local_source) {
                         (Some(global), Some(local)) => {
-                            let local_weight = local_strength.clamp(0.0, 1.0);
-                            Some(Point2::new(
-                                global.x * (1.0 - local_weight) + local.x * local_weight,
-                                global.y * (1.0 - local_weight) + local.y * local_weight,
-                            ))
+                            if local_strength >= 0.5 {
+                                Some(local)
+                            } else {
+                                Some(global)
+                            }
                         }
                         (Some(global), None) => Some(global),
                         (None, Some(local)) => Some(local),
@@ -2238,8 +2859,18 @@ fn render_focus_layer(
                     {
                         continue;
                     }
+                    // Bicubic resampling is the right default for the paper
+                    // plane, but it can average a one-pixel ink edge with the
+                    // surrounding paper when the camera pose lands between
+                    // source pixels. In a focus stack that averaging is
+                    // irreversible: the next ownership decision then sees a
+                    // thin gray stroke instead of the solid stroke present in
+                    // the source. Preserve only a native, neutral ink sample
+                    // when it is materially darker than the interpolated
+                    // result; paper and coloured artwork keep the smooth
+                    // geometric sampler.
                     let pixel =
-                        get_high_quality_interpolated_pixel(source_image, source.x, source.y);
+                        get_focus_stack_interpolated_pixel(source_image, source.x, source.y);
                     let start = local_x as usize * 3;
                     row[start..start + 3].copy_from_slice(&pixel.0);
                     mask_row[local_x as usize] = 255;
@@ -2248,9 +2879,13 @@ fn render_focus_layer(
                     // to the final canvas-tone protection below. Marking every
                     // black stroke or red seal here would make the first soft
                     // sample win forever and produce the reported ghosting.
-                    if source_is_focus_foreground(image, source) {
+                    if source_is_focus_foreground(image, source) || physical_edge {
                         foreground_mask_row[local_x as usize] = 255;
-                        if relax_foreground_seam {
+                        // A repeated physical edge is intentionally rigid:
+                        // allowing it into the relaxed mask would let focus
+                        // scores replace one aligned rail with another and
+                        // recreate the visible stepped holder/strip.
+                        if relax_foreground_seam && !physical_edge {
                             relaxed_row[local_x as usize] = 255;
                         }
                     }
@@ -2385,16 +3020,40 @@ fn focus_score_map(image: &Rgb32FImage, mask: &GrayImage) -> Vec<f32> {
     // window local enough that one clear stroke cannot claim an adjacent
     // character; the final pixels still come from the full-resolution aligned
     // layer.
+    let max_blur_radius = std::env::var("RAW_EDITOR_FOCUS_SCORE_MAX_BLUR_RADIUS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(FOCUS_SCORE_MAX_BLUR_RADIUS)
+        .max(1);
     let radius = ((width.max(height) as f32 / FOCUS_SCORE_BLUR_RADIUS_DIVISOR).round() as usize)
-        .clamp(1, FOCUS_SCORE_MAX_BLUR_RADIUS);
+        .clamp(1, max_blur_radius);
     box_blur_focus_map(&raw_score, width, height, radius)
 }
 
+#[cfg(test)]
 fn focus_decision_mask(
     base_focus: &[f32],
     candidate_focus: &[f32],
     base_mask: &GrayImage,
     candidate_mask: &GrayImage,
+) -> GrayImage {
+    focus_decision_mask_with_options(
+        base_focus,
+        candidate_focus,
+        base_mask,
+        candidate_mask,
+        true,
+        FOCUS_DECISION_MAX_COHERENCE_RADIUS,
+    )
+}
+
+fn focus_decision_mask_with_options(
+    base_focus: &[f32],
+    candidate_focus: &[f32],
+    base_mask: &GrayImage,
+    candidate_mask: &GrayImage,
+    allow_structural_claims: bool,
+    maximum_coherence_radius: usize,
 ) -> GrayImage {
     let (width, height) = base_mask.dimensions();
     let pixel_count = width as usize * height as usize;
@@ -2417,13 +3076,20 @@ fn focus_decision_mask(
             };
         });
 
-    // The old radius was effectively ~100 source pixels for a 9504px frame.
-    // That let a clear stroke in one region claim a neighbouring blurred
-    // character. Keep the decision coherent, but make the neighbourhood local
-    // enough that each character can select its own sharp source.
-    let coherence_radius = ((width.max(height) as f32 / FOCUS_DECISION_COHERENCE_RADIUS_DIVISOR)
+    // The decision mask is the complete panorama canvas, but a candidate only
+    // occupies one source-frame-sized region of it. Derive the neighbourhood
+    // from that active region rather than from the total panorama width. On a
+    // long shifted scan the old canvas-sized radius grew with every additional
+    // frame and allowed a clear stroke to claim a neighbouring character far
+    // outside the local overlap; that is exactly the path to thinned/fly-white
+    // strokes and soft seams.
+    let local_longest_dimension = focus_mask_active_longest_dimension(candidate_mask)
+        .or_else(|| focus_mask_active_longest_dimension(base_mask))
+        .unwrap_or_else(|| width.max(height));
+    let coherence_radius = ((local_longest_dimension as f32
+        / FOCUS_DECISION_COHERENCE_RADIUS_DIVISOR)
         .round() as usize)
-        .clamp(2, FOCUS_DECISION_MAX_COHERENCE_RADIUS);
+        .clamp(2, maximum_coherence_radius.max(2));
     let coarse_advantage = box_blur_focus_map(&fine_advantage, width, height, coherence_radius);
 
     let sample_step = (pixel_count / 4096).max(1);
@@ -2465,7 +3131,7 @@ fn focus_decision_mask(
                 *candidate_claim = 1.0;
             }
         });
-    let protection_radius = ((width.max(height) as f32 / 2048.0)
+    let protection_radius = ((local_longest_dimension as f32 / 2048.0)
         * (FOCUS_EDGE_PROTECTION_AT_1024 * FOCUS_EDGE_PROTECTION_SCALE))
         .round()
         .clamp(2.0, 6.0) as usize;
@@ -2484,14 +3150,18 @@ fn focus_decision_mask(
         let advantage = coarse_advantage[index];
         let nearby_base_claim = base_claim[index];
         let nearby_candidate_claim = candidate_claim[index];
-        let structural_winner = if nearby_candidate_claim > FOCUS_EDGE_CLAIM_THRESHOLD
-            && nearby_candidate_claim > nearby_base_claim
-        {
-            Some(true)
-        } else if nearby_base_claim > FOCUS_EDGE_CLAIM_THRESHOLD
-            && nearby_base_claim > nearby_candidate_claim
-        {
-            Some(false)
+        let structural_winner = if allow_structural_claims {
+            if nearby_candidate_claim > FOCUS_EDGE_CLAIM_THRESHOLD
+                && nearby_candidate_claim > nearby_base_claim
+            {
+                Some(true)
+            } else if nearby_base_claim > FOCUS_EDGE_CLAIM_THRESHOLD
+                && nearby_base_claim > nearby_candidate_claim
+            {
+                Some(false)
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -2500,6 +3170,31 @@ fn focus_decision_mask(
                 || structural_winner.unwrap_or(confident && advantage > FOCUS_CONFIDENCE_MARGIN));
         image::Luma([if candidate_wins { 255 } else { 0 }])
     })
+}
+
+fn focus_mask_active_longest_dimension(mask: &GrayImage) -> Option<u32> {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let mut minimum_x = width;
+    let mut maximum_x = 0u32;
+    let mut minimum_y = height;
+    let mut maximum_y = 0u32;
+    let mut has_active_pixel = false;
+    for (index, &value) in mask.as_raw().iter().enumerate() {
+        if value == 0 {
+            continue;
+        }
+        let x = (index as u32) % width;
+        let y = (index as u32) / width;
+        minimum_x = minimum_x.min(x);
+        maximum_x = maximum_x.max(x);
+        minimum_y = minimum_y.min(y);
+        maximum_y = maximum_y.max(y);
+        has_active_pixel = true;
+    }
+    has_active_pixel.then_some((maximum_x - minimum_x + 1).max(maximum_y - minimum_y + 1))
 }
 
 fn suppress_focus_canvas_switches(
@@ -2543,6 +3238,1087 @@ fn suppress_focus_canvas_switches(
                 }
             },
         );
+}
+
+fn suppress_focus_content_loss_switches_on_canvas(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &Rgb32FImage,
+    base_mask: &GrayImage,
+    candidate_mask: &GrayImage,
+) {
+    if decision_mask.dimensions() != base.dimensions()
+        || base.dimensions() != candidate.dimensions()
+        || base_mask.dimensions() != base.dimensions()
+        || candidate_mask.dimensions() != base.dimensions()
+    {
+        return;
+    }
+
+    // A small registration error can make the focus metric prefer a paper
+    // pixel immediately beside a real stroke. Hard-selecting that candidate
+    // produces the reported thinned/fly-white stroke even though no input
+    // frame contains it. Preserve the existing content in this one-way case;
+    // a candidate that also contains the content can still win by focus.
+    let width = base.width() as usize;
+    let protect_displaced_candidate_content =
+        std::env::var_os("RAW_EDITOR_FOCUS_ALLOW_DISPLACED_CONTENT").is_none();
+    decision_mask
+        .as_mut()
+        .par_iter_mut()
+        .enumerate()
+        .zip(base.as_raw().par_chunks(3))
+        .zip(candidate.as_raw().par_chunks(3))
+        .zip(base_mask.as_raw().par_iter())
+        .zip(candidate_mask.as_raw().par_iter())
+        .for_each(
+            |(
+                ((((index, decision), base_pixel), candidate_pixel), base_valid),
+                candidate_valid,
+            )| {
+                let x = (index % width) as u32;
+                let y = (index / width) as u32;
+                let base_has_content = focus_stack_image_pixel_has_content(base, x, y);
+                let candidate_has_content = focus_stack_image_pixel_has_content(candidate, x, y);
+                let nearby_base_content_luma = (candidate_has_content && !base_has_content)
+                    .then(|| {
+                        focus_stack_image_nearby_content_luminance(
+                            base,
+                            x,
+                            y,
+                            FOCUS_DISPLACED_CONTENT_RADIUS,
+                        )
+                    })
+                    .flatten();
+                let displaced_candidate_content = nearby_base_content_luma.is_some();
+                let candidate_leaves_nearby_base_structure = !base_has_content
+                    && !candidate_has_content
+                    && focus_stack_image_has_nearby_dark_structure(
+                        base,
+                        x,
+                        y,
+                        FOCUS_DISPLACED_CONTENT_RADIUS,
+                    );
+                let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                let candidate_luma = focus_stack_pixel_luminance(candidate_pixel).unwrap_or(0.0);
+                let native_detail_recovery = focus_stack_pixel_is_neutral_ink(candidate_pixel)
+                    && focus_stack_image_native_ink_detail_score(candidate, x, y)
+                        >= focus_stack_image_native_ink_detail_score(base, x, y)
+                            + FOCUS_NATIVE_DETAIL_RECOVERY_MARGIN;
+                let strong_ink_recovery = displaced_candidate_content
+                    && focus_stack_image_pixel_has_strong_ink_contrast(candidate, x, y)
+                    && nearby_base_content_luma.is_some_and(|nearby_luma| {
+                        candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE < nearby_luma
+                    });
+                let ambiguous_content_switch = base_has_content
+                    && candidate_has_content
+                    && candidate_luma + FOCUS_CONTENT_DECISIVE_LUMA_ADVANTAGE >= base_luma;
+                // A resampled stroke can still be classified as a local dark
+                // structure in the candidate even when its centre has moved
+                // one or two pixels. If that candidate centre is lighter than
+                // the existing stroke, preserve the existing source instead
+                // of eroding its fine line. Red seals and other known colour
+                // foreground remain eligible for normal focus selection.
+                let candidate_erodes_base = !focus_stack_pixel_is_tone_foreground(candidate_pixel)
+                    && candidate_luma > base_luma + 0.015;
+                if *decision > 0
+                    && *base_valid > 0
+                    && *candidate_valid > 0
+                    && ((base_has_content && (!candidate_has_content || candidate_erodes_base))
+                        || (protect_displaced_candidate_content
+                            && ((!strong_ink_recovery
+                                && !native_detail_recovery
+                                && displaced_candidate_content)
+                                || candidate_leaves_nearby_base_structure
+                                || (ambiguous_content_switch && !native_detail_recovery))))
+                {
+                    *decision = 0;
+                }
+            },
+        );
+}
+
+fn suppress_focus_content_loss_switches(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+    {
+        return;
+    }
+
+    let base_width = base.width() as usize;
+    let base_pixels = base.as_raw();
+    let protect_displaced_candidate_content =
+        std::env::var_os("RAW_EDITOR_FOCUS_ALLOW_DISPLACED_CONTENT").is_none();
+    decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .zip(
+            candidate
+                .image
+                .as_raw()
+                .par_chunks(layer_width as usize * 3),
+        )
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .enumerate()
+        .for_each(
+            |(local_y, ((decision_row, candidate_row), candidate_mask_row))| {
+                let global_row_start = (candidate.top as usize + local_y) * base_width;
+                for local_x in 0..layer_width as usize {
+                    if decision_row[local_x] == 0 || candidate_mask_row[local_x] == 0 {
+                        continue;
+                    }
+                    let global_index = global_row_start + candidate.left as usize + local_x;
+                    let base_start = global_index * 3;
+                    let candidate_start = local_x * 3;
+                    let base_pixel = &base_pixels[base_start..base_start + 3];
+                    let candidate_pixel = &candidate_row[candidate_start..candidate_start + 3];
+                    let global_x = candidate.left + local_x as u32;
+                    let global_y = candidate.top + local_y as u32;
+                    let base_has_content =
+                        focus_stack_image_pixel_has_content(base, global_x, global_y);
+                    let candidate_has_content = focus_stack_image_pixel_has_content(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                    let nearby_base_content_luma = (candidate_has_content && !base_has_content)
+                        .then(|| {
+                            focus_stack_image_nearby_content_luminance(
+                                base,
+                                global_x,
+                                global_y,
+                                FOCUS_DISPLACED_CONTENT_RADIUS,
+                            )
+                        })
+                        .flatten();
+                    let displaced_candidate_content = nearby_base_content_luma.is_some();
+                    let candidate_leaves_nearby_base_structure = !base_has_content
+                        && !candidate_has_content
+                        && focus_stack_image_has_nearby_dark_structure(
+                            base,
+                            global_x,
+                            global_y,
+                            FOCUS_DISPLACED_CONTENT_RADIUS,
+                        );
+                    let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                    let candidate_luma =
+                        focus_stack_pixel_luminance(candidate_pixel).unwrap_or(0.0);
+                    let native_detail_recovery = focus_stack_pixel_is_neutral_ink(candidate_pixel)
+                        && focus_stack_image_native_ink_detail_score(
+                            &candidate.image,
+                            local_x as u32,
+                            local_y as u32,
+                        ) >= focus_stack_image_native_ink_detail_score(base, global_x, global_y)
+                            + FOCUS_NATIVE_DETAIL_RECOVERY_MARGIN;
+                    let strong_ink_recovery = displaced_candidate_content
+                        && focus_stack_image_pixel_has_strong_ink_contrast(
+                            &candidate.image,
+                            local_x as u32,
+                            local_y as u32,
+                        )
+                        && nearby_base_content_luma.is_some_and(|nearby_luma| {
+                            candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE < nearby_luma
+                        });
+                    let ambiguous_content_switch = base_has_content
+                        && candidate_has_content
+                        && candidate_luma + FOCUS_CONTENT_DECISIVE_LUMA_ADVANTAGE >= base_luma;
+                    let candidate_erodes_base =
+                        !focus_stack_pixel_is_tone_foreground(candidate_pixel)
+                            && candidate_luma > base_luma + 0.015;
+                    if (base_has_content && (!candidate_has_content || candidate_erodes_base))
+                        || (protect_displaced_candidate_content
+                            && ((!strong_ink_recovery
+                                && !native_detail_recovery
+                                && displaced_candidate_content)
+                                || candidate_leaves_nearby_base_structure
+                                || (ambiguous_content_switch && !native_detail_recovery)))
+                    {
+                        decision_row[local_x] = 0;
+                    }
+                }
+            },
+        );
+}
+
+fn suppress_focus_native_ink_gaps(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+    {
+        return;
+    }
+
+    // A thin stroke can be too light to pass the broad content classifier after
+    // one source has been resampled, but it is still a native ink edge. Never
+    // let an accepted candidate replace that edge with a paper sample. This is
+    // intentionally a veto only: it does not promote a new stroke and therefore
+    // cannot create a hairline that was absent from the selected base.
+    let base_width = base.width() as usize;
+    let base_pixels = base.as_raw();
+    decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .zip(
+            candidate
+                .image
+                .as_raw()
+                .par_chunks(layer_width as usize * 3),
+        )
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .enumerate()
+        .for_each(
+            |(local_y, ((decision_row, candidate_row), candidate_mask_row))| {
+                let global_row_start = (candidate.top as usize + local_y) * base_width;
+                for local_x in 0..layer_width as usize {
+                    if decision_row[local_x] == 0 || candidate_mask_row[local_x] == 0 {
+                        continue;
+                    }
+                    let global_index = global_row_start + candidate.left as usize + local_x;
+                    let base_start = global_index * 3;
+                    let candidate_start = local_x * 3;
+                    let base_pixel = &base_pixels[base_start..base_start + 3];
+                    let candidate_pixel = &candidate_row[candidate_start..candidate_start + 3];
+                    // The base side must be a plausible neutral ink sample;
+                    // the candidate side must not pass that gate before we
+                    // can protect it. A bad candidate is often warm paper,
+                    // so requiring it to be neutral here silently skipped the
+                    // exact erase that turns a real stroke into fly-white.
+                    if !focus_stack_pixel_is_neutral_ink(base_pixel) {
+                        continue;
+                    }
+                    let global_x = candidate.left + local_x as u32;
+                    let global_y = candidate.top + local_y as u32;
+                    let base_is_native_ink =
+                        focus_stack_image_pixel_is_native_ink_like(base, global_x, global_y);
+                    // Do not let the canvas-only veto erase a legitimate
+                    // foreground colour (seal, holder, or painted object).
+                    // Those layers have their own ownership guard and are not
+                    // the paper replacement this function is meant to stop.
+                    if base_is_native_ink
+                        && !focus_stack_pixel_is_tone_foreground(candidate_pixel)
+                        && !focus_stack_image_pixel_is_native_ink_like(
+                            &candidate.image,
+                            local_x as u32,
+                            local_y as u32,
+                        )
+                    {
+                        decision_row[local_x] = 0;
+                        continue;
+                    }
+                    if !focus_stack_pixel_is_neutral_ink(candidate_pixel) {
+                        continue;
+                    }
+                    let candidate_is_native_ink = focus_stack_image_pixel_is_native_ink_like(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                    if !candidate_is_native_ink {
+                        decision_row[local_x] = 0;
+                        continue;
+                    }
+                    let candidate_luma =
+                        focus_stack_pixel_luminance(candidate_pixel).unwrap_or(0.0);
+                    let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                    if !base_is_native_ink
+                        && focus_stack_image_has_nearby_dark_structure(base, global_x, global_y, 1)
+                    {
+                        // The candidate is on the displaced side of an
+                        // existing dark stroke. Equal-dark candidates are
+                        // registration noise, not a focus improvement; keep
+                        // them out of the result unless the candidate is a
+                        // connected and materially darker recovery.
+                        let nearby_base_luma =
+                            focus_stack_image_nearby_content_luminance(base, global_x, global_y, 1)
+                                .unwrap_or(base_luma);
+                        let candidate_is_clear_recovery =
+                            focus_stack_image_pixel_has_connected_dark_ink(
+                                &candidate.image,
+                                local_x as u32,
+                                local_y as u32,
+                            ) && candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE
+                                < nearby_base_luma;
+                        if !candidate_is_clear_recovery {
+                            decision_row[local_x] = 0;
+                            continue;
+                        }
+                    }
+                    if !base_is_native_ink {
+                        continue;
+                    }
+                    if focus_stack_pixel_is_dark_structure(base_pixel)
+                        && focus_stack_pixel_is_dark_structure(candidate_pixel)
+                    {
+                        if let Some((
+                            shift_x,
+                            shift_y,
+                            best_intersection,
+                            best_union,
+                            aligned_intersection,
+                            aligned_union,
+                        )) = focus_stack_dark_patch_alignment(
+                            base,
+                            &candidate.image,
+                            global_x,
+                            global_y,
+                            local_x as u32,
+                            local_y as u32,
+                            2,
+                        ) {
+                            let displaced_patch = (shift_x != 0 || shift_y != 0)
+                                && best_intersection >= aligned_intersection + 2
+                                && best_intersection >= 3
+                                && best_union <= aligned_union.saturating_add(4);
+                            if displaced_patch
+                                && candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE >= base_luma
+                            {
+                                decision_row[local_x] = 0;
+                                continue;
+                            }
+                        }
+                    }
+                    let base_energy =
+                        focus_stack_image_native_detail_energy(base, global_x, global_y);
+                    let candidate_energy = focus_stack_image_native_detail_energy(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                    if candidate_energy + FOCUS_NATIVE_PATCH_ADVANTAGE_MARGIN < base_energy {
+                        decision_row[local_x] = 0;
+                    }
+                }
+            },
+        );
+}
+
+fn suppress_focus_native_detail_regressions(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+    {
+        return;
+    }
+
+    // The analysis canvas decides where a candidate is allowed to compete, but
+    // it cannot see every native-width calligraphic edge in a wide panorama.
+    // Once a candidate has won a cell, keep that win only if it does not make
+    // an already selected neutral ink edge less detailed. This veto is local
+    // and one-way: it never invents a stroke, and coloured seals/holders stay
+    // on their existing geometric ownership path.
+    let base_width = base.width() as usize;
+    let base_pixels = base.as_raw();
+    decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .zip(
+            candidate
+                .image
+                .as_raw()
+                .par_chunks(layer_width as usize * 3),
+        )
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .enumerate()
+        .for_each(
+            |(local_y, ((decision_row, candidate_row), candidate_mask_row))| {
+                let global_row_start = (candidate.top as usize + local_y) * base_width;
+                for local_x in 0..layer_width as usize {
+                    if decision_row[local_x] == 0 || candidate_mask_row[local_x] == 0 {
+                        continue;
+                    }
+                    let global_index = global_row_start + candidate.left as usize + local_x;
+                    let base_start = global_index * 3;
+                    let candidate_start = local_x * 3;
+                    let base_pixel = &base_pixels[base_start..base_start + 3];
+                    let candidate_pixel = &candidate_row[candidate_start..candidate_start + 3];
+                    if !focus_stack_pixel_is_neutral_ink(base_pixel)
+                        || !focus_stack_pixel_is_neutral_ink(candidate_pixel)
+                    {
+                        continue;
+                    }
+                    let global_x = candidate.left + local_x as u32;
+                    let global_y = candidate.top + local_y as u32;
+                    if !focus_stack_image_pixel_has_content(base, global_x, global_y)
+                        || !focus_stack_image_pixel_has_content(
+                            &candidate.image,
+                            local_x as u32,
+                            local_y as u32,
+                        )
+                    {
+                        continue;
+                    }
+                    let base_detail =
+                        focus_stack_image_native_ink_detail_score(base, global_x, global_y);
+                    let candidate_detail = focus_stack_image_native_ink_detail_score(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                    let base_energy =
+                        focus_stack_image_native_detail_energy(base, global_x, global_y);
+                    let candidate_energy = focus_stack_image_native_detail_energy(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                    if candidate_detail + FOCUS_NATIVE_DETAIL_VETO_MARGIN < base_detail
+                        || candidate_energy < base_energy + FOCUS_NATIVE_PATCH_ADVANTAGE_MARGIN
+                    {
+                        decision_row[local_x] = 0;
+                    }
+                }
+            },
+        );
+}
+
+fn focus_stack_dark_patch_alignment(
+    base: &Rgb32FImage,
+    candidate: &Rgb32FImage,
+    base_x: u32,
+    base_y: u32,
+    candidate_x: u32,
+    candidate_y: u32,
+    radius: i32,
+) -> Option<(i32, i32, usize, usize, usize, usize)> {
+    let (base_width, base_height) = base.dimensions();
+    let (candidate_width, candidate_height) = candidate.dimensions();
+    if base_width == 0
+        || base_height == 0
+        || candidate_width == 0
+        || candidate_height == 0
+        || base_x >= base_width
+        || base_y >= base_height
+        || candidate_x >= candidate_width
+        || candidate_y >= candidate_height
+    {
+        return None;
+    }
+    let radius = radius.max(0);
+    let mut best: Option<(i32, i32, usize, usize)> = None;
+    let mut current = None;
+    for shift_y in -radius..=radius {
+        for shift_x in -radius..=radius {
+            let mut intersection = 0usize;
+            let mut union = 0usize;
+            for offset_y in -radius..=radius {
+                for offset_x in -radius..=radius {
+                    let base_sample_x = base_x as i32 + offset_x;
+                    let base_sample_y = base_y as i32 + offset_y;
+                    let candidate_sample_x = candidate_x as i32 + offset_x + shift_x;
+                    let candidate_sample_y = candidate_y as i32 + offset_y + shift_y;
+                    if base_sample_x < 0
+                        || base_sample_y < 0
+                        || base_sample_x >= base_width as i32
+                        || base_sample_y >= base_height as i32
+                        || candidate_sample_x < 0
+                        || candidate_sample_y < 0
+                        || candidate_sample_x >= candidate_width as i32
+                        || candidate_sample_y >= candidate_height as i32
+                    {
+                        continue;
+                    }
+                    let base_ink = focus_stack_pixel_is_dark_structure(
+                        base.get_pixel(base_sample_x as u32, base_sample_y as u32)
+                            .0
+                            .as_slice(),
+                    );
+                    let candidate_ink = focus_stack_pixel_is_dark_structure(
+                        candidate
+                            .get_pixel(candidate_sample_x as u32, candidate_sample_y as u32)
+                            .0
+                            .as_slice(),
+                    );
+                    intersection += usize::from(base_ink && candidate_ink);
+                    union += usize::from(base_ink || candidate_ink);
+                }
+            }
+            if shift_x == 0 && shift_y == 0 {
+                current = Some((intersection, union));
+            }
+            let replaces_best =
+                best.as_ref()
+                    .is_none_or(|(_, _, best_intersection, best_union)| {
+                        intersection > *best_intersection
+                            || (intersection == *best_intersection && union < *best_union)
+                    });
+            if replaces_best {
+                best = Some((shift_x, shift_y, intersection, union));
+            }
+        }
+    }
+    let (shift_x, shift_y, best_intersection, best_union) = best?;
+    let (current_intersection, current_union) = current?;
+    Some((
+        shift_x,
+        shift_y,
+        best_intersection,
+        best_union,
+        current_intersection,
+        current_union,
+    ))
+}
+
+fn count_focus_native_ink_support(
+    image: &Rgb32FImage,
+    x: u32,
+    y: u32,
+    radius: i32,
+) -> (usize, usize) {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || x >= width || y >= height {
+        return (0, 0);
+    }
+    let radius = radius.max(0);
+    let mut native_support = 0usize;
+    let mut connected_support = 0usize;
+    for offset_y in -radius..=radius {
+        for offset_x in -radius..=radius {
+            let sample_x = x as i32 + offset_x;
+            let sample_y = y as i32 + offset_y;
+            if sample_x < 0 || sample_y < 0 || sample_x >= width as i32 || sample_y >= height as i32
+            {
+                continue;
+            }
+            let sample_x = sample_x as u32;
+            let sample_y = sample_y as u32;
+            if !focus_stack_image_pixel_is_native_ink_like(image, sample_x, sample_y) {
+                continue;
+            }
+            native_support += 1;
+            if focus_stack_pixel_is_dark_structure(image.get_pixel(sample_x, sample_y).0.as_slice())
+                && focus_stack_image_pixel_has_connected_dark_ink(image, sample_x, sample_y)
+            {
+                connected_support += 1;
+            }
+        }
+    }
+    (native_support, connected_support)
+}
+
+fn recover_focus_native_ink_switches(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.foreground_mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+    {
+        return;
+    }
+
+    // The bounded analysis decision can miss the centre of a narrow stroke.
+    // Recover that centre only when the candidate has a coherent native patch
+    // and is materially better than the already selected source. This is a
+    // two-way focus refinement, but not a free-form dark-pixel promotion:
+    // displaced content, isolated pixels, rails, and equal-quality contours
+    // remain rejected.
+    let base_width = base.width() as usize;
+    let base_height = base.height();
+    let base_pixels = base.as_raw();
+    let candidate_pixels = candidate.image.as_raw();
+    let candidate_mask = candidate.mask.as_raw();
+    let foreground_mask = candidate.foreground_mask.as_raw();
+    let recovered = decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .enumerate()
+        .map(|(local_y, decision_row)| {
+            let mut row_recovered = 0usize;
+            let global_y = candidate.top + local_y as u32;
+            if global_y >= base_height {
+                return row_recovered;
+            }
+            for (local_x, decision) in decision_row.iter_mut().enumerate() {
+                let index = local_y * layer_width as usize + local_x;
+                if *decision > 0 || candidate_mask[index] == 0 || foreground_mask[index] > 0 {
+                    continue;
+                }
+                let local_x = local_x as u32;
+                let local_y = local_y as u32;
+                if !focus_stack_image_pixel_is_native_ink_like(&candidate.image, local_x, local_y) {
+                    continue;
+                }
+
+                let (native_support, connected_support) = count_focus_native_ink_support(
+                    &candidate.image,
+                    local_x,
+                    local_y,
+                    FOCUS_NATIVE_INK_RECOVERY_RADIUS,
+                );
+                // Every native recovery must be part of a connected dark
+                // patch. Without this global guard, the replacement branch
+                // below could still admit a one-pixel interpolated hairline
+                // when it happened to score slightly better than the base.
+                if native_support < FOCUS_NATIVE_INK_RECOVERY_MIN_SUPPORT || connected_support == 0
+                {
+                    continue;
+                }
+                let global_x = candidate.left + local_x;
+                let base_index =
+                    (global_y as usize * base_width + global_x as usize).saturating_mul(3);
+                let base_pixel = &base_pixels[base_index..base_index + 3];
+                let candidate_start = index * 3;
+                let candidate_pixel = &candidate_pixels[candidate_start..candidate_start + 3];
+                let Some(candidate_luma) = focus_stack_pixel_luminance(candidate_pixel) else {
+                    continue;
+                };
+                let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                let candidate_detail =
+                    focus_stack_image_native_ink_detail_score(&candidate.image, local_x, local_y);
+                let base_detail =
+                    focus_stack_image_native_ink_detail_score(base, global_x, global_y);
+                let candidate_energy =
+                    focus_stack_image_native_detail_energy(&candidate.image, local_x, local_y);
+                let base_energy = focus_stack_image_native_detail_energy(base, global_x, global_y);
+                let candidate_is_clearer = candidate_detail
+                    >= base_detail + FOCUS_NATIVE_DETAIL_RECOVERY_MARGIN
+                    || candidate_energy >= base_energy + FOCUS_NATIVE_PATCH_ADVANTAGE_MARGIN;
+                let candidate_has_strong_edge = focus_stack_image_pixel_has_strong_ink_contrast(
+                    &candidate.image,
+                    local_x,
+                    local_y,
+                ) || focus_stack_image_pixel_has_native_ink_detail(
+                    &candidate.image,
+                    local_x,
+                    local_y,
+                );
+                let base_has_content =
+                    focus_stack_image_pixel_has_content(base, global_x, global_y);
+                let nearby_base_content_luma = focus_stack_image_nearby_content_luminance(
+                    base,
+                    global_x,
+                    global_y,
+                    FOCUS_DISPLACED_CONTENT_RADIUS,
+                );
+
+                if base_has_content {
+                    // If both sources already contain content, this is a
+                    // replacement rather than filling a gap. Require a real
+                    // native detail gain and do not let a lighter candidate
+                    // erode the existing stroke.
+                    if !candidate_is_clearer || candidate_luma > base_luma + 0.015 {
+                        continue;
+                    }
+                } else if let Some(nearby_luma) = nearby_base_content_luma {
+                    // A candidate beside existing base content is the common
+                    // signature of a one-pixel registration residual. Only a
+                    // clearly darker, coherent stroke may cross that guard.
+                    if !candidate_has_strong_edge
+                        || candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE >= nearby_luma
+                    {
+                        continue;
+                    }
+                } else if candidate_detail < FOCUS_INK_PROMOTION_MIN_DETAIL
+                    || !candidate_has_strong_edge
+                {
+                    // On empty paper, a soft edge is still not enough to
+                    // invent ownership. A connected patch may be recovered
+                    // by its solid centre even when its Laplacian is low.
+                    continue;
+                }
+
+                *decision = 255;
+                row_recovered += 1;
+            }
+            row_recovered
+        })
+        .sum::<usize>();
+    if recovered > 0 && std::env::var_os("RAW_EDITOR_FOCUS_DEBUG_INK_RECOVERY").is_some() {
+        println!("  - Recovered {recovered} coherent native ink pixels for focus ownership");
+    }
+}
+
+fn focus_stack_image_pixel_is_native_ink_like(image: &Rgb32FImage, x: u32, y: u32) -> bool {
+    let pixel = image.get_pixel(x, y);
+    if !focus_stack_pixel_is_neutral_ink(pixel.0.as_slice()) {
+        return false;
+    }
+    // Keep the paper classifier as the first gate. A brown paper pixel can be
+    // close to neutral after exposure correction, so luminance alone is not a
+    // safe way to grow a stroke. The native edge tests admit only pixels that
+    // still have a local ink boundary or belong to a dark connected centre.
+    if focus_stack_pixel_is_dark_structure(pixel.0.as_slice()) {
+        return true;
+    }
+    if focus_stack_pixel_is_canvas_like(pixel.0.as_slice()) {
+        return focus_stack_image_pixel_has_native_ink_edge_detail(image, x, y)
+            || focus_stack_image_pixel_has_soft_ink_detail(image, x, y)
+            || focus_stack_image_pixel_has_strong_ink_contrast(image, x, y);
+    }
+    focus_stack_image_pixel_has_native_ink_detail(image, x, y)
+        || focus_stack_image_pixel_has_soft_ink_detail(image, x, y)
+        || focus_stack_image_pixel_has_ink_contrast(image, x, y)
+}
+
+// Native-sized binary dilation without the f32 box-blur allocations used by
+// the analysis masks. `mask` is reused for the horizontal pass and the final
+// vertical result is returned, keeping the extra memory to one byte per pixel
+// of the candidate layer.
+fn dilate_focus_binary_mask_u8(mask: &mut [u8], width: u32, height: u32, radius: usize) -> Vec<u8> {
+    let width = width as usize;
+    let height = height as usize;
+    if width == 0 || height == 0 || mask.len() != width * height {
+        return Vec::new();
+    }
+    if radius == 0 {
+        return mask.to_vec();
+    }
+
+    let mut source_row = vec![0u8; width];
+    for y in 0..height {
+        let row_start = y * width;
+        source_row.copy_from_slice(&mask[row_start..row_start + width]);
+        let initial_end = radius.min(width - 1);
+        let mut window = source_row[..=initial_end]
+            .iter()
+            .filter(|value| **value > 0)
+            .count() as u32;
+        for x in 0..width {
+            if x > 0 {
+                let add_x = (x + radius).min(width - 1);
+                window += u32::from(source_row[add_x] > 0);
+                if x > radius {
+                    window -= u32::from(source_row[x - radius - 1] > 0);
+                }
+            }
+            mask[row_start + x] = u8::from(window > 0) * 255;
+        }
+    }
+
+    let mut dilated = vec![0u8; mask.len()];
+    for x in 0..width {
+        let initial_end = radius.min(height - 1);
+        let mut window = (0..=initial_end)
+            .map(|y| u32::from(mask[y * width + x] > 0))
+            .sum::<u32>();
+        for y in 0..height {
+            if y > 0 {
+                let add_y = (y + radius).min(height - 1);
+                window += u32::from(mask[add_y * width + x] > 0);
+                if y > radius {
+                    window -= u32::from(mask[(y - radius - 1) * width + x] > 0);
+                }
+            }
+            dilated[y * width + x] = u8::from(window > 0) * 255;
+        }
+    }
+    dilated
+}
+
+fn stabilize_focus_native_ink_ownership(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.foreground_mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+        || std::env::var_os("RAW_EDITOR_FOCUS_DISABLE_INK_COHERENCE").is_some()
+    {
+        return;
+    }
+
+    // Seed only from a pixel that has already passed the focus/content guards.
+    // This is deliberately a one-way repair: it can complete the anti-aliased
+    // edge of an accepted stroke, but it cannot make a new component win just
+    // because that component is dark.
+    let layer_pixels = layer_width as usize * layer_height as usize;
+    let mut selected_ink = vec![0u8; layer_pixels];
+    let decision = decision_mask.as_raw();
+    let candidate_mask = candidate.mask.as_raw();
+    let foreground_mask = candidate.foreground_mask.as_raw();
+    selected_ink
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(index, output)| {
+            if decision[index] == 0 || candidate_mask[index] == 0 || foreground_mask[index] > 0 {
+                return;
+            }
+            let x = (index % layer_width as usize) as u32;
+            let y = (index / layer_width as usize) as u32;
+            if focus_stack_image_pixel_is_native_ink_like(&candidate.image, x, y) {
+                *output = 255;
+            }
+        });
+    let seed_count = selected_ink.iter().filter(|value| **value > 0).count();
+    if seed_count == 0 {
+        return;
+    }
+    let dilated = dilate_focus_binary_mask_u8(
+        &mut selected_ink,
+        layer_width,
+        layer_height,
+        FOCUS_NATIVE_INK_COHERENCE_RADIUS,
+    );
+    if dilated.len() != layer_pixels {
+        return;
+    }
+
+    let base_width = base.width() as usize;
+    let base_height = base.height();
+    let base_pixels = base.as_raw();
+    let candidate_mask = candidate.mask.as_raw();
+    let foreground_mask = candidate.foreground_mask.as_raw();
+    let promoted = decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .enumerate()
+        .map(|(local_y, decision_row)| {
+            let mut row_promoted = 0usize;
+            let global_y = candidate.top + local_y as u32;
+            if global_y >= base_height {
+                return row_promoted;
+            }
+            for (local_x, decision) in decision_row.iter_mut().enumerate() {
+                let index = local_y * layer_width as usize + local_x;
+                if *decision > 0
+                    || dilated[index] == 0
+                    || candidate_mask[index] == 0
+                    || foreground_mask[index] > 0
+                {
+                    continue;
+                }
+                let local_x = local_x as u32;
+                let local_y = local_y as u32;
+                if !focus_stack_image_pixel_is_native_ink_like(&candidate.image, local_x, local_y) {
+                    continue;
+                }
+                let global_x = candidate.left + local_x;
+                let base_index = (global_y as usize * base_width + global_x as usize) * 3;
+                let base_pixel = &base_pixels[base_index..base_index + 3];
+                if focus_stack_image_pixel_has_content(base, global_x, global_y) {
+                    continue;
+                }
+                let Some(candidate_luma) = focus_stack_pixel_luminance(
+                    candidate.image.get_pixel(local_x, local_y).0.as_slice(),
+                ) else {
+                    continue;
+                };
+                // A nearby base stroke means the candidate is probably the
+                // displaced side of the same contour. Preserve it unless the
+                // candidate is clearly the darker recovered stroke.
+                if let Some(nearby_luma) = focus_stack_image_nearby_content_luminance(
+                    base,
+                    global_x,
+                    global_y,
+                    FOCUS_DISPLACED_CONTENT_RADIUS,
+                ) {
+                    let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                    if candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE >= nearby_luma
+                        || candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE >= base_luma
+                    {
+                        continue;
+                    }
+                }
+                *decision = 255;
+                row_promoted += 1;
+            }
+            row_promoted
+        })
+        .sum::<usize>();
+    if promoted > 0 && std::env::var_os("RAW_EDITOR_FOCUS_DEBUG_INK_COHERENCE").is_some() {
+        println!(
+            "  - Promoted {promoted} native ink edge pixels around {seed_count} accepted seeds"
+        );
+    }
+}
+
+fn promote_focus_candidate_ink_edges(
+    decision_mask: &mut GrayImage,
+    base: &Rgb32FImage,
+    candidate: &RenderedFocusLayer,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || candidate.left >= base.width()
+        || candidate.top >= base.height()
+        || candidate.left.saturating_add(layer_width) > base.width()
+        || candidate.top.saturating_add(layer_height) > base.height()
+        || std::env::var_os("RAW_EDITOR_FOCUS_DISABLE_INK_PROMOTION").is_some()
+    {
+        return;
+    }
+
+    // The low-resolution focus decision can miss the centre of a narrow stroke
+    // after the source frame has been resampled. The content guard above can
+    // only veto a bad switch; it cannot recover a candidate that the decision
+    // mask already classified as paper. Promote only a strong, neutral ink
+    // edge when the existing mosaic has neither ink at that pixel nor nearby
+    // ink. The nearby test is what prevents a one- or two-pixel registration
+    // error from turning this recovery path into a second hairline contour.
+    let base_width = base.width() as usize;
+    let base_height = base.height();
+    let base_pixels = base.as_raw();
+    let promoted = decision_mask
+        .as_mut()
+        .par_chunks_mut(layer_width as usize)
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .enumerate()
+        .map(|(local_y, (decision_row, candidate_mask_row))| {
+            let mut row_promoted = 0usize;
+            let global_y = candidate.top + local_y as u32;
+            if global_y >= base_height {
+                return row_promoted;
+            }
+            let base_row_start = global_y as usize * base_width;
+            for local_x in 0..layer_width as usize {
+                if decision_row[local_x] > 0 || candidate_mask_row[local_x] == 0 {
+                    continue;
+                }
+                // Physical rails/holders are represented by the geometric
+                // foreground mask. They must follow the foreground ownership
+                // path, never the calligraphy-specific recovery path.
+                if candidate
+                    .foreground_mask
+                    .get_pixel(local_x as u32, local_y as u32)[0]
+                    > 0
+                {
+                    continue;
+                }
+                let global_x = candidate.left + local_x as u32;
+                let base_index = (base_row_start + global_x as usize) * 3;
+                let base_pixel = &base_pixels[base_index..base_index + 3];
+                if focus_stack_pixel_is_tone_foreground(base_pixel)
+                    || focus_stack_pixel_is_dark_structure(base_pixel)
+                {
+                    continue;
+                }
+                let Some(candidate_luma) = focus_stack_pixel_luminance(
+                    candidate
+                        .image
+                        .get_pixel(local_x as u32, local_y as u32)
+                        .0
+                        .as_slice(),
+                ) else {
+                    continue;
+                };
+                let candidate_has_strong_ink = focus_stack_image_pixel_has_strong_ink_contrast(
+                    &candidate.image,
+                    local_x as u32,
+                    local_y as u32,
+                );
+                let candidate_has_native_edge = focus_stack_image_pixel_has_native_ink_detail(
+                    &candidate.image,
+                    local_x as u32,
+                    local_y as u32,
+                );
+                let candidate_has_connected_dark_ink =
+                    focus_stack_image_pixel_has_connected_dark_ink(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                    );
+                let candidate_has_nearby_ink_edge = candidate_has_connected_dark_ink
+                    && focus_stack_image_has_nearby_native_ink_edge_detail(
+                        &candidate.image,
+                        local_x as u32,
+                        local_y as u32,
+                        2,
+                    );
+                if !candidate_has_strong_ink
+                    && !candidate_has_native_edge
+                    && !candidate_has_nearby_ink_edge
+                {
+                    continue;
+                }
+                let candidate_detail = focus_stack_image_local_detail_score(
+                    &candidate.image,
+                    local_x as u32,
+                    local_y as u32,
+                );
+                let base_detail = focus_stack_image_local_detail_score(base, global_x, global_y);
+                // The centre of a connected, solid stroke is sharp content
+                // even when its four-neighbour response is near zero. Edge
+                // pixels still need the native focus margin, so a broad dark
+                // paper patch cannot be promoted merely because it is dark.
+                if !candidate_has_nearby_ink_edge
+                    && (candidate_detail < FOCUS_INK_PROMOTION_MIN_DETAIL
+                        || candidate_detail < base_detail + FOCUS_INK_PROMOTION_DETAIL_ADVANTAGE)
+                {
+                    continue;
+                }
+                // The base can contain the same stroke as a lifted gray edge.
+                // In that case it is not safe to blanket-reject promotion: the
+                // candidate may be the only sharp sample. Require a clear
+                // darker centre before replacing an existing weak edge; an
+                // equal-dark displaced stroke remains blocked by the nearby
+                // content test below.
+                let base_has_weak_ink =
+                    focus_stack_image_pixel_has_ink_contrast(base, global_x, global_y);
+                let base_luma = focus_stack_pixel_luminance(base_pixel).unwrap_or(0.0);
+                if base_has_weak_ink
+                    && candidate_luma + FOCUS_INK_PROMOTION_BASE_LUMA_ADVANTAGE >= base_luma
+                {
+                    continue;
+                }
+                if let Some(nearby_luma) = focus_stack_image_nearby_content_luminance(
+                    base,
+                    global_x,
+                    global_y,
+                    FOCUS_DISPLACED_CONTENT_RADIUS,
+                ) {
+                    if candidate_luma + FOCUS_INK_RECOVERY_LUMA_ADVANTAGE >= nearby_luma {
+                        continue;
+                    }
+                }
+                decision_row[local_x] = 255;
+                row_promoted += 1;
+            }
+            row_promoted
+        })
+        .sum::<usize>();
+    if promoted > 0 && std::env::var_os("RAW_EDITOR_FOCUS_DEBUG_INK_PROMOTION").is_some() {
+        println!("  - Promoted {promoted} native ink pixels for focus ownership recovery");
+    }
 }
 
 fn resize_binary_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
@@ -2751,9 +4527,21 @@ fn build_focus_background_foreground_envelope(
         let index = y as usize * width as usize + x as usize;
         let covered = analysis_mask.as_raw()[index] > 0;
         let start = index * 3;
+        let pixel = &analysis_image.as_raw()[start..start + 3];
+        image::Luma([u8::from(covered && focus_stack_pixel_is_tone_foreground(pixel)) * 255])
+    });
+    // Keep ink protection separate from the colour-component cleanup above.
+    // Opening a one- or two-pixel brush edge as if it were an isolated colour
+    // speck would erase exactly the lifted gray contours that must be excluded
+    // from the background tone field.
+    let ink_seed = GrayImage::from_fn(width, height, |x, y| {
+        let index = y as usize * width as usize + x as usize;
+        let start = index * 3;
+        let pixel = &analysis_image.as_raw()[start..start + 3];
         image::Luma([u8::from(
-            covered
-                && focus_stack_pixel_is_tone_foreground(&analysis_image.as_raw()[start..start + 3]),
+            analysis_mask.as_raw()[index] > 0
+                && (focus_stack_pixel_is_dark_structure(pixel)
+                    || focus_stack_image_pixel_has_strong_ink_contrast(&analysis_image, x, y)),
         ) * 255])
     });
     // Canvas weave can create long, one-pixel colour runs that connect to a
@@ -2764,7 +4552,15 @@ fn build_focus_background_foreground_envelope(
     let seed_cleanup_radius = (width.max(height) as f32 * 0.0015).round().clamp(2.0, 4.0) as usize;
     let cleaned_tone_seed = open_focus_binary_mask(&tone_seed, seed_cleanup_radius);
     let retained_seed = retain_focus_foreground_components(&cleaned_tone_seed, &cleaned_tone_seed);
-    let retained_seed = fill_focus_foreground_holes(&retained_seed);
+    let mut retained_seed = fill_focus_foreground_holes(&retained_seed);
+    let ink_protection = dilate_focus_binary_mask(&ink_seed, 1);
+    for (destination, source) in retained_seed
+        .as_mut()
+        .iter_mut()
+        .zip(ink_protection.as_raw())
+    {
+        *destination = (*destination).max(*source);
+    }
     let retained_count = retained_seed
         .as_raw()
         .iter()
@@ -3358,6 +5154,500 @@ fn estimate_focus_layer_translation(
         support,
         patch_deltas.len(),
     ))
+}
+
+fn focus_canvas_residual_patch_score(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    center_x: i32,
+    center_y: i32,
+    delta_x: i32,
+    delta_y: i32,
+    radius: i32,
+) -> Option<(f64, f64, usize)> {
+    let (candidate_width, candidate_height) = candidate.image.dimensions();
+    let mut candidate_sum = 0.0;
+    let mut merged_sum = 0.0;
+    let mut candidate_squared_sum = 0.0;
+    let mut merged_squared_sum = 0.0;
+    let mut product_sum = 0.0;
+    let mut sample_count = 0usize;
+    let sample_step = focus_canvas_residual_sample_step(radius);
+    for offset_y in (-radius..=radius).step_by(sample_step) {
+        for offset_x in (-radius..=radius).step_by(sample_step) {
+            let local_x = center_x + offset_x;
+            let local_y = center_y + offset_y;
+            if local_x < 0
+                || local_y < 0
+                || local_x >= candidate_width as i32
+                || local_y >= candidate_height as i32
+            {
+                continue;
+            }
+            if candidate.mask.get_pixel(local_x as u32, local_y as u32)[0] == 0 {
+                continue;
+            }
+            let merged_x = candidate.left as i32 + local_x + delta_x;
+            let merged_y = candidate.top as i32 + local_y + delta_y;
+            if merged_x < 0
+                || merged_y < 0
+                || merged_x >= merged.width() as i32
+                || merged_y >= merged.height() as i32
+                || merged_mask.get_pixel(merged_x as u32, merged_y as u32)[0] == 0
+            {
+                continue;
+            }
+            let candidate_pixel = candidate.image.get_pixel(local_x as u32, local_y as u32);
+            let merged_pixel = merged.get_pixel(merged_x as u32, merged_y as u32);
+            if !focus_stack_pixel_is_canvas_like(&candidate_pixel.0)
+                || focus_stack_pixel_is_tone_foreground(&candidate_pixel.0)
+                || !focus_stack_pixel_is_canvas_like(&merged_pixel.0)
+                || focus_stack_pixel_is_tone_foreground(&merged_pixel.0)
+            {
+                continue;
+            }
+            let candidate_luma = f64::from(candidate_pixel[0]) * 0.299
+                + f64::from(candidate_pixel[1]) * 0.587
+                + f64::from(candidate_pixel[2]) * 0.114;
+            let merged_luma = f64::from(merged_pixel[0]) * 0.299
+                + f64::from(merged_pixel[1]) * 0.587
+                + f64::from(merged_pixel[2]) * 0.114;
+            if !candidate_luma.is_finite() || !merged_luma.is_finite() {
+                continue;
+            }
+            candidate_sum += candidate_luma;
+            merged_sum += merged_luma;
+            candidate_squared_sum += candidate_luma * candidate_luma;
+            merged_squared_sum += merged_luma * merged_luma;
+            product_sum += candidate_luma * merged_luma;
+            sample_count += 1;
+        }
+    }
+    let expected_samples = (((radius * 2) / sample_step as i32 + 1).max(1).pow(2)) as f64;
+    let minimum_samples = (expected_samples * 0.35).round().max(36.0) as usize;
+    if sample_count < minimum_samples {
+        return None;
+    }
+    let sample_count_f64 = sample_count as f64;
+    let candidate_variance =
+        candidate_squared_sum - candidate_sum * candidate_sum / sample_count_f64;
+    let merged_variance = merged_squared_sum - merged_sum * merged_sum / sample_count_f64;
+    if candidate_variance <= f64::EPSILON || merged_variance <= f64::EPSILON {
+        return None;
+    }
+    let covariance = product_sum - candidate_sum * merged_sum / sample_count_f64;
+    let score = covariance / (candidate_variance * merged_variance).sqrt();
+    let energy = (candidate_variance.min(merged_variance) / sample_count_f64).sqrt();
+    (score.is_finite() && energy.is_finite()).then_some((score, energy, sample_count))
+}
+
+fn focus_canvas_residual_patch_radius(candidate: &RenderedFocusLayer) -> i32 {
+    let source_longest_dimension = candidate.image.width().max(candidate.image.height()).max(1);
+    let scale = source_longest_dimension as f64 / 2_376.0;
+    (FOCUS_CANVAS_RESIDUAL_PATCH_RADIUS as f64 * scale)
+        .round()
+        .clamp(
+            FOCUS_CANVAS_RESIDUAL_PATCH_RADIUS as f64,
+            FOCUS_CANVAS_RESIDUAL_MAX_PATCH_RADIUS as f64,
+        ) as i32
+}
+
+fn focus_canvas_residual_sample_step(radius: i32) -> usize {
+    let scale = (radius.max(1) as f64 / FOCUS_CANVAS_RESIDUAL_PATCH_RADIUS as f64).ceil();
+    (FOCUS_CANVAS_RESIDUAL_SAMPLE_STEP as f64 * scale)
+        .round()
+        .max(1.0) as usize
+}
+
+fn focus_canvas_residual_subpixel_axis(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    center_x: i32,
+    center_y: i32,
+    delta_x: i32,
+    delta_y: i32,
+    radius: i32,
+    horizontal: bool,
+) -> Option<f64> {
+    let score_at = |x: i32, y: i32| {
+        focus_canvas_residual_patch_score(
+            candidate,
+            merged,
+            merged_mask,
+            center_x,
+            center_y,
+            x,
+            y,
+            radius,
+        )
+        .map(|(score, _, _)| score)
+    };
+    let center = score_at(delta_x, delta_y)?;
+    let negative = if horizontal {
+        score_at(delta_x - 1, delta_y)?
+    } else {
+        score_at(delta_x, delta_y - 1)?
+    };
+    let positive = if horizontal {
+        score_at(delta_x + 1, delta_y)?
+    } else {
+        score_at(delta_x, delta_y + 1)?
+    };
+    let denominator = negative - 2.0 * center + positive;
+    if !denominator.is_finite() || denominator >= -1e-6 {
+        return None;
+    }
+    let offset = 0.5 * (negative - positive) / denominator;
+    offset.is_finite().then_some(offset.clamp(-0.49, 0.49))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_focus_canvas_residual_shift(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    center_x: i32,
+    center_y: i32,
+    delta_x: i32,
+    delta_y: i32,
+    radius: i32,
+    best: &mut Option<(f64, i32, i32)>,
+    second_best: &mut f64,
+    current_score: &mut f64,
+) {
+    let Some((score, energy, _)) = focus_canvas_residual_patch_score(
+        candidate,
+        merged,
+        merged_mask,
+        center_x,
+        center_y,
+        delta_x,
+        delta_y,
+        radius,
+    ) else {
+        return;
+    };
+    if delta_x == 0 && delta_y == 0 && score.is_finite() && energy.is_finite() {
+        // Keep the no-shift score even when it is below the candidate
+        // threshold. A low current score is precisely the evidence that a
+        // better translated patch should be considered; treating it as
+        // missing would reject every useful correction.
+        *current_score = score;
+    }
+    // Keep low-scoring coarse candidates in the search. A one-pixel residual
+    // can make a high-frequency paper patch correlate poorly at the two-pixel
+    // coarse positions; discarding those positions would prevent the fine
+    // pass from ever reaching the true peak.
+    if energy < FOCUS_CANVAS_RESIDUAL_MIN_ENERGY {
+        return;
+    }
+    let replaces_best = best.as_ref().is_none_or(|(best_score, best_x, best_y)| {
+        score > *best_score
+            || (score == *best_score
+                && (delta_x.abs() + delta_y.abs() < best_x.abs() + best_y.abs()))
+    });
+    if replaces_best {
+        if let Some((best_score, _, _)) = *best {
+            *second_best = (*second_best).max(best_score);
+        }
+        *best = Some((score, delta_x, delta_y));
+    } else {
+        *second_best = (*second_best).max(score);
+    }
+}
+
+fn estimate_focus_canvas_residual_subpixel_translation(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+) -> Option<(f64, f64, f64, usize, usize)> {
+    let debug_residual = std::env::var_os("RAW_EDITOR_FOCUS_RESIDUAL_DEBUG").is_some();
+    let (candidate_width, candidate_height) = candidate.image.dimensions();
+    let (merged_width, merged_height) = merged.dimensions();
+    let radius = focus_canvas_residual_patch_radius(candidate);
+    if candidate_width < 2 * (radius + 2) as u32
+        || candidate_height < 2 * (radius + 2) as u32
+        || merged_width < 2
+        || merged_height < 2
+        || merged_mask.dimensions() != merged.dimensions()
+    {
+        return None;
+    }
+
+    let overlap_left = candidate.left.max(0).min(merged_width.saturating_sub(1)) as i32;
+    let overlap_top = candidate.top.max(0).min(merged_height.saturating_sub(1)) as i32;
+    let overlap_right = (candidate
+        .left
+        .saturating_add(candidate_width)
+        .saturating_sub(1))
+    .min(merged_width.saturating_sub(1)) as i32;
+    let overlap_bottom = (candidate
+        .top
+        .saturating_add(candidate_height)
+        .saturating_sub(1))
+    .min(merged_height.saturating_sub(1)) as i32;
+    if overlap_right - overlap_left < radius * 2 + 2
+        || overlap_bottom - overlap_top < radius * 2 + 2
+    {
+        return None;
+    }
+
+    let grid_size = FOCUS_CANVAS_RESIDUAL_GRID_SIZE;
+    let mut patch_deltas = Vec::new();
+    let mut score_sum = 0.0;
+    let mut attempted_patches = 0usize;
+    let mut patches_without_match = 0usize;
+    let mut patches_rejected_by_quality = 0usize;
+    let mut patches_rejected_by_ncc = 0usize;
+    let mut patches_rejected_by_margin = 0usize;
+    let mut patches_rejected_by_current = 0usize;
+    let mut best_score_min = f64::INFINITY;
+    let mut best_score_max = f64::NEG_INFINITY;
+    let mut best_score_sum = 0.0;
+    for grid_y in 0..grid_size {
+        let global_y =
+            overlap_top + ((overlap_bottom - overlap_top) * (grid_y + 1) / (grid_size + 1));
+        for grid_x in 0..grid_size {
+            attempted_patches += 1;
+            let global_x =
+                overlap_left + ((overlap_right - overlap_left) * (grid_x + 1) / (grid_size + 1));
+            let center_x = global_x - candidate.left as i32;
+            let center_y = global_y - candidate.top as i32;
+            let mut best = None;
+            let mut second_best = f64::NEG_INFINITY;
+            let mut current_score = f64::NEG_INFINITY;
+            // Paper weave and scan texture can be sharp enough that the
+            // correlation peak moves from an even to an odd pixel. Search the
+            // small residual window at full integer resolution; unlike the
+            // broad panorama registration this is bounded to one patch
+            // neighbourhood and only evaluated on a few overlap anchors.
+            for delta_y in -FOCUS_CANVAS_RESIDUAL_MAX_SHIFT..=FOCUS_CANVAS_RESIDUAL_MAX_SHIFT {
+                for delta_x in -FOCUS_CANVAS_RESIDUAL_MAX_SHIFT..=FOCUS_CANVAS_RESIDUAL_MAX_SHIFT {
+                    evaluate_focus_canvas_residual_shift(
+                        candidate,
+                        merged,
+                        merged_mask,
+                        center_x,
+                        center_y,
+                        delta_x,
+                        delta_y,
+                        radius,
+                        &mut best,
+                        &mut second_best,
+                        &mut current_score,
+                    );
+                }
+            }
+            let Some((best_score, best_x, best_y)) = best else {
+                patches_without_match += 1;
+                continue;
+            };
+            best_score_min = best_score_min.min(best_score);
+            best_score_max = best_score_max.max(best_score);
+            best_score_sum += best_score;
+            // For a zero-pixel winner, `current_score` is the winning score
+            // itself. Comparing the winner with itself would reject every
+            // genuinely well-registered patch and would also prevent the
+            // subpixel parabola below from seeing a small residual.
+            let competing_score = if best_x == 0 && best_y == 0 {
+                second_best
+            } else {
+                second_best.max(current_score)
+            };
+            let margin = best_score - competing_score;
+            let rejected_by_ncc = best_score < FOCUS_CANVAS_RESIDUAL_MIN_NCC;
+            let rejected_by_margin =
+                !margin.is_finite() || margin < FOCUS_CANVAS_RESIDUAL_MIN_MARGIN;
+            let rejected_by_current = (best_x != 0 || best_y != 0)
+                && (!current_score.is_finite()
+                    || best_score - current_score < FOCUS_CANVAS_RESIDUAL_MIN_MARGIN);
+            if debug_residual {
+                println!(
+                    "    residual patch center=({}, {}) best=({}, {}) ncc={:.3} current={:.3} margin={:.3} reject_ncc={} reject_margin={} reject_current={}",
+                    center_x,
+                    center_y,
+                    best_x,
+                    best_y,
+                    best_score,
+                    current_score,
+                    margin,
+                    rejected_by_ncc,
+                    rejected_by_margin,
+                    rejected_by_current,
+                );
+            }
+            if rejected_by_ncc || rejected_by_margin || rejected_by_current {
+                patches_rejected_by_quality += 1;
+                patches_rejected_by_ncc += rejected_by_ncc as usize;
+                patches_rejected_by_margin += rejected_by_margin as usize;
+                patches_rejected_by_current += rejected_by_current as usize;
+                continue;
+            }
+            patch_deltas.push((best_x, best_y, center_x, center_y));
+            score_sum += best_score;
+        }
+    }
+    if patch_deltas.is_empty() {
+        if debug_residual {
+            println!(
+                "  - Canvas residual diagnostics: candidate={}x{} radius={} overlap={}x{} patches={}/{} no_match={} quality_rejected={} (ncc={} margin={} current={}) best_ncc={:.3}/{:.3}/{:.3}",
+                candidate_width,
+                candidate_height,
+                radius,
+                overlap_right - overlap_left + 1,
+                overlap_bottom - overlap_top + 1,
+                patch_deltas.len(),
+                attempted_patches,
+                patches_without_match,
+                patches_rejected_by_quality,
+                patches_rejected_by_ncc,
+                patches_rejected_by_margin,
+                patches_rejected_by_current,
+                best_score_min,
+                if best_score_sum == 0.0 {
+                    0.0
+                } else {
+                    best_score_sum / (attempted_patches - patches_without_match) as f64
+                },
+                best_score_max,
+            );
+        }
+        return None;
+    }
+    let mut x_values = patch_deltas
+        .iter()
+        .map(|(x, _, _, _)| *x)
+        .collect::<Vec<_>>();
+    let mut y_values = patch_deltas
+        .iter()
+        .map(|(_, y, _, _)| *y)
+        .collect::<Vec<_>>();
+    x_values.sort_unstable();
+    y_values.sort_unstable();
+    let median_x = x_values[x_values.len() / 2];
+    let median_y = y_values[y_values.len() / 2];
+    let support = patch_deltas
+        .iter()
+        .filter(|(x, y, _, _)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
+        .count();
+    if support < FOCUS_CANVAS_RESIDUAL_MIN_PATCHES
+        || (support as f64) < patch_deltas.len() as f64 * 0.5
+    {
+        if debug_residual {
+            println!(
+                "  - Canvas residual diagnostics: candidate={}x{} radius={} patches={}/{} support={} median=({}, {}) rejected_support=true",
+                candidate_width,
+                candidate_height,
+                radius,
+                patch_deltas.len(),
+                attempted_patches,
+                support,
+                median_x,
+                median_y,
+            );
+        }
+        return None;
+    }
+
+    let mut subpixel_x = Vec::new();
+    let mut subpixel_y = Vec::new();
+    for (delta_x, delta_y, center_x, center_y) in patch_deltas
+        .iter()
+        .copied()
+        .filter(|(x, y, _, _)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
+    {
+        if let Some(offset) = focus_canvas_residual_subpixel_axis(
+            candidate,
+            merged,
+            merged_mask,
+            center_x,
+            center_y,
+            delta_x,
+            delta_y,
+            radius,
+            true,
+        ) {
+            subpixel_x.push(offset);
+        }
+        if let Some(offset) = focus_canvas_residual_subpixel_axis(
+            candidate,
+            merged,
+            merged_mask,
+            center_x,
+            center_y,
+            delta_x,
+            delta_y,
+            radius,
+            false,
+        ) {
+            subpixel_y.push(offset);
+        }
+    }
+    let median_fraction = |values: &mut Vec<f64>| {
+        if values.len() < 3 {
+            return 0.0;
+        }
+        values.sort_by(f64::total_cmp);
+        values[values.len() / 2]
+    };
+    let translation_x = median_x as f64 + median_fraction(&mut subpixel_x);
+    let translation_y = median_y as f64 + median_fraction(&mut subpixel_y);
+    if translation_x.abs() < FOCUS_CANVAS_RESIDUAL_MIN_SUBPIXEL_SHIFT
+        && translation_y.abs() < FOCUS_CANVAS_RESIDUAL_MIN_SUBPIXEL_SHIFT
+    {
+        if debug_residual {
+            println!(
+                "  - Canvas residual diagnostics: candidate={}x{} radius={} patches={}/{} support={} median=({}, {}) translation=({:.3}, {:.3}) below_threshold=true",
+                candidate_width,
+                candidate_height,
+                radius,
+                patch_deltas.len(),
+                attempted_patches,
+                support,
+                median_x,
+                median_y,
+                translation_x,
+                translation_y,
+            );
+        }
+        return None;
+    }
+    if debug_residual {
+        println!(
+            "  - Canvas residual diagnostics: candidate={}x{} radius={} patches={}/{} support={} median=({}, {}) translation=({:.3}, {:.3}) accepted=true",
+            candidate_width,
+            candidate_height,
+            radius,
+            patch_deltas.len(),
+            attempted_patches,
+            support,
+            median_x,
+            median_y,
+            translation_x,
+            translation_y,
+        );
+    }
+    Some((
+        translation_x,
+        translation_y,
+        score_sum / patch_deltas.len() as f64,
+        support,
+        patch_deltas.len(),
+    ))
+}
+
+fn estimate_focus_canvas_residual_translation(
+    candidate: &RenderedFocusLayer,
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+) -> Option<(i32, i32, f64, usize, usize)> {
+    let (translation_x, translation_y, score, support, patch_count) =
+        estimate_focus_canvas_residual_subpixel_translation(candidate, merged, merged_mask)?;
+    let delta_x = translation_x.round() as i32;
+    let delta_y = translation_y.round() as i32;
+    (delta_x != 0 || delta_y != 0).then_some((delta_x, delta_y, score, support, patch_count))
 }
 
 fn translate_rendered_focus_layer(
@@ -4507,21 +6797,23 @@ fn combine_rgb(
     Rgb32FImage::from_raw(width, height, output).expect("combined image dimensions must match")
 }
 
-fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
-    let (width, height) = image.dimensions();
-    if width == 0 || height == 0 || mask.dimensions() != (width, height) {
-        return image;
+fn largest_valid_rectangle(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 {
+        return None;
     }
 
-    let mut heights = vec![0usize; width as usize];
-    let mut stack = Vec::with_capacity(width as usize + 1);
+    let width_usize = width as usize;
+    let height_usize = height as usize;
+    let mut heights = vec![0usize; width_usize];
+    let mut stack = Vec::with_capacity(width_usize + 1);
     let mut best_area = 0usize;
     let mut best_left = 0usize;
     let mut best_top = 0usize;
-    let mut best_width = width as usize;
-    let mut best_height = height as usize;
+    let mut best_width = 0usize;
+    let mut best_height = 0usize;
 
-    for y in 0..height as usize {
+    for y in 0..height_usize {
         for (x, height_value) in heights.iter_mut().enumerate() {
             *height_value = if mask.get_pixel(x as u32, y as u32)[0] > 0 {
                 height_value.saturating_add(1)
@@ -4531,8 +6823,8 @@ fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage 
         }
 
         stack.clear();
-        for x in 0..=width as usize {
-            let current_height = if x < width as usize { heights[x] } else { 0 };
+        for x in 0..=width_usize {
+            let current_height = if x < width_usize { heights[x] } else { 0 };
             while let Some(&bar_index) = stack.last() {
                 if heights[bar_index] <= current_height {
                     break;
@@ -4554,26 +6846,26 @@ fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage 
         }
     }
 
-    if best_area == 0 {
-        return image;
-    }
-
-    if best_left == 0
-        && best_top == 0
-        && best_width == width as usize
-        && best_height == height as usize
-    {
-        return image;
-    }
-
-    image::imageops::crop_imm(
-        &image,
+    (best_area > 0).then_some((
         best_left as u32,
         best_top as u32,
         best_width as u32,
         best_height as u32,
-    )
-    .to_image()
+    ))
+}
+
+fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || mask.dimensions() != (width, height) {
+        return image;
+    }
+    let Some((left, top, crop_width, crop_height)) = largest_valid_rectangle(mask) else {
+        return image;
+    };
+    if left == 0 && top == 0 && crop_width == width && crop_height == height {
+        return image;
+    }
+    image::imageops::crop_imm(&image, left, top, crop_width, crop_height).to_image()
 }
 
 fn reflected_run_source_index(
@@ -5256,7 +7548,7 @@ fn harmonize_focus_background_tone(
 fn harmonize_focus_background_tone_with_owners(
     image: &mut Rgb32FImage,
     image_mask: &GrayImage,
-    foreground_mask: &GrayImage,
+    foreground_mask: &mut GrayImage,
     owner_map: &GrayImage,
 ) {
     let (width, height) = image.dimensions();
@@ -5426,12 +7718,52 @@ fn harmonize_focus_background_tone_with_owners(
         analysis_height,
         background_radius,
     );
+    // The analysis envelope above is deliberately bounded for memory and
+    // performance, but it can undersample a one- or two-pixel gray stroke in a
+    // 9504px source. Reuse the existing foreground buffer for a native-only
+    // protection pass after the tone field has been estimated. This does not
+    // contaminate the background statistics; it only prevents the final
+    // correction from lightening a detail pixel it cannot represent at the
+    // analysis scale.
+    let image_pixels = image.as_raw();
+    foreground_mask
+        .as_mut()
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(index, protected)| {
+            if *protected > 0 {
+                return;
+            }
+            // The owner correction is a full-canvas pass. Use the same
+            // constant-time colour classifier used by the seam guard here;
+            // running several 3x3/5x5 neighbourhood searches for every pixel
+            // makes a 35k-wide scan scale quadratically in practice. The
+            // ownership passes already protect native edge detail before this
+            // low-frequency correction is reached.
+            let start = index * 3;
+            if focus_stack_pixel_is_probable_ink(&image_pixels[start..start + 3])
+                // At native resolution the pale edge of a thin brush stroke
+                // is often still chromatically indistinguishable from the
+                // warm paper.  The pixel-only classifier must not be the last
+                // word here: the four-neighbour edge test is cheap and keeps
+                // the owner tone field from lifting that edge into a visible
+                // fly-white line.
+                || focus_stack_image_pixel_has_native_ink_edge_detail(
+                    image,
+                    (index as u32) % width,
+                    (index as u32) / width,
+                )
+            {
+                *protected = 255;
+            }
+        });
     let x_samples = linear_samples(analysis_width, width);
     let y_samples = linear_samples(analysis_height, height);
     let analysis_stride = analysis_width as usize;
     let correction_ref = smoothed_correction.as_raw();
     let background_weight_ref = &background_weight;
     let image_mask_ref = image_mask.as_raw();
+    let foreground_mask_ref = foreground_mask.as_raw();
     image
         .as_mut()
         .par_chunks_mut(width as usize * 3)
@@ -5448,6 +7780,18 @@ fn harmonize_focus_background_tone_with_owners(
                 // pixels that need correction, and the low-frequency field does
                 // not replace their weave or brush detail.
                 let start = x * 3;
+                if foreground_mask_ref[y * width as usize + x] > 0 {
+                    continue;
+                }
+                // The analysis envelope is intentionally conservative, but a
+                // one-pixel gray ink edge can disappear while resizing the
+                // very wide panorama. Never apply a low-frequency tone delta
+                // to a native-resolution dark structure that is still present
+                // in the final image; otherwise colour harmonization turns a
+                // real stroke into the reported fly-white gap.
+                if focus_stack_pixel_is_dark_structure(&row[start..start + 3]) {
+                    continue;
+                }
                 let x_sample = x_samples[x];
                 let top_weight = background_weight_ref
                     [y_sample.lower * analysis_stride + x_sample.lower]
@@ -5760,6 +8104,26 @@ fn multiband_blend(
     max_bands: usize,
     hard_finest_band: bool,
 ) -> Rgb32FImage {
+    multiband_blend_with_detail_boundary(
+        base,
+        candidate,
+        mask,
+        low_frequency_mask,
+        max_bands,
+        hard_finest_band,
+        PANORAMA_GLOBAL_TONE_FIRST_BAND,
+    )
+}
+
+fn multiband_blend_with_detail_boundary(
+    base: Rgb32FImage,
+    candidate: Rgb32FImage,
+    mask: GrayImage,
+    low_frequency_mask: Option<GrayImage>,
+    max_bands: usize,
+    hard_finest_band: bool,
+    hard_detail_bands: usize,
+) -> Rgb32FImage {
     let (width, height) = base.dimensions();
     let mut current_base = base;
     let mut current_candidate = candidate;
@@ -5798,7 +8162,14 @@ fn multiband_blend(
         false,
     );
     for level in (0..base_laplacian.len()).rev() {
-        let blend_mask = if level >= PANORAMA_GLOBAL_TONE_FIRST_BAND {
+        let hard_detail = hard_finest_band && level < hard_detail_bands;
+        // A hard detail band must use the unsmoothed ownership mask. Using the
+        // low-frequency mask here still averages the two registered strokes
+        // before `combine_rgb` gets a chance to threshold it, which recreates
+        // the one-pixel fly-white contour at a larger pyramid scale.
+        let blend_mask = if hard_detail {
+            &masks[level]
+        } else if level >= PANORAMA_GLOBAL_TONE_FIRST_BAND {
             &low_frequency_masks[level]
         } else {
             &masks[level]
@@ -5812,7 +8183,7 @@ fn multiband_blend(
             // create a second contour when the two registered samples differ
             // by even a fraction of a pixel. Keep all visible detail bands on
             // one side; only the broad tone bands may feather continuously.
-            hard_finest_band && level < PANORAMA_GLOBAL_TONE_FIRST_BAND,
+            hard_detail,
         );
         reconstructed = upsample_and_add_rgb(&reconstructed, &blended_detail);
     }
@@ -6042,9 +8413,51 @@ fn blend_focus_seam_band(
                     // strokes is exactly the blur/double-contour regression this
                     // path is intended to prevent. Keep the canvas gate separate
                     // so a darker/lighter paper exposure can still be harmonized.
-                    let tone_foreground =
-                        focus_stack_pixel_is_tone_foreground(base_pixel.0.as_slice())
-                            || focus_stack_pixel_is_tone_foreground(candidate_pixel.0.as_slice());
+                    let base_tone_foreground =
+                        focus_stack_pixel_is_tone_foreground(base_pixel.0.as_slice());
+                    let candidate_tone_foreground =
+                        focus_stack_pixel_is_tone_foreground(candidate_pixel.0.as_slice());
+                    // Anti-aliased ink edges can be too light for the strict
+                    // tone foreground classifier. Protect neutral, dark
+                    // source pixels from the low-frequency exposure pyramid as
+                    // well: otherwise a paper-tone correction can turn a
+                    // continuous stroke into the thin fly-white seen in the
+                    // final stack. This deliberately uses only the pixel
+                    // classifier here. The native neighbourhood tests run in
+                    // the ownership/final-protection passes; scanning a
+                    // neighbourhood for every seam pixel makes a long 45-shot
+                    // stack needlessly expensive.
+                    let base_native_ink_edge = base_valid
+                        && (focus_stack_image_pixel_has_native_ink_edge_detail(
+                            base_ref, global_x, global_y,
+                        ) || focus_stack_image_pixel_has_soft_ink_detail(
+                            base_ref, global_x, global_y,
+                        ));
+                    let candidate_native_ink_edge = candidate_valid
+                        && (focus_stack_image_pixel_has_native_ink_edge_detail(
+                            &candidate.image,
+                            source_x,
+                            source_y,
+                        ) || focus_stack_image_pixel_has_soft_ink_detail(
+                            &candidate.image,
+                            source_x,
+                            source_y,
+                        ));
+                    let tone_foreground = base_tone_foreground
+                        || candidate_tone_foreground
+                        || (!base_tone_foreground
+                            && focus_stack_pixel_is_probable_ink(base_pixel.0.as_slice()))
+                        || (!candidate_tone_foreground
+                            && focus_stack_pixel_is_probable_ink(candidate_pixel.0.as_slice()))
+                        // A lifted/anti-aliased brush edge can have the same
+                        // warm ordering as paper and therefore fail every
+                        // single-pixel ink classifier. If its native
+                        // neighbourhood still proves a narrow ink boundary,
+                        // keep it out of the low-frequency pyramid too. This
+                        // prevents the tone pass from turning a real edge into
+                        // the thin fly-white reported in the stack result.
+                        || base_native_ink_edge
+                        || candidate_native_ink_edge;
                     let artwork_foreground =
                         candidate_foreground || existing_foreground || tone_foreground;
                     // Blend the broad tone over the union of the two valid
@@ -6152,7 +8565,11 @@ fn blend_focus_seam_band(
         };
         image::Luma([(value.clamp(0.0, 1.0) * 255.0) as u8])
     });
-    let blended = multiband_blend(
+    // The normal panorama path keeps a few middle-frequency bands feathered
+    // for a conventional static overlap. Focus ownership is stricter: every
+    // detail band belongs to exactly one registered source, while only the
+    // coarsest base band is allowed to carry the broad paper-tone transition.
+    let blended = multiband_blend_with_detail_boundary(
         Rgb32FImage::from_raw(patch_width, patch_height, base_pixels)
             .expect("focus seam base dimensions must match"),
         Rgb32FImage::from_raw(patch_width, patch_height, candidate_pixels)
@@ -6161,6 +8578,7 @@ fn blend_focus_seam_band(
         Some(low_frequency_mask),
         PANORAMA_BLEND_BANDS,
         true,
+        PANORAMA_BLEND_BANDS,
     );
 
     let blended_pixels = blended.as_raw();
@@ -6358,15 +8776,57 @@ where
     let shifted_mosaic = focus_stack_is_shifted_mosaic(images, global_homographies, projection);
     if shifted_mosaic {
         println!(
-            "  - Large framing shift detected; using foreground-scoped local geometry and global paper registration"
+            "  - Large framing shift detected; using global paper registration with hard focus ownership"
         );
         let _ = app_handle.emit(
             progress_event,
             "Large framing shift detected; selecting the sharpest source in each overlap...",
         );
     }
-    let (min_x, max_x, min_y, max_y) =
-        focus_output_bounds(images, global_homographies, projection, focus_warp);
+    // In a scan/pan mosaic, a near-field object can legitimately move against
+    // the paper plane. Applying a generic local foreground/depth homography
+    // again makes the same rail/seal appear twice: one copy from the global
+    // paper pose and another from the local depth pose. The focus renderer
+    // already has the correct global paper registration and hard detail
+    // ownership for this case. Keep only a measured, repeated physical-edge
+    // correction on the large-shift path; generic depth warps stay opt-in.
+    let shifted_physical_edge_warp =
+        if shifted_mosaic && std::env::var_os("RAW_EDITOR_FOCUS_ENABLE_SHIFTED_WARP").is_none() {
+            focus_warp.map(|warp| FocusLayerWarp {
+                bands: warp
+                    .bands
+                    .iter()
+                    .filter(|band| band.physical_edge)
+                    .cloned()
+                    .collect(),
+            })
+        } else {
+            None
+        };
+    let disable_shifted_warp =
+        shifted_mosaic && std::env::var_os("RAW_EDITOR_FOCUS_DISABLE_PHYSICAL_EDGE_WARP").is_some();
+    let rendering_focus_warp = if disable_shifted_warp {
+        println!(
+            "  - Shifted focus mosaic: local physical-edge warp disabled by diagnostic override"
+        );
+        None
+    } else if shifted_mosaic && std::env::var_os("RAW_EDITOR_FOCUS_ENABLE_SHIFTED_WARP").is_none() {
+        // A repeated, content-independent physical edge is safe to correct
+        // locally even in a moving scan. Keep the foreground/depth warp
+        // opt-in for now: unlike a measured long edge, its silhouette can
+        // be a different physical instance in two overlapping frames.
+        shifted_physical_edge_warp
+            .as_ref()
+            .filter(|warp| !warp.bands.is_empty())
+    } else {
+        focus_warp
+    };
+    let (min_x, max_x, min_y, max_y) = focus_output_bounds(
+        images,
+        global_homographies,
+        projection,
+        rendering_focus_warp,
+    );
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
         return Ok(Rgb32FImage::new(0, 0));
     }
@@ -6378,7 +8838,7 @@ where
         &first_source,
         &global_homographies[&images[0].id],
         projection,
-        focus_warp,
+        rendering_focus_warp,
         offset_x,
         offset_y,
         out_width,
@@ -6431,22 +8891,61 @@ where
             &source_image,
             &global_homographies[&image.id],
             projection,
-            focus_warp,
+            rendering_focus_warp,
             offset_x,
             offset_y,
             out_width,
             out_height,
         );
-        drop(source_image);
-        if let Some((delta_x, delta_y, score, support, patch_count)) =
+        let force_full_resolution_refinement =
+            std::env::var_os("RAW_EDITOR_FOCUS_FORCE_FULL_RES_ALIGNMENT").is_some();
+        let skip_shifted_canvas_residual =
+            std::env::var_os("RAW_EDITOR_FOCUS_SKIP_CANVAS_RESIDUAL").is_some();
+        if shifted_mosaic && !force_full_resolution_refinement && !skip_shifted_canvas_residual {
+            // Re-render from the source at the measured fractional canvas
+            // offset. Translating an already interpolated layer by an integer
+            // amount leaves the source sample phase unchanged, which is
+            // enough to turn a one-pixel registration error into a thin
+            // paper-coloured gap through a fine stroke.
+            if let Some((delta_x, delta_y, score, support, patch_count)) =
+                estimate_focus_canvas_residual_subpixel_translation(
+                    &candidate,
+                    &merged,
+                    &merged_mask,
+                )
+            {
+                println!(
+                    "  - Canvas-only residual refinement: delta=({delta_x:.2},{delta_y:.2}), score={score:.3}, consensus={support}/{patch_count} patches"
+                );
+                candidate = render_focus_layer(
+                    image,
+                    &source_image,
+                    &global_homographies[&image.id],
+                    projection,
+                    rendering_focus_warp,
+                    offset_x + delta_x,
+                    offset_y + delta_y,
+                    out_width,
+                    out_height,
+                );
+            }
+        } else if shifted_mosaic && skip_shifted_canvas_residual {
+            println!("  - Canvas-only residual refinement: skipped by diagnostic override");
+        } else if let Some((delta_x, delta_y, score, support, patch_count)) =
             estimate_focus_layer_translation(&candidate, &merged, &merged_mask)
         {
             println!(
-                "  - Full-resolution focus refinement: delta=({delta_x},{delta_y}), score={score:.3}, consensus={support}/{patch_count} patches"
+                "  - Full-resolution focus refinement{}: delta=({delta_x},{delta_y}), score={score:.3}, consensus={support}/{patch_count} patches",
+                if shifted_mosaic {
+                    " (forced shifted-mosaic)"
+                } else {
+                    ""
+                }
             );
             candidate =
                 translate_rendered_focus_layer(candidate, delta_x, delta_y, out_width, out_height);
         }
+        drop(source_image);
         // A regional warp can still leave a small residual translation on a
         // depth-discontinuous layer. Refine only the detected foreground
         // ownership mask against the already selected foreground when the
@@ -6490,11 +8989,25 @@ where
             analysis_height,
         );
         let candidate_focus = focus_score_map(&candidate_analysis.image, &candidate_analysis.mask);
-        let mut analysis_decision = focus_decision_mask(
+        let allow_shifted_structural_claims =
+            std::env::var_os("RAW_EDITOR_FOCUS_ALLOW_STRUCTURAL_CLAIMS").is_some();
+        let structural_claims_enabled = !shifted_mosaic || allow_shifted_structural_claims;
+        let coherence_radius_cap = if shifted_mosaic {
+            // A source-sized structural claim is safe for a fixed-camera focus
+            // stack, but unsafe for a translated scan: a sharp stroke in one
+            // tile can otherwise claim the neighbouring paper cell and leave a
+            // one-pixel white break in the existing stroke.
+            2
+        } else {
+            FOCUS_DECISION_MAX_COHERENCE_RADIUS
+        };
+        let mut analysis_decision = focus_decision_mask_with_options(
             &merged_focus,
             &candidate_focus,
             &merged_analysis_mask,
             &candidate_analysis.mask,
+            structural_claims_enabled,
+            coherence_radius_cap,
         );
         // Keep the low-resolution ownership model in lockstep with the final
         // image. If focus scores are allowed to switch a near-field object at
@@ -6521,6 +9034,15 @@ where
             &merged_analysis_mask,
             &candidate_analysis.mask,
         );
+        if std::env::var_os("RAW_EDITOR_FOCUS_SKIP_CONTENT_GUARD").is_none() {
+            suppress_focus_content_loss_switches_on_canvas(
+                &mut analysis_decision,
+                &merged_analysis,
+                &candidate_analysis.image,
+                &merged_analysis_mask,
+                &candidate_analysis.mask,
+            );
+        }
         let mut full_resolution_decision =
             focus_decision_for_layer(&analysis_decision, &candidate, out_width, out_height);
         // A detected near-field layer is geometrically separate from the main
@@ -6541,12 +9063,43 @@ where
             candidate.top,
             &candidate.relaxed_foreground_mask,
         );
+        if std::env::var_os("RAW_EDITOR_FOCUS_SKIP_CONTENT_GUARD").is_none() {
+            suppress_focus_content_loss_switches(
+                &mut full_resolution_decision,
+                &merged,
+                &candidate,
+            );
+            suppress_focus_native_ink_gaps(&mut full_resolution_decision, &merged, &candidate);
+            suppress_focus_native_detail_regressions(
+                &mut full_resolution_decision,
+                &merged,
+                &candidate,
+            );
+            recover_focus_native_ink_switches(&mut full_resolution_decision, &merged, &candidate);
+            stabilize_focus_native_ink_ownership(
+                &mut full_resolution_decision,
+                &merged,
+                &candidate,
+            );
+            if std::env::var_os("RAW_EDITOR_FOCUS_ALLOW_INK_PROMOTION").is_some() {
+                promote_focus_candidate_ink_edges(
+                    &mut full_resolution_decision,
+                    &merged,
+                    &candidate,
+                );
+            }
+        }
         // A shifted scan can put the ownership boundary through a face, sleeve,
         // or painted contour. Averaging the full-resolution detail there turns
         // two slightly displaced sharp samples into a soft double exposure.
         // The seam path therefore blends only low-frequency canvas tone while
         // keeping detail-band source ownership hard and deterministic.
-        let seam_blend_enabled = shifted_mosaic && FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND;
+        let seam_blend_enabled = shifted_mosaic
+            && FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND
+            && std::env::var_os("RAW_EDITOR_FOCUS_DISABLE_SEAM_BLEND").is_none();
+        if shifted_mosaic && FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND && !seam_blend_enabled {
+            println!("  - Focus seam low-frequency blend: disabled by diagnostic override");
+        }
         if seam_blend_enabled {
             blend_focus_seam_band(
                 &mut merged,
@@ -6598,30 +9151,69 @@ where
             resize_binary_mask(&merged_foreground_mask, analysis_width, analysis_height);
     }
     let merged_dimensions = merged.dimensions();
-    let (filled_pixels, remaining_invalid_pixels) =
-        fill_focus_canvas_margins(&mut merged, &mut merged_mask);
-    println!(
-        "  - Kept full focus-stack canvas {}x{}; filled {} invalid margin pixels{}",
-        merged_dimensions.0,
-        merged_dimensions.1,
-        filled_pixels,
-        if remaining_invalid_pixels > 0 {
-            format!(" ({} remain)", remaining_invalid_pixels)
-        } else {
-            String::new()
+    if shifted_mosaic {
+        // The transformed union can extend beyond the pixels actually covered
+        // by a source frame, especially at the lower edge of a long scan. Do
+        // not reflect the nearest valid pixel into that area: a reflected
+        // character or seal is synthetic content and is indistinguishable from
+        // a duplicate/ghost in the final image. Keep one maximal all-valid
+        // rectangle and crop every parallel ownership buffer together.
+        if let Some((left, top, crop_width, crop_height)) = largest_valid_rectangle(&merged_mask) {
+            if (left, top, crop_width, crop_height)
+                != (0, 0, merged_dimensions.0, merged_dimensions.1)
+            {
+                merged = image::imageops::crop_imm(&merged, left, top, crop_width, crop_height)
+                    .to_image();
+                merged_mask =
+                    image::imageops::crop_imm(&merged_mask, left, top, crop_width, crop_height)
+                        .to_image();
+                merged_foreground_mask = image::imageops::crop_imm(
+                    &merged_foreground_mask,
+                    left,
+                    top,
+                    crop_width,
+                    crop_height,
+                )
+                .to_image();
+                merged_owner =
+                    image::imageops::crop_imm(&merged_owner, left, top, crop_width, crop_height)
+                        .to_image();
+                println!(
+                    "  - Cropped uncovered focus-stack margins: {}x{} -> {}x{} (offset {},{})",
+                    merged_dimensions.0, merged_dimensions.1, crop_width, crop_height, left, top
+                );
+            }
         }
-    );
+    } else {
+        let (filled_pixels, remaining_invalid_pixels) =
+            fill_focus_canvas_margins(&mut merged, &mut merged_mask);
+        println!(
+            "  - Kept full focus-stack canvas {}x{}; filled {} invalid margin pixels{}",
+            merged_dimensions.0,
+            merged_dimensions.1,
+            filled_pixels,
+            if remaining_invalid_pixels > 0 {
+                format!(" ({} remain)", remaining_invalid_pixels)
+            } else {
+                String::new()
+            }
+        );
+    }
     // A newly exposed canvas region may have no overlap samples from which to
     // estimate a source-specific colour transform. Once ownership is final,
     // remove only the remaining source-sized low-frequency tone steps across
     // the complete mosaic. The strict canvas gate preserves the original
     // weave and painted foreground instead of treating it as a background.
-    harmonize_focus_background_tone_with_owners(
-        &mut merged,
-        &merged_mask,
-        &merged_foreground_mask,
-        &merged_owner,
-    );
+    if std::env::var_os("RAW_EDITOR_FOCUS_SKIP_OWNER_HARMONIZATION").is_none() {
+        harmonize_focus_background_tone_with_owners(
+            &mut merged,
+            &merged_mask,
+            &mut merged_foreground_mask,
+            &merged_owner,
+        );
+    } else {
+        println!("  - Owner-based background harmonization: skipped by diagnostic override");
+    }
     Ok(merged)
 }
 
@@ -7047,6 +9639,36 @@ fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb
     Rgb(output)
 }
 
+fn get_focus_stack_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
+    let interpolated = get_high_quality_interpolated_pixel(img, x, y);
+    let (width, height) = img.dimensions();
+    if width == 0 || height == 0 {
+        return interpolated;
+    }
+
+    let nearest_x = x.round().clamp(0.0, width.saturating_sub(1) as f64) as u32;
+    let nearest_y = y.round().clamp(0.0, height.saturating_sub(1) as f64) as u32;
+    let nearest = *img.get_pixel(nearest_x, nearest_y);
+    let Some(nearest_luma) = focus_stack_pixel_luminance(nearest.0.as_slice()) else {
+        return interpolated;
+    };
+    let Some(interpolated_luma) = focus_stack_pixel_luminance(interpolated.0.as_slice()) else {
+        return interpolated;
+    };
+
+    // Do not use nearest-neighbour for the whole image. It would make the
+    // paper weave and long plastic edges visibly jagged. This branch is only
+    // for an achromatic ink sample whose source value would otherwise be
+    // lifted by interpolation. The strict luma margin also keeps ordinary
+    // sub-pixel paper texture on the cubic path.
+    let nearest_is_ink = focus_stack_pixel_is_probable_ink(nearest.0.as_slice());
+    if nearest_is_ink && nearest_luma + 0.015 < interpolated_luma {
+        nearest
+    } else {
+        interpolated
+    }
+}
+
 #[cfg(test)]
 mod interpolation_tests {
     use super::*;
@@ -7077,6 +9699,22 @@ mod interpolation_tests {
     }
 
     #[test]
+    fn focus_sampling_does_not_lift_a_native_ink_pixel_into_paper() {
+        let image = Rgb32FImage::from_fn(8, 8, |x, y| {
+            if x == 4 && y >= 2 {
+                Rgb([0.10, 0.10, 0.10])
+            } else {
+                Rgb([0.42, 0.34, 0.27])
+            }
+        });
+        let cubic = get_high_quality_interpolated_pixel(&image, 4.35, 4.4);
+        let focus = get_focus_stack_interpolated_pixel(&image, 4.35, 4.4);
+
+        assert!(focus[0] < cubic[0]);
+        assert_eq!(focus, *image.get_pixel(4, 4));
+    }
+
+    #[test]
     fn focus_box_blur_preserves_a_constant_score_map() {
         let source = vec![3.5f32; 5 * 4];
         let blurred = box_blur_focus_map(&source, 5, 4, 2);
@@ -7093,6 +9731,506 @@ mod interpolation_tests {
         assert!(
             u64::from(analysis_width) * u64::from(analysis_height) <= FOCUS_ANALYSIS_MAX_PIXELS
         );
+    }
+
+    #[test]
+    fn canvas_residual_registration_recovers_a_consistent_small_translation() {
+        let candidate_left = 24u32;
+        let candidate_top = 18u32;
+        let true_delta = (3i32, -2i32);
+        let texture = |x: i32, y: i32| {
+            let variation = ((x * 17 + y * 29 + x * y * 3).rem_euclid(97) as f32) / 97.0;
+            let red = 0.30 + variation * 0.20;
+            Rgb([red, red - 0.075, red - 0.145])
+        };
+        let candidate_image = Rgb32FImage::from_fn(160, 140, |x, y| texture(x as i32, y as i32));
+        let merged_image = Rgb32FImage::from_fn(220, 190, |x, y| {
+            let local_x = x as i32 - candidate_left as i32 - true_delta.0;
+            let local_y = y as i32 - candidate_top as i32 - true_delta.1;
+            if (0..160).contains(&local_x) && (0..140).contains(&local_y) {
+                texture(local_x, local_y)
+            } else {
+                texture(x as i32 + 11, y as i32 + 7)
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: candidate_image,
+            mask: GrayImage::from_pixel(160, 140, image::Luma([255])),
+            foreground_mask: GrayImage::new(160, 140),
+            relaxed_foreground_mask: GrayImage::new(160, 140),
+            left: candidate_left,
+            top: candidate_top,
+        };
+        let merged_mask = GrayImage::from_pixel(220, 190, image::Luma([255]));
+
+        let refined =
+            estimate_focus_canvas_residual_translation(&candidate, &merged_image, &merged_mask)
+                .expect("consistent paper texture should provide a residual translation");
+
+        assert_eq!((refined.0, refined.1), true_delta);
+        assert!(refined.3 >= FOCUS_CANVAS_RESIDUAL_MIN_PATCHES);
+        assert!(refined.4 >= refined.3);
+    }
+
+    #[test]
+    fn focus_content_guard_does_not_replace_an_existing_stroke_with_paper() {
+        let base = Rgb32FImage::from_pixel(5, 5, Rgb([0.06, 0.06, 0.06]));
+        let candidate = Rgb32FImage::from_pixel(5, 5, Rgb([0.40, 0.30, 0.22]));
+        let mask = GrayImage::from_pixel(5, 5, image::Luma([255]));
+        let mut decision = mask.clone();
+
+        suppress_focus_content_loss_switches_on_canvas(
+            &mut decision,
+            &base,
+            &candidate,
+            &mask,
+            &mask,
+        );
+
+        assert!(decision.as_raw().iter().all(|value| *value == 0));
+    }
+
+    #[test]
+    fn focus_content_guard_keeps_lifted_neutral_ink_from_becoming_fly_white() {
+        let base = Rgb32FImage::from_pixel(5, 5, Rgb([0.22, 0.21, 0.20]));
+        let candidate = Rgb32FImage::from_pixel(5, 5, Rgb([0.40, 0.30, 0.22]));
+        let mask = GrayImage::from_pixel(5, 5, image::Luma([255]));
+        let mut decision = mask.clone();
+
+        suppress_focus_content_loss_switches_on_canvas(
+            &mut decision,
+            &base,
+            &candidate,
+            &mask,
+            &mask,
+        );
+
+        assert!(decision.as_raw().iter().all(|value| *value == 0));
+    }
+
+    #[test]
+    fn focus_content_guard_keeps_a_lifted_fine_ink_edge_from_becoming_paper() {
+        let base = Rgb32FImage::from_fn(7, 7, |x, _| {
+            if x == 3 {
+                Rgb([0.26, 0.26, 0.26])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = Rgb32FImage::from_pixel(7, 7, Rgb([0.40, 0.30, 0.22]));
+        let mask = GrayImage::from_pixel(7, 7, image::Luma([255]));
+        let mut decision = mask.clone();
+
+        suppress_focus_content_loss_switches_on_canvas(
+            &mut decision,
+            &base,
+            &candidate,
+            &mask,
+            &mask,
+        );
+
+        assert_eq!(decision.get_pixel(3, 3)[0], 0);
+    }
+
+    #[test]
+    fn probable_ink_does_not_treat_warm_paper_as_foreground() {
+        assert!(!focus_stack_pixel_is_probable_ink(&[0.36, 0.29, 0.23]));
+        assert!(focus_stack_pixel_is_probable_ink(&[0.18, 0.18, 0.18]));
+        assert!(focus_stack_pixel_is_probable_ink(&[0.40, 0.39, 0.38]));
+    }
+
+    #[test]
+    fn focus_content_guard_rejects_a_displaced_fine_stroke() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 5 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let mask = GrayImage::from_pixel(9, 9, image::Luma([255]));
+        let mut decision = mask.clone();
+
+        suppress_focus_content_loss_switches_on_canvas(
+            &mut decision,
+            &base,
+            &candidate,
+            &mask,
+            &mask,
+        );
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 0);
+        assert_eq!(decision.get_pixel(5, 4)[0], 0);
+    }
+
+    #[test]
+    fn focus_content_guard_allows_a_strong_ink_recovery_from_a_lifted_stroke() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.22, 0.22, 0.22])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 5 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let mask = GrayImage::from_pixel(9, 9, image::Luma([255]));
+        let mut decision = mask.clone();
+
+        suppress_focus_content_loss_switches_on_canvas(
+            &mut decision,
+            &base,
+            &candidate,
+            &mask,
+            &mask,
+        );
+
+        assert_eq!(decision.get_pixel(5, 4)[0], 255);
+    }
+
+    #[test]
+    fn native_detail_guard_rejects_a_darker_but_blurred_stroke() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if (3..=5).contains(&x) && (1..=7).contains(&y) {
+                    Rgb([0.03, 0.03, 0.03])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::from_pixel(9, 9, image::Luma([255]));
+
+        suppress_focus_native_detail_regressions(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_gap_guard_keeps_an_existing_stroke_from_becoming_warm_paper() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            // Warm paper fails the neutral-ink gate. This is the regression
+            // case that the old guard skipped before it could veto the erase.
+            image: Rgb32FImage::from_pixel(9, 9, Rgb([0.48, 0.35, 0.25])),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::from_pixel(9, 9, image::Luma([255]));
+
+        suppress_focus_native_ink_gaps(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_gap_guard_rejects_an_equal_dark_displaced_contour() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 5 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::from_pixel(9, 9, image::Luma([255]));
+
+        suppress_focus_native_ink_gaps(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(5, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_recovery_fills_a_coherent_missing_stroke() {
+        let base = Rgb32FImage::from_pixel(9, 9, Rgb([0.36, 0.29, 0.23]));
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 4 && (2..=6).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        recover_focus_native_ink_switches(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 255);
+        assert_eq!(decision.get_pixel(2, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_recovery_rejects_isolated_and_displaced_hairlines() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 5 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        recover_focus_native_ink_switches(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(5, 4)[0], 0);
+
+        let isolated_candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 4 && y == 4 {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let empty_base = Rgb32FImage::from_pixel(9, 9, Rgb([0.36, 0.29, 0.23]));
+        let mut isolated_decision = GrayImage::new(9, 9);
+
+        recover_focus_native_ink_switches(&mut isolated_decision, &empty_base, &isolated_candidate);
+
+        assert_eq!(isolated_decision.get_pixel(4, 4)[0], 0);
+    }
+
+    #[test]
+    fn focus_ink_promotion_recovers_a_missing_fine_stroke() {
+        let base = Rgb32FImage::from_pixel(9, 9, Rgb([0.36, 0.29, 0.23]));
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 4 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        promote_focus_candidate_ink_edges(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 255);
+        assert_eq!(decision.get_pixel(3, 4)[0], 0);
+        assert_eq!(decision.get_pixel(5, 4)[0], 0);
+    }
+
+    #[test]
+    fn focus_ink_promotion_replaces_a_lifted_base_edge_with_clearer_ink() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.30, 0.30, 0.30])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 4 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        promote_focus_candidate_ink_edges(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 255);
+    }
+
+    #[test]
+    fn focus_ink_promotion_keeps_the_interior_of_a_solid_stroke() {
+        let base = Rgb32FImage::from_pixel(9, 9, Rgb([0.36, 0.29, 0.23]));
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if (3..=5).contains(&x) && (3..=5).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        promote_focus_candidate_ink_edges(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(4, 4)[0], 255);
+        assert_eq!(decision.get_pixel(3, 3)[0], 255);
+        assert_eq!(decision.get_pixel(2, 4)[0], 0);
+    }
+
+    #[test]
+    fn focus_ink_promotion_does_not_reintroduce_a_displaced_stroke() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 5 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+
+        promote_focus_candidate_ink_edges(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(5, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_coherence_fills_the_edges_of_an_accepted_stroke() {
+        let base = Rgb32FImage::from_pixel(9, 9, Rgb([0.36, 0.29, 0.23]));
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if (3..=5).contains(&x) && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+        decision.put_pixel(4, 4, image::Luma([255]));
+
+        stabilize_focus_native_ink_ownership(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(3, 4)[0], 255);
+        assert_eq!(decision.get_pixel(5, 4)[0], 255);
+        assert_eq!(decision.get_pixel(2, 4)[0], 0);
+    }
+
+    #[test]
+    fn native_ink_coherence_does_not_grow_a_displaced_contour() {
+        let base = Rgb32FImage::from_fn(9, 9, |x, y| {
+            if x == 4 && (1..=7).contains(&y) {
+                Rgb([0.08, 0.08, 0.08])
+            } else {
+                Rgb([0.36, 0.29, 0.23])
+            }
+        });
+        let candidate = RenderedFocusLayer {
+            image: Rgb32FImage::from_fn(9, 9, |x, y| {
+                if x == 5 && (1..=7).contains(&y) {
+                    Rgb([0.08, 0.08, 0.08])
+                } else {
+                    Rgb([0.36, 0.29, 0.23])
+                }
+            }),
+            mask: GrayImage::from_pixel(9, 9, image::Luma([255])),
+            foreground_mask: GrayImage::new(9, 9),
+            relaxed_foreground_mask: GrayImage::new(9, 9),
+            left: 0,
+            top: 0,
+        };
+        let mut decision = GrayImage::new(9, 9);
+        decision.put_pixel(5, 4, image::Luma([255]));
+
+        stabilize_focus_native_ink_ownership(&mut decision, &base, &candidate);
+
+        assert_eq!(decision.get_pixel(5, 4)[0], 255);
+        assert_eq!(decision.get_pixel(6, 4)[0], 0);
     }
 
     #[test]
@@ -7256,6 +10394,12 @@ mod interpolation_tests {
         let candidate_image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
             if x == 32 && (16..48).contains(&y) {
                 Rgb([0.01, 0.01, 0.01])
+            } else if x == 31 && (16..48).contains(&y) {
+                // This warm anti-aliased edge is intentionally close enough
+                // to paper to fail the single-pixel probable-ink gate. Its
+                // four-neighbour boundary is still strong evidence of the
+                // real stroke and must survive the low-frequency blend.
+                Rgb([0.30, 0.25, 0.20])
             } else {
                 candidate_canvas
             }
@@ -7271,7 +10415,7 @@ mod interpolation_tests {
         let mut base_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
         let merged_foreground_mask = GrayImage::new(WIDTH, HEIGHT);
         let decision = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
-            image::Luma([u8::from(x >= WIDTH / 2) * 255])
+            image::Luma([u8::from(x >= WIDTH / 2 - 1) * 255])
         });
 
         blend_focus_seam_band(
@@ -7283,6 +10427,7 @@ mod interpolation_tests {
         );
 
         assert_eq!(base.get_pixel(32, 32).0, [0.01, 0.01, 0.01]);
+        assert_eq!(base.get_pixel(31, 32).0, [0.30, 0.25, 0.20]);
     }
 
     #[test]
@@ -7504,7 +10649,7 @@ mod interpolation_tests {
         });
         let original_foreground_pixel = *image.get_pixel(96, 48);
         let image_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
-        let foreground_mask = GrayImage::new(WIDTH, HEIGHT);
+        let mut foreground_mask = GrayImage::new(WIDTH, HEIGHT);
         let owner_map = GrayImage::from_fn(WIDTH, HEIGHT, |x, _| {
             image::Luma([if x < WIDTH / 2 { 1 } else { 2 }])
         });
@@ -7513,13 +10658,35 @@ mod interpolation_tests {
         harmonize_focus_background_tone_with_owners(
             &mut image,
             &image_mask,
-            &foreground_mask,
+            &mut foreground_mask,
             &owner_map,
         );
         let output_step = (image.get_pixel(20, 48)[0] - image.get_pixel(172, 48)[0]).abs();
 
         assert!(output_step < input_step * 0.5);
         assert_eq!(*image.get_pixel(96, 48), original_foreground_pixel);
+    }
+
+    #[test]
+    fn focus_background_envelope_protects_lifted_gray_ink() {
+        const WIDTH: u32 = 96;
+        const HEIGHT: u32 = 96;
+        let image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            if (47..49).contains(&x) {
+                Rgb([0.31, 0.31, 0.31])
+            } else {
+                Rgb([0.48, 0.43, 0.37])
+            }
+        });
+        let image_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let envelope = build_focus_background_foreground_envelope(
+            &image,
+            &image_mask,
+            &GrayImage::new(WIDTH, HEIGHT),
+        );
+
+        assert!(focus_stack_image_pixel_has_ink_contrast(&image, 47, 48));
+        assert!(envelope.get_pixel(47, 48)[0] > 0);
     }
 
     #[test]

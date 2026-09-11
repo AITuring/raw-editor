@@ -48,6 +48,17 @@ const FOCUS_GLOBAL_DAMPING: f64 = 1e-6;
 const FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT: f64 = 0.12;
 const FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT: f64 = 0.18;
 const FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT: f64 = 0.02;
+// Scalable stacks align on a reduced image to keep memory bounded. Before the
+// final focus ownership pass, re-measure the selected path on native grayscale
+// pixels. A small, bounded patch search removes the remaining sub-frame error
+// that otherwise turns a black stroke into a thin double contour.
+const FOCUS_NATIVE_PAIR_REFINE_MAX_POINTS: usize = 64;
+const FOCUS_NATIVE_PAIR_REFINE_PATCH_RADIUS: i32 = 12;
+const FOCUS_NATIVE_PAIR_REFINE_SEARCH_RADIUS: i32 = 12;
+const FOCUS_NATIVE_PAIR_REFINE_MIN_NCC: f64 = 0.42;
+const FOCUS_NATIVE_PAIR_REFINE_MIN_IMPROVEMENT: f64 = 0.012;
+const FOCUS_NATIVE_PAIR_MODEL_THRESHOLD: f64 = 3.5;
+const FOCUS_NATIVE_PAIR_MAX_MODEL_CHANGE: f64 = 24.0;
 const FOCUS_LOCAL_MODEL_MAX_DISPLACEMENT_RATIO: f64 = 0.08;
 // A random file-picker order must not become the focus-stack layer order. For
 // a medium-sized stack, inspect every pair so the capture path can be rebuilt
@@ -85,6 +96,12 @@ const FOCUS_HORIZONTAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
 const FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
 const FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES: usize = 3;
 const FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX: f64 = 6.0;
+// A fitted edge can be a little curved after lens distortion or can contain a
+// small amount of texture.  The old all-or-nothing mean rejected an otherwise
+// useful repeated edge when only a few source frames had a bad fit.  Keep the
+// pixel floor conservative, but allow the threshold to scale with the native
+// source size so the same rule works for smaller and larger cameras.
+const FOCUS_EDGE_CONSENSUS_ERROR_SCALE: f64 = 0.0015;
 const FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO: f64 = 0.025;
 const FOCUS_HORIZONTAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
 const FOCUS_VERTICAL_EDGE_MAX_COLUMNS: usize = 8;
@@ -1412,14 +1429,28 @@ fn build_focus_vertical_edge_bands(
     };
     let mut bands = Vec::new();
     for cluster in clusters {
-        let mut slopes = cluster
+        let consensus_indices = focus_consensus_inlier_indices(
+            &cluster,
+            coordinate_scale,
+            FOCUS_VERTICAL_EDGE_MAX_CONSENSUS_ERROR_PX,
+            |index| lines[index].median_error,
+        );
+        if consensus_indices.len() < FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES {
+            println!(
+                "  - Rejected vertical-edge consensus band: only {} robust image(s) remain from {}",
+                consensus_indices.len(),
+                cluster.len()
+            );
+            continue;
+        }
+        let mut slopes = consensus_indices
             .iter()
             .map(|index| lines[*index].slope)
             .collect::<Vec<_>>();
         let Some(target_slope) = median_value(&mut slopes) else {
             continue;
         };
-        let mut target_xs = cluster
+        let mut target_xs = consensus_indices
             .iter()
             .map(|index| focus_vertical_edge_line_x(&lines[*index], reference_y))
             .collect::<Vec<_>>();
@@ -1430,7 +1461,7 @@ fn build_focus_vertical_edge_bands(
         let mut homographies = HashMap::new();
         let mut source_ranges = HashMap::new();
         let mut source_x_ranges = HashMap::new();
-        for &index in &cluster {
+        for &index in &consensus_indices {
             let line = lines[index];
             let Some(global) = global_homographies.get(&line.image_id).copied() else {
                 continue;
@@ -1465,27 +1496,32 @@ fn build_focus_vertical_edge_bands(
         if homographies.len() < FOCUS_VERTICAL_EDGE_MIN_CLUSTER_IMAGES {
             continue;
         }
-        let average_error = cluster
+        let mut consensus_errors = consensus_indices
             .iter()
             .map(|index| lines[*index].median_error)
-            .sum::<f64>()
-            / cluster.len().max(1) as f64;
-        let maximum_consensus_error =
-            FOCUS_VERTICAL_EDGE_MAX_CONSENSUS_ERROR_PX.max(coordinate_scale * 0.0005);
-        if !average_error.is_finite() || average_error > maximum_consensus_error {
+            .filter(|error| error.is_finite())
+            .collect::<Vec<_>>();
+        let Some(consensus_error) = median_value(&mut consensus_errors) else {
+            continue;
+        };
+        let maximum_consensus_error = FOCUS_VERTICAL_EDGE_MAX_CONSENSUS_ERROR_PX
+            .max(coordinate_scale * FOCUS_EDGE_CONSENSUS_ERROR_SCALE);
+        if !consensus_error.is_finite() || consensus_error > maximum_consensus_error {
             println!(
                 "  - Rejected vertical-edge consensus band: {} image(s), fit error {:.2}px exceeds {:.2}px",
                 homographies.len(),
-                average_error,
+                consensus_error,
                 maximum_consensus_error
             );
             continue;
         }
         println!(
-            "  - Vertical-edge consensus band: {} image(s), world x {:.1}, fit error {:.2}px",
+            "  - Vertical-edge consensus band: {} image(s) (robust {}/{}), world x {:.1}, fit error {:.2}px",
             homographies.len(),
+            consensus_indices.len(),
+            cluster.len(),
             target_x_at_reference,
-            average_error
+            consensus_error
         );
         bands.push(FocusWarpBand {
             homographies,
@@ -1497,6 +1533,59 @@ fn build_focus_vertical_edge_bands(
         });
     }
     bands
+}
+
+fn focus_consensus_inlier_indices<F>(
+    cluster: &[usize],
+    coordinate_scale: f64,
+    base_limit: f64,
+    error_for: F,
+) -> Vec<usize>
+where
+    F: Fn(usize) -> f64,
+{
+    let mut errors = cluster
+        .iter()
+        .map(|index| error_for(*index))
+        .filter(|error| error.is_finite())
+        .collect::<Vec<_>>();
+    let Some(median_error) = robust_median_value(&mut errors) else {
+        return Vec::new();
+    };
+    let mut deviations = cluster
+        .iter()
+        .map(|index| (error_for(*index) - median_error).abs())
+        .filter(|deviation| deviation.is_finite())
+        .collect::<Vec<_>>();
+    let mad = robust_median_value(&mut deviations).unwrap_or(0.0);
+    let minimum_limit = coordinate_scale.max(1.0) * FOCUS_EDGE_CONSENSUS_ERROR_SCALE;
+    // The scaled limit is the quality gate for the edge itself.  The robust
+    // term removes isolated bad frames without allowing a cluster with a
+    // generally poor line fit to pass just because it has a large outlier.
+    let robust_limit = base_limit
+        .max(minimum_limit)
+        .max(median_error + (mad * 3.0).max(2.0));
+    cluster
+        .iter()
+        .copied()
+        .filter(|index| {
+            let error = error_for(*index);
+            error.is_finite() && error <= robust_limit
+        })
+        .collect()
+}
+
+fn robust_median_value(values: &mut [f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    let middle = values.len() / 2;
+    if values.len() % 2 == 0 {
+        Some((values[middle - 1] + values[middle]) * 0.5)
+    } else {
+        Some(values[middle])
+    }
 }
 
 fn dilate_binary_mask(
@@ -1995,6 +2084,367 @@ fn match_image_pair(
         dense_focus_points,
         foreground_feature_points,
     })
+}
+
+fn focus_native_refinement_indices(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+) -> Vec<usize> {
+    if points.len() <= FOCUS_NATIVE_PAIR_REFINE_MAX_POINTS {
+        return (0..points.len()).collect();
+    }
+
+    // Keep correspondence coverage deterministic and spatially distributed.
+    // The first implementation simply took the first N feature matches; on a
+    // long overlap that can leave the native fit supported by one small corner
+    // and allow a local false match to bend the whole pair.
+    let source_width = source_dimensions.0.max(1) as f64;
+    let source_height = source_dimensions.1.max(1) as f64;
+    let mut ordered = (0..points.len()).collect::<Vec<_>>();
+    ordered.sort_unstable_by(|left, right| {
+        let (left_source, _) = points[*left];
+        let (right_source, _) = points[*right];
+        let left_row = (left_source.y / source_height * 8.0).floor() as i32;
+        let right_row = (right_source.y / source_height * 8.0).floor() as i32;
+        left_row
+            .cmp(&right_row)
+            .then_with(|| {
+                let left_column = (left_source.x / source_width * 8.0).floor() as i32;
+                let right_column = (right_source.x / source_width * 8.0).floor() as i32;
+                left_column.cmp(&right_column)
+            })
+            .then_with(|| left.cmp(right))
+    });
+    (0..FOCUS_NATIVE_PAIR_REFINE_MAX_POINTS)
+        .map(|slot| slot * (ordered.len() - 1) / (FOCUS_NATIVE_PAIR_REFINE_MAX_POINTS - 1))
+        .map(|position| ordered[position])
+        .collect()
+}
+
+fn refine_focus_pair_point_at_native_resolution(
+    source_image: &GrayImage,
+    target_image: &GrayImage,
+    source: Point2<f64>,
+    target: Point2<f64>,
+) -> Option<(Point2<f64>, Point2<f64>)> {
+    if !source.x.is_finite()
+        || !source.y.is_finite()
+        || !target.x.is_finite()
+        || !target.y.is_finite()
+    {
+        return None;
+    }
+    let source_x = source.x.round() as i32;
+    let source_y = source.y.round() as i32;
+    let target_x = target.x.round() as i32;
+    let target_y = target.y.round() as i32;
+    let patch_radius = FOCUS_NATIVE_PAIR_REFINE_PATCH_RADIUS;
+    let search_radius = FOCUS_NATIVE_PAIR_REFINE_SEARCH_RADIUS;
+    let source_width = source_image.width() as i32;
+    let source_height = source_image.height() as i32;
+    let target_width = target_image.width() as i32;
+    let target_height = target_image.height() as i32;
+    if source_x < patch_radius
+        || source_y < patch_radius
+        || source_x + patch_radius >= source_width - 1
+        || source_y + patch_radius >= source_height - 1
+        || target_x < patch_radius + search_radius
+        || target_y < patch_radius + search_radius
+        || target_x + patch_radius + search_radius >= target_width
+        || target_y + patch_radius + search_radius >= target_height
+    {
+        return None;
+    }
+
+    let source_plane = LumaPlane::Gray(source_image);
+    let target_plane = LumaPlane::Gray(target_image);
+    let baseline_score = patch_ncc(
+        &source_plane,
+        &target_plane,
+        source_x,
+        source_y,
+        target_x,
+        target_y,
+        patch_radius,
+    );
+    // Brightness-only NCC is easily attracted to a neighbouring repeated
+    // stroke when the focus changes between frames.  Use the same
+    // gradient-aware score that the foreground matcher uses for the native
+    // last-mile search, while retaining a small luminance contribution for
+    // low-texture paper.  The selected location and the later acceptance
+    // score must use the same objective; otherwise a sharp but geometrically
+    // wrong peak can still bend the pair transform.
+    let (best_x, best_y, subpixel_x, subpixel_y) = refine_focus_patch_position(
+        &source_plane,
+        &target_plane,
+        source_x,
+        source_y,
+        target_x,
+        target_y,
+        patch_radius,
+        search_radius,
+    )?;
+    let luminance_score = patch_ncc(
+        &source_plane,
+        &target_plane,
+        source_x,
+        source_y,
+        best_x,
+        best_y,
+        patch_radius,
+    );
+    let gradient_score = gradient_patch_ncc(
+        &source_plane,
+        &target_plane,
+        source_x,
+        source_y,
+        best_x,
+        best_y,
+        patch_radius,
+    );
+    let score = if gradient_score.is_finite() {
+        gradient_score * 0.7 + luminance_score * 0.3
+    } else {
+        luminance_score
+    };
+    if !score.is_finite() || score < FOCUS_NATIVE_PAIR_REFINE_MIN_NCC {
+        return None;
+    }
+    let integer_shift = ((best_x - target_x).pow(2) + (best_y - target_y).pow(2)) as f64;
+    if baseline_score.is_finite()
+        && integer_shift > 4.0
+        && score - baseline_score < FOCUS_NATIVE_PAIR_REFINE_MIN_IMPROVEMENT
+    {
+        // A large jump with no meaningful correlation gain is usually a
+        // repeated character or seal, not the residual of the current model.
+        return None;
+    }
+    Some((
+        source,
+        Point2::new(best_x as f64 + subpixel_x, best_y as f64 + subpixel_y),
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn refine_focus_patch_position(
+    image1: &LumaPlane<'_>,
+    image2: &LumaPlane<'_>,
+    source_x: i32,
+    source_y: i32,
+    target_x: i32,
+    target_y: i32,
+    patch_radius: i32,
+    search_radius: i32,
+) -> Option<(i32, i32, f64, f64)> {
+    let mut best_score = f64::NEG_INFINITY;
+    let mut best_target = None;
+    for dy in -search_radius..=search_radius {
+        for dx in -search_radius..=search_radius {
+            let candidate_x = target_x + dx;
+            let candidate_y = target_y + dy;
+            let gradient_score = gradient_patch_ncc(
+                image1,
+                image2,
+                source_x,
+                source_y,
+                candidate_x,
+                candidate_y,
+                patch_radius,
+            );
+            if !gradient_score.is_finite() {
+                continue;
+            }
+            let luminance_score = patch_ncc(
+                image1,
+                image2,
+                source_x,
+                source_y,
+                candidate_x,
+                candidate_y,
+                patch_radius,
+            );
+            let score = if luminance_score.is_finite() {
+                gradient_score * 0.75 + luminance_score * 0.25
+            } else {
+                gradient_score
+            };
+            if score > best_score {
+                best_score = score;
+                best_target = Some((candidate_x, candidate_y));
+            }
+        }
+    }
+
+    let (best_x, best_y) = best_target?;
+    if !best_score.is_finite() {
+        return None;
+    }
+    let sample = |x, y| {
+        let gradient_score =
+            gradient_patch_ncc(image1, image2, source_x, source_y, x, y, patch_radius);
+        let luminance_score = patch_ncc(image1, image2, source_x, source_y, x, y, patch_radius);
+        if luminance_score.is_finite() {
+            gradient_score * 0.75 + luminance_score * 0.25
+        } else {
+            gradient_score
+        }
+    };
+    let subpixel_offset = |negative: f64, center: f64, positive: f64| {
+        if !negative.is_finite() || !center.is_finite() || !positive.is_finite() {
+            return 0.0;
+        }
+        let denominator = negative - 2.0 * center + positive;
+        if denominator.abs() < 1e-8 {
+            0.0
+        } else {
+            (0.5 * (negative - positive) / denominator).clamp(-1.0, 1.0)
+        }
+    };
+    let subpixel_x = subpixel_offset(
+        sample(best_x - 1, best_y),
+        best_score,
+        sample(best_x + 1, best_y),
+    );
+    let subpixel_y = subpixel_offset(
+        sample(best_x, best_y - 1),
+        best_score,
+        sample(best_x, best_y + 1),
+    );
+    Some((best_x, best_y, subpixel_x, subpixel_y))
+}
+
+fn refine_focus_pair_points_at_native_resolution(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_image: &GrayImage,
+    target_image: &GrayImage,
+    source_dimensions: (u32, u32),
+) -> Option<Vec<(Point2<f64>, Point2<f64>)>> {
+    let indices = focus_native_refinement_indices(points, source_dimensions);
+    let refined = indices
+        .into_iter()
+        .filter_map(|index| {
+            let (source, target) = points[index];
+            refine_focus_pair_point_at_native_resolution(source_image, target_image, source, target)
+        })
+        .collect::<Vec<_>>();
+    (refined.len() >= processing::MIN_INLIERS_FOR_CONNECTION).then_some(refined)
+}
+
+fn focus_homography_change(
+    before: &Matrix3<f64>,
+    after: &Matrix3<f64>,
+    dimensions: (u32, u32),
+) -> f64 {
+    [
+        Point2::new(0.0, 0.0),
+        Point2::new(dimensions.0 as f64, 0.0),
+        Point2::new(dimensions.0 as f64, dimensions.1 as f64),
+        Point2::new(0.0, dimensions.1 as f64),
+        Point2::new(dimensions.0 as f64 * 0.5, dimensions.1 as f64 * 0.5),
+    ]
+    .into_iter()
+    .filter_map(|point| {
+        let before = transformed_point(before, point)?;
+        let after = transformed_point(after, point)?;
+        Some((after - before).norm())
+    })
+    .fold(0.0, f64::max)
+}
+
+fn refine_focus_stack_path_matches_at_native_resolution(
+    images: &[ImageInfo],
+    order: &[usize],
+    matches: &mut HashMap<(usize, usize), MatchInfo>,
+    settings: &AppSettings,
+    projection: Projection,
+) -> Result<usize, String> {
+    if projection != Projection::Planar || order.len() < 2 {
+        return Ok(0);
+    }
+
+    let mut cached_target: Option<(usize, GrayImage)> = None;
+    let mut refined_pairs = 0usize;
+    let mut attempted_pairs = 0usize;
+    for pair in order.windows(2) {
+        let left = pair[0];
+        let right = pair[1];
+        let (source_index, target_index) = if matches.contains_key(&(left, right)) {
+            (left, right)
+        } else if matches.contains_key(&(right, left)) {
+            (right, left)
+        } else {
+            continue;
+        };
+        attempted_pairs += 1;
+        let source_image = &images[source_index];
+        let target_image = &images[target_index];
+        let source_gray = if cached_target
+            .as_ref()
+            .is_some_and(|(image_id, _)| *image_id == source_index)
+        {
+            cached_target
+                .take()
+                .map(|(_, image)| image)
+                .expect("cached native source should be available")
+        } else {
+            load_prepared_stack_source(&source_image.filename, settings)?.to_luma8()
+        };
+        let target_gray = load_prepared_stack_source(&target_image.filename, settings)?.to_luma8();
+        let key = (source_index, target_index);
+        let Some(match_info) = matches.get_mut(&key) else {
+            cached_target = Some((target_index, target_gray));
+            continue;
+        };
+        let original_points = match_info.points.clone();
+        let original_homography = match_info.homography;
+        let Some(mut refined_points) = refine_focus_pair_points_at_native_resolution(
+            &original_points,
+            &source_gray,
+            &target_gray,
+            source_image.dimensions(),
+        ) else {
+            cached_target = Some((target_index, target_gray));
+            continue;
+        };
+        let Some(refined_homography) =
+            refine_homography_inliers(&mut refined_points, FOCUS_NATIVE_PAIR_MODEL_THRESHOLD)
+        else {
+            cached_target = Some((target_index, target_gray));
+            continue;
+        };
+        let selected_homography = select_focus_stack_transform(
+            &refined_homography,
+            &refined_points,
+            source_image.dimensions(),
+            AlignmentMode::Auto,
+        );
+        let old_error = median_symmetric_error(&original_homography, &original_points);
+        let new_error = median_symmetric_error(&selected_homography, &refined_points);
+        let model_change = focus_homography_change(
+            &original_homography,
+            &selected_homography,
+            source_image.dimensions(),
+        );
+        let acceptable_error =
+            new_error.is_finite() && (!old_error.is_finite() || new_error <= old_error + 1.0);
+        if !acceptable_error
+            || !model_change.is_finite()
+            || model_change > FOCUS_NATIVE_PAIR_MAX_MODEL_CHANGE
+            || !transform_is_stable_for_focus_stack(&selected_homography, source_image.dimensions())
+        {
+            cached_target = Some((target_index, target_gray));
+            continue;
+        }
+        match_info.points = refined_points;
+        match_info.inliers = match_info.points.len();
+        match_info.homography = selected_homography;
+        refined_pairs += 1;
+        cached_target = Some((target_index, target_gray));
+    }
+    println!(
+        "  - Native focus registration refinement: accepted {refined_pairs}/{attempted_pairs} path edge(s)"
+    );
+    Ok(refined_pairs)
 }
 
 fn collect_dense_focus_region_points(
@@ -2699,17 +3149,85 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Determining stitching order...");
     println!("Determining stitching order...");
-    let (ordered_indices, global_homographies) = if blend_mode == BlendMode::FocusStack {
+    let (ordered_indices, mut global_homographies) = if blend_mode == BlendMode::FocusStack {
         build_focus_stack_stitching_order(&image_data, &pairwise_matches)
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
     };
+    // The scalable path intentionally keeps only reduced alignment images in
+    // memory. That is enough to find the capture path, but a two-pixel native
+    // residual is visible as a ghost on a brush stroke. Once the path is known,
+    // refine only its adjacent edges from native source pixels, then solve the
+    // global poses again from those corrected observations. This remains
+    // generic: it uses image identity/texture, not a white-holder rule.
+    if blend_mode == BlendMode::FocusStack
+        && scalable_stack
+        && projection == Projection::Planar
+        && ordered_indices.len() >= 2
+        && std::env::var_os("RAW_EDITOR_FOCUS_SKIP_NATIVE_PATH_REFINE").is_none()
+    {
+        let _ = app_handle.emit(
+            progress_event,
+            "Refining focus-stack registration at source resolution...",
+        );
+        let refined_pairs = refine_focus_stack_path_matches_at_native_resolution(
+            &image_data,
+            &ordered_indices,
+            &mut pairwise_matches,
+            &settings,
+            projection,
+        )?;
+        if refined_pairs > 0 {
+            let motion_scale = focus_auto_order_motion_scale(&image_data, &pairwise_matches);
+            let path_edges = focus_path_matches_for_order(&ordered_indices, &pairwise_matches);
+            let path_matches =
+                focus_near_path_matches_for_order(&ordered_indices, &pairwise_matches, 3);
+            if let Some(initial_refined) = build_focus_sequence_homographies(
+                &ordered_indices,
+                &image_data,
+                &path_edges,
+                motion_scale,
+            ) {
+                // The native adjacent fit is already the highest-resolution
+                // evidence available for this path. A second unconstrained
+                // global solve can pull repeated strokes/seals toward a
+                // lower-cost but geometrically wrong loop and reintroduce the
+                // sub-pixel displacement that thins fine ink. Use the refined
+                // path directly by default; retain an explicit opt-in for the
+                // older global re-optimization as a diagnostic fallback.
+                let use_native_path_direct =
+                    std::env::var_os("RAW_EDITOR_FOCUS_NATIVE_PATH_DIRECT").is_some()
+                        || std::env::var_os("RAW_EDITOR_FOCUS_NATIVE_PATH_REOPT").is_none();
+                if use_native_path_direct {
+                    println!(
+                        "  - Native focus registration: using the refined adjacent path directly"
+                    );
+                    global_homographies = initial_refined;
+                } else {
+                    global_homographies = optimize_focus_stack_global_homographies_with_reference(
+                        &image_data,
+                        &path_matches,
+                        &initial_refined,
+                        ordered_indices[0],
+                    );
+                }
+            }
+        }
+    } else if blend_mode == BlendMode::FocusStack
+        && scalable_stack
+        && projection == Projection::Planar
+        && ordered_indices.len() >= 2
+        && std::env::var_os("RAW_EDITOR_FOCUS_SKIP_NATIVE_PATH_REFINE").is_some()
+    {
+        println!("  - Native focus registration refinement: skipped by diagnostic override");
+    }
     let focus_layer_warp = (blend_mode == BlendMode::FocusStack).then(|| {
         build_focus_layer_warp(
             &image_data,
             &pairwise_matches,
             &global_homographies,
             projection,
+            ordered_indices.first().copied().unwrap_or(0),
         )
     });
 
@@ -3286,23 +3804,54 @@ fn select_focus_stack_transform(
         selected_name = "affine";
     }
 
-    let projective_error = median_symmetric_error(projective, points);
+    // The incoming projective fit has already gone through a homography RANSAC,
+    // but it can still contain a few weak correspondences after full-resolution
+    // patch refinement. Score it on its own symmetric consensus instead of
+    // letting those points lower the model-selection margin. This is important
+    // for a long scan: a locally wrong projective fit can otherwise win with a
+    // deceptively low median and bend a thin stroke far from its matches.
+    let projective_inlier_indices =
+        symmetric_inlier_indices(projective, points, FOCUS_MODEL_INLIER_THRESHOLD);
+    let projective_points = projective_inlier_indices
+        .iter()
+        .map(|&index| points[index])
+        .collect::<Vec<_>>();
+    let projective_error = if projective_inlier_indices.len() >= FOCUS_MODEL_MIN_INLIERS {
+        median_symmetric_error(projective, &projective_points)
+    } else {
+        f64::INFINITY
+    };
     let explicit_projective = matches!(
         alignment_mode,
         AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
     );
-    // A moving focus stack is also a planar scan/mosaic. Auto may use the
-    // projective fit for that case, while a genuinely fixed-camera stack keeps
-    // the lower-DOF model that is safer against defocus-driven false matches.
+    // A moving focus stack is also a planar scan/mosaic. The projective model
+    // is therefore part of the normal candidate set: on this capture path it
+    // removes the position-dependent residual that an affine model leaves at
+    // the top/bottom of a frame, which otherwise becomes a thin parallel edge
+    // around a brush stroke. It is still gated by the orientation/scale
+    // checks above and by a large error improvement, so a bad projective fit
+    // cannot turn into a mirrored or over-bent output. The environment switch
+    // is retained only to make A/B diagnosis possible.
     let shifted_mosaic = focus_stack_motion_is_shifted_mosaic(points, source_dimensions);
-    let allow_projective = explicit_projective || shifted_mosaic;
+    let disable_shifted_projective =
+        shifted_mosaic && std::env::var_os("RAW_EDITOR_FOCUS_DISABLE_SHIFTED_PROJECTIVE").is_some();
+    let allow_projective = !disable_shifted_projective
+        && (explicit_projective
+            || shifted_mosaic
+            || std::env::var_os("RAW_EDITOR_FOCUS_ALLOW_SHIFTED_PROJECTIVE").is_some());
+    let projective_support_is_robust = projective_inlier_indices.len() >= FOCUS_MODEL_MIN_INLIERS
+        && projective_inlier_indices.len() * 100
+            >= selected.inlier_indices.len().max(FOCUS_MODEL_MIN_INLIERS) * 85;
     if allow_projective
         && transform_is_stable_for_focus_stack(projective, source_dimensions)
+        && homography_preserves_focus_orientation(projective, source_dimensions)
+        && projective_support_is_robust
         && projective_error + 0.15 < selected.median_error
         && projective_error <= selected.median_error * 0.80
     {
         selected.transform = *projective;
-        selected.inlier_indices = (0..points.len()).collect();
+        selected.inlier_indices = projective_inlier_indices;
         selected.median_error = projective_error;
         selected_name = "projective";
     }
@@ -3329,7 +3878,7 @@ fn select_focus_stack_transform(
         selected.median_error,
         selected.inlier_indices.len(),
         projective_error,
-        points.len(),
+        projective_points.len(),
         shifted_mosaic
     );
     selected.transform
@@ -4403,6 +4952,34 @@ fn build_focus_sequence_homographies(
     Some(global_homographies)
 }
 
+fn focus_path_matches_for_order(
+    order: &[usize],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> HashMap<(usize, usize), MatchInfo> {
+    focus_near_path_matches_for_order(order, matches, 1)
+}
+
+fn focus_near_path_matches_for_order(
+    order: &[usize],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    maximum_gap: usize,
+) -> HashMap<(usize, usize), MatchInfo> {
+    let mut path_matches = HashMap::new();
+    for (left_position, &left) in order.iter().enumerate() {
+        for (right_position, &right) in order.iter().enumerate().skip(left_position + 1) {
+            if right_position - left_position > maximum_gap.max(1) {
+                break;
+            }
+            if let Some(match_info) = matches.get(&(left, right)) {
+                path_matches.insert((left, right), match_info.clone());
+            } else if let Some(match_info) = matches.get(&(right, left)) {
+                path_matches.insert((right, left), match_info.clone());
+            }
+        }
+    }
+    path_matches
+}
+
 fn build_focus_stack_stitching_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -4498,9 +5075,18 @@ fn build_focus_stack_stitching_order(
         return (graph_order, HashMap::new());
     };
     let reference_index = selected_order[0];
+    // Non-adjacent matches are useful for choosing a path, but they are not
+    // reliable geometric constraints for a long artwork scan: repeated
+    // strokes and seals can satisfy a feature match several frames away and
+    // pull an otherwise correct pose by a few pixels. Once the path is known,
+    // solve the final geometry from the path and its immediate neighbours.
+    // This keeps enough short-loop closure to control accumulated drift while
+    // excluding the long-range repeated identities that turn a fine stroke
+    // into a thin displaced contour.
+    let path_matches = focus_near_path_matches_for_order(&selected_order, matches, 3);
     let global_homographies = optimize_focus_stack_global_homographies_with_reference(
         images,
-        matches,
+        &path_matches,
         &initial_homographies,
         reference_index,
     );
@@ -5176,6 +5762,7 @@ fn optimize_focus_stack_global_homographies_in_region(
     matches: &HashMap<(usize, usize), MatchInfo>,
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     normalized_y_range: Option<(f64, f64)>,
+    reference_index: usize,
 ) -> HashMap<usize, Matrix3<f64>> {
     optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         images,
@@ -5183,7 +5770,7 @@ fn optimize_focus_stack_global_homographies_in_region(
         initial_homographies,
         normalized_y_range,
         true,
-        0,
+        reference_index,
     )
 }
 
@@ -5192,6 +5779,7 @@ fn optimize_focus_stack_global_homographies_in_generic_region(
     matches: &HashMap<(usize, usize), MatchInfo>,
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     normalized_y_range: (f64, f64),
+    reference_index: usize,
 ) -> HashMap<usize, Matrix3<f64>> {
     optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         images,
@@ -5199,7 +5787,7 @@ fn optimize_focus_stack_global_homographies_in_generic_region(
         initial_homographies,
         Some(normalized_y_range),
         false,
-        0,
+        reference_index,
     )
 }
 
@@ -5306,8 +5894,15 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
         let mut accepted = None;
         for step in [1.0, 0.5, 0.25, 0.125, 0.0625] {
             let mut candidate = poses.clone();
-            for (image_index, pose) in candidate.iter_mut().enumerate().skip(1) {
-                let base = (image_index - 1) * 8;
+            for (image_index, pose) in candidate.iter_mut().enumerate() {
+                if image_index == reference_index {
+                    continue;
+                }
+                let base = if image_index < reference_index {
+                    image_index * 8
+                } else {
+                    (image_index - 1) * 8
+                };
                 for parameter in 0..8 {
                     pose[parameter] += step * delta[base + parameter];
                 }
@@ -5315,7 +5910,7 @@ fn optimize_focus_stack_global_homographies_in_region_mode_with_reference(
             if candidate
                 .iter()
                 .enumerate()
-                .skip(1)
+                .filter(|(image_index, _)| *image_index != reference_index)
                 .any(|(image_index, pose)| {
                     pose.iter().enumerate().any(|(parameter, value)| {
                         let limit = match parameter {
@@ -5383,6 +5978,7 @@ fn build_focus_layer_warp(
     matches: &HashMap<(usize, usize), MatchInfo>,
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
+    reference_index: usize,
 ) -> FocusLayerWarp {
     let mut bands = Vec::new();
 
@@ -5397,6 +5993,7 @@ fn build_focus_layer_warp(
             matches,
             global_homographies,
             (minimum_source_y, maximum_source_y),
+            reference_index,
         );
         let (homographies, changed) = constrain_focus_band_homographies(
             images,
@@ -5442,6 +6039,7 @@ fn build_focus_layer_warp(
         matches,
         global_homographies,
         Some((minimum_source_y, maximum_source_y)),
+        reference_index,
     );
     align_focus_foreground_edges(images, &mut foreground_homographies);
     let (foreground_homographies, _) = constrain_focus_band_homographies(
@@ -5470,16 +6068,27 @@ fn build_focus_layer_warp(
             physical_edge: false,
         });
     }
-    let shifted_mosaic =
-        focus_stack_homographies_have_large_shift(images, global_homographies, projection);
+    let shifted_mosaic = focus_stack_homographies_have_large_shift(
+        images,
+        global_homographies,
+        projection,
+        reference_index,
+    );
     if shifted_mosaic {
-        let before = bands.len();
-        bands.retain(|band| band.foreground_only || band.physical_edge);
-        println!(
-            "  - Shifted focus mosaic: retained {} foreground/physical-edge local warp band(s), filtered {} generic paper-plane band(s)",
-            bands.len(),
-            before.saturating_sub(bands.len())
-        );
+        if std::env::var_os("RAW_EDITOR_FOCUS_ENABLE_SHIFTED_GENERIC_WARP").is_none() {
+            let before = bands.len();
+            bands.retain(|band| band.foreground_only || band.physical_edge);
+            println!(
+                "  - Shifted focus mosaic: retained {} foreground/physical-edge local warp band(s), filtered {} generic paper-plane band(s)",
+                bands.len(),
+                before.saturating_sub(bands.len())
+            );
+        } else {
+            println!(
+                "  - Shifted focus mosaic: diagnostic override retained all {} constrained local warp band(s)",
+                bands.len()
+            );
+        }
     }
     FocusLayerWarp { bands }
 }
@@ -5488,31 +6097,36 @@ fn focus_stack_homographies_have_large_shift(
     images: &[ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
+    reference_index: usize,
 ) -> bool {
-    let Some(first) = images.first() else {
+    let Some(reference) = images.get(reference_index) else {
         return false;
     };
-    let Some(first_homography) = global_homographies.get(&first.id) else {
+    let Some(reference_homography) = global_homographies.get(&reference.id) else {
         return false;
     };
     let Some(reference_center) =
-        mapped_image_center_for_focus_warp(first, first_homography, projection)
+        mapped_image_center_for_focus_warp(reference, reference_homography, projection)
     else {
         return false;
     };
-    let reference_width = first.width.max(1) as f64;
-    let reference_height = first.height.max(1) as f64;
-    images.iter().skip(1).any(|image| {
-        global_homographies
-            .get(&image.id)
-            .and_then(|homography| {
-                mapped_image_center_for_focus_warp(image, homography, projection)
-            })
-            .is_some_and(|center| {
-                (center.x - reference_center.x).abs() > reference_width * 0.08
-                    || (center.y - reference_center.y).abs() > reference_height * 0.08
-            })
-    })
+    let reference_width = reference.width.max(1) as f64;
+    let reference_height = reference.height.max(1) as f64;
+    images
+        .iter()
+        .enumerate()
+        .filter(|(image_index, _)| *image_index != reference_index)
+        .any(|(_, image)| {
+            global_homographies
+                .get(&image.id)
+                .and_then(|homography| {
+                    mapped_image_center_for_focus_warp(image, homography, projection)
+                })
+                .is_some_and(|center| {
+                    (center.x - reference_center.x).abs() > reference_width * 0.08
+                        || (center.y - reference_center.y).abs() > reference_height * 0.08
+                })
+        })
 }
 
 fn mapped_image_center_for_focus_warp(
@@ -6004,14 +6618,28 @@ fn build_focus_horizontal_edge_bands(
     };
     let mut bands = Vec::new();
     for cluster in &clusters {
+        let consensus_indices = focus_consensus_inlier_indices(
+            cluster,
+            coordinate_scale,
+            FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX,
+            |index| lines[index].median_error,
+        );
+        if consensus_indices.len() < FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES {
+            println!(
+                "  - Rejected long-edge consensus band: only {} robust image(s) remain from {}",
+                consensus_indices.len(),
+                cluster.len()
+            );
+            continue;
+        }
         let Some((target_slope, target_intercept, target_y_at_reference)) =
-            focus_horizontal_cluster_geometry(&lines, cluster, reference_x)
+            focus_horizontal_cluster_geometry(&lines, &consensus_indices, reference_x)
         else {
             continue;
         };
         let mut homographies = HashMap::new();
         let mut source_ranges = HashMap::new();
-        for &index in cluster {
+        for &index in &consensus_indices {
             let line = lines[index];
             let Some(global) = global_homographies.get(&line.image_id).copied() else {
                 continue;
@@ -6049,27 +6677,32 @@ fn build_focus_horizontal_edge_bands(
         if homographies.len() < FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES {
             continue;
         }
-        let average_error = cluster
+        let mut consensus_errors = consensus_indices
             .iter()
             .map(|index| lines[*index].median_error)
-            .sum::<f64>()
-            / cluster.len().max(1) as f64;
-        let maximum_consensus_error =
-            FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX.max(coordinate_scale * 0.0005);
-        if !average_error.is_finite() || average_error > maximum_consensus_error {
+            .filter(|error| error.is_finite())
+            .collect::<Vec<_>>();
+        let Some(consensus_error) = median_value(&mut consensus_errors) else {
+            continue;
+        };
+        let maximum_consensus_error = FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX
+            .max(coordinate_scale * FOCUS_EDGE_CONSENSUS_ERROR_SCALE);
+        if !consensus_error.is_finite() || consensus_error > maximum_consensus_error {
             println!(
                 "  - Rejected long-edge consensus band: {} image(s), fit error {:.2}px exceeds {:.2}px",
                 homographies.len(),
-                average_error,
+                consensus_error,
                 maximum_consensus_error
             );
             continue;
         }
         println!(
-            "  - Long-edge consensus band: {} image(s), world y {:.1}, fit error {:.2}px",
+            "  - Long-edge consensus band: {} image(s) (robust {}/{}), world y {:.1}, fit error {:.2}px",
             homographies.len(),
+            consensus_indices.len(),
+            cluster.len(),
             target_y_at_reference,
-            average_error
+            consensus_error
         );
         bands.push(FocusWarpBand {
             homographies,
@@ -6250,6 +6883,64 @@ mod alignment_tests {
     }
 
     #[test]
+    fn focus_global_optimizer_keeps_a_nonzero_reference_fixed() {
+        let images = vec![
+            focus_test_image(0, "frame-a.jpg"),
+            focus_test_image(1, "frame-b.jpg"),
+            focus_test_image(2, "frame-c.jpg"),
+        ];
+        let points = (0..4)
+            .flat_map(|row| {
+                (0..5).map(move |column| {
+                    let source =
+                        Point2::new(180.0 + column as f64 * 140.0, 160.0 + row as f64 * 180.0);
+                    (source, source + nalgebra::Vector2::new(20.0, 8.0))
+                })
+            })
+            .collect::<Vec<_>>();
+        let matches = HashMap::from([
+            (
+                (0, 1),
+                MatchInfo {
+                    homography: Matrix3::new(1.0, 0.0, 20.0, 0.0, 1.0, 8.0, 0.0, 0.0, 1.0),
+                    inliers: points.len(),
+                    points: points.clone(),
+                    candidate_points: Vec::new(),
+                    top_candidate_points: Vec::new(),
+                    dense_focus_points: Vec::new(),
+                    foreground_feature_points: Vec::new(),
+                },
+            ),
+            (
+                (1, 2),
+                MatchInfo {
+                    homography: Matrix3::new(1.0, 0.0, 20.0, 0.0, 1.0, 8.0, 0.0, 0.0, 1.0),
+                    inliers: points.len(),
+                    points: points.clone(),
+                    candidate_points: Vec::new(),
+                    top_candidate_points: Vec::new(),
+                    dense_focus_points: Vec::new(),
+                    foreground_feature_points: Vec::new(),
+                },
+            ),
+        ]);
+        let initial = HashMap::from([
+            (0, Matrix3::identity()),
+            (1, Matrix3::identity()),
+            (2, Matrix3::identity()),
+        ]);
+
+        let optimized =
+            optimize_focus_stack_global_homographies_with_reference(&images, &matches, &initial, 2);
+
+        assert_eq!(optimized[&2], Matrix3::identity());
+        assert!((optimized[&1][(0, 2)] - 20.0).abs() < 0.5);
+        assert!((optimized[&1][(1, 2)] - 8.0).abs() < 0.5);
+        assert!((optimized[&0][(0, 2)] - 40.0).abs() < 0.5);
+        assert!((optimized[&0][(1, 2)] - 16.0).abs() < 0.5);
+    }
+
+    #[test]
     fn focus_stack_motion_detects_a_scan_without_reclassifying_a_fixed_stack() {
         let points = (0..3)
             .flat_map(|row| {
@@ -6410,6 +7101,31 @@ mod alignment_tests {
 
         assert!(patch_ncc(&source_plane, &source_plane, 4, 4, 4, 4, 3) > 0.999_999);
         assert!(patch_ncc(&source_plane, &inverted_plane, 4, 4, 4, 4, 3) < -0.999_999);
+    }
+
+    #[test]
+    fn native_focus_refinement_recovers_a_small_translation_from_texture() {
+        let source = GrayImage::from_fn(160, 140, |x, y| {
+            image::Luma([((x * 17 + y * 29 + x * y * 3) % 251) as u8])
+        });
+        let target = GrayImage::from_fn(160, 140, |x, y| {
+            let source_x = x.checked_sub(5).unwrap_or(0);
+            let source_y = y + 3;
+            if source_y < source.height() {
+                *source.get_pixel(source_x, source_y.min(source.height() - 1))
+            } else {
+                image::Luma([0])
+            }
+        });
+        let refined = refine_focus_pair_point_at_native_resolution(
+            &source,
+            &target,
+            Point2::new(70.0, 70.0),
+            Point2::new(70.0, 70.0),
+        )
+        .expect("native patch matching should recover the translated texture");
+
+        assert!((refined.1 - Point2::new(75.0, 67.0)).norm() < 0.75);
     }
 
     #[test]
@@ -6641,6 +7357,15 @@ mod alignment_tests {
     }
 
     #[test]
+    fn edge_consensus_rejects_an_outlier_without_discarding_the_band() {
+        let errors = [2.0, 3.0, 12.0, 40.0];
+        let inliers =
+            focus_consensus_inlier_indices(&[0, 1, 2, 3], 9_504.0, 6.0, |index| errors[index]);
+
+        assert_eq!(inliers, vec![0, 1, 2]);
+    }
+
+    #[test]
     fn vertical_long_edge_consensus_groups_only_distinct_images() {
         let lines = vec![
             FocusVerticalEdgeLine {
@@ -6773,6 +7498,12 @@ mod acceptance_tests {
         });
         if std::env::var_os("RAW_EDITOR_ORDERED_PANORAMA_REVERSE_INPUT").is_some() {
             paths.reverse();
+        }
+        if let Some(limit) = std::env::var("RAW_EDITOR_ORDERED_PANORAMA_LIMIT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            paths.truncate(limit.max(2).min(paths.len()));
         }
         assert!(paths.len() >= 2, "fixture must contain at least two images");
         paths
@@ -7175,6 +7906,7 @@ mod acceptance_tests {
                 &matches,
                 &homographies,
                 Some((0.12, 0.28)),
+                connected_order.first().copied().unwrap_or(0),
             );
             let mut maximum_top_delta = (0.0f64, String::new(), 0.0f64, 0.0f64);
             for &index in connected_order.iter().take(6) {

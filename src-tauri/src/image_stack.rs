@@ -27,7 +27,7 @@ const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
 #[cfg(test)]
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
 const IMAGE_STACK_MAX_SOURCES: usize = 200;
-const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.07.1";
+const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.07.2";
 
 fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
     if count < 2 {
