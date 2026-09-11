@@ -32,6 +32,7 @@ assert.match(mosaic, /fn ownership_disagreement\s*\(/, 'source ownership must me
 assert.match(mosaic, /seam_cut::cut_grid\(/, 'ownership decisions must be regularised by a global seam cut');
 assert.match(mosaic, /crop_to_valid_rectangle\(result, &mask\)/, 'mosaic output must exclude uncovered canvas margins');
 assert.match(mosaic, /refine_native_layer\(/, 'the mosaic path must refine residual alignment at native resolution');
+assert.match(mosaic, /Render only ownership cells/, 'final rendering must skip rejected ownership cells');
 assert.match(mosaic, /every pixel has source ownership/, 'mosaic must retain an explicit full-coverage assertion');
 
 assert.match(
