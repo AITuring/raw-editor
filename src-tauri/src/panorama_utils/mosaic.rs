@@ -11,6 +11,7 @@ use image::{GrayImage, Luma, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Runtime};
 
 #[cfg(test)]
@@ -22,10 +23,226 @@ const ANALYSIS_LONG_SIDE: u32 = 1400;
 // roughly 9504px layer footprint this yields approximately 19px cells, fine
 // enough for seams to route around individual strokes.
 const SELECTION_LONG_SIDE: u32 = 512;
+const LONG_SEQUENCE_SELECTION_LONG_SIDE: u32 = 256;
+// A 1024px streaming tile resolves ownership at roughly 32px cells.
+// The native acutance probe inside every cell measures coherent edges; using
+// 256 cells here repeated almost the same 13x13 probes and made a 93-frame
+// focus scan impractically slow without yielding finer photographic evidence.
+const STREAMING_SELECTION_LONG_SIDE: u32 = 32;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
 const OWNERSHIP_MISMATCH_PENALTY: f64 = 2.4;
+const STREAMING_TILE_SIZE: u32 = 1024;
+// A float RGB canvas costs twelve bytes per pixel before the ownership mask,
+// decoded RAW layer, and canonical 16-bit result are counted.  Switch to the
+// tiled backing store by canvas area as well as by capture-sequence metadata:
+// evidence-only graph alignment intentionally has no synthetic sequence
+// bridges, so using that flag alone made large, valid focus mosaics allocate
+// the entire sparse bounding box in memory.
+const STREAMING_CANVAS_MIN_PIXELS: u64 = 120_000_000;
+
+struct StreamingMosaicStore {
+    temp_dir: tempfile::TempDir,
+    width: u32,
+    height: u32,
+    tile_size: u32,
+    tile_columns: u32,
+    tile_rows: u32,
+}
+
+impl StreamingMosaicStore {
+    fn new(width: u32, height: u32) -> Result<Self, String> {
+        let temp_dir = tempfile::Builder::new()
+            .prefix("raw-editor-focus-stack-")
+            .tempdir_in(std::env::temp_dir())
+            .map_err(|error| format!("Could not create the tiled focus canvas: {error}"))?;
+        Ok(Self {
+            temp_dir,
+            width,
+            height,
+            tile_size: STREAMING_TILE_SIZE,
+            tile_columns: width.div_ceil(STREAMING_TILE_SIZE),
+            tile_rows: height.div_ceil(STREAMING_TILE_SIZE),
+        })
+    }
+
+    fn tile_extent(&self, column: u32, row: u32) -> (u32, u32, u32, u32) {
+        let left = column * self.tile_size;
+        let top = row * self.tile_size;
+        let width = self.tile_size.min(self.width.saturating_sub(left));
+        let height = self.tile_size.min(self.height.saturating_sub(top));
+        (left, top, width, height)
+    }
+
+    fn tile_path(&self, column: u32, row: u32, suffix: &str) -> PathBuf {
+        self.temp_dir
+            .path()
+            .join(format!("tile-{column}-{row}.{suffix}"))
+    }
+
+    fn read_f32_tile(
+        &self,
+        column: u32,
+        row: u32,
+        width: u32,
+        height: u32,
+    ) -> Result<Rgb32FImage, String> {
+        let path = self.tile_path(column, row, "rgb");
+        if !path.exists() {
+            return Ok(Rgb32FImage::new(width, height));
+        }
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("Could not read focus tile {}: {error}", path.display()))?;
+        let expected = width as usize * height as usize * 3;
+        if bytes.len() != expected * std::mem::size_of::<f32>() {
+            return Err(format!(
+                "Focus tile {} has {} bytes; expected {}",
+                path.display(),
+                bytes.len(),
+                expected * std::mem::size_of::<f32>()
+            ));
+        }
+        let mut values = Vec::with_capacity(expected);
+        for chunk in bytes.chunks_exact(std::mem::size_of::<f32>()) {
+            values.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+        }
+        Rgb32FImage::from_raw(width, height, values)
+            .ok_or_else(|| format!("Could not decode focus tile {}", path.display()))
+    }
+
+    fn read_mask_tile(&self, column: u32, row: u32, width: u32, height: u32) -> Vec<u8> {
+        let path = self.tile_path(column, row, "mask");
+        let expected = width as usize * height as usize;
+        match std::fs::read(&path) {
+            Ok(bytes) if bytes.len() == expected => bytes,
+            _ => vec![0; expected],
+        }
+    }
+
+    fn load_tile(&self, column: u32, row: u32) -> Result<(Rgb32FImage, GrayImage), String> {
+        let (_, _, width, height) = self.tile_extent(column, row);
+        let rgb = self.read_f32_tile(column, row, width, height)?;
+        let mask = GrayImage::from_raw(
+            width,
+            height,
+            self.read_mask_tile(column, row, width, height),
+        )
+        .expect("focus tile mask dimensions");
+        Ok((rgb, mask))
+    }
+
+    fn save_tile(
+        &self,
+        column: u32,
+        row: u32,
+        rgb: &Rgb32FImage,
+        mask: &GrayImage,
+    ) -> Result<(), String> {
+        let rgb_path = self.tile_path(column, row, "rgb");
+        let mut rgb_bytes = Vec::with_capacity(rgb.as_raw().len() * std::mem::size_of::<f32>());
+        for &value in rgb.as_raw() {
+            rgb_bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        std::fs::write(&rgb_path, rgb_bytes).map_err(|error| {
+            format!("Could not write focus tile {}: {error}", rgb_path.display())
+        })?;
+        let mask_path = self.tile_path(column, row, "mask");
+        std::fs::write(&mask_path, mask.as_raw()).map_err(|error| {
+            format!(
+                "Could not write focus tile {}: {error}",
+                mask_path.display()
+            )
+        })?;
+        Ok(())
+    }
+
+    fn largest_valid_rectangle(&self) -> Result<Option<(u32, u32, u32, u32)>, String> {
+        let mut heights = vec![0u32; self.width as usize];
+        let mut best: Option<(u64, u32, u32, u32, u32)> = None;
+        for tile_row in 0..self.tile_rows {
+            let tile_masks: Vec<Vec<u8>> = (0..self.tile_columns)
+                .map(|column| {
+                    let (_, _, width, height) = self.tile_extent(column, tile_row);
+                    self.read_mask_tile(column, tile_row, width, height)
+                })
+                .collect();
+            let (_, tile_top, _, tile_height) = self.tile_extent(0, tile_row);
+            for local_y in 0..tile_height {
+                let y = tile_top + local_y;
+                let mut x = 0usize;
+                for column in 0..self.tile_columns {
+                    let (_, _, tile_width, _) = self.tile_extent(column, tile_row);
+                    let tile_row_start = local_y as usize * tile_width as usize;
+                    let tile_row_end = tile_row_start + tile_width as usize;
+                    for &value in &tile_masks[column as usize][tile_row_start..tile_row_end] {
+                        if value != 0 {
+                            heights[x] = heights[x].saturating_add(1);
+                        } else {
+                            heights[x] = 0;
+                        }
+                        x += 1;
+                    }
+                }
+                let mut stack: Vec<usize> = Vec::new();
+                for index in 0..=heights.len() {
+                    let current = if index == heights.len() {
+                        0
+                    } else {
+                        heights[index]
+                    };
+                    while let Some(&last) = stack.last() {
+                        if heights[last] <= current {
+                            break;
+                        }
+                        stack.pop();
+                        let left = stack.last().map_or(0, |&previous| previous + 1);
+                        let width = index - left;
+                        let height = heights[last];
+                        let area = width as u64 * height as u64;
+                        if area > best.as_ref().map_or(0, |entry| entry.0) {
+                            best = Some((area, left as u32, y + 1 - height, width as u32, height));
+                        }
+                    }
+                    stack.push(index);
+                }
+            }
+        }
+        Ok(best.map(|(_, left, top, width, height)| (left, top, width, height)))
+    }
+
+    fn materialize(&self, crop: (u32, u32, u32, u32)) -> Result<Rgb32FImage, String> {
+        let (crop_left, crop_top, crop_width, crop_height) = crop;
+        let mut output = Rgb32FImage::new(crop_width, crop_height);
+        for tile_row in 0..self.tile_rows {
+            for tile_column in 0..self.tile_columns {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    self.tile_extent(tile_column, tile_row);
+                let x_start = crop_left.max(tile_left);
+                let y_start = crop_top.max(tile_top);
+                let x_end = (crop_left + crop_width).min(tile_left + tile_width);
+                let y_end = (crop_top + crop_height).min(tile_top + tile_height);
+                if x_start >= x_end || y_start >= y_end {
+                    continue;
+                }
+                let (tile, _) = self.load_tile(tile_column, tile_row)?;
+                for y in y_start..y_end {
+                    let source_y = (y - tile_top) as usize;
+                    let destination_y = (y - crop_top) as usize;
+                    let source_start =
+                        ((x_start - tile_left) as usize * 3) + source_y * tile_width as usize * 3;
+                    let source_end = source_start + (x_end - x_start) as usize * 3;
+                    let destination_start = (x_start - crop_left) as usize * 3
+                        + destination_y * crop_width as usize * 3;
+                    let destination_end = destination_start + (x_end - x_start) as usize * 3;
+                    output.as_mut()[destination_start..destination_end]
+                        .copy_from_slice(&tile.as_raw()[source_start..source_end]);
+                }
+            }
+        }
+        Ok(output)
+    }
+}
 
 fn luma(p: Rgb<f32>) -> f64 {
     f64::from(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114)
@@ -97,7 +314,7 @@ struct LayerSampler<'a> {
 }
 
 impl LayerSampler<'_> {
-    fn sample(&self, x: f64, y: f64) -> Option<Rgb<f32>> {
+    fn source_point(&self, x: f64, y: f64) -> Option<Point2<f64>> {
         let delta = self.residual.at(x / self.scale, y / self.scale);
         let target = Point3::new(
             self.left as f64 + x + delta[0] * self.scale - self.offset.0,
@@ -112,6 +329,11 @@ impl LayerSampler<'_> {
         {
             return None;
         }
+        Some(source)
+    }
+
+    fn sample(&self, x: f64, y: f64) -> Option<Rgb<f32>> {
+        let source = self.source_point(x, y)?;
         // Each prefilter level represents the centre of a 2x2 source block.
         // Retain the half-pixel offset to avoid a lens-dependent sampling shift.
         let sx = ((source.x + 0.5) / self.source_divisor - 0.5)
@@ -394,10 +616,38 @@ fn tone_field(
     width: u32,
     height: u32,
 ) -> Field<3> {
-    let mut field = Field::new(width, height, 56.0);
+    tone_field_with_sampling(base, base_mask, sampler, width, height, 56.0, 4, 8)
+}
+
+fn streaming_tone_field(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    sampler: &LayerSampler<'_>,
+    width: u32,
+    height: u32,
+) -> Field<3> {
+    // Exposure and illumination vary much more slowly than handwriting.  A
+    // coarse field with sparse robust samples removes frame rectangles while
+    // keeping the tiled 500MP path practical; the native detail samples are
+    // still selected and rendered at full resolution.
+    tone_field_with_sampling(base, base_mask, sampler, width, height, 224.0, 16, 8)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn tone_field_with_sampling(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    sampler: &LayerSampler<'_>,
+    width: u32,
+    height: u32,
+    field_step: f64,
+    sample_step: usize,
+    minimum_samples: usize,
+) -> Field<3> {
+    let mut field = Field::new(width, height, field_step);
     let mut samples = vec![Vec::<[f64; 3]>::new(); field.values.len()];
-    for y in (0..height).step_by(4) {
-        for x in (0..width).step_by(4) {
+    for y in (0..height).step_by(sample_step) {
+        for x in (0..width).step_by(sample_step) {
             let lx = x as f64 * sampler.scale;
             let ly = y as f64 * sampler.scale;
             let gx = (sampler.left as f64 + lx) as u32;
@@ -429,7 +679,7 @@ fn tone_field(
     let observations = samples
         .iter()
         .enumerate()
-        .filter(|(_, v)| v.len() >= 8)
+        .filter(|(_, v)| v.len() >= minimum_samples)
         .map(|(i, v)| {
             let value =
                 std::array::from_fn(|c| median(&mut v.iter().map(|d| d[c]).collect::<Vec<_>>()));
@@ -562,6 +812,82 @@ fn cell_focus(
     (values[first] + values[first + 1.min(values.len() - 1)]) * 0.5
 }
 
+// Streaming stacks may evaluate hundreds of thousands of ownership cells.
+// Measure the same five spatial probes with coherent, low-pass cross
+// gradients instead of rebuilding a full 13x13 patch for every probe.  Each
+// gradient averages along its tangent before measuring energy, so isolated
+// sensor noise does not win over a focused brush edge.
+fn streaming_acutance(
+    sample: &mut impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+) -> Option<f64> {
+    const TANGENT: [f64; 3] = [-2.0, 0.0, 2.0];
+    const GRADIENTS: [(f64, f64); 2] = [(-3.0, 1.0), (-1.0, 3.0)];
+    let mut energy = 0.0;
+    let mut level = 0.0;
+    let mut level_count = 0.0f64;
+    for (near, far) in GRADIENTS {
+        let mut dx = [0.0; 3];
+        let mut dy = [0.0; 3];
+        for tangent in TANGENT {
+            let left = sample(x + near, y + tangent)?;
+            let right = sample(x + far, y + tangent)?;
+            let top = sample(x + tangent, y + near)?;
+            let bottom = sample(x + tangent, y + far)?;
+            let channels = |pixel: Rgb<f32>| {
+                [
+                    luma(pixel),
+                    f64::from(pixel[0] - pixel[1]) * 0.5,
+                    f64::from(pixel[2] - pixel[1]) * 0.5,
+                ]
+            };
+            let left_channels = channels(left);
+            let right_channels = channels(right);
+            let top_channels = channels(top);
+            let bottom_channels = channels(bottom);
+            for channel in 0..3 {
+                dx[channel] += right_channels[channel] - left_channels[channel];
+                dy[channel] += bottom_channels[channel] - top_channels[channel];
+            }
+            level += luma(left) + luma(right) + luma(top) + luma(bottom);
+            level_count += 4.0;
+        }
+        for channel in 0..3 {
+            let dx = dx[channel] / TANGENT.len() as f64;
+            let dy = dy[channel] / TANGENT.len() as f64;
+            energy += dx * dx + dy * dy;
+        }
+    }
+    Some((energy / (GRADIENTS.len() * 3) as f64).sqrt() / (level / level_count.max(1.0)).max(0.04))
+}
+
+fn streaming_cell_focus(
+    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+    cell_size: f64,
+) -> f64 {
+    let radius = (cell_size * 0.28).clamp(2.0, 18.0);
+    let mut values = [
+        (-radius, -radius),
+        (radius, -radius),
+        (0.0, 0.0),
+        (-radius, radius),
+        (radius, radius),
+    ]
+    .into_iter()
+    .filter_map(|(dx, dy)| streaming_acutance(&mut sample, x + dx, y + dy))
+    .filter(|value| value.is_finite())
+    .collect::<Vec<_>>();
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(f64::total_cmp);
+    let first = values.len().saturating_sub(2);
+    (values[first] + values[(first + 1).min(values.len() - 1)]) * 0.5
+}
+
 fn ownership_disagreement(
     base: &Rgb32FImage,
     sampler: &LayerSampler<'_>,
@@ -669,8 +995,41 @@ fn ownership(
     width: u32,
     height: u32,
 ) -> GrayImage {
-    let size = (width.max(height) as f64 / SELECTION_LONG_SIDE as f64).max(1.0);
-    ownership_grid(base, base_mask, sampler, tone, width, height, size)
+    ownership_with_long_side(
+        base,
+        base_mask,
+        sampler,
+        tone,
+        width,
+        height,
+        SELECTION_LONG_SIDE,
+    )
+}
+
+fn ownership_with_long_side(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    width: u32,
+    height: u32,
+    selection_long_side: u32,
+) -> GrayImage {
+    let size = (width.max(height) as f64 / selection_long_side.max(1) as f64).max(1.0);
+    ownership_grid(base, base_mask, sampler, tone, width, height, size, false)
+}
+
+fn streaming_ownership_with_long_side(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    width: u32,
+    height: u32,
+    selection_long_side: u32,
+) -> GrayImage {
+    let size = (width.max(height) as f64 / selection_long_side.max(1) as f64).max(1.0);
+    ownership_grid(base, base_mask, sampler, tone, width, height, size, true)
 }
 
 fn ownership_grid(
@@ -681,6 +1040,7 @@ fn ownership_grid(
     width: u32,
     height: u32,
     size: f64,
+    streaming: bool,
 ) -> GrayImage {
     let w = (width as f64 / size).ceil() as u32;
     let h = (height as f64 / size).ceil() as u32;
@@ -714,26 +1074,55 @@ fn ownership_grid(
                 fixed[i] = 1;
                 continue;
             }
-            // Keep a one-cell guard at the candidate's source boundary. The
-            // neighbouring cells can still choose the sharper source, while a
-            // hard edge prevents a whole tile from ending as a visible square.
-            if x == 0 || y == 0 || x + 1 == w || y + 1 == h {
-                fixed[i] = -1;
-                continue;
-            }
+            // Keep a one-cell guard at the *photographic source* boundary.
+            // `width`/`height` can describe a streaming backing tile rather
+            // than the source footprint; treating every tile edge as a source
+            // edge forced the old owner into a visible 1024px square grid.
             let native_cell = size * sampler.scale;
-            let base_focus = cell_focus(
-                |x, y| rgb_at(base, x, y),
-                gx + native_cell * 0.5,
-                gy + native_cell * 0.5,
-                native_cell,
-            );
-            let candidate_focus = cell_focus(
-                |x, y| sampler.sample(x, y).map(|p| adjusted(p, tone.at(ax, ay))),
-                lx + native_cell * 0.5,
-                ly + native_cell * 0.5,
-                native_cell,
-            );
+            if x == 0 || y == 0 || x + 1 == w || y + 1 == h {
+                let source_boundary = [
+                    (-native_cell, 0.0),
+                    (native_cell, 0.0),
+                    (0.0, -native_cell),
+                    (0.0, native_cell),
+                ]
+                .iter()
+                .any(|(dx, dy)| sampler.sample(lx + dx, ly + dy).is_none());
+                if source_boundary {
+                    fixed[i] = -1;
+                    continue;
+                }
+            }
+            let base_focus = if streaming {
+                streaming_cell_focus(
+                    |x, y| rgb_at(base, x, y),
+                    gx + native_cell * 0.5,
+                    gy + native_cell * 0.5,
+                    native_cell,
+                )
+            } else {
+                cell_focus(
+                    |x, y| rgb_at(base, x, y),
+                    gx + native_cell * 0.5,
+                    gy + native_cell * 0.5,
+                    native_cell,
+                )
+            };
+            let candidate_focus = if streaming {
+                streaming_cell_focus(
+                    |x, y| sampler.sample(x, y).map(|p| adjusted(p, tone.at(ax, ay))),
+                    lx + native_cell * 0.5,
+                    ly + native_cell * 0.5,
+                    native_cell,
+                )
+            } else {
+                cell_focus(
+                    |x, y| sampler.sample(x, y).map(|p| adjusted(p, tone.at(ax, ay))),
+                    lx + native_cell * 0.5,
+                    ly + native_cell * 0.5,
+                    native_cell,
+                )
+            };
             // Ties retain existing detail, making duplicate/identical frames
             // idempotent. Weak texture never wins solely from sensor noise.
             // Compare edge energy rather than per-cell log ratios. Defocus
@@ -778,6 +1167,7 @@ pub(super) fn detail_preserving_mosaic<R: Runtime, F>(
     images: &[&ImageInfo],
     homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
+    sequence_gap_aware: bool,
     app: AppHandle<R>,
     event: &str,
     load: &mut F,
@@ -791,8 +1181,25 @@ where
     }
     let (offset_x, width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, height) = pixel_aligned_canvas(min_y, max_y);
+    let canvas_pixels = u64::from(width).saturating_mul(u64::from(height));
+    if (sequence_gap_aware && images.len() > 8) || canvas_pixels > STREAMING_CANVAS_MIN_PIXELS {
+        return detail_preserving_mosaic_streaming(
+            images,
+            homographies,
+            projection,
+            app,
+            event,
+            load,
+            offset_x,
+            offset_y,
+            width,
+            height,
+        );
+    }
     let mut result = Rgb32FImage::new(width, height);
     let mut mask = GrayImage::new(width, height);
+    let mut covered_bounds: Option<(u32, u32, u32, u32)> = None;
+    let local_refinement_enabled = !sequence_gap_aware || images.len() <= 8;
     println!("  - Detail-preserving mosaic canvas: {width}x{height}");
     for (index, &info) in images.iter().enumerate() {
         let _ = app.emit(
@@ -851,17 +1258,62 @@ where
             residual: Field::new(aw, ah, GRID_STEP as f64),
         };
         println!("  - Selecting '{}'", info.filename);
-        if index > 0 {
+
+        let layer_overlaps_existing = covered_bounds.is_some_and(
+            |(covered_left, covered_right, covered_top, covered_bottom)| {
+                let overlap_width = right
+                    .min(covered_right)
+                    .saturating_sub(left.max(covered_left));
+                let overlap_height = bottom
+                    .min(covered_bottom)
+                    .saturating_sub(top.max(covered_top));
+                overlap_width >= 128 && overlap_height >= 128
+            },
+        );
+        if sequence_gap_aware && !layer_overlaps_existing {
+            // A filename bridge explicitly means that these captures are
+            // adjacent but have no measured overlap. Do not spend the costly
+            // residual/graph-cut pass trying to register empty canvas against
+            // an unrelated block; copy the source tile at its verified global
+            // pose, preserving every native detail pixel.
+            println!("    - Sequence gap: copying native detail without overlap refinement");
+            copy_sequence_gap_layer(&mut result, &mut mask, &sampler, left, right, top, bottom);
+            covered_bounds = Some(match covered_bounds {
+                Some((covered_left, covered_right, covered_top, covered_bottom)) => (
+                    covered_left.min(left),
+                    covered_right.max(right),
+                    covered_top.min(top),
+                    covered_bottom.max(bottom),
+                ),
+                None => (left, right, top, bottom),
+            });
+            continue;
+        }
+        if index > 0 && local_refinement_enabled {
             refine_layer(&result, &mask, &mut sampler, aw, ah);
             refine_layer(&result, &mask, &mut sampler, aw, ah);
             refine_native_layer(&result, &mask, &mut sampler, aw, ah);
+        } else if index > 0 && sequence_gap_aware {
+            println!("    - Long sequence: using verified global alignment for focus ownership");
         }
         let tone = if index > 0 {
             tone_field(&result, &mask, &sampler, aw, ah)
         } else {
             Field::new(aw, ah, 56.0)
         };
-        let decision = ownership(&result, &mask, &sampler, &tone, aw, ah);
+        let decision = if sequence_gap_aware && images.len() > 8 {
+            ownership_with_long_side(
+                &result,
+                &mask,
+                &sampler,
+                &tone,
+                aw,
+                ah,
+                LONG_SEQUENCE_SELECTION_LONG_SIDE,
+            )
+        } else {
+            ownership(&result, &mask, &sampler, &tone, aw, ah)
+        };
         #[cfg(test)]
         diagnostics::capture_layer(index, &sampler, &tone, &decision, aw, ah);
         let stride = width as usize * 3;
@@ -909,6 +1361,15 @@ where
                     }
                 }
             });
+        covered_bounds = Some(match covered_bounds {
+            Some((covered_left, covered_right, covered_top, covered_bottom)) => (
+                covered_left.min(left),
+                covered_right.max(right),
+                covered_top.min(top),
+                covered_bottom.max(bottom),
+            ),
+            None => (left, right, top, bottom),
+        });
     }
     let covered = mask.as_raw().iter().filter(|&&v| v != 0).count();
     if covered == 0 {
@@ -928,9 +1389,330 @@ where
     Ok(output)
 }
 
+fn detail_preserving_mosaic_streaming<R: Runtime, F>(
+    images: &[&ImageInfo],
+    homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    app: AppHandle<R>,
+    event: &str,
+    load: &mut F,
+    offset_x: f64,
+    offset_y: f64,
+    width: u32,
+    height: u32,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    let store = StreamingMosaicStore::new(width, height)?;
+    println!(
+        "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
+        store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
+    );
+    for (index, &info) in images.iter().enumerate() {
+        let _ = app.emit(
+            event,
+            format!(
+                "Streaming detail and selecting sharp source {} of {}",
+                index + 1,
+                images.len()
+            ),
+        );
+        let mut source = load(info)?;
+        let transform = &homographies[&info.id];
+        let mut source_divisor = 1.0;
+        if projection == Projection::Planar {
+            let center = Point3::new(info.width as f64 * 0.5, info.height as f64 * 0.5, 1.0);
+            let c = transform * center;
+            let dx = transform * (center + nalgebra::Vector3::new(1.0, 0.0, 0.0));
+            let dy = transform * (center + nalgebra::Vector3::new(0.0, 1.0, 0.0));
+            let sx = (dx.x / dx.z - c.x / c.z).hypot(dx.y / dx.z - c.y / c.z);
+            let sy = (dy.x / dy.z - c.x / c.z).hypot(dy.y / dy.z - c.y / c.z);
+            let scale = sx.min(sy);
+            while scale.is_finite()
+                && scale > 0.0
+                && scale * source_divisor < 0.67
+                && source.width().min(source.height()) > 8
+            {
+                source = downsample_rgb_half(&source);
+                source_divisor *= 2.0;
+            }
+        }
+        let inverse = transform
+            .try_inverse()
+            .ok_or("The stack contains a non-invertible alignment.")?;
+        let Some((left, right, top, bottom)) = transformed_image_region(
+            info, transform, projection, offset_x, offset_y, width, height,
+        ) else {
+            continue;
+        };
+        println!(
+            "    - Streaming '{}': projected region {}..{} x {}..{}",
+            info.filename, left, right, top, bottom
+        );
+        let first_column = left / STREAMING_TILE_SIZE;
+        let last_column = right / STREAMING_TILE_SIZE;
+        let first_row = top / STREAMING_TILE_SIZE;
+        let last_row = bottom / STREAMING_TILE_SIZE;
+        for tile_row in first_row..=last_row {
+            for tile_column in first_column..=last_column {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    store.tile_extent(tile_column, tile_row);
+                let x_start = left.max(tile_left);
+                let x_end = right.min(tile_left + tile_width - 1);
+                let y_start = top.max(tile_top);
+                let y_end = bottom.min(tile_top + tile_height - 1);
+                if x_start > x_end || y_start > y_end {
+                    continue;
+                }
+                let (mut tile, mut tile_mask) = store.load_tile(tile_column, tile_row)?;
+                let tile_scale =
+                    (tile_width.max(tile_height) as f64 / ANALYSIS_LONG_SIDE as f64).max(1.0);
+                let analysis_width = (tile_width as f64 / tile_scale).ceil() as u32;
+                let analysis_height = (tile_height as f64 / tile_scale).ceil() as u32;
+                let sampler = LayerSampler {
+                    info,
+                    source: &source,
+                    source_divisor,
+                    inverse,
+                    projection,
+                    // The backing tile is a local image.  Shift the canvas
+                    // origin into `offset` so registration, tone matching,
+                    // and ownership can operate against the tile itself while
+                    // source sampling still lands at the global canvas pose.
+                    offset: (
+                        offset_x - f64::from(tile_left),
+                        offset_y - f64::from(tile_top),
+                    ),
+                    left: 0,
+                    top: 0,
+                    scale: tile_scale,
+                    residual: Field::new(analysis_width, analysis_height, GRID_STEP as f64),
+                };
+                let has_existing_coverage = (y_start..=y_end).any(|y| {
+                    let local_y = y - tile_top;
+                    (x_start..=x_end).any(|x| tile_mask.get_pixel(x - tile_left, local_y)[0] != 0)
+                });
+                if !has_existing_coverage {
+                    copy_streaming_tile_region(
+                        &mut tile,
+                        &mut tile_mask,
+                        &sampler,
+                        tile_left,
+                        tile_top,
+                        x_start,
+                        x_end,
+                        y_start,
+                        y_end,
+                    );
+                } else {
+                    // Match only broad colour/exposure.  Leaving this field at
+                    // unity made each source footprint visible as a rectangle
+                    // even when its geometry and selected detail were sound.
+                    let tone = streaming_tone_field(
+                        &tile,
+                        &tile_mask,
+                        &sampler,
+                        analysis_width,
+                        analysis_height,
+                    );
+                    let decision = streaming_ownership_with_long_side(
+                        &tile,
+                        &tile_mask,
+                        &sampler,
+                        &tone,
+                        analysis_width,
+                        analysis_height,
+                        STREAMING_SELECTION_LONG_SIDE,
+                    );
+                    copy_streaming_owned_tile_region(
+                        &mut tile,
+                        &mut tile_mask,
+                        &sampler,
+                        &tone,
+                        &decision,
+                        tile_left,
+                        tile_top,
+                        x_start,
+                        x_end,
+                        y_start,
+                        y_end,
+                        tile_scale,
+                        analysis_width,
+                        analysis_height,
+                    );
+                }
+                store.save_tile(tile_column, tile_row, &tile, &tile_mask)?;
+            }
+        }
+    }
+    let crop = store
+        .largest_valid_rectangle()?
+        .ok_or("The aligned stack has no covered pixels.")?;
+    println!(
+        "  - Streaming coverage rectangle: {}x{} at ({}, {})",
+        crop.2, crop.3, crop.0, crop.1
+    );
+    let output = store.materialize(crop)?;
+    println!(
+        "  - Verified covered output: {}x{}; every pixel has source ownership",
+        output.width(),
+        output.height()
+    );
+    Ok(output)
+}
+
+fn copy_streaming_tile_region(
+    tile: &mut Rgb32FImage,
+    tile_mask: &mut GrayImage,
+    sampler: &LayerSampler<'_>,
+    tile_left: u32,
+    tile_top: u32,
+    x_start: u32,
+    x_end: u32,
+    y_start: u32,
+    y_end: u32,
+) {
+    let tile_width = tile.width();
+    let stride = tile_width as usize * 3;
+    tile.as_mut()
+        .par_chunks_mut(stride)
+        .zip(tile_mask.as_mut().par_chunks_mut(tile_width as usize))
+        .enumerate()
+        .skip(y_start.saturating_sub(tile_top) as usize)
+        .take((y_end - y_start + 1) as usize)
+        .for_each(|(local_y, (row, covered))| {
+            for x in x_start..=x_end {
+                let local_x = x - tile_left;
+                let Some(pixel) = sampler.sample(local_x as f64, local_y as f64) else {
+                    continue;
+                };
+                let start = local_x as usize * 3;
+                row[start..start + 3].copy_from_slice(&pixel.0);
+                covered[local_x as usize] = 255;
+            }
+        });
+}
+
+fn copy_streaming_owned_tile_region(
+    tile: &mut Rgb32FImage,
+    tile_mask: &mut GrayImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    decision: &GrayImage,
+    tile_left: u32,
+    tile_top: u32,
+    x_start: u32,
+    x_end: u32,
+    y_start: u32,
+    y_end: u32,
+    scale: f64,
+    analysis_width: u32,
+    analysis_height: u32,
+) {
+    let decision_width = decision.width();
+    let decision_height = decision.height();
+    let tile_width = tile.width();
+    let stride = tile_width as usize * 3;
+    tile.as_mut()
+        .par_chunks_mut(stride)
+        .zip(tile_mask.as_mut().par_chunks_mut(tile_width as usize))
+        .enumerate()
+        .skip(y_start.saturating_sub(tile_top) as usize)
+        .take((y_end - y_start + 1) as usize)
+        .for_each(|(local_y, (row, covered))| {
+            let local_y = local_y as f64;
+            let ay = local_y / scale;
+            let dy = ((ay / analysis_height as f64 * decision_height as f64) as u32)
+                .min(decision_height.saturating_sub(1));
+            for dx in 0..decision_width {
+                if decision.get_pixel(dx, dy)[0] == 0 {
+                    continue;
+                }
+                let cell_start = (dx as f64 * analysis_width as f64 / decision_width as f64 * scale)
+                    .ceil() as u32;
+                let cell_end = (((dx + 1) as f64 * analysis_width as f64 / decision_width as f64
+                    * scale)
+                    .ceil() as u32)
+                    .min(tile_width);
+                let cell_x_start = (tile_left + cell_start).max(x_start);
+                let cell_x_end = (tile_left + cell_end).min(x_end + 1);
+                for x in cell_x_start..cell_x_end {
+                    let local_x = x - tile_left;
+                    let Some(pixel) = sampler.sample(local_x as f64, local_y) else {
+                        continue;
+                    };
+                    let adjusted_pixel = adjusted(pixel, tone.at(local_x as f64 / scale, ay));
+                    let start = local_x as usize * 3;
+                    row[start..start + 3].copy_from_slice(&adjusted_pixel.0);
+                    covered[local_x as usize] = 255;
+                }
+            }
+        });
+}
+
+fn copy_sequence_gap_layer(
+    result: &mut Rgb32FImage,
+    mask: &mut GrayImage,
+    sampler: &LayerSampler<'_>,
+    left: u32,
+    right: u32,
+    top: u32,
+    bottom: u32,
+) {
+    let width = result.width();
+    let stride = width as usize * 3;
+    result
+        .as_mut()
+        .par_chunks_mut(stride)
+        .zip(mask.as_mut().par_chunks_mut(width as usize))
+        .enumerate()
+        .skip(top as usize)
+        .take((bottom - top + 1) as usize)
+        .for_each(|(y, (row, covered))| {
+            let local_y = (y as u32 - top) as f64;
+            for x in left..=right {
+                let local_x = (x - left) as f64;
+                let Some(pixel) = sampler.sample(local_x, local_y) else {
+                    continue;
+                };
+                let start = x as usize * 3;
+                row[start..start + 3].copy_from_slice(&pixel.0);
+                covered[x as usize] = 255;
+            }
+        });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_store_round_trips_across_tile_boundaries() {
+        let store = StreamingMosaicStore::new(2050, 1025).expect("tile store should initialize");
+        for row in 0..store.tile_rows {
+            for column in 0..store.tile_columns {
+                let (_, _, width, height) = store.tile_extent(column, row);
+                let value = (column + row * 3) as f32;
+                let rgb =
+                    Rgb32FImage::from_pixel(width, height, Rgb([value, value + 1.0, value + 2.0]));
+                let mask = GrayImage::from_pixel(width, height, Luma([255]));
+                store
+                    .save_tile(column, row, &rgb, &mask)
+                    .expect("tile should be writable");
+            }
+        }
+        let crop = store
+            .largest_valid_rectangle()
+            .expect("coverage should be readable")
+            .expect("full tile fixture should be covered");
+        assert_eq!(crop, (0, 0, 2050, 1025));
+        let output = store.materialize(crop).expect("tiles should materialize");
+        assert_eq!(output.dimensions(), (2050, 1025));
+        assert_eq!(*output.get_pixel(1023, 10), Rgb([0.0, 1.0, 2.0]));
+        assert_eq!(*output.get_pixel(1024, 10), Rgb([1.0, 2.0, 3.0]));
+        assert_eq!(*output.get_pixel(10, 1024), Rgb([3.0, 4.0, 5.0]));
+    }
 
     fn image_info(id: usize, image: &Rgb32FImage) -> ImageInfo {
         ImageInfo {
@@ -942,6 +1724,7 @@ mod tests {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
             foreground_range: None,
@@ -1110,6 +1893,7 @@ mod tests {
             &[&infos[0], &infos[1]],
             &transforms,
             Projection::Planar,
+            false,
             app.handle().clone(),
             "test-progress",
             &mut |info| Ok(sources[info.id].clone()),
@@ -1208,6 +1992,42 @@ mod tests {
         assert!(
             selected_on_stroke > 70,
             "a sparse sharp stroke must own its pixels ({selected_on_stroke}/96)"
+        );
+    }
+
+    #[test]
+    fn streaming_focus_probe_keeps_a_sparse_sharp_stroke() {
+        let sharp = Rgb32FImage::from_fn(160, 128, |x, y| {
+            let line = (x as i32 - 80).unsigned_abs() <= 1 && (8..120).contains(&y);
+            let value = if line { 0.04 } else { 0.42 };
+            Rgb([value, value, value])
+        });
+        let base = image::imageops::blur(&sharp, 3.0);
+        let info = image_info(1, &sharp);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &sharp,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(160, 128, 48.0),
+        };
+        let selected = streaming_ownership_with_long_side(
+            &base,
+            &GrayImage::from_pixel(160, 128, Luma([255])),
+            &sampler,
+            &Field::new(160, 128, 56.0),
+            160,
+            128,
+            5,
+        );
+        assert!(
+            selected.get_pixel(2, 1)[0] != 0 || selected.get_pixel(2, 2)[0] != 0,
+            "the bounded streaming probe must retain sparse focused writing"
         );
     }
 

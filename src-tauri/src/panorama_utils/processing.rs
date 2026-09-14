@@ -120,6 +120,7 @@ pub fn find_features_multiscale(
         let scale_x = level.width() as f64 / img.width().max(1) as f64;
         let scale_y = level.height() as f64 / img.height().max(1) as f64;
         for feature in &mut features {
+            feature.support_scale = scale;
             feature.keypoint.x = ((feature.keypoint.x as f64 / scale_x).round())
                 .clamp(0.0, img.width().saturating_sub(1) as f64)
                 as u32;
@@ -191,6 +192,7 @@ pub fn find_features_tuned(
                 |descriptor| Feature {
                     keypoint: *kp,
                     descriptor,
+                    support_scale: 1.0,
                 },
             )
         })
@@ -413,6 +415,97 @@ pub fn match_features_with_ratio(
             } else {
                 None
             }
+        })
+        .collect()
+}
+
+/// Match only descriptor levels whose support sizes are compatible with the
+/// expected optical scale change. The ordinary matcher remains the fallback:
+/// metadata is a prior, not proof, because phones can crop a module or change
+/// their distance to the artwork at the same time as the focal length.
+pub fn match_features_with_ratio_and_scale(
+    features1: &[Feature],
+    features2: &[Feature],
+    ratio_threshold: f32,
+    expected_support_scale_ratio: f32,
+    tolerance: f32,
+) -> Vec<Match> {
+    if features1.is_empty()
+        || features2.is_empty()
+        || !ratio_threshold.is_finite()
+        || !expected_support_scale_ratio.is_finite()
+        || expected_support_scale_ratio <= 0.0
+        || !tolerance.is_finite()
+        || tolerance < 1.0
+    {
+        return Vec::new();
+    }
+    let minimum_ratio = expected_support_scale_ratio / tolerance;
+    let maximum_ratio = expected_support_scale_ratio * tolerance;
+    let distances: Vec<Vec<u16>> = features1
+        .par_iter()
+        .map(|f1| {
+            features2
+                .iter()
+                .map(|f2| hamming_distance(&f1.descriptor, &f2.descriptor) as u16)
+                .collect()
+        })
+        .collect();
+    let best_for_first: Vec<(usize, u32, u32)> = distances
+        .par_iter()
+        .enumerate()
+        .map(|(index1, row)| {
+            let mut best = (usize::MAX, u32::MAX, u32::MAX);
+            for (index2, &distance) in row.iter().enumerate() {
+                let support_ratio = features2[index2].support_scale
+                    / features1[index1].support_scale.max(f32::EPSILON);
+                if !support_ratio.is_finite()
+                    || support_ratio < minimum_ratio
+                    || support_ratio > maximum_ratio
+                {
+                    continue;
+                }
+                let distance = u32::from(distance);
+                if distance < best.1 {
+                    best = (index2, distance, best.1);
+                } else if distance < best.2 {
+                    best.2 = distance;
+                }
+            }
+            best
+        })
+        .collect();
+    let best_for_second: Vec<usize> = (0..features2.len())
+        .into_par_iter()
+        .map(|index2| {
+            let mut best = (usize::MAX, u32::MAX);
+            for (index1, row) in distances.iter().enumerate() {
+                let support_ratio = features2[index2].support_scale
+                    / features1[index1].support_scale.max(f32::EPSILON);
+                if !support_ratio.is_finite()
+                    || support_ratio < minimum_ratio
+                    || support_ratio > maximum_ratio
+                {
+                    continue;
+                }
+                let distance = u32::from(row[index2]);
+                if distance < best.1 {
+                    best = (index1, distance);
+                }
+            }
+            best.0
+        })
+        .collect();
+
+    best_for_first
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index1, (index2, best_dist, second_best_dist))| {
+            (index2 != usize::MAX
+                && second_best_dist > 0
+                && (best_dist as f32 / second_best_dist as f32) < ratio_threshold
+                && best_for_second[index2] == index1)
+                .then_some(Match { index1, index2 })
         })
         .collect()
 }
@@ -803,6 +896,7 @@ mod tests {
         Feature {
             keypoint: KeyPoint { x: 0, y: 0 },
             descriptor,
+            support_scale: 1.0,
         }
     }
 

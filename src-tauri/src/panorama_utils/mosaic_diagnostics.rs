@@ -177,6 +177,7 @@ fn replay_mosaic_roi_from_env() {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: j["focal_length_35mm"].as_f64(),
+            overview_reference: false,
             features: vec![],
             top_features: vec![],
             foreground_range: None,
@@ -306,6 +307,7 @@ fn replay_mosaic_roi_from_env() {
                 full_image: None,
                 scale_factor: 1.0,
                 focal_length_35mm: None,
+                overview_reference: false,
                 features: vec![],
                 top_features: vec![],
                 foreground_range: None,
@@ -333,6 +335,7 @@ fn replay_mosaic_roi_from_env() {
                 width,
                 height,
                 native,
+                false,
             );
             for y in 0..height {
                 for x in 0..width {
