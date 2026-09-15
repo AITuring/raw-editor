@@ -35,8 +35,8 @@ const STREAMING_HARMONIZATION_LONG_SIDE: u32 = 2400;
 // exposure rectangle into a thin bright/dark halo.  Keep the selected native
 // detail untouched, but spread the low-frequency illumination correction far
 // enough that the eye no longer sees the footprint of an individual frame.
-const STREAMING_HARMONIZATION_RADIUS: f64 = 48.0;
-const STREAMING_HARMONIZATION_BLUR: f32 = 48.0;
+const STREAMING_GROUP_GAIN_FEATHER: f32 = 3.0;
+const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.24;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
@@ -351,14 +351,15 @@ fn streaming_seam_harmonization(
     let analysis_height = (height as f64 / scale).ceil() as u32;
     let (analysis, mask, owner) =
         store.analysis_region(left, top, scale, analysis_width, analysis_height)?;
-    let mut distance = vec![u32::MAX / 4; (analysis_width * analysis_height) as usize];
     let mut boundary_count = 0usize;
+    let mut owner_pixels = [0usize; 256];
     for y in 0..analysis_height {
         for x in 0..analysis_width {
             let current = owner.get_pixel(x, y)[0];
             if current == 0 || mask.get_pixel(x, y)[0] == 0 {
                 continue;
             }
+            owner_pixels[current as usize] += 1;
             let boundary = [
                 x.checked_sub(1).map(|nx| (nx, y)),
                 (x + 1 < analysis_width).then_some((x + 1, y)),
@@ -372,7 +373,6 @@ fn streaming_seam_harmonization(
                 neighbour != 0 && neighbour != current
             });
             if boundary {
-                distance[(y * analysis_width + x) as usize] = 0;
                 boundary_count += 1;
             }
         }
@@ -380,58 +380,127 @@ fn streaming_seam_harmonization(
     if boundary_count == 0 {
         return Ok(None);
     }
+    // Estimate one exposure/colour correction per camera position from paper
+    // immediately across its ownership boundaries.  The previous per-pixel
+    // ratio of two blurred images followed dark strokes and created a bright
+    // unsharp-mask halo around calligraphy.  Group-constant gains cannot trace
+    // glyph contours, and dark/strongly coloured foreground is excluded here.
+    let paper = image::imageops::blur(&analysis, 2.0);
+    let mut pair_samples: HashMap<(u8, u8), Vec<[f64; 3]>> = HashMap::new();
+    let probe = 6u32;
+    let mut sample_pair = |ax: u32, ay: u32, bx: u32, by: u32| {
+        if mask.get_pixel(ax, ay)[0] == 0 || mask.get_pixel(bx, by)[0] == 0 {
+            return;
+        }
+        let a_owner = owner.get_pixel(ax, ay)[0];
+        let b_owner = owner.get_pixel(bx, by)[0];
+        if a_owner == 0 || b_owner == 0 || a_owner == b_owner {
+            return;
+        }
+        let a = paper.get_pixel(ax, ay);
+        let b = paper.get_pixel(bx, by);
+        let a_luma = luma(*a);
+        let b_luma = luma(*b);
+        if a_luma < 0.18 || b_luma < 0.18 || (a_luma - b_luma).abs() > 0.28 {
+            return;
+        }
+        let (key, sign) = if a_owner < b_owner {
+            ((a_owner, b_owner), 1.0)
+        } else {
+            ((b_owner, a_owner), -1.0)
+        };
+        pair_samples
+            .entry(key)
+            .or_default()
+            .push(std::array::from_fn(|channel| {
+                ((f64::from(b[channel]).max(0.015) / f64::from(a[channel]).max(0.015)).ln() * sign)
+                    .clamp(-STREAMING_GROUP_GAIN_MAX_LOG, STREAMING_GROUP_GAIN_MAX_LOG)
+            }));
+    };
     for y in 0..analysis_height {
+        for x in 0..analysis_width.saturating_sub(1) {
+            if owner.get_pixel(x, y)[0] != owner.get_pixel(x + 1, y)[0]
+                && x >= probe
+                && x + probe < analysis_width
+            {
+                sample_pair(x - probe, y, x + probe, y);
+            }
+        }
+    }
+    for y in 0..analysis_height.saturating_sub(1) {
         for x in 0..analysis_width {
-            let index = (y * analysis_width + x) as usize;
-            if x > 0 {
-                distance[index] = distance[index].min(distance[index - 1].saturating_add(1));
-            }
-            if y > 0 {
-                distance[index] = distance[index]
-                    .min(distance[index - analysis_width as usize].saturating_add(1));
+            if owner.get_pixel(x, y)[0] != owner.get_pixel(x, y + 1)[0]
+                && y >= probe
+                && y + probe < analysis_height
+            {
+                sample_pair(x, y - probe, x, y + probe);
             }
         }
     }
-    for y in (0..analysis_height).rev() {
-        for x in (0..analysis_width).rev() {
-            let index = (y * analysis_width + x) as usize;
-            if x + 1 < analysis_width {
-                distance[index] = distance[index].min(distance[index + 1].saturating_add(1));
+    let pair_offsets: Vec<((u8, u8), [f64; 3], f64)> = pair_samples
+        .into_iter()
+        .filter_map(|(pair, samples)| {
+            (samples.len() >= 12).then(|| {
+                let offset = std::array::from_fn(|channel| {
+                    median(
+                        &mut samples
+                            .iter()
+                            .map(|value| value[channel])
+                            .collect::<Vec<_>>(),
+                    )
+                });
+                (pair, offset, samples.len().min(512) as f64)
+            })
+        })
+        .collect();
+    let anchor = (1u8..=u8::MAX)
+        .max_by_key(|&id| owner_pixels[id as usize])
+        .unwrap_or(1);
+    let mut log_gains = [[0.0f64; 3]; 256];
+    for _ in 0..48 {
+        let previous = log_gains;
+        for id in 1u8..=u8::MAX {
+            if id == anchor || owner_pixels[id as usize] == 0 {
+                continue;
             }
-            if y + 1 < analysis_height {
-                distance[index] = distance[index]
-                    .min(distance[index + analysis_width as usize].saturating_add(1));
+            for channel in 0..3 {
+                let mut total = 0.0;
+                let mut weight = 0.0;
+                for &((a, b), offset, edge_weight) in &pair_offsets {
+                    let target = if id == a {
+                        previous[b as usize][channel] + offset[channel]
+                    } else if id == b {
+                        previous[a as usize][channel] - offset[channel]
+                    } else {
+                        continue;
+                    };
+                    total += target * edge_weight;
+                    weight += edge_weight;
+                }
+                if weight > 0.0 {
+                    log_gains[id as usize][channel] = (total / weight)
+                        .clamp(-STREAMING_GROUP_GAIN_MAX_LOG, STREAMING_GROUP_GAIN_MAX_LOG);
+                }
             }
         }
     }
-    // Remove strokes and paper texture before estimating the illumination on
-    // either side of an ownership seam.  Only the low-frequency component is
-    // feathered; native calligraphy detail remains from exactly one source.
-    let local_low = image::imageops::blur(&analysis, 5.0);
-    let seamless_low = image::imageops::blur(&local_low, STREAMING_HARMONIZATION_BLUR);
-    let gains = Rgb32FImage::from_fn(analysis_width, analysis_height, |x, y| {
-        let index = (y * analysis_width + x) as usize;
-        if mask.get_pixel(x, y)[0] == 0 {
-            return Rgb([1.0, 1.0, 1.0]);
+    let owner_gains = Rgb32FImage::from_fn(analysis_width, analysis_height, |x, y| {
+        let id = owner.get_pixel(x, y)[0] as usize;
+        if id == 0 {
+            Rgb([1.0; 3])
+        } else {
+            Rgb(std::array::from_fn(|channel| {
+                log_gains[id][channel].exp() as f32
+            }))
         }
-        let normalized = f64::from(distance[index]) / STREAMING_HARMONIZATION_RADIUS;
-        let weight = (-0.5 * normalized * normalized).exp();
-        let current = local_low.get_pixel(x, y);
-        let target = seamless_low.get_pixel(x, y);
-        Rgb(std::array::from_fn(|channel| {
-            if current[channel] <= 0.015 || target[channel] <= 0.0 {
-                return 1.0;
-            }
-            let log_gain = f64::from(target[channel] / current[channel])
-                .ln()
-                .clamp(-0.18, 0.18)
-                * weight;
-            log_gain.exp() as f32
-        }))
     });
+    let gains = image::imageops::blur(&owner_gains, STREAMING_GROUP_GAIN_FEATHER);
     println!(
-        "  - Low-frequency seam harmonization: {} group-boundary samples at {}x{}",
-        boundary_count, analysis_width, analysis_height
+        "  - Group exposure harmonization: {} boundary samples, {} robust group relations at {}x{}",
+        boundary_count,
+        pair_offsets.len(),
+        analysis_width,
+        analysis_height
     );
     Ok(Some((gains, scale)))
 }
@@ -2464,6 +2533,34 @@ mod tests {
             after_detail >= before_detail * 0.90,
             "multiplicative low-frequency correction must retain local detail"
         );
+    }
+
+    #[test]
+    fn group_exposure_harmonization_cannot_draw_a_halo_around_dark_strokes() {
+        let store = StreamingMosaicStore::new(256, 64).expect("tile store should initialize");
+        let rgb = Rgb32FImage::from_fn(256, 64, |x, _| {
+            let paper = if x < 128 { 0.46 } else { 0.56 };
+            let value = if (58..=62).contains(&x) { 0.06 } else { paper };
+            Rgb([value, value * 0.96, value * 0.90])
+        });
+        let mask = GrayImage::from_pixel(256, 64, Luma([255]));
+        let owner = GrayImage::from_fn(256, 64, |x, _| Luma([if x < 128 { 1 } else { 2 }]));
+        store
+            .save_tile(0, 0, &rgb, &mask)
+            .expect("tile should be writable");
+        store
+            .save_owner_tile(0, 0, &owner)
+            .expect("owner should be writable");
+        let (gains, _) = streaming_seam_harmonization(&store, (0, 0, 256, 64))
+            .expect("harmonization should build")
+            .expect("two owners should create a gain field");
+        let paper_gain = gains.get_pixel(30, 32)[0];
+        for x in [52, 56, 58, 60, 62, 64, 68] {
+            assert!(
+                (gains.get_pixel(x, 32)[0] - paper_gain).abs() < 1e-5,
+                "a dark stroke must not alter the exposure gain around itself"
+            );
+        }
     }
 
     #[test]
