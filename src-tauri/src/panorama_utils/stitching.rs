@@ -6432,6 +6432,7 @@ pub fn focus_stack_stitcher<R: Runtime, F>(
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     focus_warp: Option<&FocusLayerWarp>,
+    capture_group_ids: Option<&HashMap<usize, u8>>,
     sequence_gap_aware: bool,
     app_handle: AppHandle<R>,
     progress_event: &str,
@@ -6443,7 +6444,30 @@ where
     if images.is_empty() {
         return Ok(Rgb32FImage::new(0, 0));
     }
-    let shifted_mosaic = focus_stack_is_shifted_mosaic(images, global_homographies, projection);
+    let capture_group_count = capture_group_ids
+        .map(|ids| {
+            ids.values()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        })
+        .unwrap_or(0);
+    // Focus breathing and small tripod movement can trip the framing/scale
+    // heuristic even when every source belongs to one focus bracket.  The
+    // hard, position-owned mosaic is only appropriate when registration has
+    // independently recovered multiple camera positions (or an explicit
+    // sequence gap).  A single capture group must retain the mature focus
+    // fusion path; otherwise its cell-wise local warp visibly fragments
+    // strokes that are intentionally present at different focal depths.
+    let shifted_mosaic = sequence_gap_aware
+        || (capture_group_count > 1
+            && focus_stack_is_shifted_mosaic(images, global_homographies, projection));
+    if !shifted_mosaic {
+        println!(
+            "  - Compact focus capture detected ({} inferred group(s)); preserving standard focus fusion",
+            capture_group_count.max(1)
+        );
+    }
     if shifted_mosaic {
         println!("  - Framing/lens shift detected; using local registration and detail ownership");
         let _ = app_handle.emit(
@@ -6454,6 +6478,7 @@ where
             images,
             global_homographies,
             projection,
+            capture_group_ids,
             sequence_gap_aware,
             app_handle,
             progress_event,
