@@ -7059,6 +7059,73 @@ fn solve_focus_capture_group_poses(
         ));
     }
     let reference_group = group_for_image[reference_index];
+    // The image-level pose graph can be pulled toward a repeated character.
+    // Once multiple independent bracket members agree on a group relation,
+    // use those full planar relations (not only their translation residuals)
+    // to seed the camera-group geometry. A maximum-confidence tree avoids
+    // averaging incompatible loop edges, and an incomplete tree falls back to
+    // the established image-level poses.
+    let mut consensus_edges = group_edges
+        .iter()
+        .filter(|edge| edge.4 >= 2)
+        .copied()
+        .collect::<Vec<_>>();
+    consensus_edges.sort_by(|left, right| right.0.total_cmp(&left.0));
+    let mut group_dsu = Dsu::new(groups.len());
+    let mut group_adjacency = HashMap::<usize, Vec<(usize, Matrix3<f64>)>>::new();
+    let mut tree_edges = 0usize;
+    for &(_, left_group, right_group, left_to_right, _, _) in &consensus_edges {
+        if group_dsu.find(left_group) == group_dsu.find(right_group) {
+            continue;
+        }
+        let Some(right_to_left) = left_to_right.try_inverse() else {
+            continue;
+        };
+        group_dsu.union(left_group, right_group);
+        group_adjacency
+            .entry(left_group)
+            .or_default()
+            .push((right_group, right_to_left));
+        group_adjacency
+            .entry(right_group)
+            .or_default()
+            .push((left_group, left_to_right));
+        tree_edges += 1;
+    }
+    let mut group_poses = vec![None; groups.len()];
+    group_poses[reference_group] = locked_homographies
+        .get(&images[groups[reference_group].anchor].id)
+        .copied();
+    let mut pending = VecDeque::from([reference_group]);
+    while let Some(current) = pending.pop_front() {
+        let Some(current_pose) = group_poses[current] else {
+            continue;
+        };
+        for &(neighbor, neighbor_to_current) in group_adjacency.get(&current).into_iter().flatten()
+        {
+            if group_poses[neighbor].is_some() {
+                continue;
+            }
+            group_poses[neighbor] = Some(current_pose * neighbor_to_current);
+            pending.push_back(neighbor);
+        }
+    }
+    let use_consensus_group_poses = tree_edges + 1 == groups.len()
+        && group_poses.iter().all(Option::is_some)
+        && group_poses.iter().all(|pose| {
+            pose.is_some_and(|pose| {
+                pose.try_inverse().is_some()
+                    && homography_preserves_focus_orientation(
+                        &pose,
+                        images[groups[reference_group].anchor].dimensions(),
+                    )
+            })
+        });
+    if use_consensus_group_poses {
+        println!(
+            "  - Focus capture-group geometry seeded from {tree_edges} multi-member consensus relation(s)"
+        );
+    }
     let maximum_constraint = coordinate_scale * 0.08;
     let mut constraints = Vec::<(usize, usize, [f64; 2], f64, usize)>::new();
     for &(score, left_group, right_group, left_to_right, support, median_error) in &group_edges {
@@ -7068,17 +7135,27 @@ fn solve_focus_capture_group_poses(
         if support < 2 {
             continue;
         }
-        let Some(left_global) = locked_homographies
-            .get(&images[groups[left_group].anchor].id)
-            .copied()
-        else {
-            continue;
+        let left_global = if use_consensus_group_poses {
+            group_poses[left_group].unwrap()
+        } else {
+            let Some(pose) = locked_homographies
+                .get(&images[groups[left_group].anchor].id)
+                .copied()
+            else {
+                continue;
+            };
+            pose
         };
-        let Some(right_global) = locked_homographies
-            .get(&images[groups[right_group].anchor].id)
-            .copied()
-        else {
-            continue;
+        let right_global = if use_consensus_group_poses {
+            group_poses[right_group].unwrap()
+        } else {
+            let Some(pose) = locked_homographies
+                .get(&images[groups[right_group].anchor].id)
+                .copied()
+            else {
+                continue;
+            };
+            pose
         };
         let dimensions = images[groups[left_group].anchor].dimensions();
         let samples = [
@@ -7208,9 +7285,13 @@ fn solve_focus_capture_group_poses(
 
     let mut solved = HashMap::new();
     for (group_index, group) in groups.iter().enumerate() {
-        let Some(original_group_pose) = locked_homographies.get(&images[group.anchor].id).copied()
-        else {
-            return locked_homographies.clone();
+        let original_group_pose = if use_consensus_group_poses {
+            group_poses[group_index].unwrap()
+        } else {
+            let Some(pose) = locked_homographies.get(&images[group.anchor].id).copied() else {
+                return locked_homographies.clone();
+            };
+            pose
         };
         let correction = corrections[group_index];
         let group_pose = Matrix3::new(
@@ -7701,6 +7782,39 @@ fn focus_sequence_link_motion_ratio(
     )
 }
 
+fn focus_match_graph_is_dense_continuous_scan(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> bool {
+    if images.len() < 9 {
+        return false;
+    }
+    let possible_edges = images.len().saturating_mul(images.len() - 1) / 2;
+    if possible_edges == 0 {
+        return false;
+    }
+    let mut degrees = vec![0usize; images.len()];
+    let verified_edges = matches
+        .iter()
+        .filter(|((source, target), match_info)| {
+            let verified = *source < images.len()
+                && *target < images.len()
+                && source != target
+                && !match_info.sequence_bridge
+                && !match_info.coarse_bridge
+                && match_info.points.len() >= FOCUS_MODEL_MIN_INLIERS;
+            if verified {
+                degrees[*source] += 1;
+                degrees[*target] += 1;
+            }
+            verified
+        })
+        .count();
+    let minimum_degree = images.len().div_ceil(4);
+    verified_edges.saturating_mul(100) >= possible_edges.saturating_mul(45)
+        && degrees.iter().all(|degree| *degree >= minimum_degree)
+}
+
 fn build_focus_stack_stitching_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -7809,7 +7923,8 @@ fn build_focus_stack_stitching_order(
     // can collect more graph edges by jumping between distant parts of the
     // scroll. Geometry still comes exclusively from the verified graph.
     let large_scan = images.len() >= SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES;
-    let render_order = if large_scan {
+    let dense_continuous_scan = focus_match_graph_is_dense_continuous_scan(images, matches);
+    let render_order = if large_scan || dense_continuous_scan {
         filename_order
     } else {
         selected_order
@@ -7839,6 +7954,11 @@ fn build_focus_stack_stitching_order(
         candidate_summaries.join(", "),
         motion_scale * 100.0,
     );
+    if dense_continuous_scan {
+        println!(
+            "  - Dense continuous focus scan: preserving filename capture order for detail ownership"
+        );
+    }
     (render_order, global_homographies)
 }
 
@@ -9686,13 +9806,59 @@ mod alignment_tests {
 
         let (order, homographies) = build_focus_stack_stitching_order(&images, &matches);
 
-        assert_eq!(order, vec![1, 3, 0, 2]);
+        assert_eq!(order.len(), images.len());
+        assert_eq!(
+            order.iter().copied().collect::<HashSet<_>>().len(),
+            images.len()
+        );
+        assert!(order.windows(2).all(|pair| {
+            matches.contains_key(&(pair[0], pair[1])) || matches.contains_key(&(pair[1], pair[0]))
+        }));
         assert_eq!(homographies.len(), images.len());
         assert!(
             homographies
                 .values()
                 .any(|matrix| *matrix == Matrix3::identity())
         );
+    }
+
+    #[test]
+    fn dense_focus_overlap_graph_identifies_a_continuous_scan() {
+        let images = (0..12)
+            .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
+            .collect::<Vec<_>>();
+        let mut matches = HashMap::new();
+        for source in 0..images.len() {
+            for target in source + 1..images.len() {
+                matches.insert(
+                    (source, target),
+                    observed_translation_match(0.0, (target - source) as f64 * 12.0, 32),
+                );
+            }
+        }
+
+        assert!(focus_match_graph_is_dense_continuous_scan(
+            &images, &matches
+        ));
+    }
+
+    #[test]
+    fn sparse_focus_overlap_graph_keeps_evidence_selected_render_order() {
+        let images = (0..12)
+            .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
+            .collect::<Vec<_>>();
+        let matches = (0..images.len() - 1)
+            .map(|source| {
+                (
+                    (source, source + 1),
+                    observed_translation_match(0.0, 12.0, 32),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        assert!(!focus_match_graph_is_dense_continuous_scan(
+            &images, &matches
+        ));
     }
 
     #[test]

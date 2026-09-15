@@ -973,6 +973,29 @@ fn streaming_analysis_disagreement(
     (mean * 0.45 + high * 0.55).clamp(0.0, 1.0)
 }
 
+fn streaming_transition_structure(
+    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+    cell_size: f64,
+) -> f64 {
+    let mut levels = Vec::with_capacity(9);
+    for y_offset in [0.18, 0.5, 0.82] {
+        for x_offset in [0.18, 0.5, 0.82] {
+            if let Some(pixel) = sample(x + cell_size * x_offset, y + cell_size * y_offset) {
+                levels.push(luma(pixel));
+            }
+        }
+    }
+    if levels.len() < 5 {
+        return 0.0;
+    }
+    levels.sort_by(f64::total_cmp);
+    let dark = levels[levels.len() / 8];
+    let paper = levels[levels.len() * 3 / 4].max(0.04);
+    ((paper - dark) / paper).clamp(0.0, 1.0)
+}
+
 fn streaming_ownership_from_analysis(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
@@ -1065,8 +1088,29 @@ fn streaming_ownership_from_analysis(
                 // Cross-position stitching is a seam-placement problem, not
                 // a focus contest. Prefer the established panorama except for
                 // the connected region needed to admit genuinely new source
-                // coverage. This prevents rectangular islands and doubled
-                // characters inside a broad overlap.
+                // coverage. Make ink/edge cells expensive even when the two
+                // sources agree photometrically: a seam through an aligned
+                // brush stroke can still expose a tiny residual warp as a
+                // horizontally cut glyph. Quiet paper remains the cheapest
+                // route between characters.
+                let base_structure = streaming_transition_structure(
+                    |sample_x, sample_y| masked_rgb_at(base, base_mask, sample_x, sample_y),
+                    x,
+                    y,
+                    size,
+                );
+                let candidate_structure = streaming_transition_structure(
+                    |sample_x, sample_y| {
+                        masked_rgb_at(candidate, candidate_mask, sample_x, sample_y)
+                            .map(|pixel| adjusted(pixel, tone.at(sample_x, sample_y)))
+                    },
+                    x,
+                    y,
+                    size,
+                );
+                disagreement[index] = disagreement[index]
+                    .max(base_structure)
+                    .max(candidate_structure);
                 preference[index] = -0.75;
                 continue;
             }
@@ -2682,6 +2726,22 @@ mod tests {
         assert!(
             new_coverage_selected > 0,
             "new source coverage must be admitted"
+        );
+    }
+
+    #[test]
+    fn panorama_transition_marks_ink_cells_as_expensive_seam_routes() {
+        let image = Rgb32FImage::from_fn(96, 64, |x, y| {
+            let ink = (38..58).contains(&x) && (18..46).contains(&y);
+            let value = if ink { 0.05 } else { 0.52 };
+            Rgb([value, value * 0.96, value * 0.90])
+        });
+        let quiet = streaming_transition_structure(|x, y| rgb_at(&image, x, y), 0.0, 0.0, 24.0);
+        let ink = streaming_transition_structure(|x, y| rgb_at(&image, x, y), 30.0, 12.0, 36.0);
+        assert!(quiet < 0.05, "plain paper should remain a cheap seam route");
+        assert!(
+            ink > 0.75,
+            "a cell crossed by dark calligraphy must strongly repel the panorama seam"
         );
     }
 
