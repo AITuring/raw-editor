@@ -8312,15 +8312,29 @@ fn build_focus_stack_stitching_order(
     // geometry must come from the verified maximum-confidence overlap graph.
     // Chaining filename neighbours accumulates camera-pass resets into the
     // diagonal snake/collage failure seen on large focus-stack mosaics.
-    if graph_order.len() != images.len() {
-        return (graph_order, graph_homographies);
-    }
+    // If a demonstrably weak frame is absent from the graph, filter it out of
+    // the capture order instead of falling back to graph traversal; otherwise
+    // one skipped frame makes hundreds of valid layers render in tree order.
+    let graph_sources = graph_order.iter().copied().collect::<HashSet<_>>();
+    let connected_filename_order = filename_order
+        .iter()
+        .copied()
+        .filter(|index| graph_sources.contains(index))
+        .collect::<Vec<_>>();
     // Focus ownership is order-sensitive. Keep captures that were made next
     // to each other adjacent in the renderer even when a greedy visual path
     // can collect more graph edges by jumping between distant parts of the
     // scroll. Geometry still comes exclusively from the verified graph.
     let large_scan = images.len() >= SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES;
     let dense_continuous_scan = focus_match_graph_is_dense_continuous_scan(images, matches);
+    if graph_order.len() != images.len() {
+        let render_order = if large_scan || dense_continuous_scan {
+            connected_filename_order
+        } else {
+            graph_order
+        };
+        return (render_order, graph_homographies);
+    }
     let render_order = if large_scan || dense_continuous_scan {
         filename_order
     } else {
@@ -10325,6 +10339,30 @@ mod alignment_tests {
         assert!(!focus_match_graph_is_dense_continuous_scan(
             &images, &matches
         ));
+    }
+
+    #[test]
+    fn large_focus_scan_keeps_capture_order_when_one_weak_frame_is_disconnected() {
+        let images = (0..65)
+            .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
+            .collect::<Vec<_>>();
+        let skipped = 32usize;
+        let retained = (0..images.len())
+            .filter(|index| *index != skipped)
+            .collect::<Vec<_>>();
+        let matches = retained
+            .windows(2)
+            .map(|pair| {
+                (
+                    (pair[0].min(pair[1]), pair[0].max(pair[1])),
+                    translation_match(20.0, 0.0, 32),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        let (order, _) = build_focus_stack_stitching_order(&images, &matches);
+
+        assert_eq!(order, retained);
     }
 
     #[test]
