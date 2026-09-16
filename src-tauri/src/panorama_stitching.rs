@@ -209,7 +209,7 @@ const FOCUS_MATCH_MIN_EDGE_ORIENTATION: f64 = 0.18;
 const MAX_SCALABLE_PREPARATION_WORKERS: usize = 6;
 const PREPARATION_RAM_PER_WORKER_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_IN_MEMORY_PANORAMA_PIXELS: u64 = 240_000_000;
-const MAX_STITCH_SOURCE_IMAGES: usize = 200;
+const MAX_STITCH_SOURCE_IMAGES: usize = 500;
 const MAX_RETAINED_STACK_PIXELS: u64 = 120_000_000;
 
 fn stack_requires_bounded_memory(image_paths: &[String]) -> bool {

@@ -26,8 +26,12 @@ const DETAIL_PREVIEW_MAX_PIXELS: u64 = 32_000_000;
 const DETAIL_PREVIEW_JPEG_QUALITY: u8 = 98;
 #[cfg(test)]
 const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
-const IMAGE_STACK_MAX_SOURCES: usize = 200;
-const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.07.1";
+// Large artwork scans commonly contain several focus distances at every camera
+// position. The stitching backend keeps preparation and candidate matching
+// bounded, so reject only genuinely exceptional selections rather than forcing
+// a 382-frame scan to be split into independently warped mosaics.
+const IMAGE_STACK_MAX_SOURCES: usize = 500;
+const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.16.1";
 
 fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
     if count < 2 {
@@ -870,7 +874,7 @@ mod tests {
     }
 
     #[test]
-    fn image_stack_accepts_two_hundred_sources_but_rejects_more() {
+    fn image_stack_accepts_five_hundred_sources_but_rejects_more() {
         assert!(validate_image_stack_source_count(2).is_ok());
         assert!(validate_image_stack_source_count(IMAGE_STACK_MAX_SOURCES).is_ok());
         assert!(validate_image_stack_source_count(1).is_err());

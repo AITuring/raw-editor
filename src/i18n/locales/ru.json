@@ -1204,7 +1204,7 @@
       "dropImagesHint": "Один или несколько файлов RAW, JPEG, PNG и TIFF",
       "goToSettings": "Перейти в настройки",
       "latestVersion": "У вас установлена последняя версия",
-      "multiImageSelectionHint": "Выберите от 2 до 200 изображений, чтобы продолжить.",
+      "multiImageSelectionHint": "Выберите от 2 до 500 изображений, чтобы продолжить.",
       "newVersionAvailable": "Доступна новая версия!",
       "openFolder": "Открыть папку",
       "openImage": "Открыть изображение",
