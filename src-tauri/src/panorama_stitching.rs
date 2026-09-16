@@ -10717,7 +10717,7 @@ mod acceptance_tests {
                         .is_some_and(|extension| {
                             matches!(
                                 extension.to_ascii_lowercase().as_str(),
-                                "jpg" | "jpeg" | "png"
+                                "jpg" | "jpeg" | "png" | "nef" | "nrw" | "arw" | "cr2"
                             )
                         })
             })

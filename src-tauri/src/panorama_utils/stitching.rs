@@ -2251,6 +2251,21 @@ fn render_focus_layer(
                     }
                     let pixel =
                         get_high_quality_interpolated_pixel(source_image, source.x, source.y);
+                    // Keep the compact focus-fusion path consistent with the
+                    // shifted-mosaic sampler. Reject a non-image border, or
+                    // replace a known isolated spot with adjacent paper before
+                    // focus scoring can select the artifact as sharp detail.
+                    let Some(pixel) = super::mosaic::corrected_lower_left_capture_sample(
+                        image,
+                        source_image,
+                        source.x,
+                        source.y,
+                        source.x,
+                        source.y,
+                        pixel,
+                    ) else {
+                        continue;
+                    };
                     let start = local_x as usize * 3;
                     row[start..start + 3].copy_from_slice(&pixel.0);
                     mask_row[local_x as usize] = 255;
