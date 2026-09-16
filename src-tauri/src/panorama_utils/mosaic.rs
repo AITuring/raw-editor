@@ -10,7 +10,7 @@ use crate::panorama_stitching::ImageInfo;
 use image::{GrayImage, Luma, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Runtime};
 
@@ -35,6 +35,10 @@ const STREAMING_HARMONIZATION_LONG_SIDE: u32 = 2400;
 // exposure rectangle into a thin bright/dark halo.  Keep the selected native
 // detail untouched, but spread the low-frequency illumination correction far
 // enough that the eye no longer sees the footprint of an individual frame.
+// Keep this narrow enough to cancel the actual source discontinuity at an
+// ownership boundary. A very broad gain blur preserves that discontinuity and
+// only spreads a second correction ramp around it. The gain is constant per
+// capture group before this blur, so it cannot follow glyph contours.
 const STREAMING_GROUP_GAIN_FEATHER: f32 = 3.0;
 const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.24;
 const GRID_STEP: u32 = 32;
@@ -996,6 +1000,45 @@ fn streaming_transition_structure(
     ((paper - dark) / paper).clamp(0.0, 1.0)
 }
 
+fn streaming_distance_to_fixed_label(
+    width: u32,
+    height: u32,
+    fixed: &[i8],
+    label: i8,
+) -> Option<Vec<u32>> {
+    let mut distances = vec![u32::MAX; fixed.len()];
+    let mut pending = VecDeque::new();
+    for (index, &value) in fixed.iter().enumerate() {
+        if value == label {
+            distances[index] = 0;
+            pending.push_back(index);
+        }
+    }
+    if pending.is_empty() {
+        return None;
+    }
+    while let Some(index) = pending.pop_front() {
+        let x = index as u32 % width;
+        let y = index as u32 / width;
+        let next_distance = distances[index].saturating_add(1);
+        for neighbor in [
+            x.checked_sub(1).map(|nx| (y * width + nx) as usize),
+            (x + 1 < width).then_some((y * width + x + 1) as usize),
+            y.checked_sub(1).map(|ny| (ny * width + x) as usize),
+            (y + 1 < height).then_some(((y + 1) * width + x) as usize),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if next_distance < distances[neighbor] {
+                distances[neighbor] = next_distance;
+                pending.push_back(neighbor);
+            }
+        }
+    }
+    Some(distances)
+}
+
 fn streaming_ownership_from_analysis(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
@@ -1111,7 +1154,7 @@ fn streaming_ownership_from_analysis(
                 disagreement[index] = disagreement[index]
                     .max(base_structure)
                     .max(candidate_structure);
-                preference[index] = -0.75;
+                preference[index] = 0.0;
                 continue;
             }
             let base_focus = streaming_cell_focus(
@@ -1139,6 +1182,26 @@ fn streaming_ownership_from_analysis(
             };
             mismatch[index] =
                 (disagreement[index] * OWNERSHIP_MISMATCH_PENALTY * mismatch_scale).min(1.0);
+        }
+    }
+    if panorama_transition {
+        // Put the transition near the middle of the real overlap. With a
+        // uniform bias toward the old panorama the minimum cut hugs the first
+        // newly uncovered cell and exposes the rectangular source footprint.
+        // Distances to the mandatory old/new coverage seeds provide a spatial
+        // prior without using filename order or inventing image content.
+        if let (Some(base_distance), Some(candidate_distance)) = (
+            streaming_distance_to_fixed_label(grid_width, grid_height, &fixed, -1),
+            streaming_distance_to_fixed_label(grid_width, grid_height, &fixed, 1),
+        ) {
+            for index in 0..count {
+                if fixed[index] != 0 {
+                    continue;
+                }
+                let base = base_distance[index] as f64;
+                let candidate = candidate_distance[index] as f64;
+                preference[index] = ((base - candidate) / (base + candidate).max(1.0)) * 0.45;
+            }
         }
     }
     if !panorama_transition {
@@ -2715,6 +2778,12 @@ mod tests {
             .enumerate_pixels()
             .filter(|(x, _, pixel)| *x < decision.width() / 4 && pixel[0] != 0)
             .count();
+        let overlap_selected = decision
+            .enumerate_pixels()
+            .filter(|(x, _, pixel)| {
+                *x >= decision.width() / 2 && *x < decision.width() * 3 / 4 && pixel[0] != 0
+            })
+            .count();
         let new_coverage_selected = decision
             .enumerate_pixels()
             .filter(|(x, _, pixel)| *x >= decision.width() * 3 / 4 && pixel[0] != 0)
@@ -2726,6 +2795,10 @@ mod tests {
         assert!(
             new_coverage_selected > 0,
             "new source coverage must be admitted"
+        );
+        assert!(
+            overlap_selected > 0,
+            "a panorama seam must be allowed to leave the rectangular new-coverage boundary"
         );
     }
 

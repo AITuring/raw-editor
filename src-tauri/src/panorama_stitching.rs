@@ -2191,7 +2191,98 @@ fn match_image_pair(
     } else {
         processing::match_features(features1, features2)
     };
+    let adjacent_same_focal_focus_pair = blend_mode == BlendMode::FocusStack
+        && trailing_capture_number(&source_image.filename)
+            .zip(trailing_capture_number(&target_image.filename))
+            .is_some_and(|(source, target)| source.abs_diff(target) == 1)
+        && source_image
+            .focal_length_35mm
+            .zip(target_image.focal_length_35mm)
+            .is_some_and(|(source, target)| {
+                source.is_finite()
+                    && target.is_finite()
+                    && source > 0.0
+                    && target > 0.0
+                    && (source / target).max(target / source) <= 1.03
+            });
+    let severe_focus_feature_imbalance = features1.len().min(features2.len()).saturating_mul(4)
+        < features1.len().max(features2.len());
+    if adjacent_same_focal_focus_pair
+        && severe_focus_feature_imbalance
+        && let (Some(source_focal), Some(target_focal)) = (
+            source_image.focal_length_35mm,
+            target_image.focal_length_35mm,
+        )
+        && let Some((homography, points, score)) = estimate_mixed_focal_coarse_registration(
+            source_image,
+            target_image,
+            source_focal,
+            target_focal,
+            true,
+            log_match,
+        )
+    {
+        if log_match {
+            println!(
+                "  - Defocused adjacent bracket registration recovered {} points (NCC {:.3})",
+                points.len(),
+                score
+            );
+        }
+        return Some(MatchInfo {
+            homography,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: true,
+            points: points.clone(),
+            candidate_points: points,
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+        });
+    }
     if initial_matches.len() < minimum_inliers {
+        // A focus bracket can contain one deliberately defocused endpoint
+        // whose local descriptors collapse even though the frame has the same
+        // camera pose as its immediate neighbour. Photoshop can still align
+        // these pairs from their global image structure. Give only adjacent,
+        // same-focal captures that bounded fallback: the coarse registrar
+        // validates luminance and edges before returning a transform, while
+        // the filename/focal gates prevent it from connecting unrelated scan
+        // tiles merely because they contain repeated artwork texture.
+        if adjacent_same_focal_focus_pair
+            && let (Some(source_focal), Some(target_focal)) = (
+                source_image.focal_length_35mm,
+                target_image.focal_length_35mm,
+            )
+            && let Some((homography, points, score)) = estimate_mixed_focal_coarse_registration(
+                source_image,
+                target_image,
+                source_focal,
+                target_focal,
+                true,
+                log_match,
+            )
+        {
+            if log_match {
+                println!(
+                    "  - Adjacent focus-bracket image registration recovered {} points (NCC {:.3})",
+                    points.len(),
+                    score
+                );
+            }
+            return Some(MatchInfo {
+                homography,
+                inliers: points.len(),
+                sequence_bridge: false,
+                coarse_bridge: true,
+                points: points.clone(),
+                candidate_points: points,
+                top_candidate_points: Vec::new(),
+                dense_focus_points: Vec::new(),
+                foreground_feature_points: Vec::new(),
+            });
+        }
         if log_match && mixed_focal_pair {
             println!(
                 "  - Rejecting mixed-focal pair before geometry: {} descriptor candidates (need {})",
@@ -2371,6 +2462,7 @@ fn match_image_pair(
                     target_image,
                     source_focal,
                     target_focal,
+                    false,
                     log_match,
                 )
         {
@@ -2471,6 +2563,7 @@ fn match_image_pair(
                         target_image,
                         source_focal,
                         target_focal,
+                        false,
                         log_match,
                     )
                 {
@@ -2773,6 +2866,7 @@ fn match_image_pair(
                 target_image,
                 source_focal,
                 target_focal,
+                false,
                 log_match,
             )
         {
@@ -3240,6 +3334,7 @@ fn estimate_mixed_focal_coarse_registration(
     target: &ImageInfo,
     source_focal: f64,
     target_focal: f64,
+    allow_adjacent_defocus: bool,
     log_match: bool,
 ) -> Option<(Matrix3<f64>, Vec<(Point2<f64>, Point2<f64>)>, f64)> {
     if !source_focal.is_finite()
@@ -3456,10 +3551,19 @@ fn estimate_mixed_focal_coarse_registration(
                 validation_score,
             ));
         }
-        if intensity_ncc < MIXED_FOCAL_COARSE_MIN_INTENSITY_NCC
-            || edge_ncc < MIXED_FOCAL_COARSE_MIN_EDGE_NCC
-            || edge_orientation < MIXED_FOCAL_COARSE_MIN_EDGE_ORIENTATION
-        {
+        let structurally_verified = if allow_adjacent_defocus {
+            // A heavily defocused bracket endpoint preserves coarse luminance
+            // and edge magnitude but not reliable gradient orientation. This
+            // relaxed profile is reachable only for adjacent, same-focal
+            // captures at the caller and still requires both image channels.
+            (intensity_ncc >= 0.60 && edge_ncc >= 0.20 && edge_orientation >= 0.0)
+                || (intensity_ncc >= 0.85 && edge_ncc >= 0.05 && edge_orientation >= 0.10)
+        } else {
+            intensity_ncc >= MIXED_FOCAL_COARSE_MIN_INTENSITY_NCC
+                && edge_ncc >= MIXED_FOCAL_COARSE_MIN_EDGE_NCC
+                && edge_orientation >= MIXED_FOCAL_COARSE_MIN_EDGE_ORIENTATION
+        };
+        if !structurally_verified {
             continue;
         }
         if selected
