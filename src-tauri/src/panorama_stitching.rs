@@ -2060,20 +2060,37 @@ fn prepare_focus_rescue_image(
     })
 }
 
-fn largest_match_component(
-    image_count: usize,
+fn largest_focus_match_component(
+    images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> HashSet<usize> {
-    let mut adjacency = vec![Vec::new(); image_count];
-    for &(source, target) in matches.keys() {
-        if source < image_count && target < image_count && source != target {
+    let motion_scale = focus_auto_order_motion_scale(images, matches);
+    let mut adjacency = vec![Vec::new(); images.len()];
+    for (&(source, target), match_info) in matches {
+        let Some(source_image) = images.get(source) else {
+            continue;
+        };
+        let Some(target_image) = images.get(target) else {
+            continue;
+        };
+        let bracket_boost = if focus_match_is_local_bracket(source_image, target_image, match_info)
+        {
+            FOCUS_BRACKET_GRAPH_WEIGHT_BOOST
+        } else {
+            1.0
+        };
+        let weight =
+            focus_auto_order_edge_weight(source_image, target_image, match_info, motion_scale)
+                * focus_cycle_edge_factor(images, matches, source_image.id, target_image.id)
+                * bracket_boost;
+        if source != target && weight.is_finite() {
             adjacency[source].push(target);
             adjacency[target].push(source);
         }
     }
     let mut visited = HashSet::new();
     let mut largest = HashSet::new();
-    for root in 0..image_count {
+    for root in 0..images.len() {
         if !visited.insert(root) {
             continue;
         }
@@ -2092,6 +2109,27 @@ fn largest_match_component(
         }
     }
     largest
+}
+
+fn focus_overlap_is_verified(
+    quality: (f64, f64, f64, usize),
+    inlier_count: usize,
+    median_error: f64,
+    allow_low_texture_boundary: bool,
+) -> bool {
+    let (intensity_ncc, edge_ncc, edge_orientation, samples) = quality;
+    let normal = intensity_ncc >= FOCUS_MATCH_MIN_INTENSITY_NCC
+        && edge_ncc >= FOCUS_MATCH_MIN_EDGE_NCC
+        && edge_orientation >= FOCUS_MATCH_MIN_EDGE_ORIENTATION;
+    let low_texture_boundary = allow_low_texture_boundary
+        && intensity_ncc >= 0.82
+        && edge_ncc >= 0.30
+        && edge_orientation >= 0.10
+        && samples >= 1_000
+        && inlier_count >= 12
+        && median_error.is_finite()
+        && median_error <= 2.5;
+    normal || low_texture_boundary
 }
 
 fn canonical_match_direction(
@@ -2210,6 +2248,7 @@ fn match_image_pair(
     alignment_mode: AlignmentMode,
     stable_four_point_solver: bool,
     log_match: bool,
+    allow_low_texture_boundary: bool,
 ) -> Option<MatchInfo> {
     let mixed_focal_pair = image_pair_has_mixed_focal_lengths(source_image, target_image);
     let features1 = &source_image.features;
@@ -2875,12 +2914,14 @@ fn match_image_pair(
     let focus_overlap_quality = (blend_mode == BlendMode::FocusStack && stable_four_point_solver)
         .then(|| focus_overlap_quality(source_image, target_image, &homography))
         .flatten();
-    let focus_overlap_verified =
-        focus_overlap_quality.is_some_and(|(intensity_ncc, edge_ncc, edge_orientation, _)| {
-            intensity_ncc >= FOCUS_MATCH_MIN_INTENSITY_NCC
-                && edge_ncc >= FOCUS_MATCH_MIN_EDGE_NCC
-                && edge_orientation >= FOCUS_MATCH_MIN_EDGE_ORIENTATION
-        });
+    let focus_overlap_verified = focus_overlap_quality.is_some_and(|quality| {
+        focus_overlap_is_verified(
+            quality,
+            inlier_count,
+            median_error,
+            allow_low_texture_boundary,
+        )
+    });
     if log_match
         && let Some((intensity_ncc, edge_ncc, edge_orientation, samples)) = focus_overlap_quality
     {
@@ -4411,6 +4452,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 alignment_mode,
                 scale_robust_alignment,
                 true,
+                false,
             )?;
             if invert_for_storage {
                 match_info.homography = match_info.homography.try_inverse()?;
@@ -4448,7 +4490,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         pairwise_matches.insert(result.0, result.1);
     }
     if scalable_stack && focus_stack {
-        let largest_component = largest_match_component(image_data.len(), &pairwise_matches);
+        let largest_component = largest_focus_match_component(&image_data, &pairwise_matches);
         if largest_component.len() < image_data.len() {
             let mut filename_order = (0..image_data.len()).collect::<Vec<_>>();
             filename_order.sort_by(|&left, &right| {
@@ -4487,6 +4529,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     projection,
                     blend_mode,
                     alignment_mode,
+                    true,
                     true,
                     true,
                 ) else {
@@ -9935,6 +9978,35 @@ mod alignment_tests {
         }
     }
 
+    #[test]
+    fn low_texture_overlap_requires_boundary_rescue_context() {
+        let zhang_haohao_boundary = (0.886, 0.323, 0.134, 1_313);
+        assert!(!focus_overlap_is_verified(
+            zhang_haohao_boundary,
+            13,
+            1.887,
+            false
+        ));
+        assert!(focus_overlap_is_verified(
+            zhang_haohao_boundary,
+            13,
+            1.887,
+            true
+        ));
+        assert!(!focus_overlap_is_verified(
+            (0.886, 0.323, 0.099, 1_313),
+            13,
+            1.887,
+            true
+        ));
+        assert!(!focus_overlap_is_verified(
+            zhang_haohao_boundary,
+            11,
+            1.887,
+            true
+        ));
+    }
+
     fn translation_match(dx: f64, dy: f64, inliers: usize) -> MatchInfo {
         MatchInfo {
             homography: Matrix3::new(1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0),
@@ -11083,6 +11155,7 @@ mod acceptance_tests {
                     alignment_mode,
                     true,
                     false,
+                    false,
                 )?;
                 if invert_for_storage {
                     match_info.homography = match_info.homography.try_inverse()?;
@@ -11693,6 +11766,7 @@ mod acceptance_tests {
                         BlendMode::Panorama,
                         AlignmentMode::Auto,
                         true,
+                        false,
                         false,
                     )
                     .is_some();
