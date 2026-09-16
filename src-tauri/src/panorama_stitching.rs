@@ -2021,6 +2021,79 @@ fn load_prepared_stack_source(
     })
 }
 
+fn prepare_focus_rescue_image(
+    image: &ImageInfo,
+    settings: &AppSettings,
+    brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
+) -> Result<ImageInfo, String> {
+    let prepared = load_prepared_stack_source(&image.filename, settings)?;
+    let (width, height) = prepared.image.dimensions();
+    let (new_width, new_height, scale_factor) =
+        processing::calculate_downscale_dimensions_capped(width, height, 2_400);
+    let alignment_image = prepared
+        .image
+        .resize_exact(new_width, new_height, image::imageops::FilterType::Triangle)
+        .to_luma8();
+    let foreground_range = detect_foreground_range(&alignment_image);
+    Ok(ImageInfo {
+        id: image.id,
+        filename: image.filename.clone(),
+        width,
+        height,
+        features: find_alignment_features(
+            &alignment_image,
+            brief_pairs,
+            1_600,
+            true,
+            prepared.focal_length_35mm,
+        ),
+        top_features: find_top_alignment_features(&alignment_image, brief_pairs, foreground_range),
+        foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
+        horizontal_edge_rows: horizontal_edge_row_candidates(&alignment_image, foreground_range),
+        vertical_edge_columns: detect_vertical_edge_columns(&alignment_image, foreground_range),
+        alignment_image,
+        full_image: None,
+        scale_factor,
+        focal_length_35mm: prepared.focal_length_35mm,
+        overview_reference: false,
+        foreground_range,
+    })
+}
+
+fn largest_match_component(
+    image_count: usize,
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> HashSet<usize> {
+    let mut adjacency = vec![Vec::new(); image_count];
+    for &(source, target) in matches.keys() {
+        if source < image_count && target < image_count && source != target {
+            adjacency[source].push(target);
+            adjacency[target].push(source);
+        }
+    }
+    let mut visited = HashSet::new();
+    let mut largest = HashSet::new();
+    for root in 0..image_count {
+        if !visited.insert(root) {
+            continue;
+        }
+        let mut component = HashSet::from([root]);
+        let mut pending = vec![root];
+        while let Some(node) = pending.pop() {
+            for &neighbour in &adjacency[node] {
+                if visited.insert(neighbour) {
+                    component.insert(neighbour);
+                    pending.push(neighbour);
+                }
+            }
+        }
+        if component.len() > largest.len() {
+            largest = component;
+        }
+    }
+    largest
+}
+
 fn canonical_match_direction(
     images: &[ImageInfo],
     first: usize,
@@ -4373,6 +4446,98 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     for result in match_results.into_iter().flatten() {
         pairwise_matches.insert(result.0, result.1);
+    }
+    if scalable_stack && focus_stack {
+        let largest_component = largest_match_component(image_data.len(), &pairwise_matches);
+        if largest_component.len() < image_data.len() {
+            let mut filename_order = (0..image_data.len()).collect::<Vec<_>>();
+            filename_order.sort_by(|&left, &right| {
+                natural_path_cmp(&image_data[left].filename, &image_data[right].filename)
+            });
+            let rescue_pairs = filename_order
+                .windows(2)
+                .filter_map(|window| {
+                    let source = window[0];
+                    let target = window[1];
+                    (largest_component.contains(&source) != largest_component.contains(&target))
+                        .then_some((source.min(target), source.max(target)))
+                })
+                .collect::<HashSet<_>>();
+            if !rescue_pairs.is_empty() {
+                println!(
+                    "Retrying {} disconnected focus boundary pair(s) at higher alignment resolution...",
+                    rescue_pairs.len()
+                );
+            }
+            for (first, second) in rescue_pairs {
+                let source =
+                    prepare_focus_rescue_image(&image_data[first], &settings, &brief_pairs)?;
+                let target =
+                    prepare_focus_rescue_image(&image_data[second], &settings, &brief_pairs)?;
+                let (source_index, target_index, invert_for_storage) =
+                    if source.filename <= target.filename {
+                        (0usize, 1usize, false)
+                    } else {
+                        (1usize, 0usize, true)
+                    };
+                let rescue_images = [&source, &target];
+                let Some(mut match_info) = match_image_pair(
+                    rescue_images[source_index],
+                    rescue_images[target_index],
+                    projection,
+                    blend_mode,
+                    alignment_mode,
+                    true,
+                    true,
+                ) else {
+                    continue;
+                };
+                if invert_for_storage {
+                    match_info.homography = match_info
+                        .homography
+                        .try_inverse()
+                        .ok_or_else(|| "Failed to invert a focus rescue transform".to_string())?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info
+                        .candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.top_candidate_points = match_info
+                        .top_candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.dense_focus_points = match_info
+                        .dense_focus_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.foreground_feature_points = match_info
+                        .foreground_feature_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                }
+                println!(
+                    "  - Recovered disconnected focus boundary: '{}' <-> '{}' ({} inliers)",
+                    Path::new(&image_data[first].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    Path::new(&image_data[second].filename)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    match_info.points.len()
+                );
+                pairwise_matches.insert((first, second), match_info);
+            }
+        }
     }
     // Never invent a focus-stack edge from capture order. A large artwork is
     // commonly photographed in several raster passes and focus brackets, so a
