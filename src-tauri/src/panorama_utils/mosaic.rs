@@ -1221,7 +1221,14 @@ fn streaming_ownership_from_analysis(
                 }
                 let base = base_distance[index] as f64;
                 let candidate = candidate_distance[index] as f64;
-                preference[index] = ((base - candidate) / (base + candidate).max(1.0)) * 0.45;
+                // Keep most of an already verified panorama intact. The new
+                // camera position should own its genuinely new coverage and a
+                // narrow connected overlap for a non-rectangular seam, not the
+                // middle of a very large overlap. Mid-overlap ownership let a
+                // weak defocused bridge (Wen Yuan Tu 3483/3484) replace the
+                // tree roots and display rail with a visibly displaced block.
+                preference[index] =
+                    ((base - candidate) / (base + candidate).max(1.0)) * 0.60 - 0.30;
             }
         }
     }
