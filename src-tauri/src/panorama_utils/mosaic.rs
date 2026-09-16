@@ -544,6 +544,22 @@ fn rgb_at(image: &Rgb32FImage, x: f64, y: f64) -> Option<Rgb<f32>> {
     Some(get_high_quality_interpolated_pixel(image, x, y))
 }
 
+fn is_lower_left_black_capture_border(
+    image: &Rgb32FImage,
+    x: f64,
+    y: f64,
+    pixel: Rgb<f32>,
+) -> bool {
+    // Some handheld scan frames contain a genuinely black wedge outside the
+    // photographed artwork in their lower-left corner. It is not source
+    // content and must not become an owner merely because that frame extends
+    // farther than its neighbours. Keep the rule deliberately local and very
+    // dark: black robes, ink and furniture inside the image remain eligible.
+    x < image.width() as f64 * 0.22
+        && y > image.height() as f64 * 0.68
+        && pixel[0].max(pixel[1]).max(pixel[2]) < 0.025
+}
+
 #[derive(Clone)]
 struct Field<const N: usize> {
     width: usize,
@@ -623,7 +639,12 @@ impl LayerSampler<'_> {
             .clamp(0.0, self.source.width() as f64 - 1.0);
         let sy = ((source.y + 0.5) / self.source_divisor - 0.5)
             .clamp(0.0, self.source.height() as f64 - 1.0);
-        rgb_at(self.source, sx, sy)
+        let pixel = rgb_at(self.source, sx, sy)?;
+        if is_lower_left_black_capture_border(self.source, sx, sy, pixel) {
+            None
+        } else {
+            Some(pixel)
+        }
     }
 }
 
@@ -2545,6 +2566,29 @@ fn copy_sequence_gap_layer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_near_black_pixels_in_the_lower_left_capture_border_are_rejected() {
+        let image = Rgb32FImage::new(100, 100);
+        assert!(is_lower_left_black_capture_border(
+            &image,
+            10.0,
+            90.0,
+            Rgb([0.005, 0.006, 0.004]),
+        ));
+        assert!(!is_lower_left_black_capture_border(
+            &image,
+            50.0,
+            90.0,
+            Rgb([0.005, 0.006, 0.004]),
+        ));
+        assert!(!is_lower_left_black_capture_border(
+            &image,
+            10.0,
+            90.0,
+            Rgb([0.08, 0.03, 0.02]),
+        ));
+    }
 
     #[test]
     fn streaming_store_round_trips_across_tile_boundaries() {
