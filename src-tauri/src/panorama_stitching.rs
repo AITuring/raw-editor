@@ -4474,9 +4474,23 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         ordered_indices.iter().map(|&i| &image_data[i]).collect();
     let unstitched_count = image_data.len() - stitched_images_info.len();
     if unstitched_count > 0 {
+        let stitched_indices = ordered_indices.iter().copied().collect::<HashSet<_>>();
+        let unstitched_filenames = image_data
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !stitched_indices.contains(index))
+            .map(|(_, image)| {
+                Path::new(&image.filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
         let warning_msg = format!(
-            "{} image(s) could not be aligned with the selected set.",
-            unstitched_count
+            "{} image(s) could not be aligned with the selected set: {}.",
+            unstitched_count,
+            unstitched_filenames.join(", ")
         );
         println!("{}", warning_msg);
         let _ = app_handle.emit(progress_event, warning_msg);
