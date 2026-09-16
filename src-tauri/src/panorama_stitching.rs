@@ -71,6 +71,7 @@ const FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO: f64 = 0.075;
 const FOCUS_BRACKET_MIN_OVERLAP_SUPPORT: f64 = 0.60;
 const FOCUS_BRACKET_MAX_CAPTURE_GAP: u64 = 6;
 const FOCUS_BRACKET_MAX_COMPONENT_SOURCES: usize = 8;
+const FOCUS_BRACKET_GRAPH_WEIGHT_BOOST: f64 = 24.0;
 // A long scan of repeated calligraphy can contain a visually convincing edge
 // between distant characters. Once two nearby capture numbers have a verified
 // overlap, keep that camera-sequence evidence ahead of a remote lookalike when
@@ -2302,6 +2303,28 @@ pub enum BlendMode {
     FocusStack,
 }
 
+fn focus_capture_number_gap(source: &ImageInfo, target: &ImageInfo) -> Option<u64> {
+    trailing_capture_number(&source.filename)
+        .zip(trailing_capture_number(&target.filename))
+        .map(|(left, right)| left.abs_diff(right))
+}
+
+fn focus_compatible_focal_length(source: &ImageInfo, target: &ImageInfo) -> bool {
+    match (source.focal_length_35mm, target.focal_length_35mm) {
+        (Some(left), Some(right))
+            if left.is_finite() && right.is_finite() && left > 0.0 && right > 0.0 =>
+        {
+            (left / right).max(right / left) <= 1.03
+        }
+        _ => true,
+    }
+}
+
+fn focus_adjacent_same_focal_pair(source: &ImageInfo, target: &ImageInfo) -> bool {
+    focus_capture_number_gap(source, target).is_some_and(|gap| gap == 1)
+        && focus_compatible_focal_length(source, target)
+}
+
 fn match_image_pair(
     source_image: &ImageInfo,
     target_image: &ImageInfo,
@@ -2366,35 +2389,29 @@ fn match_image_pair(
         processing::match_features(features1, features2)
     };
     let adjacent_same_focal_focus_pair = blend_mode == BlendMode::FocusStack
-        && trailing_capture_number(&source_image.filename)
-            .zip(trailing_capture_number(&target_image.filename))
-            .is_some_and(|(source, target)| source.abs_diff(target) == 1)
-        && source_image
-            .focal_length_35mm
-            .zip(target_image.focal_length_35mm)
-            .is_some_and(|(source, target)| {
-                source.is_finite()
-                    && target.is_finite()
-                    && source > 0.0
-                    && target > 0.0
-                    && (source / target).max(target / source) <= 1.03
-            });
+        && focus_adjacent_same_focal_pair(source_image, target_image);
     let severe_focus_feature_imbalance = features1.len().min(features2.len()).saturating_mul(4)
         < features1.len().max(features2.len());
     if adjacent_same_focal_focus_pair
         && severe_focus_feature_imbalance
-        && let (Some(source_focal), Some(target_focal)) = (
-            source_image.focal_length_35mm,
-            target_image.focal_length_35mm,
-        )
-        && let Some((homography, points, score)) = estimate_mixed_focal_coarse_registration(
-            source_image,
-            target_image,
-            source_focal,
-            target_focal,
-            true,
-            log_match,
-        )
+        && let Some((homography, points, score)) = {
+            let source_focal = source_image
+                .focal_length_35mm
+                .or(target_image.focal_length_35mm)
+                .unwrap_or(50.0);
+            let target_focal = target_image
+                .focal_length_35mm
+                .or(source_image.focal_length_35mm)
+                .unwrap_or(source_focal);
+            estimate_mixed_focal_coarse_registration(
+                source_image,
+                target_image,
+                source_focal,
+                target_focal,
+                true,
+                log_match,
+            )
+        }
     {
         if log_match {
             println!(
@@ -2425,18 +2442,24 @@ fn match_image_pair(
         // the filename/focal gates prevent it from connecting unrelated scan
         // tiles merely because they contain repeated artwork texture.
         if adjacent_same_focal_focus_pair
-            && let (Some(source_focal), Some(target_focal)) = (
-                source_image.focal_length_35mm,
-                target_image.focal_length_35mm,
-            )
-            && let Some((homography, points, score)) = estimate_mixed_focal_coarse_registration(
-                source_image,
-                target_image,
-                source_focal,
-                target_focal,
-                true,
-                log_match,
-            )
+            && let Some((homography, points, score)) = {
+                let source_focal = source_image
+                    .focal_length_35mm
+                    .or(target_image.focal_length_35mm)
+                    .unwrap_or(50.0);
+                let target_focal = target_image
+                    .focal_length_35mm
+                    .or(source_image.focal_length_35mm)
+                    .unwrap_or(source_focal);
+                estimate_mixed_focal_coarse_registration(
+                    source_image,
+                    target_image,
+                    source_focal,
+                    target_focal,
+                    true,
+                    log_match,
+                )
+            }
         {
             if log_match {
                 println!(
@@ -3074,6 +3097,17 @@ fn match_image_pair(
         return None;
     }
     if blend_mode == BlendMode::FocusStack && stable_four_point_solver && !focus_overlap_verified {
+        if focus_adjacent_same_focal_pair(source_image, target_image)
+            && let Some(match_info) =
+                recover_adjacent_focus_bracket_match(source_image, target_image, log_match)
+        {
+            if log_match {
+                println!(
+                    "  - Focus overlap check failed; recovered same-pose adjacent bracket instead"
+                );
+            }
+            return Some(match_info);
+        }
         if log_match {
             println!(
                 "  - Rejecting focus match: the proposed overlap does not preserve the source structure"
@@ -3120,6 +3154,773 @@ fn match_image_pair(
         dense_focus_points,
         foreground_feature_points,
     })
+}
+
+fn recover_adjacent_focus_bracket_match(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    log_match: bool,
+) -> Option<MatchInfo> {
+    let adjacent_capture = trailing_capture_number(&source.filename)
+        .zip(trailing_capture_number(&target.filename))
+        .is_some_and(|(left, right)| left.abs_diff(right) == 1);
+    if !adjacent_capture {
+        return None;
+    }
+    let compatible_focal_length = source
+        .focal_length_35mm
+        .zip(target.focal_length_35mm)
+        .map(|(left, right)| {
+            left.is_finite()
+                && right.is_finite()
+                && left > 0.0
+                && right > 0.0
+                && (left / right).max(right / left) <= 1.03
+        })
+        // Missing EXIF must not disable focus-bracket recovery. The strict
+        // same-pose checks below remain the authority.
+        .unwrap_or(true);
+    if !compatible_focal_length {
+        return None;
+    }
+    let source_focal = source
+        .focal_length_35mm
+        .or(target.focal_length_35mm)
+        .unwrap_or(50.0);
+    let target_focal = target
+        .focal_length_35mm
+        .or(source.focal_length_35mm)
+        .unwrap_or(source_focal);
+    let (homography, points, score) = estimate_mixed_focal_coarse_registration(
+        source,
+        target,
+        source_focal,
+        target_focal,
+        true,
+        log_match,
+    )?;
+    // This fallback is only allowed to attach another focal plane at the same
+    // camera pose. A spatial scan step or repeated motif must continue through
+    // the ordinary feature/cycle-verified panorama graph.
+    let scale = homography[(0, 0)].abs();
+    let source_center = Point2::new(source.width as f64 * 0.5, source.height as f64 * 0.5);
+    let target_center = Point2::new(target.width as f64 * 0.5, target.height as f64 * 0.5);
+    let mapped_center = transformed_point(&homography, source_center)?;
+    let normalization = source
+        .width
+        .max(source.height)
+        .max(target.width.max(target.height))
+        .max(1) as f64;
+    let center_motion = (mapped_center - target_center).norm() / normalization;
+    let overlap =
+        panorama_transform_overlap_support(&homography, source.dimensions(), target.dimensions());
+    // The overlap estimator deliberately ignores an outer validation margin;
+    // identical full-frame images therefore report about 0.64, not 1.0.
+    if !(0.88..=1.12).contains(&scale) || center_motion > 0.12 || overlap < 0.60 {
+        if log_match {
+            println!(
+                "  - Rejecting adjacent focus-layer recovery: scale {scale:.3}, motion {:.3}%, overlap {:.1}%",
+                center_motion * 100.0,
+                overlap * 100.0,
+            );
+        }
+        return None;
+    }
+    if log_match {
+        println!(
+            "  - Recovered same-pose adjacent focus layer: '{}' <-> '{}' (NCC {:.3}, motion {:.3}%, overlap {:.1}%)",
+            Path::new(&source.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            Path::new(&target.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            score,
+            center_motion * 100.0,
+            overlap * 100.0,
+        );
+    }
+    Some(MatchInfo {
+        homography,
+        inliers: points.len(),
+        sequence_bridge: false,
+        coarse_bridge: true,
+        points: points.clone(),
+        candidate_points: points,
+        top_candidate_points: Vec::new(),
+        dense_focus_points: Vec::new(),
+        foreground_feature_points: Vec::new(),
+    })
+}
+
+fn focus_alignment_support(image: &ImageInfo) -> usize {
+    image.features.len().max(image.top_features.len())
+}
+
+fn focus_position_recovery_accepts(
+    capture_gap: u64,
+    same_focal: bool,
+    scale: f64,
+    center_motion: f64,
+    overlap: f64,
+    samples: usize,
+    intensity_ncc: f64,
+    edge_ncc: f64,
+    edge_orientation: f64,
+    orphan_attach: bool,
+) -> bool {
+    let scale_ok = if same_focal {
+        (0.86..=1.14).contains(&scale)
+    } else {
+        (MIXED_FOCAL_SCALE_MIN_RATIO..=MIXED_FOCAL_SCALE_MAX_RATIO).contains(&scale)
+    };
+    if !scale_ok || center_motion <= 0.05 || center_motion > 0.92 || overlap < 0.10 || samples < 300
+    {
+        return false;
+    }
+    if orphan_attach && capture_gap <= 2 && intensity_ncc >= 0.74 && edge_ncc >= 0.12 {
+        return true;
+    }
+    if capture_gap == 1
+        && intensity_ncc >= 0.62
+        && edge_ncc >= 0.35
+        && overlap >= 0.20
+    {
+        return true;
+    }
+    if intensity_ncc < 0.70 || edge_ncc < 0.14 || overlap < 0.12 || samples < 400 {
+        return false;
+    }
+    edge_orientation >= 0.16
+        || (capture_gap <= 2 && intensity_ncc >= 0.85 && edge_ncc >= 0.20)
+        || (capture_gap == 1 && intensity_ncc >= 0.78 && edge_ncc >= 0.16)
+}
+
+fn focus_capture_stations(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> Vec<Vec<usize>> {
+    let mut dsu = Dsu::new(images.len());
+    for (&(left, right), match_info) in matches {
+        if left >= images.len() || right >= images.len() {
+            continue;
+        }
+        if focus_match_is_local_bracket(&images[left], &images[right], match_info) {
+            dsu.union(left, right);
+        }
+    }
+    let mut by_root = HashMap::<usize, Vec<usize>>::new();
+    for index in 0..images.len() {
+        by_root.entry(dsu.find(index)).or_default().push(index);
+    }
+    let mut stations = by_root.into_values().collect::<Vec<_>>();
+    for station in &mut stations {
+        station.sort_by(|&left, &right| {
+            natural_path_cmp(&images[left].filename, &images[right].filename)
+                .then_with(|| left.cmp(&right))
+        });
+    }
+    stations.sort_by(|left, right| {
+        let left_number = left
+            .iter()
+            .filter_map(|&index| trailing_capture_number(&images[index].filename))
+            .min()
+            .unwrap_or(u64::MAX);
+        let right_number = right
+            .iter()
+            .filter_map(|&index| trailing_capture_number(&images[index].filename))
+            .min()
+            .unwrap_or(u64::MAX);
+        left_number.cmp(&right_number)
+    });
+    stations
+}
+
+fn attach_focus_bracket_orphans_to_pose_graph(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    ordered_indices: &mut Vec<usize>,
+    global_homographies: &mut HashMap<usize, Matrix3<f64>>,
+) -> usize {
+    let mut attached = 0usize;
+    let mut pending: Vec<usize> = (0..images.len())
+        .filter(|index| !global_homographies.contains_key(index))
+        .collect();
+    pending.sort_by(|&left, &right| {
+        natural_path_cmp(&images[left].filename, &images[right].filename)
+            .then_with(|| left.cmp(&right))
+    });
+    while !pending.is_empty() {
+        let mut progress = false;
+        let mut next_pending = Vec::new();
+        for orphan in pending {
+            let mut best: Option<(usize, Matrix3<f64>, usize)> = None;
+            for anchor in 0..images.len() {
+                if anchor == orphan || !global_homographies.contains_key(&anchor) {
+                    continue;
+                }
+                let key = (anchor.min(orphan), anchor.max(orphan));
+                let Some(match_info) = matches.get(&key) else {
+                    continue;
+                };
+                let (source, target) = if anchor < orphan {
+                    (&images[anchor], &images[orphan])
+                } else {
+                    (&images[orphan], &images[anchor])
+                };
+                if !focus_match_is_local_bracket(source, target, match_info) {
+                    continue;
+                }
+                let Some((_, anchor_to_orphan)) =
+                    focus_stack_link_transform(matches, anchor, orphan)
+                else {
+                    continue;
+                };
+                let homography = global_homographies[&anchor] * anchor_to_orphan;
+                let anchor_support = focus_alignment_support(&images[anchor]);
+                if best.as_ref().is_none_or(|(_, _, best_support)| {
+                    anchor_support > *best_support
+                        || (anchor_support == *best_support && anchor < orphan)
+                }) {
+                    best = Some((anchor, homography, anchor_support));
+                }
+            }
+            if let Some((_, homography, _)) = best {
+                global_homographies.insert(orphan, homography);
+                if !ordered_indices.contains(&orphan) {
+                    ordered_indices.push(orphan);
+                }
+                attached += 1;
+                progress = true;
+            } else {
+                next_pending.push(orphan);
+            }
+        }
+        if !progress {
+            break;
+        }
+        pending = next_pending;
+    }
+    attached
+}
+
+fn focus_station_representative_indices(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> HashSet<usize> {
+    focus_capture_stations(images, matches)
+        .into_iter()
+        .map(|station| focus_station_representative(&station, images))
+        .collect()
+}
+
+fn focus_stack_spine_edge(
+    images: &[ImageInfo],
+    left: usize,
+    right: usize,
+    match_info: &MatchInfo,
+    representatives: &HashSet<usize>,
+) -> bool {
+    if match_info.sequence_bridge {
+        return false;
+    }
+    if focus_match_is_local_bracket(&images[left], &images[right], match_info) {
+        return true;
+    }
+    if !match_info.coarse_bridge {
+        return match_info.points.len() >= FOCUS_MODEL_MIN_INLIERS;
+    }
+    if !representatives.contains(&left) || !representatives.contains(&right) {
+        return false;
+    }
+    let Some(motion) = focus_match_center_motion_ratio(&images[left], &images[right], match_info)
+    else {
+        return false;
+    };
+    if motion <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO {
+        return false;
+    }
+    let capture_gap = focus_capture_number_gap(&images[left], &images[right]).unwrap_or(u64::MAX);
+    let same_focal = focus_compatible_focal_length(&images[left], &images[right]);
+    let scale = match_info.homography[(0, 0)].abs();
+    let overlap = panorama_transform_overlap_support(
+        &match_info.homography,
+        images[left].dimensions(),
+        images[right].dimensions(),
+    );
+    focus_overlap_quality(&images[left], &images[right], &match_info.homography).is_some_and(
+        |(intensity_ncc, edge_ncc, edge_orientation, samples)| {
+            focus_position_recovery_accepts(
+                capture_gap,
+                same_focal,
+                scale,
+                motion,
+                overlap,
+                samples,
+                intensity_ncc,
+                edge_ncc,
+                edge_orientation,
+                false,
+            )
+        },
+    )
+}
+
+fn focus_stack_spine_matches(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> HashMap<(usize, usize), MatchInfo> {
+    if images.len() < SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES {
+        return matches.clone();
+    }
+    let representatives = focus_station_representative_indices(images, matches);
+    matches
+        .iter()
+        .filter(|(key, match_info)| {
+            focus_stack_spine_edge(images, key.0, key.1, match_info, &representatives)
+        })
+        .map(|(key, match_info)| (*key, match_info.clone()))
+        .collect()
+}
+
+fn focus_station_representative(station: &[usize], images: &[ImageInfo]) -> usize {
+    station
+        .iter()
+        .copied()
+        .max_by_key(|&index| {
+            (
+                focus_alignment_support(&images[index]),
+                std::cmp::Reverse(trailing_capture_number(&images[index].filename).unwrap_or(0)),
+            )
+        })
+        .unwrap_or(station[0])
+}
+
+fn focus_indices_share_component(left: usize, right: usize, components: &[Vec<usize>]) -> bool {
+    components
+        .iter()
+        .any(|component| component.contains(&left) && component.contains(&right))
+}
+
+fn focus_stack_adjacent_match_is_unreliable(
+    images: &[ImageInfo],
+    left: usize,
+    right: usize,
+    match_info: &MatchInfo,
+) -> bool {
+    if match_info.sequence_bridge {
+        return false;
+    }
+    let Some(gap) = trailing_capture_number(&images[left].filename)
+        .zip(trailing_capture_number(&images[right].filename))
+        .map(|(left_number, right_number)| left_number.abs_diff(right_number))
+    else {
+        return false;
+    };
+    if gap == 0 || gap > FOCUS_BRACKET_MAX_CAPTURE_GAP {
+        return false;
+    }
+    if focus_match_is_local_bracket(&images[left], &images[right], match_info) {
+        return false;
+    }
+    if match_info.coarse_bridge || match_info.inliers < SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION {
+        return true;
+    }
+    let Some(motion) = focus_match_center_motion_ratio(&images[left], &images[right], match_info)
+    else {
+        return true;
+    };
+    if gap <= 2 && motion <= 0.10 {
+        return match_info.inliers < FOCUS_MODEL_MIN_INLIERS;
+    }
+    if motion <= 0.08 {
+        return false;
+    }
+    focus_overlap_quality(&images[left], &images[right], &match_info.homography).is_none_or(
+        |(intensity_ncc, edge_ncc, edge_orientation, samples)| {
+            intensity_ncc < 0.72 || edge_ncc < 0.20 || edge_orientation < 0.12 || samples < 400
+        },
+    )
+}
+
+fn insert_recovered_focus_match(
+    images: &[ImageInfo],
+    left_index: usize,
+    right_index: usize,
+    log_match: bool,
+    orphan_attach: bool,
+) -> Option<((usize, usize), MatchInfo)> {
+    let (source, target, invert_for_storage) =
+        canonical_match_direction(images, left_index, right_index);
+    let mut match_info = recover_adjacent_focus_position_match(
+        &images[source],
+        &images[target],
+        log_match,
+        orphan_attach,
+    )?;
+    if invert_for_storage {
+        match_info.homography = match_info.homography.try_inverse()?;
+        match_info.points = match_info
+            .points
+            .into_iter()
+            .map(|(source, target)| (target, source))
+            .collect();
+        match_info.candidate_points = match_info
+            .candidate_points
+            .into_iter()
+            .map(|(source, target)| (target, source))
+            .collect();
+    }
+    Some((
+        (left_index.min(right_index), left_index.max(right_index)),
+        match_info,
+    ))
+}
+
+fn attach_focus_orphan_components(
+    images: &[ImageInfo],
+    matches: &mut HashMap<(usize, usize), MatchInfo>,
+) -> usize {
+    let components = focus_overlap_components(images, matches);
+    if components.len() <= 1 {
+        return 0;
+    }
+    let main_index = components
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, component)| component.len())
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    let main_component = &components[main_index];
+    let mut added = 0usize;
+    for (orphan_index, orphan) in components.iter().enumerate() {
+        if orphan_index == main_index {
+            continue;
+        }
+        let mut candidates = Vec::new();
+        for &left in main_component {
+            for &right in orphan {
+                let Some(gap) = trailing_capture_number(&images[left].filename)
+                    .zip(trailing_capture_number(&images[right].filename))
+                    .map(|(left, right)| left.abs_diff(right))
+                else {
+                    continue;
+                };
+                if gap == 0 || gap > 12 {
+                    continue;
+                }
+                candidates.push((
+                    gap,
+                    std::cmp::Reverse(
+                        focus_alignment_support(&images[left])
+                            + focus_alignment_support(&images[right]),
+                    ),
+                    left,
+                    right,
+                ));
+            }
+        }
+        candidates.sort_by_key(|candidate| (candidate.0, candidate.1, candidate.2, candidate.3));
+        for (_, _, left, right) in candidates.into_iter().take(16) {
+            let key = (left.min(right), left.max(right));
+            if matches.contains_key(&key) {
+                continue;
+            }
+            let Some(recovered) = insert_recovered_focus_match(images, left, right, false, true)
+            else {
+                continue;
+            };
+            matches.insert(recovered.0, recovered.1);
+            added += 1;
+            break;
+        }
+    }
+    added
+}
+
+fn bridge_focus_capture_station_chain(
+    images: &[ImageInfo],
+    matches: &mut HashMap<(usize, usize), MatchInfo>,
+) -> usize {
+    let stations = focus_capture_stations(images, matches);
+    if stations.len() < 2 {
+        return 0;
+    }
+    let mut added = 0usize;
+    for window in stations.windows(2) {
+        let left_rep = focus_station_representative(&window[0], images);
+        let right_rep = focus_station_representative(&window[1], images);
+        let key = (left_rep.min(right_rep), left_rep.max(right_rep));
+        if matches.contains_key(&key) {
+            continue;
+        }
+        let components = focus_overlap_components(images, matches);
+        if focus_indices_share_component(left_rep, right_rep, &components) {
+            continue;
+        }
+        if let Some(recovered) =
+            insert_recovered_focus_match(images, left_rep, right_rep, false, false)
+        {
+            matches.insert(recovered.0, recovered.1);
+            added += 1;
+        }
+    }
+    added
+}
+
+fn recover_adjacent_focus_position_match(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    log_match: bool,
+    orphan_attach: bool,
+) -> Option<MatchInfo> {
+    let capture_gap = trailing_capture_number(&source.filename)
+        .zip(trailing_capture_number(&target.filename))
+        .map(|(left, right)| left.abs_diff(right))?;
+    if capture_gap == 0 || capture_gap > FOCUS_BRACKET_MAX_CAPTURE_GAP {
+        return None;
+    }
+    let source_focal = source
+        .focal_length_35mm
+        .or(target.focal_length_35mm)
+        .unwrap_or(50.0);
+    let target_focal = target
+        .focal_length_35mm
+        .or(source.focal_length_35mm)
+        .unwrap_or(source_focal);
+    let focal_ratio = (source_focal / target_focal).max(target_focal / source_focal);
+    if !focal_ratio.is_finite() || focal_ratio > 1.7 {
+        return None;
+    }
+    let same_focal = focal_ratio <= 1.03;
+    let (homography, points, score) = estimate_mixed_focal_coarse_registration(
+        source,
+        target,
+        source_focal,
+        target_focal,
+        // Spatial neighbours can include opposite ends of a focus bracket.
+        // Let the coarse search retain a blurred but structurally consistent
+        // candidate; the independent gates below are still stricter than the
+        // same-pose recovery profile.
+        true,
+        log_match,
+    )?;
+    let scale = homography[(0, 0)].abs();
+    let center_motion = focus_match_center_motion_ratio(
+        source,
+        target,
+        &MatchInfo {
+            homography,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: true,
+            points: points.clone(),
+            candidate_points: Vec::new(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+        },
+    )?;
+    let overlap =
+        panorama_transform_overlap_support(&homography, source.dimensions(), target.dimensions());
+    let (intensity_ncc, edge_ncc, edge_orientation, samples) =
+        focus_overlap_quality(source, target, &homography)?;
+    // Unlike the same-pose fallback, this edge may join two panorama
+    // positions. Require strong independent luminance, edge-magnitude, and
+    // edge-orientation agreement over a substantial real overlap. Filename
+    // adjacency merely selects a bounded candidate; it is never sufficient
+    // evidence by itself.
+    if !focus_position_recovery_accepts(
+        capture_gap,
+        same_focal,
+        scale,
+        center_motion,
+        overlap,
+        samples,
+        intensity_ncc,
+        edge_ncc,
+        edge_orientation,
+        orphan_attach,
+    ) {
+        if log_match {
+            println!(
+                "  - Rejecting focus-position recovery '{}' <-> '{}': scale {scale:.3}, intensity {intensity_ncc:.3}, edges {edge_ncc:.3}/{edge_orientation:.3}, motion {:.1}%, overlap {:.1}%, samples {samples}",
+                Path::new(&source.filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                Path::new(&target.filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                center_motion * 100.0,
+                overlap * 100.0,
+            );
+        }
+        return None;
+    }
+    if log_match {
+        println!(
+            "  - Recovered adjacent focus-position edge: '{}' <-> '{}' (NCC {:.3}, edges {:.3}/{:.3}, motion {:.1}%, overlap {:.1}%)",
+            Path::new(&source.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            Path::new(&target.filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            score,
+            edge_ncc,
+            edge_orientation,
+            center_motion * 100.0,
+            overlap * 100.0,
+        );
+    }
+    Some(MatchInfo {
+        homography,
+        inliers: points.len(),
+        sequence_bridge: false,
+        coarse_bridge: true,
+        points: points.clone(),
+        candidate_points: points,
+        top_candidate_points: Vec::new(),
+        dense_focus_points: Vec::new(),
+        foreground_feature_points: Vec::new(),
+    })
+}
+
+fn focus_overlap_components(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> Vec<Vec<usize>> {
+    let mut dsu = Dsu::new(images.len());
+    for &(left, right) in matches.keys() {
+        if left < images.len() && right < images.len() {
+            dsu.union(left, right);
+        }
+    }
+    let mut by_root = HashMap::<usize, Vec<usize>>::new();
+    for index in 0..images.len() {
+        let root = dsu.find(index);
+        by_root.entry(root).or_default().push(index);
+    }
+    let mut components = by_root.into_values().collect::<Vec<_>>();
+    for component in &mut components {
+        component.sort_by(|&left, &right| {
+            natural_path_cmp(&images[left].filename, &images[right].filename)
+                .then_with(|| left.cmp(&right))
+        });
+    }
+    components.sort_by(|left, right| {
+        natural_path_cmp(
+            &images[*left.first().unwrap_or(&0)].filename,
+            &images[*right.first().unwrap_or(&0)].filename,
+        )
+    });
+    components
+}
+
+fn recover_focus_component_edges(
+    images: &[ImageInfo],
+    matches: &mut HashMap<(usize, usize), MatchInfo>,
+) -> usize {
+    let mut total_added = bridge_focus_capture_station_chain(images, matches);
+    for _ in 0..3 {
+        let components = focus_overlap_components(images, matches);
+        if components.len() <= 1 {
+            break;
+        }
+        let stations = focus_capture_stations(images, matches);
+        let mut pending = Vec::new();
+        for left_component_index in 0..components.len() {
+            for right_component_index in left_component_index + 1..components.len() {
+                let left_component = &components[left_component_index];
+                let right_component = &components[right_component_index];
+                let left_rep = left_component
+                    .iter()
+                    .copied()
+                    .max_by_key(|&index| focus_alignment_support(&images[index]))
+                    .unwrap_or(left_component[0]);
+                let right_rep = right_component
+                    .iter()
+                    .copied()
+                    .max_by_key(|&index| focus_alignment_support(&images[index]))
+                    .unwrap_or(right_component[0]);
+                let capture_gap = trailing_capture_number(&images[left_rep].filename)
+                    .zip(trailing_capture_number(&images[right_rep].filename))
+                    .map(|(left, right)| left.abs_diff(right))
+                    .unwrap_or(u64::MAX);
+                if capture_gap == 0 || capture_gap > FOCUS_BRACKET_MAX_CAPTURE_GAP {
+                    continue;
+                }
+                let key = (left_rep.min(right_rep), left_rep.max(right_rep));
+                if matches.contains_key(&key) {
+                    continue;
+                }
+                if let Some(recovered) =
+                    insert_recovered_focus_match(images, left_rep, right_rep, false, false)
+                {
+                    pending.push(recovered);
+                    continue;
+                }
+                // Fall back to the sharpest cross-station pair when reps alone
+                // are still too defocused to pass the structural gate.
+                let mut candidates = stations
+                    .iter()
+                    .flat_map(|station| {
+                        station.iter().copied().filter(|&index| {
+                            left_component.contains(&index) || right_component.contains(&index)
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                candidates.sort_by_key(|&index| {
+                    std::cmp::Reverse(focus_alignment_support(&images[index]))
+                });
+                let mut recovered_pair = None;
+                for &left_index in candidates
+                    .iter()
+                    .filter(|&&index| left_component.contains(&index))
+                    .take(3)
+                {
+                    for &right_index in candidates
+                        .iter()
+                        .filter(|&&index| right_component.contains(&index))
+                        .take(3)
+                    {
+                        if left_index == right_index {
+                            continue;
+                        }
+                        if let Some(recovered) = insert_recovered_focus_match(
+                            images,
+                            left_index,
+                            right_index,
+                            false,
+                            false,
+                        ) {
+                            recovered_pair = Some(recovered);
+                            break;
+                        }
+                    }
+                    if recovered_pair.is_some() {
+                        break;
+                    }
+                }
+                if let Some(recovered) = recovered_pair {
+                    pending.push(recovered);
+                }
+            }
+        }
+        if pending.is_empty() {
+            break;
+        }
+        total_added += pending.len();
+        matches.extend(pending);
+    }
+    total_added += attach_focus_orphan_components(images, matches);
+    total_added
 }
 
 fn collect_dense_focus_region_points(
@@ -3548,11 +4349,21 @@ fn estimate_mixed_focal_coarse_registration(
     // change camera distance while zooming. Search a bounded scale band around
     // that prior; otherwise a valid close-up in a wide overview is rejected by
     // the fixed-ratio translation search before dense validation sees it.
-    let scale_candidates = [0.70, 0.82, 0.94, 1.0, 1.08, 1.20, 1.34]
-        .into_iter()
-        .map(|adjustment| focal_scale * adjustment)
-        .filter(|scale| scale.is_finite() && *scale > 0.0)
-        .collect::<Vec<_>>();
+    let focal_ratio = (source_focal / target_focal).max(target_focal / source_focal);
+    let scale_candidates = if focal_ratio <= 1.03 {
+        // Same lens module: do not let EXIF noise expand the search to 1.08/1.20
+        // scales that mimic a false lens switch on dark, low-texture artwork.
+        [0.94_f64, 0.97, 1.0, 1.03, 1.06]
+            .into_iter()
+            .filter(|scale| scale.is_finite() && *scale > 0.0)
+            .collect::<Vec<_>>()
+    } else {
+        [0.70, 0.82, 0.94, 1.0, 1.08, 1.20, 1.34]
+            .into_iter()
+            .map(|adjustment| focal_scale * adjustment)
+            .filter(|scale| scale.is_finite() && *scale > 0.0)
+            .collect::<Vec<_>>()
+    };
     let mut best: Option<(i32, i32, f64, f64)> = None;
     let mut candidate_scores: Vec<(i32, i32, f64, f64)> = Vec::new();
 
@@ -4550,6 +5361,136 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     for result in match_results.into_iter().flatten() {
         pairwise_matches.insert(result.0, result.1);
+    }
+    if focus_stack {
+        // Ordinary BRIEF/RANSAC matching intentionally rejects ambiguous
+        // repeated artwork texture. That is correct for panorama-position
+        // edges, but it also strands deliberately defocused or low-texture
+        // members of an otherwise valid focus bracket. Retry only missing,
+        // filename-adjacent pairs and accept them only when dense correlation
+        // proves that they occupy the same camera pose.
+        let mut filename_order = (0..image_data.len()).collect::<Vec<_>>();
+        filename_order.sort_by(|&left, &right| {
+            natural_path_cmp(&image_data[left].filename, &image_data[right].filename)
+                .then_with(|| left.cmp(&right))
+        });
+        let mut cleared_adjacent = 0usize;
+        for pair in filename_order.windows(2) {
+            let left = pair[0].min(pair[1]);
+            let right = pair[0].max(pair[1]);
+            let key = (left, right);
+            let Some(match_info) = pairwise_matches.get(&key) else {
+                continue;
+            };
+            let should_clear = if focus_match_is_local_bracket(
+                &image_data[left],
+                &image_data[right],
+                match_info,
+            ) {
+                false
+            } else {
+                focus_stack_adjacent_match_is_unreliable(&image_data, left, right, match_info)
+            };
+            if should_clear {
+                pairwise_matches.remove(&key);
+                cleared_adjacent += 1;
+            }
+        }
+        if cleared_adjacent > 0 {
+            println!(
+                "  - Clearing {cleared_adjacent} adjacent focus-stack edge(s) for recovery retry"
+            );
+        }
+        let recovery_pairs = filename_order
+            .windows(2)
+            .filter_map(|pair| {
+                let left = pair[0].min(pair[1]);
+                let right = pair[0].max(pair[1]);
+                (!pairwise_matches.contains_key(&(left, right))).then_some((left, right))
+            })
+            .collect::<Vec<_>>();
+        let recovered = recovery_pairs
+            .par_iter()
+            .filter_map(|&(left, right)| {
+                let (source, target, invert_for_storage) =
+                    canonical_match_direction(&image_data, left, right);
+                let mut match_info = recover_adjacent_focus_bracket_match(
+                    &image_data[source],
+                    &image_data[target],
+                    true,
+                )?;
+                if invert_for_storage {
+                    match_info.homography = match_info.homography.try_inverse()?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info
+                        .candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                }
+                Some(((left, right), match_info))
+            })
+            .collect::<Vec<_>>();
+        if !recovered.is_empty() {
+            println!(
+                "  - Recovered {} same-pose low-texture focus-layer edge(s)",
+                recovered.len()
+            );
+            pairwise_matches.extend(recovered);
+        }
+        let position_recovery_pairs = filename_order
+            .windows(2)
+            .filter_map(|pair| {
+                let left = pair[0].min(pair[1]);
+                let right = pair[0].max(pair[1]);
+                (!pairwise_matches.contains_key(&(left, right))).then_some((left, right))
+            })
+            .collect::<Vec<_>>();
+        let recovered_positions = position_recovery_pairs
+            .par_iter()
+            .filter_map(|&(left, right)| {
+                let (source, target, invert_for_storage) =
+                    canonical_match_direction(&image_data, left, right);
+                let mut match_info = recover_adjacent_focus_position_match(
+                    &image_data[source],
+                    &image_data[target],
+                    true,
+                    false,
+                )?;
+                if invert_for_storage {
+                    match_info.homography = match_info.homography.try_inverse()?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info
+                        .candidate_points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                }
+                Some(((left, right), match_info))
+            })
+            .collect::<Vec<_>>();
+        if !recovered_positions.is_empty() {
+            println!(
+                "  - Recovered {} structurally verified focus-position edge(s)",
+                recovered_positions.len()
+            );
+            pairwise_matches.extend(recovered_positions);
+        }
+        let recovered_components =
+            recover_focus_component_edges(&image_data, &mut pairwise_matches);
+        if recovered_components > 0 {
+            println!(
+                "  - Recovered {recovered_components} representative edge(s) between verified focus groups"
+            );
+        }
     }
     if scalable_stack && focus_stack {
         let largest_component = largest_focus_match_component(&image_data, &pairwise_matches);
@@ -6881,7 +7822,14 @@ where
             let source = images.get(i)?;
             let target = images.get(j)?;
             let weight = edge_weight(source, target, match_info);
-            weight.is_finite().then_some((weight, i, j))
+            if !weight.is_finite() {
+                println!(
+                    "  - Ignoring non-finite overlap edge '{}' <-> '{}'",
+                    source.filename, target.filename
+                );
+                return None;
+            }
+            Some((weight, i, j))
         })
         .collect::<Vec<_>>();
     edges.sort_by(|left, right| {
@@ -6965,6 +7913,38 @@ where
             natural_path_cmp(left_name, right_name)
         })
     });
+    if components.len() > 1 {
+        let summary = components
+            .iter()
+            .map(|component| {
+                let first = component
+                    .iter()
+                    .map(|&index| {
+                        Path::new(&images[index].filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                    })
+                    .min()
+                    .unwrap_or_default();
+                let last = component
+                    .iter()
+                    .map(|&index| {
+                        Path::new(&images[index].filename)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                    })
+                    .max()
+                    .unwrap_or_default();
+                format!("{} [{first}..{last}]", component.len())
+            })
+            .collect::<Vec<_>>();
+        println!(
+            "  - Verified overlap graph components: {}",
+            summary.join(", ")
+        );
+    }
     let selected_component = components.first();
     let start_node = selected_component
         .into_iter()
@@ -7041,10 +8021,7 @@ fn focus_match_is_local_bracket(
     target: &ImageInfo,
     match_info: &MatchInfo,
 ) -> bool {
-    if match_info.sequence_bridge
-        || match_info.coarse_bridge
-        || match_info.points.len() < FOCUS_MODEL_MIN_INLIERS
-    {
+    if match_info.sequence_bridge {
         return false;
     }
     let compatible_focal_length = source
@@ -7059,6 +8036,23 @@ fn focus_match_is_local_bracket(
         .zip(trailing_capture_number(&target.filename))
         .map(|(left, right)| left.abs_diff(right) <= FOCUS_BRACKET_MAX_CAPTURE_GAP)
         .unwrap_or(true);
+    if match_info.coarse_bridge {
+        let scale = match_info.homography[(0, 0)].abs();
+        return compatible_focal_length
+            && compatible_capture_distance
+            && match_info.points.len() >= SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION
+            && (0.88..=1.12).contains(&scale)
+            && focus_match_center_motion_ratio(source, target, match_info)
+                .is_some_and(|motion| motion <= 0.12)
+            && panorama_transform_overlap_support(
+                &match_info.homography,
+                source.dimensions(),
+                target.dimensions(),
+            ) >= 0.60;
+    }
+    if match_info.points.len() < FOCUS_MODEL_MIN_INLIERS {
+        return false;
+    }
     compatible_focal_length
         && compatible_capture_distance
         && focus_match_center_motion_ratio(source, target, match_info)
@@ -8238,12 +9232,37 @@ fn build_focus_stack_stitching_order(
     // when it is genuinely supported by image evidence, while still working
     // when filenames carry no useful order.
     let motion_scale = focus_auto_order_motion_scale(images, matches);
-    let (graph_order, graph_homographies) =
-        build_graph_stitching_order(images, matches, |source, target, match_info| {
+    let spine_matches = focus_stack_spine_matches(images, matches);
+    if spine_matches.len() < matches.len() {
+        println!(
+            "  - Focus stack pose spine uses {}/{} pairwise edges (station representatives + brackets)",
+            spine_matches.len(),
+            matches.len()
+        );
+    }
+    let (mut graph_order, mut graph_homographies) =
+        build_graph_stitching_order(images, &spine_matches, |source, target, match_info| {
+            let bracket_boost = if focus_match_is_local_bracket(source, target, match_info) {
+                FOCUS_BRACKET_GRAPH_WEIGHT_BOOST
+            } else {
+                1.0
+            };
             focus_auto_order_edge_weight(source, target, match_info, motion_scale)
                 * focus_cycle_edge_factor(images, matches, source.id, target.id)
                 * focus_graph_capture_sequence_boost(source, target, match_info)
+                * bracket_boost
         });
+    if graph_order.len() != images.len() {
+        let attached = attach_focus_bracket_orphans_to_pose_graph(
+            images,
+            matches,
+            &mut graph_order,
+            &mut graph_homographies,
+        );
+        if attached > 0 {
+            println!("  - Attached {attached} same-pose focus layer(s) to the verified pose graph");
+        }
+    }
     let filename_order = focus_filename_order_with_overview_gaps(images, matches);
     let input_order =
         canonical_focus_order_direction(&(0..images.len()).collect::<Vec<_>>(), images);
@@ -10049,6 +11068,18 @@ mod alignment_tests {
         image
     }
 
+    #[test]
+    fn focus_adjacent_same_focal_pair_allows_missing_exif() {
+        let mut left = focus_test_image(0, "DSC_3743.png");
+        left.focal_length_35mm = Some(50.0);
+        let mut right = focus_test_image(1, "DSC_3744.png");
+        right.focal_length_35mm = None;
+        assert!(focus_adjacent_same_focal_pair(&left, &right));
+        let mut mismatched = focus_test_image(2, "DSC_3745.png");
+        mismatched.focal_length_35mm = Some(85.0);
+        assert!(!focus_compatible_focal_length(&left, &mismatched));
+    }
+
     fn identity_match(inliers: usize) -> MatchInfo {
         MatchInfo {
             homography: Matrix3::identity(),
@@ -11117,7 +12148,7 @@ mod acceptance_tests {
                         .is_some_and(|extension| {
                             matches!(
                                 extension.to_ascii_lowercase().as_str(),
-                                "jpg" | "jpeg" | "png"
+                                "jpg" | "jpeg" | "png" | "nef"
                             )
                         })
             })
