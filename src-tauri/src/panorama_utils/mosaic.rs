@@ -560,153 +560,11 @@ fn is_lower_left_black_capture_border(
         && pixel[0].max(pixel[1]).max(pixel[2]) < 0.025
 }
 
-/// Return whether a source sample is one of the small, non-photographic dark
-/// spots found in the lower-left capture area of a few scan frames.
-///
-/// The old border rule above is intentionally retained for a genuinely black
-/// wedge, but it is not sufficient for this capture: the three spots in
-/// `DSC_3484.NEF` are dark brown after RAW development and therefore survive a
-/// fixed `< 0.025` threshold.  Keep this test at the render/ownership boundary
-/// so it cannot affect feature matching or the global pose solve.  The supplied
-/// frame was inspected against its neighbours, so the normalized coordinates
-/// below are deliberately specific rather than a broad local-contrast rule;
-/// that avoids masking legitimate ink strokes, seals, and the bottom rail.
-pub(super) fn is_lower_left_black_capture_artifact(
-    info: &ImageInfo,
-    image: &Rgb32FImage,
-    source_x: f64,
-    source_y: f64,
-    sample_x: f64,
-    sample_y: f64,
-    pixel: Rgb<f32>,
-) -> bool {
-    if is_lower_left_black_capture_border(image, sample_x, sample_y, pixel) {
-        return true;
-    }
-    if !source_x.is_finite() || !source_y.is_finite() || info.width == 0 || info.height == 0 {
-        return false;
-    }
-
-    let nx = source_x / f64::from(info.width);
-    let ny = source_y / f64::from(info.height);
-    // The bottom rail is real scene content.  Keep the detector in the paper
-    // band above it and in the left quarter where the capture artifacts occur.
-    if !(0.0..=0.25).contains(&nx) || !(0.76..=0.95).contains(&ny) {
-        return false;
-    }
-
-    known_lower_left_black_capture_spot(info, source_x, source_y).is_some()
-}
-
-/// Return the known spot and the sample's normalized elliptical distance.
-///
-/// The radii include a clean fringe around each mark. That fringe is used to
-/// feather a nearby paper-texture sample into the damaged centre, avoiding
-/// both a hard clone edge and an uncovered hole where no other frame reaches.
-fn known_lower_left_black_capture_spot(
-    info: &ImageInfo,
-    source_x: f64,
-    source_y: f64,
-) -> Option<(f64, f64, f64, f64, f64)> {
-    let stem = std::path::Path::new(&info.filename)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    if !stem.eq_ignore_ascii_case("dsc_3484")
-        || !source_x.is_finite()
-        || !source_y.is_finite()
-        || info.width == 0
-        || info.height == 0
-    {
-        return None;
-    }
-    let nx = source_x / f64::from(info.width);
-    let ny = source_y / f64::from(info.height);
-
-    // Measured from the production RAW development of the 8256 x 5504 source
-    // and expressed as normalized ellipses.  The earlier 1.5% x 1.8% blanket
-    // radius was much larger than the marks themselves; at this telephoto
-    // layer's panorama scale it removed nearly a thousand output pixels and
-    // exposed an empty black hole.  These bounds include only the observed
-    // dark components plus a small demosaic fringe.
-    const KNOWN_SPOTS: [(f64, f64, f64, f64); 3] = [
-        (
-            317.0 / 8256.0,
-            4658.0 / 5504.0,
-            30.0 / 8256.0,
-            32.0 / 5504.0,
-        ),
-        (
-            1335.0 / 8256.0,
-            4589.0 / 5504.0,
-            45.0 / 8256.0,
-            82.0 / 5504.0,
-        ),
-        (
-            1882.0 / 8256.0,
-            4646.0 / 5504.0,
-            30.0 / 8256.0,
-            42.0 / 5504.0,
-        ),
-    ];
-    KNOWN_SPOTS
-        .iter()
-        .find_map(|&(cx, cy, radius_x, radius_y)| {
-            let dx = (nx - cx) / radius_x;
-            let dy = (ny - cy) / radius_y;
-            let distance = (dx * dx + dy * dy).sqrt();
-            (distance <= 1.0).then_some((cx, cy, radius_x, radius_y, distance))
-        })
-}
-
-fn exclude_from_focus_ownership(info: &ImageInfo) -> bool {
-    let stem = std::path::Path::new(&info.filename)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    // Keep these frames as geometric constraints so the 65-frame solver stays
-    // on its validated path, but do not let them own output pixels. 3484 has
-    // several non-photographic black marks and only 133 features. The
-    // contained 3480/3481 close-ups terminate through the centre of the
-    // painting; their source-edge ownership creates the reported stair-step
-    // weave discontinuity even though cleaner neighbouring focus planes cover
-    // the complete region.
-    matches!(
-        stem.to_ascii_lowercase().as_str(),
-        "dsc_3480" | "dsc_3481" | "dsc_3484"
-    ) && info.width == 8_256
-        && info.height == 5_504
-}
-
-fn repair_known_lower_left_black_capture_spot(
-    info: &ImageInfo,
-    image: &Rgb32FImage,
-    source_x: f64,
-    source_y: f64,
-    sample_x: f64,
-    sample_y: f64,
-    pixel: Rgb<f32>,
-) -> Option<Rgb<f32>> {
-    let (_, _, radius_x, _, distance) =
-        known_lower_left_black_capture_spot(info, source_x, source_y)?;
-    // Clone from immediately left of the measured component. All three marks
-    // lie on paper, and this direction avoids the seals to their right. Keep
-    // the offset proportional to the decoded working image so the same code
-    // works after the mosaic prefilter downsamples a source.
-    let radius_in_sample = radius_x * f64::from(image.width());
-    let clone_x = (sample_x - radius_in_sample * 2.6 - 2.0).max(0.0);
-    let replacement = rgb_at(image, clone_x, sample_y)?;
-    let replacement_weight = ((1.0 - distance) / 0.25).clamp(0.0, 1.0) as f32;
-    Some(Rgb(std::array::from_fn(|channel| {
-        pixel[channel] * (1.0 - replacement_weight) + replacement[channel] * replacement_weight
-    })))
-}
-
 pub(super) fn corrected_lower_left_capture_sample(
-    info: &ImageInfo,
+    _info: &ImageInfo,
     image: &Rgb32FImage,
-    source_x: f64,
-    source_y: f64,
+    _source_x: f64,
+    _source_y: f64,
     sample_x: f64,
     sample_y: f64,
     pixel: Rgb<f32>,
@@ -714,62 +572,7 @@ pub(super) fn corrected_lower_left_capture_sample(
     if is_lower_left_black_capture_border(image, sample_x, sample_y, pixel) {
         return None;
     }
-    Some(
-        repair_known_lower_left_black_capture_spot(
-            info, image, source_x, source_y, sample_x, sample_y, pixel,
-        )
-        .unwrap_or(pixel),
-    )
-}
-
-fn apply_protected_mosaic_exposure(image: &mut Rgb32FImage) -> f32 {
-    if image.is_empty() {
-        return 1.0;
-    }
-    const BINS: usize = 1_024;
-    const TARGET_UPPER_MIDTONE: f32 = 0.62;
-    const MAX_EXPONENT: f32 = 2.3;
-    let pixel_count = u64::from(image.width()) * u64::from(image.height());
-    let sample_step = ((pixel_count as f64 / 1_000_000.0).sqrt().ceil() as usize).max(1);
-    let mut histogram = [0u64; BINS];
-    let mut sampled = 0u64;
-    for pixel in image.pixels().step_by(sample_step) {
-        let level = luma(*pixel).clamp(0.0, 1.0);
-        let bin = (level * (BINS - 1) as f64).round() as usize;
-        histogram[bin.min(BINS - 1)] += 1;
-        sampled += 1;
-    }
-    if sampled == 0 {
-        return 1.0;
-    }
-    let percentile = |fraction: f64| {
-        let target = (sampled as f64 * fraction).ceil() as u64;
-        let mut cumulative = 0u64;
-        for (index, count) in histogram.iter().copied().enumerate() {
-            cumulative += count;
-            if cumulative >= target {
-                return index as f32 / (BINS - 1) as f32;
-            }
-        }
-        1.0
-    };
-    let upper_midtone = percentile(0.90);
-    let highlight = percentile(0.995);
-    if upper_midtone >= TARGET_UPPER_MIDTONE || highlight >= 0.92 || upper_midtone <= 0.01 {
-        return 1.0;
-    }
-    // `1 - (1 - x)^e` raises an underexposed scan while asymptotically
-    // protecting white walls and specular reflections. Derive `e` from the
-    // actual upper midtone rather than applying a fixed exposure to every
-    // focus mosaic.
-    let exponent =
-        ((1.0 - TARGET_UPPER_MIDTONE).ln() / (1.0 - upper_midtone).ln()).clamp(1.0, MAX_EXPONENT);
-    image.par_chunks_mut(3).for_each(|pixel| {
-        for channel in pixel {
-            *channel = 1.0 - (1.0 - channel.clamp(0.0, 1.0)).powf(exponent);
-        }
-    });
-    exponent
+    Some(pixel)
 }
 
 #[derive(Clone)]
@@ -2177,13 +1980,6 @@ where
     let local_refinement_enabled = !sequence_gap_aware || images.len() <= 8;
     println!("  - Detail-preserving mosaic canvas: {width}x{height}");
     for (index, &info) in images.iter().enumerate() {
-        if exclude_from_focus_ownership(info) {
-            println!(
-                "  - Keeping '{}' for registration only; excluding its contaminated pixels",
-                info.filename
-            );
-            continue;
-        }
         let _ = app.emit(
             event,
             format!(
@@ -2394,13 +2190,6 @@ where
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
     );
     for (index, &info) in images.iter().enumerate() {
-        if exclude_from_focus_ownership(info) {
-            println!(
-                "  - Keeping '{}' for registration only; excluding its contaminated pixels",
-                info.filename
-            );
-            continue;
-        }
         let capture_group_id = capture_group_ids
             .and_then(|groups| groups.get(&info.id))
             .copied()
@@ -2616,10 +2405,6 @@ where
     let mut output = store.materialize(crop)?;
     if let Some((gains, scale)) = harmonization {
         apply_streaming_seam_harmonization(&mut output, &gains, scale);
-    }
-    let exposure_exponent = apply_protected_mosaic_exposure(&mut output);
-    if exposure_exponent > 1.001 {
-        println!("  - Protected artwork exposure lift: curve exponent {exposure_exponent:.3}");
     }
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
@@ -2853,114 +2638,6 @@ mod tests {
             98.0,
             Rgb([0.005, 0.006, 0.004]),
         ));
-    }
-
-    #[test]
-    fn unrelated_dark_ink_is_not_treated_as_a_capture_artifact() {
-        let image = Rgb32FImage::from_fn(400, 300, |x, y| {
-            let spot = (x as i32 - 32).pow(2) + (y as i32 - 258).pow(2) <= 16;
-            let stroke = x < 180 && (270..=278).contains(&y);
-            if spot || stroke {
-                Rgb([0.12, 0.10, 0.08])
-            } else {
-                Rgb([0.42, 0.39, 0.34])
-            }
-        });
-        let info = image_info(1, &image);
-        let spot = *image.get_pixel(32, 258);
-        assert!(!is_lower_left_black_capture_artifact(
-            &info, &image, 32.0, 258.0, 32.0, 258.0, spot,
-        ));
-
-        let stroke = Rgb([0.12, 0.10, 0.08]);
-        assert!(!is_lower_left_black_capture_artifact(
-            &info, &image, 70.0, 274.0, 70.0, 274.0, stroke,
-        ));
-    }
-
-    #[test]
-    fn known_3484_spots_are_rejected_after_downsampling_but_bottom_rail_is_kept() {
-        let image = Rgb32FImage::from_pixel(2_064, 1_376, Rgb([0.24, 0.20, 0.16]));
-        let mut info = image_info(1, &image);
-        info.filename = "/tmp/DSC_3484.NEF".to_string();
-        let spot = Rgb([0.19, 0.15, 0.11]);
-        assert!(is_lower_left_black_capture_artifact(
-            &info,
-            &image,
-            317.0 / 4.0,
-            4658.0 / 4.0,
-            317.0 / 16.0,
-            4658.0 / 16.0,
-            spot,
-        ));
-        // A paper sample that was inside the old oversized ellipse is not
-        // discarded. It must remain available to cover the removed mark.
-        assert!(!is_lower_left_black_capture_artifact(
-            &info,
-            &image,
-            400.0 / 4.0,
-            4658.0 / 4.0,
-            400.0 / 16.0,
-            4658.0 / 16.0,
-            Rgb([0.24, 0.20, 0.16]),
-        ));
-        assert!(!is_lower_left_black_capture_artifact(
-            &info,
-            &image,
-            200.0 / 4.0,
-            5350.0 / 4.0,
-            200.0 / 16.0,
-            5350.0 / 16.0,
-            Rgb([0.01, 0.01, 0.01]),
-        ));
-    }
-
-    #[test]
-    fn known_3484_spot_is_repaired_with_neighbouring_paper_instead_of_a_hole() {
-        let image = Rgb32FImage::from_pixel(2_064, 1_376, Rgb([0.32, 0.27, 0.21]));
-        let mut info = image_info(1, &image);
-        info.filename = "/tmp/DSC_3484.NEF".to_string();
-        info.width = 8_256;
-        info.height = 5_504;
-        let corrected = corrected_lower_left_capture_sample(
-            &info,
-            &image,
-            317.0,
-            4_658.0,
-            317.0 / 4.0,
-            4_658.0 / 4.0,
-            Rgb([0.04, 0.03, 0.02]),
-        )
-        .expect("an isolated spot should retain valid source coverage");
-        assert_eq!(corrected, Rgb([0.32, 0.27, 0.21]));
-    }
-
-    #[test]
-    fn problematic_wenyuan_layers_are_registration_only() {
-        let image = Rgb32FImage::new(2, 2);
-        let mut info = image_info(1, &image);
-        info.filename = "/tmp/DSC_3484.NEF".to_string();
-        info.width = 8_256;
-        info.height = 5_504;
-        assert!(exclude_from_focus_ownership(&info));
-        info.filename = "/tmp/DSC_3480.NEF".to_string();
-        assert!(exclude_from_focus_ownership(&info));
-        info.filename = "/tmp/DSC_3481.NEF".to_string();
-        assert!(exclude_from_focus_ownership(&info));
-        info.filename = "/tmp/DSC_3483.NEF".to_string();
-        assert!(!exclude_from_focus_ownership(&info));
-    }
-
-    #[test]
-    fn protected_mosaic_exposure_raises_dark_paper_without_changing_bright_images() {
-        let mut dark = Rgb32FImage::from_pixel(128, 96, Rgb([0.37, 0.37, 0.37]));
-        let exponent = apply_protected_mosaic_exposure(&mut dark);
-        assert!(exponent > 1.8);
-        assert!((dark.get_pixel(0, 0)[0] - 0.62).abs() < 0.02);
-
-        let mut bright = Rgb32FImage::from_pixel(128, 96, Rgb([0.70, 0.70, 0.70]));
-        assert_eq!(apply_protected_mosaic_exposure(&mut bright), 1.0);
-        assert_eq!(*bright.get_pixel(0, 0), Rgb([0.70, 0.70, 0.70]));
     }
 
     #[test]
