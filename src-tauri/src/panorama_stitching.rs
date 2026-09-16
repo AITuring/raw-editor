@@ -71,7 +71,12 @@ const FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO: f64 = 0.075;
 const FOCUS_BRACKET_MIN_OVERLAP_SUPPORT: f64 = 0.60;
 const FOCUS_BRACKET_MAX_CAPTURE_GAP: u64 = 6;
 const FOCUS_BRACKET_MAX_COMPONENT_SOURCES: usize = 8;
-const FOCUS_BRACKET_GRAPH_WEIGHT_BOOST: f64 = 24.0;
+// A long scan of repeated calligraphy can contain a visually convincing edge
+// between distant characters. Once two nearby capture numbers have a verified
+// overlap, keep that camera-sequence evidence ahead of a remote lookalike when
+// constructing the initial pose tree. Remote edges still connect separate
+// capture runs, but cannot replace an already verified local backbone.
+const FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST: f64 = 128.0;
 const FOCUS_BRACKET_OBSERVATION_WEIGHT: f64 = 16.0;
 const FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO: f64 = 0.006;
 const FOCUS_GROUP_SINGLE_EDGE_WEIGHT_FACTOR: f64 = 0.02;
@@ -2073,12 +2078,8 @@ fn largest_focus_match_component(
         let Some(target_image) = images.get(target) else {
             continue;
         };
-        let bracket_boost = if focus_match_is_local_bracket(source_image, target_image, match_info)
-        {
-            FOCUS_BRACKET_GRAPH_WEIGHT_BOOST
-        } else {
-            1.0
-        };
+        let bracket_boost =
+            focus_graph_capture_sequence_boost(source_image, target_image, match_info);
         let weight =
             focus_auto_order_edge_weight(source_image, target_image, match_info, motion_scale)
                 * focus_cycle_edge_factor(images, matches, source_image.id, target_image.id)
@@ -2109,6 +2110,67 @@ fn largest_focus_match_component(
         }
     }
     largest
+}
+
+fn focus_graph_capture_sequence_boost(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    match_info: &MatchInfo,
+) -> f64 {
+    if focus_match_is_local_bracket(source, target, match_info) {
+        return FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST;
+    }
+    let capture_gap = trailing_capture_number(&source.filename)
+        .zip(trailing_capture_number(&target.filename))
+        .map(|(left, right)| left.abs_diff(right));
+    if !match_info.sequence_bridge
+        && !match_info.coarse_bridge
+        && match_info.points.len() >= FOCUS_MODEL_MIN_INLIERS
+        && capture_gap.is_some_and(|gap| gap <= 3)
+    {
+        FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST
+    } else {
+        1.0
+    }
+}
+
+fn focus_unstitched_sources_are_redundant(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    stitched_indices: &HashSet<usize>,
+) -> bool {
+    let mut filename_order = (0..images.len()).collect::<Vec<_>>();
+    filename_order
+        .sort_by(|&left, &right| natural_path_cmp(&images[left].filename, &images[right].filename));
+    filename_order
+        .iter()
+        .enumerate()
+        .filter(|(_, image_index)| !stitched_indices.contains(image_index))
+        .all(|(position, &image_index)| {
+            // Only discard a demonstrably weak interior frame. The verified
+            // direct overlap across its two capture neighbours proves that no
+            // unique spatial coverage is lost by omitting it.
+            if images[image_index].features.len() > 64 {
+                return false;
+            }
+            let previous = filename_order[..position]
+                .iter()
+                .rev()
+                .copied()
+                .find(|index| stitched_indices.contains(index));
+            let next = filename_order[position + 1..]
+                .iter()
+                .copied()
+                .find(|index| stitched_indices.contains(index));
+            let (Some(previous), Some(next)) = (previous, next) else {
+                return false;
+            };
+            let capture_span = trailing_capture_number(&images[previous].filename)
+                .zip(trailing_capture_number(&images[next].filename))
+                .map(|(left, right)| left.abs_diff(right));
+            capture_span.is_some_and(|span| span <= 3)
+                && matches.contains_key(&(previous.min(next), previous.max(next)))
+        })
 }
 
 fn focus_overlap_is_verified(
@@ -4702,24 +4764,38 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         println!("{}", warning_msg);
         let _ = app_handle.emit(progress_event, warning_msg);
+        let redundant_focus_sources = scalable_stack
+            && focus_stack
+            && focus_unstitched_sources_are_redundant(
+                &image_data,
+                &pairwise_matches,
+                &stitched_indices,
+            );
+        if redundant_focus_sources {
+            let message = "Continuing without weak interior focus source(s); verified neighbouring captures preserve their coverage.";
+            println!("{}", message);
+            let _ = app_handle.emit(progress_event, message);
+        }
         let search_description = if exhaustive_search {
             "the full pairwise search"
         } else {
             "the bounded candidate search"
         };
-        return Err(if scalable_stack && focus_stack {
-            format!(
-                "Could not automatically order all selected focus-stack images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure each layer has enough visual overlap."
-            )
-        } else if scalable_stack {
-            format!(
-                "Could not align all selected panorama images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure consecutive images overlap."
-            )
-        } else {
-            format!(
-                "Could not align all selected images; {unstitched_count} image(s) have no verified overlap. The selection may contain multiple independent scenes; select one contiguous scene and retry."
-            )
-        });
+        if !redundant_focus_sources {
+            return Err(if scalable_stack && focus_stack {
+                format!(
+                    "Could not automatically order all selected focus-stack images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure each layer has enough visual overlap."
+                )
+            } else if scalable_stack {
+                format!(
+                    "Could not align all selected panorama images; {unstitched_count} image(s) have no verified overlap in {search_description}. The selection may contain multiple independent scenes. Select one contiguous scene or ensure consecutive images overlap."
+                )
+            } else {
+                format!(
+                    "Could not align all selected images; {unstitched_count} image(s) have no verified overlap. The selection may contain multiple independent scenes; select one contiguous scene and retry."
+                )
+            });
+        }
     }
     println!(
         "Global homography calculation completed in {:.2?}\n",
@@ -8164,14 +8240,9 @@ fn build_focus_stack_stitching_order(
     let motion_scale = focus_auto_order_motion_scale(images, matches);
     let (graph_order, graph_homographies) =
         build_graph_stitching_order(images, matches, |source, target, match_info| {
-            let bracket_boost = if focus_match_is_local_bracket(source, target, match_info) {
-                FOCUS_BRACKET_GRAPH_WEIGHT_BOOST
-            } else {
-                1.0
-            };
             focus_auto_order_edge_weight(source, target, match_info, motion_scale)
                 * focus_cycle_edge_factor(images, matches, source.id, target.id)
-                * bracket_boost
+                * focus_graph_capture_sequence_boost(source, target, match_info)
         });
     let filename_order = focus_filename_order_with_overview_gaps(images, matches);
     let input_order =
@@ -10004,6 +10075,46 @@ mod alignment_tests {
             11,
             1.887,
             true
+        ));
+    }
+
+    #[test]
+    fn capture_sequence_edges_outrank_remote_calligraphy_lookalikes() {
+        let first = focus_test_image(0, "DSC_1000.NEF");
+        let adjacent = focus_test_image(1, "DSC_1001.NEF");
+        let remote = focus_test_image(2, "DSC_1200.NEF");
+        let local_match = observed_translation_match(180.0, 0.0, 16);
+        let remote_match = observed_translation_match(20.0, 0.0, 300);
+
+        assert_eq!(
+            focus_graph_capture_sequence_boost(&first, &adjacent, &local_match),
+            FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST
+        );
+        assert_eq!(
+            focus_graph_capture_sequence_boost(&first, &remote, &remote_match),
+            1.0
+        );
+    }
+
+    #[test]
+    fn weak_interior_focus_frame_can_be_skipped_only_across_verified_overlap() {
+        let images = vec![
+            focus_test_image(0, "DSC_2740.NEF"),
+            focus_test_image(1, "DSC_2741.NEF"),
+            focus_test_image(2, "DSC_2742.NEF"),
+        ];
+        let stitched = HashSet::from([0, 2]);
+        let verified_bypass = HashMap::from([((0, 2), observed_translation_match(20.0, 0.0, 24))]);
+
+        assert!(focus_unstitched_sources_are_redundant(
+            &images,
+            &verified_bypass,
+            &stitched
+        ));
+        assert!(!focus_unstitched_sources_are_redundant(
+            &images,
+            &HashMap::new(),
+            &stitched
         ));
     }
 
