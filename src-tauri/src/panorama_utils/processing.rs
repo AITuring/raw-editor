@@ -15,6 +15,9 @@ const MATCH_RATIO_THRESHOLD: f32 = 0.8;
 const RANSAC_ITERATIONS: usize = 2500;
 const RANSAC_INLIER_THRESHOLD: f64 = 5.0;
 const MAX_FEATURES: usize = 2000;
+const LOCAL_CONTRAST_CELL_SIZE: u32 = 160;
+const LOCAL_CONTRAST_MAX_GAIN: f32 = 4.0;
+const LOCAL_CONTRAST_FAST_THRESHOLD: u8 = 7;
 pub const MIN_INLIERS_FOR_CONNECTION: usize = 15;
 
 pub fn calculate_downscale_dimensions(width: u32, height: u32) -> (u32, u32, f64) {
@@ -70,6 +73,120 @@ pub fn find_features(img: &GrayImage, brief_pairs: &[(Point2<i32>, Point2<i32>)]
     )
 }
 
+/// A bright mount and a dark display case can consume the global intensity
+/// range while the artwork between them has only a few levels of contrast.
+/// Stretch a bounded local range for corner detection; descriptors continue
+/// to sample the original image, so this cannot invent a matching texture.
+fn local_contrast_detector_image(img: &GrayImage) -> GrayImage {
+    let (width, height) = img.dimensions();
+    if width == 0 || height == 0 {
+        return img.clone();
+    }
+    let columns = width.div_ceil(LOCAL_CONTRAST_CELL_SIZE);
+    let rows = height.div_ceil(LOCAL_CONTRAST_CELL_SIZE);
+    let mut cells = Vec::with_capacity((columns * rows) as usize);
+    for row in 0..rows {
+        for column in 0..columns {
+            let left = column * LOCAL_CONTRAST_CELL_SIZE;
+            let top = row * LOCAL_CONTRAST_CELL_SIZE;
+            let right = (left + LOCAL_CONTRAST_CELL_SIZE).min(width);
+            let bottom = (top + LOCAL_CONTRAST_CELL_SIZE).min(height);
+            let mut histogram = [0u32; 256];
+            for y in top..bottom {
+                for x in left..right {
+                    histogram[img.get_pixel(x, y)[0] as usize] += 1;
+                }
+            }
+            let count = (right - left) * (bottom - top);
+            let percentile = |numerator: u32| {
+                let target = (count * numerator / 100).max(1);
+                let mut cumulative = 0;
+                histogram
+                    .iter()
+                    .enumerate()
+                    .find_map(|(value, &frequency)| {
+                        cumulative += frequency;
+                        (cumulative >= target).then_some(value as f32)
+                    })
+                    .unwrap_or(255.0)
+            };
+            let low = percentile(5);
+            let high = percentile(95);
+            let gain = (192.0 / (high - low).max(1.0)).clamp(1.0, LOCAL_CONTRAST_MAX_GAIN);
+            cells.push(((low + high) * 0.5, gain));
+        }
+    }
+    GrayImage::from_fn(width, height, |x, y| {
+        let gx = (x as f32 / LOCAL_CONTRAST_CELL_SIZE as f32 - 0.5)
+            .clamp(0.0, columns.saturating_sub(1) as f32);
+        let gy = (y as f32 / LOCAL_CONTRAST_CELL_SIZE as f32 - 0.5)
+            .clamp(0.0, rows.saturating_sub(1) as f32);
+        let x0 = gx.floor() as u32;
+        let y0 = gy.floor() as u32;
+        let x1 = (x0 + 1).min(columns - 1);
+        let y1 = (y0 + 1).min(rows - 1);
+        let fx = gx - x0 as f32;
+        let fy = gy - y0 as f32;
+        let mut center = 0.0;
+        let mut gain = 0.0;
+        for (cx, cy, weight) in [
+            (x0, y0, (1.0 - fx) * (1.0 - fy)),
+            (x1, y0, fx * (1.0 - fy)),
+            (x0, y1, (1.0 - fx) * fy),
+            (x1, y1, fx * fy),
+        ] {
+            let cell = cells[(cy * columns + cx) as usize];
+            center += cell.0 * weight;
+            gain += cell.1 * weight;
+        }
+        let value = (img.get_pixel(x, y)[0] as f32 - center) * gain + 128.0;
+        Luma([value.round().clamp(0.0, 255.0) as u8])
+    })
+}
+
+fn find_features_with_local_contrast(
+    img: &GrayImage,
+    brief_pairs: &[(Point2<i32>, Point2<i32>)],
+) -> Vec<Feature> {
+    let mut features = find_features(img, brief_pairs);
+    // Count against source area rather than a tiny absolute threshold: one
+    // hundred corners on the mount should not suppress recovery over a two
+    // megapixel low-contrast painting.
+    let target = ((u64::from(img.width()) * u64::from(img.height()) / 2_400) as usize)
+        .clamp(64, MAX_FEATURES);
+    if features.len() >= target {
+        return features;
+    }
+    let normalized = local_contrast_detector_image(img);
+    let blurred_detector = gaussian_blur_f32(&normalized, 1.5);
+    let corners = corners_fast9(&blurred_detector, LOCAL_CONTRAST_FAST_THRESHOLD);
+    let keypoints = non_maximal_suppression(&corners, NON_MAXIMA_SUPPRESSION_RADIUS);
+    let descriptor_image = gaussian_blur_f32(&convert_gray_u8_to_f32(img), 2.0);
+    let minimum_distance_squared = (NON_MAXIMA_SUPPRESSION_RADIUS * 0.5).powi(2);
+    for keypoint in keypoints {
+        if features.iter().any(|existing| {
+            let dx = existing.keypoint.x as f32 - keypoint.x as f32;
+            let dy = existing.keypoint.y as f32 - keypoint.y as f32;
+            dx * dx + dy * dy < minimum_distance_squared
+        }) {
+            continue;
+        }
+        if let Some(descriptor) =
+            compute_brief_descriptor(&descriptor_image, &keypoint, BRIEF_PATCH_SIZE, brief_pairs)
+        {
+            features.push(Feature {
+                keypoint,
+                descriptor,
+                support_scale: 1.0,
+            });
+        }
+        if features.len() >= MAX_FEATURES {
+            break;
+        }
+    }
+    features
+}
+
 /// Detect BRIEF features on a small image pyramid and map every keypoint back
 /// into the input image's coordinate system.
 ///
@@ -116,7 +233,7 @@ pub fn find_features_multiscale(
         } else {
             image::imageops::resize(img, width, height, image::imageops::FilterType::Triangle)
         };
-        let mut features = find_features(&level, brief_pairs);
+        let mut features = find_features_with_local_contrast(&level, brief_pairs);
         let scale_x = level.width() as f64 / img.width().max(1) as f64;
         let scale_y = level.height() as f64 / img.height().max(1) as f64;
         for feature in &mut features {
@@ -1012,6 +1129,44 @@ mod tests {
         assert!(
             (transform[(1, 1)] - 0.5).abs() < 0.08,
             "transform={transform:?}"
+        );
+    }
+
+    #[test]
+    fn local_contrast_detector_stretches_sub_threshold_texture() {
+        // A two-level patch is deliberately below FAST's native 15-level
+        // threshold. It still has enough area in every 160px cell for bounded
+        // local stretching to produce a useful detector image.
+        let image = GrayImage::from_fn(640, 480, |x, y| {
+            let in_patch =
+                (x % 160).clamp(24, 103) == x % 160 && (y % 160).clamp(24, 103) == y % 160;
+            Luma([if in_patch { 108 } else { 100 }])
+        });
+        let detector_image = local_contrast_detector_image(&image);
+        let blurred = gaussian_blur_f32(&detector_image, 1.5);
+        let _corners = corners_fast9(&blurred, FAST_THRESHOLD);
+        let low_corners = corners_fast9(&blurred, 1);
+        let pairs = generate_brief_pairs();
+        let recovered = find_features_multiscale(&image, &pairs, 256, &[]);
+        let (minimum, maximum) = detector_image
+            .pixels()
+            .map(|pixel| pixel[0])
+            .fold((u8::MAX, u8::MIN), |(minimum, maximum), value| {
+                (minimum.min(value), maximum.max(value))
+            });
+        assert!(
+            maximum.saturating_sub(minimum) >= 30,
+            "local contrast stretch was too weak: {minimum}..{maximum}"
+        );
+        assert!(
+            low_corners.len() >= 256,
+            "low-threshold corners={}",
+            low_corners.len()
+        );
+        assert!(
+            recovered.len() >= 32,
+            "recovered features={}",
+            recovered.len()
         );
     }
 

@@ -3,8 +3,11 @@
 本文描述 RAW Editor 当前 `BlendMode::FocusStack` 的实现状态，重点说明它在平面画面、
 手机多角度拍摄、混合 35mm/85mm 焦段和不同景深层之间的处理方式。
 
-本文记录的是当前分支 `codex/image-stack-alignment-robust` 的工程能力和已知边界，
-不是对所有输入都成立的数学完美性保证。
+本文记录的是当前代码分支的工程能力和已知边界，不是对所有输入都成立的数学完美性保证。
+
+2026-09-18 的连续画作参考验收记录单独放在
+[focus-stack-reference-validation.md](focus-stack-reference-validation.md)，其中包含冻结素材、
+参考驱动测试 harness、输出覆盖率和不应误读为生产结果的展示合成说明。
 
 ## 结论先说
 

@@ -6859,12 +6859,14 @@ fn select_focus_stack_transform(
         alignment_mode,
         AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
     );
-    // A moving focus stack is still a flat artwork scan. In Auto mode a
-    // projective fit can explain a handful of repeated brush strokes while
-    // bending the entire paper plane; that error compounds over dozens of
-    // frames and becomes the rectangular/stepped output seen in v33. Keep
-    // projective geometry for an explicit user-selected perspective mode only.
-    let allow_projective = explicit_projective;
+    // Auto mode may still need a homography for a handheld view of a flat
+    // artwork. Require the inliers to cover a substantial part of both
+    // frames before accepting it; a compact repeated brush stroke must stay
+    // on the lower-DOF model even if its projective fit has a tiny residual.
+    let projective_spatial_support =
+        panorama_spatial_support(points, source_dimensions, source_dimensions);
+    let allow_projective =
+        explicit_projective || projective_spatial_support >= FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT;
     if allow_projective
         && stable_transform(projective)
         && projective_error <= FOCUS_MODEL_INLIER_THRESHOLD * 0.5
@@ -14305,3 +14307,7 @@ mod acceptance_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "panorama_reference_acceptance.rs"]
+mod reference_acceptance;

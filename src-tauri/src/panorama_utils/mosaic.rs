@@ -2284,9 +2284,14 @@ where
             }
             let (candidate, candidate_mask) =
                 streaming_candidate_analysis(&sampler, analysis_width, analysis_height);
+            // A focus bracket may contain several camera positions.  Once a
+            // position has entered the mosaic, estimate its colour correction
+            // only from overlap owned by that same position.  Comparing a
+            // later position against a neighbouring group's pixels compounds
+            // exposure drift into broad vertical bands.
             let tone = streaming_tone_field_from_analysis(
                 &base_analysis,
-                &base_analysis_mask,
+                refinement_mask,
                 &candidate,
                 &candidate_mask,
             );
@@ -2401,11 +2406,13 @@ where
         "  - Streaming coverage rectangle: {}x{} at ({}, {})",
         crop.2, crop.3, crop.0, crop.1
     );
-    let harmonization = streaming_seam_harmonization(&store, crop)?;
-    let mut output = store.materialize(crop)?;
-    if let Some((gains, scale)) = harmonization {
-        apply_streaming_seam_harmonization(&mut output, &gains, scale);
-    }
+    // Ownership boundaries are not exposure measurements: the two pixels on
+    // either side can be different brush strokes or natural illumination.
+    // Applying a group gain inferred from those unrelated samples creates the
+    // vertical grey bands seen in long focus mosaics.  Keep the source tone
+    // corrections above, which are measured at matched sample coordinates,
+    // and materialize without a second boundary-wide gain pass.
+    let output = materialize_streaming_focus_output(&store, crop)?;
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
         output.width(),
@@ -2459,6 +2466,17 @@ fn fill_streaming_uncovered_tile_region(
                 owner[local_x as usize] = capture_group_id;
             }
         });
+}
+
+/// Finalize a tiled focus canvas without inferring colour from ownership
+/// boundaries.  Keeping this policy in one helper makes it harder to
+/// accidentally reintroduce the broad group-gain pass when changing the
+/// streaming renderer.
+fn materialize_streaming_focus_output(
+    store: &StreamingMosaicStore,
+    crop: (u32, u32, u32, u32),
+) -> Result<Rgb32FImage, String> {
+    store.materialize(crop)
 }
 
 fn copy_streaming_tile_region(
@@ -2533,44 +2551,61 @@ fn copy_streaming_owned_tile_region(
             let global_y = tile_top + local_y as u32;
             let layer_y = global_y.saturating_sub(sampler.top) as f64;
             let ay = layer_y / scale;
-            let dy = ((ay / analysis_height as f64 * decision_height as f64) as u32)
-                .min(decision_height.saturating_sub(1));
-            for dx in 0..decision_width {
-                let alpha = f32::from(soft_decision.get_pixel(dx, dy)[0]) / 255.0;
+            for x in x_start..=x_end {
+                let layer_x = x.saturating_sub(sampler.left) as f64;
+                let analysis_x = layer_x / scale;
+                let alpha = sample_decision_alpha(
+                    soft_decision,
+                    analysis_x / analysis_width.max(1) as f64 * decision_width as f64,
+                    ay / analysis_height.max(1) as f64 * decision_height as f64,
+                );
                 if alpha <= 1.0 / 255.0 {
                     continue;
                 }
-                let cell_start = (dx as f64 * analysis_width as f64 / decision_width as f64 * scale)
-                    .ceil() as u32;
-                let cell_end = (((dx + 1) as f64 * analysis_width as f64 / decision_width as f64
-                    * scale)
-                    .ceil() as u32)
-                    .min((analysis_width as f64 * scale).ceil() as u32);
-                let cell_x_start = (sampler.left + cell_start).max(x_start);
-                let cell_x_end = (sampler.left + cell_end).min(x_end + 1);
-                for x in cell_x_start..cell_x_end {
-                    let local_x = x - tile_left;
-                    let layer_x = x.saturating_sub(sampler.left) as f64;
-                    let Some(pixel) = sampler.sample(layer_x, layer_y) else {
-                        continue;
-                    };
-                    let adjusted_pixel = adjusted(pixel, tone.at(layer_x / scale, ay));
-                    let start = local_x as usize * 3;
-                    if covered[local_x as usize] == 0 {
-                        row[start..start + 3].copy_from_slice(&adjusted_pixel.0);
-                    } else {
-                        for channel in 0..3 {
-                            row[start + channel] = row[start + channel] * (1.0 - alpha)
-                                + adjusted_pixel[channel] * alpha;
-                        }
+                let local_x = x - tile_left;
+                let Some(pixel) = sampler.sample(layer_x, layer_y) else {
+                    continue;
+                };
+                let adjusted_pixel = adjusted(pixel, tone.at(analysis_x, ay));
+                let start = local_x as usize * 3;
+                if covered[local_x as usize] == 0 {
+                    row[start..start + 3].copy_from_slice(&adjusted_pixel.0);
+                } else {
+                    for channel in 0..3 {
+                        row[start + channel] =
+                            row[start + channel] * (1.0 - alpha) + adjusted_pixel[channel] * alpha;
                     }
-                    covered[local_x as usize] = 255;
-                    if alpha >= 0.5 {
-                        owner[local_x as usize] = capture_group_id;
-                    }
+                }
+                covered[local_x as usize] = 255;
+                if alpha >= 0.5 {
+                    owner[local_x as usize] = capture_group_id;
                 }
             }
         });
+}
+
+/// Sample the blurred ownership decision at pixel coordinates rather than
+/// assigning one constant alpha to an entire analysis cell.  Constant-cell
+/// writes create visible square steps and average sharp source detail over a
+/// wide seam.  Bilinear sampling confines the transition to the already
+/// narrow blurred decision boundary.
+fn sample_decision_alpha(image: &GrayImage, x: f64, y: f64) -> f32 {
+    if image.width() == 0 || image.height() == 0 || !x.is_finite() || !y.is_finite() {
+        return 0.0;
+    }
+    let x = x.clamp(0.0, image.width().saturating_sub(1) as f64);
+    let y = y.clamp(0.0, image.height().saturating_sub(1) as f64);
+    let x0 = x.floor() as u32;
+    let y0 = y.floor() as u32;
+    let x1 = (x0 + 1).min(image.width().saturating_sub(1));
+    let y1 = (y0 + 1).min(image.height().saturating_sub(1));
+    let fx = x as f32 - x0 as f32;
+    let fy = y as f32 - y0 as f32;
+    let a = f32::from(image.get_pixel(x0, y0)[0]) * (1.0 - fx)
+        + f32::from(image.get_pixel(x1, y0)[0]) * fx;
+    let b = f32::from(image.get_pixel(x0, y1)[0]) * (1.0 - fx)
+        + f32::from(image.get_pixel(x1, y1)[0]) * fx;
+    (a * (1.0 - fy) + b * fy) / 255.0
 }
 
 fn copy_sequence_gap_layer(
@@ -2665,6 +2700,45 @@ mod tests {
         assert_eq!(*output.get_pixel(1023, 10), Rgb([0.0, 1.0, 2.0]));
         assert_eq!(*output.get_pixel(1024, 10), Rgb([1.0, 2.0, 3.0]));
         assert_eq!(*output.get_pixel(10, 1024), Rgb([3.0, 4.0, 5.0]));
+    }
+
+    #[test]
+    fn streaming_decision_alpha_interpolates_between_cells() {
+        let decision =
+            GrayImage::from_fn(2, 2, |x, y| Luma([if (x + y) % 2 == 0 { 0 } else { 255 }]));
+        let centre = sample_decision_alpha(&decision, 0.5, 0.5);
+        assert!((centre - 0.5).abs() < 1e-6);
+        let left = sample_decision_alpha(&decision, 0.05, 0.5);
+        let right = sample_decision_alpha(&decision, 0.95, 0.5);
+        assert!(left > 0.45 && left < 0.55);
+        assert!(right > 0.45 && right < 0.55);
+        assert!(sample_decision_alpha(&decision, 0.0, 0.0) < 1e-6);
+        assert!((sample_decision_alpha(&decision, 1.0, 0.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn streaming_materialize_preserves_a_natural_gradient_at_owner_boundary() {
+        let store = StreamingMosaicStore::new(256, 32).expect("tile store should initialize");
+        let rgb = Rgb32FImage::from_fn(256, 32, |x, _| {
+            let value = 0.30 + 0.40 * x as f32 / 255.0;
+            Rgb([value, value * 0.98, value * 0.94])
+        });
+        let mask = GrayImage::from_pixel(256, 32, Luma([255]));
+        let owner = GrayImage::from_fn(256, 32, |x, _| Luma([if x < 128 { 1 } else { 2 }]));
+        store
+            .save_tile(0, 0, &rgb, &mask)
+            .expect("tile should be writable");
+        store
+            .save_owner_tile(0, 0, &owner)
+            .expect("owner should be writable");
+        let output = materialize_streaming_focus_output(&store, (0, 0, 256, 32))
+            .expect("gradient should materialize");
+        let left = luma(*output.get_pixel(126, 16));
+        let right = luma(*output.get_pixel(129, 16));
+        let expected = luma(*rgb.get_pixel(126, 16)) - luma(*rgb.get_pixel(129, 16));
+        assert!((left - right).abs() < expected.abs() * 1.4);
+        assert!((left - luma(*rgb.get_pixel(126, 16))).abs() < 1e-6);
+        assert!((right - luma(*rgb.get_pixel(129, 16))).abs() < 1e-6);
     }
 
     #[test]
