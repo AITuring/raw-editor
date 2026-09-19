@@ -124,6 +124,9 @@ const FOCUS_HORIZONTAL_EDGE_DEDUP_TOLERANCE_RATIO: f64 = 0.0025;
 const FOCUS_HORIZONTAL_EDGE_MAX_SLOPE_DELTA: f64 = 0.12;
 const FOCUS_HORIZONTAL_EDGE_MIN_CLUSTER_IMAGES: usize = 3;
 const FOCUS_HORIZONTAL_EDGE_MAX_CONSENSUS_ERROR_PX: f64 = 6.0;
+const FOCUS_GROUP_ROLL_MIN_LINES: usize = 2;
+const FOCUS_GROUP_ROLL_MAX_SLOPE_MAD: f64 = 0.018;
+const FOCUS_GROUP_ROLL_MAX_CORRECTION_RADIANS: f64 = 0.045;
 const FOCUS_HORIZONTAL_EDGE_BAND_HALF_HEIGHT_RATIO: f64 = 0.025;
 const FOCUS_HORIZONTAL_EDGE_MAX_DISPLACEMENT_RATIO: f64 = 0.035;
 const FOCUS_VERTICAL_EDGE_MAX_COLUMNS: usize = 8;
@@ -2027,6 +2030,43 @@ fn load_prepared_stack_source(
     })
 }
 
+fn normalize_stack_raw_display_exposure(rgb: &mut Rgb32FImage) {
+    // The RAW developer deliberately leaves headroom, while image-stack
+    // export freezes these samples directly as display-referred sRGB. Restore
+    // a conservative display white from the bright end of the actual frame;
+    // use a percentile rather than a maximum so lamps and specular acrylic do
+    // not suppress the correction. This is bounded and can only brighten.
+    let step = ((u64::from(rgb.width()) * u64::from(rgb.height()) / 24_000).max(1) as f64)
+        .sqrt()
+        .floor()
+        .max(1.0) as usize;
+    let mut luma_samples = Vec::with_capacity(24_000);
+    for y in (0..rgb.height()).step_by(step) {
+        for x in (0..rgb.width()).step_by(step) {
+            let pixel = rgb.get_pixel(x, y);
+            let luma = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+            if luma.is_finite() && luma > 0.02 {
+                luma_samples.push(luma);
+            }
+        }
+    }
+    if luma_samples.len() < 64 {
+        return;
+    }
+    luma_samples.sort_by(f32::total_cmp);
+    let high = luma_samples[((luma_samples.len() - 1) * 97) / 100];
+    if !high.is_finite() || high <= 0.0 {
+        return;
+    }
+    let gain = (0.82 / high).clamp(1.0, 1.85);
+    if gain <= 1.005 {
+        return;
+    }
+    rgb.as_mut()
+        .par_iter_mut()
+        .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+}
+
 fn prepare_focus_rescue_image(
     image: &ImageInfo,
     settings: &AppSettings,
@@ -3306,7 +3346,7 @@ fn focus_capture_stations(
         if left >= images.len() || right >= images.len() {
             continue;
         }
-        if focus_match_is_local_bracket(&images[left], &images[right], match_info) {
+        if focus_match_is_capture_station_link(&images[left], &images[right], match_info) {
             dsu.union(left, right);
         }
     }
@@ -3623,7 +3663,11 @@ fn focus_capture_geometry_passes(
         // Filename neighbours include transitions between focus brackets and
         // camera positions. Keep this strict: a merely connected group graph
         // can still fold a long scroll into a visually invalid 2D collage.
-        || valid_edges.saturating_mul(100) < total_edges.saturating_mul(95)
+        // Consecutive files can straddle capture stations and opposite focal
+        // planes, so direct pixel correlation is not expected at every group
+        // boundary. Group geometry has already required independent
+        // multi-layer consensus and a connected robust closure solve.
+        || valid_edges.saturating_mul(100) < total_edges.saturating_mul(85)
         || median_overlap < 0.25
     {
         return false;
@@ -3643,7 +3687,16 @@ fn focus_capture_geometry_passes(
     }
     let min_scale = scales.iter().copied().fold(f64::INFINITY, f64::min);
     let max_scale = scales.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    min_scale >= 0.82 && max_scale <= 1.18 && median_value(&mut scales).is_some()
+    // Long flat-art scans do not need perspective correction. A much tighter
+    // scale envelope rejects projective drift while retaining modest focus
+    // breathing inside a camera station.
+    let scale_ok = min_scale >= 0.90 && max_scale <= 1.10 && median_value(&mut scales).is_some();
+    if !scale_ok {
+        println!(
+            "  - Focus geometry scale range rejected: {min_scale:.3}..{max_scale:.3} (expected 0.900..1.100)"
+        );
+    }
+    scale_ok
 }
 
 fn focus_station_representative(station: &[usize], images: &[ImageInfo]) -> usize {
@@ -6173,6 +6226,23 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         || stitched_images_info.clone(),
         |images| images.iter().collect::<Vec<_>>(),
     );
+    #[cfg(test)]
+    let mut render_images_info = render_images_info;
+    #[cfg(test)]
+    if std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_GROUP_REPRESENTATIVES").is_some()
+        && let Some(group_ids) = focus_capture_group_ids.as_ref()
+    {
+        let mut seen = HashSet::new();
+        render_images_info.retain(|image| {
+            group_ids
+                .get(&image.id)
+                .is_some_and(|group| seen.insert(*group))
+        });
+        println!(
+            "Acceptance geometry/illumination preview: rendering {} capture-group representative(s)",
+            render_images_info.len()
+        );
+    }
     let scaled_global_homographies;
     let render_homographies = if render_scale < 1.0 {
         scaled_global_homographies =
@@ -6198,7 +6268,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     println!("Warping and blending images with progressive optimal seams...");
 
     let mut load_render_image = |image: &ImageInfo| {
-        if let Some(full_image) = retained_full_images.remove(&image.id) {
+        let mut rendered = if let Some(full_image) = retained_full_images.remove(&image.id) {
             if full_image.dimensions() == image.dimensions() {
                 Ok(full_image)
             } else {
@@ -6212,7 +6282,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         } else {
             load_prepared_stack_source(&image.filename, &settings)
                 .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
+        }?;
+        if is_raw_file(&image.filename) {
+            normalize_stack_raw_display_exposure(&mut rendered);
         }
+        Ok(rendered)
     };
     let sequence_gap_aware = blend_mode == BlendMode::FocusStack
         && pairwise_matches
@@ -8590,6 +8664,36 @@ fn focus_match_is_local_bracket(
         ) >= FOCUS_BRACKET_MIN_OVERLAP_SUPPORT
 }
 
+fn focus_match_is_capture_station_link(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    match_info: &MatchInfo,
+) -> bool {
+    // Capture-station membership controls which sources are allowed to
+    // compete for focus. A coarse correlation peak can help connect two
+    // already established stations, but must never merge adjacent camera
+    // positions into one bracket. Direct feature evidence from consecutive
+    // captures is enough when its measured centre motion is focus-bracket
+    // sized: low-texture or deliberately defocused layers can have far fewer
+    // inliers than a sharp layer, so a fixed high inlier threshold would split
+    // one physical station into several groups.
+    if match_info.sequence_bridge || match_info.coarse_bridge {
+        return false;
+    }
+    let consecutive = trailing_capture_number(&source.filename)
+        .zip(trailing_capture_number(&target.filename))
+        .is_none_or(|(left, right)| left.abs_diff(right) == 1);
+    consecutive
+        && focus_compatible_focal_length(source, target)
+        && focus_match_center_motion_ratio(source, target, match_info)
+            .is_some_and(|motion| motion <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO)
+        && panorama_transform_overlap_support(
+            &match_info.homography,
+            source.dimensions(),
+            target.dimensions(),
+        ) >= FOCUS_BRACKET_MIN_OVERLAP_SUPPORT
+}
+
 fn focus_local_bracket_components(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -8600,7 +8704,7 @@ fn focus_local_bracket_components(
         else {
             continue;
         };
-        if focus_match_is_local_bracket(source, target, match_info) {
+        if focus_match_is_capture_station_link(source, target, match_info) {
             dsu.union(source_index, target_index);
         }
     }
@@ -8806,17 +8910,84 @@ fn focus_capture_groups(
     matches: &HashMap<(usize, usize), MatchInfo>,
     locked_homographies: &HashMap<usize, Matrix3<f64>>,
 ) -> Option<(Vec<FocusCaptureGroup>, Vec<usize>)> {
-    let mut components = focus_local_bracket_components(images, matches);
-    let mut assigned = vec![false; images.len()];
-    for component in &components {
-        for &image_index in component {
-            assigned[image_index] = true;
+    let mut dsu = Dsu::new(images.len());
+    for component in focus_local_bracket_components(images, matches) {
+        for pair in component.windows(2) {
+            dsu.union(pair[0], pair[1]);
         }
     }
-    for (image_index, is_assigned) in assigned.into_iter().enumerate() {
-        if !is_assigned {
-            components.push(vec![image_index]);
+
+    // A deliberately defocused or textureless layer may have no usable
+    // direct feature edge to another member of its bracket. The preliminary
+    // global solve still places its frame centre reliably through other
+    // overlaps. Absorb consecutive captures only when those solved centres
+    // are focus-bracket close; a real scan-position transition is much larger.
+    // This recovers weak layers without allowing coarse correlation edges to
+    // define capture-station membership.
+    let mut natural_order = (0..images.len()).collect::<Vec<_>>();
+    natural_order.sort_by(|&left, &right| {
+        natural_path_cmp(&images[left].filename, &images[right].filename)
+            .then_with(|| left.cmp(&right))
+    });
+    for pair in natural_order.windows(2) {
+        let (left, right) = (pair[0], pair[1]);
+        let consecutive = trailing_capture_number(&images[left].filename)
+            .zip(trailing_capture_number(&images[right].filename))
+            .is_none_or(|(left, right)| left.abs_diff(right) == 1);
+        if !consecutive || !focus_compatible_focal_length(&images[left], &images[right]) {
+            continue;
         }
+        // An explicit coarse-only adjacent match is evidence that feature
+        // geometry could not verify a same-pose bracket. Do not let a
+        // preliminary global pose, which that same coarse edge may have
+        // biased, erase the boundary between two scan positions.
+        let key = (left.min(right), left.max(right));
+        if matches.get(&key).is_some_and(|edge| edge.coarse_bridge) {
+            continue;
+        }
+        let (Some(left_pose), Some(right_pose)) = (
+            locked_homographies.get(&images[left].id),
+            locked_homographies.get(&images[right].id),
+        ) else {
+            continue;
+        };
+        let left_center = Point2::new(
+            images[left].width as f64 * 0.5,
+            images[left].height as f64 * 0.5,
+        );
+        let right_center = Point2::new(
+            images[right].width as f64 * 0.5,
+            images[right].height as f64 * 0.5,
+        );
+        let (Some(left_center), Some(right_center)) = (
+            transformed_point(left_pose, left_center),
+            transformed_point(right_pose, right_center),
+        ) else {
+            continue;
+        };
+        let scale = images[left]
+            .width
+            .max(images[left].height)
+            .max(images[right].width.max(images[right].height))
+            .max(1) as f64;
+        if (left_center - right_center).norm() / scale <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO {
+            dsu.union(left, right);
+        }
+    }
+
+    let mut components_by_root = HashMap::<usize, Vec<usize>>::new();
+    for image_index in 0..images.len() {
+        components_by_root
+            .entry(dsu.find(image_index))
+            .or_default()
+            .push(image_index);
+    }
+    let mut components = components_by_root.into_values().collect::<Vec<_>>();
+    if components
+        .iter()
+        .any(|component| component.len() > FOCUS_BRACKET_MAX_COMPONENT_SOURCES)
+    {
+        return None;
     }
     components.sort_by(|left, right| {
         natural_path_cmp(&images[left[0]].filename, &images[right[0]].filename)
@@ -8847,6 +9018,7 @@ fn solve_focus_group_translation_poses(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
     group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
+    _locked_homographies: &HashMap<usize, Matrix3<f64>>,
     reference_group: usize,
     coordinate_scale: f64,
 ) -> Option<Vec<Matrix3<f64>>> {
@@ -8884,7 +9056,12 @@ fn solve_focus_group_translation_poses(
             .or_default() += 1;
     }
     let consensus_covered = consensus_sizes.values().copied().max().unwrap_or(0);
-    if consensus_covered.saturating_mul(100) < groups.len().saturating_mul(90) {
+    // A few low-texture edge stations may have only one independently
+    // verified relation. Do not fall back to accumulated projective image
+    // poses merely because the multi-layer core misses 90% by one group. The
+    // checks below still require every group to be connected and every
+    // translation constraint to pass robust closure validation.
+    if consensus_covered.saturating_mul(100) < groups.len().saturating_mul(85) {
         println!(
             "  - Focus capture-group translation geometry unavailable: multi-layer graph covers only {consensus_covered}/{} groups",
             groups.len()
@@ -9064,12 +9241,118 @@ fn solve_focus_group_translation_poses(
     )
 }
 
+fn correct_focus_group_roll_from_long_edges(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    group_poses: &mut [Matrix3<f64>],
+    locked_homographies: &HashMap<usize, Matrix3<f64>>,
+    reference_group: usize,
+) -> usize {
+    if groups.len() != group_poses.len() || reference_group >= groups.len() {
+        return 0;
+    }
+    let mut group_angles = vec![None; groups.len()];
+    for (group_index, group) in groups.iter().enumerate() {
+        let image = &images[group.anchor];
+        let pose = &group_poses[group_index];
+        let mut slopes = image
+            .horizontal_edge_rows
+            .iter()
+            .filter_map(|&row| fit_focus_horizontal_edge_line(image, pose, row))
+            .map(|line| line.slope)
+            .filter(|slope| slope.is_finite())
+            .collect::<Vec<_>>();
+        if slopes.len() < FOCUS_GROUP_ROLL_MIN_LINES {
+            continue;
+        }
+        let Some(slope) = median_value(&mut slopes) else {
+            continue;
+        };
+        let mut deviations = slopes
+            .iter()
+            .map(|value| (value - slope).abs())
+            .collect::<Vec<_>>();
+        let Some(mad) = median_value(&mut deviations) else {
+            continue;
+        };
+        if mad > FOCUS_GROUP_ROLL_MAX_SLOPE_MAD {
+            continue;
+        }
+        group_angles[group_index] = Some(slope.atan());
+    }
+    let mut reliable_angles = group_angles.iter().flatten().copied().collect::<Vec<_>>();
+    let target_angle = median_value(&mut reliable_angles);
+    let reference_pose_angle = locked_homographies
+        .get(&images[groups[reference_group].anchor].id)
+        .map(|pose| pose[(1, 0)].atan2(pose[(0, 0)]));
+
+    let mut corrected_count = 0usize;
+    let mut edge_corrected_count = 0usize;
+    for (group_index, angle) in group_angles.into_iter().enumerate() {
+        let edge_correction = angle
+            .zip(target_angle)
+            .map(|(angle, target)| target - angle);
+        let pose_correction = reference_pose_angle.and_then(|reference| {
+            locked_homographies
+                .get(&images[groups[group_index].anchor].id)
+                .map(|pose| pose[(1, 0)].atan2(pose[(0, 0)]) - reference)
+        });
+        let Some(raw_correction) = edge_correction.or(pose_correction) else {
+            continue;
+        };
+        let correction_angle = raw_correction.clamp(
+            -FOCUS_GROUP_ROLL_MAX_CORRECTION_RADIANS,
+            FOCUS_GROUP_ROLL_MAX_CORRECTION_RADIANS,
+        );
+        if correction_angle.abs() < 1e-5 {
+            continue;
+        }
+        let image = &images[groups[group_index].anchor];
+        let source_center = Point2::new(image.width as f64 * 0.5, image.height as f64 * 0.5);
+        let Some(world_center) = transformed_point(&group_poses[group_index], source_center) else {
+            continue;
+        };
+        let (sin, cos) = correction_angle.sin_cos();
+        let rotate_about_center = Matrix3::new(
+            cos,
+            -sin,
+            world_center.x - cos * world_center.x + sin * world_center.y,
+            sin,
+            cos,
+            world_center.y - sin * world_center.x - cos * world_center.y,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let corrected = rotate_about_center * group_poses[group_index];
+        if transform_is_stable_for_focus_stack(&corrected, image.dimensions()) {
+            group_poses[group_index] = corrected;
+            corrected_count += 1;
+            edge_corrected_count += usize::from(edge_correction.is_some());
+        }
+    }
+    if corrected_count > 0 {
+        println!(
+            "  - Focus capture-group roll correction: {corrected_count}/{} groups ({edge_corrected_count} from long edges, {} pose-only), long-edge target {}, maximum correction {:.3} degrees",
+            groups.len(),
+            corrected_count.saturating_sub(edge_corrected_count),
+            target_angle
+                .map(|angle| format!("{:.3} degrees", angle.to_degrees()))
+                .unwrap_or_else(|| "unavailable".to_string()),
+            FOCUS_GROUP_ROLL_MAX_CORRECTION_RADIANS.to_degrees(),
+        );
+    }
+    corrected_count
+}
+
 fn solve_focus_capture_group_poses(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
     locked_homographies: &HashMap<usize, Matrix3<f64>>,
     reference_index: usize,
+    translation_geometry_verified: &mut bool,
 ) -> HashMap<usize, Matrix3<f64>> {
+    *translation_geometry_verified = false;
     let Some((groups, group_for_image)) =
         focus_capture_groups(images, matches, locked_homographies)
     else {
@@ -9308,19 +9591,55 @@ fn solve_focus_capture_group_poses(
             pending.push_back(neighbor);
         }
     }
-    let translation_geometry_seeded = if let Some(translation_poses) =
-        solve_focus_group_translation_poses(
+    if let Some(mut translation_poses) = solve_focus_group_translation_poses(
+        images,
+        &groups,
+        &group_edges,
+        locked_homographies,
+        reference_group,
+        coordinate_scale,
+    ) {
+        // The translation solve has already required a connected group graph
+        // and robust closure. Do not subsequently "refine" it with every
+        // long-range planar relation: repeated figures and calligraphy can
+        // agree as homographies yet pull a valid scan position by hundreds of
+        // pixels. Keep the solved camera positions and only retain the local
+        // focus-plane transform inside each capture group.
+        correct_focus_group_roll_from_long_edges(
             images,
             &groups,
-            &group_edges,
+            &mut translation_poses,
+            locked_homographies,
             reference_group,
-            coordinate_scale,
-        ) {
-        group_poses = translation_poses.into_iter().map(Some).collect();
-        true
-    } else {
-        false
-    };
+        );
+        let mut solved = HashMap::new();
+        for (group_index, group) in groups.iter().enumerate() {
+            let group_pose = translation_poses[group_index];
+            for &image_index in &group.members {
+                let replacement = group_pose * group.local_to_anchor[&image_index];
+                if replacement.try_inverse().is_none()
+                    || !homography_preserves_focus_orientation(
+                        &replacement,
+                        images[image_index].dimensions(),
+                    )
+                {
+                    println!(
+                        "  - Focus capture-group translation geometry produced an unstable pose for '{}'",
+                        images[image_index].filename
+                    );
+                    return locked_homographies.clone();
+                }
+                solved.insert(images[image_index].id, replacement);
+            }
+        }
+        println!(
+            "  - Focus capture-group translation geometry accepted for {} groups without projective re-refinement",
+            groups.len()
+        );
+        *translation_geometry_verified = true;
+        return solved;
+    }
+    let translation_geometry_seeded = false;
     let use_consensus_group_poses = translation_geometry_seeded
         || (tree_edges + 1 == groups.len()
             && group_poses.iter().all(Option::is_some)
@@ -10212,10 +10531,20 @@ fn build_focus_stack_stitching_order(
     let optimized_or_locked_homographies = if large_scan {
         let locked_homographies =
             lock_focus_local_bracket_poses(images, matches, &optimized_homographies);
-        solve_focus_capture_group_poses(images, matches, &locked_homographies, reference_index)
+        let mut translation_geometry_verified = false;
+        let solved = solve_focus_capture_group_poses(
+            images,
+            matches,
+            &locked_homographies,
+            reference_index,
+            &mut translation_geometry_verified,
+        );
+        (solved, translation_geometry_verified)
     } else {
-        optimized_homographies.clone()
+        (optimized_homographies.clone(), false)
     };
+    let (optimized_or_locked_homographies, translation_geometry_verified) =
+        optimized_or_locked_homographies;
     let (valid_geometry_edges, total_geometry_edges, median_overlap, median_scale) =
         focus_capture_geometry_diagnostics(
             images,
@@ -10227,10 +10556,15 @@ fn build_focus_stack_stitching_order(
         median_overlap * 100.0,
         median_scale,
     );
+    let verified_edge_count = if translation_geometry_verified {
+        total_geometry_edges
+    } else {
+        valid_geometry_edges
+    };
     let global_homographies = if !large_scan
         || focus_capture_geometry_passes(
             images,
-            valid_geometry_edges,
+            verified_edge_count,
             total_geometry_edges,
             median_overlap,
             &optimized_or_locked_homographies,
@@ -12356,6 +12690,119 @@ mod alignment_tests {
     }
 
     #[test]
+    fn capture_stations_do_not_merge_across_a_coarse_sequence_boundary() {
+        let images = (0..7)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let mut coarse_boundary = observed_translation_match(120.0, 0.0, 48);
+        coarse_boundary.coarse_bridge = true;
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(3.0, 1.0, 600)),
+            ((1, 2), observed_translation_match(2.0, 1.0, 540)),
+            ((2, 3), coarse_boundary),
+            ((3, 4), observed_translation_match(3.0, 0.0, 520)),
+            ((4, 5), observed_translation_match(2.0, 1.0, 490)),
+            // A weak direct boundary match also cannot define a bracket.
+            ((5, 6), observed_translation_match(140.0, 0.0, 95)),
+        ]);
+
+        let stations = focus_capture_stations(&images, &matches);
+        assert_eq!(stations, vec![vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
+    }
+
+    #[test]
+    fn capture_stations_keep_a_low_texture_direct_focus_layer() {
+        let images = (0..3)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(3.0, 1.0, 540)),
+            ((1, 2), observed_translation_match(4.0, 2.0, 64)),
+        ]);
+
+        assert_eq!(
+            focus_capture_stations(&images, &matches),
+            vec![vec![0, 1, 2]]
+        );
+    }
+
+    #[test]
+    fn capture_groups_absorb_an_unmatched_layer_by_solved_center() {
+        let images = (0..5)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(3.0, 1.0, 540)),
+            ((3, 4), observed_translation_match(2.0, 1.0, 520)),
+        ]);
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let locked = HashMap::from([
+            (0, translation(0.0)),
+            (1, translation(3.0)),
+            // No direct feature edge for image 2, but its solved centre is at
+            // the same physical station as images 0 and 1.
+            (2, translation(7.0)),
+            (3, translation(900.0)),
+            (4, translation(904.0)),
+        ]);
+
+        let (groups, _) = focus_capture_groups(&images, &matches, &locked).unwrap();
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.members.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![0, 1, 2], vec![3, 4]]
+        );
+    }
+
+    #[test]
+    fn capture_groups_keep_a_coarse_boundary_despite_close_solved_centers() {
+        let images = (0..4)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let mut boundary = observed_translation_match(100.0, 0.0, 48);
+        boundary.coarse_bridge = true;
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(3.0, 1.0, 540)),
+            ((1, 2), boundary),
+            ((2, 3), observed_translation_match(2.0, 1.0, 520)),
+        ]);
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let locked = HashMap::from([
+            (0, translation(0.0)),
+            (1, translation(3.0)),
+            (2, translation(100.0)),
+            (3, translation(104.0)),
+        ]);
+
+        let (groups, _) = focus_capture_groups(&images, &matches, &locked).unwrap();
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.members.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![0, 1], vec![2, 3]]
+        );
+    }
+
+    #[test]
     fn focus_capture_group_consensus_rejects_a_single_conflicting_edge() {
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
@@ -12383,7 +12830,15 @@ mod alignment_tests {
             (3, translation(-165.0)),
         ]);
 
-        let solved = solve_focus_capture_group_poses(&images, &matches, &locked, 0);
+        let mut translation_verified = false;
+        let solved = solve_focus_capture_group_poses(
+            &images,
+            &matches,
+            &locked,
+            0,
+            &mut translation_verified,
+        );
+        assert!(translation_verified);
 
         assert!((solved[&2][(0, 2)] + 100.0).abs() < 1e-3);
         assert!((solved[&3][(0, 2)] + 105.0).abs() < 1e-3);
@@ -12418,7 +12873,15 @@ mod alignment_tests {
             (3, translation(-65.0, 0.0)),
         ]);
 
-        let solved = solve_focus_capture_group_poses(&images, &matches, &locked, 0);
+        let mut translation_verified = false;
+        let solved = solve_focus_capture_group_poses(
+            &images,
+            &matches,
+            &locked,
+            0,
+            &mut translation_verified,
+        );
+        assert!(translation_verified);
 
         assert!((solved[&2][(0, 2)] + 240.0).abs() < 1e-3);
         assert!((solved[&2][(1, 2)] + 20.0).abs() < 1e-3);

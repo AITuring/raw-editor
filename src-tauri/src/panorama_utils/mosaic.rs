@@ -3,8 +3,8 @@
 use super::registration::refine_warped_patch;
 use super::seam_cut;
 use super::stitching::{
-    Projection, crop_to_valid_rectangle, downsample_rgb_half, get_high_quality_interpolated_pixel,
-    map_target_to_source, output_bounds, pixel_aligned_canvas, transformed_image_region,
+    Projection, downsample_rgb_half, get_high_quality_interpolated_pixel, map_target_to_source,
+    output_bounds, pixel_aligned_canvas, transformed_image_region,
 };
 use crate::panorama_stitching::ImageInfo;
 use image::{GrayImage, Luma, Rgb, Rgb32FImage};
@@ -23,19 +23,22 @@ const ANALYSIS_LONG_SIDE: u32 = 1400;
 // roughly 9504px layer footprint this yields approximately 19px cells, fine
 // enough for seams to route around individual strokes.
 const SELECTION_LONG_SIDE: u32 = 512;
-const LONG_SEQUENCE_SELECTION_LONG_SIDE: u32 = 256;
+const LONG_SEQUENCE_SELECTION_LONG_SIDE: u32 = 768;
 // Streaming still makes one continuous decision for the whole source layer.
 // Keeping the analysis bounded preserves memory while preventing independent
 // 1024px tiles from choosing incompatible owners along their shared border.
 const STREAMING_ANALYSIS_LONG_SIDE: u32 = 1400;
-const STREAMING_SELECTION_LONG_SIDE: u32 = 512;
-const STREAMING_OWNERSHIP_FEATHER: f32 = 2.0;
+const STREAMING_SELECTION_LONG_SIDE: u32 = 768;
+// Ownership is already regularised by the graph cut. A wide blur here mixes
+// focused and defocused focal planes across tens of native pixels on a 45MP
+// source. Keep only a sub-cell antialiasing transition.
+const STREAMING_OWNERSHIP_FEATHER: f32 = 0.65;
 const STREAMING_HARMONIZATION_LONG_SIDE: u32 = 2400;
 // Keep this narrow enough to cancel the actual source discontinuity at an
 // ownership boundary. A broad gain blur follows nearby dark strokes and draws
 // a visible halo even though the gain itself is constant per capture group.
 const STREAMING_GROUP_GAIN_FEATHER: f32 = 3.0;
-const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.24;
+const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.45;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
@@ -253,58 +256,33 @@ impl StreamingMosaicStore {
         Ok((image, mask, owner))
     }
 
-    fn largest_valid_rectangle(&self) -> Result<Option<(u32, u32, u32, u32)>, String> {
-        let mut heights = vec![0u32; self.width as usize];
-        let mut best: Option<(u64, u32, u32, u32, u32)> = None;
-        for tile_row in 0..self.tile_rows {
-            let tile_masks: Vec<Vec<u8>> = (0..self.tile_columns)
-                .map(|column| {
-                    let (_, _, width, height) = self.tile_extent(column, tile_row);
-                    self.read_mask_tile(column, tile_row, width, height)
-                })
-                .collect();
-            let (_, tile_top, _, tile_height) = self.tile_extent(0, tile_row);
-            for local_y in 0..tile_height {
-                let y = tile_top + local_y;
-                let mut x = 0usize;
-                for column in 0..self.tile_columns {
-                    let (_, _, tile_width, _) = self.tile_extent(column, tile_row);
-                    let tile_row_start = local_y as usize * tile_width as usize;
-                    let tile_row_end = tile_row_start + tile_width as usize;
-                    for &value in &tile_masks[column as usize][tile_row_start..tile_row_end] {
-                        if value != 0 {
-                            heights[x] = heights[x].saturating_add(1);
-                        } else {
-                            heights[x] = 0;
+    fn covered_bounds(&self) -> Result<Option<(u32, u32, u32, u32)>, String> {
+        let mut bounds: Option<(u32, u32, u32, u32)> = None;
+        for row in 0..self.tile_rows {
+            for column in 0..self.tile_columns {
+                let (left, top, width, height) = self.tile_extent(column, row);
+                let mask = self.read_mask_tile(column, row, width, height);
+                for y in 0..height {
+                    let row_start = y as usize * width as usize;
+                    for x in 0..width {
+                        if mask[row_start + x as usize] == 0 {
+                            continue;
                         }
-                        x += 1;
+                        let gx = left + x;
+                        let gy = top + y;
+                        bounds = Some(match bounds {
+                            Some((min_x, min_y, max_x, max_y)) => {
+                                (min_x.min(gx), min_y.min(gy), max_x.max(gx), max_y.max(gy))
+                            }
+                            None => (gx, gy, gx, gy),
+                        });
                     }
-                }
-                let mut stack: Vec<usize> = Vec::new();
-                for index in 0..=heights.len() {
-                    let current = if index == heights.len() {
-                        0
-                    } else {
-                        heights[index]
-                    };
-                    while let Some(&last) = stack.last() {
-                        if heights[last] <= current {
-                            break;
-                        }
-                        stack.pop();
-                        let left = stack.last().map_or(0, |&previous| previous + 1);
-                        let width = index - left;
-                        let height = heights[last];
-                        let area = width as u64 * height as u64;
-                        if area > best.as_ref().map_or(0, |entry| entry.0) {
-                            best = Some((area, left as u32, y + 1 - height, width as u32, height));
-                        }
-                    }
-                    stack.push(index);
                 }
             }
         }
-        Ok(best.map(|(_, left, top, width, height)| (left, top, width, height)))
+        Ok(bounds.map(|(min_x, min_y, max_x, max_y)| {
+            (min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+        }))
     }
 
     fn materialize(&self, crop: (u32, u32, u32, u32)) -> Result<Rgb32FImage, String> {
@@ -522,6 +500,71 @@ fn apply_streaming_seam_harmonization(output: &mut Rgb32FImage, gains: &Rgb32FIm
                 let gain = get_high_quality_interpolated_pixel(gains, gain_x, gain_y);
                 for channel in 0..3 {
                     row[x * 3 + channel] = (row[x * 3 + channel] * gain[channel]).clamp(0.0, 1.0);
+                }
+            }
+        });
+}
+
+fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
+    let scale = (output.width().max(output.height()) as f64
+        / STREAMING_HARMONIZATION_LONG_SIDE as f64)
+        .max(1.0);
+    let width = (output.width() as f64 / scale).ceil().max(1.0) as u32;
+    let height = (output.height() as f64 / scale).ceil().max(1.0) as u32;
+    let analysis =
+        image::imageops::resize(output, width, height, image::imageops::FilterType::Triangle);
+    let valid = image::ImageBuffer::from_fn(width, height, |x, y| {
+        let value = (luma(*analysis.get_pixel(x, y)) > 0.025) as u8 as f32;
+        Luma([value])
+    });
+    let premultiplied = Rgb32FImage::from_fn(width, height, |x, y| {
+        let weight = valid.get_pixel(x, y)[0];
+        let pixel = analysis.get_pixel(x, y);
+        Rgb([pixel[0] * weight, pixel[1] * weight, pixel[2] * weight])
+    });
+    let normalized_blur = |sigma: f32| {
+        let colour = image::imageops::blur(&premultiplied, sigma);
+        let weight = image::imageops::blur(&valid, sigma);
+        Rgb32FImage::from_fn(width, height, |x, y| {
+            let divisor = weight.get_pixel(x, y)[0];
+            if divisor <= 1e-4 {
+                return Rgb([0.0; 3]);
+            }
+            let pixel = colour.get_pixel(x, y);
+            Rgb([pixel[0] / divisor, pixel[1] / divisor, pixel[2] / divisor])
+        })
+    };
+    let local_low = normalized_blur(3.0);
+    let continuous_low = normalized_blur(22.0);
+    let gains = Rgb32FImage::from_fn(width, height, |x, y| {
+        if valid.get_pixel(x, y)[0] == 0.0 {
+            return Rgb([1.0; 3]);
+        }
+        let local = luma(*local_low.get_pixel(x, y));
+        let continuous = luma(*continuous_low.get_pixel(x, y));
+        let gain = if local > 0.025 && continuous > 0.025 {
+            (continuous / local).clamp(0.72, 1.45) as f32
+        } else {
+            1.0
+        };
+        Rgb([gain; 3])
+    });
+    let output_width = output.width() as usize;
+    output
+        .as_mut()
+        .par_chunks_mut(output_width * 3)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let gain_y = (y as f64 / scale).clamp(0.0, gains.height().saturating_sub(1) as f64);
+            for x in 0..output_width {
+                let pixel = &mut row[x * 3..x * 3 + 3];
+                if pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722 <= 0.025 {
+                    continue;
+                }
+                let gain_x = (x as f64 / scale).clamp(0.0, gains.width().saturating_sub(1) as f64);
+                let gain = get_high_quality_interpolated_pixel(&gains, gain_x, gain_y)[0];
+                for channel in pixel {
+                    *channel = (*channel * gain).clamp(0.0, 1.0);
                 }
             }
         });
@@ -1928,6 +1971,25 @@ fn ownership_grid(
     GrayImage::from_raw(w, h, labels).expect("ownership dimensions")
 }
 
+fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
+    let mut min_x = mask.width();
+    let mut min_y = mask.height();
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut found = false;
+    for (x, y, pixel) in mask.enumerate_pixels() {
+        if pixel[0] == 0 {
+            continue;
+        }
+        found = true;
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+    }
+    found.then_some((min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
+}
+
 pub(super) fn detail_preserving_mosaic<R: Runtime, F>(
     images: &[&ImageInfo],
     homographies: &HashMap<usize, Matrix3<f64>>,
@@ -2153,12 +2215,15 @@ where
     if covered == 0 {
         return Err("The aligned stack has no covered pixels.".into());
     }
-    // An unsupported canvas margin is not photographic detail. Export only an
-    // entirely covered rectangle; do not hide holes with stretched/reflected
-    // source pixels, which looks like an unfused blur at the image boundary.
+    // Keep the complete union of real source coverage. Cropping to the largest
+    // hole-free rectangle silently removes photographed frame edges whenever
+    // the scan is slightly rotated or the coverage is non-rectangular.
     #[cfg(test)]
     diagnostics::capture_crop(&mask);
-    let output = crop_to_valid_rectangle(result, &mask);
+    let (crop_x, crop_y, crop_width, crop_height) =
+        mask_covered_bounds(&mask).ok_or("The aligned stack has no covered pixels.")?;
+    let output =
+        image::imageops::crop_imm(&result, crop_x, crop_y, crop_width, crop_height).to_image();
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
         output.width(),
@@ -2289,12 +2354,22 @@ where
             // only from overlap owned by that same position.  Comparing a
             // later position against a neighbouring group's pixels compounds
             // exposure drift into broad vertical bands.
-            let tone = streaming_tone_field_from_analysis(
-                &base_analysis,
-                refinement_mask,
-                &candidate,
-                &candidate_mask,
-            );
+            let tone = if first_capture_group_layer {
+                // The first layer of a new camera position overlaps different
+                // scene content from older stations. Treating that content
+                // difference as a spatial colour ratio compounds exposure
+                // corrections into source-sized dark/bright blocks. Leave it
+                // photometrically untouched here; the final owner-boundary
+                // solver estimates one robust correction per capture group.
+                Field::new(analysis_width, analysis_height, 112.0)
+            } else {
+                streaming_tone_field_from_analysis(
+                    &base_analysis,
+                    refinement_mask,
+                    &candidate,
+                    &candidate_mask,
+                )
+            };
             let decision = streaming_ownership_from_analysis(
                 &base_analysis,
                 &base_analysis_mask,
@@ -2400,19 +2475,24 @@ where
         }
     }
     let crop = store
-        .largest_valid_rectangle()?
+        .covered_bounds()?
         .ok_or("The aligned stack has no covered pixels.")?;
     println!(
-        "  - Streaming coverage rectangle: {}x{} at ({}, {})",
+        "  - Streaming complete source-union bounds: {}x{} at ({}, {})",
         crop.2, crop.3, crop.0, crop.1
     );
-    // Ownership boundaries are not exposure measurements: the two pixels on
-    // either side can be different brush strokes or natural illumination.
-    // Applying a group gain inferred from those unrelated samples creates the
-    // vertical grey bands seen in long focus mosaics.  Keep the source tone
-    // corrections above, which are measured at matched sample coordinates,
-    // and materialize without a second boundary-wide gain pass.
-    let output = materialize_streaming_focus_output(&store, crop)?;
+    let mut output = materialize_streaming_focus_output(&store, crop)?;
+    // The per-layer tone field is estimated only from pixels already owned by
+    // the same capture group. That preserves focus detail, but the first layer
+    // of each new camera position has no same-group reference and can leave a
+    // source-sized exposure step. Reconcile those remaining group constants
+    // after ownership is final. The solver uses only blurred, non-black paper
+    // samples across robust owner relations and feathers a bounded constant
+    // gain; it never averages the high-frequency painting detail.
+    if let Some((gains, scale)) = streaming_seam_harmonization(&store, crop)? {
+        apply_streaming_seam_harmonization(&mut output, &gains, scale);
+    }
+    smooth_streaming_low_frequency_illumination(&mut output);
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
         output.width(),
@@ -2691,7 +2771,7 @@ mod tests {
             }
         }
         let crop = store
-            .largest_valid_rectangle()
+            .covered_bounds()
             .expect("coverage should be readable")
             .expect("full tile fixture should be covered");
         assert_eq!(crop, (0, 0, 2050, 1025));
@@ -2700,6 +2780,30 @@ mod tests {
         assert_eq!(*output.get_pixel(1023, 10), Rgb([0.0, 1.0, 2.0]));
         assert_eq!(*output.get_pixel(1024, 10), Rgb([1.0, 2.0, 3.0]));
         assert_eq!(*output.get_pixel(10, 1024), Rgb([3.0, 4.0, 5.0]));
+    }
+
+    #[test]
+    fn covered_bounds_preserve_non_rectangular_source_edges() {
+        let mask = GrayImage::from_fn(8, 6, |x, y| {
+            Luma([u8::from((x == 1 && y == 3) || (x >= 3 && x <= 6 && y >= 1 && y <= 4)) * 255])
+        });
+        assert_eq!(mask_covered_bounds(&mask), Some((1, 1, 6, 4)));
+    }
+
+    #[test]
+    fn streaming_covered_bounds_do_not_reduce_to_largest_rectangle() {
+        let store = StreamingMosaicStore::new(12, 8).expect("tile store should initialize");
+        let rgb = Rgb32FImage::new(12, 8);
+        let mask = GrayImage::from_fn(12, 8, |x, y| {
+            Luma([u8::from((x == 1 && y == 6) || (x >= 4 && x <= 10 && y >= 1 && y <= 5)) * 255])
+        });
+        store
+            .save_tile(0, 0, &rgb, &mask)
+            .expect("tile should be writable");
+        assert_eq!(
+            store.covered_bounds().expect("coverage should be readable"),
+            Some((1, 1, 10, 6))
+        );
     }
 
     #[test]
@@ -2808,6 +2912,58 @@ mod tests {
             after_detail >= before_detail * 0.90,
             "multiplicative low-frequency correction must retain local detail"
         );
+    }
+
+    #[test]
+    fn frequency_separation_removes_station_blocks_but_keeps_detail_and_black_bounds() {
+        let mut image = Rgb32FImage::from_fn(512, 128, |x, y| {
+            if y < 8 {
+                return Rgb([0.0; 3]);
+            }
+            let base = if x < 256 { 0.36 } else { 0.54 };
+            let detail = if (x / 3 + y / 3) % 2 == 0 {
+                0.035
+            } else {
+                -0.035
+            };
+            Rgb([base + detail, base + detail, base + detail])
+        });
+        let original = image.clone();
+        smooth_streaming_low_frequency_illumination(&mut image);
+        let mean = |source: &Rgb32FImage, start: u32| {
+            (start..start + 12)
+                .map(|x| luma(*source.get_pixel(x, 64)))
+                .sum::<f64>()
+                / 12.0
+        };
+        let before = (mean(&original, 238) - mean(&original, 262)).abs();
+        let after = (mean(&image, 238) - mean(&image, 262)).abs();
+        assert!(
+            after < before * 0.82,
+            "station step {before:.4} -> {after:.4}"
+        );
+        let before_detail =
+            (luma(*original.get_pixel(80, 64)) - luma(*original.get_pixel(83, 64))).abs();
+        let after_detail = (luma(*image.get_pixel(80, 64)) - luma(*image.get_pixel(83, 64))).abs();
+        assert!(after_detail >= before_detail * 0.88);
+        assert!((0..512).all(|x| image.get_pixel(x, 2).0 == [0.0; 3]));
+    }
+
+    #[test]
+    #[ignore = "applies production low-frequency correction to a supplied real preview"]
+    fn real_preview_low_frequency_correction_from_env() {
+        let input = std::env::var_os("RAW_EDITOR_MOSAIC_PREVIEW_INPUT")
+            .expect("RAW_EDITOR_MOSAIC_PREVIEW_INPUT is required");
+        let output = std::env::var_os("RAW_EDITOR_MOSAIC_PREVIEW_OUTPUT")
+            .expect("RAW_EDITOR_MOSAIC_PREVIEW_OUTPUT is required");
+        let mut image = image::open(input)
+            .expect("real preview should open")
+            .to_rgb32f();
+        smooth_streaming_low_frequency_illumination(&mut image);
+        image::DynamicImage::ImageRgb32F(image)
+            .to_rgb8()
+            .save(output)
+            .expect("corrected preview should save");
     }
 
     #[test]
