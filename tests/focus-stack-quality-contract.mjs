@@ -30,10 +30,21 @@ assert.ok(mismatchPenalty >= 1, 'misregistered sharp candidates need a non-trivi
 assert.match(mosaic, /fn acutance\s*\(/, 'source ownership must measure native-resolution acutance');
 assert.match(mosaic, /fn ownership_disagreement\s*\(/, 'source ownership must measure pixel disagreement');
 assert.match(mosaic, /seam_cut::cut_grid\(/, 'ownership decisions must be regularised by a global seam cut');
-assert.match(mosaic, /crop_to_valid_rectangle\(result, &mask\)/, 'mosaic output must exclude uncovered canvas margins');
+assert.match(mosaic, /mask_covered_bounds\(&mask\)/, 'in-memory mosaic output must preserve all real source coverage');
+assert.match(mosaic, /store\s*\.covered_bounds\(\)/, 'streaming mosaic output must preserve all real source coverage');
 assert.match(mosaic, /refine_native_layer\(/, 'the mosaic path must refine residual alignment at native resolution');
 assert.match(mosaic, /Render only ownership cells/, 'final rendering must skip rejected ownership cells');
 assert.match(mosaic, /every pixel has source ownership/, 'mosaic must retain an explicit full-coverage assertion');
+assert.match(
+  mosaic,
+  /streaming_group_tone_relations_from_analysis\(/,
+  'camera exposure relations must use corresponding overlap pixels before the global solve',
+);
+assert.match(
+  mosaic,
+  /same_coordinate_group_relations_recover_exposure_offset/,
+  'same-coordinate group exposure estimation needs a regression test',
+);
 
 assert.match(
   stitching,
@@ -58,11 +69,41 @@ assert.ok(nativeSearchRadius >= 16, 'native focus matching must search beyond th
 assert.ok(localResidualRatio > 0 && localResidualRatio <= 0.01, 'local matching gate must reject implausible warps');
 assert.ok(projectiveSupport > 0 && projectiveSupport <= 0.5, 'projective alignment must require broad spatial support');
 assert.match(panorama, /transform_is_stable_for_focus_stack\(/, 'focus transforms must pass a stability check');
-assert.match(panorama, /focus_stack_order_is_rebuilt_from_overlap_evidence/, 'stack order must come from image overlap evidence');
+assert.match(
+  panorama,
+  /order_focus_render_sources_by_capture_group\(/,
+  'each camera position must finish focus selection before the next position enters the mosaic',
+);
+assert.match(
+  panorama,
+  /capture_groups_keep_long_focus_brackets/,
+  'long automated focus brackets need a grouping regression',
+);
+assert.match(
+  panorama,
+  /capture_groups_split_accumulated_scan_motion/,
+  'capture grouping must reject accumulated camera motion',
+);
+assert.match(
+  panorama,
+  /focus_capture_group_geometry_diagnostics\(/,
+  'large stacks must validate real image agreement across camera-position boundaries',
+);
+assert.match(
+  panorama,
+  /focus_station_geometry_guard_does_not_hide_broken_boundaries/,
+  'same-position focus edges must not hide broken camera-position boundaries',
+);
+assert.match(
+  panorama,
+  /focus_stack_geometry_uses_overlap_evidence_and_rendering_uses_capture_order/,
+  'stack geometry must come from image overlap evidence',
+);
 assert.match(panorama, /focus_alignment_does_not_trade_fit_precision_for_a_few_more_inliers/, 'fit selection must protect precision over raw inlier count');
 assert.match(panorama, /focus_stack_stability_rejects_extrapolated_projective_warp/, 'extrapolated projective warps need a regression test');
 
 console.log(
   `Validated focus-stack quality guards: ${selectionLongSide}-cell ownership grid, native refinement, ` +
-    'disagreement-aware seam cut, covered-output crop, and stable alignment regressions.',
+    'capture-group-first fusion, overlap-based global exposure, disagreement-aware seam cut, ' +
+    'source-union crop, and stable alignment regressions.',
 );

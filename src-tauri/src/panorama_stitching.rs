@@ -70,7 +70,10 @@ const FOCUS_GLOBAL_DAMPING: f64 = 1e-6;
 const FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO: f64 = 0.075;
 const FOCUS_BRACKET_MIN_OVERLAP_SUPPORT: f64 = 0.60;
 const FOCUS_BRACKET_MAX_CAPTURE_GAP: u64 = 6;
-const FOCUS_BRACKET_MAX_COMPONENT_SOURCES: usize = 8;
+// A high-resolution artwork station can contain a long automated focus
+// bracket. Keep a guard against an accidental whole-scan component, but do
+// not disable capture grouping for legitimate 10-32 frame brackets.
+const FOCUS_BRACKET_MAX_COMPONENT_SOURCES: usize = 48;
 const FOCUS_BRACKET_GRAPH_WEIGHT_BOOST: f64 = 24.0;
 // A long scan of repeated calligraphy can contain a visually convincing edge
 // between distant characters. Once two nearby capture numbers have a verified
@@ -3469,7 +3472,7 @@ fn focus_stack_spine_edge(
         return true;
     }
     if !match_info.coarse_bridge {
-        return match_info.points.len() >= FOCUS_MODEL_MIN_INLIERS;
+        return match_info.inliers.max(match_info.points.len()) >= FOCUS_MODEL_MIN_INLIERS;
     }
     // Coarse NCC may recover another focus plane at one pose, but it is not
     // sufficient evidence for a scan-position edge. Filename-adjacent frames
@@ -3621,6 +3624,157 @@ fn focus_capture_geometry_diagnostics(
     (valid_edges, total_edges, median_overlap, median_scale)
 }
 
+fn focus_capture_group_geometry_diagnostics(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    groups: &[FocusCaptureGroup],
+    homographies: &HashMap<usize, Matrix3<f64>>,
+) -> (usize, usize, usize, usize, f64) {
+    let mut group_for_image = vec![usize::MAX; images.len()];
+    for (group_index, group) in groups.iter().enumerate() {
+        for &image_index in &group.members {
+            group_for_image[image_index] = group_index;
+        }
+    }
+    let mut relation_pairs = HashMap::<(usize, usize), Vec<(usize, usize)>>::new();
+    for &(source, target) in matches.keys() {
+        let (Some(&source_group), Some(&target_group)) =
+            (group_for_image.get(source), group_for_image.get(target))
+        else {
+            continue;
+        };
+        if source_group == usize::MAX || target_group == usize::MAX || source_group == target_group
+        {
+            continue;
+        }
+        relation_pairs
+            .entry((
+                source_group.min(target_group),
+                source_group.max(target_group),
+            ))
+            .or_default()
+            .push((source, target));
+    }
+
+    let candidate_relations = relation_pairs.len();
+    let mut valid_relations = 0usize;
+    let mut connectivity = Dsu::new(groups.len());
+    let mut overlap_values = Vec::new();
+    for ((left_group, right_group), image_pairs) in relation_pairs {
+        let mut accepted_overlap = None::<f64>;
+        let mut best_score = f64::NEG_INFINITY;
+        let mut best_summary = None;
+        for (source, target) in image_pairs {
+            let (Some(source_global), Some(target_global)) = (
+                homographies.get(&images[source].id),
+                homographies.get(&images[target].id),
+            ) else {
+                continue;
+            };
+            let Some(source_to_target) = target_global
+                .try_inverse()
+                .map(|inverse| inverse * source_global)
+            else {
+                continue;
+            };
+            let overlap = panorama_transform_overlap_support(
+                &source_to_target,
+                images[source].dimensions(),
+                images[target].dimensions(),
+            );
+            let Some((intensity_ncc, edge_ncc, edge_orientation, samples)) =
+                focus_overlap_quality(&images[source], &images[target], &source_to_target)
+            else {
+                continue;
+            };
+            let scale = source_to_target[(0, 0)].abs();
+            let accepted = focus_compatible_focal_length(&images[source], &images[target])
+                && scale.is_finite()
+                && (0.82..=1.18).contains(&scale)
+                && overlap >= 0.10
+                && samples >= 120
+                && intensity_ncc >= 0.45
+                && edge_ncc >= -0.10
+                && edge_orientation >= -0.10;
+            let score = intensity_ncc + edge_ncc.max(-0.10) + edge_orientation.max(-0.10);
+            if score > best_score {
+                best_score = score;
+                best_summary = Some((
+                    source,
+                    target,
+                    scale,
+                    overlap,
+                    intensity_ncc,
+                    edge_ncc,
+                    edge_orientation,
+                    samples,
+                ));
+            }
+            if accepted {
+                accepted_overlap = Some(accepted_overlap.map_or(overlap, |best| best.max(overlap)));
+            }
+        }
+        if let Some(overlap) = accepted_overlap {
+            valid_relations += 1;
+            connectivity.union(left_group, right_group);
+            overlap_values.push(overlap);
+        } else if let Some((
+            source,
+            target,
+            scale,
+            overlap,
+            intensity_ncc,
+            edge_ncc,
+            edge_orientation,
+            samples,
+        )) = best_summary
+        {
+            println!(
+                "  - Focus station relation rejected '{}'<->'{}': scale {:.3}, overlap {:.1}%, NCC {:.3}, edges {:.3}/{:.3}, samples {}",
+                Path::new(&images[source].filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                Path::new(&images[target].filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                scale,
+                overlap * 100.0,
+                intensity_ncc,
+                edge_ncc,
+                edge_orientation,
+                samples,
+            );
+        }
+    }
+    let mut component_sizes = HashMap::<usize, usize>::new();
+    for group in 0..groups.len() {
+        *component_sizes.entry(connectivity.find(group)).or_default() += 1;
+    }
+    let connected_groups = component_sizes.values().copied().max().unwrap_or(0);
+    let median_overlap = median_value(&mut overlap_values).unwrap_or(0.0);
+    (
+        connected_groups,
+        groups.len(),
+        valid_relations,
+        candidate_relations,
+        median_overlap,
+    )
+}
+
+fn focus_capture_group_geometry_passes(
+    connected_groups: usize,
+    total_groups: usize,
+    valid_relations: usize,
+    median_overlap: f64,
+) -> bool {
+    total_groups > 1
+        && connected_groups == total_groups
+        && valid_relations + 1 >= total_groups
+        && median_overlap >= 0.25
+}
+
 fn focus_rescue_match_is_verified(
     source: &ImageInfo,
     target: &ImageInfo,
@@ -3687,13 +3841,20 @@ fn focus_capture_geometry_passes(
     }
     let min_scale = scales.iter().copied().fold(f64::INFINITY, f64::min);
     let max_scale = scales.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    // Long flat-art scans do not need perspective correction. A much tighter
-    // scale envelope rejects projective drift while retaining modest focus
-    // breathing inside a camera station.
-    let scale_ok = min_scale >= 0.90 && max_scale <= 1.10 && median_value(&mut scales).is_some();
+    let Some(median_scale) = median_value(&mut scales) else {
+        return false;
+    };
+    // Absolute scale depends on which source becomes the graph reference and
+    // legitimately accumulates when a long scan is photographed from several
+    // distances. Cross-station pixel agreement and graph connectivity are
+    // validated separately. Keep this as an outlier guard, not as an
+    // assumption that every camera station has nearly identical magnification.
+    let minimum_allowed = median_scale * 0.75;
+    let maximum_allowed = median_scale * 1.30;
+    let scale_ok = min_scale >= minimum_allowed && max_scale <= maximum_allowed;
     if !scale_ok {
         println!(
-            "  - Focus geometry scale range rejected: {min_scale:.3}..{max_scale:.3} (expected 0.900..1.100)"
+            "  - Focus geometry scale range rejected: {min_scale:.3}..{max_scale:.3} around median {median_scale:.3} (expected {minimum_allowed:.3}..{maximum_allowed:.3})"
         );
     }
     scale_ok
@@ -6099,8 +6260,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             retained_full_images.insert(image.id, full_image);
         }
     }
-    let stitched_images_info: Vec<&ImageInfo> =
+    let mut stitched_images_info: Vec<&ImageInfo> =
         ordered_indices.iter().map(|&i| &image_data[i]).collect();
+    if let Some(group_ids) = focus_capture_group_ids.as_ref() {
+        order_focus_render_sources_by_capture_group(&mut stitched_images_info, group_ids);
+    }
     let unstitched_count = image_data.len() - stitched_images_info.len();
     if unstitched_count > 0 {
         let stitched_indices = ordered_indices.iter().copied().collect::<HashSet<_>>();
@@ -8684,6 +8848,7 @@ fn focus_match_is_capture_station_link(
         .zip(trailing_capture_number(&target.filename))
         .is_none_or(|(left, right)| left.abs_diff(right) == 1);
     consecutive
+        && match_info.points.len() >= FOCUS_LOCAL_MODEL_MIN_INLIERS
         && focus_compatible_focal_length(source, target)
         && focus_match_center_motion_ratio(source, target, match_info)
             .is_some_and(|motion| motion <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO)
@@ -8692,6 +8857,63 @@ fn focus_match_is_capture_station_link(
             source.dimensions(),
             target.dimensions(),
         ) >= FOCUS_BRACKET_MIN_OVERLAP_SUPPORT
+}
+
+fn split_focus_local_component_by_motion(
+    mut component: Vec<usize>,
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> Vec<Vec<usize>> {
+    component
+        .sort_by(|left, right| natural_path_cmp(&images[*left].filename, &images[*right].filename));
+    let mut groups = Vec::new();
+    let mut current = Vec::new();
+    let mut anchor_to_previous = Matrix3::identity();
+    for image_index in component {
+        let can_join = current.last().copied().is_some_and(|previous| {
+            if current.len() >= FOCUS_BRACKET_MAX_COMPONENT_SOURCES {
+                return false;
+            }
+            let Some((_, previous_to_current)) =
+                focus_stack_link_transform(matches, previous, image_index)
+            else {
+                return false;
+            };
+            let anchor_to_current = previous_to_current * anchor_to_previous;
+            let anchor = current[0];
+            let anchor_center = Point2::new(
+                images[anchor].width as f64 * 0.5,
+                images[anchor].height as f64 * 0.5,
+            );
+            let current_center = Point2::new(
+                images[image_index].width as f64 * 0.5,
+                images[image_index].height as f64 * 0.5,
+            );
+            let scale = images[anchor]
+                .width
+                .max(images[anchor].height)
+                .max(images[image_index].width.max(images[image_index].height))
+                .max(1) as f64;
+            let within_station =
+                transformed_point(&anchor_to_current, anchor_center).is_some_and(|mapped| {
+                    (mapped - current_center).norm() / scale
+                        <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO
+                });
+            if within_station {
+                anchor_to_previous = anchor_to_current;
+            }
+            within_station
+        });
+        if !current.is_empty() && !can_join {
+            groups.push(std::mem::take(&mut current));
+            anchor_to_previous = Matrix3::identity();
+        }
+        current.push(image_index);
+    }
+    if !current.is_empty() {
+        groups.push(current);
+    }
+    groups
 }
 
 fn focus_local_bracket_components(
@@ -8715,9 +8937,8 @@ fn focus_local_bracket_components(
     }
     let mut components = components
         .into_values()
-        .filter(|component| {
-            component.len() >= 2 && component.len() <= FOCUS_BRACKET_MAX_COMPONENT_SOURCES
-        })
+        .flat_map(|component| split_focus_local_component_by_motion(component, images, matches))
+        .filter(|component| component.len() >= 2)
         .collect::<Vec<_>>();
     for component in &mut components {
         component.sort_by(|left, right| {
@@ -8982,12 +9203,40 @@ fn focus_capture_groups(
             .or_default()
             .push(image_index);
     }
-    let mut components = components_by_root.into_values().collect::<Vec<_>>();
-    if components
-        .iter()
-        .any(|component| component.len() > FOCUS_BRACKET_MAX_COMPONENT_SOURCES)
-    {
-        return None;
+    let mut components = Vec::new();
+    for mut component in components_by_root.into_values() {
+        component.sort_by(|left, right| {
+            natural_path_cmp(&images[*left].filename, &images[*right].filename)
+        });
+        let mut current = Vec::new();
+        let mut anchor_center = None;
+        for image_index in component {
+            let image = &images[image_index];
+            let world_center = locked_homographies.get(&image.id).and_then(|pose| {
+                transformed_point(
+                    pose,
+                    Point2::new(image.width as f64 * 0.5, image.height as f64 * 0.5),
+                )
+            });
+            let scale = image.width.max(image.height).max(1) as f64;
+            let can_join = current.len() < FOCUS_BRACKET_MAX_COMPONENT_SOURCES
+                && anchor_center.zip(world_center).is_none_or(
+                    |(anchor, center): (Point2<f64>, Point2<f64>)| {
+                        (anchor - center).norm() / scale <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO
+                    },
+                );
+            if !current.is_empty() && !can_join {
+                components.push(std::mem::take(&mut current));
+                anchor_center = None;
+            }
+            if current.is_empty() {
+                anchor_center = world_center;
+            }
+            current.push(image_index);
+        }
+        if !current.is_empty() {
+            components.push(current);
+        }
     }
     components.sort_by(|left, right| {
         natural_path_cmp(&images[left[0]].filename, &images[right[0]].filename)
@@ -9012,6 +9261,21 @@ fn focus_capture_groups(
         });
     }
     Some((groups, group_for_image))
+}
+
+fn order_focus_render_sources_by_capture_group(
+    images: &mut [&ImageInfo],
+    capture_group_ids: &HashMap<usize, u8>,
+) {
+    images.sort_by(|left, right| {
+        capture_group_ids
+            .get(&left.id)
+            .copied()
+            .unwrap_or(u8::MAX)
+            .cmp(&capture_group_ids.get(&right.id).copied().unwrap_or(u8::MAX))
+            .then_with(|| natural_path_cmp(&left.filename, &right.filename))
+            .then_with(|| left.id.cmp(&right.id))
+    });
 }
 
 fn solve_focus_group_translation_poses(
@@ -9444,10 +9708,33 @@ fn solve_focus_capture_group_poses(
             images[source_index].dimensions(),
             images[target_index].dimensions(),
         );
+        let dense_quality = focus_overlap_quality(
+            &images[source_index],
+            &images[target_index],
+            &match_info.homography,
+        );
+        let alignment_is_measurable = images[source_index].alignment_image.width() >= 32
+            && images[source_index].alignment_image.height() >= 32
+            && images[target_index].alignment_image.width() >= 32
+            && images[target_index].alignment_image.height() >= 32;
+        if alignment_is_measurable
+            && !dense_quality.is_some_and(|(intensity_ncc, edge_ncc, edge_orientation, samples)| {
+                samples >= 120
+                    && intensity_ncc >= 0.45
+                    && edge_ncc >= -0.10
+                    && edge_orientation >= -0.10
+            })
+        {
+            continue;
+        }
+        let dense_weight = dense_quality.map_or(1.0, |(intensity, edge, orientation, _)| {
+            0.25 + intensity.max(0.0) + 0.5 * edge.max(0.0) + 0.25 * orientation.max(0.0)
+        });
         let quality = (match_info.inliers.max(match_info.points.len()) as f64).sqrt()
             * precision
             * (0.25 + 0.75 * spatial)
-            * (0.25 + 0.75 * overlap);
+            * (0.25 + 0.75 * overlap)
+            * dense_weight;
         if quality.is_finite() && quality > 0.0 {
             candidates
                 .entry(key)
@@ -9540,22 +9827,21 @@ fn solve_focus_capture_group_poses(
             );
         }
     }
-    // The image-level pose graph can be pulled toward a repeated character.
-    // Once multiple independent bracket members agree on a group relation,
-    // use those full planar relations (not only their translation residuals)
-    // to seed the camera-group geometry. A maximum-confidence tree avoids
-    // averaging incompatible loop edges, and an incomplete tree falls back to
-    // the established image-level poses.
-    let mut consensus_edges = group_edges
-        .iter()
-        .filter(|edge| edge.4 >= 2)
-        .copied()
-        .collect::<Vec<_>>();
-    consensus_edges.sort_by(|left, right| right.0.total_cmp(&left.0));
+    // Preserve the measured scale, rotation, and mild perspective between
+    // camera stations. Flattening these relations to pure translations creates
+    // rectangular steps when the camera distance changes across a large scan.
+    // Multi-layer consensus edges are preferred; a dense-pixel-verified single
+    // edge may connect a low-texture boundary that only one focus layer sees.
+    let mut trusted_edges = group_edges.clone();
+    trusted_edges.sort_by(|left, right| {
+        (right.4 >= 2)
+            .cmp(&(left.4 >= 2))
+            .then_with(|| right.0.total_cmp(&left.0))
+    });
     let mut group_dsu = Dsu::new(groups.len());
     let mut group_adjacency = HashMap::<usize, Vec<(usize, Matrix3<f64>)>>::new();
     let mut tree_edges = 0usize;
-    for &(_, left_group, right_group, left_to_right, _, _) in &consensus_edges {
+    for &(_, left_group, right_group, left_to_right, _, _) in &trusted_edges {
         if group_dsu.find(left_group) == group_dsu.find(right_group) {
             continue;
         }
@@ -9590,6 +9876,33 @@ fn solve_focus_capture_group_poses(
             group_poses[neighbor] = Some(current_pose * neighbor_to_current);
             pending.push_back(neighbor);
         }
+    }
+    if tree_edges + 1 == groups.len() && group_poses.iter().all(Option::is_some) {
+        let mut solved = HashMap::new();
+        for (group_index, group) in groups.iter().enumerate() {
+            let group_pose = group_poses[group_index].unwrap();
+            for &image_index in &group.members {
+                let replacement = group_pose * group.local_to_anchor[&image_index];
+                if replacement.try_inverse().is_none()
+                    || !homography_preserves_focus_orientation(
+                        &replacement,
+                        images[image_index].dimensions(),
+                    )
+                {
+                    println!(
+                        "  - Focus capture-group planar geometry produced an unstable pose for '{}'",
+                        images[image_index].filename
+                    );
+                    return locked_homographies.clone();
+                }
+                solved.insert(images[image_index].id, replacement);
+            }
+        }
+        println!(
+            "  - Focus capture-group planar geometry seeded from {tree_edges} pixel-verified relation(s)"
+        );
+        *translation_geometry_verified = true;
+        return solved;
     }
     if let Some(mut translation_poses) = solve_focus_group_translation_poses(
         images,
@@ -10532,19 +10845,16 @@ fn build_focus_stack_stitching_order(
         let locked_homographies =
             lock_focus_local_bracket_poses(images, matches, &optimized_homographies);
         let mut translation_geometry_verified = false;
-        let solved = solve_focus_capture_group_poses(
+        solve_focus_capture_group_poses(
             images,
             matches,
             &locked_homographies,
             reference_index,
             &mut translation_geometry_verified,
-        );
-        (solved, translation_geometry_verified)
+        )
     } else {
-        (optimized_homographies.clone(), false)
+        optimized_homographies.clone()
     };
-    let (optimized_or_locked_homographies, translation_geometry_verified) =
-        optimized_or_locked_homographies;
     let (valid_geometry_edges, total_geometry_edges, median_overlap, median_scale) =
         focus_capture_geometry_diagnostics(
             images,
@@ -10556,19 +10866,41 @@ fn build_focus_stack_stitching_order(
         median_overlap * 100.0,
         median_scale,
     );
-    let verified_edge_count = if translation_geometry_verified {
-        total_geometry_edges
-    } else {
-        valid_geometry_edges
-    };
+    let (
+        connected_group_count,
+        total_group_count,
+        valid_group_relations,
+        candidate_group_relations,
+        median_group_overlap,
+    ) = focus_capture_groups(images, matches, &optimized_or_locked_homographies)
+        .map(|(groups, _)| {
+            focus_capture_group_geometry_diagnostics(
+                images,
+                matches,
+                &groups,
+                &optimized_or_locked_homographies,
+            )
+        })
+        .unwrap_or((0, 0, 0, 0, 0.0));
+    if large_scan {
+        println!(
+            "  - Focus station validation: {connected_group_count}/{total_group_count} connected groups, {valid_group_relations}/{candidate_group_relations} verified relations, median overlap {:.1}%",
+            median_group_overlap * 100.0,
+        );
+    }
     let global_homographies = if !large_scan
-        || focus_capture_geometry_passes(
+        || (focus_capture_geometry_passes(
             images,
-            verified_edge_count,
+            valid_geometry_edges,
             total_geometry_edges,
             median_overlap,
             &optimized_or_locked_homographies,
-        ) {
+        ) && focus_capture_group_geometry_passes(
+            connected_group_count,
+            total_group_count,
+            valid_group_relations,
+            median_group_overlap,
+        )) {
         optimized_or_locked_homographies
     } else {
         // The long-scan refinement can be pulled by a repeated character or
@@ -10584,12 +10916,37 @@ fn build_focus_stack_stitching_order(
             retry_overlap * 100.0,
             retry_scale,
         );
+        let (
+            retry_connected_groups,
+            retry_total_groups,
+            retry_valid_relations,
+            retry_candidate_relations,
+            retry_group_overlap,
+        ) = focus_capture_groups(images, matches, &optimized_homographies)
+            .map(|(groups, _)| {
+                focus_capture_group_geometry_diagnostics(
+                    images,
+                    matches,
+                    &groups,
+                    &optimized_homographies,
+                )
+            })
+            .unwrap_or((0, 0, 0, 0, 0.0));
+        println!(
+            "  - Focus station retry: {retry_connected_groups}/{retry_total_groups} connected groups, {retry_valid_relations}/{retry_candidate_relations} verified relations, median overlap {:.1}%",
+            retry_group_overlap * 100.0,
+        );
         if focus_capture_geometry_passes(
             images,
             retry_valid_edges,
             retry_total_edges,
             retry_overlap,
             &optimized_homographies,
+        ) && focus_capture_group_geometry_passes(
+            retry_connected_groups,
+            retry_total_groups,
+            retry_valid_relations,
+            retry_group_overlap,
         ) {
             optimized_homographies
         } else {
@@ -12345,6 +12702,14 @@ mod alignment_tests {
         ));
     }
 
+    #[test]
+    fn focus_station_geometry_guard_does_not_hide_broken_boundaries() {
+        assert!(focus_capture_group_geometry_passes(25, 25, 24, 0.50));
+        assert!(!focus_capture_group_geometry_passes(24, 25, 24, 0.50));
+        assert!(!focus_capture_group_geometry_passes(25, 25, 23, 0.50));
+        assert!(!focus_capture_group_geometry_passes(25, 25, 24, 0.20));
+    }
+
     fn identity_match(inliers: usize) -> MatchInfo {
         MatchInfo {
             homography: Matrix3::identity(),
@@ -12442,18 +12807,18 @@ mod alignment_tests {
         }
     }
 
-    fn observed_translation_match(dx: f64, dy: f64, inliers: usize) -> MatchInfo {
+    fn observed_transform_match(homography: Matrix3<f64>, inliers: usize) -> MatchInfo {
         let points = (0..4)
             .flat_map(|row| {
                 (0..4).map(move |column| {
                     let source =
                         Point2::new(140.0 + column as f64 * 220.0, 140.0 + row as f64 * 220.0);
-                    (source, source + nalgebra::Vector2::new(dx, dy))
+                    (source, transformed_point(&homography, source).unwrap())
                 })
             })
             .collect::<Vec<_>>();
         MatchInfo {
-            homography: Matrix3::new(1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0),
+            homography,
             inliers,
             sequence_bridge: false,
             coarse_bridge: false,
@@ -12463,6 +12828,13 @@ mod alignment_tests {
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
         }
+    }
+
+    fn observed_translation_match(dx: f64, dy: f64, inliers: usize) -> MatchInfo {
+        observed_transform_match(
+            Matrix3::new(1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0),
+            inliers,
+        )
     }
 
     #[test]
@@ -12735,6 +13107,90 @@ mod alignment_tests {
     }
 
     #[test]
+    fn capture_groups_keep_long_focus_brackets() {
+        let images = (0..12)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = (0..images.len() - 1)
+            .map(|index| ((index, index + 1), observed_translation_match(2.0, 1.0, 80)))
+            .collect::<HashMap<_, _>>();
+        let locked = images
+            .iter()
+            .map(|image| (image.id, Matrix3::identity()))
+            .collect::<HashMap<_, _>>();
+
+        let (groups, group_for_image) = focus_capture_groups(&images, &matches, &locked).unwrap();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].members, (0..12).collect::<Vec<_>>());
+        assert_eq!(group_for_image, vec![0; 12]);
+    }
+
+    #[test]
+    fn capture_groups_split_accumulated_scan_motion() {
+        let images = (0..12)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = (0..images.len() - 1)
+            .map(|index| {
+                (
+                    (index, index + 1),
+                    observed_translation_match(20.0, 0.0, 80),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        let groups = focus_local_bracket_components(&images, &matches);
+
+        assert!(groups.len() > 1);
+        assert!(groups.iter().all(|group| group.len() <= 4));
+        assert_eq!(groups.iter().map(Vec::len).sum::<usize>(), images.len());
+
+        let locked = images
+            .iter()
+            .enumerate()
+            .map(|(index, image)| {
+                (
+                    image.id,
+                    Matrix3::new(1.0, 0.0, index as f64 * 20.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let (groups, _) = focus_capture_groups(&images, &matches, &locked).unwrap();
+        assert!(groups.len() > 1);
+        assert!(groups.iter().all(|group| group.members.len() <= 4));
+    }
+
+    #[test]
+    fn focus_render_order_finishes_each_capture_group_before_the_next() {
+        let images = (0..6)
+            .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
+            .collect::<Vec<_>>();
+        let groups = HashMap::from([(0, 1), (1, 1), (2, 1), (3, 2), (4, 2), (5, 2)]);
+        let mut render_order = vec![
+            &images[4], &images[1], &images[3], &images[0], &images[5], &images[2],
+        ];
+
+        order_focus_render_sources_by_capture_group(&mut render_order, &groups);
+
+        assert_eq!(
+            render_order
+                .iter()
+                .map(|image| image.id)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3, 4, 5]
+        );
+    }
+
+    #[test]
     fn capture_groups_absorb_an_unmatched_layer_by_solved_center() {
         let images = (0..5)
             .map(|index| {
@@ -12886,6 +13342,45 @@ mod alignment_tests {
         assert!((solved[&2][(0, 2)] + 240.0).abs() < 1e-3);
         assert!((solved[&2][(1, 2)] + 20.0).abs() < 1e-3);
         assert!((solved[&3][(0, 2)] + 245.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn focus_capture_group_solver_preserves_station_scale() {
+        let mut images = vec![
+            focus_test_image(0, "DSC_1001.NEF"),
+            focus_test_image(1, "DSC_1002.NEF"),
+            focus_test_image(2, "DSC_1010.NEF"),
+            focus_test_image(3, "DSC_1011.NEF"),
+        ];
+        for image in &mut images {
+            image.focal_length_35mm = Some(90.0);
+        }
+        let station_transform = Matrix3::new(0.92, 0.01, 240.0, -0.01, 0.92, 20.0, 0.0, 0.0, 1.0);
+        let mut consensus_bridge = observed_transform_match(station_transform, 24);
+        consensus_bridge.coarse_bridge = true;
+        consensus_bridge.top_candidate_points = consensus_bridge.points.clone();
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(5.0, 0.0, 40)),
+            ((2, 3), observed_translation_match(5.0, 0.0, 40)),
+            ((0, 2), consensus_bridge),
+        ]);
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let locked = HashMap::from([
+            (0, translation(0.0)),
+            (1, translation(-5.0)),
+            (2, translation(-60.0)),
+            (3, translation(-65.0)),
+        ]);
+
+        let mut geometry_verified = false;
+        let solved =
+            solve_focus_capture_group_poses(&images, &matches, &locked, 0, &mut geometry_verified);
+        assert!(geometry_verified);
+
+        let expected = station_transform.try_inverse().unwrap();
+        assert!((solved[&2][(0, 0)] - expected[(0, 0)]).abs() < 1e-6);
+        assert!((solved[&2][(1, 1)] - expected[(1, 1)]).abs() < 1e-6);
+        assert!((solved[&2][(0, 1)] - expected[(0, 1)]).abs() < 1e-6);
     }
 
     #[test]

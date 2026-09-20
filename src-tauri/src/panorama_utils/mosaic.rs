@@ -39,6 +39,13 @@ const STREAMING_HARMONIZATION_LONG_SIDE: u32 = 2400;
 // a visible halo even though the gain itself is constant per capture group.
 const STREAMING_GROUP_GAIN_FEATHER: f32 = 3.0;
 const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.45;
+// Camera-position lighting varies smoothly across a frame, so a seam needs a
+// much broader low-frequency transition than the ownership antialiasing.
+// These radii operate on the bounded 2400px analysis image.
+const STREAMING_ILLUMINATION_LOCAL_SIGMA: f32 = 16.0;
+const STREAMING_ILLUMINATION_CONTINUOUS_SIGMA: f32 = 180.0;
+const STREAMING_ILLUMINATION_MIN_GAIN: f64 = 0.78;
+const STREAMING_ILLUMINATION_MAX_GAIN: f64 = 1.28;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
@@ -51,6 +58,8 @@ const STREAMING_TILE_SIZE: u32 = 1024;
 // bridges, so using that flag alone made large, valid focus mosaics allocate
 // the entire sparse bounding box in memory.
 const STREAMING_CANVAS_MIN_PIXELS: u64 = 120_000_000;
+
+type GroupToneRelation = ((u8, u8), [f64; 3], f64);
 
 struct StreamingMosaicStore {
     temp_dir: tempfile::TempDir,
@@ -321,6 +330,7 @@ impl StreamingMosaicStore {
 fn streaming_seam_harmonization(
     store: &StreamingMosaicStore,
     crop: (u32, u32, u32, u32),
+    measured_relations: &[GroupToneRelation],
 ) -> Result<Option<(Rgb32FImage, f64)>, String> {
     let (left, top, width, height) = crop;
     let scale = (width.max(height) as f64 / STREAMING_HARMONIZATION_LONG_SIDE as f64).max(1.0);
@@ -419,11 +429,11 @@ fn streaming_seam_harmonization(
             }
         }
     }
-    let pair_offsets: Vec<((u8, u8), [f64; 3], f64)> = pair_samples
+    let mut pair_offsets: HashMap<(u8, u8), ([f64; 3], f64)> = pair_samples
         .into_iter()
         .filter_map(|(pair, samples)| {
             (samples.len() >= 12).then(|| {
-                let offset = std::array::from_fn(|channel| {
+                let offset: [f64; 3] = std::array::from_fn(|channel| {
                     median(
                         &mut samples
                             .iter()
@@ -431,10 +441,19 @@ fn streaming_seam_harmonization(
                             .collect::<Vec<_>>(),
                     )
                 });
-                (pair, offset, samples.len().min(512) as f64)
+                (pair, (offset, samples.len().min(512) as f64))
             })
         })
         .collect();
+    // Same-coordinate overlap measurements are more reliable than probing
+    // opposite sides of a seam, where the painting content can differ.
+    for &(pair, offset, weight) in measured_relations {
+        pair_offsets.insert(pair, (offset, weight));
+    }
+    let pair_offsets = pair_offsets
+        .into_iter()
+        .map(|(pair, (offset, weight))| (pair, offset, weight))
+        .collect::<Vec<_>>();
     let anchor = (1u8..=u8::MAX)
         .max_by_key(|&id| owner_pixels[id as usize])
         .unwrap_or(1);
@@ -487,6 +506,76 @@ fn streaming_seam_harmonization(
     Ok(Some((gains, scale)))
 }
 
+fn streaming_group_tone_relations_from_analysis(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    base_owner: &GrayImage,
+    candidate: &Rgb32FImage,
+    candidate_mask: &GrayImage,
+    capture_group_id: u8,
+) -> Vec<GroupToneRelation> {
+    let width = base.width().min(candidate.width()).min(base_owner.width());
+    let height = base
+        .height()
+        .min(candidate.height())
+        .min(base_owner.height());
+    let mut samples = HashMap::<(u8, u8), Vec<[f64; 3]>>::new();
+    for y in (0..height).step_by(4) {
+        for x in (0..width).step_by(4) {
+            if base_mask.get_pixel(x, y)[0] == 0 || candidate_mask.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            let base_group = base_owner.get_pixel(x, y)[0];
+            if base_group == 0 || base_group == capture_group_id {
+                continue;
+            }
+            let current = *base.get_pixel(x, y);
+            let source = *candidate.get_pixel(x, y);
+            let current_luma = luma(current);
+            let source_luma = luma(source);
+            if current_luma < 0.045
+                || source_luma < 0.045
+                || (current_luma - source_luma).abs() > 0.22
+                || current
+                    .0
+                    .iter()
+                    .chain(source.0.iter())
+                    .any(|value| !(0.015..0.97).contains(value))
+            {
+                continue;
+            }
+            let (pair, sign) = if base_group < capture_group_id {
+                ((base_group, capture_group_id), 1.0)
+            } else {
+                ((capture_group_id, base_group), -1.0)
+            };
+            samples
+                .entry(pair)
+                .or_default()
+                .push(std::array::from_fn(|channel| {
+                    (f64::from(source[channel] / current[channel]).ln() * sign)
+                        .clamp(-STREAMING_GROUP_GAIN_MAX_LOG, STREAMING_GROUP_GAIN_MAX_LOG)
+                }));
+        }
+    }
+    samples
+        .into_iter()
+        .filter_map(|(pair, values)| {
+            (values.len() >= 24).then(|| {
+                let offset = std::array::from_fn(|channel| {
+                    median(
+                        &mut values
+                            .iter()
+                            .map(|value| value[channel])
+                            .collect::<Vec<_>>(),
+                    )
+                });
+                (pair, offset, values.len().min(2048) as f64)
+            })
+        })
+        .collect()
+}
+
 fn apply_streaming_seam_harmonization(output: &mut Rgb32FImage, gains: &Rgb32FImage, scale: f64) {
     let width = output.width() as usize;
     output
@@ -534,8 +623,8 @@ fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
             Rgb([pixel[0] / divisor, pixel[1] / divisor, pixel[2] / divisor])
         })
     };
-    let local_low = normalized_blur(3.0);
-    let continuous_low = normalized_blur(22.0);
+    let local_low = normalized_blur(STREAMING_ILLUMINATION_LOCAL_SIGMA);
+    let continuous_low = normalized_blur(STREAMING_ILLUMINATION_CONTINUOUS_SIGMA);
     let gains = Rgb32FImage::from_fn(width, height, |x, y| {
         if valid.get_pixel(x, y)[0] == 0.0 {
             return Rgb([1.0; 3]);
@@ -543,7 +632,10 @@ fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
         let local = luma(*local_low.get_pixel(x, y));
         let continuous = luma(*continuous_low.get_pixel(x, y));
         let gain = if local > 0.025 && continuous > 0.025 {
-            (continuous / local).clamp(0.72, 1.45) as f32
+            (continuous / local).clamp(
+                STREAMING_ILLUMINATION_MIN_GAIN,
+                STREAMING_ILLUMINATION_MAX_GAIN,
+            ) as f32
         } else {
             1.0
         };
@@ -2250,6 +2342,7 @@ where
 {
     let store = StreamingMosaicStore::new(width, height)?;
     let mut seen_capture_groups = HashSet::new();
+    let mut group_tone_relations = Vec::<GroupToneRelation>::new();
     println!(
         "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
@@ -2349,18 +2442,25 @@ where
             }
             let (candidate, candidate_mask) =
                 streaming_candidate_analysis(&sampler, analysis_width, analysis_height);
+            if first_capture_group_layer {
+                group_tone_relations.extend(streaming_group_tone_relations_from_analysis(
+                    &base_analysis,
+                    &base_analysis_mask,
+                    &base_analysis_owner,
+                    &candidate,
+                    &candidate_mask,
+                    capture_group_id,
+                ));
+            }
             // A focus bracket may contain several camera positions.  Once a
             // position has entered the mosaic, estimate its colour correction
             // only from overlap owned by that same position.  Comparing a
             // later position against a neighbouring group's pixels compounds
             // exposure drift into broad vertical bands.
             let tone = if first_capture_group_layer {
-                // The first layer of a new camera position overlaps different
-                // scene content from older stations. Treating that content
-                // difference as a spatial colour ratio compounds exposure
-                // corrections into source-sized dark/bright blocks. Leave it
-                // photometrically untouched here; the final owner-boundary
-                // solver estimates one robust correction per capture group.
+                // Solve all camera-position gains together after ownership is
+                // final. Applying them here would accumulate drift along the
+                // scan sequence.
                 Field::new(analysis_width, analysis_height, 112.0)
             } else {
                 streaming_tone_field_from_analysis(
@@ -2489,7 +2589,8 @@ where
     // after ownership is final. The solver uses only blurred, non-black paper
     // samples across robust owner relations and feathers a bounded constant
     // gain; it never averages the high-frequency painting detail.
-    if let Some((gains, scale)) = streaming_seam_harmonization(&store, crop)? {
+    if let Some((gains, scale)) = streaming_seam_harmonization(&store, crop, &group_tone_relations)?
+    {
         apply_streaming_seam_harmonization(&mut output, &gains, scale);
     }
     smooth_streaming_low_frequency_illumination(&mut output);
@@ -2888,7 +2989,7 @@ mod tests {
         store
             .save_owner_tile(0, 0, &owner)
             .expect("owner should be writable");
-        let (gains, scale) = streaming_seam_harmonization(&store, (0, 0, 256, 64))
+        let (gains, scale) = streaming_seam_harmonization(&store, (0, 0, 256, 64), &[])
             .expect("harmonization should build")
             .expect("two owners should create a seam field");
         let mut output = rgb.clone();
@@ -2950,6 +3051,36 @@ mod tests {
     }
 
     #[test]
+    fn same_coordinate_group_relations_recover_exposure_offset() {
+        let (width, height) = (320, 160);
+        let base = Rgb32FImage::from_fn(width, height, |x, y| {
+            let detail = if (x / 5 + y / 5) % 2 == 0 {
+                0.025
+            } else {
+                -0.025
+            };
+            Rgb([0.42 + detail, 0.39 + detail, 0.34 + detail])
+        });
+        let expected = [0.12f64, 0.08, -0.03];
+        let candidate = Rgb32FImage::from_fn(width, height, |x, y| {
+            let source = base.get_pixel(x, y);
+            Rgb(std::array::from_fn(|channel| {
+                source[channel] * expected[channel].exp() as f32
+            }))
+        });
+        let mask = GrayImage::from_pixel(width, height, Luma([255]));
+        let owner = GrayImage::from_pixel(width, height, Luma([1]));
+        let relations = streaming_group_tone_relations_from_analysis(
+            &base, &mask, &owner, &candidate, &mask, 2,
+        );
+        assert_eq!(relations.len(), 1);
+        assert_eq!(relations[0].0, (1, 2));
+        for (actual, expected) in relations[0].1.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 0.01, "{actual} vs {expected}");
+        }
+    }
+
+    #[test]
     #[ignore = "applies production low-frequency correction to a supplied real preview"]
     fn real_preview_low_frequency_correction_from_env() {
         let input = std::env::var_os("RAW_EDITOR_MOSAIC_PREVIEW_INPUT")
@@ -2982,7 +3113,7 @@ mod tests {
         store
             .save_owner_tile(0, 0, &owner)
             .expect("owner should be writable");
-        let (gains, _) = streaming_seam_harmonization(&store, (0, 0, 256, 64))
+        let (gains, _) = streaming_seam_harmonization(&store, (0, 0, 256, 64), &[])
             .expect("harmonization should build")
             .expect("two owners should create a gain field");
         let paper_gain = gains.get_pixel(30, 32)[0];
