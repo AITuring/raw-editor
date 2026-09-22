@@ -1,0 +1,71 @@
+{
+  "reference": "/Users/dp/Downloads/\u4e66\u753b\u62fc\u56fe/\u9606\u82d1\u5973\u4ed9/\u672a\u6807\u9898-9-yuanshi.jpg",
+  "actual": "/private/tmp/langyuan-84-canvas-switch.app.jpg",
+  "homography_reference_to_actual": [
+    [
+      0.9773061614396952,
+      -0.2097463571327873,
+      -3512.360286601297
+    ],
+    [
+      0.04856274375807587,
+      0.91923781686803,
+      -2886.74129531311
+    ],
+    [
+      1.8267023662485073e-06,
+      1.7476619413746479e-06,
+      1.0
+    ]
+  ],
+  "matches": 2857,
+  "inliers": 554,
+  "rois": [
+    {
+      "name": "faces",
+      "ref_roi": [
+        19782,
+        5477,
+        720,
+        720
+      ],
+      "actual_bbox": [
+        13866,
+        2969,
+        14689,
+        3634
+      ]
+    },
+    {
+      "name": "inscription",
+      "ref_roi": [
+        30628,
+        2705,
+        720,
+        720
+      ],
+      "actual_bbox": [
+        24200,
+        1021,
+        25010,
+        1681
+      ]
+    },
+    {
+      "name": "waves",
+      "ref_roi": [
+        14273,
+        8130,
+        720,
+        720
+      ],
+      "actual_bbox": [
+        8235,
+        5072,
+        9062,
+        5735
+      ]
+    }
+  ],
+  "usage": "QA only; reference never feeds production alignment or rendering"
+}

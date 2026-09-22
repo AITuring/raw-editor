@@ -1,3 +1,4 @@
+use super::photometric::{PhotometricModel, PhotometricOptions, calibrate_overlap_photometry};
 use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
 use image::{GrayImage, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
@@ -16,8 +17,12 @@ const PANORAMA_GLOBAL_TONE_FIRST_BAND: usize = 5;
 // seal edges. The final canvas may be much wider than one source frame, so the
 // analysis scale is still bounded by the per-source dimension in
 // `focus_analysis_dimensions`.
-const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 2048;
-const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 24_000_000;
+// Keep enough samples for narrow brush strokes and paper weave to influence
+// focus ownership.  The analysis image is still bounded independently of the
+// full panorama, so increasing this from the old 2048px cap does not make a
+// long scan allocate one score map per full-resolution source frame.
+const FOCUS_ANALYSIS_MAX_DIMENSION: u32 = 3072;
+const FOCUS_ANALYSIS_MAX_PIXELS: u64 = 40_000_000;
 const FOCUS_DECISIVE_ADVANTAGE: f32 = 0.20;
 const FOCUS_CONFIDENCE_MARGIN: f32 = 0.04;
 const FOCUS_EDGE_PROTECTION_AT_1024: f32 = 12.0;
@@ -28,9 +33,14 @@ const FOCUS_EDGE_CLAIM_THRESHOLD: f32 = 0.08;
 // neighbour and is the main way a focus stack can become softer than either
 // input frame.
 const FOCUS_SCORE_BLUR_RADIUS_DIVISOR: f32 = 1_024.0;
-const FOCUS_SCORE_MAX_BLUR_RADIUS: usize = 4;
+// Keep the sharpness support local.  At the normal 3x analysis reduction a
+// four-pixel analysis blur covered roughly a 25px native neighbourhood and
+// made adjacent out-of-focus brush strokes contribute to one another.  A
+// two-pixel cap still suppresses sensor noise while retaining a usable
+// focus boundary for thin ink and woven paper.
+const FOCUS_SCORE_MAX_BLUR_RADIUS: usize = 2;
 const FOCUS_DECISION_COHERENCE_RADIUS_DIVISOR: f32 = 1_024.0;
-const FOCUS_DECISION_MAX_COHERENCE_RADIUS: usize = 5;
+const FOCUS_DECISION_MAX_COHERENCE_RADIUS: usize = 3;
 const FOCUS_EDGE_PROTECTION_SCALE: f32 = 0.35;
 // The broad tone transition is limited to the canvas-only low-frequency mask
 // below. Keep enough room for a source-sized exposure step to meet smoothly,
@@ -74,9 +84,18 @@ const FOCUS_COLOR_PROPAGATION_MAX_CONFIDENCE: f32 = 0.65;
 // bounded analysis image and correct only a slowly varying background field;
 // the canvas weave and all selected foreground detail remain untouched.
 const FOCUS_BACKGROUND_TONE_LOCAL_RADIUS: usize = 4;
-const FOCUS_BACKGROUND_TONE_SMOOTH_RADIUS: usize = 192;
-const FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT: f32 = 0.65;
-const FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT: f32 = 0.12;
+const FOCUS_BACKGROUND_TONE_SMOOTH_RADIUS: usize = 256;
+// Prefer a continuous canvas tone over owner-specific medians.  The selected
+// detail pixels are still copied from one source; this only changes the broad
+// illumination field that otherwise exposes virtual-tile rectangles.
+const FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT: f32 = 0.82;
+const FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT: f32 = 0.24;
+// Owner-level tone estimates are only trustworthy when the selected owner
+// contains a locally consistent canvas sample.  A whole owner may cover a
+// different painted region from the global median; use a tighter correction
+// bound and reject high-dispersion owners instead of recolouring their detail.
+const FOCUS_OWNER_TONE_MAX_ADJUSTMENT: f32 = 0.08;
+const FOCUS_OWNER_TONE_MAX_MAD: f32 = 0.045;
 const FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO: f32 = 0.018;
 // A depth layer can move by more than a pixel when its source frame is aligned
 // against the paper plane. Keep an ownership buffer around an already selected
@@ -95,7 +114,12 @@ const FOCUS_FOREGROUND_REFINEMENT_MAX_SHIFT: i32 = 32;
 // the same small translation; ambiguous texture and isolated repeated strokes
 // are deliberately left unchanged.
 const FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS: i32 = 8;
-const FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT: i32 = 16;
+// Global pose registration is intentionally conservative on a long scan, so a
+// focus layer can still arrive at the tile renderer tens or hundreds of pixels
+// away from the already selected layer. The bounded per-patch pyramid searches
+// this range before refining native pixels; a fixed +-16px window leaves
+// doubled brush strokes whenever the residual exceeds that bound.
+const FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT: i32 = 384;
 const FOCUS_FULL_RES_ALIGNMENT_GRID_SIZE: i32 = 4;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_NCC: f64 = 0.52;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN: f64 = 0.025;
@@ -285,6 +309,118 @@ pub(crate) fn output_canvas_dimensions_with_focus_warp(
     (width, height)
 }
 
+/// A fully focus-fused capture station in the coordinate system of the
+/// complete mosaic.  The tile pixels are owned by the station's focus
+/// decision; `tile_to_world` only places that result in the global planar
+/// coordinate system.  Keeping this provenance beside the pixels lets the
+/// caller perform tile-level registration and seam/ownership without falling
+/// back to the individual focus layers.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct FocusVirtualTile {
+    pub(crate) image: Rgb32FImage,
+    pub(crate) tile_to_world: Matrix3<f64>,
+    pub(crate) group_index: usize,
+    pub(crate) source_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FocusVirtualTileGeometry {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) tile_to_world: Matrix3<f64>,
+}
+
+/// Return the projected bounds needed to place one virtual tile without
+/// decoding or fusing any source pixels.  This is used by the bounded-memory
+/// compositor to create tile metadata first and render each group lazily.
+pub(crate) fn focus_stack_virtual_tile_geometry(
+    group: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+) -> Option<FocusVirtualTileGeometry> {
+    if group.is_empty() {
+        return None;
+    }
+    if group
+        .iter()
+        .any(|image| !global_homographies.contains_key(&image.id))
+    {
+        return None;
+    }
+    let (min_x, max_x, min_y, max_y) =
+        focus_output_bounds(group, global_homographies, projection, focus_warp);
+    if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
+        return None;
+    }
+    let (offset_x, width) = pixel_aligned_canvas(min_x, max_x);
+    let (offset_y, height) = pixel_aligned_canvas(min_y, max_y);
+    Some(FocusVirtualTileGeometry {
+        width,
+        height,
+        tile_to_world: Matrix3::new(1.0, 0.0, -offset_x, 0.0, 1.0, -offset_y, 0.0, 0.0, 1.0),
+    })
+}
+
+/// Fuse each capture group independently into one in-memory virtual tile.
+///
+/// Group membership is supplied by the evidence-backed capture grouping in
+/// `panorama_stitching`; this helper does not inspect filenames or assume a
+/// particular number of layers.  Every group's existing global homographies
+/// are retained, so the returned translation maps tile pixels back into the
+/// same world coordinates used by the normal pose graph.
+#[allow(dead_code)]
+pub(crate) fn focus_stack_virtual_tiles<R: Runtime, F>(
+    groups: &[&[&ImageInfo]],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<Vec<FocusVirtualTile>, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    let mut tiles = Vec::with_capacity(groups.len());
+    for (group_index, group) in groups.iter().enumerate() {
+        if group.is_empty() {
+            continue;
+        }
+        let geometry =
+            focus_stack_virtual_tile_geometry(group, global_homographies, projection, focus_warp)
+                .ok_or_else(|| {
+                format!(
+                    "Capture group {} has invalid focus-tile bounds",
+                    group_index + 1
+                )
+            })?;
+
+        // The regular focus renderer computes its own bounds and uses exactly
+        // these pixel-aligned offsets.  Render it once, then expose the
+        // inverse translation as the tile-to-world placement.
+        let image = focus_stack_stitcher(
+            group,
+            global_homographies,
+            projection,
+            focus_warp,
+            None,
+            false,
+            app_handle.clone(),
+            progress_event,
+            load_image,
+        )?;
+        tiles.push(FocusVirtualTile {
+            image,
+            tile_to_world: geometry.tile_to_world,
+            group_index,
+            source_ids: group.iter().map(|image| image.id).collect(),
+        });
+    }
+    Ok(tiles)
+}
+
 pub(super) fn transformed_image_region(
     image: &ImageInfo,
     homography: &Matrix3<f64>,
@@ -445,6 +581,51 @@ fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
 }
 
+fn apply_exposure_channel_gain(pixel: Rgb<f32>, gains: [f32; 3]) -> Rgb<f32> {
+    Rgb([
+        pixel[0] * gains[0],
+        pixel[1] * gains[1],
+        pixel[2] * gains[2],
+    ])
+}
+
+fn apply_exposure_compensation(
+    pixel: Rgb<f32>,
+    exposure: &ExposureCompensation,
+    x: u32,
+    y: u32,
+) -> Rgb<f32> {
+    apply_exposure_compensation_with_strength(pixel, exposure, x, y, 1.0)
+}
+
+fn apply_exposure_compensation_with_strength(
+    pixel: Rgb<f32>,
+    exposure: &ExposureCompensation,
+    x: u32,
+    y: u32,
+    strength: f32,
+) -> Rgb<f32> {
+    let strength = strength.clamp(0.0, 1.0);
+    if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_none() {
+        let gains = exposure.channel_gain_at(x, y).map(|gain| {
+            if gain.is_finite() && gain > 0.0 {
+                (gain.ln() * strength).exp()
+            } else {
+                1.0
+            }
+        });
+        apply_exposure_channel_gain(pixel, gains)
+    } else {
+        let gain = exposure.gain_at(x, y);
+        let gain = if gain.is_finite() && gain > 0.0 {
+            (gain.ln() * strength).exp()
+        } else {
+            1.0
+        };
+        apply_exposure_gain(pixel, gain)
+    }
+}
+
 fn panorama_detail_alpha(candidate_signed_distance: f32) -> f32 {
     if candidate_signed_distance.is_infinite() {
         return if candidate_signed_distance.is_sign_positive() {
@@ -467,18 +648,75 @@ struct ExposureOverlap<'a> {
     offset_y: f64,
 }
 
+#[derive(Clone)]
 struct ExposureCompensation {
     cell_size: u32,
     grid_width: usize,
     grid_height: usize,
     gains: Vec<f32>,
     representative_gain: f32,
+    channel_gains: Vec<[f32; 3]>,
+    representative_channel_gain: [f32; 3],
+}
+
+/// Decide whether a projected focus tile should replace the current owner at
+/// one output pixel.  Interior distance is the primary quality signal; exact
+/// ties are resolved by the stable tile identity so a compositor cannot make
+/// the visible seam depend on the order in which groups happened to load.
+fn focus_tile_ownership_should_replace(
+    current_quality: u8,
+    current_owner: u8,
+    candidate_quality: u8,
+    candidate_owner: u8,
+) -> bool {
+    current_owner == 0
+        || candidate_quality > current_quality
+        || (candidate_quality == current_quality && candidate_owner < current_owner)
 }
 
 impl ExposureCompensation {
+    /// Progressive scan compositing estimates a candidate against the current
+    /// panorama.  Applying the full ratio to the whole candidate is correct at
+    /// the overlap, but it can turn a real illumination gradient into a chain
+    /// of source-sized tone blocks in the non-overlap area.  Pull the estimate
+    /// toward one before the seam search; the seam still sees the direction of
+    /// the correction while the low-frequency field remains stable across a
+    /// long scan.  Focus-bracket fusion keeps the undamped estimator.
+    fn damped(mut self, strength: f32) -> Self {
+        let strength = strength.clamp(0.0, 1.0);
+        let damp = |value: f32| {
+            if value.is_finite() && value > 0.0 {
+                value.ln().mul_add(strength, 0.0).exp()
+            } else {
+                1.0
+            }
+        };
+        self.representative_gain = damp(self.representative_gain);
+        for gain in &mut self.gains {
+            *gain = damp(*gain);
+        }
+        for channel in &mut self.representative_channel_gain {
+            *channel = damp(*channel);
+        }
+        for gains in &mut self.channel_gains {
+            for gain in gains {
+                *gain = damp(*gain);
+            }
+        }
+        self
+    }
+
     fn gain_at(&self, x: u32, y: u32) -> f32 {
         if self.gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return 1.0;
+        }
+        // The per-cell field is useful for diagnosing vignetting, but writing
+        // it into every projected tile makes the 256px analysis cells visible
+        // as rectangular tone steps on a long scan.  The default compositor
+        // uses one robust overlap constant; spatial compensation is opt-in
+        // for captures where illumination is known to vary within a station.
+        if std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none() {
+            return self.representative_gain;
         }
         let grid_x = x as f64 / self.cell_size as f64;
         let grid_y = y as f64 / self.cell_size as f64;
@@ -493,6 +731,35 @@ impl ExposureCompensation {
         let bottom = value(x0, y1) * (1.0 - tx) + value(x1, y1) * tx;
         top * (1.0 - ty) + bottom * ty
     }
+
+    fn channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
+        if self.channel_gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
+            return [1.0; 3];
+        }
+        // RGB gains use the same conservative default as the scalar field:
+        // one robust overlap constant per candidate.  A per-cell RGB field is
+        // useful for a measured vignette, but its 256px cells can otherwise
+        // become visible chromatic rectangles across a long scan.
+        if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_some()
+            || std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none()
+        {
+            return self.representative_channel_gain;
+        }
+        let grid_x = x as f64 / self.cell_size as f64;
+        let grid_y = y as f64 / self.cell_size as f64;
+        let x0 = (grid_x.floor() as usize).min(self.grid_width - 1);
+        let y0 = (grid_y.floor() as usize).min(self.grid_height - 1);
+        let x1 = (x0 + 1).min(self.grid_width - 1);
+        let y1 = (y0 + 1).min(self.grid_height - 1);
+        let tx = (grid_x - x0 as f64) as f32;
+        let ty = (grid_y - y0 as f64) as f32;
+        let value = |gx: usize, gy: usize| self.channel_gains[gy * self.grid_width + gx];
+        std::array::from_fn(|channel| {
+            let top = value(x0, y0)[channel] * (1.0 - tx) + value(x1, y0)[channel] * tx;
+            let bottom = value(x0, y1)[channel] * (1.0 - tx) + value(x1, y1)[channel] * tx;
+            top * (1.0 - ty) + bottom * ty
+        })
+    }
 }
 
 fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureCompensation {
@@ -503,8 +770,10 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
     let cell_count = grid_width * grid_height;
     let sample_step = out_width.max(out_height).div_ceil(720).max(8) as usize;
     let mut log_sums = vec![0.0f64; cell_count];
+    let mut channel_log_sums = vec![[0.0f64; 3]; cell_count];
     let mut counts = vec![0u32; cell_count];
     let mut ratios = Vec::new();
+    let mut channel_ratios = [Vec::new(), Vec::new(), Vec::new()];
     let candidate_homography = ctx.candidate_inverse.try_inverse();
     let candidate_region = candidate_homography.as_ref().and_then(|homography| {
         transformed_image_region(
@@ -544,22 +813,118 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
                 continue;
             }
             let base_luma = luminance(ctx.panorama.get_pixel(x, y));
-            let candidate_luma = luminance(&get_interpolated_pixel(
-                ctx.candidate_image,
-                source.x,
-                source.y,
-            ));
+            let base_pixel = ctx.panorama.get_pixel(x, y);
+            let candidate_pixel = get_interpolated_pixel(ctx.candidate_image, source.x, source.y);
+            // Exposure estimation is a paper-plane operation.  A luma-only
+            // ratio admits red seals, dark ink, and pale figures into the
+            // overlap statistics; one such region can then produce a gain
+            // step that is visible across the whole virtual tile.  Require
+            // both samples to have the generic canvas signature used by the
+            // final tone pass, while retaining the broad luma/range checks
+            // below for darker or lighter paper exposures.
+            if !focus_stack_pixel_is_canvas_like(base_pixel.0.as_slice())
+                || !focus_stack_pixel_is_canvas_like(candidate_pixel.0.as_slice())
+                || focus_stack_pixel_is_tone_foreground(base_pixel.0.as_slice())
+                || focus_stack_pixel_is_tone_foreground(candidate_pixel.0.as_slice())
+            {
+                continue;
+            }
+            let candidate_luma = luminance(&candidate_pixel);
             if (0.025..0.92).contains(&base_luma) && (0.025..0.92).contains(&candidate_luma) {
                 let ratio = base_luma / candidate_luma;
                 if (0.55..1.8).contains(&ratio) {
                     ratios.push(ratio);
+                    for channel in 0..3 {
+                        let base_value = base_pixel[channel];
+                        let candidate_value = candidate_pixel[channel];
+                        if base_value > 0.025 && candidate_value > 0.025 {
+                            let channel_ratio = base_value / candidate_value;
+                            if (0.55..1.8).contains(&channel_ratio) {
+                                channel_ratios[channel].push(channel_ratio);
+                            }
+                        }
+                    }
                     let grid_x = (x / CELL_SIZE) as usize;
                     let grid_y = (y / CELL_SIZE) as usize;
                     let index = grid_y * grid_width + grid_x;
                     log_sums[index] += (ratio as f64).ln();
+                    for channel in 0..3 {
+                        let base_value = base_pixel[channel];
+                        let candidate_value = candidate_pixel[channel];
+                        if base_value > 0.025 && candidate_value > 0.025 {
+                            let channel_ratio = base_value / candidate_value;
+                            if (0.55..1.8).contains(&channel_ratio) {
+                                channel_log_sums[index][channel] += (channel_ratio as f64).ln();
+                            }
+                        }
+                    }
                     counts[index] += 1;
                 }
             }
+        }
+    }
+    // Some real scans use a very dark, nearly neutral paper whose warm-canvas
+    // gate is intentionally conservative.  If that strict set is too small,
+    // take a second robust pass over neutral overlap samples.  The fallback
+    // rejects saturated artwork and trims both tails, so a red seal or a dark
+    // ink stroke cannot become the tile-wide exposure estimate.
+    if ratios.len() < 32 {
+        let mut neutral_ratios = Vec::new();
+        for y in (sample_start(top)..=bottom).step_by(sample_step) {
+            for x in (sample_start(left)..=right).step_by(sample_step) {
+                if ctx.panorama_mask.get_pixel(x, y)[0] == 0 {
+                    continue;
+                }
+                let target = Point3::new(x as f64 - ctx.offset_x, y as f64 - ctx.offset_y, 1.0);
+                let Some(source) = map_target_to_source(
+                    ctx.candidate_inverse,
+                    target,
+                    ctx.candidate,
+                    ctx.projection,
+                ) else {
+                    continue;
+                };
+                if source.x < 0.0
+                    || source.y < 0.0
+                    || source.x >= ctx.candidate_image.width() as f64 - 1.0
+                    || source.y >= ctx.candidate_image.height() as f64 - 1.0
+                {
+                    continue;
+                }
+                let base_pixel = ctx.panorama.get_pixel(x, y);
+                let candidate_pixel =
+                    get_interpolated_pixel(ctx.candidate_image, source.x, source.y);
+                let base_luma = luminance(base_pixel);
+                let candidate_luma = luminance(&candidate_pixel);
+                let base_chroma = base_pixel[0].max(base_pixel[1]).max(base_pixel[2])
+                    - base_pixel[0].min(base_pixel[1]).min(base_pixel[2]);
+                let candidate_chroma = candidate_pixel[0]
+                    .max(candidate_pixel[1])
+                    .max(candidate_pixel[2])
+                    - candidate_pixel[0]
+                        .min(candidate_pixel[1])
+                        .min(candidate_pixel[2]);
+                if !(0.025..0.92).contains(&base_luma)
+                    || !(0.025..0.92).contains(&candidate_luma)
+                    || base_chroma > 0.30
+                    || candidate_chroma > 0.30
+                {
+                    continue;
+                }
+                let ratio = base_luma / candidate_luma;
+                if (0.55..1.8).contains(&ratio) {
+                    neutral_ratios.push(ratio);
+                }
+            }
+        }
+        neutral_ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        if neutral_ratios.len() >= 32 {
+            let trim = neutral_ratios.len() / 5;
+            ratios.extend(
+                neutral_ratios[trim..neutral_ratios.len().saturating_sub(trim)]
+                    .iter()
+                    .copied(),
+            );
         }
     }
     let representative_gain = if ratios.len() < 32 {
@@ -569,12 +934,30 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
         ratios[ratios.len() / 2].clamp(0.75, 1.35)
     };
     let mut gains = vec![representative_gain; cell_count];
+    let representative_channel_gain = std::array::from_fn(|channel| {
+        if channel_ratios[channel].len() < 32 {
+            representative_gain
+        } else {
+            channel_ratios[channel].sort_by(f32::total_cmp);
+            channel_ratios[channel][channel_ratios[channel].len() / 2].clamp(0.75, 1.35)
+        }
+    });
+    let mut channel_gains = vec![representative_channel_gain; cell_count];
     for index in 0..cell_count {
         if counts[index] >= 3 {
             gains[index] = (log_sums[index] / counts[index] as f64).exp().clamp(
                 (representative_gain * 0.78) as f64,
                 (representative_gain * 1.28) as f64,
             ) as f32;
+            for channel in 0..3 {
+                let channel_gain = (channel_log_sums[index][channel] / counts[index] as f64)
+                    .exp()
+                    .clamp(
+                        (representative_channel_gain[channel] * 0.78) as f64,
+                        (representative_channel_gain[channel] * 1.28) as f64,
+                    );
+                channel_gains[index][channel] = channel_gain as f32;
+            }
         }
     }
 
@@ -615,6 +998,8 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
         grid_height,
         gains,
         representative_gain,
+        channel_gains,
+        representative_channel_gain,
     }
 }
 
@@ -719,6 +1104,12 @@ where
                         continue;
                     }
                     let color = get_high_quality_interpolated_pixel(&base_image, sx, sy);
+                    // Projected corners in a rendered focus tile are
+                    // transparent black. They are outside the photographed
+                    // support and must not become valid panorama pixels.
+                    if color[0].max(color[1]).max(color[2]) <= 1e-6 {
+                        continue;
+                    }
                     let start = x as usize * 3;
                     row_slice[start..start + 3].copy_from_slice(&color.0);
                     mask_row[x as usize] = 255;
@@ -764,16 +1155,34 @@ where
                 0,
                 out_height.saturating_sub(1),
             ));
-        let exposure = estimate_overlap_exposure_compensation(ExposureOverlap {
-            panorama: &panorama,
-            panorama_mask: &panorama_mask,
-            candidate: img_to_add_info,
-            candidate_image: &img_to_add,
-            candidate_inverse: &h_add_inv,
-            projection,
-            offset_x,
-            offset_y,
-        });
+        let exposure = if std::env::var_os("RAW_EDITOR_SKIP_PROGRESSIVE_EXPOSURE_GAIN").is_some() {
+            ExposureCompensation {
+                cell_size: 1,
+                grid_width: 1,
+                grid_height: 1,
+                gains: vec![1.0],
+                representative_gain: 1.0,
+                channel_gains: vec![[1.0; 3]],
+                representative_channel_gain: [1.0; 3],
+            }
+        } else {
+            let estimated = estimate_overlap_exposure_compensation(ExposureOverlap {
+                panorama: &panorama,
+                panorama_mask: &panorama_mask,
+                candidate: img_to_add_info,
+                candidate_image: &img_to_add,
+                candidate_inverse: &h_add_inv,
+                projection,
+                offset_x,
+                offset_y,
+            });
+            let strength = std::env::var("RAW_EDITOR_PROGRESSIVE_EXPOSURE_STRENGTH")
+                .ok()
+                .and_then(|value| value.parse::<f32>().ok())
+                .filter(|value| value.is_finite())
+                .unwrap_or(1.0);
+            estimated.damped(strength)
+        };
         println!(
             "    - Overlap exposure gain: {:.3} with local illumination correction",
             exposure.representative_gain
@@ -819,6 +1228,20 @@ where
             } else {
                 (SeamOrientation::Vertical, vec![], true, None)
             };
+
+        // Extend the overlap correction smoothly into the newly covered side
+        // of the candidate. A hard switch at the overlap bounding box makes
+        // the low-frequency seam patch visible as a rectangle; this bounded
+        // fade keeps the measured correction at the seam and returns to the
+        // source exposure over part of one tile.
+        let exposure_transition = seam_bounds.map(|(min_x, max_x, min_y, max_y)| {
+            let axis_span = match orientation {
+                SeamOrientation::Vertical => candidate_right.saturating_sub(candidate_left) + 1,
+                SeamOrientation::Horizontal => candidate_bottom.saturating_sub(candidate_top) + 1,
+            } as f32;
+            let fade_length = (axis_span * 0.35).max(128.0);
+            (min_x, max_x, min_y, max_y, fade_length)
+        });
 
         if use_seam {
             let side = match orientation {
@@ -872,10 +1295,50 @@ where
                         continue;
                     }
                     if is_on_add {
-                        let color_to_add = apply_exposure_gain(
-                            get_high_quality_interpolated_pixel(&img_to_add, sx, sy),
-                            exposure.gain_at(x, y as u32),
+                        let source_color = get_high_quality_interpolated_pixel(&img_to_add, sx, sy);
+                        // The overlap is the only place with evidence for an
+                        // exposure relation.  Apply the full robust gain
+                        // there (and in the seam-band pyramid below), but do
+                        // not carry that pairwise correction through the
+                        // candidate's non-overlap area.  Doing so turns a
+                        // legitimate scan illumination gradient into a
+                        // source-sized dark/light rectangle.
+                        let exposure_strength = if is_on_pano {
+                            1.0
+                        } else if let Some((min_x, max_x, min_y, max_y, fade_length)) =
+                            exposure_transition
+                        {
+                            let distance = match orientation {
+                                SeamOrientation::Vertical => {
+                                    if x < min_x {
+                                        (min_x - x) as f32
+                                    } else {
+                                        x.saturating_sub(max_x) as f32
+                                    }
+                                }
+                                SeamOrientation::Horizontal => {
+                                    let y_u32 = y as u32;
+                                    if y_u32 < min_y {
+                                        (min_y - y_u32) as f32
+                                    } else {
+                                        y_u32.saturating_sub(max_y) as f32
+                                    }
+                                }
+                            };
+                            (1.0 - distance / fade_length).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        let color_to_add = apply_exposure_compensation_with_strength(
+                            source_color,
+                            &exposure,
+                            x,
+                            y as u32,
+                            exposure_strength,
                         );
+                        if color_to_add[0].max(color_to_add[1]).max(color_to_add[2]) <= 1e-6 {
+                            continue;
+                        }
                         let start = x as usize * 3;
                         row_slice[start..start + 3].copy_from_slice(&color_to_add.0);
                         mask_row[x as usize] = 255;
@@ -905,15 +1368,635 @@ where
         }
     }
 
+    // Virtual tiles are resampled once while being fused at the station and a
+    // second time while they are projected onto the scan canvas.  The seam
+    // pyramid deliberately keeps the fine bands source-owned, but that second
+    // reconstruction still lowers native edge energy.  Restore only bounded
+    // luma detail after all tile-level tone work; this cannot change ownership
+    // or introduce colour halos at a seam.  The same pass is harmless for a
+    // short ordinary panorama and can be tuned or disabled by callers that
+    // need the exact pre-sharpened pixels.
+    let final_sharpen_amount = std::env::var("RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.42)
+        .clamp(0.0, 1.25);
+    if final_sharpen_amount > 0.0 {
+        sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
+    }
+
+    // Virtual tiles have projected corners and narrow ownership holes. Once
+    // transparent/black corner samples are rejected, retain the full bounds
+    // only when the union is densely covered; otherwise use the largest
+    // all-valid rectangle so projective invalid wedges cannot become black
+    // output corners.
     let panorama_dimensions = panorama.dimensions();
-    let cropped = crop_to_valid_rectangle(panorama, &panorama_mask);
+    let (valid_bounds, valid_coverage) = valid_mask_bounds_and_coverage(&panorama_mask);
+    let cropped = if valid_coverage >= 0.995 {
+        crop_to_valid_bounds(panorama, &panorama_mask)
+    } else {
+        crop_to_valid_rectangle(panorama, &panorama_mask)
+    };
     if cropped.dimensions() != panorama_dimensions {
         println!(
-            "  - Cropped invalid projection margins: {}x{} -> {}x{}",
+            "  - Cropped progressive margins: {}x{} -> {}x{} (coverage {:.2}%, bbox {:?})",
             panorama_dimensions.0,
             panorama_dimensions.1,
             cropped.width(),
-            cropped.height()
+            cropped.height(),
+            valid_coverage * 100.0,
+            valid_bounds
+        );
+    }
+    Ok(cropped)
+}
+
+/// Compose already-fused focus tiles in one ownership pass.
+///
+/// The progressive seam compositor is appropriate for a short photographic
+/// panorama, but it is order dependent: every new tile inherits the previous
+/// tile's exposure estimate and seam decision.  A long scan made from virtual
+/// focus tiles can therefore accumulate rectangular tone steps even when the
+/// tile poses are correct.  This compositor keeps the geometry and ownership
+/// decisions independent of import/path order.  In an overlap, the tile whose
+/// source sample is farther from its own border owns the pixel; this favours
+/// native, sharp interior pixels and prevents averaging two slightly displaced
+/// focus results.
+pub fn focus_tile_ownership_stitcher<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    if images.is_empty() {
+        return Ok(Rgb32FImage::new(0, 0));
+    }
+    let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
+    if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
+        return Ok(Rgb32FImage::new(0, 0));
+    }
+    let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
+    let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
+    let mut panorama = Rgb32FImage::new(out_width, out_height);
+    let mut panorama_mask = GrayImage::new(out_width, out_height);
+    // An 8-bit interior-distance score is sufficient for deterministic tile
+    // ownership and is substantially smaller than a full floating-point score
+    // plane for a 40k-pixel-wide scan.
+    let mut ownership = vec![0u8; out_width as usize * out_height as usize];
+    // Keep the virtual-tile identity separately from the interior-distance
+    // quality.  The latter decides which tile supplies detail; the former is
+    // needed after composition to solve one global low-frequency tone field
+    // instead of accumulating pairwise exposure steps in import order.
+    let mut owner_map = GrayImage::new(out_width, out_height);
+    let row_stride = out_width as usize * 3;
+    // A low-frequency consensus is accumulated from every virtual tile while
+    // ownership is decided.  The final image keeps one tile's high-frequency
+    // detail, while this analysis-resolution field retains the shared paper
+    // illumination across overlaps and removes projective tile polygons.
+    let (tone_width, tone_height) =
+        focus_analysis_dimensions(out_width, out_height, out_width.max(out_height));
+    let tone_stride = tone_width as usize;
+    let mut tone_sum = vec![[0.0f32; 3]; tone_stride * tone_height as usize];
+    let mut tone_weight = vec![0.0f32; tone_stride * tone_height as usize];
+    let mut tone_count = vec![0u16; tone_stride * tone_height as usize];
+    // A diagnostic/general fallback for material whose canvas tone is not
+    // separable from the painted foreground.  The default semantic gate keeps
+    // strokes out of the illumination solve; when disabled, the same
+    // analysis-resolution consensus is still low-pass filtered before it is
+    // applied, so it cannot replace the owned high-frequency detail.
+    let tone_all_pixels = std::env::var_os("RAW_EDITOR_FOCUS_TONE_ALL_PIXELS").is_some();
+    let soft_owner_boundary = std::env::var_os("RAW_EDITOR_FOCUS_SOFT_OWNER_BOUNDARY").is_some();
+
+    // Pairwise exposure estimates against the progressively built panorama
+    // are order dependent.  An optional bounded preview pass solves one
+    // global RGB log-gain per virtual tile from all geometric overlaps, then
+    // the full-resolution pass below applies that fixed model.  It is
+    // opt-in while the cost is being evaluated because a tile preview is an
+    // additional decode/render of each virtual station.
+    let photometric_models: Option<HashMap<usize, PhotometricModel>> =
+        if std::env::var_os("RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC").is_some() && images.len() > 1 {
+            let mut previews = Vec::with_capacity(images.len());
+            for image_info in images {
+                let image = load_image(image_info)?;
+                let longest = image.width().max(image.height()).max(1);
+                let scale = (1536.0 / longest as f64).min(1.0);
+                let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
+                let preview_height = ((image.height() as f64 * scale).round() as u32).max(2);
+                let preview = resize_rgb(&image, preview_width, preview_height);
+                let source_scale = Matrix3::new(
+                    image.width() as f64 / preview_width as f64,
+                    0.0,
+                    0.0,
+                    0.0,
+                    image.height() as f64 / preview_height as f64,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                );
+                let transform = global_homographies
+                    .get(&image_info.id)
+                    .copied()
+                    .ok_or_else(|| {
+                        format!("Missing focus tile pose for '{}'", image_info.filename)
+                    })?
+                    * source_scale;
+                previews.push((preview, transform));
+            }
+            let calibration =
+                calibrate_overlap_photometry(&previews, &PhotometricOptions::default());
+            let reliable_pairs = calibration
+                .pairs
+                .iter()
+                .filter(|pair| pair.reliable)
+                .count();
+            println!(
+                "  - Global virtual-tile photometry: reliable_pairs={}/{} error={:.4}->{:.4}",
+                reliable_pairs,
+                calibration.pairs.len(),
+                calibration.held_out_constant_error,
+                calibration.held_out_corrected_error
+            );
+            Some(
+                images
+                    .iter()
+                    .enumerate()
+                    .map(|(index, image)| (image.id, calibration.models[index].clone()))
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+    for (index, image_info) in images.iter().enumerate() {
+        let _ = app_handle.emit(
+            progress_event,
+            format!("Composing focus tile {} of {}", index + 1, images.len()),
+        );
+        println!(
+            "  - Ownership composing '{}', tile {} of {}",
+            image_info.filename,
+            index + 1,
+            images.len()
+        );
+        let homography = global_homographies
+            .get(&image_info.id)
+            .ok_or_else(|| format!("Missing focus tile pose for '{}'", image_info.filename))?;
+        let inverse = homography.try_inverse().ok_or_else(|| {
+            format!(
+                "Focus tile pose for '{}' is not invertible",
+                image_info.filename
+            )
+        })?;
+        let tile = load_image(image_info)?;
+        let tile_width = tile.width().max(1) as f64;
+        let tile_height = tile.height().max(1) as f64;
+        let tile_short = tile_width.min(tile_height).max(1.0);
+        let photo_model = photometric_models
+            .as_ref()
+            .and_then(|models| models.get(&image_info.id));
+        let exposure_enabled = photo_model.is_none()
+            && std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN").is_none();
+        let exposure = if !exposure_enabled {
+            ExposureCompensation {
+                cell_size: 1,
+                grid_width: 1,
+                grid_height: 1,
+                gains: vec![1.0],
+                representative_gain: 1.0,
+                channel_gains: vec![[1.0; 3]],
+                representative_channel_gain: [1.0; 3],
+            }
+        } else {
+            estimate_overlap_exposure_compensation(ExposureOverlap {
+                panorama: &panorama,
+                panorama_mask: &panorama_mask,
+                candidate: image_info,
+                candidate_image: &tile,
+                candidate_inverse: &inverse,
+                projection,
+                offset_x,
+                offset_y,
+            })
+        };
+        // Sample the candidate at the bounded tone-analysis resolution. Only
+        // canvas-like pixels contribute; brush strokes and seals cannot steer
+        // the exposure field. A raised-cosine edge weight favours native tile
+        // interiors and makes the consensus independent of tile order.
+        for tone_y in 0..tone_height {
+            let canvas_y = (tone_y as f64 + 0.5) * out_height as f64 / tone_height.max(1) as f64;
+            for tone_x in 0..tone_width {
+                let canvas_x = (tone_x as f64 + 0.5) * out_width as f64 / tone_width.max(1) as f64;
+                let target = Point3::new(canvas_x - offset_x, canvas_y - offset_y, 1.0);
+                let Some(source) = map_target_to_source(&inverse, target, image_info, projection)
+                else {
+                    continue;
+                };
+                if source.x < 0.0
+                    || source.y < 0.0
+                    || source.x >= tile_width
+                    || source.y >= tile_height
+                {
+                    continue;
+                }
+                let mut pixel = get_high_quality_interpolated_pixel(&tile, source.x, source.y);
+                if let Some(model) = photo_model {
+                    let preview_x = source.x * model.preview_width as f64 / tile_width;
+                    let preview_y = source.y * model.preview_height as f64 / tile_height;
+                    pixel = model.apply(pixel, preview_x, preview_y);
+                }
+                if !tone_all_pixels
+                    && (!focus_stack_pixel_is_canvas_like(&pixel.0)
+                        || focus_stack_pixel_is_tone_foreground(&pixel.0))
+                {
+                    continue;
+                }
+                let edge_distance = source
+                    .x
+                    .min(source.y)
+                    .min((tile_width - 1.0) - source.x)
+                    .min((tile_height - 1.0) - source.y)
+                    .max(0.0);
+                let edge_t = (edge_distance / (tile_short * 0.20).max(1.0)).clamp(0.0, 1.0);
+                let weight = (edge_t * edge_t * (3.0 - 2.0 * edge_t)) as f32;
+                if weight <= 0.01 {
+                    continue;
+                }
+                let tone_index = tone_y as usize * tone_stride + tone_x as usize;
+                for channel in 0..3 {
+                    tone_sum[tone_index][channel] += pixel[channel] * weight;
+                }
+                tone_weight[tone_index] += weight;
+                tone_count[tone_index] = tone_count[tone_index].saturating_add(1);
+            }
+        }
+        // Do not estimate a gain against the progressively accumulated
+        // panorama here.  That would make this supposedly order-independent
+        // ownership pass inherit a chain of pairwise exposure decisions: a
+        // tile selected later could be corrected against a previous owner's
+        // already corrected tone, then replaced by a third tile whose gain was
+        // measured against a different surface.  This is the source of broad
+        // tile-sized tone bands on long scans.  Ownership depends only on the
+        // source geometry/edge distance; the owner-wide harmonization below
+        // solves the low-frequency tone once, after all owners are final.
+        let (left, right, top, bottom) = transformed_image_region(
+            image_info, homography, projection, offset_x, offset_y, out_width, out_height,
+        )
+        .unwrap_or((
+            0,
+            out_width.saturating_sub(1),
+            0,
+            out_height.saturating_sub(1),
+        ));
+        if left > right || top > bottom {
+            continue;
+        }
+        let left = left.min(out_width.saturating_sub(1));
+        let right = right.min(out_width.saturating_sub(1));
+        let top = top.min(out_height.saturating_sub(1));
+        let bottom = bottom.min(out_height.saturating_sub(1));
+        let image_width = tile.width() as f64;
+        let image_height = tile.height() as f64;
+        panorama
+            .as_mut()
+            .par_chunks_mut(row_stride)
+            .zip(ownership.par_chunks_mut(out_width as usize))
+            .zip(panorama_mask.as_mut().par_chunks_mut(out_width as usize))
+            .zip(owner_map.as_mut().par_chunks_mut(out_width as usize))
+            .enumerate()
+            .skip(top as usize)
+            .take((bottom - top + 1) as usize)
+            .for_each(|(y, (((row, quality_row), mask_row), owner_row))| {
+                for x in left..=right {
+                    let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
+                    let Some(source) =
+                        map_target_to_source(&inverse, target, image_info, projection)
+                    else {
+                        continue;
+                    };
+                    if source.x < 0.0
+                        || source.y < 0.0
+                        || source.x >= image_width
+                        || source.y >= image_height
+                    {
+                        continue;
+                    }
+                    let edge_distance = source
+                        .x
+                        .min(source.y)
+                        .min((image_width - 1.0) - source.x)
+                        .min((image_height - 1.0) - source.y)
+                        .max(0.0);
+                    let quality = (1.0 + (edge_distance / tile_short * 510.0).round())
+                        .clamp(1.0, 255.0) as u8;
+                    let quality_slot = &mut quality_row[x as usize];
+                    let candidate_owner = (index + 1).min(255) as u8;
+                    if !focus_tile_ownership_should_replace(
+                        *quality_slot,
+                        owner_row[x as usize],
+                        quality,
+                        candidate_owner,
+                    ) {
+                        continue;
+                    }
+                    let mut color = get_high_quality_interpolated_pixel(&tile, source.x, source.y);
+                    if let Some(model) = photo_model {
+                        let preview_x = source.x * model.preview_width as f64 / image_width;
+                        let preview_y = source.y * model.preview_height as f64 / image_height;
+                        color = model.apply(color, preview_x, preview_y);
+                    }
+                    // Unfilled projective corners are transparent zeros.  Do
+                    // not let them win ownership over a neighbouring tile.
+                    if color[0].max(color[1]).max(color[2]) <= 1e-6 {
+                        continue;
+                    }
+                    color = apply_exposure_compensation(color, &exposure, x, y as u32);
+                    // Interior distance is a useful prior, but selecting a
+                    // whole projective polygon solely by that prior cuts the
+                    // paper weave at a visible hard edge. If the candidate is
+                    // only marginally better and disagrees strongly with the
+                    // already selected sample, keep the existing owner and
+                    // let the seam remain in a locally coherent region.
+                    if owner_row[x as usize] > 0 {
+                        let start = x as usize * 3;
+                        let current = &row[start..start + 3];
+                        let current_rgb = [current[0], current[1], current[2]];
+                        let current_luma =
+                            current[0] * 0.299 + current[1] * 0.587 + current[2] * 0.114;
+                        let candidate_luma = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
+                        let luma_delta = (candidate_luma - current_luma).abs();
+                        let quality_ratio = f32::from(quality) / f32::from((*quality_slot).max(1));
+                        if luma_delta > 0.075 && quality_ratio < 1.35 {
+                            continue;
+                        }
+                        // Interior distance chooses the sharper source, but a
+                        // projective tile boundary should not become a hard
+                        // tone edge.  Feather only small, low-contrast canvas
+                        // disagreements; saturated or high-contrast detail
+                        // remains single-owner so strokes cannot double.
+                        if soft_owner_boundary
+                            && luma_delta < 0.06
+                            && focus_stack_pixel_is_canvas_like(&current_rgb)
+                            && focus_stack_pixel_is_canvas_like(&color.0)
+                        {
+                            let quality_advantage =
+                                (f32::from(quality) - f32::from((*quality_slot).max(1))).max(0.0);
+                            let alpha = (0.45 + quality_advantage / 255.0 * 0.45).clamp(0.45, 0.90);
+                            for channel in 0..3 {
+                                color[channel] =
+                                    current_rgb[channel] * (1.0 - alpha) + color[channel] * alpha;
+                            }
+                        }
+                    }
+                    let start = x as usize * 3;
+                    row[start..start + 3].copy_from_slice(&color.0);
+                    *quality_slot = quality;
+                    mask_row[x as usize] = 255;
+                    owner_row[x as usize] = candidate_owner;
+                }
+            });
+    }
+
+    // Solve a low-frequency consensus from all candidate tiles. The high
+    // frequency ownership below remains hard, but its broad paper tone is
+    // replaced by the overlap-supported field so tile-shaped vignetting does
+    // not survive as a polygonal boundary.
+    let tone_mask = GrayImage::from_fn(tone_width, tone_height, |x, y| {
+        let index = y as usize * tone_stride + x as usize;
+        image::Luma([u8::from(tone_weight[index] > 0.05) * 255])
+    });
+    let tone_samples = tone_mask
+        .as_raw()
+        .iter()
+        .filter(|&&value| value > 0)
+        .count();
+    if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_LOW_FREQUENCY_CONSENSUS").is_some()
+        && tone_samples >= 128
+    {
+        let tone_reference = Rgb32FImage::from_fn(tone_width, tone_height, |x, y| {
+            let index = y as usize * tone_stride + x as usize;
+            let weight = tone_weight[index];
+            if weight > 0.05 {
+                let sum = tone_sum[index];
+                Rgb([sum[0] / weight, sum[1] / weight, sum[2] / weight])
+            } else {
+                Rgb([0.0; 3])
+            }
+        });
+        // The illumination step is source-sized on a scan. A tiny blur only
+        // feathers the ownership edge and leaves a broad diagonal tile visible;
+        // use a bounded fraction of the analysis canvas so the correction is
+        // continuous across one station while preserving brush-scale detail.
+        let tone_radius = (tone_width.max(tone_height) as f32 * 0.05)
+            .round()
+            .clamp(32.0, 192.0) as usize;
+        let target_low = masked_box_blur_rgb(&tone_reference, &tone_mask, tone_radius);
+        let output_analysis = resize_rgb(&panorama, tone_width, tone_height);
+        let output_low = masked_box_blur_rgb(&output_analysis, &tone_mask, tone_radius);
+        let target_pixels = target_low.as_raw();
+        let output_pixels = output_low.as_raw();
+        let mut correction_pixels = vec![0.0f32; tone_width as usize * tone_height as usize * 3];
+        for index in 0..tone_mask.as_raw().len() {
+            if tone_mask.as_raw()[index] == 0 {
+                continue;
+            }
+            let start = index * 3;
+            for channel in 0..3 {
+                correction_pixels[start + channel] = (target_pixels[start + channel]
+                    - output_pixels[start + channel])
+                    .clamp(-0.24, 0.24);
+            }
+        }
+        // A correction measured only where two tiles overlap must also reach
+        // the newly exposed part of that owner. Propagate a robust median per
+        // owner, then keep the local overlap residual as a small supplement.
+        let owner_analysis = image::imageops::resize(
+            &owner_map,
+            tone_width,
+            tone_height,
+            image::imageops::FilterType::Nearest,
+        );
+        let mut owner_deltas: Vec<[Vec<f32>; 3]> = (0..=u8::MAX as usize)
+            .map(|_| [Vec::new(), Vec::new(), Vec::new()])
+            .collect();
+        for index in 0..tone_mask.as_raw().len() {
+            if tone_mask.as_raw()[index] == 0 || tone_count[index] < 2 {
+                continue;
+            }
+            let owner = owner_analysis.as_raw()[index] as usize;
+            if owner == 0 {
+                continue;
+            }
+            let start = index * 3;
+            for channel in 0..3 {
+                owner_deltas[owner][channel].push(correction_pixels[start + channel]);
+            }
+        }
+        let mut owner_delta = vec![[0.0f32; 3]; u8::MAX as usize + 1];
+        let mut owner_delta_valid = vec![false; u8::MAX as usize + 1];
+        for owner in 1..owner_deltas.len() {
+            if owner_deltas[owner][0].len() < 8 {
+                continue;
+            }
+            for channel in 0..3 {
+                owner_delta[owner][channel] = median_f32(&mut owner_deltas[owner][channel])
+                    .unwrap_or(0.0)
+                    .clamp(-0.24, 0.24);
+            }
+            owner_delta_valid[owner] = true;
+        }
+        for index in 0..tone_mask.as_raw().len() {
+            let owner = owner_analysis.as_raw()[index] as usize;
+            if !owner_delta_valid.get(owner).copied().unwrap_or(false) {
+                continue;
+            }
+            let start = index * 3;
+            for channel in 0..3 {
+                correction_pixels[start + channel] =
+                    owner_delta[owner][channel] * 0.75 + correction_pixels[start + channel] * 0.25;
+            }
+        }
+        let correction_image = Rgb32FImage::from_raw(tone_width, tone_height, correction_pixels)
+            .expect("focus low-frequency correction dimensions must match");
+        let correction_low = masked_box_blur_rgb(&correction_image, &tone_mask, tone_radius / 2);
+        let tone_weights = tone_mask
+            .as_raw()
+            .iter()
+            .map(|&value| f32::from(value > 0))
+            .collect::<Vec<_>>();
+        let tone_weight_blur = box_blur_focus_map(
+            &tone_weights,
+            tone_width,
+            tone_height,
+            (tone_radius / 2).max(4),
+        );
+        let x_samples = linear_samples(tone_width, out_width);
+        let y_samples = linear_samples(tone_height, out_height);
+        let correction_pixels = correction_low.as_raw();
+        let tone_weight_ref = &tone_weight_blur;
+        let image_mask_ref = panorama_mask.as_raw();
+        panorama
+            .as_mut()
+            .par_chunks_mut(out_width as usize * 3)
+            .enumerate()
+            .for_each(|(y, row)| {
+                let y_sample = y_samples[y];
+                for x in 0..out_width as usize {
+                    if image_mask_ref[y * out_width as usize + x] == 0 {
+                        continue;
+                    }
+                    let x_sample = x_samples[x];
+                    let top_left = y_sample.lower * tone_stride + x_sample.lower;
+                    let top_right = y_sample.lower * tone_stride + x_sample.upper;
+                    let bottom_left = y_sample.upper * tone_stride + x_sample.lower;
+                    let bottom_right = y_sample.upper * tone_stride + x_sample.upper;
+                    let top_weight = tone_weight_ref[top_left] * (1.0 - x_sample.upper_weight)
+                        + tone_weight_ref[top_right] * x_sample.upper_weight;
+                    let bottom_weight = tone_weight_ref[bottom_left]
+                        * (1.0 - x_sample.upper_weight)
+                        + tone_weight_ref[bottom_right] * x_sample.upper_weight;
+                    let weight = (top_weight * (1.0 - y_sample.upper_weight)
+                        + bottom_weight * y_sample.upper_weight)
+                        .clamp(0.0, 1.0);
+                    if weight <= 0.001 {
+                        continue;
+                    }
+                    let mut delta = [0.0f32; 3];
+                    for channel in 0..3 {
+                        let top = correction_pixels[top_left * 3 + channel]
+                            * (1.0 - x_sample.upper_weight)
+                            + correction_pixels[top_right * 3 + channel] * x_sample.upper_weight;
+                        let bottom = correction_pixels[bottom_left * 3 + channel]
+                            * (1.0 - x_sample.upper_weight)
+                            + correction_pixels[bottom_right * 3 + channel] * x_sample.upper_weight;
+                        let local =
+                            top * (1.0 - y_sample.upper_weight) + bottom * y_sample.upper_weight;
+                        delta[channel] = local * weight;
+                    }
+                    let start = x * 3;
+                    for channel in 0..3 {
+                        row[start + channel] =
+                            (row[start + channel] + delta[channel]).clamp(0.0, 1.0);
+                    }
+                }
+            });
+        println!(
+            "  - Low-frequency focus consensus: samples={} radius={}px",
+            tone_samples, tone_radius
+        );
+    }
+
+    // Detail ownership is already final at this point. Correct only the
+    // remaining owner-level tone difference using selected virtual-tile
+    // regions at once; doing this after the consensus pass removes residual
+    // source steps without averaging or replacing brush pixels.
+    let empty_foreground = GrayImage::new(out_width, out_height);
+    if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION").is_some() {
+        if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {
+            harmonize_focus_background_tone_with_owners(
+                &mut panorama,
+                &panorama_mask,
+                &empty_foreground,
+                &owner_map,
+            );
+        } else {
+            println!("  - Skipping final focus owner tone harmonization (diagnostic override)");
+        }
+    } else {
+        println!("  - Skipping focus-tile owner tone harmonization (disabled by default)");
+    }
+    // A hard owner map keeps brush detail from averaging across a displaced
+    // seam. The streaming illumination solve remains an opt-in diagnostic for
+    // scenes where a broad lighting field is preferred; the owner-based solve
+    // above is the default so it cannot flatten genuine artwork contrast.
+    if std::env::var_os("RAW_EDITOR_ENABLE_FINAL_LOW_FREQUENCY_ILLUMINATION").is_some() {
+        super::mosaic::smooth_streaming_low_frequency_illumination(&mut panorama);
+    }
+    // Tile warps and the final cubic sampling soften native edges once more.
+    // Restore a bounded amount of luma detail after all tone work; the mask
+    // keeps the pass out of invalid projective corners and it never averages
+    // neighbouring owners.
+    // The virtual-tile renderer resamples each source once for the tile and
+    // once again while placing that tile on the global canvas.  A restrained
+    // luma-only unsharp pass restores the native edge energy lost to those two
+    // cubic samples without inventing cross-owner detail.  Keep this below the
+    // per-station pass (1.35) so long scans do not acquire halos at tile seams.
+    let final_sharpen_amount = std::env::var("RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.85)
+        .clamp(0.0, 1.25);
+    sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
+
+    let panorama_dimensions = panorama.dimensions();
+    // Keep the complete source union only when its bounding box is genuinely
+    // covered.  Projective virtual-tile corners are transparent by design;
+    // blindly cropping to the mask bounds would expose those zeros as black
+    // triangles.  A sparse/irregular union falls back to the largest valid
+    // rectangle, which is safe for delivery while still preserving complete
+    // scans whose outer boundary is densely covered.
+    let (valid_bounds, valid_coverage) = valid_mask_bounds_and_coverage(&panorama_mask);
+    let cropped = if valid_coverage >= 0.995 {
+        crop_to_valid_bounds(panorama, &panorama_mask)
+    } else {
+        crop_to_valid_rectangle(panorama, &panorama_mask)
+    };
+    if cropped.dimensions() != panorama_dimensions {
+        println!(
+            "  - Cropped ownership margins: {}x{} -> {}x{} (bounds coverage {:.2}%, bbox {:?})",
+            panorama_dimensions.0,
+            panorama_dimensions.1,
+            cropped.width(),
+            cropped.height(),
+            valid_coverage * 100.0,
+            valid_bounds
         );
     }
     Ok(cropped)
@@ -1032,12 +2115,20 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
                             && source.x < image_width
                             && source.y >= 0.0
                             && source.y < image_height
+                            // A virtual tile is rendered into a rectangular
+                            // buffer, but its projective corners are transparent
+                            // zero support. Treat those samples as outside the
+                            // candidate footprint so they cannot enter either
+                            // the low-frequency pyramid or the detail seam.
+                            && source_sample_has_support(img_to_add, source.x, source.y)
                     });
                     let candidate_pixel = if let Some(source) = candidate_source {
                         if candidate_valid {
-                            apply_exposure_gain(
+                            apply_exposure_compensation(
                                 get_high_quality_interpolated_pixel(img_to_add, source.x, source.y),
-                                exposure.gain_at(global_x, global_y),
+                                exposure,
+                                global_x,
+                                global_y,
                             )
                         } else {
                             Rgb([0.0, 0.0, 0.0])
@@ -1197,7 +2288,10 @@ fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
     // deliberately rejects the red skirt, green sash, near-black robe, and
     // pale faces/hands before a low-frequency exposure field is applied. The
     // limits are broad enough to retain the darker and lighter canvas tiles.
-    luma >= 0.12
+    // Darkened paper from a long scan can fall below the original 0.12
+    // floor.  Keep a small margin above true black ink so the low-frequency
+    // tone field can still see those paper samples.
+    luma >= 0.08
         && luma <= 0.78
         && red >= green
         && green >= blue
@@ -1220,8 +2314,11 @@ fn focus_stack_pixel_is_tone_foreground(pixel: &[f32]) -> bool {
     let red_dominance = red - 2.0 * green + blue;
     let red_paint = red - green >= 0.14 && red - blue >= 0.17 && red - 2.0 * green + blue >= 0.08;
     let green_or_cool_paint = green - red >= 0.05 || blue - green >= 0.05;
+    // Brown paper can be dark and nearly neutral.  Reserve this guard for
+    // genuinely near-black ink; otherwise dark paper is excluded from tone
+    // estimation and remains as a visible tile-sized exposure block.
     let dark_neutral_paint =
-        luma <= 0.18 && (red - green).abs() <= 0.07 && (green - blue).abs() <= 0.07;
+        luma <= 0.12 && (red - green).abs() <= 0.07 && (green - blue).abs() <= 0.07;
     // Faces and hands can have nearly the same average luminance as the
     // canvas, but their blue channel is much closer to green and their red
     // dominance is stronger. Keep this warm-pale paint out of the canvas-only
@@ -2397,12 +3494,22 @@ fn focus_score_map(image: &Rgb32FImage, mask: &GrayImage) -> Vec<f32> {
                     {
                         continue;
                     }
-                    *output = (4.0 * luminance_map[index]
+                    let laplacian = (4.0 * luminance_map[index]
                         - luminance_map[index - 1]
                         - luminance_map[index + 1]
                         - luminance_map[index - width as usize]
                         - luminance_map[index + width as usize])
                         .abs();
+                    // A Laplacian alone under-scores broad, low-contrast
+                    // brush strokes and woven paper texture.  Add a bounded
+                    // Tenengrad term so a genuinely focused layer can win on
+                    // those structures without making isolated sensor noise
+                    // dominate the ownership map.
+                    let gradient_x = luminance_map[index + 1] - luminance_map[index - 1];
+                    let gradient_y = luminance_map[index + width as usize]
+                        - luminance_map[index - width as usize];
+                    let gradient = (gradient_x * gradient_x + gradient_y * gradient_y).sqrt();
+                    *output = laplacian + gradient * 0.5;
                 }
             });
     }
@@ -3181,54 +4288,211 @@ fn focus_full_resolution_patch_score(
     ))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn evaluate_focus_full_resolution_shift(
+// Build only the two bounded patches used by one correspondence, rather than
+// a second full-resolution copy of both 60MP layers. Gaussian decimation samples
+// even pixel centers, so multiplying a displacement by two is exact between
+// levels. A stride over native pixels is not a pyramid: it can skip an entire
+// narrow correlation peak.
+fn focus_alignment_patch_pyramid(
+    image: &Rgb32FImage,
+    mask: &GrayImage,
+    foreground: Option<&GrayImage>,
+    center_x: i32,
+    center_y: i32,
+    radius: i32,
+    levels: usize,
+) -> Vec<RenderedFocusLayer> {
+    let size = (2 * radius + 1) as u32;
+    let mut first = RenderedFocusLayer {
+        image: Rgb32FImage::new(size, size),
+        mask: GrayImage::new(size, size),
+        foreground_mask: GrayImage::new(size, size),
+        relaxed_foreground_mask: GrayImage::new(0, 0),
+        left: 0,
+        top: 0,
+    };
+    for y in 0..size {
+        for x in 0..size {
+            let sx = center_x + x as i32 - radius;
+            let sy = center_y + y as i32 - radius;
+            if sx < 0 || sy < 0 || sx >= image.width() as i32 || sy >= image.height() as i32 {
+                continue;
+            }
+            first
+                .image
+                .put_pixel(x, y, *image.get_pixel(sx as u32, sy as u32));
+            first
+                .mask
+                .put_pixel(x, y, *mask.get_pixel(sx as u32, sy as u32));
+            if let Some(foreground) = foreground {
+                first
+                    .foreground_mask
+                    .put_pixel(x, y, *foreground.get_pixel(sx as u32, sy as u32));
+            }
+        }
+    }
+    let mut pyramid = vec![first];
+    for _ in 0..levels {
+        let previous = pyramid.last().unwrap();
+        let width = (previous.image.width() + 1) / 2;
+        let height = (previous.image.height() + 1) / 2;
+        let mut next = RenderedFocusLayer {
+            image: Rgb32FImage::new(width, height),
+            mask: GrayImage::new(width, height),
+            foreground_mask: GrayImage::new(width, height),
+            relaxed_foreground_mask: GrayImage::new(0, 0),
+            left: 0,
+            top: 0,
+        };
+        for y in 0..height {
+            for x in 0..width {
+                let mut pixel = [0.0f32; 3];
+                let mut valid = true;
+                let mut foreground = 0;
+                for oy in -1i32..=1 {
+                    for ox in -1i32..=1 {
+                        let sx =
+                            (2 * x as i32 + ox).clamp(0, previous.image.width() as i32 - 1) as u32;
+                        let sy =
+                            (2 * y as i32 + oy).clamp(0, previous.image.height() as i32 - 1) as u32;
+                        let weight = (if ox == 0 { 2.0 } else { 1.0 })
+                            * (if oy == 0 { 2.0 } else { 1.0 })
+                            / 16.0;
+                        let sample = previous.image.get_pixel(sx, sy);
+                        for channel in 0..3 {
+                            pixel[channel] += sample[channel] * weight;
+                        }
+                        valid &= previous.mask.get_pixel(sx, sy)[0] > 0;
+                        foreground |= previous.foreground_mask.get_pixel(sx, sy)[0];
+                    }
+                }
+                next.image.put_pixel(x, y, Rgb(pixel));
+                next.mask
+                    .put_pixel(x, y, image::Luma([u8::from(valid) * 255]));
+                next.foreground_mask
+                    .put_pixel(x, y, image::Luma([foreground]));
+            }
+        }
+        pyramid.push(next);
+    }
+    pyramid
+}
+
+fn focus_patch_translation_candidates(
     candidate: &RenderedFocusLayer,
     merged: &Rgb32FImage,
     merged_mask: &GrayImage,
     center_x: i32,
     center_y: i32,
-    delta_x: i32,
-    delta_y: i32,
-    radius: i32,
-    best: &mut Option<(f64, f64, i32, i32)>,
-    second_best: &mut f64,
-    current_score: &mut f64,
-) {
-    let Some((score, energy, foreground_fraction)) = focus_full_resolution_patch_score(
-        candidate,
-        merged,
-        merged_mask,
+    max_shift: i32,
+) -> Vec<(f64, f64, i32, i32)> {
+    let mut levels = 0;
+    while (max_shift >> levels) > 24 {
+        levels += 1;
+    }
+    let scale = 1 << levels;
+    let patch_radius = FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS;
+    let candidate_radius = (patch_radius + 2) * scale;
+    let merged_radius = candidate_radius + (max_shift + scale - 1) / scale * scale;
+    let mut candidate_pyramid = focus_alignment_patch_pyramid(
+        &candidate.image,
+        &candidate.mask,
+        Some(&candidate.foreground_mask),
         center_x,
         center_y,
-        delta_x,
-        delta_y,
-        radius,
-    ) else {
-        return;
-    };
-    if foreground_fraction > FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION
-        || energy < FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY
-        || score < FOCUS_FULL_RES_ALIGNMENT_MIN_NCC
-    {
-        return;
-    }
-    if delta_x == 0 && delta_y == 0 {
-        *current_score = score;
-    }
-    let replaces_best = best.as_ref().is_none_or(|(best_score, _, best_x, best_y)| {
-        score > *best_score
-            || (score == *best_score
-                && (delta_x.abs() + delta_y.abs() < best_x.abs() + best_y.abs()))
-    });
-    if replaces_best {
-        if let Some((best_score, _, _, _)) = *best {
-            *second_best = (*second_best).max(best_score);
+        candidate_radius,
+        levels,
+    );
+    let merged_pyramid = focus_alignment_patch_pyramid(
+        merged,
+        merged_mask,
+        None,
+        candidate.left as i32 + center_x,
+        candidate.top as i32 + center_y,
+        merged_radius,
+        levels,
+    );
+    let mut beam: Vec<(f64, f64, i32, i32)> = Vec::new();
+    for level in (0..=levels).rev() {
+        let scale = 1 << level;
+        let limit = (max_shift + scale - 1) / scale;
+        let candidate_patch = &mut candidate_pyramid[level];
+        candidate_patch.left = ((merged_radius - candidate_radius) / scale) as u32;
+        candidate_patch.top = candidate_patch.left;
+        let merged_patch = &merged_pyramid[level];
+        let mut offsets = Vec::new();
+        if beam.is_empty() && level == levels {
+            for dy in -limit..=limit {
+                for dx in -limit..=limit {
+                    offsets.push((dx, dy));
+                }
+            }
+        } else {
+            for &(_, _, coarse_x, coarse_y) in &beam {
+                // Coarse focus texture can shift by several pixels after
+                // Gaussian decimation. Keep a broad native refinement window
+                // around each of the few coarse seeds; a tiny ±3 window can
+                // permanently exclude the true subpixel peak.
+                for dy in -16..=16 {
+                    for dx in -16..=16 {
+                        let x = coarse_x * 2 + dx;
+                        let y = coarse_y * 2 + dy;
+                        if x.abs() <= limit && y.abs() <= limit {
+                            offsets.push((x, y));
+                        }
+                    }
+                }
+            }
         }
-        *best = Some((score, energy, delta_x, delta_y));
-    } else {
-        *second_best = (*second_best).max(score);
+        // The baseline must always be measured, including when the search
+        // bounds are not an exact multiple of a sampling stride.
+        offsets.push((0, 0));
+        offsets.sort_unstable();
+        offsets.dedup();
+        let mut scored = offsets
+            .into_iter()
+            .filter_map(|(dx, dy)| {
+                let (score, energy, foreground_fraction) = focus_full_resolution_patch_score(
+                    candidate_patch,
+                    &merged_patch.image,
+                    &merged_patch.mask,
+                    candidate_radius / scale,
+                    candidate_radius / scale,
+                    dx,
+                    dy,
+                    patch_radius,
+                )?;
+                // Coarse levels only propose locations. Native pixels supply the
+                // final quality gate, allowing a low-contrast coarse feature to
+                // lead to a sharply localized, well-supported native peak.
+                (foreground_fraction <= FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION
+                    && energy > 1e-6)
+                    .then_some((score, energy, dx, dy))
+            })
+            .collect::<Vec<_>>();
+        scored.sort_unstable_by(|a, b| {
+            b.0.total_cmp(&a.0)
+                .then_with(|| (a.2.abs() + a.3.abs()).cmp(&(b.2.abs() + b.3.abs())))
+        });
+        if level == 0 {
+            return scored;
+        }
+        beam.clear();
+        for entry in scored {
+            if beam.iter().all(|previous| {
+                (previous.2 - entry.2).abs() > 2 || (previous.3 - entry.3).abs() > 2
+            }) {
+                beam.push(entry);
+                if beam.len() == 4 {
+                    break;
+                }
+            }
+        }
+        if beam.is_empty() {
+            return Vec::new();
+        }
     }
+    Vec::new()
 }
 
 fn estimate_focus_layer_translation(
@@ -3281,94 +4545,74 @@ fn estimate_focus_layer_translation(
     }
 
     let mut patch_deltas = Vec::new();
-    let mut score_sum = 0.0;
+    let image_short_side = candidate_width.min(candidate_height) as i32;
+    let max_shift = FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT
+        .min((image_short_side as f32 * 0.08).round() as i32)
+        .max(1);
     for (center_x, center_y) in patch_centers.iter().copied() {
-        let mut best: Option<(f64, f64, i32, i32)> = None;
-        let mut second_best = f64::NEG_INFINITY;
-        let mut current_score = f64::NEG_INFINITY;
-        // A coarse pass limits the expensive full-resolution correlation to a
-        // small neighbourhood around its best integer displacement. The fine
-        // pass still checks every pixel shift around that candidate, so a
-        // one-pixel residual is not rounded away.
-        let coarse_step = 4;
-        for delta_y in (-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT..=FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT)
-            .step_by(coarse_step as usize)
-        {
-            for delta_x in (-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT
-                ..=FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT)
-                .step_by(coarse_step as usize)
-            {
-                evaluate_focus_full_resolution_shift(
-                    candidate,
-                    merged,
-                    merged_mask,
-                    center_x,
-                    center_y,
-                    delta_x,
-                    delta_y,
-                    patch_radius,
-                    &mut best,
-                    &mut second_best,
-                    &mut current_score,
-                );
-            }
-        }
-        let Some((_, _, coarse_x, coarse_y)) = best else {
+        // Record zero-shift NCC before applying the acceptance threshold. A
+        // genuinely displaced patch commonly has low baseline correlation;
+        // rejecting that baseline would make large corrections impossible.
+        let current_score = focus_full_resolution_patch_score(
+            candidate,
+            merged,
+            merged_mask,
+            center_x,
+            center_y,
+            0,
+            0,
+            patch_radius,
+        )
+        .map(|value| value.0);
+        let scores = focus_patch_translation_candidates(
+            candidate,
+            merged,
+            merged_mask,
+            center_x,
+            center_y,
+            max_shift,
+        );
+        let Some(&(best_score, energy, best_x, best_y)) = scores.first() else {
             continue;
         };
-        let fine_min_x = (coarse_x - coarse_step + 1).max(-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
-        let fine_max_x = (coarse_x + coarse_step - 1).min(FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
-        let fine_min_y = (coarse_y - coarse_step + 1).max(-FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
-        let fine_max_y = (coarse_y + coarse_step - 1).min(FOCUS_FULL_RES_ALIGNMENT_MAX_SHIFT);
-        for delta_y in fine_min_y..=fine_max_y {
-            for delta_x in fine_min_x..=fine_max_x {
-                if delta_x == coarse_x && delta_y == coarse_y {
-                    continue;
-                }
-                evaluate_focus_full_resolution_shift(
-                    candidate,
-                    merged,
-                    merged_mask,
-                    center_x,
-                    center_y,
-                    delta_x,
-                    delta_y,
-                    patch_radius,
-                    &mut best,
-                    &mut second_best,
-                    &mut current_score,
-                );
-            }
-        }
-        let Some((best_score, _, best_x, best_y)) = best else {
-            continue;
-        };
-        let margin = best_score - second_best.max(current_score);
+        let second_best = scores
+            .iter()
+            .find(|entry| (entry.2 - best_x).abs() > 2 || (entry.3 - best_y).abs() > 2)
+            .map(|entry| entry.0)
+            .unwrap_or(f64::NEG_INFINITY);
         if best_score < FOCUS_FULL_RES_ALIGNMENT_MIN_NCC
-            || !margin.is_finite()
-            || margin < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN
+            || energy < FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY
+            || best_score - second_best < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN
             || (best_x != 0 || best_y != 0)
-                && (!current_score.is_finite()
-                    || best_score - current_score < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN)
+                && current_score
+                    .is_some_and(|score| best_score - score < FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN)
         {
             continue;
         }
-        patch_deltas.push((best_x, best_y));
-        score_sum += best_score;
+        patch_deltas.push((best_x, best_y, best_score));
+    }
+    if std::env::var_os("RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS").is_some() {
+        println!(
+            "  - Focus translation diagnostics: candidate={}x{} patches={} accepted={}",
+            candidate_width,
+            candidate_height,
+            patch_centers.len(),
+            patch_deltas.len()
+        );
     }
     if patch_deltas.is_empty() {
         return None;
     }
 
-    let mut x_values = patch_deltas.iter().map(|(x, _)| *x).collect::<Vec<_>>();
-    let mut y_values = patch_deltas.iter().map(|(_, y)| *y).collect::<Vec<_>>();
+    let mut x_values = patch_deltas.iter().map(|(x, _, _)| *x).collect::<Vec<_>>();
+    let mut y_values = patch_deltas.iter().map(|(_, y, _)| *y).collect::<Vec<_>>();
     x_values.sort_unstable();
     y_values.sort_unstable();
     let median_x = x_values[x_values.len() / 2];
     let median_y = y_values[y_values.len() / 2];
     let support = patch_deltas
         .iter()
-        .filter(|(x, y)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
+        .filter(|(x, y, _)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
         .count();
     let minimum_support = FOCUS_FULL_RES_ALIGNMENT_MIN_PATCHES;
     if support < minimum_support
@@ -3380,7 +4624,12 @@ fn estimate_focus_layer_translation(
     Some((
         median_x,
         median_y,
-        score_sum / patch_deltas.len() as f64,
+        patch_deltas
+            .iter()
+            .filter(|(x, y, _)| (x - median_x).abs() <= 1 && (y - median_y).abs() <= 1)
+            .map(|(_, _, score)| score)
+            .sum::<f64>()
+            / support as f64,
         support,
         patch_deltas.len(),
     ))
@@ -4602,6 +5851,74 @@ pub(super) fn crop_to_valid_rectangle(image: Rgb32FImage, mask: &GrayImage) -> R
     .to_image()
 }
 
+/// Return the mask bounding box and the fraction of that box covered by valid
+/// pixels.  A projective tile union can have transparent corner wedges even
+/// though its outer bounds are useful; the coverage lets callers choose a
+/// source-union crop only when those wedges are negligible.
+fn valid_mask_bounds_and_coverage(mask: &GrayImage) -> ((u32, u32, u32, u32), f32) {
+    let (width, height) = mask.dimensions();
+    if width == 0 || height == 0 {
+        return ((0, 0, 0, 0), 0.0);
+    }
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut valid = 0u64;
+    for y in 0..height {
+        for x in 0..width {
+            if mask.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            valid += 1;
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+    }
+    if valid == 0 {
+        return ((0, 0, 0, 0), 0.0);
+    }
+    let bbox_width = u64::from(max_x - min_x + 1);
+    let bbox_height = u64::from(max_y - min_y + 1);
+    let coverage = valid as f32 / (bbox_width * bbox_height).max(1) as f32;
+    ((min_x, min_y, max_x, max_y), coverage.clamp(0.0, 1.0))
+}
+
+pub(super) fn crop_to_valid_bounds(image: Rgb32FImage, mask: &GrayImage) -> Rgb32FImage {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || mask.dimensions() != (width, height) {
+        return image;
+    }
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut covered = false;
+    for y in 0..height {
+        for x in 0..width {
+            if mask.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            covered = true;
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+    }
+    if !covered {
+        return image;
+    }
+    let crop_width = max_x - min_x + 1;
+    let crop_height = max_y - min_y + 1;
+    if min_x == 0 && min_y == 0 && crop_width == width && crop_height == height {
+        return image;
+    }
+    image::imageops::crop_imm(&image, min_x, min_y, crop_width, crop_height).to_image()
+}
+
 fn reflected_run_source_index(
     target: usize,
     limit: usize,
@@ -5363,19 +6680,42 @@ fn harmonize_focus_background_tone_with_owners(
     ];
     let mut owner_corrections = vec![[0.0f32; 3]; u8::MAX as usize + 1];
     let mut corrected_owner_count = 0usize;
+    let mut rejected_owner_count = 0usize;
     for (owner, channels) in owner_channels.iter_mut().enumerate().skip(1) {
         if channels[0].len() < FOCUS_COLOR_MIN_SAMPLES {
             continue;
         }
-        let mut has_adjustment = false;
+        // A source owner may cover a different painted region from the global
+        // median. Its channel median is then content, not exposure. Require a
+        // low robust spread before treating the owner as a tone reference.
+        let mut owner_medians = [0.0f32; 3];
+        let mut inconsistent = false;
         for channel in 0..3 {
             if channels[channel].len() < FOCUS_COLOR_MIN_SAMPLES {
-                continue;
+                inconsistent = true;
+                break;
             }
-            let owner_tone = median_f32(&mut channels[channel]).unwrap_or(global_tone[channel]);
-            let correction = (global_tone[channel] - owner_tone).clamp(
-                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
-                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
+            owner_medians[channel] =
+                median_f32(&mut channels[channel].clone()).unwrap_or(global_tone[channel]);
+            let mut deviations = channels[channel]
+                .iter()
+                .map(|value| (*value - owner_medians[channel]).abs())
+                .collect::<Vec<_>>();
+            let mad = median_f32(&mut deviations).unwrap_or(0.0);
+            if !mad.is_finite() || mad > FOCUS_OWNER_TONE_MAX_MAD {
+                inconsistent = true;
+                break;
+            }
+        }
+        if inconsistent {
+            rejected_owner_count += 1;
+            continue;
+        }
+        let mut has_adjustment = false;
+        for channel in 0..3 {
+            let correction = (global_tone[channel] - owner_medians[channel]).clamp(
+                -FOCUS_OWNER_TONE_MAX_ADJUSTMENT,
+                FOCUS_OWNER_TONE_MAX_ADJUSTMENT,
             );
             owner_corrections[owner][channel] = correction;
             has_adjustment |= correction.abs() >= 0.002;
@@ -5384,50 +6724,39 @@ fn harmonize_focus_background_tone_with_owners(
             corrected_owner_count += 1;
         }
     }
-    // Estimate a low-frequency tone field from the final image itself. These
-    // frames cover one continuous piece of paper, so a broad source-sized
-    // brightness step is an acquisition artefact, not detail that should
-    // survive stacking. The small blur measures each tile's current tone; the
-    // wide blur only softens the correction at the edge of an owner region.
-    let local_tone = masked_box_blur_rgb(
-        &analysis_image,
-        &background,
-        FOCUS_BACKGROUND_TONE_LOCAL_RADIUS,
-    );
-    let smooth_tone = masked_box_blur_rgb(
-        &local_tone,
-        &background,
-        FOCUS_BACKGROUND_TONE_SMOOTH_RADIUS,
-    );
-    let local_pixels = local_tone.as_raw();
-    let smooth_pixels = smooth_tone.as_raw();
-
-    // Store the measured low-frequency correction only on protected background
-    // samples, then blur that field across the same mask. The blur removes the
-    // source-owner rectangle as a colour boundary while adding the correction
-    // back to the full-resolution image leaves its weave and brush detail
-    // untouched.
+    if std::env::var_os("RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS").is_some() {
+        let summary = owner_corrections
+            .iter()
+            .enumerate()
+            .skip(1)
+            .filter(|(_, correction)| correction.iter().any(|value| value.abs() >= 0.001))
+            .map(|(owner, correction)| {
+                format!(
+                    "{}:[{:.3},{:.3},{:.3}]",
+                    owner, correction[0], correction[1], correction[2]
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("  - Focus owner tone corrections: {summary}");
+    }
+    // The owner median is the exposure estimate. Do not derive a second
+    // correction from the image's own low-frequency content: on artwork that
+    // content is real paper ageing and brush tone, so pulling it toward one
+    // global median creates the foggy, low-contrast result this pass is meant
+    // to prevent. Extend each measured owner correction over that owner's
+    // complete image and blur only the owner boundary. This preserves local
+    // contrast while still removing a source-sized exposure step.
     let mut correction_pixels =
         vec![0.0f32; analysis_width as usize * analysis_height as usize * 3];
     for index in 0..background.as_raw().len() {
-        if background.as_raw()[index] == 0 {
+        if analysis_mask.as_raw()[index] == 0 {
             continue;
         }
         let start = index * 3;
         let owner_correction = owner_corrections[owner_analysis.as_raw()[index] as usize];
         for channel in 0..3 {
-            let target = smooth_pixels[start + channel]
-                * (1.0 - FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT)
-                + global_tone[channel] * FOCUS_BACKGROUND_TONE_GLOBAL_WEIGHT;
-            let local_correction = (target - local_pixels[start + channel]).clamp(
-                -FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
-                FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
-            );
-            // The owner median stabilizes very large regions whose local blur
-            // is interrupted by a figure; it is only a supplement to the
-            // pixel-local low-frequency estimate.
-            correction_pixels[start + channel] =
-                local_correction * 0.8 + owner_correction[channel] * 0.2;
+            correction_pixels[start + channel] = owner_correction[channel];
         }
     }
     let correction_image =
@@ -5437,8 +6766,8 @@ fn harmonize_focus_background_tone_with_owners(
         .round()
         .clamp(4.0, 16.0) as usize;
     let smoothed_correction =
-        masked_box_blur_rgb(&correction_image, &background, correction_radius);
-    let background_values = background
+        masked_box_blur_rgb(&correction_image, &analysis_mask, correction_radius);
+    let background_values = analysis_mask
         .as_raw()
         .iter()
         .map(|&value| f32::from(value > 0))
@@ -5468,12 +6797,10 @@ fn harmonize_focus_background_tone_with_owners(
                 if image_mask_ref[y * width as usize + x] == 0 {
                     continue;
                 }
-                // The cleaned analysis envelope is the protection boundary.
-                // Do not gate this by the current full-resolution colour: the
-                // darkest/lightest exposure tiles are precisely the background
-                // pixels that need correction, and the low-frequency field does
-                // not replace their weave or brush detail.
                 let start = x * 3;
+                if focus_stack_pixel_is_tone_foreground(&row[start..start + 3]) {
+                    continue;
+                }
                 let x_sample = x_samples[x];
                 let top_weight = background_weight_ref
                     [y_sample.lower * analysis_stride + x_sample.lower]
@@ -5516,8 +6843,8 @@ fn harmonize_focus_background_tone_with_owners(
             }
         });
     println!(
-        "  - Owner-based background harmonization: samples={} owners_adjusted={} radius={}px",
-        background_pixels, corrected_owner_count, correction_radius
+        "  - Owner-based background harmonization: samples={} owners_adjusted={} owners_rejected={} radius={}px",
+        background_pixels, corrected_owner_count, rejected_owner_count, correction_radius
     );
 }
 
@@ -6456,6 +7783,66 @@ pub fn focus_stack_stitcher<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    focus_stack_stitcher_with_margin_policy(
+        images,
+        global_homographies,
+        projection,
+        focus_warp,
+        capture_group_ids,
+        sequence_gap_aware,
+        true,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+}
+
+/// Focus-fuse a station while preserving the projected validity mask.  Virtual
+/// tiles use this form because their non-rectangular projective corners must
+/// remain transparent until the tile-level compositor owns them.
+pub(crate) fn focus_stack_stitcher_unfilled<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+    capture_group_ids: Option<&HashMap<usize, u8>>,
+    sequence_gap_aware: bool,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    focus_stack_stitcher_with_margin_policy(
+        images,
+        global_homographies,
+        projection,
+        focus_warp,
+        capture_group_ids,
+        sequence_gap_aware,
+        false,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+}
+
+fn focus_stack_stitcher_with_margin_policy<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+    capture_group_ids: Option<&HashMap<usize, u8>>,
+    sequence_gap_aware: bool,
+    fill_margins: bool,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
     if images.is_empty() {
         return Ok(Rgb32FImage::new(0, 0));
     }
@@ -6637,25 +8024,35 @@ where
         // the next source can still see the stale analysis winner and add a
         // second copy of the object. The mask is deliberately generic and
         // applies to any detected near-field/occlusion layer.
-        suppress_focus_foreground_switches_on_canvas(
-            &mut analysis_decision,
-            &merged_analysis_foreground_mask,
-            &candidate_analysis.foreground_mask,
-            &candidate_analysis.relaxed_foreground_mask,
-        );
-        suppress_focus_foreground_ownership_switches_on_canvas(
-            &mut analysis_decision,
-            &merged_analysis_foreground_mask,
-            &candidate_analysis.mask,
-            &candidate_analysis.relaxed_foreground_mask,
-        );
-        suppress_focus_canvas_switches(
-            &mut analysis_decision,
-            &merged_analysis,
-            &candidate_analysis.image,
-            &merged_analysis_mask,
-            &candidate_analysis.mask,
-        );
+        if shifted_mosaic {
+            suppress_focus_foreground_switches_on_canvas(
+                &mut analysis_decision,
+                &merged_analysis_foreground_mask,
+                &candidate_analysis.foreground_mask,
+                &candidate_analysis.relaxed_foreground_mask,
+            );
+            suppress_focus_foreground_ownership_switches_on_canvas(
+                &mut analysis_decision,
+                &merged_analysis_foreground_mask,
+                &candidate_analysis.mask,
+                &candidate_analysis.relaxed_foreground_mask,
+            );
+        }
+        // In a compact focus bracket, the paper/canvas plane is exactly what
+        // the stack is supposed to sharpen, so later focused layers must be
+        // allowed to replace an already covered canvas pixel.  The guard is
+        // only needed for a shifted scan, where a canvas-like overlap can be
+        // a different physical camera position and switching it creates broad
+        // rectangular exposure blocks.
+        if shifted_mosaic {
+            suppress_focus_canvas_switches(
+                &mut analysis_decision,
+                &merged_analysis,
+                &candidate_analysis.image,
+                &merged_analysis_mask,
+                &candidate_analysis.mask,
+            );
+        }
         let mut full_resolution_decision =
             focus_decision_for_layer(&analysis_decision, &candidate, out_width, out_height);
         // A detected near-field layer is geometrically separate from the main
@@ -6663,19 +8060,21 @@ where
         // already placed instance of that layer; doing so creates block-shaped
         // brightness and edge jumps in a moving scan. New pixels can still be
         // added where the mosaic has no ownership yet.
-        suppress_focus_foreground_switches(
-            &mut full_resolution_decision,
-            &merged_foreground_mask,
-            &candidate,
-        );
-        suppress_focus_foreground_ownership_switches(
-            &mut full_resolution_decision,
-            &merged_foreground_mask,
-            &candidate.mask,
-            candidate.left,
-            candidate.top,
-            &candidate.relaxed_foreground_mask,
-        );
+        if shifted_mosaic {
+            suppress_focus_foreground_switches(
+                &mut full_resolution_decision,
+                &merged_foreground_mask,
+                &candidate,
+            );
+            suppress_focus_foreground_ownership_switches(
+                &mut full_resolution_decision,
+                &merged_foreground_mask,
+                &candidate.mask,
+                candidate.left,
+                candidate.top,
+                &candidate.relaxed_foreground_mask,
+            );
+        }
         // A shifted scan can put the ownership boundary through a face, sleeve,
         // or painted contour. Averaging the full-resolution detail there turns
         // two slightly displaced sharp samples into a soft double exposure.
@@ -6733,31 +8132,147 @@ where
             resize_binary_mask(&merged_foreground_mask, analysis_width, analysis_height);
     }
     let merged_dimensions = merged.dimensions();
-    let (filled_pixels, remaining_invalid_pixels) =
-        fill_focus_canvas_margins(&mut merged, &mut merged_mask);
-    println!(
-        "  - Kept full focus-stack canvas {}x{}; filled {} invalid margin pixels{}",
-        merged_dimensions.0,
-        merged_dimensions.1,
-        filled_pixels,
-        if remaining_invalid_pixels > 0 {
-            format!(" ({} remain)", remaining_invalid_pixels)
-        } else {
-            String::new()
+    if fill_margins {
+        let (filled_pixels, remaining_invalid_pixels) =
+            fill_focus_canvas_margins(&mut merged, &mut merged_mask);
+        println!(
+            "  - Kept full focus-stack canvas {}x{}; filled {} invalid margin pixels{}",
+            merged_dimensions.0,
+            merged_dimensions.1,
+            filled_pixels,
+            if remaining_invalid_pixels > 0 {
+                format!(" ({} remain)", remaining_invalid_pixels)
+            } else {
+                String::new()
+            }
+        );
+    } else {
+        println!(
+            "  - Kept unfilled focus-tile canvas {}x{}; retaining projected invalid margins",
+            merged_dimensions.0, merged_dimensions.1
+        );
+        let sharpen_amount = std::env::var("RAW_EDITOR_FOCUS_SHARPEN_AMOUNT")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .filter(|value| value.is_finite())
+            .unwrap_or(1.35)
+            .clamp(0.0, 2.0);
+        sharpen_focus_tile_detail(&mut merged, &merged_mask, sharpen_amount);
+    }
+    if std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS").is_some() {
+        let mut counts = vec![0usize; images.len() + 2];
+        for (&owner, &valid) in merged_owner.as_raw().iter().zip(merged_mask.as_raw()) {
+            if valid == 0 {
+                continue;
+            }
+            let index = owner as usize;
+            if index >= counts.len() {
+                counts.resize(index + 1, 0);
+            }
+            counts[index] += 1;
         }
-    );
+        let total: usize = counts.iter().sum();
+        let summary = counts
+            .iter()
+            .enumerate()
+            .filter(|(_, count)| **count > 0)
+            .map(|(index, count)| {
+                format!(
+                    "{}:{:.1}%",
+                    index,
+                    *count as f64 * 100.0 / total.max(1) as f64
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!(
+            "  - Focus ownership diagnostics: valid={} owners=[{}]",
+            total, summary
+        );
+    }
     // A newly exposed canvas region may have no overlap samples from which to
     // estimate a source-specific colour transform. Once ownership is final,
     // remove only the remaining source-sized low-frequency tone steps across
     // the complete mosaic. The strict canvas gate preserves the original
     // weave and painted foreground instead of treating it as a background.
-    harmonize_focus_background_tone_with_owners(
-        &mut merged,
-        &merged_mask,
-        &merged_foreground_mask,
-        &merged_owner,
-    );
+    // Every virtual tile must leave the focus stack with one continuous paper
+    // tone. The robust owner estimator above is safe by default; keep an
+    // explicit opt-out for diagnostics and for scenes whose canvas is known to
+    // contain deliberate owner-specific illumination.
+    if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {
+        harmonize_focus_background_tone_with_owners(
+            &mut merged,
+            &merged_mask,
+            &merged_foreground_mask,
+            &merged_owner,
+        );
+    } else {
+        println!("  - Skipping focus owner tone harmonization (explicit opt-out)");
+    }
     Ok(merged)
+}
+
+/// Restore a small amount of native edge contrast after focus ownership.  The
+/// focus score intentionally uses a local blur and the ownership mask is
+/// upsampled from an analysis canvas, both of which are stable but slightly
+/// conservative around thin brush strokes.  This bounded luma-only unsharp
+/// pass runs per virtual tile, never across a projected invalid corner, and
+/// therefore cannot blend two camera positions together.
+fn sharpen_focus_tile_detail(image: &mut Rgb32FImage, mask: &GrayImage, amount: f32) {
+    let (width, height) = image.dimensions();
+    if width < 3 || height < 3 || mask.dimensions() != (width, height) || amount <= 0.0 {
+        return;
+    }
+    let source = image.clone();
+    let source_pixels = source.as_raw();
+    let source_mask = mask.as_raw();
+    let width_usize = width as usize;
+    let height_usize = height as usize;
+    image
+        .as_mut()
+        .par_chunks_mut(width_usize * 3)
+        .enumerate()
+        .for_each(|(y, row)| {
+            if y == 0 || y + 1 >= height_usize {
+                return;
+            }
+            for x in 1..width_usize - 1 {
+                let center_index = y * width_usize + x;
+                if source_mask[center_index] == 0 {
+                    continue;
+                }
+                let center_start = center_index * 3;
+                let center_luma = source_pixels[center_start] * 0.299
+                    + source_pixels[center_start + 1] * 0.587
+                    + source_pixels[center_start + 2] * 0.114;
+                let mut sum = 0.0f32;
+                let mut count = 0u32;
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        let index = ny * width_usize + nx;
+                        if source_mask[index] == 0 {
+                            continue;
+                        }
+                        let start = index * 3;
+                        sum += source_pixels[start] * 0.299
+                            + source_pixels[start + 1] * 0.587
+                            + source_pixels[start + 2] * 0.114;
+                        count += 1;
+                    }
+                }
+                if count < 5 {
+                    continue;
+                }
+                let detail = center_luma - sum / count as f32;
+                let boost = (detail * amount).clamp(-0.12, 0.12);
+                let start = x * 3;
+                row[start] = (row[start] + boost).clamp(0.0, 1.0);
+                row[start + 1] = (row[start + 1] + boost).clamp(0.0, 1.0);
+                row[start + 2] = (row[start + 2] + boost).clamp(0.0, 1.0);
+            }
+        });
 }
 
 fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
@@ -6791,7 +8306,12 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
                 };
                 let sx = source.x;
                 let sy = source.y;
-                if sx >= 0.0 && sx < w_add as f64 && sy >= 0.0 && sy < h_add_img as f64 {
+                if sx >= 0.0
+                    && sx < w_add as f64
+                    && sy >= 0.0
+                    && sy < h_add_img as f64
+                    && source_sample_has_support(ctx.img_to_add, sx, sy)
+                {
                     has_overlap = true;
                     min_ox = min_ox.min(x);
                     max_ox = max_ox.max(x);
@@ -6891,13 +8411,16 @@ fn seam_energy_at(ctx: &SeamContext, h_add_inv: &Matrix3<f64>, x: u32, y: u32) -
         || source.y < 0.0
         || source.x >= ctx.img_to_add.width() as f64 - 1.0
         || source.y >= ctx.img_to_add.height() as f64 - 1.0
+        || !source_sample_has_support(ctx.img_to_add, source.x, source.y)
     {
         return None;
     }
     let base = ctx.pano.get_pixel(x, y);
-    let candidate = apply_exposure_gain(
+    let candidate = apply_exposure_compensation(
         get_interpolated_pixel(ctx.img_to_add, source.x, source.y),
-        ctx.exposure.gain_at(x, y),
+        ctx.exposure,
+        x,
+        y,
     );
     Some(
         ((base[0] as f64 - candidate[0] as f64).powi(2)
@@ -7140,6 +8663,42 @@ fn cubic_sample(p0: f64, p1: f64, p2: f64, p3: f64, amount: f64) -> f64 {
             + amount * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + amount * (3.0 * (p1 - p2) + p3 - p0)))
 }
 
+/// Return whether a source coordinate has actual image support.
+///
+/// Warped virtual tiles are stored in a rectangular RGB buffer even when the
+/// projective footprint is triangular or otherwise clipped.  Those uncovered
+/// corners are represented by exact black pixels, so a rectangle-only bounds
+/// check would incorrectly feed them into the seam and its low-frequency
+/// pyramid.  Real artwork may contain very dark strokes, but a decoded image
+/// sample still has non-zero energy in at least one channel; requiring a small
+/// positive floor keeps those samples while rejecting the transparent zero
+/// support used by the renderer.
+#[inline]
+fn source_sample_has_support(image: &Rgb32FImage, x: f64, y: f64) -> bool {
+    const SUPPORT_EPSILON: f32 = 1e-6;
+    let (width, height) = image.dimensions();
+    if width == 0
+        || height == 0
+        || !x.is_finite()
+        || !y.is_finite()
+        || x < 0.0
+        || y < 0.0
+        || x >= width as f64
+        || y >= height as f64
+    {
+        return false;
+    }
+    // Use the nearest source sample rather than the interpolated value.  A
+    // cubic sample near a transparent corner can be non-zero solely because
+    // its support straddles the valid footprint; the nearest source pixel is
+    // the stable ownership signal and avoids re-introducing that corner.
+    let source_x = (x.floor() as u32).min(width - 1);
+    let source_y = (y.floor() as u32).min(height - 1);
+    let pixel = image.get_pixel(source_x, source_y);
+    pixel.0.iter().all(|value| value.is_finite())
+        && pixel.0.iter().any(|value| *value > SUPPORT_EPSILON)
+}
+
 pub(super) fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
     let (width, height) = img.dimensions();
     if width < 4
@@ -7237,6 +8796,189 @@ mod interpolation_tests {
         let blurred = box_blur_focus_map(&source, 5, 4, 2);
 
         assert!(blurred.iter().all(|value| (*value - 3.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn overlap_exposure_ignores_coloured_artwork_samples() {
+        const WIDTH: u32 = 64;
+        const HEIGHT: u32 = 64;
+        let base = Rgb32FImage::from_pixel(WIDTH, HEIGHT, Rgb([0.60, 0.50, 0.40]));
+        let candidate = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, _| {
+            if x < WIDTH * 3 / 4 {
+                // A saturated red seal must not determine the paper gain.
+                Rgb([1.0, 0.02, 0.01])
+            } else {
+                Rgb([0.60, 0.50, 0.40])
+            }
+        });
+        let mut info = geometry_test_image(0, None);
+        info.width = WIDTH;
+        info.height = HEIGHT;
+        let panorama_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let compensation = estimate_overlap_exposure_compensation(ExposureOverlap {
+            panorama: &base,
+            panorama_mask: &panorama_mask,
+            candidate: &info,
+            candidate_image: &candidate,
+            candidate_inverse: &Matrix3::identity(),
+            projection: Projection::Planar,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        });
+
+        assert!(
+            (compensation.representative_gain - 1.0).abs() < 0.02,
+            "artwork contaminated exposure estimate: gain={:.3}",
+            compensation.representative_gain
+        );
+    }
+
+    #[test]
+    fn overlap_exposure_recovers_bounded_rgb_channel_gain() {
+        const WIDTH: u32 = 64;
+        const HEIGHT: u32 = 64;
+        let base = Rgb32FImage::from_pixel(WIDTH, HEIGHT, Rgb([0.66, 0.52, 0.40]));
+        let candidate = Rgb32FImage::from_pixel(WIDTH, HEIGHT, Rgb([0.60, 0.55, 0.44]));
+        let mut info = geometry_test_image(0, None);
+        info.width = WIDTH;
+        info.height = HEIGHT;
+        let panorama_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let compensation = estimate_overlap_exposure_compensation(ExposureOverlap {
+            panorama: &base,
+            panorama_mask: &panorama_mask,
+            candidate: &info,
+            candidate_image: &candidate,
+            candidate_inverse: &Matrix3::identity(),
+            projection: Projection::Planar,
+            offset_x: 0.0,
+            offset_y: 0.0,
+        });
+        let gains = compensation.representative_channel_gain;
+        assert!((gains[0] - 1.10).abs() < 0.02, "red gain={:.3}", gains[0]);
+        assert!((gains[1] - 0.95).abs() < 0.02, "green gain={:.3}", gains[1]);
+        assert!((gains[2] - 0.91).abs() < 0.02, "blue gain={:.3}", gains[2]);
+    }
+
+    #[test]
+    fn progressive_exposure_damping_keeps_direction_without_chain_drift() {
+        let compensation = ExposureCompensation {
+            cell_size: 1,
+            grid_width: 1,
+            grid_height: 1,
+            gains: vec![0.75],
+            representative_gain: 0.75,
+            channel_gains: vec![[0.75, 1.20, 1.0]],
+            representative_channel_gain: [0.75, 1.20, 1.0],
+        }
+        .damped(0.45);
+        let expected = 0.75f32.ln().mul_add(0.45, 0.0).exp();
+        assert!((compensation.representative_gain - expected).abs() < 1e-6);
+        assert!(compensation.representative_gain < 1.0);
+        assert!(compensation.representative_gain > 0.85);
+        assert!(compensation.representative_channel_gain[1] > 1.0);
+        assert_eq!(compensation.gain_at(0, 0), compensation.representative_gain);
+    }
+
+    #[test]
+    fn seam_blend_rejects_a_triangular_zero_support_corner() {
+        const WIDTH: u32 = 64;
+        const HEIGHT: u32 = 64;
+        let paper = Rgb([0.62, 0.51, 0.43]);
+        let mut panorama = Rgb32FImage::from_pixel(WIDTH, HEIGHT, paper);
+        let mut panorama_mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let candidate = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            if x + y < 28 {
+                Rgb([0.0, 0.0, 0.0])
+            } else {
+                paper
+            }
+        });
+        let mut info = geometry_test_image(0, None);
+        info.width = WIDTH;
+        info.height = HEIGHT;
+        let exposure = ExposureCompensation {
+            cell_size: 1,
+            grid_width: 1,
+            grid_height: 1,
+            gains: vec![1.0],
+            representative_gain: 1.0,
+            channel_gains: vec![[1.0; 3]],
+            representative_channel_gain: [1.0; 3],
+        };
+        let seam_coords = vec![HEIGHT as i32 / 2; WIDTH as usize];
+        blend_panorama_seam_band(SeamBandBlend {
+            panorama: &mut panorama,
+            panorama_mask: &mut panorama_mask,
+            img_to_add_info: &info,
+            img_to_add: &candidate,
+            h_add: &Matrix3::identity(),
+            projection: Projection::Planar,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            orientation: SeamOrientation::Horizontal,
+            seam_coords: &seam_coords,
+            new_image_is_dominant_side: true,
+            min_x: 0,
+            max_x: WIDTH - 1,
+            min_y: 0,
+            max_y: HEIGHT - 1,
+            exposure: &exposure,
+        });
+
+        let maximum_error = panorama
+            .as_raw()
+            .iter()
+            .zip(std::iter::repeat(&paper.0).flatten())
+            .map(|(actual, expected)| (actual - expected).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            maximum_error < 1e-4,
+            "zero-support corner leaked into the seam pyramid: error={maximum_error}"
+        );
+        assert!(!source_sample_has_support(&candidate, 4.0, 4.0));
+        assert!(source_sample_has_support(&candidate, 40.0, 40.0));
+    }
+
+    #[test]
+    fn focus_tile_tie_break_is_stable_and_quality_first() {
+        assert!(focus_tile_ownership_should_replace(0, 0, 1, 3));
+        assert!(focus_tile_ownership_should_replace(80, 4, 81, 9));
+        assert!(!focus_tile_ownership_should_replace(81, 4, 80, 1));
+        // Equal edge distance must resolve to the same tile identity even if
+        // the caller's loading order changes.
+        assert!(focus_tile_ownership_should_replace(120, 9, 120, 4));
+        assert!(!focus_tile_ownership_should_replace(120, 4, 120, 9));
+    }
+
+    #[test]
+    fn focus_score_prefers_native_edges_over_a_blurred_layer() {
+        const WIDTH: u32 = 128;
+        const HEIGHT: u32 = 128;
+        let sharp = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            // Use aperiodic, high-frequency structure so the metric cannot
+            // win by matching a single periodic phase after blur.
+            let cell = ((x / 3 + y / 5 + (x * 7 + y * 11) % 5) & 1) as f32;
+            let value = 0.18 + cell * 0.62;
+            Rgb([value, value * 0.92, value * 0.84])
+        });
+        let blurred = image::imageops::blur(&sharp, 2.2);
+        let mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+        let sharp_score = focus_score_map(&sharp, &mask);
+        let blurred_score = focus_score_map(&blurred, &mask);
+        let interior = |scores: &[f32]| {
+            let mut values = Vec::new();
+            for y in 8..(HEIGHT - 8) as usize {
+                let row = y * WIDTH as usize;
+                values.extend_from_slice(&scores[row + 8..row + (WIDTH - 8) as usize]);
+            }
+            values.iter().copied().sum::<f32>() / values.len().max(1) as f32
+        };
+        let sharp_mean = interior(&sharp_score);
+        let blurred_mean = interior(&blurred_score);
+        assert!(
+            sharp_mean > blurred_mean * 1.8,
+            "focus metric did not separate sharp={sharp_mean:.5} from blurred={blurred_mean:.5}"
+        );
     }
 
     #[test]
@@ -7401,6 +9143,87 @@ mod interpolation_tests {
         assert!(
             blended_variation >= source_variation * 0.9,
             "medium-frequency contrast fell from {source_variation:.3} to {blended_variation:.3}",
+        );
+    }
+
+    #[test]
+    fn focus_translation_recovers_a_non_grid_aligned_displacement() {
+        const WIDTH: u32 = 800;
+        const HEIGHT: u32 = 800;
+        const LEFT: i32 = 21;
+        const TOP: i32 = 17;
+        const SHIFT_X: i32 = 19;
+        const SHIFT_Y: i32 = 11;
+        let pattern = |x: i32, y: i32| {
+            let x = x as f32;
+            let y = y as f32;
+            // A deterministic aperiodic texture keeps the correspondence
+            // unique instead of letting a periodic texture pass the margin at
+            // another offset.
+            let xi = x as i32;
+            let yi = y as i32;
+            let hash = ((xi.wrapping_mul(73_856_093)
+                ^ yi.wrapping_mul(19_349_663)
+                ^ (xi.wrapping_mul(yi)).wrapping_mul(83_492_791))
+                & 255) as f32
+                / 255.0;
+            let wave = (x * 0.017 + y * 0.043).sin() * 0.12;
+            (0.12 + hash * 0.72 + wave).clamp(0.03, 0.97)
+        };
+        let candidate_image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            let value = pattern(x as i32, y as i32);
+            Rgb([value, value * 0.91, value * 0.78])
+        });
+        let merged_image = Rgb32FImage::from_fn(WIDTH + 80, HEIGHT + 80, |x, y| {
+            let source_x = x as i32 - LEFT - SHIFT_X;
+            let source_y = y as i32 - TOP - SHIFT_Y;
+            let value = pattern(source_x, source_y);
+            Rgb([value, value * 0.91, value * 0.78])
+        });
+        let candidate = RenderedFocusLayer {
+            image: candidate_image,
+            mask: GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
+            foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            relaxed_foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            left: LEFT as u32,
+            top: TOP as u32,
+        };
+        let merged_mask = GrayImage::from_pixel(WIDTH + 80, HEIGHT + 80, image::Luma([255]));
+
+        let result = estimate_focus_layer_translation(&candidate, &merged_image, &merged_mask)
+            .expect("synthetic overlap should produce a translation");
+
+        assert_eq!((result.0, result.1), (SHIFT_X, SHIFT_Y));
+        assert!(result.3 >= 8, "insufficient patch consensus: {:?}", result);
+    }
+
+    #[test]
+    fn focus_translation_accepts_aligned_layers_without_forcing_motion() {
+        const WIDTH: u32 = 640;
+        const HEIGHT: u32 = 640;
+        let pattern = |x: i32, y: i32| {
+            let v = ((x * 17 + y * 29).rem_euclid(97) as f32) / 97.0;
+            0.15 + 0.7 * v
+        };
+        let image = Rgb32FImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            let value = pattern(x as i32, y as i32);
+            Rgb([value, value * 0.8, value * 0.65])
+        });
+        let candidate = RenderedFocusLayer {
+            image: image.clone(),
+            mask: GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255])),
+            foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            relaxed_foreground_mask: GrayImage::new(WIDTH, HEIGHT),
+            left: 0,
+            top: 0,
+        };
+        let mask = GrayImage::from_pixel(WIDTH, HEIGHT, image::Luma([255]));
+
+        let result = estimate_focus_layer_translation(&candidate, &image, &mask);
+
+        assert!(
+            result.is_none(),
+            "already aligned layers should remain untouched: {result:?}"
         );
     }
 

@@ -43,9 +43,9 @@ const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.45;
 // much broader low-frequency transition than the ownership antialiasing.
 // These radii operate on the bounded 2400px analysis image.
 const STREAMING_ILLUMINATION_LOCAL_SIGMA: f32 = 16.0;
-const STREAMING_ILLUMINATION_CONTINUOUS_SIGMA: f32 = 180.0;
-const STREAMING_ILLUMINATION_MIN_GAIN: f64 = 0.78;
-const STREAMING_ILLUMINATION_MAX_GAIN: f64 = 1.28;
+const STREAMING_ILLUMINATION_CONTINUOUS_SIGMA: f32 = 320.0;
+const STREAMING_ILLUMINATION_MIN_GAIN: f64 = 0.70;
+const STREAMING_ILLUMINATION_MAX_GAIN: f64 = 1.40;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
@@ -594,7 +594,7 @@ fn apply_streaming_seam_harmonization(output: &mut Rgb32FImage, gains: &Rgb32FIm
         });
 }
 
-fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
+pub(super) fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
     let scale = (output.width().max(output.height()) as f64
         / STREAMING_HARMONIZATION_LONG_SIDE as f64)
         .max(1.0);
@@ -629,17 +629,39 @@ fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
         if valid.get_pixel(x, y)[0] == 0.0 {
             return Rgb([1.0; 3]);
         }
-        let local = luma(*local_low.get_pixel(x, y));
-        let continuous = luma(*continuous_low.get_pixel(x, y));
-        let gain = if local > 0.025 && continuous > 0.025 {
+        let local_pixel = *local_low.get_pixel(x, y);
+        let continuous_pixel = *continuous_low.get_pixel(x, y);
+        let local = luma(local_pixel);
+        let continuous = luma(continuous_pixel);
+        let luminance_gain = if local > 0.025 && continuous > 0.025 {
             (continuous / local).clamp(
                 STREAMING_ILLUMINATION_MIN_GAIN,
                 STREAMING_ILLUMINATION_MAX_GAIN,
             ) as f32
         } else {
-            1.0
+            1.0f32
         };
-        Rgb([gain; 3])
+        // Exposure and white-balance changes affect channels together, but a
+        // scalar luma gain leaves a coloured seam when two RAW frames have
+        // slightly different white balance.  Use the broad luma correction as
+        // the anchor and add a restrained per-channel low-frequency term. The
+        // high-frequency detail is still taken verbatim from the selected
+        // owner, so this cannot blur brush edges.
+        Rgb(std::array::from_fn(|channel| {
+            let channel_gain = if local_pixel[channel] > 0.025 && continuous_pixel[channel] > 0.025
+            {
+                (continuous_pixel[channel] / local_pixel[channel]).clamp(
+                    STREAMING_ILLUMINATION_MIN_GAIN as f32,
+                    STREAMING_ILLUMINATION_MAX_GAIN as f32,
+                )
+            } else {
+                luminance_gain
+            };
+            (luminance_gain * 0.72 + channel_gain * 0.28).clamp(
+                STREAMING_ILLUMINATION_MIN_GAIN as f32,
+                STREAMING_ILLUMINATION_MAX_GAIN as f32,
+            )
+        }))
     });
     let output_width = output.width() as usize;
     output
@@ -654,9 +676,9 @@ fn smooth_streaming_low_frequency_illumination(output: &mut Rgb32FImage) {
                     continue;
                 }
                 let gain_x = (x as f64 / scale).clamp(0.0, gains.width().saturating_sub(1) as f64);
-                let gain = get_high_quality_interpolated_pixel(&gains, gain_x, gain_y)[0];
-                for channel in pixel {
-                    *channel = (*channel * gain).clamp(0.0, 1.0);
+                let gain = get_high_quality_interpolated_pixel(&gains, gain_x, gain_y);
+                for channel in 0..3 {
+                    pixel[channel] = (pixel[channel] * gain[channel]).clamp(0.0, 1.0);
                 }
             }
         });
@@ -2082,7 +2104,7 @@ fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
     found.then_some((min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
 }
 
-pub(super) fn detail_preserving_mosaic<R: Runtime, F>(
+pub(crate) fn detail_preserving_mosaic<R: Runtime, F>(
     images: &[&ImageInfo],
     homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
