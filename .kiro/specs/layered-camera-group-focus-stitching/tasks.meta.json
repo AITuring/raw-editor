@@ -1,0 +1,76 @@
+{
+  "pbtResults": {
+    "9.27 属性测试：无闭环约束时直接输出生成树解": {
+      "status": "passed",
+      "lastRunTimestamp": 1790450186890
+    },
+    "9.29 属性测试：拒绝优先于降级": {
+      "status": "passed",
+      "lastRunTimestamp": 1790450210573
+    },
+    "9.30 属性测试：路径选择由机位数量决定并被记录": {
+      "status": "passed",
+      "lastRunTimestamp": 1790500875355
+    },
+    "9.25 属性测试：被接受的闭环解满足残差上界": {
+      "status": "passed",
+      "lastRunTimestamp": 1790493419218
+    },
+    "9.15 属性测试：机位间证据仅取自已覆盖像素": {
+      "status": "passed",
+      "lastRunTimestamp": 1790510934803
+    }
+  },
+  "executionHistory": {
+    "9.28 属性测试：闭环降级不放松画质判据": [
+      {
+        "executionId": "f21d80a2-f437-4464-9afa-80a971a053cd",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790448566615
+      },
+      {
+        "executionId": "9a123335-896c-4420-a622-651ccdac43f5",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790493120119
+      }
+    ],
+    "9.29 属性测试：拒绝优先于降级": [
+      {
+        "executionId": "f21d80a2-f437-4464-9afa-80a971a053cd",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790448566752
+      }
+    ],
+    "9.30 属性测试：路径选择由机位数量决定并被记录": [
+      {
+        "executionId": "f21d80a2-f437-4464-9afa-80a971a053cd",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790448566885
+      }
+    ],
+    "9.31 单元测试：`StationTopology` 不含位姿参数": [
+      {
+        "executionId": "f21d80a2-f437-4464-9afa-80a971a053cd",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790448567037
+      },
+      {
+        "executionId": "9a123335-896c-4420-a622-651ccdac43f5",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790493120559
+      }
+    ],
+    "10. 阶段 4 检查点": [
+      {
+        "executionId": "9a123335-896c-4420-a622-651ccdac43f5",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790493120772
+      },
+      {
+        "executionId": "f2cd87f5-634e-430d-a617-eb23f0e23810",
+        "chatSessionId": "sess_bc91b75f-48f6-421b-b76d-bc8a557c60ed",
+        "timestamp": 1790499184657
+      }
+    ]
+  }
+}
