@@ -1,10 +1,22 @@
 use super::photometric::{PhotometricModel, PhotometricOptions, calibrate_overlap_photometry};
+use super::stack_pipeline::degradation;
+use super::stack_pipeline::focus_fuser::{
+    self, CandidateCells, CellSamplingPlan, OwnershipGridGeometry, StationFusion, cell_disagreement,
+};
+use super::stack_pipeline::intra_station;
+use super::stack_pipeline::report::{
+    FusionReport, IntraStationFrameRecord, IntraStationFrameStatus, OwnershipGridSize,
+};
+use super::stack_pipeline::station_degradation::{
+    GroupJoinEvidence, GroupJoinRejection, StationMember, group_join_rejection,
+    plan_station_fusion, record_run_entries, record_run_group_join_rejection, station_plan_entries,
+};
 use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
 use image::{GrayImage, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Runtime};
 
 const PANORAMA_BLEND_BANDS: usize = 9;
@@ -126,6 +138,10 @@ const FOCUS_FULL_RES_ALIGNMENT_MIN_MARGIN: f64 = 0.025;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_ENERGY: f64 = 0.008;
 const FOCUS_FULL_RES_ALIGNMENT_MIN_PATCHES: usize = 4;
 const FOCUS_FULL_RES_ALIGNMENT_MAX_FOREGROUND_FRACTION: f64 = 0.25;
+/// Smallest native-resolution correction worth resampling a rendered layer for
+/// (需求 2.3).  Below a twentieth of a pixel the warp is indistinguishable from
+/// the interpolation it costs, so the already rendered pixels are kept.
+const FOCUS_NATIVE_REFINEMENT_MIN_OFFSET_PX: f64 = 0.05;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
@@ -309,19 +325,448 @@ pub(crate) fn output_canvas_dimensions_with_focus_warp(
     (width, height)
 }
 
+/// Reserved Ownership_Map identifier for a pixel that no Source_RAW owns
+/// (需求 3.7).  Every other identifier is `source index + 1`, so
+/// `legend[id - 1]` is the owning file.
+pub(crate) const NO_OWNER: u16 = 0;
+
+/// Colour encoding of the Virtual_Tile pixels (需求 4.2).  The focus fuser
+/// copies decoded source pixels, so the tile inherits the encoding of the
+/// render pipeline rather than choosing one of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ColorEncoding {
+    LinearSrgb,
+    DisplaySrgb,
+}
+
+/// Maps every Virtual_Tile pixel to at most one Source_RAW (需求 4.1 / 4.6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OwnershipMap {
+    width: u32,
+    height: u32,
+    owners: Vec<u16>,
+    /// `legend[id - 1]` is the absolute path of owner identifier `id`.
+    legend: Vec<PathBuf>,
+}
+
+impl OwnershipMap {
+    pub(crate) fn new(
+        width: u32,
+        height: u32,
+        owners: Vec<u16>,
+        legend: Vec<PathBuf>,
+    ) -> Result<Self, String> {
+        let expected = width as usize * height as usize;
+        if owners.len() != expected {
+            return Err(format!(
+                "ownership map holds {} entries for a {}x{} tile",
+                owners.len(),
+                width,
+                height
+            ));
+        }
+        if let Some(&invalid) = owners.iter().find(|&&owner| owner as usize > legend.len()) {
+            return Err(format!(
+                "ownership map references owner {} outside a legend of {} source(s)",
+                invalid,
+                legend.len()
+            ));
+        }
+        Ok(Self {
+            width,
+            height,
+            owners,
+            legend,
+        })
+    }
+
+    pub(crate) fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub(crate) fn owners(&self) -> &[u16] {
+        &self.owners
+    }
+
+    pub(crate) fn legend(&self) -> &[PathBuf] {
+        &self.legend
+    }
+
+    pub(crate) fn owner_at(&self, x: u32, y: u32) -> u16 {
+        if x >= self.width || y >= self.height {
+            return NO_OWNER;
+        }
+        self.owners[y as usize * self.width as usize + x as usize]
+    }
+
+    /// Owned pixel count per legend entry, in legend order (需求 4.1).
+    pub(crate) fn owned_pixel_counts(&self) -> Vec<u64> {
+        let mut counts = vec![0u64; self.legend.len()];
+        for &owner in &self.owners {
+            if owner == NO_OWNER {
+                continue;
+            }
+            counts[owner as usize - 1] += 1;
+        }
+        counts
+    }
+
+    pub(crate) fn assigned_pixels(&self) -> u64 {
+        self.owners
+            .iter()
+            .filter(|&&owner| owner != NO_OWNER)
+            .count() as u64
+    }
+}
+
+/// Binary Coverage_Mask: whether a Virtual_Tile pixel is covered by at least
+/// one valid source projection (需求 3.7 / 4.6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CoverageMask {
+    width: u32,
+    height: u32,
+    /// Non-zero means covered; the focus renderer already keeps this mask as
+    /// an 8-bit image, so the tile stores it without a re-encoding step.
+    covered: Vec<u8>,
+}
+
+impl CoverageMask {
+    pub(crate) fn from_gray(mask: GrayImage) -> Self {
+        let (width, height) = mask.dimensions();
+        Self {
+            width,
+            height,
+            covered: mask.into_raw(),
+        }
+    }
+
+    /// Rebuild a mask from a raw coverage plane, one byte per pixel, non-zero
+    /// meaning covered.  Used by the Virtual_Tile disk cache, which stores the
+    /// mask as one bit per pixel and expands it on read (需求 4.3).
+    pub(crate) fn from_bytes(width: u32, height: u32, covered: Vec<u8>) -> Result<Self, String> {
+        let expected = width as usize * height as usize;
+        if covered.len() != expected {
+            return Err(format!(
+                "coverage mask holds {} entries for a {}x{} tile",
+                covered.len(),
+                width,
+                height
+            ));
+        }
+        Ok(Self {
+            width,
+            height,
+            covered,
+        })
+    }
+
+    pub(crate) fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub(crate) fn is_covered(&self, x: u32, y: u32) -> bool {
+        if x >= self.width || y >= self.height {
+            return false;
+        }
+        self.covered[y as usize * self.width as usize + x as usize] > 0
+    }
+
+    pub(crate) fn covered(&self) -> &[u8] {
+        &self.covered
+    }
+
+    pub(crate) fn covered_pixels(&self) -> u64 {
+        self.covered.iter().filter(|&&value| value > 0).count() as u64
+    }
+
+    /// Union bounds of the covered pixels as `(x, y, width, height)`
+    /// (需求 4.7).  `None` when nothing is covered.
+    pub(crate) fn covered_bounds(&self) -> Option<(u32, u32, u32, u32)> {
+        let width = self.width as usize;
+        let mut min_x = self.width;
+        let mut min_y = self.height;
+        let mut max_x = 0u32;
+        let mut max_y = 0u32;
+        let mut any = false;
+        for (index, &value) in self.covered.iter().enumerate() {
+            if value == 0 {
+                continue;
+            }
+            any = true;
+            let x = (index % width) as u32;
+            let y = (index / width) as u32;
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        any.then(|| (min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
+    }
+}
+
+/// Sharpness_Confidence per Virtual_Tile pixel (需求 4.6).  The Focus_Fuser
+/// produces one value per ownership cell and the station render expands it to
+/// `PerPixel`; `Uniform` stays for the paths that never ran a fusion (a
+/// cache-restored tile of uniform confidence, and the test fixtures), where it
+/// keeps the required geometry without allocating a full-canvas `f32` plane.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ConfidenceMap {
+    Uniform {
+        width: u32,
+        height: u32,
+        value: f32,
+    },
+    PerPixel {
+        width: u32,
+        height: u32,
+        values: Vec<f32>,
+    },
+}
+
+impl ConfidenceMap {
+    /// Placeholder map: every pixel reads 0.0 (需求 3.9 treats "no runner-up
+    /// evidence" as zero confidence).
+    pub(crate) fn zero(width: u32, height: u32) -> Self {
+        Self::Uniform {
+            width,
+            height,
+            value: 0.0,
+        }
+    }
+
+    pub(crate) fn per_pixel(width: u32, height: u32, values: Vec<f32>) -> Result<Self, String> {
+        let expected = width as usize * height as usize;
+        if values.len() != expected {
+            return Err(format!(
+                "confidence map holds {} entries for a {}x{} tile",
+                values.len(),
+                width,
+                height
+            ));
+        }
+        Ok(Self::PerPixel {
+            width,
+            height,
+            values,
+        })
+    }
+
+    pub(crate) fn dimensions(&self) -> (u32, u32) {
+        match *self {
+            Self::Uniform { width, height, .. } | Self::PerPixel { width, height, .. } => {
+                (width, height)
+            }
+        }
+    }
+
+    pub(crate) fn value_at(&self, x: u32, y: u32) -> f32 {
+        let (width, height) = self.dimensions();
+        if x >= width || y >= height {
+            return 0.0;
+        }
+        match self {
+            Self::Uniform { value, .. } => *value,
+            Self::PerPixel { values, .. } => values[y as usize * width as usize + x as usize],
+        }
+    }
+
+    /// Row-major copy of every confidence value.  The Virtual_Tile disk cache
+    /// stores one plane whatever representation the map happens to use.
+    pub(crate) fn to_row_major(&self) -> Vec<f32> {
+        let (width, height) = self.dimensions();
+        let count = width as usize * height as usize;
+        match self {
+            Self::Uniform { value, .. } => vec![*value; count],
+            Self::PerPixel { values, .. } => values.clone(),
+        }
+    }
+
+    fn in_unit_range(&self) -> bool {
+        match self {
+            Self::Uniform { value, .. } => value.is_finite() && (0.0..=1.0).contains(value),
+            Self::PerPixel { values, .. } => values
+                .iter()
+                .all(|value| value.is_finite() && (0.0..=1.0).contains(value)),
+        }
+    }
+}
+
+/// Source_RAW provenance of one Virtual_Tile (需求 4.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SourceProvenance {
+    pub(crate) absolute_path: PathBuf,
+    /// SHA-256 over every byte of the source file, taken with the read-only
+    /// digest of `virtual_tile::source_file_sha256`.  Filled by the fusion call
+    /// site that builds the tile; `None` until that stage lands.
+    pub(crate) sha256: Option<[u8; 32]>,
+    pub(crate) owned_pixels: u64,
+}
+
 /// A fully focus-fused capture station in the coordinate system of the
 /// complete mosaic.  The tile pixels are owned by the station's focus
 /// decision; `tile_to_world` only places that result in the global planar
-/// coordinate system.  Keeping this provenance beside the pixels lets the
-/// caller perform tile-level registration and seam/ownership without falling
-/// back to the individual focus layers.
-#[allow(dead_code)]
+/// coordinate system.  Keeping the ownership, coverage, confidence and
+/// provenance beside the pixels lets the caller perform tile-level
+/// registration and seam/ownership, and lets every output pixel be traced
+/// back to one real Source_RAW, without falling back to the individual focus
+/// layers.
 #[derive(Debug, Clone)]
-pub(crate) struct FocusVirtualTile {
-    pub(crate) image: Rgb32FImage,
+pub(crate) struct VirtualTile {
+    pub(crate) station_index: usize,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     pub(crate) tile_to_world: Matrix3<f64>,
-    pub(crate) group_index: usize,
-    pub(crate) source_ids: Vec<usize>,
+    pub(crate) pixels: Rgb32FImage,
+    pub(crate) ownership: OwnershipMap,
+    pub(crate) sharpness_confidence: ConfidenceMap,
+    pub(crate) coverage: CoverageMask,
+    pub(crate) color_encoding: ColorEncoding,
+    pub(crate) provenance: Vec<SourceProvenance>,
+}
+
+impl VirtualTile {
+    /// Build a Virtual_Tile, enforcing the four structural invariants of the
+    /// design document:
+    ///
+    /// 1. `provenance` has one entry per participating Source_RAW and matches
+    ///    the Ownership_Map legend (需求 4.1);
+    /// 2. every `provenance[i].owned_pixels` equals the number of pixels owned
+    ///    by that source, so the sum equals the number of pixels with an owner
+    ///    (需求 4.1);
+    /// 3. Coverage_Mask and Ownership_Map agree in both directions and share
+    ///    the pixel geometry of `pixels` (需求 3.11 / 4.6);
+    /// 4. the valid pixel extent equals the union bounds of the covered pixels
+    ///    (需求 4.7).
+    pub(crate) fn new(
+        station_index: usize,
+        tile_to_world: Matrix3<f64>,
+        pixels: Rgb32FImage,
+        ownership: OwnershipMap,
+        sharpness_confidence: ConfidenceMap,
+        coverage: CoverageMask,
+        color_encoding: ColorEncoding,
+        provenance: Vec<SourceProvenance>,
+    ) -> Result<Self, String> {
+        let (width, height) = pixels.dimensions();
+        // Invariant 3a: one pixel coordinate system for pixels and masks.
+        if ownership.dimensions() != (width, height) {
+            return Err(format!(
+                "ownership map is {:?} for a {}x{} tile",
+                ownership.dimensions(),
+                width,
+                height
+            ));
+        }
+        if coverage.dimensions() != (width, height) {
+            return Err(format!(
+                "coverage mask is {:?} for a {}x{} tile",
+                coverage.dimensions(),
+                width,
+                height
+            ));
+        }
+        if sharpness_confidence.dimensions() != (width, height) {
+            return Err(format!(
+                "confidence map is {:?} for a {}x{} tile",
+                sharpness_confidence.dimensions(),
+                width,
+                height
+            ));
+        }
+        if !sharpness_confidence.in_unit_range() {
+            return Err("confidence values must stay inside [0, 1]".to_string());
+        }
+        // Invariant 1: provenance is the Ownership_Map legend.
+        if provenance.len() != ownership.legend().len() {
+            return Err(format!(
+                "{} provenance record(s) for an ownership legend of {} source(s)",
+                provenance.len(),
+                ownership.legend().len()
+            ));
+        }
+        if let Some((index, record)) = provenance
+            .iter()
+            .enumerate()
+            .find(|(index, record)| ownership.legend()[*index] != record.absolute_path)
+        {
+            return Err(format!(
+                "provenance {} ({}) does not match its ownership legend entry ({})",
+                index,
+                record.absolute_path.display(),
+                ownership.legend()[index].display()
+            ));
+        }
+        // Invariant 2: the provenance pixel counts are the Ownership_Map.
+        let counts = ownership.owned_pixel_counts();
+        if let Some((index, record)) = provenance
+            .iter()
+            .enumerate()
+            .find(|(index, record)| counts[*index] != record.owned_pixels)
+        {
+            return Err(format!(
+                "provenance {} ({}) claims {} owned pixel(s) but owns {}",
+                index,
+                record.absolute_path.display(),
+                record.owned_pixels,
+                counts[index]
+            ));
+        }
+        // Invariant 3b: covered <=> owned, in both directions.
+        if let Some(index) = coverage
+            .covered()
+            .iter()
+            .zip(ownership.owners())
+            .position(|(&covered, &owner)| (covered > 0) != (owner != NO_OWNER))
+        {
+            let x = index % width.max(1) as usize;
+            let y = index / width.max(1) as usize;
+            return Err(format!(
+                "pixel ({x}, {y}) is covered={} but owned={}",
+                coverage.covered()[index] > 0,
+                ownership.owners()[index] != NO_OWNER
+            ));
+        }
+        // Invariant 4: the valid extent is exactly the covered union bounds.
+        // Everything outside those bounds must stay untouched, so the tile
+        // never carries a pixel that no source produced.
+        match coverage.covered_bounds() {
+            Some((min_x, min_y, bounds_width, bounds_height)) => {
+                let tight =
+                    min_x == 0 && min_y == 0 && bounds_width == width && bounds_height == height;
+                if !tight {
+                    let outside_is_clear = pixels.enumerate_pixels().all(|(x, y, pixel)| {
+                        let inside = x >= min_x
+                            && y >= min_y
+                            && x < min_x + bounds_width
+                            && y < min_y + bounds_height;
+                        inside || pixel.0 == [0.0, 0.0, 0.0]
+                    });
+                    if !outside_is_clear {
+                        return Err(format!(
+                            "tile pixels extend beyond the coverage union bounds ({min_x}, {min_y}, {bounds_width}, {bounds_height})"
+                        ));
+                    }
+                }
+            }
+            None => {
+                if pixels.as_raw().iter().any(|value| *value != 0.0) {
+                    return Err("tile has pixels but no coverage".to_string());
+                }
+            }
+        }
+        Ok(Self {
+            station_index,
+            width,
+            height,
+            tile_to_world,
+            pixels,
+            ownership,
+            sharpness_confidence,
+            coverage,
+            color_encoding,
+            provenance,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -363,14 +808,13 @@ pub(crate) fn focus_stack_virtual_tile_geometry(
     })
 }
 
-/// Fuse each capture group independently into one in-memory virtual tile.
+/// Fuse each capture group independently into one in-memory Virtual_Tile.
 ///
 /// Group membership is supplied by the evidence-backed capture grouping in
 /// `panorama_stitching`; this helper does not inspect filenames or assume a
 /// particular number of layers.  Every group's existing global homographies
 /// are retained, so the returned translation maps tile pixels back into the
 /// same world coordinates used by the normal pose graph.
-#[allow(dead_code)]
 pub(crate) fn focus_stack_virtual_tiles<R: Runtime, F>(
     groups: &[&[&ImageInfo]],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
@@ -379,7 +823,7 @@ pub(crate) fn focus_stack_virtual_tiles<R: Runtime, F>(
     app_handle: AppHandle<R>,
     progress_event: &str,
     load_image: &mut F,
-) -> Result<Vec<FocusVirtualTile>, String>
+) -> Result<Vec<VirtualTile>, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
@@ -399,26 +843,74 @@ where
 
         // The regular focus renderer computes its own bounds and uses exactly
         // these pixel-aligned offsets.  Render it once, then expose the
-        // inverse translation as the tile-to-world placement.
-        let image = focus_stack_stitcher(
+        // inverse translation as the tile-to-world placement.  The unfilled
+        // form is the Virtual_Tile form: it keeps the projected validity mask
+        // instead of filling the trapezoid margins, which is exactly the
+        // Coverage_Mask semantics of 需求 3.7.
+        let rendered = focus_stack_stitcher_unfilled(
             group,
             global_homographies,
             projection,
             focus_warp,
             None,
+            group_index,
             false,
             app_handle.clone(),
             progress_event,
             load_image,
         )?;
-        tiles.push(FocusVirtualTile {
-            image,
-            tile_to_world: geometry.tile_to_world,
+        tiles.push(virtual_tile_from_render(
             group_index,
-            source_ids: group.iter().map(|image| image.id).collect(),
-        });
+            geometry.tile_to_world,
+            rendered,
+        )?);
     }
     Ok(tiles)
+}
+
+/// Assemble a Virtual_Tile from a station render.  Every invariant is checked
+/// by [`VirtualTile::new`]; this only turns the renderer's internal masks into
+/// the published structure (需求 4.1 / 4.2 / 4.6 / 4.7).
+pub(crate) fn virtual_tile_from_render(
+    station_index: usize,
+    tile_to_world: Matrix3<f64>,
+    rendered: FocusStackTileRender,
+) -> Result<VirtualTile, String> {
+    let FocusStackTileRender { image, masks } = rendered;
+    let masks = masks.ok_or_else(|| {
+        format!(
+            "Capture station {} produced no ownership/coverage masks",
+            station_index + 1
+        )
+    })?;
+    let mut fusion = masks.fusion;
+    fusion.station_index = station_index;
+    focus_fuser::record_run_station(fusion);
+    let owned_pixels = masks.ownership.owned_pixel_counts();
+    let provenance = masks
+        .ownership
+        .legend()
+        .iter()
+        .zip(owned_pixels)
+        .map(|(path, owned_pixels)| SourceProvenance {
+            absolute_path: path.clone(),
+            // TODO(task 5.4): the read-only source access records the digest.
+            sha256: None,
+            owned_pixels,
+        })
+        .collect::<Vec<_>>();
+    VirtualTile::new(
+        station_index,
+        tile_to_world,
+        image,
+        masks.ownership,
+        masks.confidence,
+        masks.coverage,
+        // The focus renderer copies decoded render pixels, which are the
+        // display-encoded sRGB values used by the rest of the pipeline.
+        ColorEncoding::DisplaySrgb,
+        provenance,
+    )
 }
 
 pub(super) fn transformed_image_region(
@@ -1211,6 +1703,17 @@ where
 
         if !use_seam {
             println!("    - Warning: Could not find seam. Using simple overwrite.");
+            // Observation only (requirement 12.7/12.9): the overwrite fallback
+            // below is unchanged, the ledger just learns that this pair had no
+            // usable overlap for a seam.
+            degradation::record_run_degradation(
+                degradation::COMPOSITION_NARROW_OVERLAP,
+                serde_json::json!({
+                    "stage": "pairwise_seam",
+                    "trigger": "seam_unavailable",
+                    "image": img_to_add_info.filename,
+                }),
+            );
         }
 
         let (orientation, seam_coords, new_image_is_dominant_side, seam_bounds) =
@@ -1434,12 +1937,160 @@ pub fn focus_tile_ownership_stitcher<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    focus_tile_ownership_stitcher_with_finishing(
+        images,
+        global_homographies,
+        projection,
+        TileCompositorFinishing::LegacyOwnership,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+    .map(LayeredOwnershipRender::into_image)
+}
+
+/// The default Tile_Compositor of the layered station pipeline (任务 13.1).
+///
+/// Geometry and ownership are decided exactly as in
+/// [`focus_tile_ownership_stitcher`] — that compositor's semantics are what
+/// became the default — but the finishing stage differs:
+///
+/// * no `crop_to_valid_rectangle()` fallback.  The canvas is the union
+///   axis-aligned bounding box of the Coverage_Mask and nothing else
+///   (需求 10.2 / 10.3, 任务 13.3).  Projective corners stay uncovered instead
+///   of being cropped away.
+/// * no unconditional final sharpen.  The default amount is 0.0 and the
+///   environment variable is diagnostic only (需求 11.6 / 11.7, 任务 13.4).
+///
+/// Known defect on real material, to be repaired by the remaining stage-6 and
+/// stage-3 tasks: source-interior ownership turns a projected tile footprint
+/// into a visible polygon on a long scan.  任务 13.2 adds the
+/// coverage-boundary-distance term to the seam cost and 任务 7.10 moves pixel
+/// writes onto the hard Ownership_Map; until then a station boundary can be
+/// visible where the two stations disagree photometrically.
+pub fn layered_virtual_tile_compositor<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    layered_virtual_tile_compositor_with_ownership(
+        images,
+        global_homographies,
+        projection,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+    .map(LayeredOwnershipRender::into_image)
+}
+
+/// The default layered compositor result before the public image-only API drops
+/// its semantic planes. `sampling_origin` is the world/projected coordinate of
+/// output pixel `(0, 0)` and therefore defines the exact Source_RAW
+/// correspondence for a non-integer projective sample (需求 3.6).
+#[derive(Debug, Clone)]
+pub(crate) struct LayeredOwnershipRender {
+    pub(crate) image: Rgb32FImage,
+    pub(crate) coverage: CoverageMask,
+    pub(crate) ownership: OwnershipMap,
+    pub(crate) sampling_origin: (f64, f64),
+}
+
+impl LayeredOwnershipRender {
+    fn into_image(self) -> Rgb32FImage {
+        self.image
+    }
+}
+
+/// Provenance-preserving form of [`layered_virtual_tile_compositor`]. The
+/// image-only production entry point above calls this exact function; exposing
+/// the masks prevents tests and later pipeline stages from reconstructing
+/// ownership from pixel colours.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn layered_virtual_tile_compositor_with_ownership<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<LayeredOwnershipRender, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    focus_tile_ownership_stitcher_with_finishing(
+        images,
+        global_homographies,
+        projection,
+        TileCompositorFinishing::LayeredVirtualTile,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+}
+
+/// How the ownership compositor finishes a composed canvas.
+///
+/// The two arms exist so the retired path keeps its exact pixels while the
+/// default path drops the second-pass sharpen and the rectangle crop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TileCompositorFinishing {
+    /// Comparison path: 0.85 final sharpen plus the valid-rectangle crop.
+    LegacyOwnership,
+    /// Default path: no sharpen, no crop beyond the covered union bounds.
+    LayeredVirtualTile,
+}
+
+/// The final sharpen amount of the default layered path (任务 13.4).
+///
+/// 需求 11.6 / 11.7 measure sharpness with MTF50 and gradient energy, so the
+/// default path must not pre-sharpen its own evidence: the default is 0.0.
+/// `RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT` survives as a diagnostic knob and
+/// the resolved value is reported in `composition.final_sharpen_amount`.
+pub(crate) fn layered_final_sharpen_amount() -> f32 {
+    std::env::var("RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.25)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    finishing: TileCompositorFinishing,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<LayeredOwnershipRender, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
     if images.is_empty() {
-        return Ok(Rgb32FImage::new(0, 0));
+        return Ok(LayeredOwnershipRender {
+            image: Rgb32FImage::new(0, 0),
+            coverage: CoverageMask::from_gray(GrayImage::new(0, 0)),
+            ownership: OwnershipMap::new(0, 0, Vec::new(), Vec::new())?,
+            sampling_origin: (0.0, 0.0),
+        });
     }
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
-        return Ok(Rgb32FImage::new(0, 0));
+        return Ok(LayeredOwnershipRender {
+            image: Rgb32FImage::new(0, 0),
+            coverage: CoverageMask::from_gray(GrayImage::new(0, 0)),
+            ownership: OwnershipMap::new(0, 0, Vec::new(), Vec::new())?,
+            sampling_origin: (0.0, 0.0),
+        });
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
@@ -1454,6 +2105,9 @@ where
     // needed after composition to solve one global low-frequency tone field
     // instead of accumulating pairwise exposure steps in import order.
     let mut owner_map = GrayImage::new(out_width, out_height);
+    // Source-level semantic plane for the exact same write decisions. The u16
+    // identifier is not capped at the 8-bit tone-group key above.
+    let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
     let row_stride = out_width as usize * 3;
     // A low-frequency consensus is accumulated from every virtual tile while
     // ownership is decided.  The final image keeps one tile's high-frequency
@@ -1523,6 +2177,18 @@ where
                 calibration.held_out_constant_error,
                 calibration.held_out_corrected_error
             );
+            // Observation only: unreliable pairs already fall back to the
+            // identity model inside `calibrate_overlap_photometry`.
+            if reliable_pairs < calibration.pairs.len() {
+                degradation::record_run_degradation(
+                    degradation::TONE_INSUFFICIENT_SAMPLES,
+                    serde_json::json!({
+                        "stage": "global_virtual_tile_photometry",
+                        "reliable_pairs": reliable_pairs,
+                        "pairs": calibration.pairs.len(),
+                    }),
+                );
+            }
             Some(
                 images
                     .iter()
@@ -1561,7 +2227,12 @@ where
         let photo_model = photometric_models
             .as_ref()
             .and_then(|models| models.get(&image_info.id));
-        let exposure_enabled = photo_model.is_none()
+        // Requirement 3.6: the default ownership path may choose a sample, but
+        // it must not change that sample's RGB while continuing to name the
+        // source as owner. Keep exposure compensation only on the retired
+        // comparison path.
+        let exposure_enabled = finishing == TileCompositorFinishing::LegacyOwnership
+            && photo_model.is_none()
             && std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN").is_none();
         let exposure = if !exposure_enabled {
             ExposureCompensation {
@@ -1669,98 +2340,107 @@ where
             .zip(ownership.par_chunks_mut(out_width as usize))
             .zip(panorama_mask.as_mut().par_chunks_mut(out_width as usize))
             .zip(owner_map.as_mut().par_chunks_mut(out_width as usize))
+            .zip(source_owner_ids.par_chunks_mut(out_width as usize))
             .enumerate()
             .skip(top as usize)
             .take((bottom - top + 1) as usize)
-            .for_each(|(y, (((row, quality_row), mask_row), owner_row))| {
-                for x in left..=right {
-                    let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
-                    let Some(source) =
-                        map_target_to_source(&inverse, target, image_info, projection)
-                    else {
-                        continue;
-                    };
-                    if source.x < 0.0
-                        || source.y < 0.0
-                        || source.x >= image_width
-                        || source.y >= image_height
-                    {
-                        continue;
-                    }
-                    let edge_distance = source
-                        .x
-                        .min(source.y)
-                        .min((image_width - 1.0) - source.x)
-                        .min((image_height - 1.0) - source.y)
-                        .max(0.0);
-                    let quality = (1.0 + (edge_distance / tile_short * 510.0).round())
-                        .clamp(1.0, 255.0) as u8;
-                    let quality_slot = &mut quality_row[x as usize];
-                    let candidate_owner = (index + 1).min(255) as u8;
-                    if !focus_tile_ownership_should_replace(
-                        *quality_slot,
-                        owner_row[x as usize],
-                        quality,
-                        candidate_owner,
-                    ) {
-                        continue;
-                    }
-                    let mut color = get_high_quality_interpolated_pixel(&tile, source.x, source.y);
-                    if let Some(model) = photo_model {
-                        let preview_x = source.x * model.preview_width as f64 / image_width;
-                        let preview_y = source.y * model.preview_height as f64 / image_height;
-                        color = model.apply(color, preview_x, preview_y);
-                    }
-                    // Unfilled projective corners are transparent zeros.  Do
-                    // not let them win ownership over a neighbouring tile.
-                    if color[0].max(color[1]).max(color[2]) <= 1e-6 {
-                        continue;
-                    }
-                    color = apply_exposure_compensation(color, &exposure, x, y as u32);
-                    // Interior distance is a useful prior, but selecting a
-                    // whole projective polygon solely by that prior cuts the
-                    // paper weave at a visible hard edge. If the candidate is
-                    // only marginally better and disagrees strongly with the
-                    // already selected sample, keep the existing owner and
-                    // let the seam remain in a locally coherent region.
-                    if owner_row[x as usize] > 0 {
-                        let start = x as usize * 3;
-                        let current = &row[start..start + 3];
-                        let current_rgb = [current[0], current[1], current[2]];
-                        let current_luma =
-                            current[0] * 0.299 + current[1] * 0.587 + current[2] * 0.114;
-                        let candidate_luma = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
-                        let luma_delta = (candidate_luma - current_luma).abs();
-                        let quality_ratio = f32::from(quality) / f32::from((*quality_slot).max(1));
-                        if luma_delta > 0.075 && quality_ratio < 1.35 {
+            .for_each(
+                |(y, ((((row, quality_row), mask_row), owner_row), source_owner_row))| {
+                    for x in left..=right {
+                        let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
+                        let Some(source) =
+                            map_target_to_source(&inverse, target, image_info, projection)
+                        else {
+                            continue;
+                        };
+                        if source.x < 0.0
+                            || source.y < 0.0
+                            || source.x >= image_width
+                            || source.y >= image_height
+                        {
                             continue;
                         }
-                        // Interior distance chooses the sharper source, but a
-                        // projective tile boundary should not become a hard
-                        // tone edge.  Feather only small, low-contrast canvas
-                        // disagreements; saturated or high-contrast detail
-                        // remains single-owner so strokes cannot double.
-                        if soft_owner_boundary
-                            && luma_delta < 0.06
-                            && focus_stack_pixel_is_canvas_like(&current_rgb)
-                            && focus_stack_pixel_is_canvas_like(&color.0)
-                        {
-                            let quality_advantage =
-                                (f32::from(quality) - f32::from((*quality_slot).max(1))).max(0.0);
-                            let alpha = (0.45 + quality_advantage / 255.0 * 0.45).clamp(0.45, 0.90);
-                            for channel in 0..3 {
-                                color[channel] =
-                                    current_rgb[channel] * (1.0 - alpha) + color[channel] * alpha;
+                        let edge_distance = source
+                            .x
+                            .min(source.y)
+                            .min((image_width - 1.0) - source.x)
+                            .min((image_height - 1.0) - source.y)
+                            .max(0.0);
+                        let quality = (1.0 + (edge_distance / tile_short * 510.0).round())
+                            .clamp(1.0, 255.0) as u8;
+                        let quality_slot = &mut quality_row[x as usize];
+                        let candidate_owner = (index + 1).min(255) as u8;
+                        if !focus_tile_ownership_should_replace(
+                            *quality_slot,
+                            owner_row[x as usize],
+                            quality,
+                            candidate_owner,
+                        ) {
+                            continue;
+                        }
+                        let mut color =
+                            get_high_quality_interpolated_pixel(&tile, source.x, source.y);
+                        if let Some(model) = photo_model {
+                            let preview_x = source.x * model.preview_width as f64 / image_width;
+                            let preview_y = source.y * model.preview_height as f64 / image_height;
+                            color = model.apply(color, preview_x, preview_y);
+                        }
+                        // Unfilled projective corners are transparent zeros.  Do
+                        // not let them win ownership over a neighbouring tile.
+                        if color[0].max(color[1]).max(color[2]) <= 1e-6 {
+                            continue;
+                        }
+                        color = apply_exposure_compensation(color, &exposure, x, y as u32);
+                        // Interior distance is a useful prior, but selecting a
+                        // whole projective polygon solely by that prior cuts the
+                        // paper weave at a visible hard edge. If the candidate is
+                        // only marginally better and disagrees strongly with the
+                        // already selected sample, keep the existing owner and
+                        // let the seam remain in a locally coherent region.
+                        if owner_row[x as usize] > 0 {
+                            let start = x as usize * 3;
+                            let current = &row[start..start + 3];
+                            let current_rgb = [current[0], current[1], current[2]];
+                            let current_luma =
+                                current[0] * 0.299 + current[1] * 0.587 + current[2] * 0.114;
+                            let candidate_luma =
+                                color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
+                            let luma_delta = (candidate_luma - current_luma).abs();
+                            let quality_ratio =
+                                f32::from(quality) / f32::from((*quality_slot).max(1));
+                            if luma_delta > 0.075 && quality_ratio < 1.35 {
+                                continue;
+                            }
+                            // Interior distance chooses the sharper source, but a
+                            // projective tile boundary should not become a hard
+                            // tone edge.  Feather only small, low-contrast canvas
+                            // disagreements; saturated or high-contrast detail
+                            // remains single-owner so strokes cannot double.
+                            if soft_owner_boundary
+                                && luma_delta < 0.06
+                                && focus_stack_pixel_is_canvas_like(&current_rgb)
+                                && focus_stack_pixel_is_canvas_like(&color.0)
+                            {
+                                let quality_advantage = (f32::from(quality)
+                                    - f32::from((*quality_slot).max(1)))
+                                .max(0.0);
+                                let alpha =
+                                    (0.45 + quality_advantage / 255.0 * 0.45).clamp(0.45, 0.90);
+                                for channel in 0..3 {
+                                    color[channel] = current_rgb[channel] * (1.0 - alpha)
+                                        + color[channel] * alpha;
+                                }
                             }
                         }
+                        let start = x as usize * 3;
+                        row[start..start + 3].copy_from_slice(&color.0);
+                        *quality_slot = quality;
+                        mask_row[x as usize] = 255;
+                        owner_row[x as usize] = candidate_owner;
+                        source_owner_row[x as usize] = (index + 1).min(u16::MAX as usize) as u16;
                     }
-                    let start = x as usize * 3;
-                    row[start..start + 3].copy_from_slice(&color.0);
-                    *quality_slot = quality;
-                    mask_row[x as usize] = 255;
-                    owner_row[x as usize] = candidate_owner;
-                }
-            });
+                },
+            );
     }
 
     // Solve a low-frequency consensus from all candidate tiles. The high
@@ -1967,26 +2647,43 @@ where
     // luma-only unsharp pass restores the native edge energy lost to those two
     // cubic samples without inventing cross-owner detail.  Keep this below the
     // per-station pass (1.35) so long scans do not acquire halos at tile seams.
-    let final_sharpen_amount = std::env::var("RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT")
-        .ok()
-        .and_then(|value| value.parse::<f32>().ok())
-        .filter(|value| value.is_finite())
-        .unwrap_or(0.85)
-        .clamp(0.0, 1.25);
-    sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
+    // 任务 13.4: the default layered path resolves to 0.0 here, so
+    // `sharpen_focus_tile_detail` is not executed at all; the comparison path
+    // keeps its 0.85 second pass.
+    let final_sharpen_amount = match finishing {
+        TileCompositorFinishing::LayeredVirtualTile => layered_final_sharpen_amount(),
+        TileCompositorFinishing::LegacyOwnership => {
+            std::env::var("RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT")
+                .ok()
+                .and_then(|value| value.parse::<f32>().ok())
+                .filter(|value| value.is_finite())
+                .unwrap_or(0.85)
+                .clamp(0.0, 1.25)
+        }
+    };
+    if final_sharpen_amount > 0.0 {
+        sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
+    }
 
     let panorama_dimensions = panorama.dimensions();
-    // Keep the complete source union only when its bounding box is genuinely
-    // covered.  Projective virtual-tile corners are transparent by design;
-    // blindly cropping to the mask bounds would expose those zeros as black
-    // triangles.  A sparse/irregular union falls back to the largest valid
-    // rectangle, which is safe for delivery while still preserving complete
-    // scans whose outer boundary is densely covered.
+    // The comparison path keeps the complete source union only when its
+    // bounding box is genuinely covered and otherwise falls back to the largest
+    // valid rectangle.  The default path must not: 需求 10.2 fixes the canvas at
+    // the union axis-aligned bounding box of every Coverage_Mask, and 需求 10.3
+    // keeps the uncovered projective corners transparent instead of cropping
+    // real coverage away to hide them (任务 13.3).
     let (valid_bounds, valid_coverage) = valid_mask_bounds_and_coverage(&panorama_mask);
-    let cropped = if valid_coverage >= 0.995 {
-        crop_to_valid_bounds(panorama, &panorama_mask)
-    } else {
-        crop_to_valid_rectangle(panorama, &panorama_mask)
+    let cropped = match finishing {
+        TileCompositorFinishing::LayeredVirtualTile => {
+            crop_to_valid_bounds(panorama, &panorama_mask)
+        }
+        TileCompositorFinishing::LegacyOwnership => {
+            if valid_coverage >= 0.995 {
+                crop_to_valid_bounds(panorama, &panorama_mask)
+            } else {
+                crop_to_valid_rectangle(panorama, &panorama_mask)
+            }
+        }
     };
     if cropped.dimensions() != panorama_dimensions {
         println!(
@@ -1999,7 +2696,50 @@ where
             valid_bounds
         );
     }
-    Ok(cropped)
+
+    // The production default crops only to the covered union bounds, so the
+    // same rectangle can be applied losslessly to all semantic planes. The
+    // legacy image-only caller discards these planes.
+    let (crop_x, crop_y, crop_width, crop_height) = if valid_coverage > 0.0
+        && (finishing == TileCompositorFinishing::LayeredVirtualTile || valid_coverage >= 0.995)
+    {
+        (
+            valid_bounds.0,
+            valid_bounds.1,
+            valid_bounds.2 - valid_bounds.0 + 1,
+            valid_bounds.3 - valid_bounds.1 + 1,
+        )
+    } else {
+        (0, 0, cropped.width(), cropped.height())
+    };
+    let coverage_gray = if crop_x + crop_width <= panorama_mask.width()
+        && crop_y + crop_height <= panorama_mask.height()
+    {
+        image::imageops::crop_imm(&panorama_mask, crop_x, crop_y, crop_width, crop_height)
+            .to_image()
+    } else {
+        GrayImage::new(cropped.width(), cropped.height())
+    };
+    let mut cropped_owners = vec![NO_OWNER; cropped.width() as usize * cropped.height() as usize];
+    if crop_x + cropped.width() <= out_width && crop_y + cropped.height() <= out_height {
+        cropped_owners
+            .par_chunks_mut(cropped.width() as usize)
+            .enumerate()
+            .for_each(|(y, row)| {
+                let source_start = (crop_y as usize + y) * out_width as usize + crop_x as usize;
+                row.copy_from_slice(&source_owner_ids[source_start..source_start + row.len()]);
+            });
+    }
+    let legend = images
+        .iter()
+        .map(|image| PathBuf::from(&image.filename))
+        .collect::<Vec<_>>();
+    Ok(LayeredOwnershipRender {
+        image: cropped,
+        coverage: CoverageMask::from_gray(coverage_gray),
+        ownership: OwnershipMap::new(crop_width, crop_height, cropped_owners, legend)?,
+        sampling_origin: (crop_x as f64 - offset_x, crop_y as f64 - offset_y),
+    })
 }
 
 struct SeamBandBlend<'a> {
@@ -3348,21 +4088,9 @@ fn render_focus_layer(
                     }
                     let pixel =
                         get_high_quality_interpolated_pixel(source_image, source.x, source.y);
-                    // Keep the compact focus-fusion path consistent with the
-                    // shifted-mosaic sampler. Reject a non-image border, or
-                    // replace a known isolated spot with adjacent paper before
-                    // focus scoring can select the artifact as sharp detail.
-                    let Some(pixel) = super::mosaic::corrected_lower_left_capture_sample(
-                        image,
-                        source_image,
-                        source.x,
-                        source.y,
-                        source.x,
-                        source.y,
-                        pixel,
-                    ) else {
-                        continue;
-                    };
+                    // Requirement 3.6 forbids replacing an owned sample with a
+                    // neighbouring "corrected" paper sample: the owner must
+                    // identify the photograph and coordinate that supplied RGB.
                     let start = local_x as usize * 3;
                     row[start..start + 3].copy_from_slice(&pixel.0);
                     mask_row[local_x as usize] = 255;
@@ -4495,6 +5223,144 @@ fn focus_patch_translation_candidates(
     Vec::new()
 }
 
+/// Run the Intra_Station_Registrar over one already rendered layer (需求 2.2–2.9).
+///
+/// The measurement itself is `mosaic::register_station_frame_native`, the same
+/// code the mosaic comparison path uses; this only reconstructs the pose the
+/// caller actually rendered with.  `applied_translation` is the integer shift
+/// `translate_rendered_focus_layer` has already put on those pixels, and a canvas
+/// shift is a translation in the projection plane, so pre-multiplying the
+/// station homography with it reproduces the layer exactly.
+#[allow(clippy::too_many_arguments)]
+fn register_station_frame_native_layer(
+    merged: &Rgb32FImage,
+    merged_mask: &GrayImage,
+    image: &ImageInfo,
+    source_image: &Rgb32FImage,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+    offset: (f64, f64),
+    applied_translation: (i32, i32),
+    candidate: &RenderedFocusLayer,
+    anchor_long_side: u32,
+    anchor_to_station_inverse: Option<Matrix3<f64>>,
+) -> Option<super::mosaic::StationFrameRegistration> {
+    let (candidate_width, candidate_height) = candidate.image.dimensions();
+    if candidate_width < 2 || candidate_height < 2 {
+        return None;
+    }
+    let mut translation = Matrix3::identity();
+    translation[(0, 2)] = f64::from(applied_translation.0);
+    translation[(1, 2)] = f64::from(applied_translation.1);
+    let rendered_pose = translation * homography;
+    // 需求 2.1: every record is expressed in the anchor frame's coordinates.
+    let into_anchor = anchor_to_station_inverse
+        .map(|inverse| inverse * rendered_pose)
+        .unwrap_or_else(Matrix3::identity);
+    super::mosaic::register_station_frame_native(
+        merged,
+        merged_mask,
+        image,
+        source_image,
+        &rendered_pose,
+        projection,
+        offset,
+        (
+            candidate.left,
+            candidate.left + candidate_width - 1,
+            candidate.top,
+            candidate.top + candidate_height - 1,
+        ),
+        anchor_long_side,
+        into_anchor,
+    )
+}
+
+/// Apply a measured native displacement field to an already rendered layer
+/// (需求 2.3–2.7).
+///
+/// The field is what [`super::mosaic::register_station_frame_native`] accepted,
+/// expressed as a canvas-pixel offset to add before sampling, so resampling the
+/// layer at that offset moves its pixels by exactly the accepted correction. A
+/// pixel whose bilinear support is not fully covered loses coverage instead of
+/// borrowing an invented neighbour.
+fn warp_rendered_focus_layer(
+    candidate: RenderedFocusLayer,
+    displacement: &super::mosaic::NativeResidualDisplacement,
+) -> RenderedFocusLayer {
+    let (width, height) = candidate.image.dimensions();
+    if width == 0 || height == 0 {
+        return candidate;
+    }
+    let row_pixels = width as usize * 3;
+    let mut pixels = vec![0.0f32; row_pixels * height as usize];
+    let mut mask = vec![0u8; width as usize * height as usize];
+    let mut foreground_mask = vec![0u8; width as usize * height as usize];
+    let mut relaxed_foreground_mask = vec![0u8; width as usize * height as usize];
+    pixels
+        .par_chunks_mut(row_pixels)
+        .zip(mask.par_chunks_mut(width as usize))
+        .zip(foreground_mask.par_chunks_mut(width as usize))
+        .zip(relaxed_foreground_mask.par_chunks_mut(width as usize))
+        .enumerate()
+        .for_each(|(y, (((row, mask_row), foreground_row), relaxed_row))| {
+            for x in 0..width as usize {
+                let [delta_x, delta_y] = displacement.at(
+                    f64::from(candidate.left) + x as f64,
+                    f64::from(candidate.top) + y as f64,
+                );
+                let sample_x = x as f64 + delta_x;
+                let sample_y = y as f64 + delta_y;
+                if !sample_x.is_finite() || !sample_y.is_finite() {
+                    continue;
+                }
+                let x0 = sample_x.floor();
+                let y0 = sample_y.floor();
+                if x0 < 0.0
+                    || y0 < 0.0
+                    || x0 + 1.0 >= f64::from(width)
+                    || y0 + 1.0 >= f64::from(height)
+                {
+                    continue;
+                }
+                let (x0, y0) = (x0 as u32, y0 as u32);
+                if [(x0, y0), (x0 + 1, y0), (x0, y0 + 1), (x0 + 1, y0 + 1)]
+                    .iter()
+                    .any(|&(px, py)| candidate.mask.get_pixel(px, py)[0] == 0)
+                {
+                    continue;
+                }
+                let fx = (sample_x - f64::from(x0)) as f32;
+                let fy = (sample_y - f64::from(y0)) as f32;
+                for channel in 0..3 {
+                    let at = |px: u32, py: u32| candidate.image.get_pixel(px, py)[channel];
+                    let top = at(x0, y0) * (1.0 - fx) + at(x0 + 1, y0) * fx;
+                    let bottom = at(x0, y0 + 1) * (1.0 - fx) + at(x0 + 1, y0 + 1) * fx;
+                    row[x * 3 + channel] = top * (1.0 - fy) + bottom * fy;
+                }
+                mask_row[x] = 255;
+                // The detected layer masks are categorical, so they follow
+                // the nearest sample rather than an average of two classes.
+                let nearest_x = (sample_x.round() as u32).min(width - 1);
+                let nearest_y = (sample_y.round() as u32).min(height - 1);
+                foreground_row[x] = candidate.foreground_mask.get_pixel(nearest_x, nearest_y)[0];
+                relaxed_row[x] = candidate
+                    .relaxed_foreground_mask
+                    .get_pixel(nearest_x, nearest_y)[0];
+            }
+        });
+    RenderedFocusLayer {
+        image: Rgb32FImage::from_raw(width, height, pixels).expect("warped layer dimensions"),
+        mask: GrayImage::from_raw(width, height, mask).expect("warped mask dimensions"),
+        foreground_mask: GrayImage::from_raw(width, height, foreground_mask)
+            .expect("warped foreground dimensions"),
+        relaxed_foreground_mask: GrayImage::from_raw(width, height, relaxed_foreground_mask)
+            .expect("warped relaxed foreground dimensions"),
+        left: candidate.left,
+        top: candidate.top,
+    }
+}
+
 fn estimate_focus_layer_translation(
     candidate: &RenderedFocusLayer,
     merged: &Rgb32FImage,
@@ -5310,6 +6176,57 @@ fn hard_select_focus_layer(
         );
 }
 
+/// Record the Ownership_Map entries that the *following*
+/// [`hard_select_focus_layer`] call is about to create.
+///
+/// `base_mask` must be the coverage state before that call, because the
+/// selection replaces a pixel when the candidate is valid and either the base
+/// has no coverage yet or the focus decision prefers the candidate.  The
+/// predicate below is that same condition, kept in lockstep with the copy in
+/// `hard_select_focus_layer`; nothing here writes a pixel.
+fn record_focus_layer_ownership(
+    ownership: &mut [u16],
+    base_mask: &GrayImage,
+    candidate: &RenderedFocusLayer,
+    decision_mask: &GrayImage,
+    owner_id: u16,
+) {
+    let (layer_width, layer_height) = candidate.image.dimensions();
+    let (base_width, base_height) = base_mask.dimensions();
+    if layer_width == 0
+        || layer_height == 0
+        || decision_mask.dimensions() != (layer_width, layer_height)
+        || candidate.mask.dimensions() != (layer_width, layer_height)
+        || ownership.len() != base_width as usize * base_height as usize
+        || candidate.left >= base_width
+        || candidate.top >= base_height
+        || candidate.left + layer_width > base_width
+        || candidate.top + layer_height > base_height
+    {
+        return;
+    }
+    ownership
+        .par_chunks_mut(base_width as usize)
+        .zip(base_mask.as_raw().par_chunks(base_width as usize))
+        .skip(candidate.top as usize)
+        .take(layer_height as usize)
+        .zip(candidate.mask.as_raw().par_chunks(layer_width as usize))
+        .zip(decision_mask.as_raw().par_chunks(layer_width as usize))
+        .for_each(
+            |(((ownership_row, base_mask_row), candidate_mask_row), decision_row)| {
+                let start = candidate.left as usize;
+                for local_x in 0..layer_width as usize {
+                    let global_x = start + local_x;
+                    if candidate_mask_row[local_x] > 0
+                        && (base_mask_row[global_x] == 0 || decision_row[local_x] > 0)
+                    {
+                        ownership_row[global_x] = owner_id;
+                    }
+                }
+            },
+        );
+}
+
 fn mark_focus_owner_pixels(
     owner: &mut GrayImage,
     candidate: &RenderedFocusLayer,
@@ -5469,6 +6386,14 @@ fn render_focus_analysis_layer(
     }
 }
 
+/// Upsample an analysis-resolution focus decision onto a layer's pixel grid.
+///
+/// Superseded on the station path by [`focus_cell_decision_for_layer`], which
+/// decides at ownership cell resolution instead (需求 3.6).  Kept because it is
+/// the only reader of the analysis decision and the shifted-mosaic guards still
+/// maintain that decision; the comparison path needs it back when it is
+/// re-enabled.
+#[allow(dead_code)]
 fn focus_decision_for_layer(
     analysis_decision: &GrayImage,
     layer: &RenderedFocusLayer,
@@ -6027,6 +6952,11 @@ fn fill_invalid_runs_horizontally(image: &mut Rgb32FImage, mask: &mut GrayImage)
     }
     let width = width as usize;
     let image_stride = width * 3;
+    // Determinism (需求 14.6): the writes are partitioned by destination row and
+    // the reduction accumulates `usize`, which is associative, so neither the
+    // pixels nor the returned count depend on the thread count. A floating
+    // point reduction in this position would need
+    // `stack_pipeline::determinism::deterministic_sum`.
     image
         .as_mut()
         .par_chunks_mut(image_stride)
@@ -7789,28 +8719,73 @@ where
         projection,
         focus_warp,
         capture_group_ids,
+        // The margin-filling form is the single-canvas comparison output: it
+        // invents pixels for the projected trapezoid corners and publishes no
+        // Ownership_Map, so it carries no Capture_Station identity of its own.
+        0,
         sequence_gap_aware,
         true,
         app_handle,
         progress_event,
         load_image,
     )
+    .map(FocusStackTileRender::into_image)
+}
+
+/// The Coverage_Mask and Ownership_Map the focus renderer already maintains
+/// internally (需求 3.7 / 3.11 / 4.6).  They are recorded at the exact pixel
+/// write sites of the hard focus selection, so publishing them does not change
+/// a single pixel write.
+#[derive(Debug, Clone)]
+pub(crate) struct FocusStackTileMasks {
+    pub(crate) coverage: CoverageMask,
+    pub(crate) ownership: OwnershipMap,
+    /// Per-pixel Sharpness_Confidence of the owning ownership cell (需求 3.9).
+    pub(crate) confidence: ConfidenceMap,
+    /// The Focus_Fuser observations of 需求 3.5 / 3.8 / 3.9.  `station_index` is
+    /// filled by the call site that knows it.
+    pub(crate) fusion: FusionReport,
+}
+
+/// One focus-fused station: the pixels plus, for the unfilled Virtual_Tile
+/// form, the masks that describe where they came from.  `masks` is `None`
+/// whenever the render did not go through the hard focus selection (empty
+/// input, degenerate bounds, the shifted-mosaic path, or the margin-filling
+/// single-layer output), because those paths cannot attest per-pixel ownership.
+#[derive(Debug, Clone)]
+pub(crate) struct FocusStackTileRender {
+    pub(crate) image: Rgb32FImage,
+    pub(crate) masks: Option<FocusStackTileMasks>,
+}
+
+impl FocusStackTileRender {
+    fn unattributed(image: Rgb32FImage) -> Self {
+        Self { image, masks: None }
+    }
+
+    pub(crate) fn into_image(self) -> Rgb32FImage {
+        self.image
+    }
 }
 
 /// Focus-fuse a station while preserving the projected validity mask.  Virtual
 /// tiles use this form because their non-rectangular projective corners must
-/// remain transparent until the tile-level compositor owns them.
+/// remain transparent until the tile-level compositor owns them, and because
+/// the Virtual_Tile needs the Coverage_Mask and Ownership_Map that the fusion
+/// builds on the way.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn focus_stack_stitcher_unfilled<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     focus_warp: Option<&FocusLayerWarp>,
     capture_group_ids: Option<&HashMap<usize, u8>>,
+    station_index: usize,
     sequence_gap_aware: bool,
     app_handle: AppHandle<R>,
     progress_event: &str,
     load_image: &mut F,
-) -> Result<Rgb32FImage, String>
+) -> Result<FocusStackTileRender, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
@@ -7820,6 +8795,7 @@ where
         projection,
         focus_warp,
         capture_group_ids,
+        station_index,
         sequence_gap_aware,
         false,
         app_handle,
@@ -7828,23 +8804,326 @@ where
     )
 }
 
+/// Nearest-neighbour read of a canvas-space position out of a layer that lives
+/// at `(left, top)`, returning `None` outside the layer's validity mask.
+///
+/// The Sharpness_Score probes sit on a fixed grid whose spacing is a whole
+/// number of native pixels, so there is nothing between samples to interpolate;
+/// a bilinear read here would only low-pass the very gradients 需求 3.2 measures.
+#[inline]
+fn sample_focus_plane(
+    image: &Rgb32FImage,
+    mask: &GrayImage,
+    left: u32,
+    top: u32,
+    x: f64,
+    y: f64,
+) -> Option<Rgb<f32>> {
+    let local_x = x - f64::from(left);
+    let local_y = y - f64::from(top);
+    if !local_x.is_finite() || !local_y.is_finite() || local_x < 0.0 || local_y < 0.0 {
+        return None;
+    }
+    let (px, py) = (local_x.round(), local_y.round());
+    if px < 0.0 || py < 0.0 || px >= f64::from(image.width()) || py >= f64::from(image.height()) {
+        return None;
+    }
+    let (px, py) = (px as u32, py as u32);
+    if mask.get_pixel(px, py).0[0] == 0 {
+        return None;
+    }
+    Some(*image.get_pixel(px, py))
+}
+
+/// Normalised Sharpness_Score and coverage of every ownership cell of one
+/// projected layer (需求 3.2, 3.7).
+///
+/// A cell counts as covered when the layer's validity mask is set at the cell
+/// centre.  The cell is the *decision* unit; a cell only partly inside the
+/// projected trapezoid still gets one owner, and the per-pixel write below
+/// never copies a pixel the layer does not actually have, so the Coverage_Mask
+/// stays exact at pixel resolution.
+fn measure_focus_cells(
+    geometry: &OwnershipGridGeometry,
+    plan: &CellSamplingPlan,
+    image: &Rgb32FImage,
+    mask: &GrayImage,
+    left: u32,
+    top: u32,
+) -> (Vec<f64>, Vec<bool>) {
+    // 需求 3.2: the candidate and the current composite are comparable only when
+    // they are measured at the same positions with the same window, and the only
+    // way to guarantee that across two call sites is to insist that both measure
+    // with the plan this station's ownership grid defines.  A plan from anywhere
+    // else would make defocus indistinguishable from a change of sampling
+    // geometry, which is the one confusion 需求 3.2 exists to rule out.
+    plan.assert_matches(&geometry.sampling_plan());
+    let count = geometry.cell_count();
+    let mut sharpness = vec![0.0f64; count];
+    let mut covered = vec![false; count];
+    let columns = geometry.columns as usize;
+    let half = f64::from(geometry.cell_size_px) * 0.5;
+    sharpness
+        .par_iter_mut()
+        .zip(covered.par_iter_mut())
+        .enumerate()
+        .for_each(|(cell, (sharpness, covered))| {
+            let (column, row) = ((cell % columns) as u32, (cell / columns) as u32);
+            let (origin_x, origin_y) = geometry.cell_origin(column, row);
+            let sample = |x: f64, y: f64| sample_focus_plane(image, mask, left, top, x, y);
+            if sample(origin_x + half, origin_y + half).is_none() {
+                return;
+            }
+            *covered = true;
+            *sharpness = plan.measure(origin_x, origin_y, sample);
+        });
+    (sharpness, covered)
+}
+
+/// Pixel inconsistency of every ownership cell between a candidate layer and
+/// the current composite (需求 3.3).
+fn measure_focus_cell_disagreement(
+    geometry: &OwnershipGridGeometry,
+    candidate: &RenderedFocusLayer,
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+) -> Vec<f64> {
+    let count = geometry.cell_count();
+    let columns = geometry.columns as usize;
+    let cell_size = f64::from(geometry.cell_size_px);
+    let mut disagreement = vec![0.0f64; count];
+    disagreement
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(cell, disagreement)| {
+            let (column, row) = ((cell % columns) as u32, (cell / columns) as u32);
+            let (origin_x, origin_y) = geometry.cell_origin(column, row);
+            // Both closures receive the same fractional cell offsets and map
+            // them into their own plane, which is how 需求 3.3's "same cell"
+            // comparison stays a property of the code.
+            *disagreement = cell_disagreement(
+                |fx, fy| {
+                    sample_focus_plane(
+                        &candidate.image,
+                        &candidate.mask,
+                        candidate.left,
+                        candidate.top,
+                        origin_x + fx * cell_size,
+                        origin_y + fy * cell_size,
+                    )
+                },
+                |fx, fy| {
+                    sample_focus_plane(
+                        base,
+                        base_mask,
+                        0,
+                        0,
+                        origin_x + fx * cell_size,
+                        origin_y + fy * cell_size,
+                    )
+                },
+            );
+        });
+    disagreement
+}
+
+/// Rasterise an ownership cell decision onto a layer's own pixel grid
+/// (需求 3.6).
+///
+/// The result is a hard mask whose boundaries are exactly ownership cell
+/// boundaries: no feather, no alpha ramp, no transition band.  The legacy
+/// streaming mosaic keeps its `STREAMING_OWNERSHIP_FEATHER` sub-cell blur; the
+/// station layer no longer has one.
+fn focus_cell_decision_for_layer(
+    geometry: &OwnershipGridGeometry,
+    took: &[bool],
+    layer: &RenderedFocusLayer,
+) -> GrayImage {
+    let (width, height) = layer.image.dimensions();
+    let mut decision = GrayImage::new(width, height);
+    let cell_size = geometry.cell_size_px.max(1);
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    let width_usize = width as usize;
+    decision
+        .as_mut()
+        .par_chunks_mut(width_usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let global_y = layer.top as usize + y;
+            let cell_row = global_y / cell_size as usize;
+            if cell_row >= rows {
+                return;
+            }
+            let base = cell_row * columns;
+            for (x, value) in row.iter_mut().enumerate() {
+                let cell_column = (layer.left as usize + x) / cell_size as usize;
+                if cell_column < columns && took[base + cell_column] {
+                    *value = 255;
+                }
+            }
+        });
+    decision
+}
+
+/// Expand an ownership cell plane to one value per tile pixel (需求 4.6).
+fn focus_cell_plane_to_pixels(
+    geometry: &OwnershipGridGeometry,
+    cells: &[f32],
+    width: u32,
+    height: u32,
+) -> Vec<f32> {
+    let mut values = vec![0.0f32; width as usize * height as usize];
+    let cell_size = geometry.cell_size_px.max(1) as usize;
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    values
+        .par_chunks_mut(width as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let cell_row = y / cell_size;
+            if cell_row >= rows {
+                return;
+            }
+            let base = cell_row * columns;
+            for (x, value) in row.iter_mut().enumerate() {
+                let cell_column = x / cell_size;
+                if cell_column < columns {
+                    *value = cells[base + cell_column];
+                }
+            }
+        });
+    values
+}
+
+/// The Capture_Station members of 需求 12.1 / 12.2 as the default station path
+/// can see them, together with every 需求 12.5 rejection its evidence supports.
+///
+/// The registration evidence is what the Intra_Station_Registrar recorded for
+/// 需求 2.9 through [`intra_station::record_run_frame`].  Since the default path
+/// runs the native patch refinement itself — `register_station_frame_native_layer`
+/// below, which is `mosaic::refine_native_layer` over this path's own layer pose
+/// — this function is what a *later* render of the same station reads, and what
+/// the up-front plan of a station whose frames have already been measured is
+/// built from.  A frame with a record is judged by the numbers in that record; a
+/// frame without one has not been measured yet and is placed by its verified
+/// global model plus the bounded integer translation of
+/// `estimate_focus_layer_translation`, which has no control point field to accept
+/// or reject and is therefore exactly `GlobalFallback`.  Nothing here invents a
+/// substitute measurement: 需求 12.5 stays silent rather than judging a frame on a
+/// number that was never taken.
+fn station_members_from_records(
+    images: &[&ImageInfo],
+    station_index: usize,
+) -> (Vec<StationMember>, Vec<GroupJoinRejection>) {
+    let recorded = intra_station::run_records_snapshot()
+        .into_iter()
+        .find(|station| station.station_index == station_index)
+        .map(|station| {
+            station
+                .frames
+                .into_iter()
+                .map(|frame| (frame.path.clone(), frame))
+                .collect::<HashMap<String, IntraStationFrameRecord>>()
+        })
+        .unwrap_or_default();
+    station_members_from_frame_records(images, &recorded)
+}
+
+/// [`station_members_from_records`] over an injected record set.
+///
+/// The run scoped sink is a global that concurrent tests share, so the rule
+/// itself takes the records as data: production passes the snapshot of the
+/// station it is rendering, a test passes a local map.
+fn station_members_from_frame_records(
+    images: &[&ImageInfo],
+    recorded: &HashMap<String, IntraStationFrameRecord>,
+) -> (Vec<StationMember>, Vec<GroupJoinRejection>) {
+    // Layer 0 is the frame every later layer registers against, so it is this
+    // station's anchor by construction and 需求 12.5 scales its error limit by
+    // that frame's native long side.
+    let anchor_long_side = images
+        .first()
+        .map(|info| info.width.max(info.height))
+        .unwrap_or(0);
+    let mut rejections = Vec::new();
+    let members = images
+        .iter()
+        .enumerate()
+        .map(|(index, info)| {
+            let record = recorded.get(&info.filename);
+            // 需求 12.5: inlier spatial support below 20% of the overlap area, or
+            // an inlier median symmetric reprojection error above 0.01 × the long
+            // side, keeps this Source_RAW out of every Capture_Station.  Only a
+            // record with an accepted inlier set carries both measurements; with
+            // none accepted the two fields are structural zeros rather than
+            // measurements, and 需求 12.2's registration-failure exclusion below
+            // already covers that frame.
+            let rejection = record
+                .filter(|record| index > 0 && record.inliers > 0)
+                .and_then(|record| {
+                    group_join_rejection(&GroupJoinEvidence {
+                        path: info.filename.clone(),
+                        inlier_area_coverage: record.inlier_area_coverage,
+                        median_symmetric_error_px: record.median_symmetric_error_px,
+                        anchor_long_side_px: anchor_long_side,
+                    })
+                });
+            let status = match (
+                index,
+                rejection.is_some(),
+                record.map(|record| record.status),
+            ) {
+                // Rejected from every Capture_Station, so this station cannot
+                // fuse it either (需求 12.2 / 12.5).
+                (_, true, _) => IntraStationFrameStatus::Failed,
+                (0, _, _) => IntraStationFrameStatus::Anchor,
+                (_, false, Some(status)) => status,
+                (_, false, None) => IntraStationFrameStatus::GlobalFallback,
+            };
+            if let Some(rejection) = rejection {
+                rejections.push(rejection);
+            }
+            StationMember {
+                path: info.filename.clone(),
+                median_sharpness: super::mosaic::station_member_median_sharpness(info),
+                status,
+            }
+        })
+        .collect();
+    (members, rejections)
+}
+
+/// Test-only entry point for Property 78. This deliberately delegates to the
+/// production default-station wiring above, rather than duplicating the
+/// rejection predicate in the property harness.
+#[cfg(test)]
+pub(crate) fn station_members_from_measured_group_join_evidence(
+    images: &[&ImageInfo],
+    recorded: &HashMap<String, IntraStationFrameRecord>,
+) -> (Vec<StationMember>, Vec<GroupJoinRejection>) {
+    station_members_from_frame_records(images, recorded)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn focus_stack_stitcher_with_margin_policy<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     focus_warp: Option<&FocusLayerWarp>,
     capture_group_ids: Option<&HashMap<usize, u8>>,
+    station_index: usize,
     sequence_gap_aware: bool,
     fill_margins: bool,
     app_handle: AppHandle<R>,
     progress_event: &str,
     load_image: &mut F,
-) -> Result<Rgb32FImage, String>
+) -> Result<FocusStackTileRender, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
     if images.is_empty() {
-        return Ok(Rgb32FImage::new(0, 0));
+        return Ok(FocusStackTileRender::unattributed(Rgb32FImage::new(0, 0)));
     }
     let capture_group_count = capture_group_ids
         .map(|ids| {
@@ -7885,20 +9164,71 @@ where
             app_handle,
             progress_event,
             load_image,
-        );
+        )
+        .map(FocusStackTileRender::unattributed);
     }
     let (min_x, max_x, min_y, max_y) =
         focus_output_bounds(images, global_homographies, projection, focus_warp);
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
-        return Ok(Rgb32FImage::new(0, 0));
+        return Ok(FocusStackTileRender::unattributed(Rgb32FImage::new(0, 0)));
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
-    let first_source = load_image(images[0])?;
+    // 需求 12.1 / 12.2 / 12.5: which members this Capture_Station can fuse, as
+    // the records of earlier runs of this station already describe them.  The
+    // loop below measures this run's evidence itself (需求 2.2–2.9) and updates
+    // `station_members` frame by frame, so the plan that is finally *recorded* is
+    // the one the pixels followed.  The canvas bounds above deliberately stay
+    // over the whole group: the Virtual_Tile geometry the caller already
+    // published is computed from the same set, and a degraded station must not
+    // silently resize its tile.
+    let (mut station_members, group_join_rejections) =
+        station_members_from_records(images, station_index);
+    for rejection in &group_join_rejections {
+        println!(
+            "  - Rejected from every Capture_Station: '{}' inlier support {:.3} (minimum {:.2}), median symmetric error {:.2}px (limit {:.2}px)",
+            rejection.path,
+            rejection.inlier_area_coverage,
+            rejection.minimum_inlier_area_coverage,
+            rejection.median_symmetric_error_px,
+            rejection.symmetric_error_limit_px
+        );
+        record_run_group_join_rejection(station_index, rejection);
+    }
+    let station_plan = plan_station_fusion(&station_members);
+    // 需求 3.10 and 12.1 both retain source-exact pixel writes; the former
+    // physically contains one successful frame, while the latter selects one
+    // survivor from a larger station.
+    // 需求 12.1: a degraded station keeps one Source_RAW, so `fused` holds that
+    // frame alone and every covered pixel below is copied from it.
+    let seed_index = station_plan.fused.first().copied().unwrap_or(0);
+    // 需求 2.1 / 2.9: the seed frame is the one every later frame of this station
+    // is composited against, so it is this station's anchor; it carries the
+    // identity transform and its record is the reference the other frames'
+    // transforms are expressed against.
+    let anchor_path = images[seed_index].filename.clone();
+    let anchor_long_side = images[seed_index].width.max(images[seed_index].height);
+    let anchor_to_station_inverse = global_homographies
+        .get(&images[seed_index].id)
+        .and_then(|transform| transform.try_inverse());
+    intra_station::record_run_frame(
+        station_index,
+        &anchor_path,
+        IntraStationFrameRecord {
+            path: anchor_path.clone(),
+            status: IntraStationFrameStatus::Anchor,
+            inlier_area_coverage: 1.0,
+            ..Default::default()
+        },
+    );
+    if let Some(member) = station_members.get_mut(seed_index) {
+        member.status = IntraStationFrameStatus::Anchor;
+    }
+    let first_source = load_image(images[seed_index])?;
     let first_layer = render_focus_layer(
-        images[0],
+        images[seed_index],
         &first_source,
-        &global_homographies[&images[0].id],
+        &global_homographies[&images[seed_index].id],
         projection,
         focus_warp,
         offset_x,
@@ -7917,6 +9247,26 @@ where
     let mut merged_owner = GrayImage::new(out_width, out_height);
     place_focus_layer(&mut merged, &mut merged_mask, &first_layer);
     place_focus_foreground_mask(&mut merged_foreground_mask, &first_layer);
+    // Published Ownership_Map (需求 3.11 / 4.1).  `merged_owner` above stays
+    // exactly as it was: it is an 8-bit tone-harmonisation grouping key with
+    // its own identifier scheme, while this map is the per-pixel Source_RAW
+    // attribution the Virtual_Tile publishes.  It is only tracked for the
+    // unfilled tile form, where every covered pixel is a hard selection from
+    // one source; the margin-filling output invents pixels for the projected
+    // trapezoid corners and therefore cannot attest ownership.
+    let seed_owner = (seed_index + 1).min(u16::MAX as usize) as u16;
+    let mut ownership_ids = (!fill_margins).then(|| {
+        let mut owners = vec![NO_OWNER; out_width as usize * out_height as usize];
+        owners
+            .par_iter_mut()
+            .zip(merged_mask.as_raw().par_iter())
+            .for_each(|(owner, &covered)| {
+                if covered > 0 {
+                    *owner = seed_owner;
+                }
+            });
+        owners
+    });
     merged_owner
         .as_mut()
         .par_chunks_mut(out_width as usize)
@@ -7928,6 +9278,35 @@ where
                 }
             }
         });
+    // Focus_Fuser (需求 3.1–3.11).  The station's ownership grid decides which
+    // source owns each cell; the loop below copies that source's pixels and
+    // nothing else, so an owner boundary is an ownership cell boundary.
+    // 需求 3.10 / 12.1: the frame count is the number of frames the plan fuses,
+    // so a single-frame degraded station reports `SingleFrame` and skips the cut
+    // it has nothing to cut against.
+    let mut fusion = StationFusion::new(
+        out_width,
+        out_height,
+        station_plan.fused.len().min(images.len()).max(1),
+    );
+    let fusion_geometry = fusion.geometry();
+    let fusion_plan = fusion.sampling_plan();
+    {
+        // The composite currently holds exactly the seed frame, so measuring it
+        // here is measuring that frame — with the same plan every candidate
+        // will use (需求 3.2).
+        let (sharpness, covered) =
+            measure_focus_cells(&fusion_geometry, &fusion_plan, &merged, &merged_mask, 0, 0);
+        fusion.seed(seed_index, &sharpness, &covered);
+    }
+    println!(
+        "  - Focus ownership grid: {}x{} cells of {}px over a {}x{} station plane",
+        fusion_geometry.columns,
+        fusion_geometry.rows,
+        fusion_geometry.cell_size_px,
+        out_width,
+        out_height
+    );
     let source_longest_dimension = images
         .iter()
         .map(|image| image.width().max(image.height()))
@@ -7942,7 +9321,11 @@ where
         resize_binary_mask(&merged_foreground_mask, analysis_width, analysis_height);
     let mut merged_focus = focus_score_map(&merged_analysis, &merged_analysis_mask);
 
-    for (index, image) in images.iter().enumerate().skip(1) {
+    // 需求 12.2: only the frames the plan fused are loaded, rendered and offered
+    // to the cut.  An excluded Source_RAW is never sampled, so no pixel of it can
+    // reach the Virtual_Tile while the report calls it excluded.
+    for &index in station_plan.fused.iter().skip(1) {
+        let image = images[index];
         let _ = app_handle.emit(
             progress_event,
             format!("Focus-stacking image {} of {}", index + 1, images.len()),
@@ -7959,7 +9342,7 @@ where
             out_width,
             out_height,
         );
-        drop(source_image);
+        let mut applied_translation = (0i32, 0i32);
         if let Some((delta_x, delta_y, score, support, patch_count)) =
             estimate_focus_layer_translation(&candidate, &merged, &merged_mask)
         {
@@ -7968,6 +9351,85 @@ where
             );
             candidate =
                 translate_rendered_focus_layer(candidate, delta_x, delta_y, out_width, out_height);
+            applied_translation = (delta_x, delta_y);
+        }
+        // Intra_Station_Registrar (需求 2.2–2.9).  The integer translation above
+        // is this frame's *global* model on this path; the registrar now measures
+        // and corrects what is left of it at native resolution, against the
+        // station canvas the anchor seeded.
+        let registration = register_station_frame_native_layer(
+            &merged,
+            &merged_mask,
+            image,
+            &source_image,
+            &global_homographies[&image.id],
+            projection,
+            (offset_x, offset_y),
+            applied_translation,
+            &candidate,
+            anchor_long_side,
+            anchor_to_station_inverse,
+        );
+        drop(source_image);
+        if let Some(registration) = registration {
+            let record = registration.record.clone();
+            println!(
+                "    - Intra-station registration '{}': {:?}, {} inliers of {} control points, coverage {:.3}, rejected {:.3}, median symmetric error {:.2}px, control point spacing {:.1}px",
+                image.filename,
+                record.status,
+                record.inliers,
+                registration.evaluated_control_points,
+                record.inlier_area_coverage,
+                record.rejected_control_point_ratio,
+                record.median_symmetric_error_px,
+                record.control_point_spacing_px
+            );
+            intra_station::record_run_frame(station_index, &anchor_path, record.clone());
+            // 需求 12.5: inlier spatial support below 20%, or an inlier median
+            // symmetric reprojection error above 0.01 × the anchor's long side,
+            // keeps this Source_RAW out of every Capture_Station — so this
+            // station cannot fuse it either (需求 12.2).  A frame whose evidence
+            // was never measured has nothing to judge and keeps the behaviour it
+            // had before.
+            let rejection = (registration.evaluated_control_points > 0 && record.inliers > 0)
+                .then(|| {
+                    group_join_rejection(&GroupJoinEvidence {
+                        path: image.filename.clone(),
+                        inlier_area_coverage: record.inlier_area_coverage,
+                        median_symmetric_error_px: record.median_symmetric_error_px,
+                        anchor_long_side_px: anchor_long_side,
+                    })
+                })
+                .flatten();
+            if let Some(member) = station_members.get_mut(index) {
+                member.status = match (rejection.is_some(), record.status) {
+                    (true, _) => IntraStationFrameStatus::Failed,
+                    (false, IntraStationFrameStatus::Failed) => {
+                        IntraStationFrameStatus::GlobalFallback
+                    }
+                    (false, status) => status,
+                };
+            }
+            if let Some(rejection) = rejection {
+                println!(
+                    "    - Rejected from every Capture_Station: inlier support {:.3} (minimum {:.2}), median symmetric error {:.2}px (limit {:.2}px)",
+                    rejection.inlier_area_coverage,
+                    rejection.minimum_inlier_area_coverage,
+                    rejection.median_symmetric_error_px,
+                    rejection.symmetric_error_limit_px
+                );
+                record_run_group_join_rejection(station_index, &rejection);
+                continue;
+            }
+            // Apply exactly what was measured: the same displacement field the
+            // gates above accepted, resampled onto the layer that produced it.
+            if let Some(displacement) = registration.displacement.as_ref() {
+                let max_offset = displacement.max_offset_px();
+                if max_offset >= FOCUS_NATIVE_REFINEMENT_MIN_OFFSET_PX {
+                    println!("    - Applying native refinement field: up to {max_offset:.2}px");
+                    candidate = warp_rendered_focus_layer(candidate, displacement);
+                }
+            }
         }
         // A regional warp can still leave a small residual translation on a
         // depth-discontinuous layer. Refine only the detected foreground
@@ -7983,27 +9445,11 @@ where
             candidate =
                 align_focus_foreground_layer_to_existing(candidate, &merged_foreground_mask);
         }
-        // Match only the slowly varying canvas illumination before focus scoring.
-        // The estimator excludes detected foreground and the application is
-        // canvas-gated, so brush strokes, seals, and the source weave remain
-        // unchanged while the sharpness comparison is not biased by exposure
-        // blocks between frames.
-        let color_correction = estimate_focus_color_correction(
-            &merged,
-            &merged_mask,
-            &merged_foreground_mask,
-            &candidate,
-            true,
-        );
-        apply_focus_color_correction(
-            &mut candidate.image,
-            &color_correction,
-            &candidate.foreground_mask,
-            true,
-        );
-        // Keep the source pixels untouched until focus ownership is decided.
-        // The correction above is deliberately low-frequency and canvas-only;
-        // final ownership still decides all detail pixels independently.
+        // Requirement 3.6: registration chooses the corresponding sample and
+        // ownership chooses the frame; neither step may tone-modify the
+        // candidate while continuing to identify that Source_RAW as owner.
+        // Inter-station low-frequency harmonisation is a later pipeline stage
+        // and must not alter this Virtual_Tile's source-level provenance.
         let candidate_analysis = render_focus_analysis_layer(
             &candidate,
             out_width,
@@ -8053,8 +9499,34 @@ where
                 &candidate_analysis.mask,
             );
         }
-        let mut full_resolution_decision =
-            focus_decision_for_layer(&analysis_decision, &candidate, out_width, out_height);
+        // Focus_Fuser (需求 3.2–3.6): on the standard focus path the ownership
+        // grid, not the analysis-resolution focus map, decides this candidate.
+        // `analysis_decision` above keeps feeding the shifted-mosaic guards and
+        // the analysis score table; the pixel write follows the cut alone, at
+        // ownership cell resolution and with no transition band.  The cut runs
+        // on the *photometrically corrected* candidate, so the inconsistency of
+        // 需求 3.3 measures geometry rather than exposure.
+        let mut full_resolution_decision = {
+            let mut cells = CandidateCells::new(fusion_geometry.cell_count());
+            let (sharpness, covered) = measure_focus_cells(
+                &fusion_geometry,
+                &fusion_plan,
+                &candidate.image,
+                &candidate.mask,
+                candidate.left,
+                candidate.top,
+            );
+            cells.sharpness = sharpness;
+            cells.covered = covered;
+            cells.disagreement = measure_focus_cell_disagreement(
+                &fusion_geometry,
+                &candidate,
+                &merged,
+                &merged_mask,
+            );
+            let took = fusion.fold(index, &cells);
+            focus_cell_decision_for_layer(&fusion_geometry, &took, &candidate)
+        };
         // A detected near-field layer is geometrically separate from the main
         // image plane. Do not let focus sharpness make later frames replace an
         // already placed instance of that layer; doing so creates block-shaped
@@ -8082,6 +9554,10 @@ where
         // keeping detail-band source ownership hard and deterministic.
         let seam_blend_enabled = shifted_mosaic && FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND;
         if seam_blend_enabled {
+            // A blended seam band mixes two sources in one pixel, so no single
+            // Source_RAW owns it.  Drop the published map instead of claiming
+            // an owner that is not the only contributor.
+            ownership_ids = None;
             blend_focus_seam_band(
                 &mut merged,
                 &mut merged_mask,
@@ -8090,6 +9566,17 @@ where
                 &full_resolution_decision,
             );
         } else {
+            if let Some(ownership_ids) = ownership_ids.as_mut() {
+                // Recorded from the coverage state *before* the selection, so
+                // it marks exactly the pixels the call below copies.
+                record_focus_layer_ownership(
+                    ownership_ids,
+                    &merged_mask,
+                    &candidate,
+                    &full_resolution_decision,
+                    (index + 1).min(u16::MAX as usize) as u16,
+                );
+            }
             hard_select_focus_layer(
                 &mut merged,
                 &mut merged_mask,
@@ -8131,6 +9618,32 @@ where
         merged_analysis_foreground_mask =
             resize_binary_mask(&merged_foreground_mask, analysis_width, analysis_height);
     }
+    // 需求 12.1 / 12.2: the station's fusion path, with every excluded
+    // Source_RAW listed individually.  `station_members` now carries what the
+    // loop really fused — the registrar's own verdict for every frame it
+    // measured — so the recorded plan and the pixels agree.
+    //
+    // A station of one Source_RAW has no non-anchor frame, so neither 需求 12.1
+    // ("all non-anchor frames failed") nor 需求 12.2 ("at least one failed") has
+    // a premise: nothing degraded and nothing is reported.  The fusion above
+    // still saw exactly one frame, which is 需求 3.10's single-frame short
+    // circuit and not a degradation.
+    if station_members.len() >= 2 {
+        let measured_plan = plan_station_fusion(&station_members);
+        let entries = station_plan_entries(station_index, &station_members, &measured_plan);
+        if !entries.is_empty() {
+            println!(
+                "  - Capture_Station {station_index} fused {} of {} frame(s) ({:?})",
+                measured_plan.fused.len(),
+                station_members.len(),
+                measured_plan.mode
+            );
+            for excluded in &measured_plan.excluded {
+                println!("    - Excluded '{}': {}", excluded.path, excluded.reason);
+            }
+        }
+        record_run_entries(&entries);
+    }
     let merged_dimensions = merged.dimensions();
     if fill_margins {
         let (filled_pixels, remaining_invalid_pixels) =
@@ -8151,13 +9664,9 @@ where
             "  - Kept unfilled focus-tile canvas {}x{}; retaining projected invalid margins",
             merged_dimensions.0, merged_dimensions.1
         );
-        let sharpen_amount = std::env::var("RAW_EDITOR_FOCUS_SHARPEN_AMOUNT")
-            .ok()
-            .and_then(|value| value.parse::<f32>().ok())
-            .filter(|value| value.is_finite())
-            .unwrap_or(1.35)
-            .clamp(0.0, 2.0);
-        sharpen_focus_tile_detail(&mut merged, &merged_mask, sharpen_amount);
+        // Requirement 3.6: an attributed Virtual_Tile is the selected source
+        // sample itself. Sharpening would create a value that no owner supplied.
+        println!("  - Source-owned Capture_Station tile; skipping tile sharpening");
     }
     if std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS").is_some() {
         let mut counts = vec![0usize; images.len() + 2];
@@ -8190,26 +9699,74 @@ where
             total, summary
         );
     }
-    // A newly exposed canvas region may have no overlap samples from which to
-    // estimate a source-specific colour transform. Once ownership is final,
-    // remove only the remaining source-sized low-frequency tone steps across
-    // the complete mosaic. The strict canvas gate preserves the original
-    // weave and painted foreground instead of treating it as a background.
-    // Every virtual tile must leave the focus stack with one continuous paper
-    // tone. The robust owner estimator above is safe by default; keep an
-    // explicit opt-out for diagnostics and for scenes whose canvas is known to
-    // contain deliberate owner-specific illumination.
-    if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {
-        harmonize_focus_background_tone_with_owners(
-            &mut merged,
-            &merged_mask,
-            &merged_foreground_mask,
-            &merged_owner,
+    // Requirement 3.6: source-level ownership and tone modification are
+    // mutually exclusive. Tone harmonisation belongs after inter-station seam
+    // ownership and cannot run inside an attributed Capture_Station tile.
+    println!("  - Source-owned Capture_Station tile; skipping owner tone harmonization");
+    // 需求 3.8 / 3.9 / 4.6: publish the fuser's per-cell confidence at pixel
+    // resolution and the low sharpness regions in world coordinates.  The tile
+    // plane is a pure translation of the world plane, so the tile's top-left
+    // pixel sits at `(-offset_x, -offset_y)`.
+    let confidence_cells = fusion.confidence();
+    let low_sharpness_regions = fusion.low_sharpness_region_records((-offset_x, -offset_y));
+    if !low_sharpness_regions.is_empty() {
+        println!(
+            "  - Focus fusion found {} low-sharpness region(s) below the station P10",
+            low_sharpness_regions.len()
         );
-    } else {
-        println!("  - Skipping focus owner tone harmonization (explicit opt-out)");
+        degradation::record_run_degradation(
+            degradation::FUSION_LOW_SHARPNESS_REGION,
+            serde_json::json!({ "regions": low_sharpness_regions.len() }),
+        );
     }
-    Ok(merged)
+    let confidence_values =
+        focus_cell_plane_to_pixels(&fusion_geometry, &confidence_cells, out_width, out_height);
+    let mut fusion_report = FusionReport {
+        cell_size_px: fusion_geometry.cell_size_px,
+        grid: OwnershipGridSize {
+            columns: fusion_geometry.columns,
+            rows: fusion_geometry.rows,
+        },
+        solver_status: fusion.solver_status(),
+        graph_cut_seconds: fusion.graph_cut_seconds(),
+        confidence: focus_fuser::confidence_summary(&confidence_values, merged_mask.as_raw()),
+        low_sharpness_regions,
+        ..FusionReport::default()
+    };
+    println!(
+        "  - Focus ownership solved in {:.2}s ({:?}); mean confidence {:.3}, below 0.05 {:.2}%",
+        fusion_report.graph_cut_seconds,
+        fusion_report.solver_status,
+        fusion_report.confidence.mean,
+        fusion_report.confidence.below_0_05_ratio * 100.0
+    );
+    let masks = ownership_ids
+        .map(|owners| -> Result<FocusStackTileMasks, String> {
+            let legend = images
+                .iter()
+                .map(|image| PathBuf::from(&image.filename))
+                .collect::<Vec<_>>();
+            let confidence = ConfidenceMap::per_pixel(out_width, out_height, confidence_values)?;
+            let ownership = OwnershipMap::new(out_width, out_height, owners, legend)?;
+            fusion_report.owned_pixels = ownership.assigned_pixels();
+            fusion_report.uncovered_pixels = u64::from(out_width) * u64::from(out_height)
+                - merged_mask
+                    .as_raw()
+                    .par_iter()
+                    .filter(|&&covered| covered > 0)
+                    .count() as u64;
+            Ok(FocusStackTileMasks {
+                coverage: CoverageMask::from_gray(merged_mask),
+                ownership,
+                confidence,
+                fusion: fusion_report,
+            })
+        })
+        .transpose()?;
+    Ok(FocusStackTileRender {
+        image: merged,
+        masks,
+    })
 }
 
 /// Restore a small amount of native edge contrast after focus ownership.  The
@@ -8772,6 +10329,30 @@ mod interpolation_tests {
         assert_eq!(size, 1001);
         assert_eq!(offset.fract(), 0.0);
         assert!(offset - 123.4 >= 0.0);
+    }
+
+    #[test]
+    fn virtual_tile_geometry_preserves_nonzero_world_origin() {
+        let image = geometry_test_image(7, None);
+        let image_ref = &image;
+        let image_to_world = Matrix3::new(1.0, 0.0, -123.4, 0.0, 1.0, 55.2, 0.0, 0.0, 1.0);
+        let homographies = HashMap::from([(image.id, image_to_world)]);
+        let geometry = focus_stack_virtual_tile_geometry(
+            &[image_ref],
+            &homographies,
+            Projection::Planar,
+            None,
+        )
+        .expect("translated source must have valid Virtual_Tile geometry");
+        assert_eq!(geometry.tile_to_world[(0, 2)], -124.0);
+        assert_eq!(geometry.tile_to_world[(1, 2)], 55.0);
+        for source in [Point2::new(0.0, 0.0), Point2::new(999.0, 799.0)] {
+            let world = image_to_world * Point3::new(source.x, source.y, 1.0);
+            let tile = Point2::new(world.x + 124.0, world.y - 55.0);
+            let recovered = geometry.tile_to_world * Point3::new(tile.x, tile.y, 1.0);
+            assert!((recovered.x - world.x).abs() < 1e-9);
+            assert!((recovered.y - world.y).abs() < 1e-9);
+        }
     }
 
     #[test]
@@ -9591,5 +11172,256 @@ mod interpolation_tests {
         assert_eq!(remaining, 0);
         assert!(mask.as_raw().iter().all(|&value| value > 0));
         assert!(image.get_pixel(0, 0).0.iter().any(|&value| value != 0.0));
+    }
+}
+
+/// Test-only access to the Focus_Fuser measurement the default station path
+/// drives (需求 3.2, 3.3).
+///
+/// Property 10 lives in `stack_pipeline::properties`, which cannot see
+/// [`measure_focus_cells`] or [`sample_focus_plane`].  Both entry points below
+/// call the production functions unchanged with the production geometry and the
+/// production sampling plan, so the property tests the measurement the composite
+/// and every candidate really go through rather than a re-implementation of it.
+#[cfg(test)]
+pub(crate) mod focus_fusion_test_access {
+    use super::*;
+
+    /// Per-cell normalised Sharpness_Score and coverage of one projected layer,
+    /// exactly as the composite and every candidate of a Capture_Station are
+    /// measured.
+    pub(crate) fn measure_cells(
+        geometry: &OwnershipGridGeometry,
+        plan: &CellSamplingPlan,
+        image: &Rgb32FImage,
+        mask: &GrayImage,
+        left: u32,
+        top: u32,
+    ) -> (Vec<f64>, Vec<bool>) {
+        measure_focus_cells(geometry, plan, image, mask, left, top)
+    }
+}
+
+/// 需求 12.1 / 12.2 / 12.5 on the *default* station path.
+///
+/// The decisions themselves are unit tested in
+/// `stack_pipeline::station_degradation`; these tests cover the wiring, which is
+/// where the same trap has been hit before: a rule connected to
+/// `mosaic::detail_preserving_mosaic` alone never runs, because a Virtual_Tile
+/// holds one Capture_Station and therefore always takes the standard focus
+/// fusion branch of `focus_stack_stitcher_with_margin_policy`.
+#[cfg(test)]
+mod station_degradation_wiring_tests {
+    use super::*;
+    use crate::panorama_utils::stack_pipeline::degradation::INTRA_STATION_REGISTRATION_FAILED;
+    use crate::panorama_utils::stack_pipeline::station_degradation::StationFusionMode;
+
+    fn station_frame(id: usize) -> ImageInfo {
+        ImageInfo {
+            id,
+            filename: format!("/station/000{id}.nef"),
+            width: 6_000,
+            height: 4_000,
+            alignment_image: GrayImage::new(1, 1),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: None,
+            overview_reference: false,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        }
+    }
+
+    fn record(
+        path: &str,
+        status: IntraStationFrameStatus,
+        inliers: usize,
+        coverage: f64,
+        error_px: f64,
+    ) -> (String, IntraStationFrameRecord) {
+        (
+            path.to_string(),
+            IntraStationFrameRecord {
+                path: path.to_string(),
+                inliers,
+                inlier_area_coverage: coverage,
+                median_symmetric_error_px: error_px,
+                status,
+                ..Default::default()
+            },
+        )
+    }
+
+    #[test]
+    fn a_station_with_no_registration_record_fuses_every_frame_in_order() {
+        // This is the no-change guarantee of the wiring: the default path does
+        // not run the native patch refinement, so it records nothing, so the
+        // plan is the full bracket and the render loop is exactly what it was.
+        let frames = (1..=4).map(station_frame).collect::<Vec<_>>();
+        let images = frames.iter().collect::<Vec<_>>();
+        let (members, rejections) = station_members_from_frame_records(&images, &HashMap::new());
+        assert!(rejections.is_empty());
+        assert_eq!(members[0].status, IntraStationFrameStatus::Anchor);
+        assert!(
+            members[1..]
+                .iter()
+                .all(|member| member.status == IntraStationFrameStatus::GlobalFallback),
+            "a frame placed by its global model alone is a global fallback, not a failure"
+        );
+        let plan = plan_station_fusion(&members);
+        assert_eq!(plan.mode, StationFusionMode::AllFrames);
+        assert_eq!(plan.fused, vec![0, 1, 2, 3]);
+        assert!(plan.excluded.is_empty());
+        assert!(station_plan_entries(0, &members, &plan).is_empty());
+    }
+
+    #[test]
+    fn a_recorded_failure_beside_two_survivors_leaves_the_fusion_to_the_survivors() {
+        // 需求 12.2.
+        let frames = (1..=4).map(station_frame).collect::<Vec<_>>();
+        let images = frames.iter().collect::<Vec<_>>();
+        let recorded = HashMap::from([
+            record(
+                "/station/0002.nef",
+                IntraStationFrameStatus::Failed,
+                0,
+                0.05,
+                0.4,
+            ),
+            record(
+                "/station/0003.nef",
+                IntraStationFrameStatus::Local,
+                900,
+                0.80,
+                0.4,
+            ),
+        ]);
+        let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+        assert!(
+            rejections.is_empty(),
+            "no accepted inlier means no measured 需求 12.5 evidence to judge"
+        );
+        let plan = plan_station_fusion(&members);
+        assert_eq!(plan.mode, StationFusionMode::SuccessfulFramesOnly);
+        assert_eq!(
+            plan.fused,
+            vec![0, 2, 3],
+            "the excluded frame is never offered to the cut"
+        );
+        assert_eq!(
+            plan.excluded
+                .iter()
+                .map(|record| (record.path.as_str(), record.reason.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("/station/0002.nef", INTRA_STATION_REGISTRATION_FAILED)],
+            "需求 12.2 names the excluded Source_RAW by absolute path"
+        );
+        let entries = station_plan_entries(7, &members, &plan);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, INTRA_STATION_REGISTRATION_FAILED);
+        assert_eq!(entries[0].1["station_index"], serde_json::json!(7));
+        assert_eq!(entries[0].1["fused_frames"], serde_json::json!(3));
+    }
+
+    #[test]
+    fn every_non_anchor_frame_failing_degrades_the_station_to_one_source() {
+        // 需求 12.1: the plan keeps one member, so the fusion is constructed with
+        // one frame and reports `SingleFrame`, and every covered pixel is copied
+        // from that Source_RAW.
+        let frames = (1..=3).map(station_frame).collect::<Vec<_>>();
+        let images = frames.iter().collect::<Vec<_>>();
+        let recorded = HashMap::from([
+            record(
+                "/station/0002.nef",
+                IntraStationFrameStatus::Failed,
+                0,
+                0.01,
+                9.0,
+            ),
+            record(
+                "/station/0003.nef",
+                IntraStationFrameStatus::Failed,
+                0,
+                0.02,
+                9.0,
+            ),
+        ]);
+        let (members, _) = station_members_from_frame_records(&images, &recorded);
+        let plan = plan_station_fusion(&members);
+        assert_eq!(plan.mode, StationFusionMode::SingleFrameDegraded);
+        assert_eq!(plan.fused, vec![0]);
+        assert_eq!(
+            plan.single_frame_path(&members).as_deref(),
+            Some("/station/0001.nef")
+        );
+        assert_eq!(plan.excluded.len(), 2);
+        assert_eq!(
+            focus_fuser::StationFusion::new(64, 64, plan.fused.len()).solver_status(),
+            crate::panorama_utils::stack_pipeline::report::FusionSolverStatus::SingleFrame,
+            "需求 12.1 / 3.10: one frame has nothing to cut against"
+        );
+    }
+
+    #[test]
+    fn recorded_evidence_below_the_group_join_limits_rejects_the_frame() {
+        // 需求 12.5, on a 6000px anchor: support below 0.20, or a median
+        // symmetric error above 60px, keeps the Source_RAW out of the station.
+        let frames = (1..=3).map(station_frame).collect::<Vec<_>>();
+        let images = frames.iter().collect::<Vec<_>>();
+        let recorded = HashMap::from([
+            record(
+                "/station/0002.nef",
+                IntraStationFrameStatus::Local,
+                120,
+                0.1999,
+                0.5,
+            ),
+            record(
+                "/station/0003.nef",
+                IntraStationFrameStatus::Local,
+                900,
+                0.85,
+                60.1,
+            ),
+        ]);
+        let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+        assert_eq!(rejections.len(), 2);
+        assert!(rejections[0].support_below_minimum && !rejections[0].error_above_limit);
+        assert!(rejections[1].error_above_limit && !rejections[1].support_below_minimum);
+        assert!((rejections[1].symmetric_error_limit_px - 60.0).abs() < 1e-12);
+        assert!(
+            members[1..]
+                .iter()
+                .all(|member| member.status == IntraStationFrameStatus::Failed),
+            "a frame that joins no Capture_Station cannot be fused by this one"
+        );
+        // A frame exactly at both limits still joins, so the thresholds are not
+        // loosened in either direction.
+        let recorded = HashMap::from([
+            record(
+                "/station/0002.nef",
+                IntraStationFrameStatus::Local,
+                120,
+                0.20,
+                60.0,
+            ),
+            record(
+                "/station/0003.nef",
+                IntraStationFrameStatus::Local,
+                900,
+                0.85,
+                0.5,
+            ),
+        ]);
+        let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+        assert!(rejections.is_empty());
+        assert_eq!(
+            plan_station_fusion(&members).mode,
+            StationFusionMode::AllFrames
+        );
     }
 }

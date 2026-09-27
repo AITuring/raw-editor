@@ -12,8 +12,20 @@ struct Graph {
     edges: Vec<Vec<Edge>>,
 }
 
-const OWNERSHIP_PAIRWISE_BASE: f64 = 0.35;
-const OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT: f64 = 12.0;
+pub(super) const OWNERSHIP_PAIRWISE_BASE: f64 = 0.35;
+pub(super) const OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT: f64 = 12.0;
+
+/// Smoothness weight of one 4-neighbour edge of the ownership grid: the cost
+/// charged when the two cells end up with different owners.
+///
+/// Published so a multi-label caller can evaluate the very same energy
+/// [`cut_grid`] minimises instead of re-deriving the formula. The arithmetic is
+/// unchanged and [`cut_grid`] is its only user inside this module, so the
+/// min-cut semantics are untouched.
+pub(super) fn pairwise_weight(disagreement_a: f64, disagreement_b: f64) -> f64 {
+    OWNERSHIP_PAIRWISE_BASE
+        + (disagreement_a + disagreement_b) * OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT
+}
 
 impl Graph {
     fn connect(&mut self, a: usize, b: usize, forward: f64, reverse: f64) {
@@ -97,6 +109,16 @@ impl Graph {
     }
 }
 
+/// Binary min-cut over a `width × height` 4-connected grid.
+///
+/// - `preference[i]` is `cost(base) − cost(candidate)`; the split into the two
+///   terminal capacities is the standard reparametrisation, so only the
+///   difference matters.
+/// - `disagreement[i]` feeds [`pairwise_weight`] on every 4-neighbour edge.
+/// - `fixed[i]`: `1` pins the cell to the candidate, `-1` pins it to the base,
+///   `0` leaves it to the cut.
+/// - the returned byte is `255` when the cell took the **candidate** and `0`
+///   when it kept the **base**.
 pub(super) fn cut_grid(
     width: usize,
     height: usize,
@@ -130,9 +152,7 @@ pub(super) fn cut_grid(
         .into_iter()
         .flatten()
         {
-            let weight = OWNERSHIP_PAIRWISE_BASE
-                + (disagreement[i] + disagreement[neighbour])
-                    * OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT;
+            let weight = pairwise_weight(disagreement[i], disagreement[neighbour]);
             graph.connect(i, neighbour, weight, weight);
         }
     }

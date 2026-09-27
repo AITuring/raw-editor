@@ -54,6 +54,10 @@ nalgebra = "0.35.0"
 hex = "0.4"
 rand = "0.10"
 tempfile = "3.27.0"
+# Lossless payload compression for the Virtual_Tile disk cache (需求 4.3).
+# Deliberately not an image codec: the cache stores raw f32/u16/bit planes so
+# the round trip is element-for-element exact.
+zstd = "=0.13.3"
 mimalloc = "0.1.52"
 image_hasher = "3.1.1"
 regex = "1.12.4"
@@ -107,6 +111,9 @@ hex = "0.4"
 [dev-dependencies]
 naga = { version = "30.0.0", features = ["wgsl-in"] }
 tauri = { version = "2.11", features = ["test"] }
+# Property-based testing for the Stack_Pipeline correctness properties. Pinned
+# so a regression seed in `proptest-regressions/` always replays identically.
+proptest = "=1.11.0"
 
 [profile.dev]
 opt-level = 1

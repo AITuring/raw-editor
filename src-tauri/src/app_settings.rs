@@ -523,6 +523,14 @@ pub struct AppSettings {
     pub group_preferred_type: Option<String>,
     #[serde(default)]
     pub always_decode_raw_thumbnails: Option<bool>,
+    /// Which focus-stack compositor composes the final canvas
+    /// (`StackCompositorChoice`, 需求 15.1–15.3 / 15.10).  `None` means the
+    /// default layered Virtual_Tile path; the other identifiers
+    /// (`progressive_seam_tile`, `streaming_mosaic`,
+    /// `legacy_single_layer_mosaic`) select a comparison path and are therefore
+    /// off in a default build.
+    #[serde(default)]
+    pub stack_compositor: Option<String>,
     #[serde(default)]
     pub workspace: WorkspaceState,
 }
@@ -615,6 +623,8 @@ impl Default for AppSettings {
             group_associated_files: Some(false),
             group_preferred_type: Some("raw".to_string()),
             always_decode_raw_thumbnails: Some(false),
+            // 需求 15.10: every comparison compositor is off by default.
+            stack_compositor: None,
             workspace: WorkspaceState::default(),
         }
     }

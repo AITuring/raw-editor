@@ -163,7 +163,15 @@ pub struct AppState {
     pub export_task_token: Arc<Mutex<Option<Arc<AtomicBool>>>>,
     pub hdr_result: Arc<Mutex<Option<DynamicImage>>>,
     pub panorama_result: Arc<Mutex<Option<DynamicImage>>>,
-    pub image_stack_result: Arc<Mutex<Option<(String, DynamicImage)>>>,
+    pub image_stack_result: Arc<
+        Mutex<
+            Option<(
+                String,
+                DynamicImage,
+                crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+            )>,
+        >,
+    >,
     pub image_stack_generation: Arc<AtomicUsize>,
     pub denoise_result: Arc<Mutex<Option<DynamicImage>>>,
     pub indexing_task_handle: Mutex<Option<JoinHandle<()>>>,

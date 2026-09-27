@@ -4,15 +4,16 @@ use crate::file_management::{parse_virtual_path, read_file_mapped};
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
 use image::{ColorType, DynamicImage, GenericImageView, GrayImage, Rgb32FImage, RgbImage};
-use nalgebra::{Matrix3, Point2, Point3};
+use nalgebra::{Matrix2, Matrix3, Point2, Point3};
 use rand::prelude::*;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
+use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
@@ -20,6 +21,17 @@ use tauri::{AppHandle, Emitter, Runtime};
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_cpu_default_raw_processing;
 use crate::panorama_utils::registration;
+use crate::panorama_utils::stack_pipeline::compositor::{
+    StackCompositorChoice, select_and_record_run_path,
+};
+use crate::panorama_utils::stack_pipeline::degradation;
+use crate::panorama_utils::stack_pipeline::determinism;
+use crate::panorama_utils::stack_pipeline::determinism::{sorted_keys, sorted_pairs};
+use crate::panorama_utils::stack_pipeline::focus_fuser;
+use crate::panorama_utils::stack_pipeline::intra_station;
+use crate::panorama_utils::stack_pipeline::report as stack_report;
+use crate::panorama_utils::stack_pipeline::topology;
+use crate::panorama_utils::stack_pipeline::virtual_tile;
 use crate::panorama_utils::stitching::{Projection, project_point};
 use crate::panorama_utils::{processing, stitching};
 
@@ -79,10 +91,69 @@ const FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO: f64 = 0.075;
 const FOCUS_BRACKET_INTERNAL_MOTION_RATIO: f64 = 0.05;
 const FOCUS_BRACKET_MIN_OVERLAP_SUPPORT: f64 = 0.60;
 const FOCUS_BRACKET_MAX_CAPTURE_GAP: u64 = 6;
+// ---------------------------------------------------------------------------
+// Capture_Station membership evidence (需求 1.1)
+//
+// These four thresholds are the *whole* membership judgement. They are
+// deliberately separate from the broad pairwise bracket gate above, which stays
+// in place for the station pose graph: `FOCUS_BRACKET_MIN_OVERLAP_SUPPORT` is an
+// overlap *area* ratio, while the station evidence measures the correlation of
+// that overlap, how widely the inliers are spread inside it, and whether the two
+// frames were shot at the same distance.
+// ---------------------------------------------------------------------------
+/// Verified overlap inlier correspondences a station link needs (需求 1.1).
+const STATION_MIN_INLIER_MATCHES: usize = 30;
+/// Local normalised pixel correlation over the overlap (需求 1.1).
+///
+/// Distinct from the `0.45`-class bars used to merely *connect* two tiles:
+/// connecting and co-owning ownership cells are different decisions.
+/// `focus_overlap_quality` already refuses to report a correlation measured from
+/// fewer than 120 samples, which is the measurable precondition.
+const STATION_MIN_OVERLAP_NCC: f64 = 0.60;
+/// Inlier spatial support inside the overlap (需求 1.1).
+const STATION_MIN_INLIER_SPATIAL_SUPPORT: f64 = 0.20;
+/// Scale-ratio window of two sources of one Capture_Station (需求 1.1).
+///
+/// 需求 6.3 applies `[0.95, 1.05]` to the *inter*-station relation using the
+/// same [`homography_scale_ratio`] measurement.
+const STATION_SCALE_RATIO_MIN: f64 = 0.98;
+const STATION_SCALE_RATIO_MAX: f64 = 1.02;
+// ---------------------------------------------------------------------------
+// Station_Relation acceptance contract (需求 6.3 / 6.4 / 6.8 / 6.9)
+//
+// These are world-coordinate native-pixel and dimensionless limits. They are
+// deliberately independent of source dimensions: a 3px defect must not become
+// acceptable merely because the camera has a longer sensor edge.
+// ---------------------------------------------------------------------------
+const STATION_RELATION_MIN_INLIERS: usize = 24;
+const STATION_RELATION_MAX_MEDIAN_ERROR_PX: f64 = 3.0;
+const STATION_RELATION_SCALE_RATIO_MIN: f64 = 0.95;
+const STATION_RELATION_SCALE_RATIO_MAX: f64 = 1.05;
+const STATION_RELATION_MIN_SPATIAL_SUPPORT: f64 = 0.20;
+const STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE: f64 = 0.20;
+const STATION_RELATION_EDGE_STRENGTH_RATIO_MIN: f64 = 0.70;
+const STATION_RELATION_EDGE_STRENGTH_RATIO_MAX: f64 = 1.40;
+const STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES: f64 = 10.0;
+/// Maximum Local_Scale variation accepted inside one station tile (需求 6.6).
+const STATION_POSE_MAX_LOCAL_SCALE_RATIO: f64 = 1.10;
+/// Samples per axis, including every valid-area edge and the tile centre.
+const STATION_POSE_LOCAL_SCALE_SAMPLES_PER_AXIS: usize = 9;
+/// Accumulated frame-centre displacement, in long sides, that splits a
+/// Capture_Station at that candidate (需求 1.4).
+const STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO: f64 = 0.02;
+/// Station-evidence score difference below which the absolute path is allowed
+/// to break the tie between two candidates (需求 1.2).
+const STATION_EVIDENCE_SCORE_TIE_BREAK: f64 = 0.001;
 // A high-resolution artwork station can contain a long automated focus
 // bracket. Keep a guard against an accidental whole-scan component, but do
 // not disable capture grouping for legitimate 10-32 frame brackets.
 const FOCUS_BRACKET_MAX_COMPONENT_SOURCES: usize = 48;
+
+/// Whether a member count can be represented by one Capture_Station before the
+/// deterministic oversized-component split is applied (需求 1.5 / 1.10).
+fn station_member_count_is_supported(count: usize) -> bool {
+    (1..=FOCUS_BRACKET_MAX_COMPONENT_SOURCES).contains(&count)
+}
 const FOCUS_BRACKET_GRAPH_WEIGHT_BOOST: f64 = 24.0;
 // A long scan of repeated calligraphy can contain a visually convincing edge
 // between distant characters. Once two nearby capture numbers have a verified
@@ -91,9 +162,12 @@ const FOCUS_BRACKET_GRAPH_WEIGHT_BOOST: f64 = 24.0;
 // capture runs, but cannot replace an already verified local backbone.
 const FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST: f64 = 128.0;
 const FOCUS_BRACKET_OBSERVATION_WEIGHT: f64 = 16.0;
-const FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO: f64 = 0.006;
-const FOCUS_GROUP_SINGLE_EDGE_WEIGHT_FACTOR: f64 = 0.02;
-const FOCUS_GROUP_MAX_CENTER_CORRECTION_RATIO: f64 = 0.50;
+const CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX: f64 = 2.0;
+const CLOSURE_DIRECT_PAIR_P95_LIMIT_PX: f64 = 3.0;
+const CLOSURE_MAX_CORNER_CORRECTION_PX: f64 = 256.0;
+const CLOSURE_OVERLAP_SHORT_SIDE_CORRECTION_RATIO: f64 = 0.10;
+const CLOSURE_RELATIVE_RESIDUAL_DECREASE: f64 = 0.0001;
+const CLOSURE_MAX_ITERATIONS: usize = 100;
 const FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT: f64 = 0.12;
 const FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT: f64 = 0.18;
 const FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT: f64 = 0.02;
@@ -329,6 +403,23 @@ pub struct MatchInfo {
     pub top_candidate_points: Vec<(Point2<f64>, Point2<f64>)>,
     pub dense_focus_points: Vec<(Point2<f64>, Point2<f64>)>,
     pub foreground_feature_points: Vec<(Point2<f64>, Point2<f64>)>,
+    /// The fit exactly as measured, in the direction
+    /// [`canonical_match_direction`] chose for the two sources.
+    ///
+    /// `homography` is stored in the `(min index, max index)` orientation of the
+    /// `matches` key, so whenever that orientation disagrees with the content
+    /// derived measurement direction it holds `try_inverse()` of the fit.  That
+    /// round trip is not bit exact — `inv(inv(M))` differs from `M` in the last
+    /// mantissa bits — so a consumer that rotated `homography` back into the
+    /// canonical direction still inherited which of the two sources happened to
+    /// be imported first, and the station pose solve propagated it into the
+    /// rendered canvas.  Keeping the untouched fit here lets such a consumer
+    /// read the same bits for either import order (需求 14.6).
+    ///
+    /// `None` for relations that never passed through a canonical-direction
+    /// storage step — panorama matching and filename-sequence bridges; those
+    /// keep the previous inverse round trip.
+    pub canonical_homography: Option<Matrix3<f64>>,
 }
 
 #[derive(Clone)]
@@ -2152,6 +2243,11 @@ fn largest_focus_match_component(
 ) -> HashSet<usize> {
     let motion_scale = focus_auto_order_motion_scale(images, matches);
     let mut adjacency = vec![Vec::new(); images.len()];
+    // Direct map iteration is order safe here: the loop only inserts undirected
+    // edges, and the connected components it feeds are the same set partition for
+    // any edge order.  The winning component is chosen by a strict `>` over the
+    // ascending root scan below, so no hash-seed order reaches the result
+    // (需求 14.6).
     for (&(source, target), match_info) in matches {
         let Some(source_image) = images.get(source) else {
             continue;
@@ -2332,6 +2428,96 @@ fn focus_image_direction_key(image: &ImageInfo) -> (u64, usize, u32, u32) {
         image.width,
         image.height,
     )
+}
+
+/// Singular values `(σ1, σ2)`, `σ1 ≥ σ2`, of the upper-left 2×2 block of a
+/// homography.
+///
+/// The block is read after normalising the matrix by `h[(2, 2)]`: a homography
+/// is only defined up to an overall scale, so `2 · I` and `I` describe the same
+/// mapping and must report the same singular values.
+fn homography_linear_singular_values(transform: &Matrix3<f64>) -> Option<(f64, f64)> {
+    let normaliser = transform[(2, 2)];
+    let scale = if normaliser.is_finite() && normaliser.abs() > f64::EPSILON {
+        1.0 / normaliser
+    } else {
+        1.0
+    };
+    let linear = Matrix2::new(
+        transform[(0, 0)] * scale,
+        transform[(0, 1)] * scale,
+        transform[(1, 0)] * scale,
+        transform[(1, 1)] * scale,
+    );
+    if linear.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let values = linear.singular_values();
+    let (first, second) = (values[0], values[1]);
+    (first.is_finite() && second.is_finite() && second >= 0.0)
+        .then_some((first.max(second), first.min(second)))
+}
+
+/// Scale ratio of a homography: the geometric mean `sqrt(σ1 · σ2)` of the
+/// singular values of its linear part.
+///
+/// One measurement, two thresholds: 需求 1.1 requires `[0.98, 1.02]` between two
+/// members of one Capture_Station, 需求 6.3 requires `[0.95, 1.05]` for an
+/// inter-station relation. Callers own the threshold; this function owns the
+/// measurement so both read the same number.
+fn homography_scale_ratio(transform: &Matrix3<f64>) -> Option<f64> {
+    let (first, second) = homography_linear_singular_values(transform)?;
+    let ratio = (first * second).sqrt();
+    (ratio.is_finite() && ratio > 0.0).then_some(ratio)
+}
+
+/// Sample the valid station-tile rectangle and return its Local_Scale range.
+///
+/// For `H: tile -> world`, Local_Scale is `sqrt(abs(det J_H))`.  The analytic
+/// quotient-rule Jacobian keeps this deterministic and measures projective
+/// variation without constraining any of H's eight free parameters (需求 6.6).
+fn station_pose_local_scale_range(
+    transform: &Matrix3<f64>,
+    dimensions: (u32, u32),
+) -> Option<(f64, f64)> {
+    if dimensions.0 == 0 || dimensions.1 == 0 || transform.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let mut minimum = f64::INFINITY;
+    let mut maximum = 0.0f64;
+    let sample_denominator = (STATION_POSE_LOCAL_SCALE_SAMPLES_PER_AXIS - 1) as f64;
+    let maximum_x = f64::from(dimensions.0.saturating_sub(1));
+    let maximum_y = f64::from(dimensions.1.saturating_sub(1));
+    for sample_y in 0..STATION_POSE_LOCAL_SCALE_SAMPLES_PER_AXIS {
+        let y = maximum_y * sample_y as f64 / sample_denominator;
+        for sample_x in 0..STATION_POSE_LOCAL_SCALE_SAMPLES_PER_AXIS {
+            let x = maximum_x * sample_x as f64 / sample_denominator;
+            let denominator = transform[(2, 0)] * x + transform[(2, 1)] * y + transform[(2, 2)];
+            if !denominator.is_finite() || denominator.abs() <= f64::EPSILON {
+                return None;
+            }
+            let world_x_numerator =
+                transform[(0, 0)] * x + transform[(0, 1)] * y + transform[(0, 2)];
+            let world_y_numerator =
+                transform[(1, 0)] * x + transform[(1, 1)] * y + transform[(1, 2)];
+            let denominator_squared = denominator * denominator;
+            let dx_dx = (transform[(0, 0)] * denominator - world_x_numerator * transform[(2, 0)])
+                / denominator_squared;
+            let dx_dy = (transform[(0, 1)] * denominator - world_x_numerator * transform[(2, 1)])
+                / denominator_squared;
+            let dy_dx = (transform[(1, 0)] * denominator - world_y_numerator * transform[(2, 0)])
+                / denominator_squared;
+            let dy_dy = (transform[(1, 1)] * denominator - world_y_numerator * transform[(2, 1)])
+                / denominator_squared;
+            let local_scale = (dx_dx * dy_dy - dx_dy * dy_dx).abs().sqrt();
+            if !local_scale.is_finite() || local_scale <= 0.0 {
+                return None;
+            }
+            minimum = minimum.min(local_scale);
+            maximum = maximum.max(local_scale);
+        }
+    }
+    (minimum.is_finite() && maximum.is_finite() && minimum > 0.0).then_some((minimum, maximum))
 }
 
 fn match_has_spatial_support(
@@ -2560,6 +2746,7 @@ fn match_image_pair(
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         });
     }
     if initial_matches.len() < minimum_inliers {
@@ -2608,6 +2795,7 @@ fn match_image_pair(
                 top_candidate_points: Vec::new(),
                 dense_focus_points: Vec::new(),
                 foreground_feature_points: Vec::new(),
+                canonical_homography: None,
             });
         }
         if log_match && mixed_focal_pair {
@@ -2810,6 +2998,7 @@ fn match_image_pair(
                 top_candidate_points: Vec::new(),
                 dense_focus_points: Vec::new(),
                 foreground_feature_points: Vec::new(),
+                canonical_homography: None,
             });
         }
         if log_match && mixed_focal_pair {
@@ -2911,6 +3100,7 @@ fn match_image_pair(
                         top_candidate_points: Vec::new(),
                         dense_focus_points: Vec::new(),
                         foreground_feature_points: Vec::new(),
+                        canonical_homography: None,
                     });
                 }
                 return None;
@@ -3184,6 +3374,7 @@ fn match_image_pair(
                 top_candidate_points,
                 dense_focus_points,
                 foreground_feature_points,
+                canonical_homography: None,
             });
         }
         if let (Some(source_focal), Some(target_focal)) = (
@@ -3216,6 +3407,7 @@ fn match_image_pair(
                 top_candidate_points: Vec::new(),
                 dense_focus_points: Vec::new(),
                 foreground_feature_points: Vec::new(),
+                canonical_homography: None,
             });
         }
         if log_match {
@@ -3283,6 +3475,7 @@ fn match_image_pair(
         top_candidate_points,
         dense_focus_points,
         foreground_feature_points,
+        canonical_homography: None,
     })
 }
 
@@ -3382,6 +3575,7 @@ fn recover_adjacent_focus_bracket_match(
         top_candidate_points: Vec::new(),
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
+        canonical_homography: None,
     })
 }
 
@@ -3432,15 +3626,17 @@ fn focus_capture_stations(
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> Vec<Vec<usize>> {
     let mut dsu = Dsu::new(images.len());
-    for (&(left, right), match_info) in matches {
+    for (&(left, right), match_info) in sorted_pairs(matches) {
         if left >= images.len() || right >= images.len() {
             continue;
         }
-        if focus_match_is_capture_station_link(&images[left], &images[right], match_info) {
+        if focus_match_is_capture_station_link(images, left, right, match_info) {
             dsu.union(left, right);
         }
     }
-    let mut by_root = HashMap::<usize, Vec<usize>>::new();
+    // Grouping by root in an ordered map makes the station order depend on the
+    // representative image index instead of the hash seed (需求 14.6).
+    let mut by_root = BTreeMap::<usize, Vec<usize>>::new();
     for index in 0..images.len() {
         by_root.entry(dsu.find(index)).or_default().push(index);
     }
@@ -3462,7 +3658,11 @@ fn focus_capture_stations(
             .filter_map(|&index| trailing_capture_number(&images[index].filename))
             .min()
             .unwrap_or(u64::MAX);
-        left_number.cmp(&right_number)
+        // Sources without a trailing capture number all collapse to `u64::MAX`.
+        // The members themselves are the stable secondary key (需求 14.6).
+        left_number
+            .cmp(&right_number)
+            .then_with(|| left.first().cmp(&right.first()))
     });
     stations
 }
@@ -3723,8 +3923,11 @@ fn focus_capture_group_geometry_diagnostics(
             group_for_image[image_index] = group_index;
         }
     }
-    let mut relation_pairs = HashMap::<(usize, usize), Vec<(usize, usize)>>::new();
-    for &(source, target) in matches.keys() {
+    // Both the station-pair order and the image-pair order inside a station pair
+    // decide which candidate wins the `best_score` comparison that is reported in
+    // the rejection diagnostics, so neither may follow the hash seed (需求 14.6).
+    let mut relation_pairs = BTreeMap::<(usize, usize), Vec<(usize, usize)>>::new();
+    for (source, target) in sorted_keys(matches) {
         let (Some(&source_group), Some(&target_group)) =
             (group_for_image.get(source), group_for_image.get(target))
         else {
@@ -3751,7 +3954,20 @@ fn focus_capture_group_geometry_diagnostics(
         let mut accepted_overlap = None::<f64>;
         let mut best_score = f64::NEG_INFINITY;
         let mut best_summary = None;
-        for (source, target) in image_pairs {
+        for (key_source, key_target) in image_pairs {
+            // `relation_pairs` carries the `(min import index, max import index)`
+            // orientation of the `matches` key, and everything below is
+            // direction sensitive: `focus_overlap_quality` warps the source into
+            // the target and correlates there, and the `scale` gate
+            // `0.82..=1.18` is not symmetric around 1.0, so a relation measured
+            // at 0.948 in one direction is measured at 1.055 in the other and a
+            // near-threshold pair can be accepted one way and rejected the
+            // other.  Measuring in the key direction therefore let a shuffled
+            // import change which station relations pass this validation, which
+            // in turn changed the accepted closure and every world pose.  Take
+            // the same content derived direction the station solver takes
+            // (需求 14.6).
+            let (source, target, _) = canonical_match_direction(images, key_source, key_target);
             let (Some(source_global), Some(target_global)) = (
                 homographies.get(&images[source].id),
                 homographies.get(&images[target].id),
@@ -4112,42 +4328,82 @@ fn focus_geometry_group_compositor_order(
     order
 }
 
-/// Collapse the evidence-backed source stitching path to station ids.  The
-/// source path is produced by the visual graph search and already carries the
-/// measured horizontal/vertical snake transitions.  Re-sorting stations by
-/// their noisy world centres can turn a valid path into a nearest-neighbour
-/// jump across an entire row, which makes the progressive seam/exposure pass
-/// compare non-adjacent tiles and creates large dark polygons.
+/// Decide the order in which Capture_Station virtual tiles enter the default
+/// layered virtual-tile compositor.
+///
+/// The compositor places the first tile as the base and resolves every later
+/// tile against the canvas built so far, so this order is part of the rendered
+/// result: change it and the output pixels change.  It therefore has to be a
+/// function of the measured geometry only (需求 14.6).
+///
+/// The previous implementation collapsed the *source* stitching path
+/// (`ordered_indices`) to station ids.  That path is scored against image
+/// evidence, but its orientation and several of its tie-breaks are filename
+/// derived — `canonical_focus_order_direction` decides which end of a candidate
+/// path comes first by comparing the first and last filename with
+/// `natural_path_cmp`, and the greedy/graph builders break equal weights on the
+/// import index.  Renaming the sources or importing them in reverse could
+/// therefore reverse the whole accumulation even though every measured match was
+/// identical, which is exactly what 需求 1.2/1.3/5.8 forbid: filename order may
+/// only produce *candidate* orders and break exact ties, never stand in for
+/// geometry.
+///
+/// Stations are ordered by the production `StationTopology`: row index
+/// ascending (top to bottom), then column index ascending (right to left,
+/// because topology inference numbers columns by descending world `x`). This
+/// makes the scan convention explicit at the seam accumulator instead of
+/// approximating it with continuous projected centres.
+///
+/// Requirement 5.1 makes `(row, column)` unique for every inferred station, so
+/// filenames, source paths and import ranks never participate. The station
+/// index is consulted only as the deterministic final key for an exact
+/// topology-coordinate tie, which can occur only in malformed or synthetic
+/// input; production topology remains rename/import-order invariant.
 fn focus_source_order_group_compositor_order(
-    ordered_indices: &[usize],
-    groups: &[FocusCaptureGroup],
+    station_count: usize,
+    station_topology: &topology::StationTopology,
 ) -> Vec<usize> {
-    let mut image_to_group = HashMap::new();
-    for (group_index, group) in groups.iter().enumerate() {
-        for &image_index in &group.members {
-            image_to_group.insert(image_index, group_index);
-        }
-    }
-    let mut order = Vec::with_capacity(groups.len());
-    let mut seen = vec![false; groups.len()];
-    for &image_index in ordered_indices {
-        let Some(&group_index) = image_to_group.get(&image_index) else {
-            continue;
-        };
-        if !seen[group_index] {
-            seen[group_index] = true;
-            order.push(group_index);
-        }
-    }
-    if order.len() == groups.len() {
-        order
-    } else {
-        let geometric = (0..groups.len())
-            .filter(|&index| !seen[index])
-            .collect::<Vec<_>>();
-        order.extend(geometric);
-        order
-    }
+    debug_assert_eq!(
+        station_topology.row.len(),
+        station_count,
+        "topology must contain one row index per station"
+    );
+    debug_assert_eq!(
+        station_topology.column.len(),
+        station_count,
+        "topology must contain one column index per station"
+    );
+
+    let topology_key = |station: usize| {
+        (
+            station_topology
+                .row
+                .get(station)
+                .copied()
+                .unwrap_or(u32::MAX),
+            station_topology
+                .column
+                .get(station)
+                .copied()
+                .unwrap_or(u32::MAX),
+        )
+    };
+    let mut order = (0..station_count).collect::<Vec<_>>();
+    order.sort_by(|&left, &right| {
+        let left_topology = topology_key(left);
+        let right_topology = topology_key(right);
+        left_topology
+            // Row indices increase from top to bottom. Column indices increase
+            // from right to left, so their ascending lexicographic order is the
+            // required scan convention inferred by Capture_Topology_Model.
+            .cmp(&right_topology)
+            // Requirement 5.1 makes topology coordinates unique in production.
+            // Keep only this content-derived station index as a deterministic
+            // final key for malformed/ambiguous exact topology ties; filenames,
+            // import order and continuous world coordinates never participate.
+            .then_with(|| left.cmp(&right))
+    });
+    order
 }
 
 fn focus_rescue_match_is_verified(
@@ -4262,47 +4518,6 @@ fn focus_indices_share_component(left: usize, right: usize, components: &[Vec<us
         .any(|component| component.contains(&left) && component.contains(&right))
 }
 
-fn focus_stack_adjacent_match_is_unreliable(
-    images: &[ImageInfo],
-    left: usize,
-    right: usize,
-    match_info: &MatchInfo,
-) -> bool {
-    if match_info.sequence_bridge {
-        return false;
-    }
-    let Some(gap) = trailing_capture_number(&images[left].filename)
-        .zip(trailing_capture_number(&images[right].filename))
-        .map(|(left_number, right_number)| left_number.abs_diff(right_number))
-    else {
-        return false;
-    };
-    if gap == 0 || gap > FOCUS_BRACKET_MAX_CAPTURE_GAP {
-        return false;
-    }
-    if focus_match_is_local_bracket(&images[left], &images[right], match_info) {
-        return false;
-    }
-    if match_info.coarse_bridge || match_info.inliers < SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION {
-        return true;
-    }
-    let Some(motion) = focus_match_center_motion_ratio(&images[left], &images[right], match_info)
-    else {
-        return true;
-    };
-    if gap <= 2 && motion <= 0.10 {
-        return match_info.inliers < FOCUS_MODEL_MIN_INLIERS;
-    }
-    if motion <= 0.08 {
-        return false;
-    }
-    focus_overlap_quality(&images[left], &images[right], &match_info.homography).is_none_or(
-        |(intensity_ncc, edge_ncc, edge_orientation, samples)| {
-            intensity_ncc < 0.72 || edge_ncc < 0.20 || edge_orientation < 0.12 || samples < 400
-        },
-    )
-}
-
 fn insert_recovered_focus_match(
     images: &[ImageInfo],
     left_index: usize,
@@ -4318,6 +4533,9 @@ fn insert_recovered_focus_match(
         log_match,
         orphan_attach,
     )?;
+    // Record the fit before it is rotated into the key orientation; see
+    // `MatchInfo::canonical_homography` (需求 14.6).
+    match_info.canonical_homography = Some(match_info.homography);
     if invert_for_storage {
         match_info.homography = match_info.homography.try_inverse()?;
         match_info.points = match_info
@@ -4398,36 +4616,6 @@ fn attach_focus_orphan_components(
     added
 }
 
-fn bridge_focus_capture_station_chain(
-    images: &[ImageInfo],
-    matches: &mut HashMap<(usize, usize), MatchInfo>,
-) -> usize {
-    let stations = focus_capture_stations(images, matches);
-    if stations.len() < 2 {
-        return 0;
-    }
-    let mut added = 0usize;
-    for window in stations.windows(2) {
-        let left_rep = focus_station_representative(&window[0], images);
-        let right_rep = focus_station_representative(&window[1], images);
-        let key = (left_rep.min(right_rep), left_rep.max(right_rep));
-        if matches.contains_key(&key) {
-            continue;
-        }
-        let components = focus_overlap_components(images, matches);
-        if focus_indices_share_component(left_rep, right_rep, &components) {
-            continue;
-        }
-        if let Some(recovered) =
-            insert_recovered_focus_match(images, left_rep, right_rep, false, false)
-        {
-            matches.insert(recovered.0, recovered.1);
-            added += 1;
-        }
-    }
-    added
-}
-
 fn recover_adjacent_focus_position_match(
     source: &ImageInfo,
     target: &ImageInfo,
@@ -4479,6 +4667,7 @@ fn recover_adjacent_focus_position_match(
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         },
     )?;
     let overlap =
@@ -4547,6 +4736,7 @@ fn recover_adjacent_focus_position_match(
         top_candidate_points: Vec::new(),
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
+        canonical_homography: None,
     })
 }
 
@@ -4555,12 +4745,14 @@ fn focus_overlap_components(
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> Vec<Vec<usize>> {
     let mut dsu = Dsu::new(images.len());
-    for &(left, right) in matches.keys() {
+    for (left, right) in sorted_keys(matches) {
         if left < images.len() && right < images.len() {
             dsu.union(left, right);
         }
     }
-    let mut by_root = HashMap::<usize, Vec<usize>>::new();
+    // Ordered by representative index so that the component order does not
+    // depend on the hash seed (需求 14.6).
+    let mut by_root = BTreeMap::<usize, Vec<usize>>::new();
     for index in 0..images.len() {
         let root = dsu.find(index);
         by_root.entry(root).or_default().push(index);
@@ -4577,6 +4769,9 @@ fn focus_overlap_components(
             &images[*left.first().unwrap_or(&0)].filename,
             &images[*right.first().unwrap_or(&0)].filename,
         )
+        // `natural_path_cmp` can rate two distinct names equal; the member index
+        // is the stable secondary key (需求 14.6).
+        .then_with(|| left.first().cmp(&right.first()))
     });
     components
 }
@@ -4632,6 +4827,7 @@ fn coarse_focus_component_candidate(
         top_candidate_points: points.clone(),
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
+        canonical_homography: None,
     };
     let scale = homography[(0, 0)].abs();
     let motion = focus_match_center_motion_ratio(source, target, &provisional)?;
@@ -4660,6 +4856,9 @@ fn coarse_focus_component_candidate(
         + edge_ncc.max(0.0) * 0.20
         + edge_orientation.max(0.0) * 0.10;
     let mut match_info = provisional;
+    // Record the fit before it is rotated into the key orientation; see
+    // `MatchInfo::canonical_homography` (需求 14.6).
+    match_info.canonical_homography = Some(match_info.homography);
     if invert_for_storage {
         match_info.homography = match_info.homography.try_inverse()?;
         match_info.points = match_info
@@ -5526,11 +5725,33 @@ fn estimate_mixed_focal_coarse_registration(
 /// calligraphy can make a wrong translation look unique. Sampling the proposed
 /// overlap at a denser grid and comparing both luminance and edge structure
 /// catches that failure before synthetic points can be promoted to a match.
-fn focus_overlap_quality(
+#[derive(Clone, Copy, Debug)]
+struct FocusOverlapQuality {
+    intensity_ncc: f64,
+    edge_ncc: f64,
+    mean_edge_orientation_cosine: f64,
+    samples: usize,
+    low_frequency_mean_relative_difference: f64,
+    edge_strength_ratio: f64,
+    median_edge_orientation_difference_degrees: f64,
+}
+
+impl FocusOverlapQuality {
+    fn legacy_tuple(self) -> (f64, f64, f64, usize) {
+        (
+            self.intensity_ncc,
+            self.edge_ncc,
+            self.mean_edge_orientation_cosine,
+            self.samples,
+        )
+    }
+}
+
+fn focus_overlap_quality_measurements(
     source: &ImageInfo,
     target: &ImageInfo,
     source_to_target: &Matrix3<f64>,
-) -> Option<(f64, f64, f64, usize)> {
+) -> Option<FocusOverlapQuality> {
     let inverse = source_to_target.try_inverse()?;
     let target_width = target.alignment_image.width();
     let target_height = target.alignment_image.height();
@@ -5543,7 +5764,8 @@ fn focus_overlap_quality(
     let mut target_values = Vec::new();
     let mut source_edges = Vec::new();
     let mut target_edges = Vec::new();
-    let mut edge_orientations = Vec::new();
+    let mut edge_orientation_cosines = Vec::new();
+    let mut edge_orientation_differences = Vec::new();
     for row in 2..rows.saturating_sub(2) {
         let target_y = (row as f64 + 0.5) * target_height as f64 / rows as f64;
         for column in 2..columns.saturating_sub(2) {
@@ -5617,11 +5839,13 @@ fn focus_overlap_quality(
                 source_edges.push(source_edge);
                 target_edges.push(target_edge);
                 if source_edge > 4.0 && target_edge > 4.0 {
-                    edge_orientations.push(
-                        ((source_dx * target_dx + source_dy * target_dy)
-                            / (source_edge * target_edge))
-                            .clamp(-1.0, 1.0),
-                    );
+                    let cosine = ((source_dx * target_dx + source_dy * target_dy)
+                        / (source_edge * target_edge))
+                        .clamp(-1.0, 1.0);
+                    edge_orientation_cosines.push(cosine);
+                    // Edge orientation is axial rather than directional: a
+                    // 180-degree gradient reversal describes the same edge.
+                    edge_orientation_differences.push(cosine.abs().acos().to_degrees());
                 }
             }
             source_values.push(source_value);
@@ -5631,14 +5855,50 @@ fn focus_overlap_quality(
     if source_values.len() < 120 || source_edges.len() != source_values.len() {
         return None;
     }
-    let ncc = normalized_correlation(&source_values, &target_values)?;
+    let intensity_ncc = normalized_correlation(&source_values, &target_values)?;
     let edge_ncc = normalized_correlation(&source_edges, &target_edges)?;
-    let orientation = if edge_orientations.is_empty() {
+    let mean_edge_orientation_cosine = if edge_orientation_cosines.is_empty() {
         0.0
     } else {
-        edge_orientations.iter().sum::<f64>() / edge_orientations.len() as f64
+        edge_orientation_cosines.iter().sum::<f64>() / edge_orientation_cosines.len() as f64
     };
-    Some((ncc, edge_ncc, orientation, source_values.len()))
+    let source_mean = source_values.iter().sum::<f64>() / source_values.len() as f64;
+    let target_mean = target_values.iter().sum::<f64>() / target_values.len() as f64;
+    // A mean is the zero-frequency component of the sampled overlap. Dividing
+    // by the larger magnitude makes the comparison symmetric and bounded.
+    let low_frequency_mean_relative_difference = (source_mean - target_mean).abs()
+        / source_mean.abs().max(target_mean.abs()).max(f64::EPSILON);
+    let source_edge_mean = source_edges.iter().sum::<f64>() / source_edges.len() as f64;
+    let target_edge_mean = target_edges.iter().sum::<f64>() / target_edges.len() as f64;
+    let edge_strength_ratio = if target_edge_mean > f64::EPSILON {
+        source_edge_mean / target_edge_mean
+    } else if source_edge_mean <= f64::EPSILON {
+        1.0
+    } else {
+        f64::INFINITY
+    };
+    let median_edge_orientation_difference_degrees =
+        median_value(&mut edge_orientation_differences).unwrap_or(f64::INFINITY);
+    Some(FocusOverlapQuality {
+        intensity_ncc,
+        edge_ncc,
+        mean_edge_orientation_cosine,
+        samples: source_values.len(),
+        low_frequency_mean_relative_difference,
+        edge_strength_ratio,
+        median_edge_orientation_difference_degrees,
+    })
+}
+
+/// Legacy overlap score used by non-Station_Relation paths. Station relation
+/// acceptance reads the complete measurement structure above.
+fn focus_overlap_quality(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    source_to_target: &Matrix3<f64>,
+) -> Option<(f64, f64, f64, usize)> {
+    focus_overlap_quality_measurements(source, target, source_to_target)
+        .map(FocusOverlapQuality::legacy_tuple)
 }
 
 fn normalized_correlation(left: &[f64], right: &[f64]) -> Option<f64> {
@@ -5673,8 +5933,12 @@ fn find_mixed_focal_similarity_ransac(
         return None;
     }
 
+    // See `find_homography_ransac_points_with_solver`: site constant mixed with
+    // the content derived run seed, no time and no thread id (需求 14.6).
     let mut rng = StdRng::seed_from_u64(
-        0xB4D4_5EED_5CA1_E001u64 ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93),
+        0xB4D4_5EED_5CA1_E001u64
+            ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
+            ^ determinism::run_random_seed_mix(),
     );
     let all_indices: Vec<usize> = (0..points.len()).collect();
     let required_inliers = minimum_inliers.max(2);
@@ -5983,6 +6247,74 @@ pub async fn save_panorama(
     Ok(output_path.to_string_lossy().to_string())
 }
 
+/// SHA-256 over every byte of each selected Source_RAW, in the order the paths
+/// were handed in.  `None` marks a source that could not be read.
+///
+/// Every file is opened read only with `File::open` and streamed (需求 4.8), so
+/// a 50 MB RAW never lands in memory as a whole and no path in this function can
+/// modify a source.  Hashing runs on the `rayon` pool; the result is a plain
+/// per-path mapping, so the thread count cannot reach it.
+fn focus_stack_source_digests(image_paths: &[String]) -> Vec<Option<[u8; 32]>> {
+    image_paths
+        .par_iter()
+        .map(|path| {
+            let (real_path, _) = crate::file_management::parse_virtual_path(path);
+            match virtual_tile::source_file_sha256(&real_path) {
+                Ok(digest) => Some(digest),
+                Err(error) => {
+                    println!("Focus stack: {error}");
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
+/// Lower hex of a source digest, or the empty string when the file could not be
+/// read.  An empty string is what the Stack_Report records for "not measured",
+/// which must stay distinguishable from a digest that is genuinely all zero.
+fn source_digest_hex(digest: Option<[u8; 32]>) -> String {
+    digest
+        .map(|digest| virtual_tile::hex_digest(&digest))
+        .unwrap_or_default()
+}
+
+/// The Source_RAW digests taken before the run, together with the three
+/// Virtual_Tile `cache_key` ingredients they feed (需求 4.5).
+struct FocusStackSourceDigests {
+    /// Pipeline version, sorted absolute source paths, sorted source digests.
+    inputs: virtual_tile::CacheKeyInputs,
+    /// Lower hex digest per selected path, in selection order (需求 4.8 / 12.8).
+    sha256_before: Vec<String>,
+}
+
+/// Hash every selected Source_RAW once and derive the run's `cache_key`
+/// ingredients from the result.
+///
+/// A source that cannot be opened contributes an all-zero digest to the key
+/// rather than dropping out of the set: the key must stay a pure function of the
+/// selection, and an unreadable source fails the run later on its own terms.
+/// `sha256_before` keeps that case empty instead, so the report never claims a
+/// digest it did not measure.
+///
+/// The ingredients are sorted after hashing, so neither the import order nor the
+/// completion order of the `rayon` tasks reaches the key.
+fn focus_stack_cache_key_inputs(image_paths: &[String]) -> FocusStackSourceDigests {
+    let digests = focus_stack_source_digests(image_paths);
+    let sources = image_paths
+        .iter()
+        .zip(&digests)
+        .map(|(path, digest)| (path.clone(), digest.unwrap_or([0u8; 32])))
+        .collect::<Vec<_>>();
+    FocusStackSourceDigests {
+        inputs: virtual_tile::CacheKeyInputs::new(
+            crate::image_stack::STACK_PIPELINE_VERSION,
+            &sources,
+        ),
+        sha256_before: digests.into_iter().map(source_digest_hex).collect(),
+    }
+}
+
 pub(crate) fn stitch_images_with_options<R: Runtime>(
     image_paths: Vec<String>,
     app_handle: AppHandle<R>,
@@ -5994,10 +6326,100 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
         .collect::<Vec<_>>();
+    // Open a fresh degradation observation window for this run. Recording is
+    // additive: no fallback decision below consults the ledger.
+    degradation::reset_run_ledger();
+    // The Intra_Station_Registrar records one entry per registered frame
+    // (需求 2.9); open its window alongside the ledger so a second run in the
+    // same process cannot inherit the previous run's frames.
+    intra_station::reset_run_records();
+    // The Focus_Fuser records one entry per Capture_Station (需求 3.5 / 3.8 / 3.9)
+    // through the same run scoped sink.
+    focus_fuser::reset_run_records();
+    // Capture_Topology_Model observations are likewise scoped to this run so
+    // the report receives exactly the topology used by the production station
+    // relation candidate gate (需求 5.1 / 5.7).
+    topology::reset_run_topology();
+    // Install the RANSAC seed of this run before any matching starts (需求 14.6).
+    // The focus stack path seeds from the Virtual_Tile `cache_key`, which binds
+    // the pipeline version, the sorted source paths and the sorted per-source
+    // content digests (需求 4.5), so the sampling sequence follows the input
+    // content rather than the wall clock or the thread count.  The panorama path
+    // keeps its site constants, and clearing here stops it from inheriting the
+    // seed of a preceding focus stack run in the same process.
+    // The same read-only pass also produces the `sha256_before` column of the
+    // Stack_Report (需求 4.8 / 12.8), so the sources are hashed once per run.
+    let mut source_sha256_before = Vec::<String>::new();
+    if blend_mode == BlendMode::FocusStack {
+        let digests = focus_stack_cache_key_inputs(&image_paths);
+        determinism::set_run_random_seed(determinism::derive_run_seed_from_cache_key(
+            &digests.inputs.digest(),
+        ));
+        source_sha256_before = digests.sha256_before;
+    } else {
+        determinism::clear_run_random_seed();
+    }
+    // Observation only: the Stack_Report records what a focus-stack run did and
+    // is flushed on every terminating path (success, degraded output,
+    // rejection, cancellation) by its drop guard, well inside the 30 s budget
+    // of requirement 10.8.  No field written here feeds a decision yet.
+    let stack_report = (blend_mode == BlendMode::FocusStack).then(|| {
+        let recorder = stack_report::StackReportRecorder::new(
+            crate::image_stack::STACK_PIPELINE_VERSION,
+            stack_report::resolve_stack_report_dir(&app_handle),
+        )
+        // Requirement 4.8 / 12.8: whichever way this run ends — success,
+        // failure or cancellation — the recorder's drop guard re-reads every
+        // Source_RAW and records the digest next to the one taken above, so a
+        // source modified behind the pipeline's back stays visible.  The
+        // pipeline itself only ever opens a source read only, so the two
+        // columns are expected to match.
+        .with_source_digest_recheck(Box::new(|paths| {
+            focus_stack_source_digests(paths)
+                .into_iter()
+                .map(source_digest_hex)
+                .collect()
+        }));
+        recorder.update(|report| {
+            report.input.source_count = image_paths.len();
+            report.input.max_sources = MAX_STITCH_SOURCE_IMAGES;
+            report.input.sources = image_paths
+                .iter()
+                .enumerate()
+                .map(|(index, path)| stack_report::SourceRecord {
+                    path: path.clone(),
+                    sha256_before: source_sha256_before.get(index).cloned().unwrap_or_default(),
+                    ..Default::default()
+                })
+                .collect();
+            // Any return before the compositor finishes is a run that produced
+            // no result; a successful path overwrites this below.
+            report.degradation.result = stack_report::StackRunResult::Rejected;
+            report.resources.worker_threads = rayon::current_num_threads();
+            report.resources.random_seed_source = determinism::run_random_seed_source().to_string();
+        });
+        recorder
+    });
     if image_paths.len() < 2 {
+        degradation::record_run_degradation(
+            degradation::INPUT_SOURCE_COUNT_OUT_OF_RANGE,
+            serde_json::json!({
+                "count": image_paths.len(),
+                "minimum": 2,
+                "maximum": MAX_STITCH_SOURCE_IMAGES,
+            }),
+        );
         return Err("At least two images are required for a panorama.".to_string());
     }
     if image_paths.len() > MAX_STITCH_SOURCE_IMAGES {
+        degradation::record_run_degradation(
+            degradation::INPUT_SOURCE_COUNT_OUT_OF_RANGE,
+            serde_json::json!({
+                "count": image_paths.len(),
+                "minimum": 2,
+                "maximum": MAX_STITCH_SOURCE_IMAGES,
+            }),
+        );
         return Err(format!(
             "Image stitching is limited to {MAX_STITCH_SOURCE_IMAGES} source images."
         ));
@@ -6179,9 +6601,96 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         prepare_images()
     };
 
+    // Preparation already finished for every source, so collect the whole batch
+    // before propagating.  The caller still observes the first error exactly as
+    // a `?` in the loop would, but the Stack_Report can now name which sources
+    // decoded instead of reporting the entire selection as undecodable.
     let mut image_data = Vec::new();
+    let mut preparation_error = None;
     for result in image_data_results {
-        image_data.push(result?);
+        match result {
+            Ok(image) => image_data.push(image),
+            Err(error) => {
+                if preparation_error.is_none() {
+                    preparation_error = Some(error);
+                }
+            }
+        }
+    }
+    // 需求 1.9: a Source_RAW that does not decode is excluded from every
+    // Capture_Station and reported by absolute path with `source_decode_failed`,
+    // while the remaining sources keep the grouping they would have had anyway.
+    let undecodable_paths = undecodable_source_paths(&image_paths, &image_data);
+    if let Some(recorder) = stack_report.as_ref() {
+        let decoded_paths = image_data
+            .iter()
+            .map(|image| image.filename.as_str())
+            .collect::<HashSet<_>>();
+        let undecodable = undecodable_paths
+            .iter()
+            .map(|path| stack_report::ExcludedSourceRecord {
+                path: path.clone(),
+                reason: degradation::SOURCE_DECODE_FAILED.to_string(),
+            })
+            .collect::<Vec<_>>();
+        recorder.update(|report| {
+            for source in &mut report.input.sources {
+                source.decoded = decoded_paths.contains(source.path.as_str());
+            }
+            report.grouping.undecodable = undecodable;
+        });
+    }
+    // The ledger entry is independent of the report recorder: 需求 1.9 asks for
+    // one `source_decode_failed` record per excluded source, by absolute path.
+    for path in &undecodable_paths {
+        degradation::record_run_degradation(
+            degradation::SOURCE_DECODE_FAILED,
+            serde_json::json!({ "path": path }),
+        );
+    }
+    if let Some(error) = preparation_error {
+        // 需求 1.9: on the FocusStack path an undecodable Source_RAW is excluded
+        // from every Capture_Station and the remaining sources keep the grouping
+        // they would have had anyway, so the run continues on the decodable
+        // subset.  This entry point is shared with the panorama path, which has
+        // no Capture_Station layer to exclude a source from and no Stack_Report
+        // to name it in: a panorama still aborts on the first failure.
+        if !focus_stack {
+            return Err(error);
+        }
+        // 需求 1.8: fewer than two decodable sources leaves nothing to group, so
+        // the run is rejected with the input-range identifier rather than
+        // degraded.
+        if image_data.len() < 2 {
+            degradation::record_run_degradation(
+                degradation::INPUT_SOURCE_COUNT_OUT_OF_RANGE,
+                serde_json::json!({
+                    "count": image_data.len(),
+                    "minimum": 2,
+                    "maximum": MAX_STITCH_SOURCE_IMAGES,
+                    "undecodable": undecodable_paths.len(),
+                }),
+            );
+            return Err(format!(
+                "Only {} of {} selected images could be decoded; at least two are required. First failure: {error}",
+                image_data.len(),
+                image_paths.len(),
+            ));
+        }
+        println!(
+            "  - Excluded {} undecodable source(s) from every capture station; continuing with {} of {}. First failure: {error}",
+            undecodable_paths.len(),
+            image_data.len(),
+            image_paths.len(),
+        );
+        let _ = app_handle.emit(
+            progress_event,
+            format!(
+                "Skipped {} undecodable image(s); continuing with {}.",
+                undecodable_paths.len(),
+                image_data.len(),
+            ),
+        );
     }
 
     let shared_raw_display_gain = if focus_stack
@@ -6277,6 +6786,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 true,
                 false,
             )?;
+            if blend_mode == BlendMode::FocusStack {
+                // Record the fit before it is rotated into the key orientation;
+                // see `MatchInfo::canonical_homography` (需求 14.6).
+                match_info.canonical_homography = Some(match_info.homography);
+            }
             if invert_for_storage {
                 match_info.homography = match_info.homography.try_inverse()?;
                 match_info.points = match_info
@@ -6315,90 +6829,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     if sequence_only {
         add_capture_sequence_bridges(&image_data, &mut pairwise_matches);
     }
-    if false && focus_stack && !sequence_only {
-        // Kept as a disabled compatibility block for the old filename-window
-        // recovery path. Focus recovery is now geometry-driven; filename
-        // adjacency cannot create or clear a match in the generic pipeline.
-        let mut filename_order = (0..image_data.len()).collect::<Vec<_>>();
-        filename_order.sort_by(|&left, &right| {
-            natural_path_cmp(&image_data[left].filename, &image_data[right].filename)
-                .then_with(|| left.cmp(&right))
-        });
-        let mut cleared_adjacent = 0usize;
-        for pair in filename_order.windows(2) {
-            let left = pair[0].min(pair[1]);
-            let right = pair[0].max(pair[1]);
-            let key = (left, right);
-            let Some(match_info) = pairwise_matches.get(&key) else {
-                continue;
-            };
-            let should_clear = if focus_match_is_local_bracket(
-                &image_data[left],
-                &image_data[right],
-                match_info,
-            ) {
-                false
-            } else {
-                focus_stack_adjacent_match_is_unreliable(&image_data, left, right, match_info)
-            };
-            if should_clear {
-                pairwise_matches.remove(&key);
-                cleared_adjacent += 1;
-            }
-        }
-        if cleared_adjacent > 0 {
-            println!(
-                "  - Clearing {cleared_adjacent} adjacent focus-stack edge(s) for recovery retry"
-            );
-        }
-        let recovery_pairs = filename_order
-            .windows(2)
-            .filter_map(|pair| {
-                let left = pair[0].min(pair[1]);
-                let right = pair[0].max(pair[1]);
-                (!pairwise_matches.contains_key(&(left, right))).then_some((left, right))
-            })
-            .collect::<Vec<_>>();
-        let recovered = recovery_pairs
-            .par_iter()
-            .filter_map(|&(left, right)| {
-                let (source, target, invert_for_storage) =
-                    canonical_match_direction(&image_data, left, right);
-                let mut match_info = recover_adjacent_focus_bracket_match(
-                    &image_data[source],
-                    &image_data[target],
-                    true,
-                )?;
-                if invert_for_storage {
-                    match_info.homography = match_info.homography.try_inverse()?;
-                    match_info.points = match_info
-                        .points
-                        .into_iter()
-                        .map(|(source, target)| (target, source))
-                        .collect();
-                    match_info.candidate_points = match_info
-                        .candidate_points
-                        .into_iter()
-                        .map(|(source, target)| (target, source))
-                        .collect();
-                }
-                Some(((left, right), match_info))
-            })
-            .collect::<Vec<_>>();
-        if !recovered.is_empty() {
-            println!(
-                "  - Recovered {} same-pose low-texture focus-layer edge(s)",
-                recovered.len()
-            );
-            pairwise_matches.extend(recovered);
-        }
-        // Do not synthesize scan-position edges from filename adjacency or a
-        // coarse NCC peak. A capture sequence may reset to another raster row,
-        // and repeated seals/figures can make that false edge look convincing.
-        // Position bridges are retried below with the full feature/RANSAC
-        // matcher; if that evidence is absent the stack remains disconnected
-        // and is rejected instead of rendered as a duplicated collage.
-    }
+    // Filename adjacency never creates or clears a focus-stack edge. The old
+    // filename-window recovery pass (clear + retry on natural-sort neighbours)
+    // was removed in favour of the geometry-driven retry below: a capture
+    // sequence may reset to another raster row, and repeated seals/figures can
+    // make such a false edge look convincing. Scan-position edges are therefore
+    // never synthesized from filename order or a coarse NCC peak; if the full
+    // feature/RANSAC matcher finds no evidence the stack stays disconnected and
+    // is rejected instead of rendered as a duplicated collage.
     if scalable_stack && focus_stack && !sequence_only {
         // A disconnected focus stack gets a bounded, evidence-only retry. The
         // old retry examined only filename-window boundaries, which is exactly
@@ -6525,6 +6963,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     );
                     continue;
                 }
+                // Record the fit before it is rotated into the key orientation;
+                // see `MatchInfo::canonical_homography` (需求 14.6).
+                match_info.canonical_homography = Some(match_info.homography);
                 if invert_for_storage {
                     match_info.homography = match_info
                         .homography
@@ -6618,8 +7059,40 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Determining stitching order...");
     println!("Determining stitching order...");
+    let compositor_choice = (blend_mode == BlendMode::FocusStack)
+        .then(|| StackCompositorChoice::resolve(settings.stack_compositor.as_deref()));
+    let defer_authoritative_station_solve =
+        compositor_choice == Some(StackCompositorChoice::LayeredVirtualTile);
     let (ordered_indices, global_homographies) = if blend_mode == BlendMode::FocusStack {
-        build_focus_stack_stitching_order(&image_data, &pairwise_matches)
+        // The default two-stage path uses source images only to group stations
+        // and establish each station's local tile geometry.  Its authoritative
+        // requirement-6/7 report is produced later from the fused tiles, so an
+        // early source-only support=1 graph must neither reject nor publish a
+        // report that could overwrite the Virtual_Tile result.
+        let mut closure = stack_report::ClosureReport::default();
+        let mut station_relations = stack_report::StationRelationsReport::default();
+        let stitching_order = build_focus_stack_stitching_order_with_report(
+            &image_data,
+            &pairwise_matches,
+            &mut closure,
+            &mut station_relations,
+            !defer_authoritative_station_solve,
+        );
+        let disconnected_component_count = station_relations.connectivity.components;
+        if !defer_authoritative_station_solve {
+            if let Some(recorder) = stack_report.as_ref() {
+                recorder.update(|report| {
+                    report.closure = closure;
+                    report.station_relations = station_relations;
+                });
+            }
+            if disconnected_component_count > 1 {
+                return Err(geometry_disconnected_user_error(
+                    disconnected_component_count,
+                ));
+            }
+        }
+        stitching_order
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
     };
@@ -6631,12 +7104,145 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             projection,
         )
     });
-    let focus_capture_groups = if blend_mode == BlendMode::FocusStack {
-        focus_capture_groups(&image_data, &pairwise_matches, &global_homographies)
-            .map(|(groups, _)| groups)
+    let focus_station_grouping_outcome = if blend_mode == BlendMode::FocusStack {
+        focus_capture_groups_with_grouping(&image_data, &pairwise_matches, &global_homographies)
     } else {
         None
     };
+    let station_topology = focus_station_grouping_outcome
+        .as_ref()
+        .and_then(|(groups, _, _)| {
+            (groups.len() >= 2).then(|| {
+                // For long scans this is the exact pre-pose topology already
+                // used by `solve_focus_capture_group_poses`. Compact
+                // multi-station runs do not enter that solver yet, so infer
+                // here from their image-level world centres. This value is
+                // shared by reporting and the default layered compositor.
+                topology::run_topology_snapshot()
+                    .filter(|topology| topology.row.len() == groups.len())
+                    .unwrap_or_else(|| {
+                        let inferred =
+                            focus_station_topology(&image_data, groups, &global_homographies);
+                        topology::record_run_topology(inferred.clone());
+                        inferred
+                    })
+            })
+        });
+    if let (Some(recorder), Some((groups, _, grouping))) = (
+        stack_report.as_ref(),
+        focus_station_grouping_outcome.as_ref(),
+    ) {
+        // 需求 1.7: member paths, evidence kind, score, inlier count and inlier
+        // spatial support of every Capture_Station.  Task 9.1 augments these
+        // same production records with displacement-derived topology indices.
+        let stations = groups
+            .iter()
+            .enumerate()
+            .map(|(index, group)| {
+                let evidence =
+                    focus_station_binding_evidence(&group.members, &image_data, &pairwise_matches);
+                let topology_ambiguous = station_topology
+                    .as_ref()
+                    .is_some_and(|topology| topology.ambiguous.binary_search(&index).is_ok());
+                stack_report::StationRecord {
+                    index,
+                    row: station_topology
+                        .as_ref()
+                        .and_then(|topology| topology.row.get(index))
+                        .map(|&row| row as usize),
+                    column: station_topology
+                        .as_ref()
+                        .and_then(|topology| topology.column.get(index))
+                        .map(|&column| column as usize),
+                    topology_status: topology_ambiguous
+                        .then(|| degradation::TOPOLOGY_INDEX_AMBIGUOUS.to_string()),
+                    members: group
+                        .members
+                        .iter()
+                        .filter_map(|&member| image_data.get(member))
+                        .map(|image| image.filename.clone())
+                        .collect(),
+                    anchor: image_data
+                        .get(group.anchor)
+                        .map(|image| image.filename.clone())
+                        .unwrap_or_default(),
+                    evidence: evidence
+                        .map(|evidence| stack_report::StationEvidenceRecord {
+                            kind: StationEvidence::KIND.to_string(),
+                            score: evidence.score,
+                            inliers: evidence.inliers,
+                            overlap_ncc: evidence.overlap_ncc,
+                            spatial_support: evidence.spatial_support,
+                            scale_ratio: evidence.scale_ratio,
+                        })
+                        .unwrap_or_default(),
+                }
+            })
+            .collect::<Vec<_>>();
+        // 需求 1.6: a source that satisfies the 需求 1.1 evidence with no other
+        // source is reported by absolute path with its reason identifier, and the
+        // remaining sources keep the grouping they would have had anyway.
+        let isolated = excluded_source_records(
+            &image_data,
+            &grouping.isolated,
+            degradation::GROUPING_NO_OVERLAP_EVIDENCE,
+        );
+        // 需求 1.4 / 1.10: every split position.
+        let splits = grouping
+            .splits
+            .iter()
+            .map(|split| stack_report::StationSplitRecord {
+                station_index: split.component,
+                position: split.position,
+                reason: split.reason.to_string(),
+                motion_ratio: split.motion_ratio,
+            })
+            .collect::<Vec<_>>();
+        for split in &grouping.splits {
+            degradation::record_run_degradation(
+                split.reason,
+                serde_json::json!({
+                    "component": split.component,
+                    "position": split.position,
+                    "motion_ratio": split.motion_ratio,
+                }),
+            );
+        }
+        for record in &isolated {
+            degradation::record_run_degradation(
+                degradation::GROUPING_NO_OVERLAP_EVIDENCE,
+                serde_json::json!({ "path": record.path }),
+            );
+        }
+        let topology_report = station_topology.as_ref().map(|topology| {
+            for &station_index in &topology.ambiguous {
+                degradation::record_run_degradation(
+                    degradation::TOPOLOGY_INDEX_AMBIGUOUS,
+                    serde_json::json!({ "station_index": station_index }),
+                );
+            }
+            if topology.truncated_count > 0 {
+                degradation::record_run_degradation(
+                    degradation::TOPOLOGY_CANDIDATES_TRUNCATED,
+                    serde_json::json!({
+                        "truncated_count": topology.truncated_count,
+                        "truncation_min_score": topology.truncation_min_score,
+                    }),
+                );
+            }
+            stack_report::TopologyReport::from(topology)
+        });
+        recorder.update(|report| {
+            report.grouping.station_count = stations.len();
+            report.grouping.stations = stations;
+            report.grouping.isolated = isolated;
+            report.grouping.splits = splits;
+            if let Some(topology) = topology_report {
+                report.topology = topology;
+            }
+        });
+    }
+    let focus_capture_groups = focus_station_grouping_outcome.map(|(groups, _, _)| groups);
     let focus_capture_group_ids = focus_capture_groups.as_ref().map(|groups| {
         let mut ids = HashMap::new();
         for (group_index, group) in groups.iter().enumerate() {
@@ -6907,10 +7513,23 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             // stations.  The virtual-tile path is deliberately selected by
             // the inferred groups, never by filename ranges or a fixture's
             // expected station count.
-            let use_virtual_tiles = focus_capture_groups
-                .as_ref()
-                .is_some_and(|groups| groups.len() > 1);
-            if !use_virtual_tiles {
+            //
+            // 需求 15.2: the compositor comes from a setting, not from an
+            // environment variable, and an unset setting is the default layered
+            // path.  需求 15.10: every comparison path is therefore off unless a
+            // developer opts in.
+            let compositor_choice =
+                compositor_choice.expect("focus-stack compositor choice resolved above");
+            if compositor_choice.is_comparison_path() {
+                println!(
+                    "  - Focus compositor comparison path selected: {}",
+                    compositor_choice.as_identifier()
+                );
+            }
+            let station_count = focus_capture_groups.as_ref().map(|groups| groups.len());
+            let path_selection =
+                select_and_record_run_path(station_count, compositor_choice, stack_report.as_ref());
+            if !path_selection.use_virtual_tiles {
                 stitching::focus_stack_stitcher(
                     &render_images_info,
                     render_homographies,
@@ -6983,17 +7602,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     Err("one or more inferred groups lack a rendered source".to_string())
                 };
                 if let Ok(geometries) = geometries {
-                    // The seam/exposure accumulator must have a geometry
-                    // derived base tile.  Group discovery may use a filename
-                    // order as a deterministic tie-break, but that order is
-                    // not a camera topology and must not change the rendered
-                    // result when sources are renamed or imported shuffled.
-                    // `ordered_indices` is the measured visual graph path.
-                    // Preserve that path at station level; centre-sorting the
-                    // already-solved poses can start with a distant column
-                    // and leave the seam accumulator with no local overlap.
+                    // Feed the default layered compositor in the canonical
+                    // row/column order inferred by Capture_Topology_Model.
+                    // Continuous projected centres, source names and the
+                    // candidate source path must not break topology ties or
+                    // change seam accumulation (任务 9.10, 需求 14.6).
+                    let station_topology = station_topology
+                        .as_ref()
+                        .expect("multi-station layered composition requires inferred topology");
                     let group_order =
-                        focus_source_order_group_compositor_order(&ordered_indices, groups);
+                        focus_source_order_group_compositor_order(groups.len(), station_topology);
                     println!(
                         "  - Focus virtual-tile compositor order: {}",
                         group_order
@@ -7010,7 +7628,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     let mut tile_infos = Vec::with_capacity(group_order.len());
                     let mut tile_homographies = HashMap::with_capacity(group_order.len());
                     let mut tile_group_indices = HashMap::with_capacity(group_order.len());
-                    for &group_index in &group_order {
+                    for group_index in 0..groups.len() {
                         let geometry = geometries[group_index];
                         let tile_id = usize::MAX.saturating_sub(group_index);
                         let source_ids = group_slices[group_index]
@@ -7042,40 +7660,195 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             vertical_edge_columns: Vec::new(),
                         });
                     }
-                    let tile_refs = tile_infos.iter().collect::<Vec<_>>();
-                    let mut load_tile = |tile: &ImageInfo| {
-                        let group_index =
-                            tile_group_indices.get(&tile.id).copied().ok_or_else(|| {
-                                format!("Missing virtual tile provenance {}", tile.id)
-                            })?;
+
+                    // The production station-relation pass works on the actual
+                    // focus-fused Virtual_Tiles, not on rectangular source
+                    // buffers. Render one station at a time, derive its
+                    // detector plane exclusively from Coverage_Mask pixels,
+                    // and discard the temporary pixels before moving to the
+                    // next station. This preserves source ownership and does
+                    // not increase the compositor's resident-tile set.
+                    let mut tile_coverages = Vec::with_capacity(tile_infos.len());
+                    for (group_index, tile) in tile_infos.iter_mut().enumerate() {
                         let rendered = stitching::focus_stack_stitcher_unfilled(
-                            &group_slices[group_index],
+                            group_slices[group_index],
                             render_homographies,
                             projection,
                             tile_focus_warp,
                             None,
+                            group_index,
                             false,
                             app_handle.clone(),
                             progress_event,
                             &mut load_render_image,
                         )?;
                         let expected = geometries[group_index];
-                        if rendered.dimensions() != (expected.width, expected.height) {
+                        let rendered_dimensions = rendered.image.dimensions();
+                        if rendered_dimensions != (expected.width, expected.height) {
+                            return Err(format!(
+                                "Virtual tile station {group_index} geometry/render mismatch: expected {}x{} at world origin ({:.3},{:.3}), rendered {}x{}",
+                                expected.width,
+                                expected.height,
+                                expected.tile_to_world[(0, 2)],
+                                expected.tile_to_world[(1, 2)],
+                                rendered_dimensions.0,
+                                rendered_dimensions.1,
+                            ));
+                        }
+                        let coverage = rendered.masks.as_ref().map_or_else(
+                            || {
+                                stitching::CoverageMask::from_bytes(
+                                    tile.width,
+                                    tile.height,
+                                    vec![0; tile.width as usize * tile.height as usize],
+                                )
+                                .expect("empty Virtual_Tile coverage dimensions must match")
+                            },
+                            |masks| masks.coverage.clone(),
+                        );
+                        let (alignment_image, features) =
+                            virtual_tile_covered_features(&rendered.image, &coverage, &brief_pairs);
+                        tile.alignment_image = alignment_image;
+                        tile.features = features;
+                        tile_coverages.push(coverage);
+                    }
+                    let VirtualTileStationMatchOutcome {
+                        relations: tile_relations,
+                        diagnostics: tile_relation_candidates,
+                    } = virtual_tile_station_match_outcome(
+                        &tile_infos,
+                        &tile_coverages,
+                        &tile_homographies,
+                        station_topology,
+                    );
+                    if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
+                        // Authoritative stage 4 starts only now: each ImageInfo
+                        // is one focus-fused Virtual_Tile and every feature was
+                        // extracted through its Coverage_Mask.  The shared
+                        // relation/tree/closure core knows this evidence kind,
+                        // so requirement 6.2's single-Source_RAW discard does
+                        // not apply and no support value is fabricated.
+                        let mut closure = stack_report::ClosureReport::default();
+                        let mut station_relations = stack_report::StationRelationsReport::default();
+                        if tile_infos.len() >= 2 {
+                            let solved = solve_virtual_tile_station_poses_with_report(
+                                &tile_infos,
+                                &tile_relations,
+                                &tile_homographies,
+                                station_topology,
+                                &mut closure,
+                                &mut station_relations,
+                            );
+                            let component_count = station_relations.connectivity.components;
+                            station_relations.candidates = tile_relation_candidates.clone();
+                            if let Some(recorder) = stack_report.as_ref() {
+                                recorder.update(|report| {
+                                    report.closure = closure.clone();
+                                    report.station_relations = station_relations.clone();
+                                });
+                            }
+                            if component_count > 1 || solved.len() != tile_infos.len() {
+                                return Err(geometry_disconnected_user_error(
+                                    component_count.max(2),
+                                ));
+                            }
+                            tile_homographies = solved;
+                            println!(
+                                "  - Authoritative Virtual_Tile station solve accepted {} relation(s)",
+                                station_relations.accepted.len()
+                            );
+                        }
+                    } else if !tile_relations.is_empty() {
+                        // Diagnostic comparison compositors retain their old
+                        // image-space optimiser. Their authoritative source
+                        // solve already ran before rendering.
+                        tile_homographies = optimize_focus_stack_global_homographies_with_reference(
+                            &tile_infos,
+                            &tile_relations,
+                            &tile_homographies,
+                            0,
+                        );
+                    }
+
+                    let tile_refs = group_order
+                        .iter()
+                        .map(|&group_index| &tile_infos[group_index])
+                        .collect::<Vec<_>>();
+                    let mut load_tile = |tile: &ImageInfo| {
+                        let group_index =
+                            tile_group_indices.get(&tile.id).copied().ok_or_else(|| {
+                                format!("Missing virtual tile provenance {}", tile.id)
+                            })?;
+                        let rendered = stitching::focus_stack_stitcher_unfilled(
+                            group_slices[group_index],
+                            render_homographies,
+                            projection,
+                            tile_focus_warp,
+                            None,
+                            group_index,
+                            false,
+                            app_handle.clone(),
+                            progress_event,
+                            &mut load_render_image,
+                        )?;
+                        let expected = geometries[group_index];
+                        let (rendered_width, rendered_height) = rendered.image.dimensions();
+                        if (rendered_width, rendered_height) != (expected.width, expected.height) {
                             return Err(format!(
                                 "Virtual tile {} dimensions changed from {}x{} to {}x{}",
                                 group_index,
                                 expected.width,
                                 expected.height,
-                                rendered.width(),
-                                rendered.height()
+                                rendered_width,
+                                rendered_height
                             ));
                         }
-                        Ok(rendered)
+                        // The render now also publishes the Coverage_Mask, the
+                        // Ownership_Map and the Sharpness_Confidence it built at
+                        // the focus selection's pixel write sites (需求 3.7 /
+                        // 3.9 / 3.11 / 4.6).  The Virtual_Tile_Store (task 5.3)
+                        // is what consumes the masks; the tile compositors below
+                        // still take pixels only, so hand them the same pixel
+                        // buffer as before.  The Focus_Fuser observations are
+                        // attached to their Capture_Station here, because this is
+                        // the first caller that knows which station was rendered
+                        // (需求 3.5 / 3.8 / 3.9).
+                        if let Some(masks) = rendered.masks.as_ref() {
+                            let mut fusion = masks.fusion.clone();
+                            fusion.station_index = group_index;
+                            focus_fuser::record_run_station(fusion);
+                        }
+                        Ok(rendered.into_image())
                     };
-                    let tile_result =
-                        if std::env::var_os("RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC")
-                            .is_some()
-                        {
+                    if let Some(recorder) = stack_report.as_ref() {
+                        let tiles = tile_infos
+                            .iter()
+                            .enumerate()
+                            .map(|(group_index, tile)| stack_report::VirtualTileReport {
+                                station_index: group_index,
+                                width: tile.width,
+                                height: tile.height,
+                                provenance: group_slices[group_index]
+                                    .iter()
+                                    .map(|image| stack_report::ProvenanceRecord {
+                                        path: image.filename.clone(),
+                                        ..Default::default()
+                                    })
+                                    .collect(),
+                                ..Default::default()
+                            })
+                            .collect::<Vec<_>>();
+                        recorder.update(|report| report.virtual_tiles = tiles);
+                    }
+                    if let Some(recorder) = stack_report.as_ref() {
+                        // 任务 13.4 / 需求 11.6: 0.0 unless a diagnostic session
+                        // overrode it.
+                        let sharpen = f64::from(stitching::layered_final_sharpen_amount());
+                        recorder.update(|report| report.composition.final_sharpen_amount = sharpen);
+                    }
+                    let tile_result = match compositor_choice {
+                        // Comparison: the streaming detail-preserving mosaic.
+                        StackCompositorChoice::StreamingMosaic => {
                             let tile_groups = tile_infos
                                 .iter()
                                 .enumerate()
@@ -7093,26 +7866,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 progress_event,
                                 &mut load_tile,
                             )
-                        } else if std::env::var_os("RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER")
-                            .is_some()
-                        {
-                            // Diagnostic fallback: source-interior ownership
-                            // is deterministic but turns projective tile
-                            // footprints into visible polygons on long scans.
-                            stitching::focus_tile_ownership_stitcher(
-                                &tile_refs,
-                                &tile_homographies,
-                                Projection::Planar,
-                                app_handle.clone(),
-                                progress_event,
-                                &mut load_tile,
-                            )
-                        } else {
-                            // Default virtual-tile path: use an image-space
-                            // minimum-cost seam and low-frequency multiband
-                            // transition so projected station boundaries do
-                            // not become hard polygons. The ownership path is
-                            // retained above for diagnostics and rollback.
+                        }
+                        // Comparison: the image-space minimum-cost seam with a
+                        // low-frequency multiband transition.  It was the
+                        // default until 任务 13.1; it is order dependent and it
+                        // crops and sharpens the delivered canvas, which
+                        // 需求 10.2 / 10.3 / 11.6 no longer allow.
+                        StackCompositorChoice::ProgressiveSeamTile => {
                             stitching::progressive_seam_stitcher(
                                 &tile_refs,
                                 &tile_homographies,
@@ -7121,7 +7881,26 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 progress_event,
                                 &mut load_tile,
                             )
-                        };
+                        }
+                        // Default (需求 15.1): hard source-interior ownership,
+                        // the covered union as the canvas and no second-pass
+                        // sharpen.
+                        //
+                        // `LegacySingleLayerMosaic` never reaches this match —
+                        // it clears `use_virtual_tiles` above — so it is folded
+                        // in here instead of panicking on an unreachable arm.
+                        StackCompositorChoice::LayeredVirtualTile
+                        | StackCompositorChoice::LegacySingleLayerMosaic => {
+                            stitching::layered_virtual_tile_compositor(
+                                &tile_refs,
+                                &tile_homographies,
+                                Projection::Planar,
+                                app_handle.clone(),
+                                progress_event,
+                                &mut load_tile,
+                            )
+                        }
+                    };
                     match tile_result {
                         Ok(image) => Ok(image),
                         Err(error) => {
@@ -7130,6 +7909,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             );
                             println!("  - {message}");
                             let _ = app_handle.emit(progress_event, &message);
+                            if let Some(recorder) = stack_report.as_ref() {
+                                recorder.set_selected_path(
+                                    stack_report::SelectedPath::LegacySingleLayerMosaic,
+                                );
+                            }
                             stitching::focus_stack_stitcher(
                                 &render_images_info,
                                 render_homographies,
@@ -7150,6 +7934,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     );
                     println!("  - {message}");
                     let _ = app_handle.emit(progress_event, &message);
+                    if let Some(recorder) = stack_report.as_ref() {
+                        recorder
+                            .set_selected_path(stack_report::SelectedPath::LegacySingleLayerMosaic);
+                    }
                     stitching::focus_stack_stitcher(
                         &render_images_info,
                         render_homographies,
@@ -7169,6 +7957,18 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     println!("Stitching completed in {:.2?}\n", start_time.elapsed());
 
     let _ = app_handle.emit(progress_event, "Finalizing image result...");
+
+    if let Some(recorder) = stack_report.as_ref() {
+        let (width, height) = panorama.dimensions();
+        recorder.update(|report| {
+            report.composition.canvas.width = u64::from(width);
+            report.composition.canvas.height = u64::from(height);
+            report.degradation.result = stack_report::StackRunResult::Success;
+        });
+        // Flush eagerly so the report exists before the result travels back to
+        // the caller; the drop guard then becomes a no-op.
+        recorder.write_once();
+    }
 
     Ok(StitchOutcome {
         image: DynamicImage::ImageRgb32F(panorama),
@@ -7678,8 +8478,12 @@ where
         return None;
     }
 
-    let mut rng =
-        StdRng::seed_from_u64(seed ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93));
+    // `seed` is the caller's site constant; the run seed below is derived from
+    // the input content (需求 14.6).
+    let mut rng = StdRng::seed_from_u64(
+        seed ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
+            ^ determinism::run_random_seed_mix(),
+    );
     let all_indices: Vec<usize> = (0..points.len()).collect();
     let mut best_transform = None;
     let mut best_inliers = Vec::new();
@@ -8710,6 +9514,7 @@ fn synthetic_capture_sequence_bridge(
         top_candidate_points: Vec::new(),
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
+        canonical_homography: None,
     })
 }
 
@@ -8748,6 +9553,7 @@ fn synthetic_overview_overlay_bridge(source: &ImageInfo, target: &ImageInfo) -> 
         top_candidate_points: Vec::new(),
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
+        canonical_homography: None,
     })
 }
 
@@ -8849,6 +9655,7 @@ fn synthetic_overview_gap_bridges(
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         },
         MatchInfo {
             homography: overview_to_right,
@@ -8860,6 +9667,7 @@ fn synthetic_overview_gap_bridges(
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         },
     ))
 }
@@ -8941,6 +9749,7 @@ fn add_capture_sequence_bridges(
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         };
         if source_index > target_index {
             let Some(inverse) = match_info.homography.try_inverse() else {
@@ -9345,6 +10154,9 @@ where
             .0
             .total_cmp(&left.0)
             .then_with(|| left_names.cmp(&right_names))
+            // Duplicate paths in the selection would leave the name comparison
+            // equal; the source index pair is the stable secondary key (需求 14.6).
+            .then_with(|| (left.1, left.2).cmp(&(right.1, right.2)))
     });
     let mut mst_adj: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut dsu = Dsu::new(n);
@@ -9450,7 +10262,11 @@ where
                 )
                 .then_with(|| images[left].filename.cmp(&images[right].filename))
         })
-        .unwrap_or_else(|| mst_adj.keys().next().copied().unwrap_or(0));
+        // `components` is empty only when `mst_adj` is empty, so this arm always
+        // yields 0 in practice.  Take the lowest key rather than an arbitrary one
+        // so that no hash-seed dependent value can ever reach the pose graph
+        // (需求 14.6).
+        .unwrap_or_else(|| mst_adj.keys().copied().min().unwrap_or(0));
 
     let mut ordered_indices = Vec::new();
     let mut global_homographies = HashMap::new();
@@ -9489,14 +10305,15 @@ where
     (ordered_indices, global_homographies)
 }
 
-fn focus_match_center_motion_ratio(
+/// Frame-centre displacement of an explicit transform, in long sides.
+fn focus_transform_center_motion_ratio(
     source: &ImageInfo,
     target: &ImageInfo,
-    match_info: &MatchInfo,
+    source_to_target: &Matrix3<f64>,
 ) -> Option<f64> {
     let source_center = Point2::new(source.width as f64 * 0.5, source.height as f64 * 0.5);
     let target_center = Point2::new(target.width as f64 * 0.5, target.height as f64 * 0.5);
-    let mapped_center = transformed_point(&match_info.homography, source_center)?;
+    let mapped_center = transformed_point(source_to_target, source_center)?;
     let scale = source
         .width
         .max(source.height)
@@ -9504,6 +10321,14 @@ fn focus_match_center_motion_ratio(
         .max(1) as f64;
     let displacement = (mapped_center - target_center).norm();
     (displacement.is_finite()).then_some(displacement / scale)
+}
+
+fn focus_match_center_motion_ratio(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    match_info: &MatchInfo,
+) -> Option<f64> {
+    focus_transform_center_motion_ratio(source, target, &match_info.homography)
 }
 
 fn focus_match_is_local_bracket(
@@ -9548,100 +10373,309 @@ fn focus_match_is_local_bracket(
         ) >= FOCUS_BRACKET_MIN_OVERLAP_SUPPORT
 }
 
-fn focus_match_is_capture_station_link(
-    source: &ImageInfo,
-    target: &ImageInfo,
-    match_info: &MatchInfo,
-) -> bool {
-    // Capture-station membership controls which sources are allowed to
-    // compete for focus. A coarse correlation peak can help connect two
-    // already established stations, but must never merge adjacent camera
-    // positions into one bracket. Direct feature evidence from consecutive
-    // captures is enough when its measured centre motion is focus-bracket
-    // sized: low-texture or deliberately defocused layers can have far fewer
-    // inliers than a sharp layer, so a fixed high inlier threshold would split
-    // one physical station into several groups.
-    if match_info.sequence_bridge || match_info.coarse_bridge {
-        return false;
-    }
-    match_info.points.len() >= FOCUS_LOCAL_MODEL_MIN_INLIERS
-        && focus_compatible_focal_length(source, target)
-        && focus_match_center_motion_ratio(source, target, match_info)
-            .is_some_and(|motion| motion <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO)
-        && panorama_transform_overlap_support(
-            &match_info.homography,
-            source.dimensions(),
-            target.dimensions(),
-        ) >= FOCUS_BRACKET_MIN_OVERLAP_SUPPORT
+/// The four pieces of image evidence 需求 1.1 allows a Capture_Station
+/// membership decision to rest on, together with the derived score 需求 1.2
+/// compares when it needs a tie-break.
+///
+/// Every field is a measurement, never a threshold: the accept/reject decision
+/// lives in [`StationEvidence::accepts`] so that the numbers can be reported
+/// (需求 1.7) for accepted *and* rejected relations.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StationEvidence {
+    /// Verified overlap inlier correspondences (需求 1.1, ≥ 30).
+    pub inliers: usize,
+    /// Local normalised pixel correlation over the overlap (需求 1.1, ≥ 0.60).
+    ///
+    /// Meaningful only when `overlap_ncc_measured` is set.
+    pub overlap_ncc: f64,
+    /// Whether the overlap correlation could be measured at all.
+    ///
+    /// The correlation needs at least 120 usable samples out of a 32px-or-larger
+    /// alignment image; the design keeps that as the *measurable precondition*
+    /// of the threshold. Synthetic sources that carry a placeholder alignment
+    /// image report no correlation evidence in either direction, exactly like
+    /// the `alignment_is_measurable` gate the station relation scorer uses.
+    pub overlap_ncc_measured: bool,
+    /// Inlier spread inside the overlap (需求 1.1, ≥ 0.20).
+    pub spatial_support: f64,
+    /// `sqrt(σ1 · σ2)` of the linear part (需求 1.1, ∈ `[0.98, 1.02]`).
+    pub scale_ratio: f64,
+    /// Composite of the four measurements above. Ordering only — never a gate.
+    pub score: f64,
 }
 
+impl Default for StationEvidence {
+    fn default() -> Self {
+        Self {
+            inliers: 0,
+            overlap_ncc: 0.0,
+            overlap_ncc_measured: false,
+            spatial_support: 0.0,
+            scale_ratio: 1.0,
+            score: 0.0,
+        }
+    }
+}
+
+impl StationEvidence {
+    /// Stable identifier of the evidence kind, for the Stack_Report (需求 1.7).
+    pub(crate) const KIND: &'static str = "verified_overlap";
+
+    /// Whether all four measurements clear 需求 1.1 at once.
+    fn accepts(&self) -> bool {
+        self.inliers >= STATION_MIN_INLIER_MATCHES
+            && (!self.overlap_ncc_measured || self.overlap_ncc >= STATION_MIN_OVERLAP_NCC)
+            && self.spatial_support >= STATION_MIN_INLIER_SPATIAL_SUPPORT
+            && (STATION_SCALE_RATIO_MIN..=STATION_SCALE_RATIO_MAX).contains(&self.scale_ratio)
+    }
+
+    /// Composite score used only where 需求 1.2 permits a comparison: to order
+    /// candidates, and to decide whether an absolute-path tie-break is allowed
+    /// at all (`|Δscore| ≤ 0.001`).
+    ///
+    /// Each factor is normalised into `[0, 1]` so the score stays a function of
+    /// the measurements and of nothing else.
+    fn from_measurements(
+        inliers: usize,
+        overlap_ncc: Option<f64>,
+        spatial_support: f64,
+        scale_ratio: f64,
+    ) -> Self {
+        let inlier_term =
+            (inliers as f64 / STATION_MIN_INLIER_MATCHES as f64).clamp(0.0, 4.0) / 4.0;
+        // An unmeasurable correlation contributes the bar itself, so a source
+        // with a placeholder alignment image neither gains nor loses score.
+        let correlation_term = overlap_ncc
+            .unwrap_or(STATION_MIN_OVERLAP_NCC)
+            .clamp(0.0, 1.0);
+        let support_term = spatial_support.clamp(0.0, 1.0);
+        let scale_term = if scale_ratio.is_finite() && scale_ratio > 0.0 {
+            (1.0 - (scale_ratio - 1.0).abs() / (STATION_SCALE_RATIO_MAX - 1.0)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        Self {
+            inliers,
+            overlap_ncc: overlap_ncc.unwrap_or(0.0),
+            overlap_ncc_measured: overlap_ncc.is_some(),
+            spatial_support,
+            scale_ratio,
+            score: 0.25 * (inlier_term + correlation_term + support_term + scale_term),
+        }
+    }
+}
+
+/// Measure the 需求 1.1 evidence of one pairwise relation.
+///
+/// The measurement runs in the content-derived direction that
+/// [`canonical_match_direction`] picks, not in the `(min, max)` orientation the
+/// `matches` key happens to use: `focus_overlap_quality` warps the source into
+/// the target before correlating and `panorama_spatial_support` weighs the
+/// source spread first, so scoring in the key direction let a shuffled import
+/// award the same physical relation different numbers (需求 1.2 / 14.6).
+/// `canonical_homography` is the untouched fit in exactly that direction, which
+/// avoids the lossy `inv(inv(M))` round trip.
+fn focus_station_link_evidence(
+    images: &[ImageInfo],
+    first: usize,
+    second: usize,
+    match_info: &MatchInfo,
+) -> Option<StationEvidence> {
+    // A coarse correlation peak or a filename-sequence bridge is an ordering
+    // cue whose points are synthetic. It may connect two already established
+    // stations, but it is not overlap evidence and can never merge two camera
+    // positions into one bracket.
+    if match_info.sequence_bridge || match_info.coarse_bridge {
+        return None;
+    }
+    let (source_index, target_index, inverted) = canonical_match_direction(images, first, second);
+    let source = images.get(source_index)?;
+    let target = images.get(target_index)?;
+    if !focus_compatible_focal_length(source, target) {
+        return None;
+    }
+    let homography = match match_info.canonical_homography {
+        Some(canonical) => canonical,
+        None if inverted => match_info.homography.try_inverse()?,
+        None => match_info.homography,
+    };
+    // A coarse precondition, subordinate to the accumulated-displacement split
+    // of 需求 1.4: a relation whose own centre displacement is already several
+    // times the 0.02 accumulated budget cannot be an intra-station relation, and
+    // admitting it would only make the split undo it. The binding motion
+    // criterion remains `STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO`.
+    if !focus_transform_center_motion_ratio(source, target, &homography)
+        .is_some_and(|motion| motion <= FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO)
+    {
+        return None;
+    }
+    let points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if inverted {
+        Cow::Owned(
+            match_info
+                .points
+                .iter()
+                .map(|&(source_point, target_point)| (target_point, source_point))
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(&match_info.points)
+    };
+    // `focus_overlap_quality` returns `None` below 120 usable samples, which is
+    // the measurable precondition of the correlation threshold.  Distinguish
+    // "the overlap correlates badly" (reject) from "this source pair carries no
+    // alignment image large enough to correlate on" (no evidence either way),
+    // using the same 32px test the station relation scorer applies.
+    let alignment_is_measurable = source.alignment_image.width() >= 32
+        && source.alignment_image.height() >= 32
+        && target.alignment_image.width() >= 32
+        && target.alignment_image.height() >= 32;
+    let overlap_ncc = match focus_overlap_quality(source, target, &homography) {
+        Some((intensity_ncc, _, _, _)) => Some(intensity_ncc),
+        None if alignment_is_measurable => return None,
+        None => None,
+    };
+    let spatial_support =
+        panorama_spatial_support(&points, source.dimensions(), target.dimensions());
+    let scale_ratio = homography_scale_ratio(&homography)?;
+    Some(StationEvidence::from_measurements(
+        points.len(),
+        overlap_ncc,
+        spatial_support,
+        scale_ratio,
+    ))
+}
+
+/// Whether two sources belong to the same Capture_Station (需求 1.1).
+fn focus_match_is_capture_station_link(
+    images: &[ImageInfo],
+    first: usize,
+    second: usize,
+    match_info: &MatchInfo,
+) -> bool {
+    focus_station_link_evidence(images, first, second, match_info)
+        .is_some_and(|evidence| evidence.accepts())
+}
+
+/// One Capture_Station split, recorded for the Stack_Report (需求 1.4 / 1.10).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StationSplit {
+    /// Verified-link component the split was applied to, in the component order
+    /// the grouper walks. Station indices do not exist yet at split time.
+    pub component: usize,
+    /// Position inside the candidate order of the component at which the split
+    /// falls: the candidate at this position starts the next Capture_Station.
+    pub position: usize,
+    /// Accumulated frame-centre displacement measured there, in long sides.
+    pub motion_ratio: f64,
+    /// [`degradation::GROUPING_ACCUMULATED_MOTION`] or
+    /// [`degradation::GROUPING_MEMBER_LIMIT_SPLIT`].
+    pub reason: &'static str,
+}
+
+/// Relative poses of one accepted station link, both derived from the untouched
+/// canonical fit with exactly one inversion each.
+///
+/// Composing `homography` and `homography.try_inverse()` would make one of the
+/// two directions an `inv(inv(M))` round trip whenever the `(min, max)` key
+/// orientation disagrees with the content-derived measurement direction, and
+/// that round trip is not bit exact (需求 14.6).
+fn station_link_relative_poses(
+    images: &[ImageInfo],
+    left: usize,
+    right: usize,
+    match_info: &MatchInfo,
+) -> Option<(Matrix3<f64>, Matrix3<f64>)> {
+    let (source_index, _, inverted) = canonical_match_direction(images, left, right);
+    let canonical = match match_info.canonical_homography {
+        Some(canonical) => canonical,
+        None if inverted => match_info.homography.try_inverse()?,
+        None => match_info.homography,
+    };
+    let reverse = canonical.try_inverse()?;
+    Some(if source_index == left {
+        (canonical, reverse)
+    } else {
+        (reverse, canonical)
+    })
+}
+
+/// Split one verified-link component into Capture_Stations at the candidates
+/// where the accumulated frame-centre displacement leaves the bracket window
+/// (需求 1.4), then enforce the 48-member ceiling (需求 1.5 / 1.10).
+///
+/// The candidate order is the relative world-centre order recovered from the
+/// verified link graph; the absolute path only breaks an exact centre tie
+/// (需求 1.2 / 1.3).
 fn split_focus_local_component_by_motion(
     component: Vec<usize>,
+    component_index: usize,
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
+    splits: &mut Vec<StationSplit>,
 ) -> Vec<Vec<usize>> {
     if component.is_empty() {
         return Vec::new();
     }
 
     // Recover a relative pose for every member using the verified local-link
-    // graph.  The previous implementation sorted by filename and only tested
-    // consecutive pairs, so a renamed or shuffled import could split one
-    // focus bracket even when the same geometric edges were present.
+    // graph.  Sorting by filename and only testing consecutive pairs would let
+    // a renamed or shuffled import split one focus bracket even when the same
+    // geometric edges were present.
     let member_set = component.iter().copied().collect::<HashSet<_>>();
-    let mut adjacency = HashMap::<usize, Vec<(usize, Matrix3<f64>, usize)>>::new();
+    let mut adjacency = HashMap::<usize, Vec<(usize, Matrix3<f64>, f64)>>::new();
     for &left in &component {
         for &right in &component {
-            if left >= right {
+            if left >= right || !member_set.contains(&right) {
                 continue;
             }
             let Some(match_info) = matches.get(&(left, right)) else {
                 continue;
             };
-            if !member_set.contains(&right)
-                || !focus_match_is_capture_station_link(&images[left], &images[right], match_info)
-            {
+            let Some(evidence) = focus_station_link_evidence(images, left, right, match_info)
+                .filter(StationEvidence::accepts)
+            else {
                 continue;
-            }
-            let Some(reverse) = match_info.homography.try_inverse() else {
+            };
+            let Some((left_to_right, right_to_left)) =
+                station_link_relative_poses(images, left, right, match_info)
+            else {
                 continue;
             };
             adjacency
                 .entry(left)
                 .or_default()
-                .push((right, reverse, match_info.inliers));
-            adjacency.entry(right).or_default().push((
-                left,
-                match_info.homography,
-                match_info.inliers,
-            ));
+                .push((right, right_to_left, evidence.score));
+            adjacency
+                .entry(right)
+                .or_default()
+                .push((left, left_to_right, evidence.score));
         }
     }
 
+    // 需求 1.2: the score may order candidates, and the absolute path may only
+    // step in once two scores are within 0.001 of each other.
+    let evidence_cmp = |left_score: f64, right_score: f64, left: usize, right: usize| {
+        if (left_score - right_score).abs() <= STATION_EVIDENCE_SCORE_TIE_BREAK {
+            focus_image_direction_key(&images[left])
+                .cmp(&focus_image_direction_key(&images[right]))
+                .then_with(|| natural_path_cmp(&images[left].filename, &images[right].filename))
+                .then_with(|| left.cmp(&right))
+        } else {
+            right_score.total_cmp(&left_score)
+        }
+    };
+    let link_support = |image_index: &usize| {
+        adjacency
+            .get(image_index)
+            .into_iter()
+            .flatten()
+            .map(|(_, _, score)| *score)
+            .sum::<f64>()
+    };
     let anchor = component
         .iter()
         .copied()
-        .max_by(|left, right| {
-            let left_support = adjacency
-                .get(left)
-                .into_iter()
-                .flatten()
-                .map(|(_, _, support)| *support)
-                .sum::<usize>();
-            let right_support = adjacency
-                .get(right)
-                .into_iter()
-                .flatten()
-                .map(|(_, _, support)| *support)
-                .sum::<usize>();
-            left_support
-                .cmp(&right_support)
-                .then_with(|| {
-                    focus_image_direction_key(&images[*left])
-                        .cmp(&focus_image_direction_key(&images[*right]))
-                })
-                .reverse()
-        })
+        .min_by(|left, right| evidence_cmp(link_support(left), link_support(right), *left, *right))
         .unwrap_or(component[0]);
     let mut relative_to_anchor = HashMap::<usize, Matrix3<f64>>::new();
     relative_to_anchor.insert(anchor, Matrix3::identity());
@@ -9649,12 +10683,7 @@ fn split_focus_local_component_by_motion(
     while let Some(current) = pending.pop_front() {
         let current_to_anchor = relative_to_anchor[&current];
         let mut neighbours = adjacency.get(&current).cloned().unwrap_or_default();
-        neighbours.sort_by(|left, right| {
-            right.2.cmp(&left.2).then_with(|| {
-                focus_image_direction_key(&images[left.0])
-                    .cmp(&focus_image_direction_key(&images[right.0]))
-            })
-        });
+        neighbours.sort_by(|left, right| evidence_cmp(left.2, right.2, left.0, right.0));
         for (neighbor, neighbor_to_current, _) in neighbours {
             if relative_to_anchor.contains_key(&neighbor) {
                 continue;
@@ -9664,11 +10693,11 @@ fn split_focus_local_component_by_motion(
         }
     }
 
-    let mut ordered = component;
-    ordered.sort_by_key(|index| focus_image_direction_key(&images[*index]));
-    let mut groups = Vec::<(Point2<f64>, Vec<usize>)>::new();
-    for image_index in ordered {
-        let center = relative_to_anchor.get(&image_index).and_then(|relative| {
+    // The candidate order is the recovered world-centre order.  Members whose
+    // pose could not be recovered carry no centre and sort last; they cannot
+    // take part in a displacement measurement either way.
+    let member_center = |image_index: usize| {
+        relative_to_anchor.get(&image_index).and_then(|relative| {
             transformed_point(
                 relative,
                 Point2::new(
@@ -9676,64 +10705,294 @@ fn split_focus_local_component_by_motion(
                     images[image_index].height as f64 * 0.5,
                 ),
             )
-        });
-        let assigned = center.and_then(|center| {
-            groups.iter().position(|(anchor_center, members)| {
-                if members.len() >= FOCUS_BRACKET_MAX_COMPONENT_SOURCES {
-                    return false;
+        })
+    };
+    let mut ordered = component;
+    ordered.sort_by(|left, right| {
+        let left_center = member_center(*left);
+        let right_center = member_center(*right);
+        match (left_center, right_center) {
+            (Some(left_center), Some(right_center)) => left_center
+                .y
+                .total_cmp(&right_center.y)
+                .then_with(|| left_center.x.total_cmp(&right_center.x)),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        }
+        // 需求 1.2: the absolute path enters only once the world centres compare
+        // exactly equal, and the member index is the final stable key.
+        .then_with(|| {
+            focus_image_direction_key(&images[*left])
+                .cmp(&focus_image_direction_key(&images[*right]))
+        })
+        .then_with(|| natural_path_cmp(&images[*left].filename, &images[*right].filename))
+        .then_with(|| left.cmp(right))
+    });
+
+    let long_side = |image_index: usize| {
+        images[image_index]
+            .width
+            .max(images[image_index].height)
+            .max(1) as f64
+    };
+    // Step displacement between adjacent candidates, normalised by the longer of
+    // the two long sides.  `None` means "not measurable", which is treated as a
+    // boundary: two members without a common recovered pose have no evidence
+    // that they share a camera position.
+    let step_motion = |previous: usize, current: usize| -> Option<f64> {
+        let previous_center = member_center(previous)?;
+        let current_center = member_center(current)?;
+        let scale = long_side(previous).max(long_side(current));
+        let ratio = (current_center - previous_center).norm() / scale;
+        ratio.is_finite().then_some(ratio)
+    };
+
+    // 需求 1.4: walk the candidate order and accumulate the centre displacement
+    // since the first member of the current Capture_Station.  A single split
+    // position is therefore a function of the measured poses alone.
+    let mut groups = Vec::<Vec<usize>>::new();
+    let mut current = Vec::<usize>::new();
+    let mut accumulated = 0.0f64;
+    for (position, image_index) in ordered.iter().copied().enumerate() {
+        if current.is_empty() {
+            current.push(image_index);
+            accumulated = 0.0;
+            continue;
+        }
+        let previous = *current.last().expect("non-empty above");
+        match step_motion(previous, image_index) {
+            Some(step) => {
+                let candidate_accumulated = accumulated + step;
+                if candidate_accumulated > STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO {
+                    splits.push(StationSplit {
+                        component: component_index,
+                        position,
+                        motion_ratio: candidate_accumulated,
+                        reason: degradation::GROUPING_ACCUMULATED_MOTION,
+                    });
+                    groups.push(std::mem::take(&mut current));
+                    current.push(image_index);
+                    accumulated = 0.0;
+                } else {
+                    accumulated = candidate_accumulated;
+                    current.push(image_index);
                 }
-                let scale = images[image_index]
-                    .width
-                    .max(images[image_index].height)
-                    .max(images[anchor].width.max(images[anchor].height))
-                    .max(1) as f64;
-                (center - *anchor_center).norm() / scale <= FOCUS_BRACKET_INTERNAL_MOTION_RATIO
-            })
-        });
-        if let Some(group_index) = assigned {
-            groups[group_index].1.push(image_index);
-        } else if let Some(center) = center {
-            groups.push((center, vec![image_index]));
-        } else {
-            groups.push((Point2::new(f64::NAN, f64::NAN), vec![image_index]));
+            }
+            None => {
+                splits.push(StationSplit {
+                    component: component_index,
+                    position,
+                    motion_ratio: f64::NAN,
+                    reason: degradation::GROUPING_ACCUMULATED_MOTION,
+                });
+                groups.push(std::mem::take(&mut current));
+                current.push(image_index);
+                accumulated = 0.0;
+            }
         }
     }
-    groups.into_iter().map(|(_, members)| members).collect()
+    if !current.is_empty() {
+        groups.push(current);
+    }
+
+    // 需求 1.5 / 1.10: a Capture_Station holds 1..=48 sources.  Split an
+    // oversized one at the adjacent candidate pair carrying the largest
+    // displacement, repeatedly, until every station fits.
+    let mut bounded = Vec::<Vec<usize>>::with_capacity(groups.len());
+    let mut oversized = VecDeque::from(groups);
+    while let Some(group) = oversized.pop_front() {
+        if station_member_count_is_supported(group.len()) {
+            bounded.push(group);
+            continue;
+        }
+        let mut best: Option<(f64, usize)> = None;
+        for position in 1..group.len() {
+            let step = step_motion(group[position - 1], group[position]).unwrap_or(f64::INFINITY);
+            let balance = position.abs_diff(group.len() / 2);
+            let better = match best {
+                None => true,
+                Some((best_step, best_position)) => {
+                    if (step - best_step).abs() <= f64::EPSILON {
+                        // Equal displacement — all-zero motion included — splits
+                        // as evenly as possible so the recursion terminates
+                        // quickly and deterministically.
+                        balance < best_position.abs_diff(group.len() / 2)
+                    } else {
+                        step > best_step
+                    }
+                }
+            };
+            if better {
+                best = Some((step, position));
+            }
+        }
+        let (motion_ratio, position) = best.unwrap_or((f64::NAN, group.len() / 2));
+        splits.push(StationSplit {
+            component: component_index,
+            position,
+            motion_ratio,
+            reason: degradation::GROUPING_MEMBER_LIMIT_SPLIT,
+        });
+        let tail = group[position..].to_vec();
+        let head = group[..position].to_vec();
+        // Push both halves back so a half that is still oversized is split again.
+        oversized.push_front(tail);
+        oversized.push_front(head);
+    }
+    bounded
+}
+
+/// Capture_Station membership of one selection, with everything 需求 1.6 / 1.7 /
+/// 1.9 / 1.4 / 1.10 ask the Stack_Report to carry.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct StationGroupingOutcome {
+    /// Capture_Stations of two or more members, in station order.
+    pub components: Vec<Vec<usize>>,
+    /// 需求 1.6: sources that satisfy the 需求 1.1 evidence with no other source.
+    pub isolated: Vec<usize>,
+    /// 需求 1.4 / 1.10: every split position, in the order it was applied.
+    pub splits: Vec<StationSplit>,
+}
+
+/// Group the selection into Capture_Stations from image evidence only.
+///
+/// Membership is a DSU over the accepted 需求 1.1 relations — a set operation,
+/// so it cannot see the insertion order — followed by the accumulated-motion
+/// split above.
+fn focus_station_grouping(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> StationGroupingOutcome {
+    let mut dsu = Dsu::new(images.len());
+    let mut linked = vec![false; images.len()];
+    for (&(source_index, target_index), match_info) in sorted_pairs(matches) {
+        if source_index >= images.len() || target_index >= images.len() {
+            continue;
+        }
+        if focus_match_is_capture_station_link(images, source_index, target_index, match_info) {
+            dsu.union(source_index, target_index);
+            linked[source_index] = true;
+            linked[target_index] = true;
+        }
+    }
+    // Ordered by representative index: the bracket split below is applied in this
+    // order and its output feeds the station order (需求 14.6).
+    let mut components = BTreeMap::<usize, Vec<usize>>::new();
+    for image_index in 0..images.len() {
+        let root = dsu.find(image_index);
+        components.entry(root).or_default().push(image_index);
+    }
+    let mut splits = Vec::new();
+    let mut components = components
+        .into_values()
+        .enumerate()
+        .flat_map(|(component_index, component)| {
+            split_focus_local_component_by_motion(
+                component,
+                component_index,
+                images,
+                matches,
+                &mut splits,
+            )
+        })
+        .collect::<Vec<_>>();
+    // 需求 1.6: a source with no accepted overlap relation at all is isolated.
+    // A single member left over by a *split* is not: it had verified evidence,
+    // the accumulated motion simply put it at its own camera position.
+    let isolated = (0..images.len())
+        .filter(|&image_index| !linked[image_index])
+        .collect::<Vec<_>>();
+    components.retain(|component| component.len() >= 2);
+    for component in &mut components {
+        component.sort_by(|left, right| {
+            natural_path_cmp(&images[*left].filename, &images[*right].filename)
+                // `natural_path_cmp` can rate two distinct names equal; the
+                // member index is the stable secondary key (需求 14.6).
+                .then_with(|| left.cmp(right))
+        });
+    }
+    components.sort_by(|left, right| {
+        natural_path_cmp(&images[left[0]].filename, &images[right[0]].filename)
+            .then_with(|| left[0].cmp(&right[0]))
+    });
+    StationGroupingOutcome {
+        components,
+        isolated,
+        splits,
+    }
 }
 
 fn focus_local_bracket_components(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> Vec<Vec<usize>> {
-    let mut dsu = Dsu::new(images.len());
-    for (&(source_index, target_index), match_info) in matches {
-        let (Some(source), Some(target)) = (images.get(source_index), images.get(target_index))
-        else {
-            continue;
-        };
-        if focus_match_is_capture_station_link(source, target, match_info) {
-            dsu.union(source_index, target_index);
+    focus_station_grouping(images, matches).components
+}
+
+/// The selected sources that produced no decoded image (需求 1.9).
+///
+/// Returned in selection order and by absolute path, which is what the
+/// Stack_Report and the degradation ledger record.  Excluding them from every
+/// Capture_Station is not a separate step: the grouper only ever sees the decoded
+/// images, so a source named here cannot reach it.
+fn undecodable_source_paths(selection: &[String], decoded: &[ImageInfo]) -> Vec<String> {
+    selection
+        .iter()
+        .filter(|path| !decoded.iter().any(|image| &image.filename == *path))
+        .cloned()
+        .collect()
+}
+
+/// The Stack_Report records of the sources one grouping excluded (需求 1.6 / 1.9).
+///
+/// Each record names the absolute path of the excluded Source_RAW and the stable
+/// reason identifier it was excluded for, and nothing else: the exclusion itself
+/// has already happened by the time this runs.
+fn excluded_source_records(
+    images: &[ImageInfo],
+    indices: &[usize],
+    reason: &'static str,
+) -> Vec<stack_report::ExcludedSourceRecord> {
+    indices
+        .iter()
+        .filter_map(|&image_index| images.get(image_index))
+        .map(|image| stack_report::ExcludedSourceRecord {
+            path: image.filename.clone(),
+            reason: reason.to_string(),
+        })
+        .collect()
+}
+
+/// Binding 需求 1.1 evidence of one Capture_Station: the weakest accepted
+/// relation inside it.
+///
+/// Every member joined the station through at least this much evidence, so it is
+/// the number 需求 1.7 should carry. Returns `None` for a single-member station,
+/// which has no intra-station relation to report.
+fn focus_station_binding_evidence(
+    members: &[usize],
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+) -> Option<StationEvidence> {
+    let mut weakest: Option<StationEvidence> = None;
+    for (offset, &left) in members.iter().enumerate() {
+        for &right in &members[offset + 1..] {
+            let key = (left.min(right), left.max(right));
+            let Some(match_info) = matches.get(&key) else {
+                continue;
+            };
+            let Some(evidence) = focus_station_link_evidence(images, key.0, key.1, match_info)
+                .filter(StationEvidence::accepts)
+            else {
+                continue;
+            };
+            if weakest.is_none_or(|current| evidence.score < current.score) {
+                weakest = Some(evidence);
+            }
         }
     }
-    let mut components = HashMap::<usize, Vec<usize>>::new();
-    for image_index in 0..images.len() {
-        let root = dsu.find(image_index);
-        components.entry(root).or_default().push(image_index);
-    }
-    let mut components = components
-        .into_values()
-        .flat_map(|component| split_focus_local_component_by_motion(component, images, matches))
-        .filter(|component| component.len() >= 2)
-        .collect::<Vec<_>>();
-    for component in &mut components {
-        component.sort_by(|left, right| {
-            natural_path_cmp(&images[*left].filename, &images[*right].filename)
-        });
-    }
-    components.sort_by(|left, right| {
-        natural_path_cmp(&images[left[0]].filename, &images[right[0]].filename)
-    });
-    components
+    weakest
 }
 
 fn lock_focus_local_bracket_poses(
@@ -9879,11 +11138,2722 @@ struct FocusCaptureGroup {
     local_to_anchor: HashMap<usize, Matrix3<f64>>,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct StationRelationMeasurements {
+    inliers: usize,
+    median_error_px: f64,
+    scale_ratio: f64,
+    spatial_support: f64,
+    low_frequency_mean_relative_difference: f64,
+    edge_strength_ratio: f64,
+    median_edge_orientation_difference_degrees: f64,
+    preserves_convex_orientation: bool,
+}
+
+fn station_relation_rejection_reasons(
+    measurements: &StationRelationMeasurements,
+) -> Vec<&'static str> {
+    let mut reasons = Vec::with_capacity(8);
+    if measurements.inliers < STATION_RELATION_MIN_INLIERS {
+        reasons.push(degradation::STATION_RELATION_LOW_INLIERS);
+    }
+    if !measurements.median_error_px.is_finite()
+        || measurements.median_error_px > STATION_RELATION_MAX_MEDIAN_ERROR_PX
+    {
+        reasons.push(degradation::STATION_RELATION_HIGH_REPROJECTION_ERROR);
+    }
+    if !measurements.scale_ratio.is_finite()
+        || !(STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+            .contains(&measurements.scale_ratio)
+    {
+        reasons.push(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE);
+    }
+    if !measurements.spatial_support.is_finite()
+        || measurements.spatial_support < STATION_RELATION_MIN_SPATIAL_SUPPORT
+    {
+        reasons.push(degradation::STATION_RELATION_LOW_SPATIAL_SUPPORT);
+    }
+    if !measurements
+        .low_frequency_mean_relative_difference
+        .is_finite()
+        || measurements.low_frequency_mean_relative_difference
+            > STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE
+    {
+        reasons.push(degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH);
+    }
+    if !measurements.edge_strength_ratio.is_finite()
+        || !(STATION_RELATION_EDGE_STRENGTH_RATIO_MIN..=STATION_RELATION_EDGE_STRENGTH_RATIO_MAX)
+            .contains(&measurements.edge_strength_ratio)
+    {
+        reasons.push(degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH);
+    }
+    if !measurements
+        .median_edge_orientation_difference_degrees
+        .is_finite()
+        || measurements.median_edge_orientation_difference_degrees
+            > STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES
+    {
+        reasons.push(degradation::STATION_RELATION_EDGE_ORIENTATION_MISMATCH);
+    }
+    if !measurements.preserves_convex_orientation {
+        reasons.push(degradation::STATION_RELATION_NON_CONVEX_QUAD);
+    }
+    reasons
+}
+
+/// Apply the production Station_Relation rejection decision to its report.
+///
+/// One candidate increments `rejected_count` once, while every independently
+/// failed criterion increments its stable reason bucket.  Keeping this at the
+/// solver boundary makes combined defects visible without allowing a rejected
+/// candidate to reach pose construction (requirements 6.5, 6.9, 6.10).
+fn station_relation_is_accepted_with_report(
+    left: usize,
+    right: usize,
+    consensus_error_px: f64,
+    measurements: &StationRelationMeasurements,
+    report: &mut stack_report::StationRelationsReport,
+) -> bool {
+    let reasons = station_relation_rejection_reasons(measurements);
+    if reasons.is_empty() {
+        return true;
+    }
+    report.rejected_count += 1;
+    for reason in reasons {
+        *report
+            .rejected_by_reason
+            .entry(reason.to_string())
+            .or_default() += 1;
+        degradation::record_run_degradation(
+            reason,
+            serde_json::json!({
+                "left": left,
+                "right": right,
+                "inliers": measurements.inliers,
+                "median_error_px": measurements.median_error_px,
+                "consensus_error_px": consensus_error_px,
+                "scale_ratio": measurements.scale_ratio,
+                "spatial_support": measurements.spatial_support,
+                "low_frequency_mean_relative_difference": measurements.low_frequency_mean_relative_difference,
+                "edge_strength_ratio": measurements.edge_strength_ratio,
+                "median_edge_orientation_difference_degrees": measurements.median_edge_orientation_difference_degrees,
+                "preserves_convex_orientation": measurements.preserves_convex_orientation,
+            }),
+        );
+    }
+    false
+}
+
+/// Record a topology candidate for which descriptor/patch matching produced no
+/// measured model. Infinity is used internally for unavailable errors and
+/// ratios; report serialization remains the existing stable reason counters.
+fn record_station_relation_no_fit(
+    left: usize,
+    right: usize,
+    report: &mut stack_report::StationRelationsReport,
+) {
+    let measurements = StationRelationMeasurements {
+        inliers: 0,
+        median_error_px: f64::INFINITY,
+        scale_ratio: f64::INFINITY,
+        spatial_support: 0.0,
+        low_frequency_mean_relative_difference: f64::INFINITY,
+        edge_strength_ratio: f64::INFINITY,
+        median_edge_orientation_difference_degrees: f64::INFINITY,
+        // No fitted quad exists; avoid claiming a contradictory fold in
+        // addition to the explicit zero/unknown evidence reasons.
+        preserves_convex_orientation: true,
+    };
+    let accepted =
+        station_relation_is_accepted_with_report(left, right, f64::INFINITY, &measurements, report);
+    debug_assert!(
+        !accepted,
+        "zero-evidence station candidate cannot be accepted"
+    );
+}
+
+fn polygon_signed_double_area(points: &[Point2<f64>]) -> f64 {
+    if points.len() < 3 {
+        return 0.0;
+    }
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .take(points.len())
+        .map(|(left, right)| left.x * right.y - right.x * left.y)
+        .sum()
+}
+
+fn convex_hull_area(points: impl IntoIterator<Item = Point2<f64>>) -> f64 {
+    let mut points = points
+        .into_iter()
+        .filter(|point| point.x.is_finite() && point.y.is_finite())
+        .collect::<Vec<_>>();
+    points.sort_by(|left, right| {
+        left.x
+            .total_cmp(&right.x)
+            .then_with(|| left.y.total_cmp(&right.y))
+    });
+    points.dedup_by(|left, right| left.x == right.x && left.y == right.y);
+    if points.len() < 3 {
+        return 0.0;
+    }
+    let cross = |origin: Point2<f64>, left: Point2<f64>, right: Point2<f64>| {
+        (left.x - origin.x) * (right.y - origin.y) - (left.y - origin.y) * (right.x - origin.x)
+    };
+    let mut lower = Vec::with_capacity(points.len());
+    for &point in &points {
+        while lower.len() >= 2
+            && cross(lower[lower.len() - 2], lower[lower.len() - 1], point) <= 0.0
+        {
+            lower.pop();
+        }
+        lower.push(point);
+    }
+    let mut upper = Vec::with_capacity(points.len());
+    for &point in points.iter().rev() {
+        while upper.len() >= 2
+            && cross(upper[upper.len() - 2], upper[upper.len() - 1], point) <= 0.0
+        {
+            upper.pop();
+        }
+        upper.push(point);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    polygon_signed_double_area(&lower).abs() * 0.5
+}
+
+fn clip_polygon_to_rectangle(polygon: &[Point2<f64>], dimensions: (u32, u32)) -> Vec<Point2<f64>> {
+    let mut clipped = polygon.to_vec();
+    let boundaries: [(usize, f64, bool); 4] = [
+        (0, 0.0, true),
+        (0, dimensions.0 as f64, false),
+        (1, 0.0, true),
+        (1, dimensions.1 as f64, false),
+    ];
+    for (axis, limit, keep_greater) in boundaries {
+        if clipped.is_empty() {
+            break;
+        }
+        let input = std::mem::take(&mut clipped);
+        let coordinate = |point: Point2<f64>| if axis == 0 { point.x } else { point.y };
+        let inside = |point: Point2<f64>| {
+            if keep_greater {
+                coordinate(point) >= limit
+            } else {
+                coordinate(point) <= limit
+            }
+        };
+        for index in 0..input.len() {
+            let current = input[index];
+            let previous = input[(index + input.len() - 1) % input.len()];
+            let current_inside = inside(current);
+            let previous_inside = inside(previous);
+            if current_inside != previous_inside {
+                let previous_coordinate = coordinate(previous);
+                let current_coordinate = coordinate(current);
+                let denominator = current_coordinate - previous_coordinate;
+                if denominator.abs() > f64::EPSILON {
+                    let t = (limit - previous_coordinate) / denominator;
+                    clipped.push(previous + (current - previous) * t);
+                }
+            }
+            if current_inside {
+                clipped.push(current);
+            }
+        }
+    }
+    clipped
+}
+
+fn station_relation_overlap_area(
+    source_to_target: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    source_side: bool,
+) -> Option<f64> {
+    let target_to_source = source_to_target.try_inverse()?;
+    let (footprint_dimensions, clip_dimensions, transform) = if source_side {
+        (target_dimensions, source_dimensions, target_to_source)
+    } else {
+        (source_dimensions, target_dimensions, *source_to_target)
+    };
+    let footprint = [
+        Point2::new(0.0, 0.0),
+        Point2::new(footprint_dimensions.0 as f64, 0.0),
+        Point2::new(footprint_dimensions.0 as f64, footprint_dimensions.1 as f64),
+        Point2::new(0.0, footprint_dimensions.1 as f64),
+    ]
+    .into_iter()
+    .map(|point| transformed_point(&transform, point))
+    .collect::<Option<Vec<_>>>()?;
+    let clipped = clip_polygon_to_rectangle(&footprint, clip_dimensions);
+    let area = polygon_signed_double_area(&clipped).abs() * 0.5;
+    (area.is_finite() && area > f64::EPSILON).then_some(area)
+}
+
+/// Requirement 6.4's literal support: inlier convex-hull area divided by the
+/// actual geometric overlap area, checked on both station planes.
+fn station_relation_spatial_support(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_to_target: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+) -> f64 {
+    let Some(source_overlap) =
+        station_relation_overlap_area(source_to_target, source_dimensions, target_dimensions, true)
+    else {
+        return 0.0;
+    };
+    let Some(target_overlap) = station_relation_overlap_area(
+        source_to_target,
+        source_dimensions,
+        target_dimensions,
+        false,
+    ) else {
+        return 0.0;
+    };
+    let source_hull = convex_hull_area(points.iter().map(|point| point.0));
+    let target_hull = convex_hull_area(points.iter().map(|point| point.1));
+    (source_hull / source_overlap)
+        .min(target_hull / target_overlap)
+        .clamp(0.0, 1.0)
+}
+
 #[derive(Clone, Copy)]
 struct FocusGroupEdgeCandidate {
     transform: Matrix3<f64>,
     quality: f64,
     independent_support: usize,
+    inlier_count: usize,
+    median_error_px: f64,
+    scale_ratio: f64,
+    spatial_support: f64,
+    low_frequency_mean_relative_difference: f64,
+    edge_strength_ratio: f64,
+    median_edge_orientation_difference_degrees: f64,
+}
+
+/// Exact Closure_Optimizer M-estimator multiplier from requirement 7.3.
+///
+/// Residuals are measured in world-coordinate native pixels. Keeping this
+/// independent of image dimensions makes the same geometric error receive the
+/// same weight at every station and in the final report.
+fn closure_residual_weight(residual_px: f64) -> f64 {
+    if residual_px.is_nan() {
+        return 0.0;
+    }
+    let residual_px = residual_px.max(0.0);
+    if residual_px <= 2.0 {
+        1.0
+    } else if residual_px <= 6.0 {
+        1.0 - 0.9 * (residual_px - 2.0) / 4.0
+    } else {
+        0.1 * (6.0 / residual_px)
+    }
+}
+
+fn closure_weighted_total_residual(
+    corrections: &[[f64; 2]],
+    constraints: &[(usize, usize, [f64; 2], f64)],
+) -> f64 {
+    constraints
+        .iter()
+        .map(|&(left, right, observed, base_weight)| {
+            let residual = (corrections[right][0] - corrections[left][0] - observed[0])
+                .hypot(corrections[right][1] - corrections[left][1] - observed[1]);
+            base_weight * closure_residual_weight(residual) * residual * residual
+        })
+        .sum()
+}
+
+fn closure_relative_residual_decrease_converged(previous: f64, current: f64) -> bool {
+    if !previous.is_finite() || !current.is_finite() || current > previous {
+        return false;
+    }
+    if previous <= f64::EPSILON {
+        return current <= f64::EPSILON;
+    }
+    (previous - current) / previous < CLOSURE_RELATIVE_RESIDUAL_DECREASE
+}
+
+#[derive(Debug)]
+struct ClosureTranslationSolve {
+    corrections: Vec<[f64; 2]>,
+    iterations: usize,
+    converged: bool,
+}
+
+fn solve_robust_closure_translations(
+    station_count: usize,
+    reference_station: usize,
+    constraints: &[(usize, usize, [f64; 2], f64)],
+) -> Option<ClosureTranslationSolve> {
+    if station_count < 2 || reference_station >= station_count || constraints.is_empty() {
+        return None;
+    }
+    let variable_count = station_count.saturating_sub(1) * 2;
+    let variable_index = |station: usize, axis: usize| {
+        let compact = if station < reference_station {
+            station
+        } else {
+            station - 1
+        };
+        compact * 2 + axis
+    };
+    let mut corrections = vec![[0.0f64; 2]; station_count];
+    let mut previous_total = closure_weighted_total_residual(&corrections, constraints);
+    let mut iterations = 0usize;
+    let mut converged = false;
+
+    for iteration in 1..=CLOSURE_MAX_ITERATIONS {
+        let mut normal = nalgebra::DMatrix::<f64>::zeros(variable_count, variable_count);
+        let mut rhs = nalgebra::DVector::<f64>::zeros(variable_count);
+        for &(left, right, observed, base_weight) in constraints {
+            let residual = [
+                corrections[right][0] - corrections[left][0] - observed[0],
+                corrections[right][1] - corrections[left][1] - observed[1],
+            ];
+            let magnitude = residual[0].hypot(residual[1]);
+            let weight = base_weight * closure_residual_weight(magnitude);
+            for axis in 0..2 {
+                let left_variable = (left != reference_station).then(|| variable_index(left, axis));
+                let right_variable =
+                    (right != reference_station).then(|| variable_index(right, axis));
+                if let Some(variable) = left_variable {
+                    normal[(variable, variable)] += weight;
+                    rhs[variable] -= weight * observed[axis];
+                }
+                if let Some(variable) = right_variable {
+                    normal[(variable, variable)] += weight;
+                    rhs[variable] += weight * observed[axis];
+                }
+                if let (Some(left_variable), Some(right_variable)) = (left_variable, right_variable)
+                {
+                    normal[(left_variable, right_variable)] -= weight;
+                    normal[(right_variable, left_variable)] -= weight;
+                }
+            }
+        }
+        for variable in 0..variable_count {
+            normal[(variable, variable)] += FOCUS_GLOBAL_DAMPING;
+        }
+        let solution = normal.lu().solve(&rhs)?;
+        for station in 0..station_count {
+            if station == reference_station {
+                continue;
+            }
+            corrections[station] = [
+                solution[variable_index(station, 0)],
+                solution[variable_index(station, 1)],
+            ];
+        }
+        iterations = iteration;
+        let current_total = closure_weighted_total_residual(&corrections, constraints);
+        if closure_relative_residual_decrease_converged(previous_total, current_total) {
+            converged = true;
+            break;
+        }
+        previous_total = current_total;
+    }
+
+    Some(ClosureTranslationSolve {
+        corrections,
+        iterations,
+        converged,
+    })
+}
+
+fn station_relation_overlap_polygon(
+    source_to_target: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    source_side: bool,
+) -> Option<Vec<Point2<f64>>> {
+    let target_to_source = source_to_target.try_inverse()?;
+    let (footprint_dimensions, clip_dimensions, transform) = if source_side {
+        (target_dimensions, source_dimensions, target_to_source)
+    } else {
+        (source_dimensions, target_dimensions, *source_to_target)
+    };
+    let footprint = [
+        Point2::new(0.0, 0.0),
+        Point2::new(footprint_dimensions.0 as f64, 0.0),
+        Point2::new(footprint_dimensions.0 as f64, footprint_dimensions.1 as f64),
+        Point2::new(0.0, footprint_dimensions.1 as f64),
+    ]
+    .into_iter()
+    .map(|point| transformed_point(&transform, point))
+    .collect::<Option<Vec<_>>>()?;
+    let clipped = clip_polygon_to_rectangle(&footprint, clip_dimensions);
+    (!clipped.is_empty()).then_some(clipped)
+}
+
+fn projected_polygon_short_side(
+    polygon: &[Point2<f64>],
+    local_to_world: &Matrix3<f64>,
+) -> Option<f64> {
+    let projected = polygon
+        .iter()
+        .copied()
+        .map(|point| transformed_point(local_to_world, point))
+        .collect::<Option<Vec<_>>>()?;
+    let min_x = projected
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = projected
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = projected
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = projected
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let short_side = (max_x - min_x).min(max_y - min_y);
+    (short_side.is_finite() && short_side > 0.0).then_some(short_side)
+}
+
+fn maximum_station_corner_displacement(
+    initial_pose: &Matrix3<f64>,
+    corrected_pose: &Matrix3<f64>,
+    dimensions: (u32, u32),
+) -> Option<f64> {
+    [
+        Point2::new(0.0, 0.0),
+        Point2::new(dimensions.0 as f64, 0.0),
+        Point2::new(dimensions.0 as f64, dimensions.1 as f64),
+        Point2::new(0.0, dimensions.1 as f64),
+    ]
+    .into_iter()
+    .try_fold(0.0f64, |maximum, corner| {
+        let initial = transformed_point(initial_pose, corner)?;
+        let corrected = transformed_point(corrected_pose, corner)?;
+        let displacement = (corrected - initial).norm();
+        displacement
+            .is_finite()
+            .then_some(maximum.max(displacement))
+    })
+}
+
+fn clamp_station_translation_corrections(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
+    initial_poses: &[Matrix3<f64>],
+    corrections: &mut [[f64; 2]],
+) -> Option<(f64, usize)> {
+    if groups.len() != initial_poses.len() || groups.len() != corrections.len() {
+        return None;
+    }
+    let mut overlap_short_sides = vec![None::<f64>; groups.len()];
+    for &(_, left, right, left_to_right, _, _) in group_edges {
+        if left >= groups.len() || right >= groups.len() {
+            continue;
+        }
+        let left_dimensions = images[groups[left].anchor].dimensions();
+        let right_dimensions = images[groups[right].anchor].dimensions();
+        for (station, source_side) in [(left, true), (right, false)] {
+            let polygon = station_relation_overlap_polygon(
+                &left_to_right,
+                left_dimensions,
+                right_dimensions,
+                source_side,
+            )?;
+            let short_side = projected_polygon_short_side(&polygon, &initial_poses[station])?;
+            overlap_short_sides[station] = Some(
+                overlap_short_sides[station].map_or(short_side, |current| current.min(short_side)),
+            );
+        }
+    }
+
+    let mut clamped_stations = 0usize;
+    let mut actual_maximum = 0.0f64;
+    for station in 0..groups.len() {
+        let correction = corrections[station];
+        if !correction[0].is_finite() || !correction[1].is_finite() {
+            return None;
+        }
+        let overlap_short_side = overlap_short_sides[station]?;
+        let limit = (overlap_short_side * CLOSURE_OVERLAP_SHORT_SIDE_CORRECTION_RATIO)
+            .min(CLOSURE_MAX_CORNER_CORRECTION_PX);
+        let corrected_pose = Matrix3::new(
+            1.0,
+            0.0,
+            correction[0],
+            0.0,
+            1.0,
+            correction[1],
+            0.0,
+            0.0,
+            1.0,
+        ) * initial_poses[station];
+        let displacement = maximum_station_corner_displacement(
+            &initial_poses[station],
+            &corrected_pose,
+            images[groups[station].anchor].dimensions(),
+        )?;
+        if displacement > limit {
+            let scale = if displacement > 0.0 {
+                limit / displacement
+            } else {
+                0.0
+            };
+            corrections[station][0] *= scale;
+            corrections[station][1] *= scale;
+            clamped_stations += 1;
+        }
+        let clamped = corrections[station];
+        let clamped_pose = Matrix3::new(1.0, 0.0, clamped[0], 0.0, 1.0, clamped[1], 0.0, 0.0, 1.0)
+            * initial_poses[station];
+        actual_maximum = actual_maximum.max(maximum_station_corner_displacement(
+            &initial_poses[station],
+            &clamped_pose,
+            images[groups[station].anchor].dimensions(),
+        )?);
+    }
+    Some((actual_maximum, clamped_stations))
+}
+
+fn closure_residual_summary(residuals: &mut [f64]) -> Option<(f64, f64)> {
+    if residuals.is_empty() || residuals.iter().any(|residual| !residual.is_finite()) {
+        return None;
+    }
+    residuals.sort_by(f64::total_cmp);
+    let median = residuals[residuals.len() / 2];
+    let p95_index = residuals
+        .len()
+        .saturating_mul(95)
+        .div_ceil(100)
+        .saturating_sub(1);
+    Some((median, residuals[p95_index]))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ClosureDirectPairP95 {
+    left: usize,
+    right: usize,
+    p95_px: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ClosureAcceptance {
+    Accepted,
+    NoConstraints,
+    UnreliableResidual,
+    UnreliableIterations,
+    UnreliablePairP95(ClosureDirectPairP95),
+}
+
+fn closure_acceptance(
+    station_count: usize,
+    accepted_relation_count: usize,
+    converged: bool,
+    iterations: usize,
+    residual_median_px: f64,
+    direct_pairs: &[ClosureDirectPairP95],
+) -> ClosureAcceptance {
+    if accepted_relation_count <= station_count.saturating_sub(1) {
+        return ClosureAcceptance::NoConstraints;
+    }
+    if !converged || iterations > CLOSURE_MAX_ITERATIONS {
+        return ClosureAcceptance::UnreliableIterations;
+    }
+    if !residual_median_px.is_finite() || residual_median_px > CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX {
+        return ClosureAcceptance::UnreliableResidual;
+    }
+    direct_pairs
+        .iter()
+        .copied()
+        .filter(|pair| !pair.p95_px.is_finite() || pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+        .max_by(|left, right| {
+            left.p95_px
+                .total_cmp(&right.p95_px)
+                .then_with(|| (right.left, right.right).cmp(&(left.left, left.right)))
+        })
+        .map_or(
+            ClosureAcceptance::Accepted,
+            ClosureAcceptance::UnreliablePairP95,
+        )
+}
+
+/// Measure overlap reprojection disagreement for every accepted direct
+/// Station_Relation. The fixed 11×11 source-plane lattice is clipped by the
+/// relation into the target tile, so every retained sample belongs to the
+/// geometric overlap and repeated runs inspect identical world positions.
+fn closure_direct_pair_p95s(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
+    poses: &[Matrix3<f64>],
+) -> Vec<ClosureDirectPairP95> {
+    const SAMPLES_PER_AXIS: usize = 11;
+
+    group_edges
+        .iter()
+        .map(|&(_, left, right, left_to_right, _, _)| {
+            let mut errors = Vec::with_capacity(SAMPLES_PER_AXIS * SAMPLES_PER_AXIS);
+            if let (Some(left_group), Some(right_group), Some(left_pose), Some(right_pose)) = (
+                groups.get(left),
+                groups.get(right),
+                poses.get(left),
+                poses.get(right),
+            ) {
+                let left_dimensions = images[left_group.anchor].dimensions();
+                let right_dimensions = images[right_group.anchor].dimensions();
+                for sample_y in 0..SAMPLES_PER_AXIS {
+                    let y = (left_dimensions.1.saturating_sub(1) as f64) * sample_y as f64
+                        / (SAMPLES_PER_AXIS - 1) as f64;
+                    for sample_x in 0..SAMPLES_PER_AXIS {
+                        let x = (left_dimensions.0.saturating_sub(1) as f64) * sample_x as f64
+                            / (SAMPLES_PER_AXIS - 1) as f64;
+                        let source = Point2::new(x, y);
+                        let Some(target) = transformed_point(&left_to_right, source) else {
+                            continue;
+                        };
+                        if target.x < 0.0
+                            || target.y < 0.0
+                            || target.x >= right_dimensions.0 as f64
+                            || target.y >= right_dimensions.1 as f64
+                        {
+                            continue;
+                        }
+                        let (Some(left_world), Some(right_world)) = (
+                            transformed_point(left_pose, source),
+                            transformed_point(right_pose, target),
+                        ) else {
+                            continue;
+                        };
+                        let error = (left_world - right_world).norm();
+                        if error.is_finite() {
+                            errors.push(error);
+                        }
+                    }
+                }
+            }
+            let p95_px = closure_residual_summary(&mut errors)
+                .map(|(_, p95)| p95)
+                .unwrap_or(f64::INFINITY);
+            ClosureDirectPairP95 {
+                left,
+                right,
+                p95_px,
+            }
+        })
+        .collect()
+}
+
+fn closure_offending_pair_record(
+    pair: ClosureDirectPairP95,
+    station_topology: &topology::StationTopology,
+) -> stack_report::ClosureOffendingPairRecord {
+    stack_report::ClosureOffendingPairRecord {
+        left: pair.left,
+        left_row: station_topology
+            .row
+            .get(pair.left)
+            .copied()
+            .unwrap_or(u32::MAX),
+        left_column: station_topology
+            .column
+            .get(pair.left)
+            .copied()
+            .unwrap_or(u32::MAX),
+        right: pair.right,
+        right_row: station_topology
+            .row
+            .get(pair.right)
+            .copied()
+            .unwrap_or(u32::MAX),
+        right_column: station_topology
+            .column
+            .get(pair.right)
+            .copied()
+            .unwrap_or(u32::MAX),
+        p95_px: pair.p95_px,
+    }
+}
+
+fn station_tree_position_key(
+    station_topology: &topology::StationTopology,
+    station: usize,
+) -> (u32, u32, usize) {
+    (
+        station_topology
+            .row
+            .get(station)
+            .copied()
+            .unwrap_or(u32::MAX),
+        station_topology
+            .column
+            .get(station)
+            .copied()
+            .unwrap_or(u32::MAX),
+        station,
+    )
+}
+
+fn station_tree_edge_key(
+    station_topology: &topology::StationTopology,
+    left: usize,
+    right: usize,
+) -> ((u32, u32, usize), (u32, u32, usize)) {
+    let left = station_tree_position_key(station_topology, left);
+    let right = station_tree_position_key(station_topology, right);
+    if left <= right {
+        (left, right)
+    } else {
+        (right, left)
+    }
+}
+
+/// Select a maximum-inlier spanning tree. The returned values are indices into
+/// `relations`; relation score and input order never participate. Equal inlier
+/// counts are ordered only by the stations' canonical row/column indices.
+fn maximum_inlier_spanning_tree_indices(
+    station_count: usize,
+    station_topology: &topology::StationTopology,
+    relations: &[(usize, usize, usize)],
+) -> Vec<usize> {
+    let mut ordered = relations
+        .iter()
+        .enumerate()
+        .filter(|(_, (left, right, _))| {
+            *left < station_count && *right < station_count && left != right
+        })
+        .collect::<Vec<_>>();
+    ordered.sort_by(|(_, left), (_, right)| {
+        right.2.cmp(&left.2).then_with(|| {
+            station_tree_edge_key(station_topology, left.0, left.1).cmp(&station_tree_edge_key(
+                station_topology,
+                right.0,
+                right.1,
+            ))
+        })
+    });
+
+    let mut connectivity = Dsu::new(station_count);
+    let mut selected = Vec::with_capacity(station_count.saturating_sub(1));
+    for (index, &(left, right, _)) in ordered {
+        if connectivity.find(left) == connectivity.find(right) {
+            continue;
+        }
+        connectivity.union(left, right);
+        selected.push(index);
+        if selected.len() + 1 == station_count {
+            break;
+        }
+    }
+    selected
+}
+
+const VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS: u32 = 20;
+
+/// Convert a rendered Virtual_Tile to its station-matching representation.
+///
+/// Uncovered RGB values are never read. The deterministic zero outside the
+/// mask prevents transparent-corner payloads from changing detection, while
+/// the final erosion keeps both FAST and BRIEF support wholly inside genuine
+/// Coverage_Mask pixels (需求 6.1).
+fn virtual_tile_covered_features(
+    pixels: &Rgb32FImage,
+    coverage: &stitching::CoverageMask,
+    brief_pairs: &[(Point2<i32>, Point2<i32>)],
+) -> (GrayImage, Vec<Feature>) {
+    let (width, height) = pixels.dimensions();
+    if coverage.dimensions() != (width, height) {
+        return (GrayImage::new(width, height), Vec::new());
+    }
+    let gray = GrayImage::from_fn(width, height, |x, y| {
+        if !coverage.is_covered(x, y) {
+            return image::Luma([0]);
+        }
+        let pixel = pixels.get_pixel(x, y);
+        let luminance = 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2];
+        image::Luma([(luminance.clamp(0.0, 1.0) * 255.0).round() as u8])
+    });
+    let radius = VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS;
+    let features = processing::find_features(&gray, brief_pairs)
+        .into_iter()
+        .filter(|feature| {
+            let x = feature.keypoint.x;
+            let y = feature.keypoint.y;
+            x >= radius
+                && y >= radius
+                && x.saturating_add(radius) < width
+                && y.saturating_add(radius) < height
+                && (y - radius..=y + radius).all(|sample_y| {
+                    (x - radius..=x + radius)
+                        .all(|sample_x| coverage.is_covered(sample_x, sample_y))
+                })
+        })
+        .collect();
+    (gray, features)
+}
+
+const VIRTUAL_TILE_GUIDED_PATCH_RADIUS: i32 = 6;
+const VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC: f64 = 0.55;
+const VIRTUAL_TILE_GUIDED_MIN_GRADIENT_NCC: f64 = 0.35;
+const VIRTUAL_TILE_GUIDED_MIN_PEAK_MARGIN: f64 = 0.025;
+const VIRTUAL_TILE_GUIDED_MAX_LOCAL_ORIENTATION_DEGREES: f64 = 15.0;
+const VIRTUAL_TILE_GUIDED_MAX_DESCRIPTOR_DISTANCE: u32 = 64;
+const VIRTUAL_TILE_GUIDED_RATIO: f64 = 0.90;
+const VIRTUAL_TILE_GUIDED_MIN_SEARCH_RADIUS_PX: f64 = 12.0;
+const VIRTUAL_TILE_GUIDED_MAX_SEARCH_RADIUS_PX: f64 = 96.0;
+const VIRTUAL_TILE_GUIDED_GRID_COLUMNS: usize = 6;
+const VIRTUAL_TILE_GUIDED_GRID_ROWS: usize = 6;
+const VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA: usize = 2;
+const VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS: usize = 12;
+
+#[derive(Clone, Copy, Debug)]
+struct VirtualTileStructuralScore {
+    patch_ncc: f64,
+    gradient_ncc: f64,
+    orientation_difference_degrees: f64,
+}
+
+impl VirtualTileStructuralScore {
+    fn rank(self, descriptor_distance: u32) -> f64 {
+        self.patch_ncc + 0.5 * self.gradient_ncc
+            - f64::from(descriptor_distance)
+                / f64::from(VIRTUAL_TILE_GUIDED_MAX_DESCRIPTOR_DISTANCE.max(1))
+                * 0.05
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct VirtualTileGuidedFeatureMatch {
+    target_index: usize,
+    rank: f64,
+    orientation_difference_degrees: f64,
+}
+
+struct VirtualTileStationMatchOutcome {
+    relations: HashMap<(usize, usize), MatchInfo>,
+    diagnostics: Vec<stack_report::StationRelationCandidateRecord>,
+}
+
+fn virtual_tile_unseeded_station_match(
+    left: usize,
+    right: usize,
+    tiles: &[ImageInfo],
+) -> Option<MatchInfo> {
+    let descriptor_matches =
+        processing::match_features(&tiles[left].features, &tiles[right].features);
+    let left_keypoints = tiles[left]
+        .features
+        .iter()
+        .map(|feature| feature.keypoint)
+        .collect::<Vec<_>>();
+    let right_keypoints = tiles[right]
+        .features
+        .iter()
+        .map(|feature| feature.keypoint)
+        .collect::<Vec<_>>();
+    let (homography, inliers) =
+        processing::find_homography_ransac(&descriptor_matches, &left_keypoints, &right_keypoints)?;
+    let points = inliers
+        .iter()
+        .map(|matched| {
+            let source = left_keypoints[matched.index1];
+            let target = right_keypoints[matched.index2];
+            (
+                Point2::new(source.x as f64, source.y as f64),
+                Point2::new(target.x as f64, target.y as f64),
+            )
+        })
+        .collect::<Vec<_>>();
+    Some(MatchInfo {
+        homography,
+        inliers: points.len(),
+        sequence_bridge: false,
+        coarse_bridge: false,
+        points,
+        candidate_points: Vec::new(),
+        top_candidate_points: Vec::new(),
+        dense_focus_points: Vec::new(),
+        foreground_feature_points: Vec::new(),
+        canonical_homography: Some(homography),
+    })
+}
+
+fn virtual_tile_point_is_covered(coverage: &stitching::CoverageMask, point: Point2<f64>) -> bool {
+    let (width, height) = coverage.dimensions();
+    point.x.is_finite()
+        && point.y.is_finite()
+        && point.x >= 0.0
+        && point.y >= 0.0
+        && point.x < width as f64
+        && point.y < height as f64
+        && coverage.is_covered(point.x.round() as u32, point.y.round() as u32)
+}
+
+fn virtual_tile_local_jacobian(
+    transform: &Matrix3<f64>,
+    point: Point2<f64>,
+) -> Option<nalgebra::Matrix2<f64>> {
+    let center = transformed_point(transform, point)?;
+    let horizontal = transformed_point(transform, point + nalgebra::Vector2::new(1.0, 0.0))?;
+    let vertical = transformed_point(transform, point + nalgebra::Vector2::new(0.0, 1.0))?;
+    let jacobian = nalgebra::Matrix2::new(
+        horizontal.x - center.x,
+        vertical.x - center.x,
+        horizontal.y - center.y,
+        vertical.y - center.y,
+    );
+    (jacobian.iter().all(|value| value.is_finite()) && jacobian.determinant().abs() > 1e-8)
+        .then_some(jacobian)
+}
+
+fn virtual_tile_gradient(image: &GrayImage, point: Point2<f64>) -> Option<nalgebra::Vector2<f64>> {
+    let gx = registration::sample_gray(image, point.x + 1.0, point.y)?
+        - registration::sample_gray(image, point.x - 1.0, point.y)?;
+    let gy = registration::sample_gray(image, point.x, point.y + 1.0)?
+        - registration::sample_gray(image, point.x, point.y - 1.0)?;
+    let gradient = nalgebra::Vector2::new(gx, gy);
+    gradient
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(gradient)
+}
+
+fn axial_orientation_difference_degrees(
+    left: nalgebra::Vector2<f64>,
+    right: nalgebra::Vector2<f64>,
+) -> Option<f64> {
+    let denominator = left.norm() * right.norm();
+    if !denominator.is_finite() || denominator <= 1e-8 {
+        return None;
+    }
+    let cosine = (left.dot(&right) / denominator).abs().clamp(0.0, 1.0);
+    Some(cosine.acos().to_degrees())
+}
+
+fn virtual_tile_gradient_magnitude_ncc(left: &[f64], right: &[f64]) -> Option<f64> {
+    if left.len() != right.len() || left.is_empty() {
+        return None;
+    }
+    if let Some(correlation) = normalized_correlation(left, right) {
+        return Some(correlation);
+    }
+    // A constant-strength edge has zero variance but still carries orientation
+    // and location evidence. Treat equal non-zero magnitudes as perfect NCC;
+    // unequal or flat gradients remain non-matches.
+    let left_mean = left.iter().sum::<f64>() / left.len() as f64;
+    let right_mean = right.iter().sum::<f64>() / right.len() as f64;
+    let scale = left_mean.abs().max(right_mean.abs());
+    (scale > 1e-8).then(|| (1.0 - (left_mean - right_mean).abs() / scale).clamp(-1.0, 1.0))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn virtual_tile_structural_score_points(
+    left: &GrayImage,
+    right: &GrayImage,
+    left_coverage: &stitching::CoverageMask,
+    right_coverage: &stitching::CoverageMask,
+    center: Point2<f64>,
+    right_center: Point2<f64>,
+    left_to_right: &Matrix3<f64>,
+) -> Option<VirtualTileStructuralScore> {
+    let projected_center = transformed_point(left_to_right, center)?;
+    let residual = right_center - projected_center;
+    let jacobian = virtual_tile_local_jacobian(left_to_right, center)?;
+    let gradient_transform = jacobian.try_inverse()?.transpose();
+    let radius = VIRTUAL_TILE_GUIDED_PATCH_RADIUS;
+    let capacity = ((radius * 2 + 1) * (radius * 2 + 1)) as usize;
+    let mut left_values = Vec::with_capacity(capacity);
+    let mut right_values = Vec::with_capacity(capacity);
+    let mut left_gradient_magnitudes = Vec::with_capacity(capacity);
+    let mut right_gradient_magnitudes = Vec::with_capacity(capacity);
+    let mut orientation_differences = Vec::with_capacity(capacity);
+
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let source = center + nalgebra::Vector2::new(f64::from(dx), f64::from(dy));
+            let target = transformed_point(left_to_right, source)? + residual;
+            if !virtual_tile_point_is_covered(left_coverage, source)
+                || !virtual_tile_point_is_covered(right_coverage, target)
+            {
+                return None;
+            }
+            left_values.push(registration::sample_gray(left, source.x, source.y)?);
+            right_values.push(registration::sample_gray(right, target.x, target.y)?);
+
+            let left_gradient = virtual_tile_gradient(left, source)?;
+            let right_gradient = virtual_tile_gradient(right, target)?;
+            let transformed_gradient = gradient_transform * left_gradient;
+            left_gradient_magnitudes.push(transformed_gradient.norm());
+            right_gradient_magnitudes.push(right_gradient.norm());
+            if transformed_gradient.norm().min(right_gradient.norm()) >= 4.0
+                && let Some(difference) =
+                    axial_orientation_difference_degrees(transformed_gradient, right_gradient)
+            {
+                orientation_differences.push(difference);
+            }
+        }
+    }
+
+    let patch_ncc = normalized_correlation(&left_values, &right_values)?;
+    let gradient_ncc =
+        virtual_tile_gradient_magnitude_ncc(&left_gradient_magnitudes, &right_gradient_magnitudes)?;
+    let orientation_difference_degrees = median_value(&mut orientation_differences)?;
+    Some(VirtualTileStructuralScore {
+        patch_ncc,
+        gradient_ncc,
+        orientation_difference_degrees,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn virtual_tile_structural_score(
+    left: &GrayImage,
+    right: &GrayImage,
+    left_coverage: &stitching::CoverageMask,
+    right_coverage: &stitching::CoverageMask,
+    left_point: KeyPoint,
+    right_point: KeyPoint,
+    left_to_right: &Matrix3<f64>,
+) -> Option<VirtualTileStructuralScore> {
+    virtual_tile_structural_score_points(
+        left,
+        right,
+        left_coverage,
+        right_coverage,
+        Point2::new(f64::from(left_point.x), f64::from(left_point.y)),
+        Point2::new(f64::from(right_point.x), f64::from(right_point.y)),
+        left_to_right,
+    )
+}
+
+fn virtual_tile_descriptor_distance(left: &Descriptor, right: &Descriptor) -> u32 {
+    left.iter()
+        .zip(right.iter())
+        .map(|(left, right)| (left ^ right).count_ones())
+        .sum()
+}
+
+/// Search radius in the Virtual_Tile analysis plane.
+///
+/// The source-stage station geometry supplies a measured uncertainty of at
+/// most `FOCUS_MODEL_INLIER_THRESHOLD`; three such sigmas cover its current
+/// geometric uncertainty. Sparse instruments add two standard sampling errors:
+/// `sqrt(overlap_area / count) / sqrt(count)`. The result is converted through
+/// the actual analysis scale and bounded to eight percent of the shorter tile
+/// side (and 96 analysis pixels) so a prior can never turn into an unrestricted
+/// repeated-texture search.
+fn virtual_tile_guided_search_radius(
+    left: &ImageInfo,
+    right: &ImageInfo,
+    predicted_overlap_area: f64,
+    instrument_count: usize,
+) -> f64 {
+    let analysis_scale = left.scale_factor.max(right.scale_factor).max(1.0);
+    let count = instrument_count.max(1) as f64;
+    let sampling_error = (predicted_overlap_area.max(1.0) / count).sqrt() / count.sqrt();
+    let measured_geometry_error = 3.0 * FOCUS_MODEL_INLIER_THRESHOLD / analysis_scale;
+    let dimension_cap = 0.08
+        * f64::from(
+            left.width
+                .min(left.height)
+                .min(right.width.min(right.height)),
+        );
+    (measured_geometry_error + 2.0 * sampling_error).clamp(
+        VIRTUAL_TILE_GUIDED_MIN_SEARCH_RADIUS_PX,
+        VIRTUAL_TILE_GUIDED_MAX_SEARCH_RADIUS_PX
+            .min(dimension_cap.max(VIRTUAL_TILE_GUIDED_MIN_SEARCH_RADIUS_PX)),
+    )
+}
+
+fn virtual_tile_feature_buckets(
+    features: &[Feature],
+    eligible: &[bool],
+    cell_size: f64,
+) -> BTreeMap<(i32, i32), Vec<usize>> {
+    let mut buckets = BTreeMap::<(i32, i32), Vec<usize>>::new();
+    for (index, feature) in features.iter().enumerate() {
+        if !eligible.get(index).copied().unwrap_or(false) {
+            continue;
+        }
+        let key = (
+            (f64::from(feature.keypoint.x) / cell_size).floor() as i32,
+            (f64::from(feature.keypoint.y) / cell_size).floor() as i32,
+        );
+        buckets.entry(key).or_default().push(index);
+    }
+    buckets
+}
+
+#[allow(clippy::too_many_arguments)]
+fn virtual_tile_best_guided_feature(
+    source_index: usize,
+    source_features: &[Feature],
+    target_features: &[Feature],
+    target_buckets: &BTreeMap<(i32, i32), Vec<usize>>,
+    source_gray: &GrayImage,
+    target_gray: &GrayImage,
+    source_coverage: &stitching::CoverageMask,
+    target_coverage: &stitching::CoverageMask,
+    source_to_target: &Matrix3<f64>,
+    search_radius: f64,
+    orientation_observations: &mut Vec<f64>,
+) -> Option<VirtualTileGuidedFeatureMatch> {
+    let source = source_features.get(source_index)?;
+    let projected = transformed_point(
+        source_to_target,
+        Point2::new(f64::from(source.keypoint.x), f64::from(source.keypoint.y)),
+    )?;
+    let center = (
+        (projected.x / search_radius).floor() as i32,
+        (projected.y / search_radius).floor() as i32,
+    );
+    let mut candidates = Vec::<(f64, u32, usize, f64)>::new();
+    for bucket_y in center.1 - 1..=center.1 + 1 {
+        for bucket_x in center.0 - 1..=center.0 + 1 {
+            for &target_index in target_buckets
+                .get(&(bucket_x, bucket_y))
+                .into_iter()
+                .flatten()
+            {
+                let target = &target_features[target_index];
+                let displacement = Point2::new(
+                    f64::from(target.keypoint.x) - projected.x,
+                    f64::from(target.keypoint.y) - projected.y,
+                );
+                if displacement.coords.norm() > search_radius {
+                    continue;
+                }
+                let descriptor_distance =
+                    virtual_tile_descriptor_distance(&source.descriptor, &target.descriptor);
+                if descriptor_distance > VIRTUAL_TILE_GUIDED_MAX_DESCRIPTOR_DISTANCE {
+                    continue;
+                }
+                let Some(structure) = virtual_tile_structural_score(
+                    source_gray,
+                    target_gray,
+                    source_coverage,
+                    target_coverage,
+                    source.keypoint,
+                    target.keypoint,
+                    source_to_target,
+                ) else {
+                    continue;
+                };
+                // The rough station pose is only a search prior. Its local
+                // Jacobian may have the wrong rotation, so pre-fit orientation
+                // is recorded for diagnostics but cannot reject a measured
+                // correspondence. Patch/gradient structure remains evidence.
+                orientation_observations.push(structure.orientation_difference_degrees);
+                if structure.patch_ncc < VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC
+                    || structure.gradient_ncc < VIRTUAL_TILE_GUIDED_MIN_GRADIENT_NCC
+                {
+                    continue;
+                }
+                candidates.push((
+                    structure.rank(descriptor_distance),
+                    descriptor_distance,
+                    target_index,
+                    structure.orientation_difference_degrees,
+                ));
+            }
+        }
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .total_cmp(&left.0)
+            .then_with(|| left.1.cmp(&right.1))
+            .then_with(|| {
+                let left_point = target_features[left.2].keypoint;
+                let right_point = target_features[right.2].keypoint;
+                (left_point.y, left_point.x, left.2).cmp(&(right_point.y, right_point.x, right.2))
+            })
+    });
+    let &(best_rank, best_distance, best_index, orientation_difference_degrees) =
+        candidates.first()?;
+    if let Some(&(second_rank, second_distance, _, _)) = candidates.get(1)
+        && (second_distance == 0
+            || f64::from(best_distance) / f64::from(second_distance) >= VIRTUAL_TILE_GUIDED_RATIO
+            || best_rank - second_rank < VIRTUAL_TILE_GUIDED_MIN_PEAK_MARGIN)
+    {
+        return None;
+    }
+    Some(VirtualTileGuidedFeatureMatch {
+        target_index: best_index,
+        rank: best_rank,
+        orientation_difference_degrees,
+    })
+}
+
+fn virtual_tile_predicted_overlap_bounds(
+    left_to_right: &Matrix3<f64>,
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+) -> Option<(f64, f64, f64, f64)> {
+    let right_to_left = left_to_right.try_inverse()?;
+    let footprint = [
+        Point2::new(0.0, 0.0),
+        Point2::new(f64::from(right_dimensions.0), 0.0),
+        Point2::new(f64::from(right_dimensions.0), f64::from(right_dimensions.1)),
+        Point2::new(0.0, f64::from(right_dimensions.1)),
+    ]
+    .into_iter()
+    .map(|point| transformed_point(&right_to_left, point))
+    .collect::<Option<Vec<_>>>()?;
+    let clipped = clip_polygon_to_rectangle(&footprint, left_dimensions);
+    if clipped.len() < 3 {
+        return None;
+    }
+    let min_x = clipped
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = clipped
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = clipped
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = clipped
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    (min_x.is_finite()
+        && max_x.is_finite()
+        && min_y.is_finite()
+        && max_y.is_finite()
+        && max_x > min_x
+        && max_y > min_y)
+        .then_some((min_x, min_y, max_x, max_y))
+}
+
+fn virtual_tile_overlap_grid_cell(
+    point: Point2<f64>,
+    bounds: (f64, f64, f64, f64),
+) -> (usize, usize) {
+    let (min_x, min_y, max_x, max_y) = bounds;
+    let x = (((point.x - min_x) / (max_x - min_x)) * VIRTUAL_TILE_GUIDED_GRID_COLUMNS as f64)
+        .floor()
+        .clamp(0.0, (VIRTUAL_TILE_GUIDED_GRID_COLUMNS - 1) as f64) as usize;
+    let y = (((point.y - min_y) / (max_y - min_y)) * VIRTUAL_TILE_GUIDED_GRID_ROWS as f64)
+        .floor()
+        .clamp(0.0, (VIRTUAL_TILE_GUIDED_GRID_ROWS - 1) as f64) as usize;
+    (x, y)
+}
+
+#[allow(dead_code)]
+fn virtual_tile_descriptor_guided_station_match(
+    left: usize,
+    right: usize,
+    tiles: &[ImageInfo],
+    coverages: &[stitching::CoverageMask],
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> (
+    Option<MatchInfo>,
+    stack_report::StationRelationCandidateRecord,
+) {
+    let mut diagnostic = stack_report::StationRelationCandidateRecord {
+        left,
+        right,
+        evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
+        grid_probe_count: 0,
+        measurable_patch_count: 0,
+        bidirectional_match_count: 0,
+        occupied_grid_cells: 0,
+        search_radius_px: 0.0,
+        residual_dx_px: Default::default(),
+        residual_dy_px: Default::default(),
+        residual_magnitude_px: Default::default(),
+        max_residual_translation_consensus: 0,
+        residual_translation: Default::default(),
+        residual_affine: Default::default(),
+        residual_projective: Default::default(),
+        residual_model: "not_run".to_string(),
+        fitted_inliers: 0,
+        hull_support: 0.0,
+        median_prefit_structural_orientation_difference_degrees: None,
+        median_fitted_orientation_difference_degrees: None,
+        failure_stage: "missing_input".to_string(),
+    };
+    let Some(left_tile) = tiles.get(left) else {
+        return (None, diagnostic);
+    };
+    let Some(right_tile) = tiles.get(right) else {
+        return (None, diagnostic);
+    };
+    let Some(left_coverage) = coverages.get(left) else {
+        return (None, diagnostic);
+    };
+    let Some(right_coverage) = coverages.get(right) else {
+        return (None, diagnostic);
+    };
+    diagnostic.failure_stage = "missing_initial_pose".to_string();
+    let Some(left_to_world) = initial_homographies.get(&left_tile.id) else {
+        return (None, diagnostic);
+    };
+    let Some(right_to_world) = initial_homographies.get(&right_tile.id) else {
+        return (None, diagnostic);
+    };
+    let Some(world_to_right) = right_to_world.try_inverse() else {
+        return (None, diagnostic);
+    };
+    let left_to_right = world_to_right * left_to_world;
+    let Some(right_to_left) = left_to_right.try_inverse() else {
+        return (None, diagnostic);
+    };
+    diagnostic.failure_stage = "no_predicted_overlap".to_string();
+    let Some(overlap_bounds) = virtual_tile_predicted_overlap_bounds(
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    ) else {
+        return (None, diagnostic);
+    };
+    let Some(predicted_overlap_area) = station_relation_overlap_area(
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+        true,
+    ) else {
+        return (None, diagnostic);
+    };
+
+    let left_eligible = left_tile
+        .features
+        .iter()
+        .map(|feature| {
+            let point = Point2::new(f64::from(feature.keypoint.x), f64::from(feature.keypoint.y));
+            virtual_tile_point_is_covered(left_coverage, point)
+                && transformed_point(&left_to_right, point)
+                    .is_some_and(|mapped| virtual_tile_point_is_covered(right_coverage, mapped))
+        })
+        .collect::<Vec<_>>();
+    let right_eligible = right_tile
+        .features
+        .iter()
+        .map(|feature| {
+            let point = Point2::new(f64::from(feature.keypoint.x), f64::from(feature.keypoint.y));
+            virtual_tile_point_is_covered(right_coverage, point)
+                && transformed_point(&right_to_left, point)
+                    .is_some_and(|mapped| virtual_tile_point_is_covered(left_coverage, mapped))
+        })
+        .collect::<Vec<_>>();
+    let instrument_count = left_eligible
+        .iter()
+        .filter(|&&eligible| eligible)
+        .count()
+        .min(right_eligible.iter().filter(|&&eligible| eligible).count());
+    diagnostic.grid_probe_count = instrument_count;
+    diagnostic.failure_stage = "insufficient_jointly_covered_probes".to_string();
+    if instrument_count < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+
+    let search_radius = virtual_tile_guided_search_radius(
+        left_tile,
+        right_tile,
+        predicted_overlap_area,
+        instrument_count,
+    );
+    diagnostic.search_radius_px = search_radius;
+    let left_buckets =
+        virtual_tile_feature_buckets(&left_tile.features, &left_eligible, search_radius);
+    let right_buckets =
+        virtual_tile_feature_buckets(&right_tile.features, &right_eligible, search_radius);
+    let mut by_cell = BTreeMap::<(usize, usize), Vec<(f64, usize, usize, f64)>>::new();
+    let mut orientation_observations = Vec::new();
+    for (left_index, &eligible) in left_eligible.iter().enumerate() {
+        if !eligible {
+            continue;
+        }
+        let Some(forward) = virtual_tile_best_guided_feature(
+            left_index,
+            &left_tile.features,
+            &right_tile.features,
+            &right_buckets,
+            &left_tile.alignment_image,
+            &right_tile.alignment_image,
+            left_coverage,
+            right_coverage,
+            &left_to_right,
+            search_radius,
+            &mut orientation_observations,
+        ) else {
+            continue;
+        };
+        let mut reverse_orientations = Vec::new();
+        let reverse = virtual_tile_best_guided_feature(
+            forward.target_index,
+            &right_tile.features,
+            &left_tile.features,
+            &left_buckets,
+            &right_tile.alignment_image,
+            &left_tile.alignment_image,
+            right_coverage,
+            left_coverage,
+            &right_to_left,
+            search_radius,
+            &mut reverse_orientations,
+        );
+        orientation_observations.extend(reverse_orientations);
+        if reverse.is_none_or(|reverse| reverse.target_index != left_index) {
+            continue;
+        }
+        let source = left_tile.features[left_index].keypoint;
+        let cell = virtual_tile_overlap_grid_cell(
+            Point2::new(f64::from(source.x), f64::from(source.y)),
+            overlap_bounds,
+        );
+        by_cell.entry(cell).or_default().push((
+            forward.rank,
+            left_index,
+            forward.target_index,
+            forward.orientation_difference_degrees,
+        ));
+    }
+    diagnostic.median_prefit_structural_orientation_difference_degrees =
+        median_value(&mut orientation_observations);
+    diagnostic.bidirectional_match_count = by_cell.values().map(Vec::len).sum();
+    diagnostic.occupied_grid_cells = by_cell.len();
+    diagnostic.failure_stage = "insufficient_bidirectional_match_count".to_string();
+    if diagnostic.bidirectional_match_count < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    diagnostic.failure_stage = "insufficient_grid_coverage".to_string();
+    if diagnostic.occupied_grid_cells < VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS {
+        return (None, diagnostic);
+    }
+
+    for proposals in by_cell.values_mut() {
+        proposals.sort_by(|left, right| {
+            right
+                .0
+                .total_cmp(&left.0)
+                .then_with(|| {
+                    let left_source = left_tile.features[left.1].keypoint;
+                    let right_source = left_tile.features[right.1].keypoint;
+                    (left_source.y, left_source.x).cmp(&(right_source.y, right_source.x))
+                })
+                .then_with(|| {
+                    let left_target = right_tile.features[left.2].keypoint;
+                    let right_target = right_tile.features[right.2].keypoint;
+                    (left_target.y, left_target.x).cmp(&(right_target.y, right_target.x))
+                })
+        });
+        proposals.truncate(VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA);
+    }
+    // Round-robin by quota rank gives RANSAC one observation from every cell
+    // before any repeated structure receives its second slot.
+    let mut selected = Vec::new();
+    for rank in 0..VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA {
+        for proposals in by_cell.values() {
+            if let Some(proposal) = proposals.get(rank) {
+                selected.push(*proposal);
+            }
+        }
+    }
+    diagnostic.failure_stage = "insufficient_matches_after_cell_quota".to_string();
+    if selected.len() < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    let candidate_points = selected
+        .iter()
+        .map(|&(_, left_index, right_index, _)| {
+            let source = left_tile.features[left_index].keypoint;
+            let target = right_tile.features[right_index].keypoint;
+            (
+                Point2::new(f64::from(source.x), f64::from(source.y)),
+                Point2::new(f64::from(target.x), f64::from(target.y)),
+            )
+        })
+        .collect::<Vec<_>>();
+    diagnostic.hull_support = station_relation_spatial_support(
+        &candidate_points,
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    );
+    diagnostic.failure_stage = "insufficient_prefit_hull_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
+        return (None, diagnostic);
+    }
+
+    // The initial pose ends here. RANSAC and its refit receive only measured
+    // fused-pixel correspondences, so the prior can neither become an inlier
+    // nor contribute acceptance evidence.
+    diagnostic.failure_stage = "ransac_no_fit".to_string();
+    let Some((seed_fit, seed_inliers)) =
+        processing::find_homography_ransac_points_stable_with_min_inliers(
+            &candidate_points,
+            STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+            STATION_RELATION_MIN_INLIERS,
+        )
+    else {
+        return (None, diagnostic);
+    };
+    let seed_points = seed_inliers
+        .iter()
+        .map(|&index| candidate_points[index])
+        .collect::<Vec<_>>();
+    let refined = processing::compute_homography(&seed_points).unwrap_or(seed_fit);
+    let refined_inliers = symmetric_inlier_indices(
+        &refined,
+        &candidate_points,
+        STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+    );
+    diagnostic.fitted_inliers = refined_inliers.len();
+    diagnostic.failure_stage = "insufficient_fitted_inliers".to_string();
+    if refined_inliers.len() < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    let points = refined_inliers
+        .iter()
+        .map(|&index| candidate_points[index])
+        .collect::<Vec<_>>();
+    diagnostic.hull_support = station_relation_spatial_support(
+        &points,
+        &refined,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    );
+    diagnostic.failure_stage = "insufficient_fitted_hull_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
+        return (None, diagnostic);
+    }
+
+    // Orientation becomes an acceptance gate only after fused-pixel
+    // correspondences have produced a measured homography. Re-measure every
+    // accepted inlier patch with the fitted local Jacobian; the rough prior is
+    // deliberately absent from this decision.
+    let mut fitted_orientation_observations = refined_inliers
+        .iter()
+        .filter_map(|&index| {
+            let &(_, left_index, right_index, _) = selected.get(index)?;
+            virtual_tile_structural_score(
+                &left_tile.alignment_image,
+                &right_tile.alignment_image,
+                left_coverage,
+                right_coverage,
+                left_tile.features[left_index].keypoint,
+                right_tile.features[right_index].keypoint,
+                &refined,
+            )
+            .map(|score| score.orientation_difference_degrees)
+        })
+        .collect::<Vec<_>>();
+    diagnostic.median_fitted_orientation_difference_degrees =
+        median_value(&mut fitted_orientation_observations);
+    diagnostic.failure_stage = "fitted_orientation_mismatch".to_string();
+    if diagnostic
+        .median_fitted_orientation_difference_degrees
+        .is_some_and(|difference| difference > VIRTUAL_TILE_GUIDED_MAX_LOCAL_ORIENTATION_DEGREES)
+    {
+        return (None, diagnostic);
+    }
+
+    diagnostic.failure_stage = "fitted".to_string();
+    (
+        Some(MatchInfo {
+            homography: refined,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: false,
+            points,
+            candidate_points: Vec::new(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+            canonical_homography: Some(refined),
+        }),
+        diagnostic,
+    )
+}
+
+const VIRTUAL_TILE_DIRECT_PATCH_RADIUS: i32 = 6;
+const VIRTUAL_TILE_DIRECT_GRID_SPACING_PX: f64 = 24.0;
+const VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES: usize = 1_024;
+const VIRTUAL_TILE_DIRECT_MAX_GRID_AXIS: usize = 64;
+const VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX: f64 = 16.0;
+const VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX: f64 = 1.0;
+const VIRTUAL_TILE_DIRECT_PATCH_GATES: registration::PatchMatchGates =
+    registration::PatchMatchGates {
+        min_correlation: VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC,
+        min_peak_margin: VIRTUAL_TILE_GUIDED_MIN_PEAK_MARGIN,
+        min_source_variance: 2.0,
+        min_target_variance: 1.0,
+    };
+
+fn virtual_tile_direct_grid_points(bounds: (f64, f64, f64, f64)) -> Vec<Point2<f64>> {
+    let (min_x, min_y, max_x, max_y) = bounds;
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Vec::new();
+    }
+    let area = width * height;
+    let desired = (area
+        / (VIRTUAL_TILE_DIRECT_GRID_SPACING_PX * VIRTUAL_TILE_DIRECT_GRID_SPACING_PX))
+        .ceil()
+        .clamp(
+            STATION_RELATION_MIN_INLIERS as f64,
+            VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES as f64,
+        ) as usize;
+    let aspect = width / height;
+    let mut columns = ((desired as f64 * aspect).sqrt().round() as usize)
+        .clamp(1, VIRTUAL_TILE_DIRECT_MAX_GRID_AXIS);
+    let mut rows = desired
+        .div_ceil(columns)
+        .clamp(1, VIRTUAL_TILE_DIRECT_MAX_GRID_AXIS);
+    while columns * rows > VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES {
+        if columns >= rows && columns > 1 {
+            columns -= 1;
+        } else if rows > 1 {
+            rows -= 1;
+        } else {
+            break;
+        }
+    }
+    let mut points = Vec::with_capacity(columns * rows);
+    for row in 0..rows {
+        let y = min_y + (row as f64 + 0.5) * height / rows as f64;
+        for column in 0..columns {
+            let x = min_x + (column as f64 + 0.5) * width / columns as f64;
+            points.push(Point2::new(x, y));
+        }
+    }
+    points
+}
+
+fn virtual_tile_coverage_contains_rectangle(
+    coverage: &stitching::CoverageMask,
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+) -> bool {
+    let (width, height) = coverage.dimensions();
+    if ![min_x, min_y, max_x, max_y]
+        .iter()
+        .all(|value| value.is_finite())
+        || min_x < 0.0
+        || min_y < 0.0
+        || max_x >= f64::from(width.saturating_sub(1))
+        || max_y >= f64::from(height.saturating_sub(1))
+        || max_x < min_x
+        || max_y < min_y
+    {
+        return false;
+    }
+    let start_x = min_x.floor() as u32;
+    let end_x = max_x.ceil() as u32;
+    let start_y = min_y.floor() as u32;
+    let end_y = max_y.ceil() as u32;
+    (start_y..=end_y).all(|y| (start_x..=end_x).all(|x| coverage.is_covered(x, y)))
+}
+
+fn virtual_tile_direct_patch_support_is_covered(
+    source_coverage: &stitching::CoverageMask,
+    target_coverage: &stitching::CoverageMask,
+    source_to_target: &Matrix3<f64>,
+    center: Point2<f64>,
+    patch_radius: i32,
+    search_radius: i32,
+) -> bool {
+    let Some(jacobian) = virtual_tile_local_jacobian(source_to_target, center) else {
+        return false;
+    };
+    let scale = (jacobian.column(0).norm() * jacobian.column(1).norm()).sqrt();
+    if !(0.15..6.0).contains(&scale) {
+        return false;
+    }
+    let spacing = scale.recip().max(1.0);
+    // Include one pixel for gradient sampling and another for bilinear access.
+    let source_extent = f64::from(patch_radius) * spacing + 2.0;
+    if !virtual_tile_coverage_contains_rectangle(
+        source_coverage,
+        center.x - source_extent,
+        center.y - source_extent,
+        center.x + source_extent,
+        center.y + source_extent,
+    ) {
+        return false;
+    }
+    let corners = [
+        Point2::new(center.x - source_extent, center.y - source_extent),
+        Point2::new(center.x + source_extent, center.y - source_extent),
+        Point2::new(center.x + source_extent, center.y + source_extent),
+        Point2::new(center.x - source_extent, center.y + source_extent),
+    ];
+    let Some(projected) = corners
+        .into_iter()
+        .map(|point| transformed_point(source_to_target, point))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    let padding = f64::from(search_radius) + 2.0;
+    let min_x = projected
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min)
+        - padding;
+    let max_x = projected
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::NEG_INFINITY, f64::max)
+        + padding;
+    let min_y = projected
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min)
+        - padding;
+    let max_y = projected
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max)
+        + padding;
+    virtual_tile_coverage_contains_rectangle(target_coverage, min_x, min_y, max_x, max_y)
+}
+
+fn virtual_tile_round_trip_is_consistent(source: Point2<f64>, returned: Point2<f64>) -> bool {
+    let distance = (returned - source).norm();
+    distance.is_finite() && distance <= VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX
+}
+
+/// Invert the *measured* local forward map, not merely the rough station prior.
+///
+/// `probe_warped_patch` returns `target = H_initial(source) + residual` in the
+/// target tile's coordinates. The corresponding local forward homography is
+/// therefore `T(residual) * H_initial`; its inverse is the only transform whose
+/// source/target convention maps that measured target back to the original
+/// source. Using `H_initial.inverse()` here incorrectly asks the reverse probe
+/// to rediscover the already measured residual and made valid pairs depend on
+/// which station happened to be the source (任务 10 checkpoint).
+fn virtual_tile_measured_reverse_transform(
+    initial_source_to_target: &Matrix3<f64>,
+    source: Point2<f64>,
+    measured_target: Point2<f64>,
+) -> Option<Matrix3<f64>> {
+    let predicted_target = transformed_point(initial_source_to_target, source)?;
+    let residual = measured_target - predicted_target;
+    if !residual.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    let residual_translation =
+        Matrix3::new(1.0, 0.0, residual.x, 0.0, 1.0, residual.y, 0.0, 0.0, 1.0);
+    (residual_translation * initial_source_to_target).try_inverse()
+}
+
+const VIRTUAL_TILE_DIRECT_MAX_NON_TRANSLATION_RESIDUAL_PX: f64 = 8.0;
+const VIRTUAL_TILE_DIRECT_MAX_RESIDUAL_DISPLACEMENT_PX: f64 = 24.0;
+const VIRTUAL_TILE_DIRECT_RESIDUAL_SCALE_MIN: f64 = 0.98;
+const VIRTUAL_TILE_DIRECT_RESIDUAL_SCALE_MAX: f64 = 1.02;
+
+#[derive(Debug, Clone)]
+struct VirtualTileResidualFit {
+    measured_homography: Matrix3<f64>,
+    inlier_indices: Vec<usize>,
+    median_error_px: f64,
+    spatial_support: f64,
+    model: &'static str,
+}
+
+fn residual_distribution(mut values: Vec<f64>) -> stack_report::ResidualDistributionRecord {
+    values.retain(|value| value.is_finite());
+    values.sort_by(f64::total_cmp);
+    if values.is_empty() {
+        return Default::default();
+    }
+    let at = |quantile: f64| {
+        let index = ((values.len() - 1) as f64 * quantile).round() as usize;
+        values[index]
+    };
+    stack_report::ResidualDistributionRecord {
+        count: values.len(),
+        min: values[0],
+        p10: at(0.10),
+        median: at(0.50),
+        p90: at(0.90),
+        max: values[values.len() - 1],
+    }
+}
+
+fn virtual_tile_measured_residuals(
+    points: &[(Point2<f64>, Point2<f64>)],
+    initial: &Matrix3<f64>,
+) -> Vec<(usize, nalgebra::Vector2<f64>)> {
+    points
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (source, target))| {
+            let predicted = transformed_point(initial, *source)?;
+            let residual = target - predicted;
+            residual
+                .iter()
+                .all(|value| value.is_finite())
+                .then_some((index, residual))
+        })
+        .collect()
+}
+
+fn virtual_tile_residual_candidate(
+    correction: &Matrix3<f64>,
+    initial: &Matrix3<f64>,
+    measured_points: &[(Point2<f64>, Point2<f64>)],
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+    model: &'static str,
+) -> Option<VirtualTileResidualFit> {
+    // Both matrices map left -> right, so a correction measured in right-tile
+    // coordinates composes on the left: H_measured = H_residual * H_initial.
+    let measured_homography = correction * initial;
+    let inlier_indices = symmetric_inlier_indices(
+        &measured_homography,
+        measured_points,
+        STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+    );
+    let inlier_points = inlier_indices
+        .iter()
+        .map(|&index| measured_points[index])
+        .collect::<Vec<_>>();
+    let median_error_px = median_symmetric_error(&measured_homography, &inlier_points);
+    let spatial_support = station_relation_spatial_support(
+        &inlier_points,
+        &measured_homography,
+        left_dimensions,
+        right_dimensions,
+    );
+    Some(VirtualTileResidualFit {
+        measured_homography,
+        inlier_indices,
+        median_error_px,
+        spatial_support,
+        model,
+    })
+}
+
+fn virtual_tile_residual_fit_is_better(
+    candidate: &VirtualTileResidualFit,
+    current: &VirtualTileResidualFit,
+) -> bool {
+    candidate.inlier_indices.len() > current.inlier_indices.len()
+        || (candidate.inlier_indices.len() == current.inlier_indices.len()
+            && (candidate.median_error_px < current.median_error_px
+                || (candidate.median_error_px == current.median_error_px
+                    && candidate
+                        .measured_homography
+                        .iter()
+                        .map(|value| value.to_bits())
+                        .cmp(
+                            current
+                                .measured_homography
+                                .iter()
+                                .map(|value| value.to_bits()),
+                        )
+                        .is_lt())))
+}
+
+fn virtual_tile_residual_correction_is_bounded(
+    correction: &Matrix3<f64>,
+    initial: &Matrix3<f64>,
+    left_dimensions: (u32, u32),
+) -> bool {
+    let (width, height) = (f64::from(left_dimensions.0), f64::from(left_dimensions.1));
+    let source_samples = [
+        Point2::new(0.0, 0.0),
+        Point2::new(width, 0.0),
+        Point2::new(width, height),
+        Point2::new(0.0, height),
+        Point2::new(width * 0.5, height * 0.5),
+    ];
+    let Some(displacements) = source_samples
+        .into_iter()
+        .map(|source| {
+            let predicted = transformed_point(initial, source)?;
+            let corrected = transformed_point(correction, predicted)?;
+            Some(corrected - predicted)
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    let center = displacements[4];
+    displacements.iter().all(|displacement| {
+        displacement.norm() <= VIRTUAL_TILE_DIRECT_MAX_RESIDUAL_DISPLACEMENT_PX
+            && (*displacement - center).norm()
+                <= VIRTUAL_TILE_DIRECT_MAX_NON_TRANSLATION_RESIDUAL_PX
+    }) && homography_scale_ratio(correction).is_some_and(|scale| {
+        (VIRTUAL_TILE_DIRECT_RESIDUAL_SCALE_MIN..=VIRTUAL_TILE_DIRECT_RESIDUAL_SCALE_MAX)
+            .contains(&scale)
+    })
+}
+
+fn virtual_tile_robust_translation_residual(
+    measured_points: &[(Point2<f64>, Point2<f64>)],
+    initial: &Matrix3<f64>,
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+) -> Option<VirtualTileResidualFit> {
+    let residuals = virtual_tile_measured_residuals(measured_points, initial);
+    let mut hypotheses = residuals
+        .iter()
+        .map(|(_, residual)| *residual)
+        .collect::<Vec<_>>();
+    hypotheses.sort_by(|left, right| {
+        left.x
+            .total_cmp(&right.x)
+            .then_with(|| left.y.total_cmp(&right.y))
+    });
+    hypotheses.dedup_by(|left, right| left.x == right.x && left.y == right.y);
+
+    let mut best = None::<VirtualTileResidualFit>;
+    for residual in hypotheses {
+        let correction = Matrix3::new(1.0, 0.0, residual.x, 0.0, 1.0, residual.y, 0.0, 0.0, 1.0);
+        let candidate = virtual_tile_residual_candidate(
+            &correction,
+            initial,
+            measured_points,
+            left_dimensions,
+            right_dimensions,
+            "translation",
+        )?;
+        if best
+            .as_ref()
+            .is_none_or(|current| virtual_tile_residual_fit_is_better(&candidate, current))
+        {
+            best = Some(candidate);
+        }
+    }
+
+    let best = best?;
+    let best_indices = best.inlier_indices.iter().copied().collect::<HashSet<_>>();
+    let mut dx = residuals
+        .iter()
+        .filter(|(index, _)| best_indices.contains(index))
+        .map(|(_, residual)| residual.x)
+        .collect::<Vec<_>>();
+    let mut dy = residuals
+        .iter()
+        .filter(|(index, _)| best_indices.contains(index))
+        .map(|(_, residual)| residual.y)
+        .collect::<Vec<_>>();
+    dx.sort_by(f64::total_cmp);
+    dy.sort_by(f64::total_cmp);
+    if dx.is_empty() || dy.is_empty() {
+        return Some(best);
+    }
+    let correction = Matrix3::new(
+        1.0,
+        0.0,
+        dx[dx.len() / 2],
+        0.0,
+        1.0,
+        dy[dy.len() / 2],
+        0.0,
+        0.0,
+        1.0,
+    );
+    let refined = virtual_tile_residual_candidate(
+        &correction,
+        initial,
+        measured_points,
+        left_dimensions,
+        right_dimensions,
+        "translation",
+    )?;
+    if virtual_tile_residual_fit_is_better(&refined, &best) {
+        Some(refined)
+    } else {
+        Some(best)
+    }
+}
+
+fn virtual_tile_refit_residual_affine(
+    seed: Matrix3<f64>,
+    residual_points: &[(Point2<f64>, Point2<f64>)],
+    measured_points: &[(Point2<f64>, Point2<f64>)],
+    initial: &Matrix3<f64>,
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+) -> Option<VirtualTileResidualFit> {
+    let mut correction = seed;
+    let mut fit = virtual_tile_residual_candidate(
+        &correction,
+        initial,
+        measured_points,
+        left_dimensions,
+        right_dimensions,
+        "affine",
+    )?;
+    for _ in 0..2 {
+        let points = fit
+            .inlier_indices
+            .iter()
+            .map(|&index| residual_points[index])
+            .collect::<Vec<_>>();
+        let Some(refitted) = estimate_affine(&points) else {
+            break;
+        };
+        if !virtual_tile_residual_correction_is_bounded(&refitted, initial, left_dimensions) {
+            break;
+        }
+        correction = refitted;
+        fit = virtual_tile_residual_candidate(
+            &correction,
+            initial,
+            measured_points,
+            left_dimensions,
+            right_dimensions,
+            "affine",
+        )?;
+    }
+    virtual_tile_residual_correction_is_bounded(&correction, initial, left_dimensions)
+        .then_some(fit)
+}
+
+#[derive(Debug)]
+struct VirtualTileResidualModelOutcome {
+    fit: Option<VirtualTileResidualFit>,
+    max_translation_consensus: usize,
+    translation: stack_report::ResidualModelStageRecord,
+    affine: stack_report::ResidualModelStageRecord,
+    projective: stack_report::ResidualModelStageRecord,
+}
+
+fn residual_model_stage(
+    fit: Option<&VirtualTileResidualFit>,
+    bounded_correction: Option<bool>,
+) -> stack_report::ResidualModelStageRecord {
+    let candidate_inliers = fit.map_or(0, |fit| fit.inlier_indices.len());
+    let final_support = fit.map_or(0.0, |fit| fit.spatial_support);
+    let rejection_reason = if bounded_correction == Some(false) {
+        "correction_out_of_bounds"
+    } else if fit.is_none() {
+        "no_fit"
+    } else if candidate_inliers < STATION_RELATION_MIN_INLIERS {
+        "insufficient_inliers"
+    } else if final_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
+        "insufficient_support"
+    } else {
+        "accepted"
+    };
+    stack_report::ResidualModelStageRecord {
+        candidate_inliers,
+        final_support,
+        bounded_correction,
+        rejection_reason: rejection_reason.to_string(),
+    }
+}
+
+fn residual_model_not_run_stage() -> stack_report::ResidualModelStageRecord {
+    stack_report::ResidualModelStageRecord {
+        rejection_reason: "not_run".to_string(),
+        ..Default::default()
+    }
+}
+
+fn virtual_tile_fit_measured_residual_model(
+    measured_points: &[(Point2<f64>, Point2<f64>)],
+    initial: &Matrix3<f64>,
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+) -> VirtualTileResidualModelOutcome {
+    let translation = virtual_tile_robust_translation_residual(
+        measured_points,
+        initial,
+        left_dimensions,
+        right_dimensions,
+    );
+    let max_translation_consensus = translation
+        .as_ref()
+        .map_or(0, |fit| fit.inlier_indices.len());
+    let translation_correction = translation.as_ref().and_then(|fit| {
+        initial
+            .try_inverse()
+            .map(|initial_inverse| fit.measured_homography * initial_inverse)
+    });
+    let translation_bounded = translation_correction.as_ref().map(|correction| {
+        virtual_tile_residual_correction_is_bounded(correction, initial, left_dimensions)
+    });
+    let translation_stage = residual_model_stage(translation.as_ref(), translation_bounded);
+    if translation_stage.rejection_reason == "accepted" {
+        return VirtualTileResidualModelOutcome {
+            fit: translation,
+            max_translation_consensus,
+            translation: translation_stage,
+            affine: residual_model_not_run_stage(),
+            projective: residual_model_not_run_stage(),
+        };
+    }
+
+    // Escalate model complexity only when the lower-DOF correction cannot pass
+    // the unchanged inlier/support/bounds gates. The fit uses predicted target
+    // points as coordinates, but every accepted inlier is recomputed from the
+    // original measured source/target pair under H_residual * H_initial.
+    let mut indexed_residual_points = measured_points
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (source, target))| {
+            transformed_point(initial, *source).map(|predicted| (index, predicted, *target))
+        })
+        .collect::<Vec<_>>();
+    indexed_residual_points.sort_by(|left, right| {
+        left.1
+            .y
+            .total_cmp(&right.1.y)
+            .then_with(|| left.1.x.total_cmp(&right.1.x))
+            .then_with(|| left.2.y.total_cmp(&right.2.y))
+            .then_with(|| left.2.x.total_cmp(&right.2.x))
+    });
+    let sorted_pairs = indexed_residual_points
+        .iter()
+        .map(|(_, predicted, target)| (*predicted, *target))
+        .collect::<Vec<_>>();
+    let residual_points = measured_points
+        .iter()
+        .map(|(source, target)| {
+            (
+                transformed_point(initial, *source).unwrap_or(*source),
+                *target,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let affine_seed =
+        robust_transform_fit(&sorted_pairs, 3, 0xD1EC_7A11_AFF1_4E01, estimate_affine);
+    let affine_seed_bounded = affine_seed.as_ref().map(|seed| {
+        virtual_tile_residual_correction_is_bounded(&seed.transform, initial, left_dimensions)
+    });
+    let affine = affine_seed
+        .filter(|_| affine_seed_bounded == Some(true))
+        .and_then(|seed| {
+            virtual_tile_refit_residual_affine(
+                seed.transform,
+                &residual_points,
+                measured_points,
+                initial,
+                left_dimensions,
+                right_dimensions,
+            )
+        });
+    let affine_bounded = affine
+        .as_ref()
+        .map(|fit| {
+            initial.try_inverse().is_some_and(|initial_inverse| {
+                let correction = fit.measured_homography * initial_inverse;
+                virtual_tile_residual_correction_is_bounded(&correction, initial, left_dimensions)
+            })
+        })
+        .or(affine_seed_bounded);
+    let affine_stage = residual_model_stage(affine.as_ref(), affine_bounded);
+    if affine_stage.rejection_reason == "accepted" {
+        return VirtualTileResidualModelOutcome {
+            fit: affine,
+            max_translation_consensus,
+            translation: translation_stage,
+            affine: affine_stage,
+            projective: residual_model_not_run_stage(),
+        };
+    }
+
+    let projective_seed = processing::find_homography_ransac_points_stable_with_min_inliers(
+        &sorted_pairs,
+        STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+        STATION_RELATION_MIN_INLIERS,
+    );
+    let projective_correction = projective_seed.as_ref().map(|(seed, seed_inliers)| {
+        let seed_points = seed_inliers
+            .iter()
+            .map(|&index| sorted_pairs[index])
+            .collect::<Vec<_>>();
+        processing::compute_homography(&seed_points).unwrap_or(*seed)
+    });
+    let projective_bounded = projective_correction.as_ref().map(|correction| {
+        virtual_tile_residual_correction_is_bounded(correction, initial, left_dimensions)
+    });
+    let projective = projective_correction
+        .filter(|_| projective_bounded == Some(true))
+        .and_then(|correction| {
+            virtual_tile_residual_candidate(
+                &correction,
+                initial,
+                measured_points,
+                left_dimensions,
+                right_dimensions,
+                "small_projective",
+            )
+        });
+    let projective_stage = residual_model_stage(projective.as_ref(), projective_bounded);
+    let fit = (projective_stage.rejection_reason == "accepted")
+        .then_some(projective)
+        .flatten();
+    VirtualTileResidualModelOutcome {
+        fit,
+        max_translation_consensus,
+        translation: translation_stage,
+        affine: affine_stage,
+        projective: projective_stage,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn virtual_tile_direct_station_match(
+    left: usize,
+    right: usize,
+    tiles: &[ImageInfo],
+    coverages: &[stitching::CoverageMask],
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> (
+    Option<MatchInfo>,
+    stack_report::StationRelationCandidateRecord,
+) {
+    let mut diagnostic = stack_report::StationRelationCandidateRecord {
+        left,
+        right,
+        evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
+        grid_probe_count: 0,
+        measurable_patch_count: 0,
+        bidirectional_match_count: 0,
+        occupied_grid_cells: 0,
+        search_radius_px: 0.0,
+        residual_dx_px: Default::default(),
+        residual_dy_px: Default::default(),
+        residual_magnitude_px: Default::default(),
+        max_residual_translation_consensus: 0,
+        residual_translation: Default::default(),
+        residual_affine: Default::default(),
+        residual_projective: Default::default(),
+        residual_model: "not_run".to_string(),
+        fitted_inliers: 0,
+        hull_support: 0.0,
+        median_prefit_structural_orientation_difference_degrees: None,
+        median_fitted_orientation_difference_degrees: None,
+        failure_stage: "missing_input".to_string(),
+    };
+    let (Some(left_tile), Some(right_tile), Some(left_coverage), Some(right_coverage)) = (
+        tiles.get(left),
+        tiles.get(right),
+        coverages.get(left),
+        coverages.get(right),
+    ) else {
+        return (None, diagnostic);
+    };
+    diagnostic.failure_stage = "missing_initial_pose".to_string();
+    let (Some(left_to_world), Some(right_to_world)) = (
+        initial_homographies.get(&left_tile.id),
+        initial_homographies.get(&right_tile.id),
+    ) else {
+        return (None, diagnostic);
+    };
+    let Some(world_to_right) = right_to_world.try_inverse() else {
+        return (None, diagnostic);
+    };
+    let left_to_right = world_to_right * left_to_world;
+    if left_to_right.try_inverse().is_none() {
+        return (None, diagnostic);
+    }
+    diagnostic.failure_stage = "no_predicted_overlap".to_string();
+    let Some(overlap_bounds) = virtual_tile_predicted_overlap_bounds(
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    ) else {
+        return (None, diagnostic);
+    };
+    let Some(predicted_overlap_area) = station_relation_overlap_area(
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+        true,
+    ) else {
+        return (None, diagnostic);
+    };
+    let grid = virtual_tile_direct_grid_points(overlap_bounds);
+    diagnostic.grid_probe_count = grid.len();
+    diagnostic.failure_stage = "insufficient_grid_probes".to_string();
+    if grid.len() < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    let search_radius = virtual_tile_guided_search_radius(
+        left_tile,
+        right_tile,
+        predicted_overlap_area,
+        grid.len(),
+    )
+    .min(VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX)
+    .ceil() as i32;
+    diagnostic.search_radius_px = f64::from(search_radius);
+
+    let mut by_cell = BTreeMap::<(usize, usize), Vec<(f64, Point2<f64>, Point2<f64>, f64)>>::new();
+    let mut prefit_orientations = Vec::new();
+    for source in grid {
+        if !virtual_tile_direct_patch_support_is_covered(
+            left_coverage,
+            right_coverage,
+            &left_to_right,
+            source,
+            VIRTUAL_TILE_DIRECT_PATCH_RADIUS,
+            search_radius,
+        ) {
+            continue;
+        }
+        let forward_probe = registration::probe_warped_patch(
+            &left_tile.alignment_image,
+            &right_tile.alignment_image,
+            &left_to_right,
+            source,
+            VIRTUAL_TILE_DIRECT_PATCH_RADIUS,
+            search_radius,
+            VIRTUAL_TILE_DIRECT_PATCH_GATES,
+        );
+        if forward_probe.best_correlation.is_some() {
+            diagnostic.measurable_patch_count += 1;
+        }
+        let Some(forward) = forward_probe.matched else {
+            continue;
+        };
+        let Some(structure) = virtual_tile_structural_score_points(
+            &left_tile.alignment_image,
+            &right_tile.alignment_image,
+            left_coverage,
+            right_coverage,
+            source,
+            forward.target,
+            &left_to_right,
+        ) else {
+            continue;
+        };
+        prefit_orientations.push(structure.orientation_difference_degrees);
+        if structure.patch_ncc < VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC
+            || structure.gradient_ncc < VIRTUAL_TILE_GUIDED_MIN_GRADIENT_NCC
+        {
+            continue;
+        }
+        let Some(measured_right_to_left) =
+            virtual_tile_measured_reverse_transform(&left_to_right, source, forward.target)
+        else {
+            continue;
+        };
+        if !virtual_tile_direct_patch_support_is_covered(
+            right_coverage,
+            left_coverage,
+            &measured_right_to_left,
+            forward.target,
+            VIRTUAL_TILE_DIRECT_PATCH_RADIUS,
+            search_radius,
+        ) {
+            continue;
+        }
+        let reverse_probe = registration::probe_warped_patch(
+            &right_tile.alignment_image,
+            &left_tile.alignment_image,
+            &measured_right_to_left,
+            forward.target,
+            VIRTUAL_TILE_DIRECT_PATCH_RADIUS,
+            search_radius,
+            VIRTUAL_TILE_DIRECT_PATCH_GATES,
+        );
+        let Some(reverse) = reverse_probe.matched else {
+            continue;
+        };
+        if !virtual_tile_round_trip_is_consistent(source, reverse.target) {
+            continue;
+        }
+        diagnostic.bidirectional_match_count += 1;
+        let cell = virtual_tile_overlap_grid_cell(source, overlap_bounds);
+        let rank = structure.patch_ncc + 0.5 * structure.gradient_ncc
+            - 0.05 * (reverse.target - source).norm();
+        by_cell.entry(cell).or_default().push((
+            rank,
+            source,
+            forward.target,
+            structure.orientation_difference_degrees,
+        ));
+    }
+    diagnostic.median_prefit_structural_orientation_difference_degrees =
+        median_value(&mut prefit_orientations);
+    diagnostic.occupied_grid_cells = by_cell.len();
+    diagnostic.failure_stage = "insufficient_measurable_patches".to_string();
+    if diagnostic.measurable_patch_count < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    diagnostic.failure_stage = "insufficient_bidirectional_matches".to_string();
+    if diagnostic.bidirectional_match_count < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    diagnostic.failure_stage = "insufficient_grid_coverage".to_string();
+    if diagnostic.occupied_grid_cells < VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS {
+        return (None, diagnostic);
+    }
+
+    // Rank locally, but do not discard candidates before finding a globally
+    // coherent residual model. Repeated artwork can give every cell a strong
+    // yet different local peak; truncating each cell first made those modes
+    // indistinguishable to RANSAC. The strict measured model selects one mode,
+    // then the per-cell quota only limits its already verified inliers.
+    for proposals in by_cell.values_mut() {
+        proposals.sort_by(|left, right| {
+            right
+                .0
+                .total_cmp(&left.0)
+                .then_with(|| left.1.y.total_cmp(&right.1.y))
+                .then_with(|| left.1.x.total_cmp(&right.1.x))
+                .then_with(|| left.2.y.total_cmp(&right.2.y))
+                .then_with(|| left.2.x.total_cmp(&right.2.x))
+        });
+    }
+    let maximum_cell_candidates = by_cell.values().map(Vec::len).max().unwrap_or(0);
+    let mut all_selected = Vec::with_capacity(diagnostic.bidirectional_match_count);
+    for rank in 0..maximum_cell_candidates {
+        for (&cell, proposals) in &by_cell {
+            if let Some(proposal) = proposals.get(rank) {
+                all_selected.push((cell, *proposal));
+            }
+        }
+    }
+    let candidate_points = all_selected
+        .iter()
+        .map(|(_, (_, source, target, _))| (*source, *target))
+        .collect::<Vec<_>>();
+    diagnostic.hull_support = station_relation_spatial_support(
+        &candidate_points,
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    );
+    diagnostic.failure_stage = "insufficient_prefit_hull_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
+        return (None, diagnostic);
+    }
+
+    let measured_residuals = virtual_tile_measured_residuals(&candidate_points, &left_to_right);
+    diagnostic.residual_dx_px = residual_distribution(
+        measured_residuals
+            .iter()
+            .map(|(_, residual)| residual.x)
+            .collect(),
+    );
+    diagnostic.residual_dy_px = residual_distribution(
+        measured_residuals
+            .iter()
+            .map(|(_, residual)| residual.y)
+            .collect(),
+    );
+    diagnostic.residual_magnitude_px = residual_distribution(
+        measured_residuals
+            .iter()
+            .map(|(_, residual)| residual.norm())
+            .collect(),
+    );
+
+    diagnostic.failure_stage = "residual_model_no_fit".to_string();
+    let model = virtual_tile_fit_measured_residual_model(
+        &candidate_points,
+        &left_to_right,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    );
+    diagnostic.max_residual_translation_consensus = model.max_translation_consensus;
+    diagnostic.residual_translation = model.translation.clone();
+    diagnostic.residual_affine = model.affine.clone();
+    diagnostic.residual_projective = model.projective.clone();
+    let Some(fit) = model.fit else {
+        return (None, diagnostic);
+    };
+    diagnostic.residual_model = fit.model.to_string();
+    let refined = fit.measured_homography;
+
+    let fitted_indices = fit.inlier_indices.into_iter().collect::<HashSet<_>>();
+    let mut fitted_by_cell =
+        BTreeMap::<(usize, usize), Vec<(f64, Point2<f64>, Point2<f64>, f64)>>::new();
+    for (index, (cell, proposal)) in all_selected.into_iter().enumerate() {
+        if fitted_indices.contains(&index) {
+            fitted_by_cell.entry(cell).or_default().push(proposal);
+        }
+    }
+    for proposals in fitted_by_cell.values_mut() {
+        proposals.truncate(VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA);
+    }
+    let mut selected = Vec::new();
+    for rank in 0..VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA {
+        for proposals in fitted_by_cell.values() {
+            if let Some(proposal) = proposals.get(rank) {
+                selected.push(*proposal);
+            }
+        }
+    }
+    diagnostic.failure_stage = "insufficient_matches_after_model_quota".to_string();
+    if selected.len() < STATION_RELATION_MIN_INLIERS {
+        return (None, diagnostic);
+    }
+    let points = selected
+        .iter()
+        .map(|&(_, source, target, _)| (source, target))
+        .collect::<Vec<_>>();
+    diagnostic.fitted_inliers = points.len();
+    diagnostic.hull_support = station_relation_spatial_support(
+        &points,
+        &refined,
+        left_tile.dimensions(),
+        right_tile.dimensions(),
+    );
+    diagnostic.failure_stage = "insufficient_fitted_hull_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
+        return (None, diagnostic);
+    }
+
+    let mut fitted_orientations = selected
+        .iter()
+        .filter_map(|&(_, source, target, _)| {
+            virtual_tile_structural_score_points(
+                &left_tile.alignment_image,
+                &right_tile.alignment_image,
+                left_coverage,
+                right_coverage,
+                source,
+                target,
+                &refined,
+            )
+            .map(|score| score.orientation_difference_degrees)
+        })
+        .collect::<Vec<_>>();
+    diagnostic.median_fitted_orientation_difference_degrees =
+        median_value(&mut fitted_orientations);
+    diagnostic.failure_stage = "fitted_orientation_mismatch".to_string();
+    if diagnostic
+        .median_fitted_orientation_difference_degrees
+        .is_some_and(|difference| difference > VIRTUAL_TILE_GUIDED_MAX_LOCAL_ORIENTATION_DEGREES)
+    {
+        return (None, diagnostic);
+    }
+
+    diagnostic.failure_stage = "fitted".to_string();
+    (
+        Some(MatchInfo {
+            homography: refined,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: false,
+            points,
+            candidate_points: Vec::new(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+            canonical_homography: Some(refined),
+        }),
+        diagnostic,
+    )
+}
+
+/// Fit station relations directly from focus-fused Virtual_Tiles. The topology
+/// controls deterministic attempt order and budget. Initial poses select the
+/// jointly covered grid and predict bounded target search centres only; every
+/// returned point and fitted model is measured directly from fused tile pixels.
+fn virtual_tile_station_match_outcome(
+    tiles: &[ImageInfo],
+    coverages: &[stitching::CoverageMask],
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    station_topology: &topology::StationTopology,
+) -> VirtualTileStationMatchOutcome {
+    let mut relations = HashMap::new();
+    let mut diagnostics = Vec::with_capacity(station_topology.candidates.len());
+    for candidate in &station_topology.candidates {
+        let (left, right) = (candidate.left, candidate.right);
+        let (relation, diagnostic) =
+            virtual_tile_direct_station_match(left, right, tiles, coverages, initial_homographies);
+        println!(
+            "  - Virtual_Tile candidate {left}->{right}: grid_probes={} measurable={} bidirectional={} cells={} radius={:.1}px residual_dx=[{:.2},{:.2},{:.2}] residual_dy=[{:.2},{:.2},{:.2}] residual_mag=[{:.2},{:.2},{:.2}] translation={}/{:.4}/{:?}/{} affine={}/{:.4}/{:?}/{} projective={}/{:.4}/{:?}/{} residual_model={} fit_inliers={} support={:.4} prefit_structural_orientation={} fitted_orientation={} stage={}",
+            diagnostic.grid_probe_count,
+            diagnostic.measurable_patch_count,
+            diagnostic.bidirectional_match_count,
+            diagnostic.occupied_grid_cells,
+            diagnostic.search_radius_px,
+            diagnostic.residual_dx_px.p10,
+            diagnostic.residual_dx_px.median,
+            diagnostic.residual_dx_px.p90,
+            diagnostic.residual_dy_px.p10,
+            diagnostic.residual_dy_px.median,
+            diagnostic.residual_dy_px.p90,
+            diagnostic.residual_magnitude_px.p10,
+            diagnostic.residual_magnitude_px.median,
+            diagnostic.residual_magnitude_px.p90,
+            diagnostic.residual_translation.candidate_inliers,
+            diagnostic.residual_translation.final_support,
+            diagnostic.residual_translation.bounded_correction,
+            diagnostic.residual_translation.rejection_reason,
+            diagnostic.residual_affine.candidate_inliers,
+            diagnostic.residual_affine.final_support,
+            diagnostic.residual_affine.bounded_correction,
+            diagnostic.residual_affine.rejection_reason,
+            diagnostic.residual_projective.candidate_inliers,
+            diagnostic.residual_projective.final_support,
+            diagnostic.residual_projective.bounded_correction,
+            diagnostic.residual_projective.rejection_reason,
+            diagnostic.residual_model,
+            diagnostic.fitted_inliers,
+            diagnostic.hull_support,
+            diagnostic
+                .median_prefit_structural_orientation_difference_degrees
+                .map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}deg")),
+            diagnostic
+                .median_fitted_orientation_difference_degrees
+                .map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}deg")),
+            diagnostic.failure_stage,
+        );
+        diagnostics.push(diagnostic);
+        if let Some(relation) = relation {
+            relations.insert((left, right), relation);
+        }
+    }
+    VirtualTileStationMatchOutcome {
+        relations,
+        diagnostics,
+    }
+}
+
+fn virtual_tile_station_matches(
+    tiles: &[ImageInfo],
+    coverages: &[stitching::CoverageMask],
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    station_topology: &topology::StationTopology,
+) -> HashMap<(usize, usize), MatchInfo> {
+    virtual_tile_station_match_outcome(tiles, coverages, initial_homographies, station_topology)
+        .relations
+}
+
+fn single_layer_station_evidence_discard(
+    independent_support: usize,
+    left_station: usize,
+    right_station: usize,
+) -> Option<serde_json::Value> {
+    (independent_support < 2).then(|| {
+        serde_json::json!({
+            "count": 1,
+            "stations": [left_station, right_station],
+            "independent_support": independent_support,
+        })
+    })
+}
+
+/// Total, content-only ordering key of a station relation candidate.
+///
+/// Two focus layer relations of the same station pair can measure the same
+/// quality and the same support; the bit pattern of the relation they propose is
+/// then the only thing left that still comes from the measurement rather than
+/// from the import order (需求 14.6).
+fn focus_group_candidate_key(candidate: &FocusGroupEdgeCandidate) -> [u64; 9] {
+    let mut key = [0u64; 9];
+    for (slot, value) in key.iter_mut().zip(candidate.transform.iter()) {
+        *slot = value.to_bits();
+    }
+    key
 }
 
 fn focus_transform_disagreement_px(
@@ -9911,24 +13881,60 @@ fn focus_transform_disagreement_px(
     median_value(&mut errors)
 }
 
+/// Median Sharpness_Score over the valid pixels of one Source_RAW (需求 2.1).
+///
+/// Measured on the already prepared analysis image, resampled to the
+/// Intra_Station analysis budget of 需求 2.2 so the number is a property of the
+/// photograph rather than of whichever alignment budget the run happened to
+/// pick.  The score is still the unbounded acutance ratio; task 7.6 normalises
+/// it monotonically, which cannot change which frame is sharpest.
+fn focus_frame_median_sharpness(image: &ImageInfo) -> f64 {
+    let analysis = &image.alignment_image;
+    let (width, height) = (analysis.width(), analysis.height());
+    let spacing = intra_station::analysis_probe_spacing(width.max(height));
+    intra_station::median_valid_sharpness(width, height, |x, y| {
+        crate::panorama_utils::mosaic::gray_analysis_sharpness(analysis, x, y, spacing)
+    })
+}
+
 fn focus_capture_groups(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
     locked_homographies: &HashMap<usize, Matrix3<f64>>,
 ) -> Option<(Vec<FocusCaptureGroup>, Vec<usize>)> {
+    focus_capture_groups_with_grouping(images, matches, locked_homographies)
+        .map(|(groups, group_for_image, _)| (groups, group_for_image))
+}
+
+/// [`focus_capture_groups`] together with everything the Stack_Report needs to
+/// carry about the grouping decision (需求 1.4 / 1.6 / 1.7 / 1.10).
+fn focus_capture_groups_with_grouping(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    locked_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> Option<(Vec<FocusCaptureGroup>, Vec<usize>, StationGroupingOutcome)> {
     // Direct local links already provide the strongest station membership
     // evidence.  Keep those components intact and use solved world centres
     // only to attach a weak/unmatched layer.  The previous implementation
     // sorted each connected component by filename before splitting it; a
     // renamed or shuffled import therefore changed the station count even
     // though every geometric match was identical.
-    let mut components = focus_local_bracket_components(images, matches);
+    let grouping = focus_station_grouping(images, matches);
+    let mut components = grouping.components.clone();
     let mut assigned = components
         .iter()
         .flat_map(|component| component.iter().copied())
         .collect::<HashSet<_>>();
+    // 需求 1.6: a source that satisfies the 需求 1.1 overlap evidence with no
+    // other source is isolated.  It joins no Capture_Station at all — not even
+    // by its solved world centre, which is only as trustworthy as the pose the
+    // missing evidence could not confirm — while every other source keeps the
+    // grouping it would have had anyway.  A single member left over by the
+    // accumulated-motion split is *not* isolated: it had verified evidence, so
+    // it still becomes a station of its own (需求 1.5).
+    let isolated = grouping.isolated.iter().copied().collect::<HashSet<_>>();
     for image_index in 0..images.len() {
-        if assigned.contains(&image_index) {
+        if assigned.contains(&image_index) || isolated.contains(&image_index) {
             continue;
         }
         components.push(vec![image_index]);
@@ -10047,7 +14053,24 @@ fn focus_capture_groups(
     let mut group_for_image = vec![usize::MAX; images.len()];
     let mut groups = Vec::with_capacity(components.len());
     for (group_index, members) in components.into_iter().enumerate() {
-        let anchor = members[0];
+        // 需求 2.1: the anchor frame is the member whose valid pixels have the
+        // highest median Sharpness_Score, with near-equal scores resolved by
+        // ascending absolute path.  The previous `members[0]` took the first
+        // frame in world-centre order, which is a geometric accident of the
+        // bracket: every other frame is then registered into the coordinate
+        // system of a possibly defocused reference, and the station's own
+        // representative frame (its dimensions, focal length and edge lines
+        // feed the station pose graph) carried the least detail of the bracket.
+        let anchor_candidates = members
+            .iter()
+            .map(|&image_index| intra_station::AnchorCandidate {
+                path: images[image_index].filename.clone(),
+                median_sharpness: focus_frame_median_sharpness(&images[image_index]),
+            })
+            .collect::<Vec<_>>();
+        let anchor = intra_station::select_anchor(&anchor_candidates)
+            .map(|position| members[position])
+            .unwrap_or(members[0]);
         let anchor_global = locked_homographies.get(&images[anchor].id)?;
         let anchor_inverse = anchor_global.try_inverse()?;
         let mut local_to_anchor = HashMap::new();
@@ -10062,7 +14085,46 @@ fn focus_capture_groups(
             local_to_anchor,
         });
     }
-    Some((groups, group_for_image))
+    Some((groups, group_for_image, grouping))
+}
+
+fn canonicalize_station_geometry_anchors(
+    images: &[ImageInfo],
+    groups: &mut [FocusCaptureGroup],
+    locked_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> Option<()> {
+    let pose_order = |left: usize, right: usize| {
+        let left_pose = locked_homographies.get(&images[left].id);
+        let right_pose = locked_homographies.get(&images[right].id);
+        (0..9)
+            .map(|index| {
+                left_pose
+                    .map(|pose| pose[index])
+                    .unwrap_or(f64::INFINITY)
+                    .total_cmp(&right_pose.map(|pose| pose[index]).unwrap_or(f64::INFINITY))
+            })
+            .find(|order| !order.is_eq())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    };
+
+    for group in groups {
+        let geometry_anchor = group.members.iter().copied().min_by(|&left, &right| {
+            focus_image_direction_key(&images[left])
+                .cmp(&focus_image_direction_key(&images[right]))
+                .then_with(|| pose_order(left, right))
+        })?;
+        let anchor_inverse = locked_homographies
+            .get(&images[geometry_anchor].id)?
+            .try_inverse()?;
+        let mut local_to_anchor = HashMap::new();
+        for &image_index in &group.members {
+            let image_global = locked_homographies.get(&images[image_index].id)?;
+            local_to_anchor.insert(image_index, anchor_inverse * image_global);
+        }
+        group.anchor = geometry_anchor;
+        group.local_to_anchor = local_to_anchor;
+    }
+    Some(())
 }
 
 fn order_focus_render_sources_by_capture_group(
@@ -10110,13 +14172,11 @@ fn solve_focus_group_translation_poses(
     }
 
     let mut consensus_connectivity = Dsu::new(groups.len());
-    // Single-layer station edges are weaker than multi-layer consensus, but
-    // they are still valid geometric observations after the dense overlap
-    // gate above.  Use them for connectivity; their lower weight below keeps
-    // an isolated weak edge from moving the solution while avoiding a false
-    // "unavailable" result on a long scan with many low-texture stations.
+    // Only multi-layer Consensus_Feature evidence may connect stations.
+    // A single Source_RAW observation is supplemental evidence, never a
+    // station relation on its own (需求 6.2).
     for &(_, left, right, _, support, _) in group_edges {
-        if support > 0 {
+        if support >= 2 {
             consensus_connectivity.union(left, right);
         }
     }
@@ -10144,7 +14204,7 @@ fn solve_focus_group_translation_poses(
         .iter()
         .filter_map(
             |&(score, left, right, left_to_right, support, median_error)| {
-                if support == 0 || left >= groups.len() || right >= groups.len() {
+                if support < 2 || left >= groups.len() || right >= groups.len() {
                     return None;
                 }
                 let left_image = &images[groups[left].anchor];
@@ -10154,15 +14214,8 @@ fn solve_focus_group_translation_poses(
                 );
                 let right_point = transformed_point(&left_to_right, left_center)?;
                 let observed = left_center - right_point;
-                let support_weight = if support >= 2 {
-                    support as f64
-                } else {
-                    FOCUS_GROUP_SINGLE_EDGE_WEIGHT_FACTOR
-                };
-                let weight = support_weight * score.max(1e-8).sqrt()
-                    / (1.0
-                        + median_error
-                            / (coordinate_scale * FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO));
+                let weight = support as f64 * score.max(1e-8).sqrt()
+                    / (1.0 + median_error / STATION_RELATION_MAX_MEDIAN_ERROR_PX);
                 (observed.x.is_finite()
                     && observed.y.is_finite()
                     && weight.is_finite()
@@ -10205,77 +14258,9 @@ fn solve_focus_group_translation_poses(
         return None;
     }
 
-    let variable_count = groups.len().saturating_sub(1) * 2;
-    let variable_index = |group: usize, axis: usize| {
-        let compact = if group < reference_group {
-            group
-        } else {
-            group - 1
-        };
-        compact * 2 + axis
-    };
-    let mut positions = vec![[0.0f64; 2]; groups.len()];
-    let robust_limit = coordinate_scale * 0.04;
-    for _ in 0..8 {
-        let mut normal = nalgebra::DMatrix::<f64>::zeros(variable_count, variable_count);
-        let mut right_hand_side = nalgebra::DVector::<f64>::zeros(variable_count);
-        for &(left, right, observed, base_weight) in &constraints {
-            let residual = [
-                positions[right][0] - positions[left][0] - observed[0],
-                positions[right][1] - positions[left][1] - observed[1],
-            ];
-            let magnitude = residual[0].hypot(residual[1]);
-            let weight = base_weight
-                * if magnitude <= robust_limit {
-                    1.0
-                } else {
-                    robust_limit / magnitude.max(1e-8)
-                };
-            for axis in 0..2 {
-                let left_variable = (left != reference_group).then(|| variable_index(left, axis));
-                let right_variable =
-                    (right != reference_group).then(|| variable_index(right, axis));
-                if let Some(variable) = left_variable {
-                    normal[(variable, variable)] += weight;
-                    right_hand_side[variable] -= weight * observed[axis];
-                }
-                if let Some(variable) = right_variable {
-                    normal[(variable, variable)] += weight;
-                    right_hand_side[variable] += weight * observed[axis];
-                }
-                if let (Some(left_variable), Some(right_variable)) = (left_variable, right_variable)
-                {
-                    normal[(left_variable, right_variable)] -= weight;
-                    normal[(right_variable, left_variable)] -= weight;
-                }
-            }
-        }
-        for variable in 0..variable_count {
-            normal[(variable, variable)] += FOCUS_GLOBAL_DAMPING;
-        }
-        let Some(solution) = normal.lu().solve(&right_hand_side) else {
-            println!(
-                "  - Focus capture-group translation geometry unavailable: singular relation graph"
-            );
-            return None;
-        };
-        let mut maximum_change = 0.0f64;
-        for group in 0..groups.len() {
-            if group == reference_group {
-                continue;
-            }
-            let next = [
-                solution[variable_index(group, 0)],
-                solution[variable_index(group, 1)],
-            ];
-            maximum_change = maximum_change
-                .max((next[0] - positions[group][0]).hypot(next[1] - positions[group][1]));
-            positions[group] = next;
-        }
-        if maximum_change < 0.01 {
-            break;
-        }
-    }
+    let solve = solve_robust_closure_translations(groups.len(), reference_group, &constraints)?;
+    let positions = solve.corrections;
+    let iterations = solve.iterations;
     let mut residuals = constraints
         .iter()
         .map(|&(left, right, observed, _)| {
@@ -10289,6 +14274,7 @@ fn solve_focus_group_translation_poses(
         );
         return None;
     };
+    let robust_limit = coordinate_scale * 0.04;
     if !median_residual.is_finite() || median_residual > robust_limit {
         println!(
             "  - Focus capture-group translation geometry rejected: median closure error {:.2}px exceeds {:.2}px",
@@ -10297,7 +14283,7 @@ fn solve_focus_group_translation_poses(
         return None;
     }
     println!(
-        "  - Focus capture-group translation geometry seeded from {} relation(s), multi-layer core {consensus_covered}/{}, median closure error {:.2}px",
+        "  - Focus capture-group translation geometry seeded from {} relation(s), multi-layer core {consensus_covered}/{}, {iterations} iteration(s), median closure error {:.2}px",
         constraints.len(),
         groups.len(),
         median_residual
@@ -10323,8 +14309,9 @@ fn solve_focus_group_translation_poses(
 /// full projective bundle adjustment at station level is under-constrained on
 /// flat artwork and can be pulled by repeated calligraphy. The measured
 /// homography remains the base pose; the closure correction is bounded and
-/// M-estimator weighted, so an occasional repeated-content edge is rejected
-/// without changing the camera scale or local focus ownership.
+/// M-estimator weighted, so an occasional repeated-content edge is strongly
+/// downweighted without changing the camera scale or local focus ownership.
+#[cfg(test)]
 fn refine_focus_group_projective_tree_poses(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -10333,14 +14320,70 @@ fn refine_focus_group_projective_tree_poses(
     reference_group: usize,
     coordinate_scale: f64,
 ) -> Option<Vec<Matrix3<f64>>> {
+    let mut closure_report = stack_report::ClosureReport::default();
+    let station_topology = topology::StationTopology {
+        row: vec![0; groups.len()],
+        column: (0..groups.len() as u32).collect(),
+        ..topology::StationTopology::default()
+    };
+    refine_focus_group_projective_tree_poses_with_report(
+        images,
+        groups,
+        group_edges,
+        base_poses,
+        reference_group,
+        coordinate_scale,
+        &station_topology,
+        2,
+        &mut closure_report,
+    )
+}
+
+fn refine_focus_group_projective_tree_poses_with_report(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
+    base_poses: &[Matrix3<f64>],
+    reference_group: usize,
+    _coordinate_scale: f64,
+    station_topology: &topology::StationTopology,
+    minimum_independent_support: usize,
+    closure_report: &mut stack_report::ClosureReport,
+) -> Option<Vec<Matrix3<f64>>> {
+    closure_report.participating_constraints = group_edges.len();
+    closure_report.constraint_weights.clear();
+    closure_report.status = stack_report::ClosureStatus::NotRun;
+    closure_report.iterations = 0;
+    closure_report.residual_median_px = 0.0;
+    closure_report.residual_p95_px = 0.0;
+    closure_report.max_direct_pair_p95_px = 0.0;
+    closure_report.max_corner_correction_px = 0.0;
+    closure_report.clamped_stations = 0;
+    closure_report.fallback_reason = None;
+    closure_report.offending_pair = None;
     if groups.len() < 2 || base_poses.len() != groups.len() || reference_group >= groups.len() {
         return None;
     }
 
-    let maximum_constraint = coordinate_scale * 0.08;
+    // Requirement 7.10: a connected graph with no edge beyond its spanning
+    // tree has no cycle constraint. Do not enter either joint solver; returning
+    // this clone preserves every f64 bit of the tree seed.
+    if group_edges.len() <= groups.len().saturating_sub(1) {
+        closure_report.status = stack_report::ClosureStatus::NoConstraints;
+        closure_report.fallback_reason = Some(degradation::CLOSURE_NO_CONSTRAINTS.to_string());
+        degradation::record_run_degradation(
+            degradation::CLOSURE_NO_CONSTRAINTS,
+            serde_json::json!({
+                "accepted_relations": group_edges.len(),
+                "station_count": groups.len(),
+            }),
+        );
+        return Some(base_poses.to_vec());
+    }
+
     let mut constraints = Vec::<(usize, usize, [f64; 2], f64)>::new();
     for &(score, left_group, right_group, left_to_right, support, median_error) in group_edges {
-        if support == 0
+        if support < minimum_independent_support
             || left_group >= groups.len()
             || right_group >= groups.len()
             || left_group == right_group
@@ -10377,131 +14420,129 @@ fn refine_focus_group_projective_tree_poses(
         let (Some(dx), Some(dy)) = (median_value(&mut dx), median_value(&mut dy)) else {
             continue;
         };
-        if dx.hypot(dy) > maximum_constraint {
-            // A large residual means this relation disagrees with the
-            // projective seed by more than the bounded closure model can
-            // safely explain. Leave it out of the solve rather than bending
-            // every station toward a repeated motif.
-            continue;
-        }
-        let precision = 1.0
-            / (1.0
-                + median_error
-                    / (coordinate_scale * FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO).max(1.0));
-        let support_weight = if support >= 2 {
-            support as f64
-        } else {
-            FOCUS_GROUP_SINGLE_EDGE_WEIGHT_FACTOR
-        };
-        let weight = support_weight * score.max(1e-8).sqrt() * precision;
+        let precision = 1.0 / (1.0 + median_error / STATION_RELATION_MAX_MEDIAN_ERROR_PX);
+        let weight = support as f64 * score.max(1e-8).sqrt() * precision;
         if weight.is_finite() && weight > 0.0 {
             constraints.push((left_group, right_group, [dx, dy], weight));
         }
     }
-    if constraints.len() + 1 < groups.len() {
-        return None;
-    }
-    let mut connectivity = Dsu::new(groups.len());
-    for &(left, right, _, _) in &constraints {
-        connectivity.union(left, right);
-    }
-    let reference_root = connectivity.find(reference_group);
-    if (0..groups.len()).any(|group| connectivity.find(group) != reference_root) {
-        return None;
-    }
 
-    let variable_count = groups.len().saturating_sub(1) * 2;
-    let variable_index = |group: usize, axis: usize| {
-        let compact = if group < reference_group {
-            group
-        } else {
-            group - 1
-        };
-        compact * 2 + axis
+    let constraints_are_connected = if constraints.len() + 1 >= groups.len() {
+        let mut connectivity = Dsu::new(groups.len());
+        for &(left, right, _, _) in &constraints {
+            connectivity.union(left, right);
+        }
+        let reference_root = connectivity.find(reference_group);
+        (0..groups.len()).all(|group| connectivity.find(group) == reference_root)
+    } else {
+        false
     };
-    let robust_limit = (coordinate_scale * FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO).max(1.0);
-    let mut corrections = vec![[0.0f64; 2]; groups.len()];
-    for _ in 0..8 {
-        let mut normal = nalgebra::DMatrix::<f64>::zeros(variable_count, variable_count);
-        let mut rhs = nalgebra::DVector::<f64>::zeros(variable_count);
-        for &(left, right, observed, base_weight) in &constraints {
-            let residual = [
-                corrections[right][0] - corrections[left][0] - observed[0],
-                corrections[right][1] - corrections[left][1] - observed[1],
-            ];
-            let magnitude = residual[0].hypot(residual[1]);
-            let robust = if magnitude <= robust_limit {
-                1.0
-            } else {
-                robust_limit / magnitude.max(1e-8)
-            };
-            let weight = base_weight * robust;
-            for axis in 0..2 {
-                let left_variable = (left != reference_group).then(|| variable_index(left, axis));
-                let right_variable =
-                    (right != reference_group).then(|| variable_index(right, axis));
-                if let Some(variable) = left_variable {
-                    normal[(variable, variable)] += weight;
-                    rhs[variable] -= weight * observed[axis];
-                }
-                if let Some(variable) = right_variable {
-                    normal[(variable, variable)] += weight;
-                    rhs[variable] += weight * observed[axis];
-                }
-                if let (Some(left_variable), Some(right_variable)) = (left_variable, right_variable)
-                {
-                    normal[(left_variable, right_variable)] -= weight;
-                    normal[(right_variable, left_variable)] -= weight;
-                }
-            }
-        }
-        for variable in 0..variable_count {
-            normal[(variable, variable)] += FOCUS_GLOBAL_DAMPING;
-        }
-        let solution = normal.lu().solve(&rhs)?;
-        let mut maximum_change = 0.0f64;
-        for group in 0..groups.len() {
-            if group == reference_group {
-                continue;
-            }
-            let next = [
-                solution[variable_index(group, 0)],
-                solution[variable_index(group, 1)],
-            ];
-            maximum_change = maximum_change
-                .max((next[0] - corrections[group][0]).hypot(next[1] - corrections[group][1]));
-            corrections[group] = next;
-        }
-        if maximum_change < 0.01 {
-            break;
-        }
+    if !constraints_are_connected {
+        closure_report.status = stack_report::ClosureStatus::Unreliable;
+        closure_report.fallback_reason =
+            Some(degradation::CLOSURE_UNRELIABLE_ITERATIONS.to_string());
+        degradation::record_run_degradation(
+            degradation::CLOSURE_UNRELIABLE_ITERATIONS,
+            serde_json::json!({
+                "iterations": 0,
+                "converged": false,
+                "accepted_relations": group_edges.len(),
+                "usable_constraints": constraints.len(),
+            }),
+        );
+        return Some(base_poses.to_vec());
     }
 
-    let maximum_correction = corrections
-        .iter()
-        .map(|correction| correction[0].hypot(correction[1]))
-        .fold(0.0, f64::max);
-    let maximum_allowed = coordinate_scale * FOCUS_GROUP_MAX_CENTER_CORRECTION_RATIO;
-    if !maximum_correction.is_finite() || maximum_correction > maximum_allowed {
-        return None;
-    }
+    let Some(mut solve) =
+        solve_robust_closure_translations(groups.len(), reference_group, &constraints)
+    else {
+        closure_report.status = stack_report::ClosureStatus::Unreliable;
+        closure_report.fallback_reason =
+            Some(degradation::CLOSURE_UNRELIABLE_ITERATIONS.to_string());
+        degradation::record_run_degradation(
+            degradation::CLOSURE_UNRELIABLE_ITERATIONS,
+            serde_json::json!({ "iterations": 0, "converged": false }),
+        );
+        return Some(base_poses.to_vec());
+    };
+    let iterations = solve.iterations;
+    closure_report.iterations = iterations;
+    let Some((maximum_correction, clamped_stations)) = clamp_station_translation_corrections(
+        images,
+        groups,
+        group_edges,
+        base_poses,
+        &mut solve.corrections,
+    ) else {
+        closure_report.status = stack_report::ClosureStatus::Unreliable;
+        closure_report.fallback_reason =
+            Some(degradation::CLOSURE_UNRELIABLE_ITERATIONS.to_string());
+        degradation::record_run_degradation(
+            degradation::CLOSURE_UNRELIABLE_ITERATIONS,
+            serde_json::json!({
+                "iterations": solve.iterations,
+                "converged": false,
+                "invalid_correction": true,
+            }),
+        );
+        return Some(base_poses.to_vec());
+    };
 
-    let mut residuals = constraints
+    closure_report.constraint_weights = constraints
         .iter()
         .map(|&(left, right, observed, _)| {
-            (corrections[right][0] - corrections[left][0] - observed[0])
-                .hypot(corrections[right][1] - corrections[left][1] - observed[1])
+            let residual = (solve.corrections[right][0] - solve.corrections[left][0] - observed[0])
+                .hypot(solve.corrections[right][1] - solve.corrections[left][1] - observed[1]);
+            stack_report::ClosureConstraintWeightRecord {
+                left,
+                right,
+                residual_px: residual,
+                weight: closure_residual_weight(residual),
+            }
         })
-        .filter(|residual| residual.is_finite())
+        .collect();
+    let mut residuals = closure_report
+        .constraint_weights
+        .iter()
+        .map(|relation| relation.residual_px)
         .collect::<Vec<_>>();
-    let median_residual = median_value(&mut residuals).unwrap_or(f64::INFINITY);
-    if median_residual > robust_limit {
-        return None;
+    let (median_residual, residual_p95) =
+        closure_residual_summary(&mut residuals).unwrap_or((f64::INFINITY, f64::INFINITY));
+    closure_report.residual_median_px = median_residual;
+    closure_report.residual_p95_px = residual_p95;
+
+    let preliminary = closure_acceptance(
+        groups.len(),
+        group_edges.len(),
+        solve.converged,
+        solve.iterations,
+        median_residual,
+        &[],
+    );
+    if preliminary != ClosureAcceptance::Accepted {
+        let reason = match preliminary {
+            ClosureAcceptance::UnreliableResidual => degradation::CLOSURE_UNRELIABLE_RESIDUAL,
+            ClosureAcceptance::UnreliableIterations => degradation::CLOSURE_UNRELIABLE_ITERATIONS,
+            ClosureAcceptance::NoConstraints => degradation::CLOSURE_NO_CONSTRAINTS,
+            ClosureAcceptance::Accepted | ClosureAcceptance::UnreliablePairP95(_) => unreachable!(),
+        };
+        closure_report.status = stack_report::ClosureStatus::Unreliable;
+        closure_report.fallback_reason = Some(reason.to_string());
+        degradation::record_run_degradation(
+            reason,
+            serde_json::json!({
+                "iterations": solve.iterations,
+                "converged": solve.converged,
+                "residual_median_px": median_residual,
+                "residual_limit_px": CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX,
+            }),
+        );
+        return Some(base_poses.to_vec());
     }
 
     let mut refined = Vec::with_capacity(groups.len());
     for (group_index, pose) in base_poses.iter().enumerate() {
-        let correction = corrections[group_index];
+        let correction = solve.corrections[group_index];
         let translation = Matrix3::new(
             1.0,
             0.0,
@@ -10520,15 +14561,85 @@ fn refine_focus_group_projective_tree_poses(
                 images[groups[group_index].anchor].dimensions(),
             )
         {
-            return None;
+            closure_report.status = stack_report::ClosureStatus::Unreliable;
+            closure_report.fallback_reason =
+                Some(degradation::CLOSURE_UNRELIABLE_PAIR_P95.to_string());
+            degradation::record_run_degradation(
+                degradation::CLOSURE_UNRELIABLE_PAIR_P95,
+                serde_json::json!({
+                    "station": group_index,
+                    "invalid_corrected_pose": true,
+                }),
+            );
+            return Some(base_poses.to_vec());
         }
         refined.push(corrected);
     }
-    println!(
-        "  - Focus capture-group closure refinement: {} relations, median residual {:.2}px, maximum correction {:.2}px",
-        constraints.len(),
+
+    let direct_pairs = closure_direct_pair_p95s(images, groups, group_edges, &refined);
+    closure_report.max_direct_pair_p95_px = direct_pairs
+        .iter()
+        .map(|pair| pair.p95_px)
+        .max_by(f64::total_cmp)
+        .unwrap_or(0.0);
+    match closure_acceptance(
+        groups.len(),
+        group_edges.len(),
+        solve.converged,
+        solve.iterations,
         median_residual,
+        &direct_pairs,
+    ) {
+        ClosureAcceptance::Accepted => {}
+        ClosureAcceptance::UnreliablePairP95(pair) => {
+            let offending = closure_offending_pair_record(pair, station_topology);
+            closure_report.status = stack_report::ClosureStatus::Unreliable;
+            closure_report.fallback_reason =
+                Some(degradation::CLOSURE_UNRELIABLE_PAIR_P95.to_string());
+            closure_report.offending_pair = Some(offending);
+            closure_report.max_corner_correction_px = 0.0;
+            closure_report.clamped_stations = 0;
+            degradation::record_run_degradation(
+                degradation::CLOSURE_UNRELIABLE_PAIR_P95,
+                serde_json::json!({
+                    "left": offending.left,
+                    "left_row": offending.left_row,
+                    "left_column": offending.left_column,
+                    "right": offending.right,
+                    "right_row": offending.right_row,
+                    "right_column": offending.right_column,
+                    "p95_px": offending.p95_px,
+                    "limit_px": CLOSURE_DIRECT_PAIR_P95_LIMIT_PX,
+                }),
+            );
+            return Some(base_poses.to_vec());
+        }
+        ClosureAcceptance::NoConstraints
+        | ClosureAcceptance::UnreliableResidual
+        | ClosureAcceptance::UnreliableIterations => unreachable!(),
+    }
+
+    closure_report.status = stack_report::ClosureStatus::Converged;
+    closure_report.max_corner_correction_px = maximum_correction;
+    closure_report.clamped_stations = clamped_stations;
+    if clamped_stations > 0 {
+        degradation::record_run_degradation(
+            degradation::CLOSURE_CORRECTION_CLAMPED,
+            serde_json::json!({
+                "clamped_stations": clamped_stations,
+                "max_corner_correction_px": maximum_correction,
+            }),
+        );
+    }
+    println!(
+        "  - Focus capture-group closure accepted: {} relations, {} iteration(s), median/P95 residual {:.2}/{:.2}px, maximum direct-pair P95 {:.2}px, maximum corner correction {:.2}px, {} clamped station(s)",
+        constraints.len(),
+        solve.iterations,
+        median_residual,
+        residual_p95,
+        closure_report.max_direct_pair_p95_px,
         maximum_correction,
+        clamped_stations,
     );
     Some(refined)
 }
@@ -10637,137 +14748,227 @@ fn correct_focus_group_roll_from_long_edges(
     corrected_count
 }
 
-/// Refine station poses jointly from every accepted group relation.  The
-/// spanning tree above is only an initialization; fitting each relation as a
-/// point correspondence lets horizontal, vertical and cross-column closures
-/// correct accumulated scale, roll and mild perspective drift together.
-fn optimize_focus_group_projective_poses(
+fn focus_station_topology(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
-    group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
-    initial_poses: &[Matrix3<f64>],
-    reference_group: usize,
-) -> Option<Vec<Matrix3<f64>>> {
-    if groups.len() < 2
-        || initial_poses.len() != groups.len()
-        || reference_group >= groups.len()
-        || group_edges.is_empty()
-    {
-        return None;
-    }
-
-    // Use the real station anchor dimensions, but give the temporary graph a
-    // separate id space.  The existing normalized bundle-adjustment solver can
-    // then be reused without allowing source-image indices to leak into the
-    // station solve.
-    let station_images = groups
+    station_homographies: &HashMap<usize, Matrix3<f64>>,
+) -> topology::StationTopology {
+    let observations = groups
         .iter()
         .enumerate()
-        .map(|(group_index, group)| {
-            let source = &images[group.anchor];
-            ImageInfo {
-                id: group_index,
-                filename: format!("station://{group_index}"),
-                width: source.width,
-                height: source.height,
-                alignment_image: GrayImage::new(source.width.max(1), source.height.max(1)),
-                full_image: None,
-                scale_factor: 1.0,
-                focal_length_35mm: None,
-                overview_reference: false,
-                features: Vec::new(),
-                top_features: Vec::new(),
-                foreground_range: None,
-                foreground_mask: None,
-                horizontal_edge_rows: Vec::new(),
-                vertical_edge_columns: Vec::new(),
+        .map(|(station_index, group)| {
+            let anchor = &images[group.anchor];
+            let pose = station_homographies.get(&anchor.id);
+            let center = pose.and_then(|pose| {
+                transformed_point(
+                    pose,
+                    Point2::new(anchor.width as f64 * 0.5, anchor.height as f64 * 0.5),
+                )
+            });
+            let effective_width = pose.and_then(|pose| {
+                let corners = [
+                    Point2::new(0.0, 0.0),
+                    Point2::new(anchor.width as f64, 0.0),
+                    Point2::new(0.0, anchor.height as f64),
+                    Point2::new(anchor.width as f64, anchor.height as f64),
+                ];
+                let projected = corners
+                    .into_iter()
+                    .map(|corner| transformed_point(pose, corner))
+                    .collect::<Option<Vec<_>>>()?;
+                let min_x = projected
+                    .iter()
+                    .map(|point| point.x)
+                    .fold(f64::INFINITY, f64::min);
+                let max_x = projected
+                    .iter()
+                    .map(|point| point.x)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let width = max_x - min_x;
+                (width.is_finite() && width > 0.0).then_some(width)
+            });
+            topology::StationObservation {
+                station_index,
+                world_x: center.map(|point| point.x),
+                world_y: center.map(|point| point.y),
+                effective_width,
+                filename: anchor.filename.clone(),
             }
         })
         .collect::<Vec<_>>();
 
-    let fractions = [0.12, 0.30, 0.50, 0.70, 0.88];
-    let mut station_matches = HashMap::new();
-    for &(_, left, right, left_to_right, support, _) in group_edges {
-        let Some(left_image) = station_images.get(left) else {
+    // Candidate scores are the transform-estimated overlap area divided by one
+    // station's effective area. Keep the matrix outside StationTopology so the
+    // topology result remains pose-free (requirements 5.4 and 5.5).
+    let mut overlap_scores = BTreeMap::new();
+    for left in 0..groups.len() {
+        let left_anchor = &images[groups[left].anchor];
+        let Some(left_to_world) = station_homographies.get(&left_anchor.id) else {
             continue;
         };
-        let Some(right_image) = station_images.get(right) else {
-            continue;
-        };
-        let mut points = Vec::new();
-        for &fy in &fractions {
-            for &fx in &fractions {
-                let source =
-                    Point2::new(left_image.width as f64 * fx, left_image.height as f64 * fy);
-                let Some(target) = transformed_point(&left_to_right, source) else {
-                    continue;
-                };
-                if target.x.is_finite()
-                    && target.y.is_finite()
-                    && target.x >= 0.0
-                    && target.y >= 0.0
-                    && target.x < right_image.width as f64
-                    && target.y < right_image.height as f64
-                {
-                    points.push((source, target));
-                }
-            }
+        for right in (left + 1)..groups.len() {
+            let right_anchor = &images[groups[right].anchor];
+            let Some(world_to_right) = station_homographies
+                .get(&right_anchor.id)
+                .and_then(|pose| pose.try_inverse())
+            else {
+                continue;
+            };
+            let left_to_right = world_to_right * left_to_world;
+            overlap_scores.insert(
+                (left, right),
+                panorama_transform_overlap_support(
+                    &left_to_right,
+                    left_anchor.dimensions(),
+                    right_anchor.dimensions(),
+                ),
+            );
         }
-        if points.len() < 6 {
-            continue;
-        }
-        // Independent layer agreement is represented as a bounded weight by
-        // duplicating only the synthetic station samples.  This avoids making
-        // a single weak relation as strong as a multi-layer consensus edge.
-        let repetitions = support.clamp(1, 4);
-        let weighted_points = (0..repetitions)
-            .flat_map(|_| points.iter().copied())
-            .collect::<Vec<_>>();
-        station_matches.insert(
-            (left, right),
-            MatchInfo {
-                homography: left_to_right,
-                inliers: weighted_points.len(),
-                sequence_bridge: false,
-                coarse_bridge: false,
-                points: weighted_points,
-                candidate_points: Vec::new(),
-                top_candidate_points: Vec::new(),
-                dense_focus_points: Vec::new(),
-                foreground_feature_points: Vec::new(),
-            },
-        );
-    }
-    if station_matches.len() < groups.len().saturating_sub(1) {
-        return None;
     }
 
-    let initial = station_images
-        .iter()
-        .enumerate()
-        .map(|(group_index, _)| (group_index, initial_poses[group_index]))
-        .collect::<HashMap<_, _>>();
-    let optimized = optimize_focus_stack_global_homographies_with_reference(
-        &station_images,
-        &station_matches,
-        &initial,
-        reference_group,
-    );
-    let poses = (0..groups.len())
-        .map(|group_index| optimized.get(&group_index).copied())
-        .collect::<Option<Vec<_>>>()?;
-    poses
-        .iter()
-        .all(|pose| {
-            pose.try_inverse().is_some()
-                && transform_is_stable_for_focus_stack(
-                    pose,
-                    images[groups[reference_group].anchor].dimensions(),
-                )
-        })
-        .then_some(poses)
+    topology::infer_station_topology(&observations, &overlap_scores)
 }
 
+fn station_pose_candidate_has_bounded_local_scale(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    poses: &[Matrix3<f64>],
+    stage: &str,
+) -> bool {
+    if poses.len() != groups.len() {
+        return false;
+    }
+    let mut accepted = true;
+    for (station_index, (group, pose)) in groups.iter().zip(poses).enumerate() {
+        let anchor = &images[group.anchor];
+        let range = station_pose_local_scale_range(pose, anchor.dimensions());
+        let ratio = range.map(|(minimum, maximum)| maximum / minimum);
+        if ratio.is_some_and(|ratio| ratio <= STATION_POSE_MAX_LOCAL_SCALE_RATIO) {
+            continue;
+        }
+        accepted = false;
+        degradation::record_run_degradation(
+            degradation::STATION_POSE_LOCAL_SCALE_EXCEEDED,
+            serde_json::json!({
+                "station_index": station_index,
+                "anchor_path": absolute_source_path(&anchor.filename),
+                "stage": stage,
+                "minimum_local_scale": range.map(|range| range.0),
+                "maximum_local_scale": range.map(|range| range.1),
+                "local_scale_ratio": ratio,
+                "maximum_ratio": STATION_POSE_MAX_LOCAL_SCALE_RATIO,
+            }),
+        );
+        println!(
+            "  - Station pose candidate rejected at station {station_index}: Local_Scale ratio {} exceeds {:.2}; retaining spanning-tree seed",
+            ratio
+                .map(|value| format!("{value:.4}"))
+                .unwrap_or_else(|| "unmeasurable".to_string()),
+            STATION_POSE_MAX_LOCAL_SCALE_RATIO,
+        );
+    }
+    accepted
+}
+
+/// Keep a general projective candidate exactly as solved when its sampled
+/// Local_Scale is bounded; otherwise preserve every bit of the spanning-tree
+/// seed (requirement 6.6).
+fn select_station_pose_candidate(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    candidate: &[Matrix3<f64>],
+    spanning_tree_seed: &[Matrix3<f64>],
+    stage: &str,
+) -> Vec<Matrix3<f64>> {
+    if station_pose_candidate_has_bounded_local_scale(images, groups, candidate, stage) {
+        candidate.to_vec()
+    } else {
+        spanning_tree_seed.to_vec()
+    }
+}
+
+fn absolute_source_path(path: &str) -> String {
+    let path = Path::new(path);
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("/"))
+            .join(path)
+    };
+    absolute.to_string_lossy().into_owned()
+}
+
+fn station_graph_components(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    relation_pairs: &[(usize, usize)],
+) -> Vec<Vec<String>> {
+    let mut connectivity = Dsu::new(groups.len());
+    for &(left, right) in relation_pairs {
+        if left < groups.len() && right < groups.len() {
+            connectivity.union(left, right);
+        }
+    }
+    let mut stations_by_root = BTreeMap::<usize, Vec<usize>>::new();
+    for station_index in 0..groups.len() {
+        let root = connectivity.find(station_index);
+        stations_by_root
+            .entry(root)
+            .or_default()
+            .push(station_index);
+    }
+    stations_by_root
+        .into_values()
+        .map(|station_indices| {
+            let mut members = station_indices
+                .into_iter()
+                .flat_map(|station_index| groups[station_index].members.iter().copied())
+                .map(|image_index| absolute_source_path(&images[image_index].filename))
+                .collect::<Vec<_>>();
+            members.sort();
+            members
+        })
+        .collect()
+}
+
+/// Populate the canonical connectivity report and return the exact rejected
+/// diagnostic payload when the accepted Station_Relation graph is disconnected.
+fn station_graph_connectivity_rejection(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    relation_pairs: &[(usize, usize)],
+    report: &mut stack_report::StationRelationsReport,
+) -> Option<serde_json::Value> {
+    let components = station_graph_components(images, groups, relation_pairs);
+    report.connectivity.components = components.len();
+    report.connectivity.component_member_counts = components.iter().map(Vec::len).collect();
+    report.connectivity.component_members = components.clone();
+    (components.len() > 1).then(|| {
+        let component_details = components
+            .iter()
+            .map(|members| {
+                serde_json::json!({
+                    "member_count": members.len(),
+                    "members": members,
+                })
+            })
+            .collect::<Vec<_>>();
+        serde_json::json!({
+            "component_count": components.len(),
+            "components": component_details,
+            "actions": ["按连续场景重新分组", "补拍增加重叠"],
+        })
+    })
+}
+
+fn geometry_disconnected_user_error(component_count: usize) -> String {
+    format!(
+        "机位几何图包含 {component_count} 个不连通分量，无法导出完整拼图。可执行操作：“按连续场景重新分组”或“补拍增加重叠”。"
+    )
+}
+
+#[cfg(test)]
 fn solve_focus_capture_group_poses(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -10775,15 +14976,151 @@ fn solve_focus_capture_group_poses(
     reference_index: usize,
     translation_geometry_verified: &mut bool,
 ) -> HashMap<usize, Matrix3<f64>> {
+    let mut closure_report = stack_report::ClosureReport::default();
+    let mut station_relations_report = stack_report::StationRelationsReport::default();
+    solve_focus_capture_group_poses_with_report(
+        images,
+        matches,
+        locked_homographies,
+        reference_index,
+        translation_geometry_verified,
+        &mut closure_report,
+        &mut station_relations_report,
+    )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StationRelationEvidenceKind {
+    SourceRaw,
+    VirtualTile,
+}
+
+impl StationRelationEvidenceKind {
+    fn minimum_independent_support(self) -> usize {
+        match self {
+            Self::SourceRaw => 2,
+            // One fused station tile is already the requirement-6.1 primary
+            // observation.  This is not a fabricated second source: the
+            // evidence kind explicitly exempts it from requirement 6.2.
+            Self::VirtualTile => 1,
+        }
+    }
+}
+
+fn solve_focus_capture_group_poses_with_report(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    locked_homographies: &HashMap<usize, Matrix3<f64>>,
+    reference_index: usize,
+    translation_geometry_verified: &mut bool,
+    closure_report: &mut stack_report::ClosureReport,
+    station_relations_report: &mut stack_report::StationRelationsReport,
+) -> HashMap<usize, Matrix3<f64>> {
+    solve_station_poses_for_evidence_with_report(
+        images,
+        matches,
+        locked_homographies,
+        reference_index,
+        translation_geometry_verified,
+        closure_report,
+        station_relations_report,
+        StationRelationEvidenceKind::SourceRaw,
+        None,
+    )
+}
+
+fn solve_virtual_tile_station_poses_with_report(
+    tiles: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    station_topology: &topology::StationTopology,
+    closure_report: &mut stack_report::ClosureReport,
+    station_relations_report: &mut stack_report::StationRelationsReport,
+) -> HashMap<usize, Matrix3<f64>> {
+    let mut verified = false;
+    solve_station_poses_for_evidence_with_report(
+        tiles,
+        matches,
+        initial_homographies,
+        0,
+        &mut verified,
+        closure_report,
+        station_relations_report,
+        StationRelationEvidenceKind::VirtualTile,
+        Some(station_topology),
+    )
+}
+
+fn solve_station_poses_for_evidence_with_report(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    locked_homographies: &HashMap<usize, Matrix3<f64>>,
+    reference_index: usize,
+    translation_geometry_verified: &mut bool,
+    closure_report: &mut stack_report::ClosureReport,
+    station_relations_report: &mut stack_report::StationRelationsReport,
+    evidence_kind: StationRelationEvidenceKind,
+    supplied_topology: Option<&topology::StationTopology>,
+) -> HashMap<usize, Matrix3<f64>> {
     *translation_geometry_verified = false;
-    let Some((groups, group_for_image)) =
-        focus_capture_groups(images, matches, locked_homographies)
-    else {
-        return locked_homographies.clone();
+    *station_relations_report = stack_report::StationRelationsReport::default();
+    let (mut groups, group_for_image) = match evidence_kind {
+        StationRelationEvidenceKind::SourceRaw => {
+            let Some(groups) = focus_capture_groups(images, matches, locked_homographies) else {
+                return locked_homographies.clone();
+            };
+            groups
+        }
+        StationRelationEvidenceKind::VirtualTile => {
+            let groups = (0..images.len())
+                .map(|index| FocusCaptureGroup {
+                    members: vec![index],
+                    anchor: index,
+                    local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+                })
+                .collect::<Vec<_>>();
+            (groups, (0..images.len()).collect::<Vec<_>>())
+        }
     };
+    // The Focus_Fuser anchor follows requirement 2.1 and may legitimately use
+    // the source path for a near-sharpness tie. Station geometry cannot inherit
+    // that rename-sensitive coordinate choice (requirements 1.3/5.8), so the
+    // pose graph uses an equivalent content/geometry-derived representative.
+    if canonicalize_station_geometry_anchors(images, &mut groups, locked_homographies).is_none() {
+        return locked_homographies.clone();
+    }
     if groups.len() < 2 || reference_index >= images.len() {
         return locked_homographies.clone();
     }
+    // 需求 1.6: an isolated source belongs to no Capture_Station, so it cannot
+    // anchor the station pose graph.  Keep the image-level geometry instead of
+    // rooting the tree at a station that does not exist.
+    if group_for_image[reference_index] == usize::MAX {
+        return locked_homographies.clone();
+    }
+    // Task 9.1 is part of the production station-relation path: infer the
+    // displacement-only topology before collecting relation evidence, retain
+    // it for Stack_Report, and use it below as the candidate eligibility gate.
+    // Matrix-valued poses are reduced to centres/widths before entering the
+    // topology module (需求 5.2 / 5.4).
+    let station_topology = supplied_topology
+        .cloned()
+        .unwrap_or_else(|| focus_station_topology(images, &groups, locked_homographies));
+    if evidence_kind == StationRelationEvidenceKind::SourceRaw {
+        topology::record_run_topology(station_topology.clone());
+    }
+    // An isolated source keeps the image-level pose the station solve cannot
+    // refine, so the returned map still covers the whole selection.
+    let carry_unstationed_poses = |solved: &mut HashMap<usize, Matrix3<f64>>| {
+        for (image_index, image) in images.iter().enumerate() {
+            if group_for_image[image_index] != usize::MAX {
+                continue;
+            }
+            if let Some(&pose) = locked_homographies.get(&image.id) {
+                solved.insert(image.id, pose);
+            }
+        }
+    };
 
     #[cfg(test)]
     if std::env::var_os("RAW_EDITOR_STACK_GROUP_DIAGNOSTICS").is_some() {
@@ -10805,8 +15142,12 @@ fn solve_focus_capture_group_poses(
         }
     }
 
-    let mut candidates = HashMap::<(usize, usize), Vec<FocusGroupEdgeCandidate>>::new();
-    for (&(source_index, target_index), match_info) in matches {
+    // Station-pair candidates are keyed by a group pair and later compared by
+    // score; both the candidate order inside a pair and the order of the pairs
+    // themselves must not depend on the hash seed (需求 14.6).  The map is one
+    // entry per station pair, so an ordered container costs nothing here.
+    let mut candidates = BTreeMap::<(usize, usize), Vec<FocusGroupEdgeCandidate>>::new();
+    for (&(source_index, target_index), match_info) in sorted_pairs(matches) {
         if source_index >= images.len()
             || target_index >= images.len()
             || match_info.sequence_bridge
@@ -10826,75 +15167,148 @@ fn solve_focus_capture_group_poses(
         {
             continue;
         }
-        let source_group = group_for_image[source_index];
-        let target_group = group_for_image[target_index];
-        if source_group == target_group {
+        // 需求 1.6: an isolated source is a member of no Capture_Station, so it
+        // contributes no station relation either.
+        if group_for_image[source_index] == usize::MAX
+            || group_for_image[target_index] == usize::MAX
+        {
             continue;
         }
-        let Some(source_local_inverse) = groups[source_group]
-            .local_to_anchor
-            .get(&source_index)
-            .and_then(|matrix| (*matrix).try_inverse())
-        else {
+        if group_for_image[source_index] == group_for_image[target_index] {
+            continue;
+        }
+        if !station_topology
+            .pair_is_eligible(group_for_image[source_index], group_for_image[target_index])
+        {
+            continue;
+        }
+        // A `MatchInfo` is stored in the `(min index, max index)` orientation of
+        // its map key, so its direction follows the import positions of the two
+        // sources.  Both halves of what follows are direction sensitive:
+        //
+        //   * every quality measure — `focus_overlap_quality` warps the source
+        //     into the target and correlates there, `panorama_spatial_support`
+        //     weighs the source spread first — so scoring in the key direction
+        //     made a shuffled import award the same physical relation a
+        //     different quality and pick a different station edge, and
+        //   * the composed station relation, which is inverted once when the
+        //     source station outranks the target station.  Which of the two
+        //     sources ends up as `source_index` decides how many inversions the
+        //     measurement passes through, and an inversion is not lossless.
+        //
+        // Both therefore work from the content derived direction (需求 14.6).
+        let (quality_source, quality_target, quality_inverted) =
+            canonical_match_direction(images, source_index, target_index);
+        let source_group = group_for_image[quality_source];
+        let target_group = group_for_image[quality_target];
+        // `canonical_homography` is the untouched fit in exactly this direction.
+        // Falling back to inverting `homography` is only reached for relations
+        // that were never measured pairwise in a canonical direction.
+        let quality_homography = match match_info.canonical_homography {
+            Some(canonical) => canonical,
+            None if quality_inverted => {
+                let Some(inverse) = match_info.homography.try_inverse() else {
+                    continue;
+                };
+                inverse
+            }
+            None => match_info.homography,
+        };
+        let quality_points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if quality_inverted {
+            Cow::Owned(
+                match_info
+                    .points
+                    .iter()
+                    .map(|&(source, target)| (target, source))
+                    .collect(),
+            )
+        } else {
+            Cow::Borrowed(&match_info.points)
+        };
+        let Some(source_local) = groups[source_group].local_to_anchor.get(&quality_source) else {
             continue;
         };
-        let Some(target_local) = groups[target_group].local_to_anchor.get(&target_index) else {
+        let Some(source_local_inverse) = (*source_local).try_inverse() else {
+            continue;
+        };
+        let Some(target_local) = groups[target_group].local_to_anchor.get(&quality_target) else {
             continue;
         };
         let source_anchor_to_target_anchor =
-            target_local * match_info.homography * source_local_inverse;
-        let (key, transform) = if source_group < target_group {
-            ((source_group, target_group), source_anchor_to_target_anchor)
+            target_local * quality_homography * source_local_inverse;
+        let anchor_points_in_measurement_direction = quality_points
+            .iter()
+            .filter_map(|&(source, target)| {
+                transformed_point(source_local, source).zip(transformed_point(target_local, target))
+            })
+            .collect::<Vec<_>>();
+        let (key, transform, anchor_points, invert_dense_ratio) = if source_group < target_group {
+            (
+                (source_group, target_group),
+                source_anchor_to_target_anchor,
+                anchor_points_in_measurement_direction,
+                false,
+            )
         } else {
             let Some(inverse) = source_anchor_to_target_anchor.try_inverse() else {
                 continue;
             };
-            ((target_group, source_group), inverse)
+            (
+                (target_group, source_group),
+                inverse,
+                anchor_points_in_measurement_direction
+                    .into_iter()
+                    .map(|(source, target)| (target, source))
+                    .collect(),
+                true,
+            )
         };
-        let error = median_symmetric_error(&match_info.homography, &match_info.points);
+        // Acceptance evidence belongs to the immutable measured source pair,
+        // not to whichever near-tied focus frames happen to become station
+        // anchors. Requirement 2.1 permits a path tie-break for that anchor;
+        // requirements 1.3/5.8 therefore require these measurements to remain
+        // in the canonical content-derived source direction. The composed
+        // anchor transform and anchor points remain the pose-graph payload.
+        let measurement_source_dimensions = images[quality_source].dimensions();
+        let measurement_target_dimensions = images[quality_target].dimensions();
+        let error = median_symmetric_error(&quality_homography, &quality_points);
         let precision = if error.is_finite() {
-            1.0 / (1.0 + error / FOCUS_MODEL_INLIER_THRESHOLD)
+            1.0 / (1.0 + error / STATION_RELATION_MAX_MEDIAN_ERROR_PX)
         } else {
             0.0
         };
         let spatial = panorama_spatial_support(
-            &match_info.points,
-            images[source_index].dimensions(),
-            images[target_index].dimensions(),
+            &quality_points,
+            measurement_source_dimensions,
+            measurement_target_dimensions,
         );
         let overlap = panorama_transform_overlap_support(
-            &match_info.homography,
-            images[source_index].dimensions(),
-            images[target_index].dimensions(),
+            &quality_homography,
+            measurement_source_dimensions,
+            measurement_target_dimensions,
         );
-        let dense_quality = focus_overlap_quality(
-            &images[source_index],
-            &images[target_index],
-            &match_info.homography,
+        let dense_measurements = focus_overlap_quality_measurements(
+            &images[quality_source],
+            &images[quality_target],
+            &quality_homography,
         );
-        let alignment_is_measurable = images[source_index].alignment_image.width() >= 32
-            && images[source_index].alignment_image.height() >= 32
-            && images[target_index].alignment_image.width() >= 32
-            && images[target_index].alignment_image.height() >= 32;
-        if alignment_is_measurable
-            && !dense_quality.is_some_and(|(intensity_ncc, edge_ncc, edge_orientation, samples)| {
-                samples >= 120
-                    && intensity_ncc >= 0.45
-                    && edge_ncc >= -0.10
-                    && edge_orientation >= -0.10
-            })
-        {
-            continue;
-        }
+        let dense_quality = dense_measurements.map(FocusOverlapQuality::legacy_tuple);
         let dense_weight = dense_quality.map_or(1.0, |(intensity, edge, orientation, _)| {
             0.25 + intensity.max(0.0) + 0.5 * edge.max(0.0) + 0.25 * orientation.max(0.0)
         });
-        let quality = (match_info.inliers.max(match_info.points.len()) as f64).sqrt()
+        let quality = (match_info.inliers.max(anchor_points.len()) as f64).sqrt()
             * precision
             * (0.25 + 0.75 * spatial)
             * (0.25 + 0.75 * overlap)
             * dense_weight;
         if quality.is_finite() && quality > 0.0 {
+            let edge_strength_ratio = dense_measurements.map_or(f64::INFINITY, |measurements| {
+                if invert_dense_ratio {
+                    1.0 / measurements.edge_strength_ratio
+                } else {
+                    measurements.edge_strength_ratio
+                }
+            });
             candidates
                 .entry(key)
                 .or_default()
@@ -10902,24 +15316,65 @@ fn solve_focus_capture_group_poses(
                     transform,
                     quality,
                     independent_support: if consensus_coarse { 2 } else { 1 },
+                    inlier_count: match_info.inliers.max(anchor_points.len()),
+                    median_error_px: error,
+                    scale_ratio: homography_scale_ratio(&quality_homography)
+                        .unwrap_or(f64::INFINITY),
+                    spatial_support: station_relation_spatial_support(
+                        &quality_points,
+                        &quality_homography,
+                        measurement_source_dimensions,
+                        measurement_target_dimensions,
+                    ),
+                    low_frequency_mean_relative_difference: dense_measurements
+                        .map_or(f64::INFINITY, |measurements| {
+                            measurements.low_frequency_mean_relative_difference
+                        }),
+                    edge_strength_ratio,
+                    median_edge_orientation_difference_degrees: dense_measurements
+                        .map_or(f64::INFINITY, |measurements| {
+                            measurements.median_edge_orientation_difference_degrees
+                        }),
                 });
         }
+    }
+
+    // One station pair collects one candidate per accepted focus layer
+    // relation, and the consensus search below reads that vector in order: it
+    // accumulates `supporting_quality` along it and keeps the first candidate on
+    // a score tie.  Pushing in `matches` key order would make both inherit the
+    // import positions the keys are built from, so re-order every candidate
+    // list by its own measured content (需求 14.6).
+    for pair_candidates in candidates.values_mut() {
+        pair_candidates.sort_by(|left, right| {
+            right
+                .quality
+                .total_cmp(&left.quality)
+                .then_with(|| right.independent_support.cmp(&left.independent_support))
+                .then_with(|| {
+                    focus_group_candidate_key(left).cmp(&focus_group_candidate_key(right))
+                })
+        });
     }
 
     let coordinate_scale = images
         .iter()
         .map(|image| image.width.max(image.height) as f64)
         .fold(1.0, f64::max);
-    let consensus_threshold = coordinate_scale * FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO;
+    let consensus_threshold = STATION_RELATION_MAX_MEDIAN_ERROR_PX;
     let mut group_edges = Vec::<(f64, usize, usize, Matrix3<f64>, usize, f64)>::new();
+    let mut station_relation_inlier_counts = BTreeMap::<(usize, usize), usize>::new();
+    let mut evaluated_candidate_pairs = HashSet::<(usize, usize)>::new();
     let mut consensus_pair_count = 0usize;
     for ((left_group, right_group), pair_candidates) in candidates {
+        evaluated_candidate_pairs.insert((left_group, right_group));
         let dimensions = images[groups[left_group].anchor].dimensions();
-        let mut best: Option<(f64, Matrix3<f64>, usize, f64)> = None;
+        let mut best: Option<(f64, FocusGroupEdgeCandidate, usize, f64, usize)> = None;
         for candidate in &pair_candidates {
             let mut supporting_errors = Vec::new();
             let mut supporting_quality = 0.0;
             let mut independent_support = 0usize;
+            let mut inlier_count = 0usize;
             for other in &pair_candidates {
                 let Some(error) = focus_transform_disagreement_px(
                     &candidate.transform,
@@ -10932,42 +15387,131 @@ fn solve_focus_capture_group_poses(
                     supporting_errors.push(error);
                     supporting_quality += other.quality;
                     independent_support += other.independent_support;
+                    inlier_count = inlier_count.saturating_add(other.inlier_count);
                 }
             }
             let support = independent_support;
-            if support == 0 {
+            let discard = (evidence_kind == StationRelationEvidenceKind::SourceRaw)
+                .then(|| single_layer_station_evidence_discard(support, left_group, right_group))
+                .flatten();
+            if discard.is_none() {
+                let consensus_error =
+                    median_value(&mut supporting_errors).unwrap_or(consensus_threshold);
+                let score = (support * support) as f64 * supporting_quality
+                    / (1.0 + consensus_error / consensus_threshold.max(1.0));
+                if best
+                    .as_ref()
+                    .is_none_or(|(best_score, _, _, _, _)| score > *best_score)
+                {
+                    best = Some((score, *candidate, support, consensus_error, inlier_count));
+                }
                 continue;
             }
-            let median_error = median_value(&mut supporting_errors).unwrap_or(consensus_threshold);
-            let support_factor = if support >= 2 {
-                (support * support) as f64
-            } else {
-                FOCUS_GROUP_SINGLE_EDGE_WEIGHT_FACTOR
-            };
-            let score = support_factor * supporting_quality
-                / (1.0 + median_error / consensus_threshold.max(1.0));
-            if best
-                .as_ref()
-                .is_none_or(|(best_score, _, _, _)| score > *best_score)
-            {
-                best = Some((score, candidate.transform, support, median_error));
-            }
+            degradation::record_run_degradation(
+                degradation::STATION_RELATION_SINGLE_LAYER_EVIDENCE_DISCARDED,
+                discard.expect("source evidence discard was checked above"),
+            );
         }
-        let Some((score, transform, support, median_error)) = best else {
+        let Some((score, candidate, support, consensus_error, inlier_count)) = best else {
+            if evidence_kind == StationRelationEvidenceKind::VirtualTile {
+                record_station_relation_no_fit(left_group, right_group, station_relations_report);
+            }
             continue;
         };
-        if support >= 2 {
-            consensus_pair_count += 1;
+        let measurements = StationRelationMeasurements {
+            inliers: inlier_count,
+            median_error_px: candidate.median_error_px,
+            scale_ratio: candidate.scale_ratio,
+            spatial_support: candidate.spatial_support,
+            low_frequency_mean_relative_difference: candidate
+                .low_frequency_mean_relative_difference,
+            edge_strength_ratio: candidate.edge_strength_ratio,
+            median_edge_orientation_difference_degrees: candidate
+                .median_edge_orientation_difference_degrees,
+            preserves_convex_orientation: homography_preserves_focus_orientation(
+                &candidate.transform,
+                dimensions,
+            ),
+        };
+        if !station_relation_is_accepted_with_report(
+            left_group,
+            right_group,
+            consensus_error,
+            &measurements,
+            station_relations_report,
+        ) {
+            continue;
         }
+        consensus_pair_count += 1;
+        station_relations_report
+            .accepted
+            .push(stack_report::AcceptedStationRelationRecord {
+                left: left_group,
+                right: right_group,
+                evidence_kind: match evidence_kind {
+                    StationRelationEvidenceKind::SourceRaw => {
+                        stack_report::StationRelationEvidenceKind::SourceRawConsensus
+                    }
+                    StationRelationEvidenceKind::VirtualTile => {
+                        stack_report::StationRelationEvidenceKind::VirtualTile
+                    }
+                },
+                inliers: measurements.inliers,
+                spatial_support: measurements.spatial_support,
+                scale_ratio: measurements.scale_ratio,
+                median_error_px: measurements.median_error_px,
+                independent_support: support,
+            });
+        station_relation_inlier_counts.insert((left_group, right_group), inlier_count);
         group_edges.push((
             score,
             left_group,
             right_group,
-            transform,
+            candidate.transform,
             support,
-            median_error,
+            measurements.median_error_px,
         ));
     }
+    if evidence_kind == StationRelationEvidenceKind::VirtualTile {
+        for candidate in &station_topology.candidates {
+            let pair = (
+                candidate.left.min(candidate.right),
+                candidate.left.max(candidate.right),
+            );
+            if pair.0 >= groups.len()
+                || pair.1 >= groups.len()
+                || !evaluated_candidate_pairs.insert(pair)
+            {
+                continue;
+            }
+            record_station_relation_no_fit(pair.0, pair.1, station_relations_report);
+        }
+    }
+    closure_report.participating_constraints = group_edges.len();
+    closure_report.constraint_weights.clear();
+
+    // Requirements 6.7 / 12.4: an accepted Station_Relation graph must cover
+    // every Capture_Station.  Image-level locked poses are diagnostics and a
+    // spanning-tree seed, not permission to render independent components into
+    // one apparently complete mosaic.
+    let relation_pairs = group_edges
+        .iter()
+        .map(|edge| (edge.1, edge.2))
+        .collect::<Vec<_>>();
+    if let Some(rejection) = station_graph_connectivity_rejection(
+        images,
+        &groups,
+        &relation_pairs,
+        station_relations_report,
+    ) {
+        let component_count = station_relations_report.connectivity.components;
+        degradation::record_run_degradation(degradation::GEOMETRY_DISCONNECTED, rejection);
+        println!(
+            "  - Focus station geometry rejected: {component_count} disconnected component(s)"
+        );
+        return HashMap::new();
+    }
+
     let reference_group = group_for_image[reference_index];
     #[cfg(test)]
     if std::env::var_os("RAW_EDITOR_STACK_GROUP_DIAGNOSTICS").is_some() {
@@ -10986,28 +15530,50 @@ fn solve_focus_capture_group_poses(
             );
         }
     }
-    // Preserve the measured scale, rotation, and mild perspective between
-    // camera stations. Flattening these relations to pure translations creates
-    // rectangular steps when the camera distance changes across a large scan.
-    // Multi-layer consensus edges are preferred; a dense-pixel-verified single
-    // edge may connect a low-texture boundary that only one focus layer sees.
-    let mut trusted_edges = group_edges.clone();
-    trusted_edges.sort_by(|left, right| {
-        (right.4 >= 2)
-            .cmp(&(left.4 >= 2))
-            .then_with(|| right.0.total_cmp(&left.0))
-    });
-    let mut group_dsu = Dsu::new(groups.len());
+    // Requirement 7.1: accepted-relation inlier count is the only spanning-tree
+    // weight. Composite quality continues to inform the joint optimizer, but it
+    // cannot change the projective seed. Equal inlier counts use the inferred
+    // station row/column coordinates as the complete deterministic tie-break.
+    let tree_relations = group_edges
+        .iter()
+        .map(|&(_, left, right, transform, _, _)| {
+            let key = (left.min(right), left.max(right));
+            let inlier_count = station_relation_inlier_counts
+                .get(&key)
+                .copied()
+                .unwrap_or_default();
+            (
+                left,
+                right,
+                transform.try_inverse().is_some().then_some(inlier_count),
+            )
+        })
+        .collect::<Vec<_>>();
+    let selectable_relations = tree_relations
+        .iter()
+        .filter_map(|&(left, right, inlier_count)| {
+            inlier_count.map(|inlier_count| (left, right, inlier_count))
+        })
+        .collect::<Vec<_>>();
+    let selected_tree_indices = maximum_inlier_spanning_tree_indices(
+        groups.len(),
+        &station_topology,
+        &selectable_relations,
+    );
+    let selectable_group_edge_indices = tree_relations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, relation)| relation.2.map(|_| index))
+        .collect::<Vec<_>>();
+
     let mut group_adjacency = HashMap::<usize, Vec<(usize, Matrix3<f64>)>>::new();
     let mut tree_edges = 0usize;
-    for &(_, left_group, right_group, left_to_right, _, _) in &trusted_edges {
-        if group_dsu.find(left_group) == group_dsu.find(right_group) {
-            continue;
-        }
-        let Some(right_to_left) = left_to_right.try_inverse() else {
-            continue;
-        };
-        group_dsu.union(left_group, right_group);
+    for selectable_index in selected_tree_indices {
+        let group_edge_index = selectable_group_edge_indices[selectable_index];
+        let (_, left_group, right_group, left_to_right, _, _) = group_edges[group_edge_index];
+        let right_to_left = left_to_right
+            .try_inverse()
+            .expect("tree candidates were filtered to invertible transforms");
         group_adjacency
             .entry(left_group)
             .or_default()
@@ -11018,6 +15584,7 @@ fn solve_focus_capture_group_poses(
             .push((left_group, left_to_right));
         tree_edges += 1;
     }
+    closure_report.spanning_tree_edges = tree_edges;
     let mut group_poses = vec![None; groups.len()];
     group_poses[reference_group] = locked_homographies
         .get(&images[groups[reference_group].anchor].id)
@@ -11041,86 +15608,35 @@ fn solve_focus_capture_group_poses(
             .iter()
             .map(|pose| pose.expect("connected group tree must provide every pose"))
             .collect::<Vec<_>>();
-        // Refine the full station homographies jointly.  A translation-only
-        // closure cannot represent the small scale, roll and perspective
-        // changes produced by a hand-scanned grid; it also turns a valid
-        // vertical closure into a slanted seam.  The bounded optimizer uses
-        // every accepted group relation and keeps the tree only as its seed.
-        if let Some(projective_poses) = optimize_focus_group_projective_poses(
-            images,
-            &groups,
-            &group_edges,
-            &base_group_poses,
-            reference_group,
-        ) {
-            let mut solved = HashMap::new();
-            let mut stable = true;
-            for (group_index, group) in groups.iter().enumerate() {
-                let group_pose = projective_poses[group_index];
-                for &image_index in &group.members {
-                    let replacement = group_pose * group.local_to_anchor[&image_index];
-                    if replacement.try_inverse().is_none()
-                        || !homography_preserves_focus_orientation(
-                            &replacement,
-                            images[image_index].dimensions(),
-                        )
-                    {
-                        println!(
-                            "  - Focus capture-group projective candidate rejected as unstable at group {} image '{}'",
-                            group_index, images[image_index].filename,
-                        );
-                        stable = false;
-                        break;
-                    }
-                    solved.insert(images[image_index].id, replacement);
-                }
-                if !stable {
-                    break;
-                }
-            }
-            if stable && solved.len() == images.len() {
-                let diagnostics =
-                    focus_capture_group_geometry_diagnostics(images, matches, &groups, &solved);
-                println!(
-                    "  - Focus capture-group projective closure diagnostics: {}/{}, {}/{} relations, median overlap {:.1}%",
-                    diagnostics.0,
-                    diagnostics.1,
-                    diagnostics.2,
-                    diagnostics.3,
-                    diagnostics.4 * 100.0,
-                );
-                if focus_capture_group_geometry_passes(
-                    diagnostics.0,
-                    diagnostics.1,
-                    diagnostics.2,
-                    diagnostics.4,
-                ) {
-                    println!(
-                        "  - Focus capture-group projective closure accepted for {} stations",
-                        groups.len()
-                    );
-                    *translation_geometry_verified = true;
-                    return solved;
-                }
-                println!(
-                    "  - Focus capture-group projective closure failed source-level validation; retaining tree/translation fallback"
-                );
-            }
-        }
+        // The maximum-support tree keeps each station's full 8-DOF measured
+        // homography. Task 9.9 integrates the 9.6-9.8 robust closure path here
+        // as the only joint update, so no earlier projective solve can bypass
+        // its convergence, median-residual, and direct-pair P95 acceptance
+        // gates.
         // Keep the maximum-support tree as the projective initialisation, but
         // let every reliable closure edge vote on a bounded world translation
         // correction. This is the generic path for both horizontal/vertical
         // scan closures and snake cross-column links; no filename topology is
         // assumed here.
-        let refined_group_poses = refine_focus_group_projective_tree_poses(
+        let refined_group_poses = refine_focus_group_projective_tree_poses_with_report(
             images,
             &groups,
             &group_edges,
             &base_group_poses,
             reference_group,
             coordinate_scale,
+            &station_topology,
+            evidence_kind.minimum_independent_support(),
+            closure_report,
         )
         .unwrap_or_else(|| base_group_poses.clone());
+        let selected_group_poses = select_station_pose_candidate(
+            images,
+            &groups,
+            &refined_group_poses,
+            &base_group_poses,
+            "closure_refinement",
+        );
         let build_solved = |poses: &[Matrix3<f64>]| {
             let mut solved = HashMap::new();
             for (group_index, group) in groups.iter().enumerate() {
@@ -11138,61 +15654,11 @@ fn solve_focus_capture_group_poses(
                     solved.insert(images[image_index].id, replacement);
                 }
             }
+            carry_unstationed_poses(&mut solved);
             Some(solved)
         };
-        let base_solved = build_solved(&base_group_poses);
-        let refined_solved = build_solved(&refined_group_poses);
-        let mut solved = refined_solved.clone().or_else(|| base_solved.clone());
-        // A low-residual closure can still bend a long scan enough to make
-        // otherwise reliable station relations fail the dense geometry gate.
-        // Validate the candidate against all source-level relation evidence
-        // before exposing it to the renderer; the projective tree remains the
-        // safe generic fallback when closure refinement is not geometrically
-        // usable for this scene.
-        if refined_group_poses != base_group_poses {
-            let refined_diagnostics = refined_solved.as_ref().map(|candidate| {
-                focus_capture_group_geometry_diagnostics(images, matches, &groups, candidate)
-            });
-            if !refined_diagnostics.is_some_and(|(connected, total, valid, _, median_overlap)| {
-                focus_capture_group_geometry_passes(connected, total, valid, median_overlap)
-            }) {
-                println!(
-                    "  - Focus capture-group closure rejected by station geometry validation; keeping projective tree seed"
-                );
-                // A long planar scan can accumulate a large scale drift in a
-                // projective spanning tree even when each local edge is
-                // individually valid.  If the focal metadata is compatible,
-                // the translation-only closure is safer: it preserves one
-                // common station scale/roll while solving every reliable
-                // horizontal/vertical relation.  This is the fallback for
-                // flat artwork; mixed-focal stacks continue to use the
-                // projective seed below.
-                if let Some(mut translation_poses) = solve_focus_group_translation_poses(
-                    images,
-                    &groups,
-                    &group_edges,
-                    locked_homographies,
-                    reference_group,
-                    coordinate_scale,
-                ) {
-                    correct_focus_group_roll_from_long_edges(
-                        images,
-                        &groups,
-                        &mut translation_poses,
-                        locked_homographies,
-                        reference_group,
-                    );
-                    if let Some(translation_solved) = build_solved(&translation_poses) {
-                        println!(
-                            "  - Focus capture-group projective drift replaced by translation closure"
-                        );
-                        *translation_geometry_verified = true;
-                        return translation_solved;
-                    }
-                }
-                solved = base_solved;
-            }
-        }
+        let solved =
+            build_solved(&selected_group_poses).or_else(|| build_solved(&base_group_poses));
         let Some(solved) = solved else {
             println!(
                 "  - Focus capture-group planar geometry produced an unstable pose; keeping image-level geometry"
@@ -11246,6 +15712,7 @@ fn solve_focus_capture_group_poses(
                 solved.insert(images[image_index].id, replacement);
             }
         }
+        carry_unstationed_poses(&mut solved);
         println!(
             "  - Focus capture-group translation geometry accepted for {} groups without projective re-refinement",
             groups.len()
@@ -11271,7 +15738,6 @@ fn solve_focus_capture_group_poses(
             "  - Focus capture-group geometry seeded from {tree_edges} multi-member consensus relation(s)"
         );
     }
-    let maximum_constraint = coordinate_scale * 0.08;
     let mut constraints = Vec::<(usize, usize, [f64; 2], f64, usize)>::new();
     for &(score, left_group, right_group, left_to_right, support, median_error) in &group_edges {
         // One repeated character can produce one excellent-looking edge. A
@@ -11331,9 +15797,6 @@ fn solve_focus_capture_group_poses(
         let (Some(dx), Some(dy)) = (median_value(&mut dx), median_value(&mut dy)) else {
             continue;
         };
-        if dx.hypot(dy) > maximum_constraint {
-            continue;
-        }
         let weight =
             (support as f64) * score.sqrt() / (1.0 + median_error / consensus_threshold.max(1.0));
         if weight.is_finite() && weight > 0.0 {
@@ -11347,97 +15810,55 @@ fn solve_focus_capture_group_poses(
         return locked_homographies.clone();
     }
 
-    let variable_count = groups.len().saturating_sub(1) * 2;
-    let variable_index = |group: usize, axis: usize| {
-        let compact = if group < reference_group {
-            group
-        } else {
-            group - 1
-        };
-        compact * 2 + axis
-    };
-    let mut corrections = vec![[0.0f64; 2]; groups.len()];
-    for _ in 0..6 {
-        let mut normal = nalgebra::DMatrix::<f64>::zeros(variable_count, variable_count);
-        let mut right_hand_side = nalgebra::DVector::<f64>::zeros(variable_count);
-        for &(left_group, right_group, observed, base_weight, _) in &constraints {
-            let residual = [
-                corrections[left_group][0] - corrections[right_group][0] - observed[0],
-                corrections[left_group][1] - corrections[right_group][1] - observed[1],
-            ];
-            let magnitude = residual[0].hypot(residual[1]);
-            let robust = if magnitude <= consensus_threshold {
-                1.0
-            } else {
-                consensus_threshold / magnitude.max(1e-8)
-            };
-            let weight = base_weight * robust;
-            for axis in 0..2 {
-                let left_variable =
-                    (left_group != reference_group).then(|| variable_index(left_group, axis));
-                let right_variable =
-                    (right_group != reference_group).then(|| variable_index(right_group, axis));
-                if let Some(left) = left_variable {
-                    normal[(left, left)] += weight;
-                    right_hand_side[left] += weight * observed[axis];
-                }
-                if let Some(right) = right_variable {
-                    normal[(right, right)] += weight;
-                    right_hand_side[right] -= weight * observed[axis];
-                }
-                if let (Some(left), Some(right)) = (left_variable, right_variable) {
-                    normal[(left, right)] -= weight;
-                    normal[(right, left)] -= weight;
-                }
-            }
-        }
-        for variable in 0..variable_count {
-            normal[(variable, variable)] += FOCUS_GLOBAL_DAMPING;
-        }
-        let Some(solution) = normal.lu().solve(&right_hand_side) else {
-            return locked_homographies.clone();
-        };
-        let mut maximum_change = 0.0f64;
-        for (group_index, correction) in corrections.iter_mut().enumerate() {
-            if group_index == reference_group {
-                continue;
-            }
-            let next = [
-                solution[variable_index(group_index, 0)],
-                solution[variable_index(group_index, 1)],
-            ];
-            maximum_change =
-                maximum_change.max((next[0] - correction[0]).hypot(next[1] - correction[1]));
-            *correction = next;
-        }
-        if maximum_change < 0.01 {
-            break;
-        }
-    }
-
-    let maximum_center_correction = corrections
+    let closure_constraints = constraints
         .iter()
-        .map(|correction| correction[0].hypot(correction[1]))
-        .fold(0.0, f64::max);
-    let maximum_allowed = coordinate_scale * FOCUS_GROUP_MAX_CENTER_CORRECTION_RATIO;
-    if !maximum_center_correction.is_finite() || maximum_center_correction > maximum_allowed {
-        println!(
-            "  - Focus capture-group translation solve rejected: {:.1}px maximum correction exceeds {:.1}px",
-            maximum_center_correction, maximum_allowed
-        );
+        .map(|&(left, right, observed, base_weight, _)| {
+            (left, right, [-observed[0], -observed[1]], base_weight)
+        })
+        .collect::<Vec<_>>();
+    let Some(mut closure_solve) =
+        solve_robust_closure_translations(groups.len(), reference_group, &closure_constraints)
+    else {
         return locked_homographies.clone();
+    };
+    let iterations = closure_solve.iterations;
+    let corrections = &mut closure_solve.corrections;
+    let initial_group_poses = groups
+        .iter()
+        .enumerate()
+        .map(|(group_index, group)| {
+            if use_consensus_group_poses {
+                group_poses[group_index]
+            } else {
+                locked_homographies.get(&images[group.anchor].id).copied()
+            }
+        })
+        .collect::<Option<Vec<_>>>();
+    let Some(initial_group_poses) = initial_group_poses else {
+        return locked_homographies.clone();
+    };
+    let Some((maximum_corner_correction, clamped_stations)) = clamp_station_translation_corrections(
+        images,
+        &groups,
+        &group_edges,
+        &initial_group_poses,
+        corrections,
+    ) else {
+        return locked_homographies.clone();
+    };
+    if clamped_stations > 0 {
+        degradation::record_run_degradation(
+            degradation::CLOSURE_CORRECTION_CLAMPED,
+            serde_json::json!({
+                "clamped_stations": clamped_stations,
+                "max_corner_correction_px": maximum_corner_correction,
+            }),
+        );
     }
 
     let mut solved = HashMap::new();
     for (group_index, group) in groups.iter().enumerate() {
-        let original_group_pose = if use_consensus_group_poses {
-            group_poses[group_index].unwrap()
-        } else {
-            let Some(pose) = locked_homographies.get(&images[group.anchor].id).copied() else {
-                return locked_homographies.clone();
-            };
-            pose
-        };
+        let original_group_pose = initial_group_poses[group_index];
         let correction = corrections[group_index];
         let group_pose = Matrix3::new(
             1.0,
@@ -11467,13 +15888,15 @@ fn solve_focus_capture_group_poses(
             solved.insert(images[image_index].id, replacement);
         }
     }
+    carry_unstationed_poses(&mut solved);
     println!(
-        "  - Focus capture-group translation solve: {} groups, {} candidate group pairs, {} consensus pairs, {} accepted constraints; maximum center correction {:.2}px",
+        "  - Focus capture-group translation solve: {} groups, {} candidate group pairs, {} consensus pairs, {} accepted constraints; {iterations} iteration(s), maximum corner correction {:.2}px, {} clamped station(s)",
         groups.len(),
         group_edges.len(),
         consensus_pair_count,
         constraints.len(),
-        maximum_center_correction,
+        maximum_corner_correction,
+        clamped_stations,
     );
     solved
 }
@@ -11483,6 +15906,9 @@ fn focus_auto_order_motion_scale(
     matches: &HashMap<(usize, usize), MatchInfo>,
 ) -> f64 {
     let mut minimum_motion_by_image = vec![f64::INFINITY; images.len()];
+    // Direct map iteration is order safe here: the loop only takes a per-image
+    // minimum and the result is the median of a `total_cmp`-sorted vector, both of
+    // which are independent of the visiting order (需求 14.6).
     for (&(source_index, target_index), match_info) in matches {
         let Some(source) = images.get(source_index) else {
             continue;
@@ -11729,6 +16155,9 @@ fn focus_auto_order_adjacency(
     motion_scale: f64,
 ) -> Vec<Vec<(usize, f64)>> {
     let mut adjacency = vec![Vec::new(); images.len()];
+    // Direct map iteration is order safe here: every neighbour list is sorted
+    // below by `(weight desc, natural path, index)`, which is a total order, so the
+    // insertion order cannot survive into the traversal (需求 14.6).
     for (&(left, right), match_info) in matches {
         if left >= images.len() || right >= images.len() || left == right {
             continue;
@@ -11960,9 +16389,28 @@ fn focus_match_graph_is_dense_continuous_scan(
         && degrees.iter().all(|degree| *degree >= minimum_degree)
 }
 
+#[cfg(test)]
 fn build_focus_stack_stitching_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
+) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
+    let mut closure_report = stack_report::ClosureReport::default();
+    let mut station_relations_report = stack_report::StationRelationsReport::default();
+    build_focus_stack_stitching_order_with_report(
+        images,
+        matches,
+        &mut closure_report,
+        &mut station_relations_report,
+        true,
+    )
+}
+
+fn build_focus_stack_stitching_order_with_report(
+    images: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    closure_report: &mut stack_report::ClosureReport,
+    station_relations_report: &mut stack_report::StationRelationsReport,
+    solve_source_station_geometry: bool,
 ) -> (Vec<usize>, HashMap<usize, Matrix3<f64>>) {
     if images.len() < 2 {
         let mut homographies = HashMap::new();
@@ -12137,25 +16585,42 @@ fn build_focus_stack_stitching_order(
         &graph_homographies,
         reference_index,
     );
-    // Preserve the established geometry and evidence-selected order for normal
-    // focus stacks.  Bracket locking and camera-group translation were added
-    // specifically for long scans whose repeated calligraphy otherwise lets
-    // the pose graph drift; applying them to compact stacks can manufacture
-    // multiple displaced frames from ordinary focus breathing.
-    let optimized_or_locked_homographies = if large_scan {
-        let locked_homographies =
-            lock_focus_local_bracket_poses(images, matches, &optimized_homographies);
+    // Bracket locking belongs to the station model, not to the capture-order
+    // heuristic. Infer Capture_Stations from the locked intra-station poses on
+    // every default focus run; raw image count must never bypass the strict
+    // Station_Pose_Solver gates (requirements 6, 7 and 15.1).
+    let locked_homographies =
+        lock_focus_local_bracket_poses(images, matches, &optimized_homographies);
+    let inferred_station_count = focus_capture_groups(images, matches, &locked_homographies)
+        .map(|(groups, _)| groups.len())
+        .unwrap_or_default();
+    let solve_station_geometry = solve_source_station_geometry && inferred_station_count >= 2;
+    let optimized_or_locked_homographies = if solve_station_geometry {
         let mut translation_geometry_verified = false;
-        solve_focus_capture_group_poses(
+        solve_focus_capture_group_poses_with_report(
             images,
             matches,
             &locked_homographies,
             reference_index,
             &mut translation_geometry_verified,
+            closure_report,
+            station_relations_report,
         )
+    } else if inferred_station_count >= 2 {
+        // Default two-stage Virtual_Tile flow: preserve the image-level solve
+        // only as local station geometry.  Bracket locking keeps every source
+        // in its station anchor coordinates; inter-station placement is
+        // replaced by the authoritative fused-tile solve after rendering.
+        locked_homographies.clone()
     } else {
+        // A single Capture_Station has no inter-station relation or closure to
+        // solve. Keep compact single-station rendering on its established
+        // image-level geometry rather than applying bracket-lock side effects.
         optimized_homographies.clone()
     };
+    if station_relations_report.connectivity.components > 1 {
+        return (Vec::new(), HashMap::new());
+    }
     let geometry_render_order = if large_scan {
         focus_geometry_capture_order(images, matches, &optimized_or_locked_homographies)
             .filter(|order| order.len() == images.len())
@@ -12190,25 +16655,27 @@ fn build_focus_stack_stitching_order(
             )
         })
         .unwrap_or((0, 0, 0, 0, 0.0));
-    if large_scan {
+    if solve_station_geometry {
         println!(
             "  - Focus station validation: {connected_group_count}/{total_group_count} connected groups, {valid_group_relations}/{candidate_group_relations} verified relations, median overlap {:.1}%",
             median_group_overlap * 100.0,
         );
     }
-    let global_homographies = if !large_scan
+    let global_homographies = if !solve_source_station_geometry
+        || !large_scan
         || (focus_capture_geometry_passes(
             images,
             valid_geometry_edges,
             total_geometry_edges,
             median_overlap,
             &optimized_or_locked_homographies,
-        ) && focus_capture_group_geometry_passes(
-            connected_group_count,
-            total_group_count,
-            valid_group_relations,
-            median_group_overlap,
-        )) {
+        ) && (!solve_source_station_geometry
+            || focus_capture_group_geometry_passes(
+                connected_group_count,
+                total_group_count,
+                valid_group_relations,
+                median_group_overlap,
+            ))) {
         optimized_or_locked_homographies
     } else {
         // The long-scan refinement can be pulled by a repeated character or
@@ -12254,12 +16721,14 @@ fn build_focus_stack_stitching_order(
             retry_total_edges,
             retry_overlap,
             &optimized_homographies,
-        ) && focus_capture_group_geometry_passes(
-            retry_connected_groups,
-            retry_total_groups,
-            retry_valid_relations,
-            retry_group_overlap,
-        ) {
+        ) && (!solve_source_station_geometry
+            || focus_capture_group_geometry_passes(
+                retry_connected_groups,
+                retry_total_groups,
+                retry_valid_relations,
+                retry_group_overlap,
+            ))
+        {
             optimized_homographies
         } else {
             println!(
@@ -12656,7 +17125,12 @@ fn focus_global_observations_with_mode(
     use_foreground_region_matches: bool,
 ) -> Vec<FocusGlobalObservation> {
     let mut observations = Vec::new();
-    for (&(source_index, target_index), match_info) in matches {
+    // The observation vector defines the summation order of the robust cost and
+    // of the normal equations in the global pose solve.  Iterating the match map
+    // directly made that order depend on the per-process hash seed, which
+    // changed the solved poses in the last mantissa bits and therefore the
+    // rendered canvas.  Walk the pairs in ascending key order instead (需求 14.6).
+    for (&(source_index, target_index), match_info) in sorted_pairs(matches) {
         if source_index >= images.len() || target_index >= images.len() {
             continue;
         }
@@ -13921,6 +18395,717 @@ fn build_focus_horizontal_edge_bands(
     bands
 }
 
+/// Test-only access to the determinism critical station solver internals.
+///
+/// Property 90 (逐字节可复现, 需求 14.6) is implemented in
+/// `panorama_utils::stack_pipeline::properties`, a sibling module that cannot
+/// see the private items of this module.  The wrappers below contain no logic
+/// of their own: they only widen visibility inside `cfg(test)` so the property
+/// test drives the real production functions — the ones tasks 3.1 to 3.4
+/// changed — instead of a re-implementation that could drift away from them.
+#[cfg(test)]
+pub(crate) mod determinism_test_access {
+    use super::*;
+
+    /// One capture station in a shape a sibling module can hold.
+    ///
+    /// [`FocusCaptureGroup`] itself stays private; this carries the same data
+    /// with the visibility the property test needs.
+    pub(crate) struct StationView {
+        pub(crate) members: Vec<usize>,
+        pub(crate) anchor: usize,
+        pub(crate) local_to_anchor: HashMap<usize, Matrix3<f64>>,
+    }
+
+    fn into_views(groups: Vec<FocusCaptureGroup>) -> Vec<StationView> {
+        groups
+            .into_iter()
+            .map(|group| StationView {
+                members: group.members,
+                anchor: group.anchor,
+                local_to_anchor: group.local_to_anchor,
+            })
+            .collect()
+    }
+
+    fn from_views(stations: &[StationView]) -> Vec<FocusCaptureGroup> {
+        stations
+            .iter()
+            .map(|station| FocusCaptureGroup {
+                members: station.members.clone(),
+                anchor: station.anchor,
+                local_to_anchor: station.local_to_anchor.clone(),
+            })
+            .collect()
+    }
+
+    /// [`focus_capture_groups`] — station membership and station order.
+    pub(crate) fn capture_stations(
+        images: &[ImageInfo],
+        matches: &HashMap<(usize, usize), MatchInfo>,
+        locked_homographies: &HashMap<usize, Matrix3<f64>>,
+    ) -> Option<Vec<StationView>> {
+        focus_capture_groups(images, matches, locked_homographies)
+            .map(|(groups, _)| into_views(groups))
+    }
+
+    /// [`canonical_match_direction`] — pair orientation derived from feature
+    /// content whenever both synthetic images carry content signatures.
+    pub(crate) fn canonical_pair_direction(
+        images: &[ImageInfo],
+        first: usize,
+        second: usize,
+    ) -> (usize, usize, bool) {
+        canonical_match_direction(images, first, second)
+    }
+
+    /// Full station-pose test outcome, including the connectivity report that
+    /// distinguishes a valid solved graph from the explicit requirements
+    /// 6.7/12.4 disconnected rejection.
+    pub(crate) struct StationPoseSolveView {
+        pub(crate) poses: HashMap<usize, Matrix3<f64>>,
+        pub(crate) translation_geometry_verified: bool,
+        pub(crate) connectivity: stack_report::ConnectivityReport,
+    }
+
+    /// [`solve_focus_capture_group_poses_with_report`] — the station-level pose
+    /// solve together with its machine-readable connectivity outcome.
+    pub(crate) fn solve_station_poses_with_report(
+        images: &[ImageInfo],
+        matches: &HashMap<(usize, usize), MatchInfo>,
+        locked_homographies: &HashMap<usize, Matrix3<f64>>,
+        reference_index: usize,
+    ) -> StationPoseSolveView {
+        let mut translation_geometry_verified = false;
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut station_relations_report = stack_report::StationRelationsReport::default();
+        let poses = solve_focus_capture_group_poses_with_report(
+            images,
+            matches,
+            locked_homographies,
+            reference_index,
+            &mut translation_geometry_verified,
+            &mut closure_report,
+            &mut station_relations_report,
+        );
+        StationPoseSolveView {
+            poses,
+            translation_geometry_verified,
+            connectivity: station_relations_report.connectivity,
+        }
+    }
+
+    /// [`solve_focus_capture_group_poses`] — the station level pose solve.
+    ///
+    /// Returns the solved per-source world homographies together with the
+    /// `translation_geometry_verified` flag the caller receives out-of-band.
+    pub(crate) fn solve_station_poses(
+        images: &[ImageInfo],
+        matches: &HashMap<(usize, usize), MatchInfo>,
+        locked_homographies: &HashMap<usize, Matrix3<f64>>,
+        reference_index: usize,
+    ) -> (HashMap<usize, Matrix3<f64>>, bool) {
+        let outcome =
+            solve_station_poses_with_report(images, matches, locked_homographies, reference_index);
+        (outcome.poses, outcome.translation_geometry_verified)
+    }
+
+    /// [`focus_source_order_group_compositor_order`] — the seam order derived
+    /// from the production Capture_Topology_Model row/column indices.
+    pub(crate) fn station_compositor_order(
+        images: &[ImageInfo],
+        stations: &[StationView],
+        station_homographies: &HashMap<usize, Matrix3<f64>>,
+    ) -> Vec<usize> {
+        let mut groups = from_views(stations);
+        let _ = canonicalize_station_geometry_anchors(images, &mut groups, station_homographies);
+        let station_topology = focus_station_topology(images, &groups, station_homographies);
+        focus_source_order_group_compositor_order(groups.len(), &station_topology)
+    }
+}
+
+/// Test-only access to the Station_Grouper internals of 需求 1.1 to 1.10.
+///
+/// Properties 1, 3, 4 and 5 live in `panorama_utils::stack_pipeline::properties`,
+/// a sibling module that cannot see the private items of this module.  As with
+/// [`determinism_test_access`] the wrappers below carry no logic: they widen
+/// visibility inside `cfg(test)` so the property tests drive
+/// [`focus_station_link_evidence`], [`focus_station_grouping`],
+/// [`split_focus_local_component_by_motion`] and [`focus_frame_median_sharpness`]
+/// themselves rather than a re-implementation of them.
+#[cfg(test)]
+pub(crate) mod grouping_test_access {
+    use super::*;
+
+    /// The four 需求 1.1 measurements of one pairwise relation plus the verdict.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub(crate) struct EvidenceView {
+        pub(crate) inliers: usize,
+        pub(crate) overlap_ncc: f64,
+        pub(crate) overlap_ncc_measured: bool,
+        pub(crate) spatial_support: f64,
+        pub(crate) scale_ratio: f64,
+        pub(crate) score: f64,
+        /// [`StationEvidence::accepts`] — the membership decision itself.
+        pub(crate) accepts: bool,
+    }
+
+    /// One recorded Capture_Station split (需求 1.4 / 1.10).
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub(crate) struct SplitView {
+        pub(crate) component: usize,
+        pub(crate) position: usize,
+        pub(crate) motion_ratio: f64,
+        pub(crate) reason: &'static str,
+    }
+
+    impl From<&StationSplit> for SplitView {
+        fn from(split: &StationSplit) -> Self {
+            Self {
+                component: split.component,
+                position: split.position,
+                motion_ratio: split.motion_ratio,
+                reason: split.reason,
+            }
+        }
+    }
+
+    /// [`StationGroupingOutcome`] in a shape a sibling module can hold.
+    #[derive(Clone, Debug, Default)]
+    pub(crate) struct GroupingView {
+        pub(crate) components: Vec<Vec<usize>>,
+        pub(crate) isolated: Vec<usize>,
+        pub(crate) splits: Vec<SplitView>,
+    }
+
+    /// The 需求 1.1 / 1.4 / 1.5 thresholds, so a property test can state the
+    /// requirement's own numbers *and* assert the production constants are them.
+    pub(crate) const MIN_INLIER_MATCHES: usize = STATION_MIN_INLIER_MATCHES;
+    pub(crate) const MIN_OVERLAP_NCC: f64 = STATION_MIN_OVERLAP_NCC;
+    pub(crate) const MIN_INLIER_SPATIAL_SUPPORT: f64 = STATION_MIN_INLIER_SPATIAL_SUPPORT;
+    pub(crate) const SCALE_RATIO_MIN: f64 = STATION_SCALE_RATIO_MIN;
+    pub(crate) const SCALE_RATIO_MAX: f64 = STATION_SCALE_RATIO_MAX;
+    pub(crate) const MAX_ACCUMULATED_CENTER_MOTION_RATIO: f64 =
+        STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO;
+    pub(crate) const MAX_STATION_MEMBERS: usize = FOCUS_BRACKET_MAX_COMPONENT_SOURCES;
+
+    /// [`focus_station_link_evidence`] — the measured 需求 1.1 evidence of one
+    /// pair, `None` when the pair carries no overlap evidence at all.
+    pub(crate) fn station_link_evidence(
+        images: &[ImageInfo],
+        first: usize,
+        second: usize,
+        match_info: &MatchInfo,
+    ) -> Option<EvidenceView> {
+        focus_station_link_evidence(images, first, second, match_info).map(|evidence| {
+            EvidenceView {
+                inliers: evidence.inliers,
+                overlap_ncc: evidence.overlap_ncc,
+                overlap_ncc_measured: evidence.overlap_ncc_measured,
+                spatial_support: evidence.spatial_support,
+                scale_ratio: evidence.scale_ratio,
+                score: evidence.score,
+                accepts: evidence.accepts(),
+            }
+        })
+    }
+
+    /// [`focus_match_is_capture_station_link`] — the membership decision the
+    /// grouper's union-find is driven by.
+    pub(crate) fn is_capture_station_link(
+        images: &[ImageInfo],
+        first: usize,
+        second: usize,
+        match_info: &MatchInfo,
+    ) -> bool {
+        focus_match_is_capture_station_link(images, first, second, match_info)
+    }
+
+    /// [`focus_station_grouping`] — membership, isolated sources and splits.
+    pub(crate) fn station_grouping(
+        images: &[ImageInfo],
+        matches: &HashMap<(usize, usize), MatchInfo>,
+    ) -> GroupingView {
+        let outcome = focus_station_grouping(images, matches);
+        GroupingView {
+            components: outcome.components,
+            isolated: outcome.isolated,
+            splits: outcome.splits.iter().map(SplitView::from).collect(),
+        }
+    }
+
+    /// [`split_focus_local_component_by_motion`] — the accumulated displacement
+    /// split of one verified-link component (需求 1.4 / 1.5 / 1.10).
+    pub(crate) fn split_component_by_motion(
+        component: Vec<usize>,
+        images: &[ImageInfo],
+        matches: &HashMap<(usize, usize), MatchInfo>,
+    ) -> (Vec<Vec<usize>>, Vec<SplitView>) {
+        let mut splits = Vec::new();
+        let groups =
+            split_focus_local_component_by_motion(component, 0, images, matches, &mut splits);
+        (groups, splits.iter().map(SplitView::from).collect())
+    }
+
+    /// [`focus_frame_median_sharpness`] — the 需求 2.1 anchor measurement.
+    pub(crate) fn frame_median_sharpness(image: &ImageInfo) -> f64 {
+        focus_frame_median_sharpness(image)
+    }
+
+    /// [`excluded_source_records`] — the 需求 1.6 / 1.9 report records.
+    pub(crate) fn excluded_sources(
+        images: &[ImageInfo],
+        indices: &[usize],
+        reason: &'static str,
+    ) -> Vec<stack_report::ExcludedSourceRecord> {
+        excluded_source_records(images, indices, reason)
+    }
+
+    /// [`undecodable_source_paths`] — the 需求 1.9 exclusion itself.
+    pub(crate) fn undecodable_sources(selection: &[String], decoded: &[ImageInfo]) -> Vec<String> {
+        undecodable_source_paths(selection, decoded)
+    }
+}
+
+/// Test-only access to the production Station_Relation evidence and acceptance
+/// decisions used by Properties 28 and 29. These wrappers deliberately contain
+/// no thresholds or alternate implementations: they expose the real decisions
+/// while keeping the production types private.
+#[cfg(test)]
+pub(crate) mod station_relation_test_access {
+    use super::*;
+
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct MeasurementsView {
+        pub(crate) inliers: usize,
+        pub(crate) median_error_px: f64,
+        pub(crate) scale_ratio: f64,
+        pub(crate) spatial_support: f64,
+        pub(crate) low_frequency_mean_relative_difference: f64,
+        pub(crate) edge_strength_ratio: f64,
+        pub(crate) median_edge_orientation_difference_degrees: f64,
+        pub(crate) preserves_convex_orientation: bool,
+    }
+
+    pub(crate) fn covered_features(
+        pixels: &Rgb32FImage,
+        coverage: &stitching::CoverageMask,
+        brief_pairs: &[(Point2<i32>, Point2<i32>)],
+    ) -> (GrayImage, Vec<Feature>) {
+        virtual_tile_covered_features(pixels, coverage, brief_pairs)
+    }
+
+    pub(crate) fn station_matches(tiles: &[ImageInfo]) -> HashMap<(usize, usize), MatchInfo> {
+        all_image_pairs(tiles.len())
+            .into_iter()
+            .filter_map(|(left, right)| {
+                virtual_tile_unseeded_station_match(left, right, tiles)
+                    .map(|relation| ((left, right), relation))
+            })
+            .collect()
+    }
+
+    pub(crate) fn guided_station_matches(
+        tiles: &[ImageInfo],
+        coverages: &[stitching::CoverageMask],
+        initial_homographies: &HashMap<usize, Matrix3<f64>>,
+        station_topology: &topology::StationTopology,
+    ) -> HashMap<(usize, usize), MatchInfo> {
+        virtual_tile_station_matches(tiles, coverages, initial_homographies, station_topology)
+    }
+
+    pub(crate) fn single_source_discard(
+        independent_support: usize,
+        left_station: usize,
+        right_station: usize,
+    ) -> Option<serde_json::Value> {
+        single_layer_station_evidence_discard(independent_support, left_station, right_station)
+    }
+
+    pub(crate) fn rejection_reasons(measurements: MeasurementsView) -> Vec<&'static str> {
+        station_relation_rejection_reasons(&StationRelationMeasurements {
+            inliers: measurements.inliers,
+            median_error_px: measurements.median_error_px,
+            scale_ratio: measurements.scale_ratio,
+            spatial_support: measurements.spatial_support,
+            low_frequency_mean_relative_difference: measurements
+                .low_frequency_mean_relative_difference,
+            edge_strength_ratio: measurements.edge_strength_ratio,
+            median_edge_orientation_difference_degrees: measurements
+                .median_edge_orientation_difference_degrees,
+            preserves_convex_orientation: measurements.preserves_convex_orientation,
+        })
+    }
+
+    fn production_measurements(measurements: MeasurementsView) -> StationRelationMeasurements {
+        StationRelationMeasurements {
+            inliers: measurements.inliers,
+            median_error_px: measurements.median_error_px,
+            scale_ratio: measurements.scale_ratio,
+            spatial_support: measurements.spatial_support,
+            low_frequency_mean_relative_difference: measurements
+                .low_frequency_mean_relative_difference,
+            edge_strength_ratio: measurements.edge_strength_ratio,
+            median_edge_orientation_difference_degrees: measurements
+                .median_edge_orientation_difference_degrees,
+            preserves_convex_orientation: measurements.preserves_convex_orientation,
+        }
+    }
+
+    pub(crate) struct RelationDecisionBatchView {
+        pub(crate) report: stack_report::StationRelationsReport,
+        pub(crate) pose_writes: Vec<(usize, usize)>,
+    }
+
+    /// Drive the exact production reject/report gate for a batch of candidate
+    /// adjacencies. `pose_writes` models the immediately following pose-graph
+    /// insertion and therefore contains accepted candidates only.
+    pub(crate) fn relation_decision_batch(
+        candidates: &[(usize, usize, MeasurementsView)],
+    ) -> RelationDecisionBatchView {
+        let mut report = stack_report::StationRelationsReport::default();
+        let mut pose_writes = Vec::new();
+        for &(left, right, measurements) in candidates {
+            if station_relation_is_accepted_with_report(
+                left,
+                right,
+                0.0,
+                &production_measurements(measurements),
+                &mut report,
+            ) {
+                pose_writes.push((left, right));
+            }
+        }
+        RelationDecisionBatchView {
+            report,
+            pose_writes,
+        }
+    }
+
+    fn synthetic_image(id: usize, path: String, dimensions: (u32, u32)) -> ImageInfo {
+        ImageInfo {
+            id,
+            filename: path,
+            width: dimensions.0,
+            height: dimensions.1,
+            alignment_image: GrayImage::new(dimensions.0.max(1), dimensions.1.max(1)),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: None,
+            overview_reference: false,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        }
+    }
+
+    fn singleton_station_inputs(
+        dimensions: (u32, u32),
+        station_count: usize,
+    ) -> (Vec<ImageInfo>, Vec<FocusCaptureGroup>) {
+        let images = (0..station_count)
+            .map(|station| {
+                synthetic_image(
+                    station,
+                    format!("/synthetic/property/station-{station}.raw"),
+                    dimensions,
+                )
+            })
+            .collect::<Vec<_>>();
+        let groups = (0..station_count)
+            .map(|station| FocusCaptureGroup {
+                members: vec![station],
+                anchor: station,
+                local_to_anchor: HashMap::from([(station, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        (images, groups)
+    }
+
+    pub(crate) struct PoseCandidateView {
+        pub(crate) selected: Matrix3<f64>,
+        pub(crate) minimum_local_scale: Option<f64>,
+        pub(crate) maximum_local_scale: Option<f64>,
+        pub(crate) rejection_reason: Option<&'static str>,
+    }
+
+    /// Exercise the production Local_Scale publication gate for one station.
+    pub(crate) fn select_pose_candidate(
+        candidate: Matrix3<f64>,
+        spanning_tree_seed: Matrix3<f64>,
+        dimensions: (u32, u32),
+    ) -> PoseCandidateView {
+        let (images, groups) = singleton_station_inputs(dimensions, 1);
+        let accepted = station_pose_local_scale_range(&candidate, dimensions).is_some_and(
+            |(minimum, maximum)| maximum / minimum <= STATION_POSE_MAX_LOCAL_SCALE_RATIO,
+        );
+        let selected = select_station_pose_candidate(
+            &images,
+            &groups,
+            &[candidate],
+            &[spanning_tree_seed],
+            "property_31",
+        )[0];
+        let range = station_pose_local_scale_range(&candidate, dimensions);
+        PoseCandidateView {
+            selected,
+            minimum_local_scale: range.map(|range| range.0),
+            maximum_local_scale: range.map(|range| range.1),
+            rejection_reason: (!accepted).then_some(degradation::STATION_POSE_LOCAL_SCALE_EXCEEDED),
+        }
+    }
+
+    pub(crate) struct StationGraphOutcomeView {
+        pub(crate) report: stack_report::StationRelationsReport,
+        pub(crate) rejection_reason: Option<&'static str>,
+        pub(crate) rejection_detail: Option<serde_json::Value>,
+        pub(crate) user_error: Option<String>,
+    }
+
+    /// Run the production component canonicalisation/report boundary on an
+    /// arbitrary station graph supplied by a property test.
+    pub(crate) fn station_graph_outcome(
+        station_member_paths: &[Vec<String>],
+        relation_pairs: &[(usize, usize)],
+    ) -> StationGraphOutcomeView {
+        let mut images = Vec::new();
+        let mut groups = Vec::new();
+        for members in station_member_paths {
+            let first = images.len();
+            let mut member_indices = Vec::new();
+            for path in members {
+                let image_index = images.len();
+                images.push(synthetic_image(image_index, path.clone(), (64, 64)));
+                member_indices.push(image_index);
+            }
+            groups.push(FocusCaptureGroup {
+                members: member_indices,
+                anchor: first,
+                local_to_anchor: HashMap::from([(first, Matrix3::identity())]),
+            });
+        }
+        let mut report = stack_report::StationRelationsReport::default();
+        let rejection_detail =
+            station_graph_connectivity_rejection(&images, &groups, relation_pairs, &mut report);
+        let rejection_reason = rejection_detail
+            .as_ref()
+            .map(|_| degradation::GEOMETRY_DISCONNECTED);
+        let user_error = rejection_detail
+            .as_ref()
+            .map(|_| geometry_disconnected_user_error(report.connectivity.components));
+        StationGraphOutcomeView {
+            report,
+            rejection_reason,
+            rejection_detail,
+            user_error,
+        }
+    }
+
+    /// Production Kruskal selection, returned as canonical station pairs so
+    /// relation input order is not observable to the property test.
+    pub(crate) fn maximum_inlier_tree(
+        station_count: usize,
+        rows: &[u32],
+        columns: &[u32],
+        relations: &[(usize, usize, usize, f64)],
+    ) -> Vec<(usize, usize)> {
+        let station_topology = topology::StationTopology {
+            row: rows.to_vec(),
+            column: columns.to_vec(),
+            ..topology::StationTopology::default()
+        };
+        let production_relations = relations
+            .iter()
+            .map(|&(left, right, inliers, _score)| (left, right, inliers))
+            .collect::<Vec<_>>();
+        maximum_inlier_spanning_tree_indices(
+            station_count,
+            &station_topology,
+            &production_relations,
+        )
+        .into_iter()
+        .map(|index| {
+            let (left, right, _, _) = relations[index];
+            (left.min(right), left.max(right))
+        })
+        .collect()
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct ClosureRelationView {
+        pub(crate) score: f64,
+        pub(crate) left: usize,
+        pub(crate) right: usize,
+        pub(crate) left_to_right: Matrix3<f64>,
+        pub(crate) independent_support: usize,
+        pub(crate) median_error_px: f64,
+    }
+
+    pub(crate) struct ClosureRunView {
+        pub(crate) poses: Vec<Matrix3<f64>>,
+        pub(crate) report: stack_report::ClosureReport,
+    }
+
+    fn production_group_edges(
+        relations: &[ClosureRelationView],
+    ) -> Vec<(f64, usize, usize, Matrix3<f64>, usize, f64)> {
+        relations
+            .iter()
+            .map(|relation| {
+                (
+                    relation.score,
+                    relation.left,
+                    relation.right,
+                    relation.left_to_right,
+                    relation.independent_support,
+                    relation.median_error_px,
+                )
+            })
+            .collect()
+    }
+
+    /// Exact production M-estimator access for Property 35.
+    pub(crate) fn closure_weight(residual_px: f64) -> f64 {
+        closure_residual_weight(residual_px)
+    }
+
+    /// Exact production stopping predicate access for Property 37.
+    pub(crate) fn closure_converged(previous: f64, current: f64) -> bool {
+        closure_relative_residual_decrease_converged(previous, current)
+    }
+
+    pub(crate) struct ClosureSolveView {
+        pub(crate) corrections: Vec<[f64; 2]>,
+        pub(crate) iterations: usize,
+        pub(crate) converged: bool,
+    }
+
+    /// Exercise the production robust translation solver without image setup.
+    pub(crate) fn closure_solve(
+        station_count: usize,
+        reference_station: usize,
+        constraints: &[(usize, usize, [f64; 2], f64)],
+    ) -> Option<ClosureSolveView> {
+        solve_robust_closure_translations(station_count, reference_station, constraints).map(
+            |solve| ClosureSolveView {
+                corrections: solve.corrections,
+                iterations: solve.iterations,
+                converged: solve.converged,
+            },
+        )
+    }
+
+    pub(crate) struct ClosureClampView {
+        pub(crate) corrections: Vec<[f64; 2]>,
+        pub(crate) maximum_corner_displacement_px: f64,
+        pub(crate) clamped_stations: usize,
+    }
+
+    /// Exercise the production four-corner correction clamp for Property 36.
+    pub(crate) fn clamp_closure_corrections(
+        dimensions: (u32, u32),
+        base_poses: &[Matrix3<f64>],
+        relations: &[ClosureRelationView],
+        corrections: &[[f64; 2]],
+    ) -> Option<ClosureClampView> {
+        let (images, groups) = singleton_station_inputs(dimensions, base_poses.len());
+        let group_edges = production_group_edges(relations);
+        let mut corrections = corrections.to_vec();
+        let (maximum_corner_displacement_px, clamped_stations) =
+            clamp_station_translation_corrections(
+                &images,
+                &groups,
+                &group_edges,
+                base_poses,
+                &mut corrections,
+            )?;
+        Some(ClosureClampView {
+            corrections,
+            maximum_corner_displacement_px,
+            clamped_stations,
+        })
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum ClosureAcceptanceView {
+        Accepted,
+        NoConstraints,
+        UnreliableResidual,
+        UnreliableIterations,
+        UnreliablePairP95(usize, usize),
+    }
+
+    /// Exact production acceptance gate access for Properties 38 and 39.
+    pub(crate) fn closure_acceptance_view(
+        station_count: usize,
+        accepted_relation_count: usize,
+        converged: bool,
+        iterations: usize,
+        residual_median_px: f64,
+        direct_pairs: &[(usize, usize, f64)],
+    ) -> ClosureAcceptanceView {
+        let direct_pairs = direct_pairs
+            .iter()
+            .map(|&(left, right, p95_px)| ClosureDirectPairP95 {
+                left,
+                right,
+                p95_px,
+            })
+            .collect::<Vec<_>>();
+        match closure_acceptance(
+            station_count,
+            accepted_relation_count,
+            converged,
+            iterations,
+            residual_median_px,
+            &direct_pairs,
+        ) {
+            ClosureAcceptance::Accepted => ClosureAcceptanceView::Accepted,
+            ClosureAcceptance::NoConstraints => ClosureAcceptanceView::NoConstraints,
+            ClosureAcceptance::UnreliableResidual => ClosureAcceptanceView::UnreliableResidual,
+            ClosureAcceptance::UnreliableIterations => ClosureAcceptanceView::UnreliableIterations,
+            ClosureAcceptance::UnreliablePairP95(pair) => {
+                ClosureAcceptanceView::UnreliablePairP95(pair.left, pair.right)
+            }
+        }
+    }
+
+    /// Run the actual closure/report boundary with one singleton source per
+    /// station; no image payload is decoded or mocked.
+    pub(crate) fn closure_run(
+        dimensions: (u32, u32),
+        rows: &[u32],
+        columns: &[u32],
+        base_poses: &[Matrix3<f64>],
+        relations: &[ClosureRelationView],
+    ) -> ClosureRunView {
+        let (images, groups) = singleton_station_inputs(dimensions, base_poses.len());
+        let group_edges = production_group_edges(relations);
+        let station_topology = topology::StationTopology {
+            row: rows.to_vec(),
+            column: columns.to_vec(),
+            ..topology::StationTopology::default()
+        };
+        let mut report = stack_report::ClosureReport::default();
+        let poses = refine_focus_group_projective_tree_poses_with_report(
+            &images,
+            &groups,
+            &group_edges,
+            base_poses,
+            0,
+            f64::from(dimensions.0.max(dimensions.1)),
+            &station_topology,
+            2,
+            &mut report,
+        )
+        .expect("valid property closure fixture returns a pose vector");
+        ClosureRunView { poses, report }
+    }
+}
+
 #[cfg(test)]
 mod alignment_tests {
     use super::*;
@@ -13946,11 +19131,177 @@ mod alignment_tests {
         }
     }
 
+    /// Alignment side of [`focus_textured_test_image`]; the full frame is
+    /// 1000×1000, so `scale_factor` is 4.0 exactly as a downscaled production
+    /// source would be.
+    const FOCUS_TEST_ALIGNMENT_SIDE: u32 = 250;
+
+    /// Deterministic band-limited texture for an alignment image the overlap
+    /// correlation of 需求 1.1 can actually be measured on.
+    ///
+    /// Three incommensurate sinusoids decorrelate over roughly ten alignment
+    /// pixels: bracket-sized breathing stays near 1.0 while a neighbouring
+    /// camera position falls well below the 0.60 bar.
+    fn focus_test_alignment_image() -> GrayImage {
+        GrayImage::from_fn(
+            FOCUS_TEST_ALIGNMENT_SIDE,
+            FOCUS_TEST_ALIGNMENT_SIDE,
+            |x, y| {
+                let x = f64::from(x);
+                let y = f64::from(y);
+                let value = 128.0
+                    + 60.0 * (x * 0.09 + y * 0.05).sin()
+                    + 45.0 * (x * 0.031 - y * 0.11).sin()
+                    + 25.0 * (x * 0.17 + y * 0.13).cos();
+                image::Luma([value.clamp(0.0, 255.0) as u8])
+            },
+        )
+    }
+
     fn focus_test_image(id: usize, filename: &str) -> ImageInfo {
         let mut image = test_image(id, filename);
         image.width = 1_000;
         image.height = 1_000;
         image
+    }
+
+    /// [`focus_test_image`] with a real alignment image, so the overlap
+    /// correlation of 需求 1.1 is measurable rather than absent.
+    fn focus_textured_test_image(id: usize, filename: &str) -> ImageInfo {
+        let mut image = focus_test_image(id, filename);
+        image.alignment_image = focus_test_alignment_image();
+        image.scale_factor = f64::from(image.width) / f64::from(FOCUS_TEST_ALIGNMENT_SIDE);
+        image.focal_length_35mm = Some(75.0);
+        image
+    }
+
+    #[test]
+    fn station_relation_contract_accepts_every_literal_boundary() {
+        let measurements = StationRelationMeasurements {
+            inliers: STATION_RELATION_MIN_INLIERS,
+            median_error_px: STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+            scale_ratio: STATION_RELATION_SCALE_RATIO_MIN,
+            spatial_support: STATION_RELATION_MIN_SPATIAL_SUPPORT,
+            low_frequency_mean_relative_difference:
+                STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE,
+            edge_strength_ratio: STATION_RELATION_EDGE_STRENGTH_RATIO_MIN,
+            median_edge_orientation_difference_degrees:
+                STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES,
+            preserves_convex_orientation: true,
+        };
+        assert!(station_relation_rejection_reasons(&measurements).is_empty());
+
+        let upper_scale_and_edge = StationRelationMeasurements {
+            scale_ratio: STATION_RELATION_SCALE_RATIO_MAX,
+            edge_strength_ratio: STATION_RELATION_EDGE_STRENGTH_RATIO_MAX,
+            ..measurements
+        };
+        assert!(station_relation_rejection_reasons(&upper_scale_and_edge).is_empty());
+    }
+
+    #[test]
+    fn station_relation_contract_records_one_identifier_per_failed_defect() {
+        let accepted = StationRelationMeasurements {
+            inliers: 24,
+            median_error_px: 3.0,
+            scale_ratio: 1.0,
+            spatial_support: 0.20,
+            low_frequency_mean_relative_difference: 0.20,
+            edge_strength_ratio: 1.0,
+            median_edge_orientation_difference_degrees: 10.0,
+            preserves_convex_orientation: true,
+        };
+        let cases = [
+            (
+                StationRelationMeasurements {
+                    inliers: 23,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_LOW_INLIERS,
+            ),
+            (
+                StationRelationMeasurements {
+                    median_error_px: 3.000_001,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_HIGH_REPROJECTION_ERROR,
+            ),
+            (
+                StationRelationMeasurements {
+                    scale_ratio: 0.949_999,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_SCALE_OUT_OF_RANGE,
+            ),
+            (
+                StationRelationMeasurements {
+                    spatial_support: 0.199_999,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_LOW_SPATIAL_SUPPORT,
+            ),
+            (
+                StationRelationMeasurements {
+                    low_frequency_mean_relative_difference: 0.200_001,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH,
+            ),
+            (
+                StationRelationMeasurements {
+                    edge_strength_ratio: 1.400_001,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH,
+            ),
+            (
+                StationRelationMeasurements {
+                    median_edge_orientation_difference_degrees: 10.000_001,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_EDGE_ORIENTATION_MISMATCH,
+            ),
+            (
+                StationRelationMeasurements {
+                    preserves_convex_orientation: false,
+                    ..accepted
+                },
+                degradation::STATION_RELATION_NON_CONVEX_QUAD,
+            ),
+        ];
+        for (measurements, expected) in cases {
+            assert_eq!(
+                station_relation_rejection_reasons(&measurements),
+                [expected]
+            );
+        }
+
+        let every_defect = StationRelationMeasurements {
+            inliers: 0,
+            median_error_px: f64::INFINITY,
+            scale_ratio: 0.0,
+            spatial_support: 0.0,
+            low_frequency_mean_relative_difference: f64::INFINITY,
+            edge_strength_ratio: f64::INFINITY,
+            median_edge_orientation_difference_degrees: f64::INFINITY,
+            preserves_convex_orientation: false,
+        };
+        let reasons = station_relation_rejection_reasons(&every_defect);
+        assert_eq!(reasons.len(), 8);
+        assert_eq!(reasons.iter().copied().collect::<HashSet<_>>().len(), 8);
+    }
+
+    #[test]
+    fn station_relation_spatial_support_is_inlier_hull_over_overlap() {
+        let points = vec![
+            (Point2::new(0.0, 0.0), Point2::new(0.0, 0.0)),
+            (Point2::new(50.0, 0.0), Point2::new(50.0, 0.0)),
+            (Point2::new(50.0, 50.0), Point2::new(50.0, 50.0)),
+            (Point2::new(0.0, 50.0), Point2::new(0.0, 50.0)),
+        ];
+        let support =
+            station_relation_spatial_support(&points, &Matrix3::identity(), (100, 100), (100, 100));
+        assert!((support - 0.25).abs() < 1e-12);
     }
 
     #[test]
@@ -14022,6 +19373,7 @@ mod alignment_tests {
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         }
     }
 
@@ -14105,15 +19457,21 @@ mod alignment_tests {
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         }
     }
 
+    /// A 6×6 correspondence grid over a 1000×1000 frame.
+    ///
+    /// 需求 1.1 asks for at least 30 verified inlier correspondences before two
+    /// sources may share a Capture_Station, so an observed relation in these
+    /// tests carries 36 of them spread from 100 to 900 on both axes.
     fn observed_transform_match(homography: Matrix3<f64>, inliers: usize) -> MatchInfo {
-        let points = (0..4)
+        let points = (0..6)
             .flat_map(|row| {
-                (0..4).map(move |column| {
+                (0..6).map(move |column| {
                     let source =
-                        Point2::new(140.0 + column as f64 * 220.0, 140.0 + row as f64 * 220.0);
+                        Point2::new(100.0 + column as f64 * 160.0, 100.0 + row as f64 * 160.0);
                     (source, transformed_point(&homography, source).unwrap())
                 })
             })
@@ -14128,6 +19486,7 @@ mod alignment_tests {
             top_candidate_points: Vec::new(),
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
+            canonical_homography: None,
         }
     }
 
@@ -14291,8 +19650,117 @@ mod alignment_tests {
         ));
     }
 
+    /// Build single-source stations plus image-level world poses for focused
+    /// compositor-order tests. `centers` are world centres of 1000×1000
+    /// stations, exactly the observations consumed by production topology
+    /// inference (任务 9.10).
+    fn compositor_order_fixture(
+        centers: &[(f64, f64)],
+    ) -> (
+        Vec<ImageInfo>,
+        Vec<FocusCaptureGroup>,
+        HashMap<usize, Matrix3<f64>>,
+    ) {
+        let images = (0..centers.len())
+            .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 3680 + index)))
+            .collect::<Vec<_>>();
+        let groups = (0..centers.len())
+            .map(|index| FocusCaptureGroup {
+                members: vec![index],
+                anchor: index,
+                local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        let poses = centers
+            .iter()
+            .enumerate()
+            .map(|(index, &(x, y))| {
+                (
+                    images[index].id,
+                    Matrix3::new(1.0, 0.0, x - 500.0, 0.0, 1.0, y - 500.0, 0.0, 0.0, 1.0),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        (images, groups, poses)
+    }
+
     #[test]
-    fn station_projective_closure_uses_loop_constraints() {
+    fn compositor_order_uses_topology_rows_and_columns_not_world_coordinate_drift() {
+        // Per-station drift makes a continuous y/x sort interleave each row in
+        // the wrong order. Production topology first clusters columns, assigns
+        // rows inside them, then composes top-to-bottom and right-to-left.
+        let (images, groups, poses) =
+            compositor_order_fixture(&[(900.0, 20.0), (900.0, 900.0), (0.0, 0.0), (0.0, 880.0)]);
+        let station_topology = focus_station_topology(&images, &groups, &poses);
+
+        assert_eq!(station_topology.row, vec![0, 1, 0, 1]);
+        assert_eq!(station_topology.column, vec![0, 0, 1, 1]);
+        assert_eq!(
+            focus_source_order_group_compositor_order(groups.len(), &station_topology),
+            vec![0, 2, 1, 3]
+        );
+    }
+
+    #[test]
+    fn compositor_order_uses_station_index_only_for_exact_topology_ties() {
+        // Requirement 5.1 prevents this malformed tie in production. Keeping a
+        // final station key nevertheless makes synthetic/partial topology
+        // deterministic without consulting filenames, world coordinates or
+        // candidate/import order.
+        let station_topology = topology::StationTopology {
+            row: vec![0, 0, 1],
+            column: vec![0, 0, 0],
+            ..topology::StationTopology::default()
+        };
+
+        assert_eq!(
+            focus_source_order_group_compositor_order(3, &station_topology),
+            vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn compositor_order_is_invariant_to_rename_and_import_order() {
+        // Physical station identities in canonical topology order: right-top,
+        // left-top, right-bottom, left-bottom.
+        let physical_centers = [(900.0, 10.0), (0.0, 0.0), (900.0, 900.0), (0.0, 890.0)];
+        let (original_images, original_groups, original_poses) =
+            compositor_order_fixture(&physical_centers);
+        let original_topology =
+            focus_station_topology(&original_images, &original_groups, &original_poses);
+        let original_order =
+            focus_source_order_group_compositor_order(original_groups.len(), &original_topology);
+
+        // Reindex stations by shuffled import order and rename every source.
+        // Map the resulting station indices back to physical identities before
+        // comparing, because import indices themselves intentionally differ.
+        let permutation = [3usize, 0, 2, 1];
+        let shuffled_centers = permutation
+            .iter()
+            .map(|&physical| physical_centers[physical])
+            .collect::<Vec<_>>();
+        let (mut shuffled_images, shuffled_groups, shuffled_poses) =
+            compositor_order_fixture(&shuffled_centers);
+        let shuffled_count = shuffled_images.len();
+        for (index, image) in shuffled_images.iter_mut().enumerate() {
+            image.filename = format!("renamed-{}.NEF", shuffled_count - index);
+        }
+        let shuffled_topology =
+            focus_station_topology(&shuffled_images, &shuffled_groups, &shuffled_poses);
+        let shuffled_order =
+            focus_source_order_group_compositor_order(shuffled_groups.len(), &shuffled_topology);
+
+        let original_physical = original_order;
+        let shuffled_physical = shuffled_order
+            .into_iter()
+            .map(|station| permutation[station])
+            .collect::<Vec<_>>();
+        assert_eq!(original_physical, vec![0, 1, 2, 3]);
+        assert_eq!(shuffled_physical, original_physical);
+    }
+
+    #[test]
+    fn station_projective_tree_closure_uses_loop_constraints() {
         let images = (0..3)
             .map(|index| focus_test_image(index, &format!("station-{index}.NEF")))
             .collect::<Vec<_>>();
@@ -14308,14 +19776,16 @@ mod alignment_tests {
         let edges = vec![
             (1.0, 0, 1, translation(-100.0), 2, 0.0),
             (1.0, 1, 2, translation(-100.0), 2, 0.0),
-            // The long closure is ten pixels short and should pull the last
-            // station without flattening the measured translation geometry.
-            (1.0, 0, 2, translation(-190.0), 2, 0.0),
+            // The long closure is two pixels short and should pull the last
+            // station without exceeding the direct-pair acceptance bound.
+            (1.0, 0, 2, translation(-198.0), 2, 0.0),
         ];
-        let solved = optimize_focus_group_projective_poses(&images, &groups, &edges, &initial, 0)
-            .expect("connected station loop should optimize");
+        let solved = refine_focus_group_projective_tree_poses(
+            &images, &groups, &edges, &initial, 0, 1_000.0,
+        )
+        .expect("connected station loop should optimize");
         assert_eq!(solved.len(), 3);
-        assert!(solved[2][(0, 2)] > 190.0);
+        assert!(solved[2][(0, 2)] > 198.0);
         assert!(solved[2][(0, 2)] < 200.0);
     }
 
@@ -14336,6 +19806,88 @@ mod alignment_tests {
         assert!(!focus_match_graph_is_dense_continuous_scan(
             &images, &matches
         ));
+    }
+
+    #[test]
+    fn compact_three_station_focus_run_executes_strict_station_solver() {
+        let capture_numbers = [1000, 1009, 1001, 1008, 1002, 1007, 1003, 1006, 1004, 1005];
+        let images = capture_numbers
+            .iter()
+            .enumerate()
+            .map(|(index, number)| {
+                focus_textured_test_image(index, &format!("DSC_{number:04}.NEF"))
+            })
+            .collect::<Vec<_>>();
+        assert!(images.len() < SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES);
+
+        // Three focus brackets (4 + 3 + 3 frames) are connected by two
+        // multi-layer consensus bridges. The bridges seed station geometry but
+        // cannot merge the brackets into one Capture_Station.
+        let mut matches = HashMap::new();
+        for &(start, end) in &[(0usize, 4usize), (4, 7), (7, 10)] {
+            for index in start..end - 1 {
+                matches.insert((index, index + 1), observed_translation_match(0.0, 0.0, 36));
+            }
+        }
+        for &(left, right) in &[(3usize, 4usize), (6, 7)] {
+            let mut bridge = observed_translation_match(0.0, 0.0, 36);
+            bridge.coarse_bridge = true;
+            bridge.top_candidate_points = bridge.points.clone();
+            matches.insert((left, right), bridge);
+        }
+
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+        let (render_order, solved) = build_focus_stack_stitching_order_with_report(
+            &images,
+            &matches,
+            &mut closure_report,
+            &mut relation_report,
+            true,
+        );
+
+        assert_eq!(solved.len(), images.len());
+        assert_eq!(relation_report.accepted.len(), 2);
+        assert_eq!(relation_report.connectivity.components, 1);
+        assert_eq!(closure_report.participating_constraints, 2);
+        assert_eq!(
+            closure_report.status,
+            stack_report::ClosureStatus::NoConstraints
+        );
+
+        // Solving compact station geometry must not opt the ownership renderer
+        // into the large-scan filename heuristic.
+        let filename_order = focus_filename_order_with_overview_gaps(&images, &matches);
+        assert_eq!(render_order.len(), images.len());
+        assert_ne!(render_order, filename_order);
+    }
+
+    #[test]
+    fn compact_single_station_focus_run_skips_inter_station_solver() {
+        let images = (0..10)
+            .map(|index| focus_textured_test_image(index, &format!("DSC_{:04}.NEF", 2000 + index)))
+            .collect::<Vec<_>>();
+        let matches = (0..images.len() - 1)
+            .map(|index| ((index, index + 1), observed_translation_match(0.0, 0.0, 36)))
+            .collect::<HashMap<_, _>>();
+
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+        let (render_order, solved) = build_focus_stack_stitching_order_with_report(
+            &images,
+            &matches,
+            &mut closure_report,
+            &mut relation_report,
+            true,
+        );
+
+        assert_eq!(render_order.len(), images.len());
+        assert_eq!(solved.len(), images.len());
+        assert!(relation_report.accepted.is_empty());
+        assert_eq!(relation_report.rejected_count, 0);
+        assert_eq!(relation_report.connectivity.components, 0);
+        assert_eq!(closure_report.status, stack_report::ClosureStatus::NotRun);
+        assert_eq!(closure_report.participating_constraints, 0);
     }
 
     #[test]
@@ -14444,8 +19996,12 @@ mod alignment_tests {
                 image
             })
             .collect::<Vec<_>>();
+        // 需求 1.4 budgets 0.02 long sides of *accumulated* centre displacement
+        // per Capture_Station, so a 12-frame bracket may drift at most
+        // 20px/11 ≈ 1.8px per layer.  0.4px of refocus breathing per layer adds
+        // up to 0.0049 and stays one station.
         let matches = (0..images.len() - 1)
-            .map(|index| ((index, index + 1), observed_translation_match(2.0, 1.0, 80)))
+            .map(|index| ((index, index + 1), observed_translation_match(0.4, 0.2, 80)))
             .collect::<HashMap<_, _>>();
         let locked = images
             .iter()
@@ -14527,6 +20083,275 @@ mod alignment_tests {
     }
 
     #[test]
+    fn homography_scale_ratio_is_the_singular_value_geometric_mean() {
+        assert!((homography_scale_ratio(&Matrix3::identity()).unwrap() - 1.0).abs() < 1e-12);
+
+        // A uniform 3% enlargement reports 1.03 regardless of rotation.
+        let (sin, cos) = 0.4f64.sin_cos();
+        let rotated_scale = Matrix3::new(
+            1.03 * cos,
+            -1.03 * sin,
+            120.0,
+            1.03 * sin,
+            1.03 * cos,
+            -40.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        assert!((homography_scale_ratio(&rotated_scale).unwrap() - 1.03).abs() < 1e-9);
+
+        // An anisotropic stretch reports the geometric mean of both axes.
+        let anisotropic = Matrix3::new(1.20, 0.0, 0.0, 0.0, 0.80, 0.0, 0.0, 0.0, 1.0);
+        let expected = (1.20f64 * 0.80).sqrt();
+        assert!((homography_scale_ratio(&anisotropic).unwrap() - expected).abs() < 1e-12);
+
+        // A homography is defined up to an overall scale, so an unnormalised
+        // matrix must report the same ratio as its normalised form.
+        let unnormalised = Matrix3::identity() * 4.0;
+        assert!((homography_scale_ratio(&unnormalised).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn station_pose_jacobian_accepts_bounded_projective_local_scale_without_mutation() {
+        // Every one of the eight homography parameters is free and non-trivial;
+        // the Local_Scale gate observes the matrix but never projects it onto a
+        // similarity/affine model.
+        let pose = Matrix3::new(
+            1.012, -0.018, 73.0, 0.021, 0.997, -41.0, 0.000_015, -0.000_009, 1.0,
+        );
+        let original = pose;
+        let (minimum, maximum) = station_pose_local_scale_range(&pose, (1200, 800))
+            .expect("a nonsingular projective pose has a measurable Jacobian");
+        let ratio = maximum / minimum;
+
+        assert!(minimum > 0.0);
+        assert!(ratio <= STATION_POSE_MAX_LOCAL_SCALE_RATIO);
+        assert_eq!(pose, original, "the gate must preserve all eight pose DOF");
+        assert_ne!(pose[(2, 0)], 0.0);
+        assert_ne!(pose[(2, 1)], 0.0);
+    }
+
+    #[test]
+    fn station_pose_jacobian_rejects_excessive_local_scale_variation() {
+        let pose = Matrix3::new(1.0, 0.01, 0.0, -0.02, 1.0, 0.0, 0.000_35, 0.0, 1.0);
+        let (minimum, maximum) = station_pose_local_scale_range(&pose, (1200, 800))
+            .expect("the perspective pose remains nonsingular over the tile");
+        let ratio = maximum / minimum;
+
+        assert!(ratio > STATION_POSE_MAX_LOCAL_SCALE_RATIO);
+    }
+
+    #[test]
+    fn capture_station_link_requires_all_four_pieces_of_evidence() {
+        let images = (0..2)
+            .map(|index| focus_textured_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
+            .collect::<Vec<_>>();
+
+        // Focus breathing: 36 inliers, high overlap correlation, broad support,
+        // unit scale.
+        let accepted = observed_translation_match(2.0, 1.0, 36);
+        let evidence = focus_station_link_evidence(&images, 0, 1, &accepted)
+            .expect("the overlap is measurable");
+        assert!(evidence.overlap_ncc_measured);
+        assert!(evidence.inliers >= STATION_MIN_INLIER_MATCHES);
+        assert!(evidence.overlap_ncc >= STATION_MIN_OVERLAP_NCC);
+        assert!(evidence.spatial_support >= STATION_MIN_INLIER_SPATIAL_SUPPORT);
+        assert!(
+            (STATION_SCALE_RATIO_MIN..=STATION_SCALE_RATIO_MAX).contains(&evidence.scale_ratio)
+        );
+        assert!(focus_match_is_capture_station_link(
+            &images, 0, 1, &accepted
+        ));
+
+        // Fewer than 30 verified correspondences is not station evidence, even
+        // with a perfect transform.
+        let mut too_few_inliers = accepted.clone();
+        too_few_inliers
+            .points
+            .truncate(STATION_MIN_INLIER_MATCHES - 1);
+        assert!(!focus_match_is_capture_station_link(
+            &images,
+            0,
+            1,
+            &too_few_inliers
+        ));
+
+        // A 5% scale step is a different camera distance, not a focus layer.
+        let scaled = observed_transform_match(
+            Matrix3::new(1.05, 0.0, 0.0, 0.0, 1.05, 0.0, 0.0, 0.0, 1.0),
+            36,
+        );
+        let scaled_evidence =
+            focus_station_link_evidence(&images, 0, 1, &scaled).expect("measurable");
+        assert!(scaled_evidence.scale_ratio > STATION_SCALE_RATIO_MAX);
+        assert!(!focus_match_is_capture_station_link(&images, 0, 1, &scaled));
+
+        // Inliers packed into one corner carry no spatial support.
+        let mut clustered = accepted.clone();
+        clustered.points = (0..36)
+            .map(|index| {
+                let source = Point2::new(
+                    120.0 + f64::from(index % 6) * 2.0,
+                    120.0 + f64::from(index / 6) * 2.0,
+                );
+                (source, Point2::new(source.x + 2.0, source.y + 1.0))
+            })
+            .collect();
+        let clustered_evidence =
+            focus_station_link_evidence(&images, 0, 1, &clustered).expect("measurable");
+        assert!(clustered_evidence.spatial_support < STATION_MIN_INLIER_SPATIAL_SUPPORT);
+        assert!(!focus_match_is_capture_station_link(
+            &images, 0, 1, &clustered
+        ));
+
+        // A displacement of a quarter frame decorrelates the overlap well below
+        // the 0.60 bar even though the transform is a clean translation.
+        let neighbouring_station = observed_translation_match(60.0, 0.0, 36);
+        let neighbour_evidence =
+            focus_station_link_evidence(&images, 0, 1, &neighbouring_station).expect("measurable");
+        assert!(neighbour_evidence.overlap_ncc < STATION_MIN_OVERLAP_NCC);
+        assert!(!focus_match_is_capture_station_link(
+            &images,
+            0,
+            1,
+            &neighbouring_station
+        ));
+    }
+
+    #[test]
+    fn capture_sequence_weight_boost_never_reaches_station_membership() {
+        // 需求 1.2: `FOCUS_BRACKET_MAX_CAPTURE_GAP` is a candidate-order hint for
+        // the pose graph.  Two filename-adjacent captures whose overlap evidence
+        // fails 需求 1.1 must stay in different Capture_Stations even while the
+        // graph builder keeps boosting their edge weight.
+        let images = vec![
+            focus_textured_test_image(0, "DSC_1001.NEF"),
+            focus_textured_test_image(1, "DSC_1002.NEF"),
+        ];
+        let capture_gap = trailing_capture_number(&images[0].filename)
+            .zip(trailing_capture_number(&images[1].filename))
+            .map(|(left, right)| left.abs_diff(right))
+            .expect("both names carry a trailing capture number");
+        assert!(capture_gap <= FOCUS_BRACKET_MAX_CAPTURE_GAP);
+
+        let neighbouring_station = observed_translation_match(60.0, 0.0, 36);
+        assert!(
+            focus_graph_capture_sequence_boost(&images[0], &images[1], &neighbouring_station) > 1.0,
+            "the capture-sequence hint must keep boosting the graph weight"
+        );
+        assert!(
+            !focus_match_is_capture_station_link(&images, 0, 1, &neighbouring_station),
+            "a capture-sequence hint must not create station membership"
+        );
+        assert!(
+            focus_station_grouping(&images, &HashMap::from([((0, 1), neighbouring_station)]))
+                .components
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn grouping_reports_an_isolated_source_without_moving_the_others() {
+        // 需求 1.6: the isolated source is named, and the remaining sources keep
+        // the grouping they would have had on their own.
+        let images = (0..3)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let bracket = HashMap::from([((0, 1), observed_translation_match(2.0, 1.0, 36))]);
+        let reference = focus_station_grouping(&images[..2], &bracket);
+
+        let with_isolated = focus_station_grouping(&images, &bracket);
+        assert_eq!(with_isolated.components, reference.components);
+        assert_eq!(with_isolated.isolated, vec![2]);
+    }
+
+    #[test]
+    fn task_7_31_station_member_count_boundaries_are_exact() {
+        let outcomes = [1usize, 2, 47, 48, 49].map(station_member_count_is_supported);
+        assert_eq!(outcomes, [true, true, true, true, false]);
+        assert_eq!(FOCUS_BRACKET_MAX_COMPONENT_SOURCES, 48);
+        assert!(!station_member_count_is_supported(0));
+    }
+
+    #[test]
+    fn oversized_station_is_split_until_every_member_count_fits() {
+        // 需求 1.5 / 1.10: a static 50-frame bracket has no motion to split on,
+        // so the member ceiling has to do it, and every split is recorded.
+        let count = FOCUS_BRACKET_MAX_COMPONENT_SOURCES + 2;
+        let images = (0..count)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = (0..count - 1)
+            .map(|index| ((index, index + 1), observed_translation_match(0.0, 0.0, 36)))
+            .collect::<HashMap<_, _>>();
+
+        let grouping = focus_station_grouping(&images, &matches);
+
+        assert_eq!(
+            grouping.components.iter().map(Vec::len).sum::<usize>(),
+            count
+        );
+        assert!(
+            grouping
+                .components
+                .iter()
+                .all(|station| station.len() <= FOCUS_BRACKET_MAX_COMPONENT_SOURCES)
+        );
+        assert!(
+            grouping
+                .splits
+                .iter()
+                .any(|split| split.reason == degradation::GROUPING_MEMBER_LIMIT_SPLIT)
+        );
+    }
+
+    #[test]
+    fn accumulated_motion_split_records_its_position_and_ratio() {
+        // 需求 1.4: 12 frames drifting 2.236px each cross 0.02 long sides of
+        // accumulated displacement at the ninth step (9 × 0.002236 = 0.0201).
+        let images = (0..12)
+            .map(|index| {
+                let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
+                image.focal_length_35mm = Some(75.0);
+                image
+            })
+            .collect::<Vec<_>>();
+        let matches = (0..images.len() - 1)
+            .map(|index| ((index, index + 1), observed_translation_match(2.0, 1.0, 36)))
+            .collect::<HashMap<_, _>>();
+
+        let grouping = focus_station_grouping(&images, &matches);
+
+        let motion_splits = grouping
+            .splits
+            .iter()
+            .filter(|split| split.reason == degradation::GROUPING_ACCUMULATED_MOTION)
+            .collect::<Vec<_>>();
+        assert_eq!(motion_splits.len(), 1);
+        assert_eq!(motion_splits[0].position, 9);
+        assert!(motion_splits[0].motion_ratio > STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO);
+        // The candidate order runs along the recovered world centres, whose
+        // direction is a property of the measured relations rather than of the
+        // import order, so assert the partition rather than which end it starts
+        // from.
+        let mut sizes = grouping.components.iter().map(Vec::len).collect::<Vec<_>>();
+        sizes.sort_unstable();
+        assert_eq!(sizes, vec![3, 9]);
+        let mut covered = grouping.components.concat();
+        covered.sort_unstable();
+        assert_eq!(covered, (0..12).collect::<Vec<_>>());
+    }
+
+    #[test]
     fn focus_render_order_finishes_each_capture_group_before_the_next() {
         let images = (0..6)
             .map(|index| focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index)))
@@ -14548,7 +20373,12 @@ mod alignment_tests {
     }
 
     #[test]
-    fn capture_groups_absorb_an_unmatched_layer_by_solved_center() {
+    fn capture_groups_keep_an_isolated_layer_out_of_every_station() {
+        // 需求 1.6: a source that satisfies the 需求 1.1 overlap evidence with no
+        // other source is marked isolated and merged into no Capture_Station —
+        // a close solved world centre is not a substitute for the missing
+        // evidence — while the remaining sources keep the grouping they would
+        // have had anyway.
         let images = (0..5)
             .map(|index| {
                 let mut image = focus_test_image(index, &format!("DSC_{:04}.NEF", 1000 + index));
@@ -14564,20 +20394,27 @@ mod alignment_tests {
         let locked = HashMap::from([
             (0, translation(0.0)),
             (1, translation(3.0)),
-            // No direct feature edge for image 2, but its solved centre is at
-            // the same physical station as images 0 and 1.
+            // No accepted relation at all for image 2, even though its solved
+            // centre sits at the same physical station as images 0 and 1.
             (2, translation(7.0)),
             (3, translation(900.0)),
             (4, translation(904.0)),
         ]);
 
-        let (groups, _) = focus_capture_groups(&images, &matches, &locked).unwrap();
+        let (groups, group_for_image) = focus_capture_groups(&images, &matches, &locked).unwrap();
         assert_eq!(
             groups
                 .iter()
                 .map(|group| group.members.clone())
                 .collect::<Vec<_>>(),
-            vec![vec![0, 1, 2], vec![3, 4]]
+            vec![vec![0, 1], vec![3, 4]]
+        );
+        assert_eq!(group_for_image[2], usize::MAX);
+        assert!(groups.iter().all(|group| !group.members.contains(&2)));
+        assert_eq!(
+            focus_station_grouping(&images, &matches).isolated,
+            vec![2],
+            "需求 1.6: the isolated source is still named for the Stack_Report"
         );
     }
 
@@ -14616,6 +20453,1085 @@ mod alignment_tests {
     }
 
     #[test]
+    fn virtual_tile_features_ignore_every_uncovered_pixel() {
+        let width = 96;
+        let height = 96;
+        let covered = (0..height)
+            .flat_map(|y| {
+                (0..width).map(move |x| {
+                    if (8..88).contains(&x) && (8..88).contains(&y) {
+                        u8::MAX
+                    } else {
+                        0
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let coverage = stitching::CoverageMask::from_bytes(width, height, covered).unwrap();
+        let covered_value = |x: u32, y: u32| {
+            if ((x / 6) + (y / 6)) % 2 == 0 {
+                0.1
+            } else {
+                0.9
+            }
+        };
+        let first = Rgb32FImage::from_fn(width, height, |x, y| {
+            let value = if coverage.is_covered(x, y) {
+                covered_value(x, y)
+            } else {
+                0.0
+            };
+            image::Rgb([value, value, value])
+        });
+        let second = Rgb32FImage::from_fn(width, height, |x, y| {
+            let value = if coverage.is_covered(x, y) {
+                covered_value(x, y)
+            } else if (x + y) % 2 == 0 {
+                1.0
+            } else {
+                0.35
+            };
+            image::Rgb([value, value, value])
+        });
+        let brief_pairs = processing::generate_brief_pairs();
+
+        let (first_gray, first_features) =
+            virtual_tile_covered_features(&first, &coverage, &brief_pairs);
+        let (second_gray, second_features) =
+            virtual_tile_covered_features(&second, &coverage, &brief_pairs);
+        let signature = |features: &[Feature]| {
+            features
+                .iter()
+                .map(|feature| (feature.keypoint.x, feature.keypoint.y, feature.descriptor))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(first_gray, second_gray);
+        assert!(
+            !first_features.is_empty(),
+            "the covered texture must yield evidence"
+        );
+        assert_eq!(signature(&first_features), signature(&second_features));
+        assert!(first_features.iter().all(|feature| {
+            let x = feature.keypoint.x;
+            let y = feature.keypoint.y;
+            (y - VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS..=y + VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS)
+                .all(|sample_y| {
+                    (x - VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS
+                        ..=x + VIRTUAL_TILE_FEATURE_COVERAGE_RADIUS)
+                        .all(|sample_x| coverage.is_covered(sample_x, sample_y))
+                })
+        }));
+    }
+
+    fn synthetic_virtual_tile_topology(station_count: usize) -> topology::StationTopology {
+        topology::StationTopology {
+            row: vec![0; station_count],
+            column: (0..station_count as u32).collect(),
+            candidates: all_image_pairs(station_count)
+                .into_iter()
+                .map(|(left, right)| topology::CandidateAdjacency {
+                    left,
+                    right,
+                    kind: stack_report::AdjacencyKind::SameRow,
+                    score: 1.0,
+                })
+                .collect(),
+            ..topology::StationTopology::default()
+        }
+    }
+
+    fn synthetic_virtual_tiles(station_count: usize) -> Vec<ImageInfo> {
+        (0..station_count)
+            .map(|station| {
+                let mut tile = focus_textured_test_image(
+                    usize::MAX - station,
+                    &format!("virtual://synthetic-station-{station}"),
+                );
+                // The fused representation is the requirement-6.1 evidence;
+                // no individual source feature vector is retained here.
+                tile.features.clear();
+                tile.top_features.clear();
+                tile
+            })
+            .collect()
+    }
+
+    fn guided_repeated_texture_fixture() -> (
+        Vec<ImageInfo>,
+        Vec<stitching::CoverageMask>,
+        HashMap<usize, Matrix3<f64>>,
+        topology::StationTopology,
+    ) {
+        let (width, height) = (720u32, 560u32);
+        let world_texture = |world_x: u32, y: u32| {
+            let coarse = ((world_x / 11 + y / 13) % 2) as u8 * 150;
+            let fine = ((world_x / 5 + y / 7) % 2) as u8 * 70;
+            20u8.saturating_add(coarse).saturating_add(fine)
+        };
+        let left_gray =
+            GrayImage::from_fn(width, height, |x, y| image::Luma([world_texture(x, y)]));
+        let right_gray = GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([world_texture(x + 200, y)])
+        });
+        let points = (70..=490)
+            .step_by(70)
+            .flat_map(|y| (240..=660).step_by(70).map(move |left_x| (left_x, y)))
+            .collect::<Vec<_>>();
+        let descriptor_for = |index: usize| {
+            let mut descriptor = [0u8; BRIEF_DESCRIPTOR_SIZE / 8];
+            descriptor[index / 8] = 1u8 << (index % 8);
+            descriptor
+        };
+        let left_features = points
+            .iter()
+            .enumerate()
+            .map(|(index, &(left_x, y))| Feature {
+                keypoint: KeyPoint { x: left_x, y },
+                descriptor: descriptor_for(index),
+                support_scale: 1.0,
+            })
+            .collect::<Vec<_>>();
+        // Deliberately permute otherwise perfect descriptor identities. A
+        // descriptor matcher therefore gets broad but geometrically
+        // inconsistent repeated-texture pairs; direct pixels remain aligned.
+        let right_features = points
+            .iter()
+            .enumerate()
+            .map(|(index, &(left_x, y))| Feature {
+                keypoint: KeyPoint { x: left_x - 200, y },
+                descriptor: descriptor_for((index * 17 + 5) % points.len()),
+                support_scale: 1.0,
+            })
+            .collect::<Vec<_>>();
+        let mut tiles = synthetic_virtual_tiles(2);
+        for tile in &mut tiles {
+            tile.width = width;
+            tile.height = height;
+            tile.scale_factor = 1.0;
+        }
+        tiles[0].alignment_image = left_gray;
+        tiles[0].features = left_features;
+        tiles[1].alignment_image = right_gray;
+        tiles[1].features = right_features;
+        let coverage_bytes = (0..height)
+            .flat_map(|y| {
+                (0..width).map(move |x| {
+                    u8::from((20..width - 20).contains(&x) && (20..height - 20).contains(&y))
+                        * u8::MAX
+                })
+            })
+            .collect::<Vec<_>>();
+        let coverage = stitching::CoverageMask::from_bytes(width, height, coverage_bytes).unwrap();
+        let right_to_world = Matrix3::new(1.0, 0.0, 200.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let initial = HashMap::from([
+            (tiles[0].id, Matrix3::identity()),
+            (tiles[1].id, right_to_world),
+        ]);
+        (
+            tiles,
+            vec![coverage.clone(), coverage],
+            initial,
+            synthetic_virtual_tile_topology(2),
+        )
+    }
+
+    fn direct_projective_fixture() -> (
+        Vec<ImageInfo>,
+        Vec<stitching::CoverageMask>,
+        HashMap<usize, Matrix3<f64>>,
+        topology::StationTopology,
+        Matrix3<f64>,
+    ) {
+        let (width, height) = (420u32, 340u32);
+        let texture = |x: f64, y: f64| {
+            let value = 126.0
+                + 47.0 * (x * 0.091 + y * 0.037).sin()
+                + 38.0 * (x * 0.027 - y * 0.113).cos()
+                + 24.0 * (x * 0.173 + y * 0.149).sin()
+                + 13.0 * (x * 0.311 - y * 0.071).cos();
+            value.clamp(0.0, 255.0)
+        };
+        let actual = Matrix3::new(
+            1.006, 0.009, -82.0, -0.006, 0.996, 11.0, 0.000_018, -0.000_012, 1.0,
+        );
+        let inverse = actual.try_inverse().unwrap();
+        let left = GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([texture(f64::from(x), f64::from(y)).round() as u8])
+        });
+        let right = GrayImage::from_fn(width, height, |x, y| {
+            let point = transformed_point(&inverse, Point2::new(f64::from(x), f64::from(y)));
+            let value = point.map_or(0.0, |point| texture(point.x, point.y) * 0.82 + 19.0);
+            image::Luma([value.clamp(0.0, 255.0).round() as u8])
+        });
+        let mut tiles = synthetic_virtual_tiles(2);
+        for tile in &mut tiles {
+            tile.width = width;
+            tile.height = height;
+            tile.scale_factor = 2.0;
+            tile.features.clear();
+        }
+        tiles[0].alignment_image = left;
+        tiles[1].alignment_image = right;
+        let coverage = stitching::CoverageMask::from_bytes(
+            width,
+            height,
+            vec![u8::MAX; width as usize * height as usize],
+        )
+        .unwrap();
+        let mut initial_left_to_right = actual;
+        initial_left_to_right[(0, 2)] += 4.5;
+        initial_left_to_right[(1, 2)] -= 3.75;
+        let initial = HashMap::from([
+            (tiles[0].id, Matrix3::identity()),
+            (tiles[1].id, initial_left_to_right.try_inverse().unwrap()),
+        ]);
+        (
+            tiles,
+            vec![coverage.clone(), coverage],
+            initial,
+            synthetic_virtual_tile_topology(2),
+            actual,
+        )
+    }
+
+    fn nonzero_origin_virtual_tile_fixture() -> (
+        Vec<ImageInfo>,
+        Vec<stitching::CoverageMask>,
+        HashMap<usize, Matrix3<f64>>,
+        topology::StationTopology,
+        Matrix3<f64>,
+    ) {
+        let left_dimensions = (560u32, 420u32);
+        let right_dimensions = (500u32, 460u32);
+        let left_to_world = Matrix3::new(1.0, 0.0, 140.0, 0.0, 1.0, -80.0, 0.0, 0.0, 1.0);
+        let right_to_world = Matrix3::new(1.0, 0.0, 260.0, 0.0, 1.0, -55.0, 0.0, 0.0, 1.0);
+        let actual = right_to_world.try_inverse().unwrap() * left_to_world;
+        let world_texture = |x: f64, y: f64| {
+            (127.0
+                + 48.0 * (x * 0.071 + y * 0.043).sin()
+                + 37.0 * (x * 0.029 - y * 0.109).cos()
+                + 22.0 * (x * 0.163 + y * 0.137).sin())
+            .clamp(0.0, 255.0)
+        };
+        let render = |dimensions: (u32, u32), tile_to_world: &Matrix3<f64>| {
+            GrayImage::from_fn(dimensions.0, dimensions.1, |x, y| {
+                let world =
+                    transformed_point(tile_to_world, Point2::new(f64::from(x), f64::from(y)))
+                        .unwrap();
+                image::Luma([world_texture(world.x, world.y).round() as u8])
+            })
+        };
+        let mut tiles = synthetic_virtual_tiles(2);
+        tiles[0].width = left_dimensions.0;
+        tiles[0].height = left_dimensions.1;
+        tiles[0].alignment_image = render(left_dimensions, &left_to_world);
+        tiles[1].width = right_dimensions.0;
+        tiles[1].height = right_dimensions.1;
+        tiles[1].alignment_image = render(right_dimensions, &right_to_world);
+        let coverages = [left_dimensions, right_dimensions]
+            .into_iter()
+            .map(|(width, height)| {
+                stitching::CoverageMask::from_bytes(
+                    width,
+                    height,
+                    vec![u8::MAX; width as usize * height as usize],
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let initial = HashMap::from([(tiles[0].id, left_to_world), (tiles[1].id, right_to_world)]);
+        (
+            tiles,
+            coverages,
+            initial,
+            synthetic_virtual_tile_topology(2),
+            actual,
+        )
+    }
+
+    #[test]
+    fn direct_grid_nonzero_origins_and_different_dimensions_keep_station_mapping() {
+        let (tiles, coverages, initial, topology, actual) = nonzero_origin_virtual_tile_fixture();
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        let relation = outcome
+            .relations
+            .get(&(0, 1))
+            .expect("nonzero Virtual_Tile origins must remain in the same station frame");
+        assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
+        for point in [
+            Point2::new(180.0, 90.0),
+            Point2::new(310.0, 210.0),
+            Point2::new(455.0, 350.0),
+        ] {
+            let expected = transformed_point(&actual, point).unwrap();
+            let measured = transformed_point(&relation.homography, point).unwrap();
+            assert!((expected - measured).norm() <= 0.75);
+            let left_world = transformed_point(&initial[&tiles[0].id], point).unwrap();
+            let right_world = transformed_point(&initial[&tiles[1].id], measured).unwrap();
+            assert!((left_world - right_world).norm() <= 0.75);
+        }
+
+        let (
+            mut reordered_tiles,
+            mut reordered_coverages,
+            reordered_initial,
+            reordered_topology,
+            _,
+        ) = nonzero_origin_virtual_tile_fixture();
+        reordered_tiles.swap(0, 1);
+        reordered_coverages.swap(0, 1);
+        let reordered = virtual_tile_station_matches(
+            &reordered_tiles,
+            &reordered_coverages,
+            &reordered_initial,
+            &reordered_topology,
+        );
+        let reordered_inverse = reordered
+            .get(&(0, 1))
+            .expect("station import reordering must retain measured geometry")
+            .homography
+            .try_inverse()
+            .unwrap();
+        for (forward, reverse) in relation.homography.iter().zip(reordered_inverse.iter()) {
+            assert!((forward - reverse).abs() < 1e-8);
+        }
+
+        let mut wrong_mapping = initial.clone();
+        wrong_mapping.insert(tiles[0].id, initial[&tiles[1].id]);
+        wrong_mapping.insert(tiles[1].id, initial[&tiles[0].id]);
+        assert!(
+            virtual_tile_station_matches(&tiles, &coverages, &wrong_mapping, &topology).is_empty(),
+            "swapping station origins must not be accepted as measured evidence"
+        );
+    }
+
+    #[test]
+    fn direct_grid_rejects_inverse_coordinate_direction() {
+        let (tiles, coverages, mut initial, topology, actual) =
+            nonzero_origin_virtual_tile_fixture();
+        initial.insert(tiles[0].id, Matrix3::identity());
+        initial.insert(tiles[1].id, actual);
+        assert!(
+            virtual_tile_station_matches(&tiles, &coverages, &initial, &topology).is_empty(),
+            "using target-to-source as source-to-target must fail strict pixel evidence"
+        );
+    }
+
+    #[test]
+    fn measured_reverse_transform_is_the_inverse_of_forward_residual_composition() {
+        let initial = Matrix3::new(
+            1.004, 0.009, -83.0, -0.006, 0.997, 12.0, 0.000_01, -0.000_02, 1.0,
+        );
+        let source = Point2::new(210.5, 143.25);
+        let predicted = transformed_point(&initial, source).unwrap();
+        let measured = predicted + nalgebra::Vector2::new(11.25, -7.5);
+        let reverse = virtual_tile_measured_reverse_transform(&initial, source, measured).unwrap();
+        assert!((transformed_point(&reverse, measured).unwrap() - source).norm() < 1e-9);
+        assert!(
+            (transformed_point(&initial.try_inverse().unwrap(), measured).unwrap() - source).norm()
+                > VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX,
+            "the inverse prior is not the inverse of a measured residual match"
+        );
+    }
+
+    #[test]
+    fn direct_grid_recovers_projective_photometric_overlap() {
+        let (tiles, coverages, initial, topology, actual) = direct_projective_fixture();
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        let relation = outcome
+            .relations
+            .get(&(0, 1))
+            .expect("direct fused pixels must recover the projective overlap");
+        let diagnostic = &outcome.diagnostics[0];
+        assert!(diagnostic.grid_probe_count <= VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES);
+        assert!(diagnostic.measurable_patch_count >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.bidirectional_match_count >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT);
+        for point in [
+            Point2::new(100.0, 70.0),
+            Point2::new(210.0, 170.0),
+            Point2::new(335.0, 275.0),
+        ] {
+            let expected = transformed_point(&actual, point).unwrap();
+            let measured = transformed_point(&relation.homography, point).unwrap();
+            assert!(
+                (expected - measured).norm() <= 1.0,
+                "{expected:?} != {measured:?}"
+            );
+        }
+    }
+
+    fn residual_model_fixture(
+        initial: Matrix3<f64>,
+        correction: Matrix3<f64>,
+        columns: usize,
+        rows: usize,
+    ) -> Vec<(Point2<f64>, Point2<f64>)> {
+        let measured = correction * initial;
+        (0..rows)
+            .flat_map(|row| {
+                (0..columns).map(move |column| {
+                    let source = Point2::new(70.0 + column as f64 * 65.0, 55.0 + row as f64 * 52.0);
+                    (source, transformed_point(&measured, source).unwrap())
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn direct_residual_translation_uses_only_measured_correspondences() {
+        let initial = Matrix3::new(
+            1.002, 0.004, -96.0, -0.003, 0.998, 8.0, 0.000_006, -0.000_004, 1.0,
+        );
+        let correction = Matrix3::new(1.0, 0.0, 6.25, 0.0, 1.0, -4.5, 0.0, 0.0, 1.0);
+        let points = residual_model_fixture(initial, correction, 6, 6);
+        let outcome =
+            virtual_tile_fit_measured_residual_model(&points, &initial, (500, 400), (500, 400));
+        let maximum_consensus = outcome.max_translation_consensus;
+        let fit = outcome.fit.expect("coherent measured residuals must fit");
+        assert_eq!(fit.model, "translation");
+        assert_eq!(maximum_consensus, points.len());
+        assert_eq!(fit.inlier_indices.len(), points.len());
+        assert!(fit.spatial_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT);
+        for (source, target) in &points {
+            let predicted = transformed_point(&fit.measured_homography, *source).unwrap();
+            assert!((predicted - target).norm() < 1e-9);
+        }
+
+        // Mutation proof: a perfect prior plus only 23 measured pairs still has
+        // only 23 pieces of evidence. The prior itself must never become the
+        // 24th point or an accepted inlier.
+        let prior_only_points = residual_model_fixture(initial, Matrix3::identity(), 23, 1);
+        let outcome = virtual_tile_fit_measured_residual_model(
+            &prior_only_points,
+            &initial,
+            (1_600, 400),
+            (1_600, 400),
+        );
+        assert!(outcome.fit.is_none());
+        assert_eq!(
+            outcome.max_translation_consensus,
+            STATION_RELATION_MIN_INLIERS - 1
+        );
+    }
+
+    #[test]
+    fn direct_residual_escalates_to_bounded_affine_only_when_translation_fails() {
+        let initial = Matrix3::new(1.0, 0.0, -90.0, 0.0, 1.0, 5.0, 0.0, 0.0, 1.0);
+        let correction = Matrix3::new(1.015, 0.008, 1.5, -0.006, 1.012, -2.0, 0.0, 0.0, 1.0);
+        let points = residual_model_fixture(initial, correction, 6, 6);
+        let outcome =
+            virtual_tile_fit_measured_residual_model(&points, &initial, (500, 400), (500, 400));
+        let translation_consensus = outcome.max_translation_consensus;
+        let fit = outcome
+            .fit
+            .expect("bounded spatially coherent affine residual must fit");
+        assert!(translation_consensus < STATION_RELATION_MIN_INLIERS);
+        assert_eq!(fit.model, "affine");
+        assert_eq!(fit.inlier_indices.len(), points.len());
+        assert!(virtual_tile_residual_correction_is_bounded(
+            &correction,
+            &initial,
+            (500, 400)
+        ));
+    }
+
+    #[test]
+    fn direct_residual_rejects_incoherent_measurements_and_is_order_deterministic() {
+        let initial = Matrix3::new(1.0, 0.0, -80.0, 0.0, 1.0, 3.0, 0.0, 0.0, 1.0);
+        let correction = Matrix3::new(1.0, 0.0, 5.0, 0.0, 1.0, -3.0, 0.0, 0.0, 1.0);
+        let points = residual_model_fixture(initial, correction, 6, 6);
+        let forward =
+            virtual_tile_fit_measured_residual_model(&points, &initial, (500, 400), (500, 400));
+        let mut reversed = points.clone();
+        reversed.reverse();
+        let reverse =
+            virtual_tile_fit_measured_residual_model(&reversed, &initial, (500, 400), (500, 400));
+        let forward = forward.fit.unwrap();
+        let reverse = reverse.fit.unwrap();
+        assert_eq!(forward.model, reverse.model);
+        assert_eq!(forward.inlier_indices.len(), reverse.inlier_indices.len());
+        assert_eq!(
+            forward
+                .measured_homography
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            reverse
+                .measured_homography
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>()
+        );
+
+        let incoherent = (0..48)
+            .map(|index| {
+                let source = Point2::new(
+                    60.0 + f64::from(index % 8) * 52.0,
+                    45.0 + f64::from(index / 8) * 58.0,
+                );
+                let predicted = transformed_point(&initial, source).unwrap();
+                let dx = f64::from((index * 37) % 31) - 15.0;
+                let dy = f64::from((index * 53) % 29) - 14.0;
+                (source, predicted + nalgebra::Vector2::new(dx, dy))
+            })
+            .collect::<Vec<_>>();
+        let outcome =
+            virtual_tile_fit_measured_residual_model(&incoherent, &initial, (500, 400), (500, 400));
+        assert!(outcome.max_translation_consensus < STATION_RELATION_MIN_INLIERS);
+        assert!(
+            outcome.fit.is_none(),
+            "an incorrect prior is not acceptance evidence"
+        );
+    }
+
+    #[test]
+    fn residual_model_selects_a_spatially_broad_mode_from_multimodal_texture() {
+        let initial = Matrix3::new(
+            1.001, 0.003, -74.0, -0.002, 0.999, 6.0, 0.000_004, -0.000_003, 1.0,
+        );
+        let coherent_correction = Matrix3::new(1.0, 0.0, 6.5, 0.0, 1.0, -4.25, 0.0, 0.0, 1.0);
+        let mut points = residual_model_fixture(initial, coherent_correction, 6, 5);
+        // Add stronger-looking but mutually inconsistent repeated-texture modes.
+        // None may borrow the prior or combine with the 30-point broad mode.
+        points.extend((0..72).map(|index| {
+            let source = Point2::new(
+                45.0 + f64::from(index % 12) * 36.0,
+                38.0 + f64::from(index / 12) * 57.0,
+            );
+            let predicted = transformed_point(&initial, source).unwrap();
+            let mode = index % 6;
+            let residual = nalgebra::Vector2::new(
+                -14.0 + f64::from(mode) * 5.1,
+                13.0 - f64::from((index * 5) % 7) * 4.2,
+            );
+            (source, predicted + residual)
+        }));
+        let outcome =
+            virtual_tile_fit_measured_residual_model(&points, &initial, (520, 390), (500, 410));
+        let fit = outcome
+            .fit
+            .expect("the spatially broad measured residual mode must be recovered");
+        assert_eq!(fit.model, "translation");
+        assert!(fit.inlier_indices.len() >= 30);
+        assert!(fit.spatial_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT);
+        assert_eq!(outcome.translation.rejection_reason, "accepted");
+        assert_eq!(outcome.translation.bounded_correction, Some(true));
+    }
+
+    #[test]
+    fn residual_model_reports_each_rejected_bounded_stage() {
+        let initial = Matrix3::new(1.0, 0.0, -80.0, 0.0, 1.0, 3.0, 0.0, 0.0, 1.0);
+        let unbounded = Matrix3::new(1.0, 0.0, 40.0, 0.0, 1.0, -35.0, 0.0, 0.0, 1.0);
+        let points = residual_model_fixture(initial, unbounded, 6, 6);
+        let outcome =
+            virtual_tile_fit_measured_residual_model(&points, &initial, (500, 400), (500, 400));
+        assert!(outcome.fit.is_none());
+        assert_eq!(outcome.translation.candidate_inliers, points.len());
+        assert_eq!(outcome.translation.bounded_correction, Some(false));
+        assert_eq!(
+            outcome.translation.rejection_reason,
+            "correction_out_of_bounds"
+        );
+        assert!(!outcome.affine.rejection_reason.is_empty());
+        assert!(!outcome.projective.rejection_reason.is_empty());
+    }
+
+    #[test]
+    fn direct_grid_round_trip_mutation_is_rejected() {
+        let source = Point2::new(113.25, 84.5);
+        assert!(virtual_tile_round_trip_is_consistent(
+            source,
+            source + nalgebra::Vector2::new(0.6, -0.6)
+        ));
+        assert!(!virtual_tile_round_trip_is_consistent(
+            source,
+            source + nalgebra::Vector2::new(1.01, 0.0)
+        ));
+    }
+
+    #[test]
+    fn direct_grid_recovers_repeated_texture_despite_inconsistent_descriptors() {
+        let (tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        assert!(
+            virtual_tile_unseeded_station_match(0, 1, &tiles).is_none(),
+            "global ratio matching must remain ambiguous on repeated descriptors"
+        );
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        let relation = outcome
+            .relations
+            .get(&(0, 1))
+            .expect("guided overlap must fit");
+        let diagnostic = &outcome.diagnostics[0];
+        assert_eq!(
+            diagnostic.evidence_kind,
+            stack_report::StationRelationEvidenceKind::VirtualTile
+        );
+        assert_eq!(diagnostic.failure_stage, "fitted");
+        assert!(diagnostic.grid_probe_count >= 24);
+        assert!(diagnostic.measurable_patch_count >= 24);
+        assert!(diagnostic.bidirectional_match_count >= 24);
+        assert!(diagnostic.occupied_grid_cells >= VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS);
+        assert!(diagnostic.search_radius_px > 0.0);
+        assert_eq!(diagnostic.residual_model, "translation");
+        assert_eq!(
+            diagnostic.max_residual_translation_consensus,
+            diagnostic.residual_translation.candidate_inliers
+        );
+        assert!(
+            diagnostic.max_residual_translation_consensus >= diagnostic.fitted_inliers,
+            "the post-model spatial quota may only reduce a measured consensus"
+        );
+        assert!(diagnostic.residual_dx_px.count >= diagnostic.fitted_inliers);
+        assert_eq!(
+            diagnostic.residual_dx_px.count,
+            diagnostic.residual_dy_px.count
+        );
+        assert_eq!(
+            diagnostic.residual_dx_px.count,
+            diagnostic.residual_magnitude_px.count
+        );
+        assert!(diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT);
+        assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
+        assert!(relation.points.iter().all(|(left, right)| {
+            (right.x - (left.x - 200.0)).abs() < 1e-9 && (right.y - left.y).abs() < 1e-9
+        }));
+        assert!(
+            station_relation_spatial_support(
+                &relation.points,
+                &relation.homography,
+                tiles[0].dimensions(),
+                tiles[1].dimensions(),
+            ) >= STATION_RELATION_MIN_SPATIAL_SUPPORT
+        );
+    }
+
+    #[test]
+    fn direct_grid_ignores_descriptor_matches_concentrated_in_repeated_stroke_cells() {
+        let (mut tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        let descriptor = [0u8; BRIEF_DESCRIPTOR_SIZE / 8];
+        tiles[0].features = (0..30)
+            .map(|index| Feature {
+                keypoint: KeyPoint {
+                    x: 240 + index * 14,
+                    y: 270 + index % 3,
+                },
+                descriptor,
+                support_scale: 1.0,
+            })
+            .collect();
+        tiles[1].features = tiles[0]
+            .features
+            .iter()
+            .map(|feature| Feature {
+                keypoint: KeyPoint {
+                    x: feature.keypoint.x - 200,
+                    y: feature.keypoint.y,
+                },
+                descriptor,
+                support_scale: 1.0,
+            })
+            .collect();
+
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        let relation = outcome
+            .relations
+            .get(&(0, 1))
+            .expect("direct grid pixels must not depend on descriptor concentration");
+        let diagnostic = &outcome.diagnostics[0];
+        assert!(diagnostic.grid_probe_count > tiles[0].features.len());
+        assert!(diagnostic.measurable_patch_count >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.bidirectional_match_count >= STATION_RELATION_MIN_INLIERS);
+        assert!(diagnostic.occupied_grid_cells >= VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS);
+        assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
+    }
+
+    #[test]
+    fn guided_overlap_rejects_wrong_prior_and_wrong_content() {
+        let (tiles, coverages, mut initial, topology) = guided_repeated_texture_fixture();
+        initial.insert(
+            tiles[1].id,
+            Matrix3::new(1.0, 0.0, 260.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+        );
+        assert!(
+            virtual_tile_station_matches(&tiles, &coverages, &initial, &topology).is_empty(),
+            "a prior outside the bounded structural search must not become evidence"
+        );
+
+        let (mut tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        tiles[1].alignment_image =
+            GrayImage::from_pixel(tiles[1].width, tiles[1].height, image::Luma([127]));
+        assert!(
+            virtual_tile_station_matches(&tiles, &coverages, &initial, &topology).is_empty(),
+            "descriptor identity without native patch agreement must reject"
+        );
+    }
+
+    #[test]
+    fn direct_grid_rejects_locally_wrong_45_degree_orientation() {
+        let (mut tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        let (width, height) = tiles[0].dimensions();
+        tiles[0].alignment_image = GrayImage::from_fn(width, height, |x, _| {
+            image::Luma([(40.0 + f64::from(x % 100) * 2.0).round() as u8])
+        });
+        tiles[1].alignment_image = GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([
+                (40.0 + f64::from((x + y) % 100) * std::f64::consts::SQRT_2).round() as u8,
+            ])
+        });
+        let left_to_right = Matrix3::new(1.0, 0.0, -200.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let structure = virtual_tile_structural_score(
+            &tiles[0].alignment_image,
+            &tiles[1].alignment_image,
+            &coverages[0],
+            &coverages[1],
+            tiles[0].features[1].keypoint,
+            tiles[1].features[1].keypoint,
+            &left_to_right,
+        )
+        .expect("the two ramp patches are measurable");
+        assert!(structure.patch_ncc >= VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC);
+        assert!(structure.gradient_ncc >= VIRTUAL_TILE_GUIDED_MIN_GRADIENT_NCC);
+        assert!(structure.orientation_difference_degrees > 35.0);
+
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        assert!(outcome.relations.is_empty());
+        let diagnostic = &outcome.diagnostics[0];
+        assert_ne!(diagnostic.failure_stage, "fitted");
+        // A one-dimensional ramp can be rejected earlier as an ambiguous patch
+        // peak. If enough unique peaks survive to produce a model, the retained
+        // fitted-Jacobian orientation gate must be the rejecting stage.
+        if diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS {
+            assert_eq!(diagnostic.failure_stage, "fitted_orientation_mismatch");
+            assert!(
+                diagnostic
+                    .median_fitted_orientation_difference_degrees
+                    .is_some_and(|difference| difference > 35.0)
+            );
+        }
+    }
+
+    #[test]
+    fn direct_grid_flat_overlap_reports_unmeasurable_patches() {
+        let (mut tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        for tile in &mut tiles {
+            tile.alignment_image =
+                GrayImage::from_pixel(tile.width, tile.height, image::Luma([127]));
+        }
+        let outcome = virtual_tile_station_match_outcome(&tiles, &coverages, &initial, &topology);
+        assert!(outcome.relations.is_empty());
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diagnostic = &outcome.diagnostics[0];
+        assert_eq!(
+            diagnostic.evidence_kind,
+            stack_report::StationRelationEvidenceKind::VirtualTile
+        );
+        assert!(diagnostic.grid_probe_count >= STATION_RELATION_MIN_INLIERS);
+        assert_eq!(diagnostic.measurable_patch_count, 0);
+        assert_eq!(diagnostic.bidirectional_match_count, 0);
+        assert_eq!(diagnostic.fitted_inliers, 0);
+        assert_eq!(diagnostic.failure_stage, "insufficient_measurable_patches");
+    }
+
+    #[test]
+    fn guided_overlap_ignores_uncovered_payload_and_import_order() {
+        let (tiles, coverages, initial, topology) = guided_repeated_texture_fixture();
+        let original = virtual_tile_station_matches(&tiles, &coverages, &initial, &topology);
+        let mut mutated = tiles;
+        let coverage = &coverages[1];
+        for (x, y, pixel) in mutated[1].alignment_image.enumerate_pixels_mut() {
+            if !coverage.is_covered(x, y) {
+                pixel[0] = ((x.wrapping_mul(31) + y.wrapping_mul(17)) % 251) as u8;
+            }
+        }
+        let repeated = virtual_tile_station_matches(&mutated, &coverages, &initial, &topology);
+        let original_relation = original.get(&(0, 1)).unwrap();
+        let repeated_relation = repeated.get(&(0, 1)).unwrap();
+        assert_eq!(original_relation.points, repeated_relation.points);
+        assert_eq!(
+            original_relation
+                .homography
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            repeated_relation
+                .homography
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>()
+        );
+
+        let (mut swapped_tiles, mut swapped_coverages, swapped_initial, swapped_topology) =
+            guided_repeated_texture_fixture();
+        swapped_tiles.swap(0, 1);
+        swapped_coverages.swap(0, 1);
+        let swapped = virtual_tile_station_matches(
+            &swapped_tiles,
+            &swapped_coverages,
+            &swapped_initial,
+            &swapped_topology,
+        );
+        let reverse = swapped.get(&(0, 1)).unwrap();
+        let reverse_inverse = reverse.homography.try_inverse().unwrap();
+        for (left, right) in original_relation
+            .homography
+            .iter()
+            .zip(reverse_inverse.iter())
+        {
+            assert!((left - right).abs() < 1e-8);
+        }
+    }
+
+    #[test]
+    fn virtual_tile_no_fit_candidate_reports_stable_reasons() {
+        let tiles = synthetic_virtual_tiles(2);
+        let initial = tiles
+            .iter()
+            .map(|tile| (tile.id, Matrix3::identity()))
+            .collect::<HashMap<_, _>>();
+        let mut closure = stack_report::ClosureReport::default();
+        let mut report = stack_report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            &HashMap::new(),
+            &initial,
+            &synthetic_virtual_tile_topology(2),
+            &mut closure,
+            &mut report,
+        );
+        assert!(solved.is_empty());
+        assert_eq!(report.accepted.len(), 0);
+        assert_eq!(report.rejected_count, 1);
+        for reason in [
+            degradation::STATION_RELATION_LOW_INLIERS,
+            degradation::STATION_RELATION_HIGH_REPROJECTION_ERROR,
+            degradation::STATION_RELATION_SCALE_OUT_OF_RANGE,
+            degradation::STATION_RELATION_LOW_SPATIAL_SUPPORT,
+            degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH,
+            degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH,
+            degradation::STATION_RELATION_EDGE_ORIENTATION_MISMATCH,
+        ] {
+            assert_eq!(report.rejected_by_reason.get(reason), Some(&1));
+        }
+    }
+
+    #[test]
+    fn default_two_stage_flow_solves_ten_sources_as_three_fused_stations() {
+        let images = (0..10)
+            .map(|index| focus_textured_test_image(index, &format!("source-{index}.raw")))
+            .collect::<Vec<_>>();
+        let mut source_matches = HashMap::new();
+        for &(start, end) in &[(0usize, 4usize), (4, 7), (7, 10)] {
+            for index in start..end - 1 {
+                source_matches.insert((index, index + 1), observed_translation_match(0.0, 0.0, 36));
+            }
+        }
+        // Each station boundary has only one Source_RAW observation.  The old
+        // early authoritative solve discarded both as support=1 and rejected
+        // the three components before the fused station tiles existed.
+        source_matches.insert((3, 4), observed_translation_match(120.0, 0.0, 36));
+        source_matches.insert((6, 7), observed_translation_match(120.0, 0.0, 36));
+        let mut early_closure = stack_report::ClosureReport::default();
+        let mut early_relations = stack_report::StationRelationsReport::default();
+        let (order, local_geometry) = build_focus_stack_stitching_order_with_report(
+            &images,
+            &source_matches,
+            &mut early_closure,
+            &mut early_relations,
+            false,
+        );
+        assert_eq!(order.len(), 10);
+        assert_eq!(local_geometry.len(), 10);
+        assert!(early_relations.accepted.is_empty());
+        assert_eq!(early_relations.connectivity.components, 0);
+        assert_eq!(early_closure.status, stack_report::ClosureStatus::NotRun);
+
+        let tiles = synthetic_virtual_tiles(3);
+        let tile_matches = HashMap::from([
+            ((0, 1), observed_translation_match(0.0, 0.0, 36)),
+            ((1, 2), observed_translation_match(0.0, 0.0, 36)),
+        ]);
+        let initial = tiles
+            .iter()
+            .map(|tile| (tile.id, Matrix3::identity()))
+            .collect::<HashMap<_, _>>();
+        let mut final_closure = stack_report::ClosureReport::default();
+        let mut final_relations = stack_report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            &tile_matches,
+            &initial,
+            &synthetic_virtual_tile_topology(3),
+            &mut final_closure,
+            &mut final_relations,
+        );
+
+        assert_eq!(solved.len(), 3);
+        assert_eq!(final_relations.connectivity.components, 1);
+        assert_eq!(final_relations.accepted.len(), 2);
+        assert!(final_relations.discarded_single_layer_evidence.is_empty());
+        assert!(final_relations.accepted.iter().all(|relation| {
+            relation.evidence_kind == stack_report::StationRelationEvidenceKind::VirtualTile
+                && relation.independent_support == 1
+        }));
+        assert_eq!(
+            final_closure.status,
+            stack_report::ClosureStatus::NoConstraints
+        );
+    }
+
+    #[test]
+    fn true_virtual_tile_disconnection_rejects_before_composition() {
+        let tiles = synthetic_virtual_tiles(3);
+        let tile_matches = HashMap::from([((0, 1), observed_translation_match(0.0, 0.0, 36))]);
+        let initial = tiles
+            .iter()
+            .map(|tile| (tile.id, Matrix3::identity()))
+            .collect::<HashMap<_, _>>();
+        let mut closure = stack_report::ClosureReport::default();
+        let mut relations = stack_report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            &tile_matches,
+            &initial,
+            &synthetic_virtual_tile_topology(3),
+            &mut closure,
+            &mut relations,
+        );
+
+        assert!(solved.is_empty());
+        assert_eq!(relations.connectivity.components, 2);
+        assert_eq!(relations.connectivity.component_member_counts, vec![2, 1]);
+    }
+
+    #[test]
+    fn single_virtual_tile_skips_station_relations_and_closure() {
+        let tiles = synthetic_virtual_tiles(1);
+        let initial = HashMap::from([(tiles[0].id, Matrix3::identity())]);
+        let mut closure = stack_report::ClosureReport::default();
+        let mut relations = stack_report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            &HashMap::new(),
+            &initial,
+            &synthetic_virtual_tile_topology(1),
+            &mut closure,
+            &mut relations,
+        );
+
+        assert_eq!(solved, initial);
+        assert!(relations.accepted.is_empty());
+        assert_eq!(relations.connectivity.components, 0);
+        assert_eq!(closure.status, stack_report::ClosureStatus::NotRun);
+    }
+
+    #[test]
+    fn station_source_evidence_requires_two_independent_layers() {
+        let discarded = single_layer_station_evidence_discard(1, 3, 8)
+            .expect("one Source_RAW without consensus must be discarded");
+        assert_eq!(discarded["count"], serde_json::json!(1));
+        assert_eq!(discarded["stations"], serde_json::json!([3, 8]));
+        assert_eq!(discarded["independent_support"], serde_json::json!(1));
+        assert!(
+            single_layer_station_evidence_discard(2, 3, 8).is_none(),
+            "two independent focus layers are valid supplemental evidence"
+        );
+    }
+
+    #[test]
+    fn disconnected_station_graph_rejects_full_mosaic_and_reports_components() {
+        degradation::reset_run_ledger();
+        let mut images = vec![
+            focus_test_image(0, "/synthetic/station-a-1.nef"),
+            focus_test_image(1, "/synthetic/station-a-2.nef"),
+            focus_test_image(2, "/synthetic/station-b-1.nef"),
+            focus_test_image(3, "/synthetic/station-b-2.nef"),
+        ];
+        for image in &mut images {
+            image.focal_length_35mm = Some(90.0);
+        }
+        // Each pair is a valid focus bracket, but there is deliberately no
+        // accepted Station_Relation between the two Capture_Stations.
+        let matches = HashMap::from([
+            ((0, 1), observed_translation_match(5.0, 0.0, 40)),
+            ((2, 3), observed_translation_match(5.0, 0.0, 40)),
+        ]);
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let locked = HashMap::from([
+            (0, translation(0.0)),
+            (1, translation(-5.0)),
+            (2, translation(-300.0)),
+            (3, translation(-305.0)),
+        ]);
+        let mut geometry_verified = false;
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+
+        let solved = solve_focus_capture_group_poses_with_report(
+            &images,
+            &matches,
+            &locked,
+            0,
+            &mut geometry_verified,
+            &mut closure_report,
+            &mut relation_report,
+        );
+
+        assert!(
+            solved.is_empty(),
+            "disconnected geometry is not a pose fallback"
+        );
+        assert!(!geometry_verified);
+        assert_eq!(relation_report.connectivity.components, 2);
+        assert_eq!(
+            relation_report.connectivity.component_member_counts,
+            vec![2, 2]
+        );
+        let canonical_components = |components: &[Vec<String>]| {
+            let mut components = components
+                .iter()
+                .map(|members| {
+                    let mut members = members.clone();
+                    members.sort();
+                    members
+                })
+                .collect::<Vec<_>>();
+            components.sort();
+            components
+        };
+        assert_eq!(
+            canonical_components(&relation_report.connectivity.component_members),
+            vec![
+                vec![
+                    "/synthetic/station-a-1.nef".to_string(),
+                    "/synthetic/station-a-2.nef".to_string(),
+                ],
+                vec![
+                    "/synthetic/station-b-1.nef".to_string(),
+                    "/synthetic/station-b-2.nef".to_string(),
+                ],
+            ]
+        );
+        let ledger = degradation::run_ledger_snapshot();
+        let rejection = ledger
+            .entries()
+            .iter()
+            .find(|entry| entry.reason == degradation::GEOMETRY_DISCONNECTED)
+            .expect("the disconnected rejection must remain in diagnostics");
+        assert_eq!(rejection.severity, degradation::Severity::Rejected);
+        assert_eq!(rejection.detail["component_count"], serde_json::json!(2));
+        assert_eq!(rejection.detail["components"][0]["member_count"], 2);
+        assert_eq!(rejection.detail["components"][1]["member_count"], 2);
+        let error = geometry_disconnected_user_error(2);
+        assert!(error.contains("2 个不连通分量"));
+        assert!(error.contains("按连续场景重新分组"));
+        assert!(error.contains("补拍增加重叠"));
+    }
+
+    #[test]
     fn focus_capture_group_consensus_rejects_a_single_conflicting_edge() {
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
@@ -14644,17 +21560,34 @@ mod alignment_tests {
         ]);
 
         let mut translation_verified = false;
-        let solved = solve_focus_capture_group_poses(
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+        let solved = solve_focus_capture_group_poses_with_report(
             &images,
             &matches,
             &locked,
             0,
             &mut translation_verified,
+            &mut closure_report,
+            &mut relation_report,
         );
-        assert!(translation_verified);
-
-        assert!((solved[&2][(0, 2)] + 100.0).abs() < 1e-3);
-        assert!((solved[&3][(0, 2)] + 105.0).abs() < 1e-3);
+        assert!(!translation_verified);
+        assert!(solved.is_empty());
+        assert_eq!(relation_report.rejected_count, 1);
+        assert_eq!(
+            relation_report.rejected_by_reason[degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH],
+            1
+        );
+        assert_eq!(
+            relation_report.rejected_by_reason
+                [degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH],
+            1
+        );
+        assert_eq!(
+            relation_report.rejected_by_reason
+                [degradation::STATION_RELATION_EDGE_ORIENTATION_MISMATCH],
+            1
+        );
     }
 
     #[test]
@@ -14687,22 +21620,28 @@ mod alignment_tests {
         ]);
 
         let mut translation_verified = false;
-        let solved = solve_focus_capture_group_poses(
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+        let solved = solve_focus_capture_group_poses_with_report(
             &images,
             &matches,
             &locked,
             0,
             &mut translation_verified,
+            &mut closure_report,
+            &mut relation_report,
         );
-        assert!(translation_verified);
-
-        assert!((solved[&2][(0, 2)] + 240.0).abs() < 1e-3);
-        assert!((solved[&2][(1, 2)] + 20.0).abs() < 1e-3);
-        assert!((solved[&3][(0, 2)] + 245.0).abs() < 1e-3);
+        assert!(!translation_verified);
+        assert!(solved.is_empty());
+        assert_eq!(relation_report.rejected_count, 1);
+        assert_eq!(
+            relation_report.rejected_by_reason[degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH],
+            1
+        );
     }
 
     #[test]
-    fn focus_capture_group_solver_preserves_station_scale() {
+    fn focus_capture_group_solver_rejects_out_of_contract_station_scale() {
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
             focus_test_image(1, "DSC_1002.NEF"),
@@ -14730,14 +21669,161 @@ mod alignment_tests {
         ]);
 
         let mut geometry_verified = false;
-        let solved =
-            solve_focus_capture_group_poses(&images, &matches, &locked, 0, &mut geometry_verified);
-        assert!(geometry_verified);
+        let mut closure_report = stack_report::ClosureReport::default();
+        let mut relation_report = stack_report::StationRelationsReport::default();
+        let solved = solve_focus_capture_group_poses_with_report(
+            &images,
+            &matches,
+            &locked,
+            0,
+            &mut geometry_verified,
+            &mut closure_report,
+            &mut relation_report,
+        );
+        assert!(!geometry_verified);
+        assert!(solved.is_empty());
+        assert_eq!(relation_report.rejected_count, 1);
+        assert_eq!(
+            relation_report.rejected_by_reason[degradation::STATION_RELATION_SCALE_OUT_OF_RANGE],
+            1
+        );
+    }
 
-        let expected = station_transform.try_inverse().unwrap();
-        assert!((solved[&2][(0, 0)] - expected[(0, 0)]).abs() < 1e-6);
-        assert!((solved[&2][(1, 1)] - expected[(1, 1)]).abs() < 1e-6);
-        assert!((solved[&2][(0, 1)] - expected[(0, 1)]).abs() < 1e-6);
+    #[test]
+    fn station_tree_prefers_inlier_count_over_composite_score() {
+        let topology = topology::StationTopology {
+            row: vec![0, 0, 0],
+            column: vec![0, 1, 2],
+            ..topology::StationTopology::default()
+        };
+        // Relation 0->2 has the largest old composite score, but the two local
+        // relations carry more accepted geometric inliers and must form the
+        // maximum-support initial tree.
+        let scored_relations = [(1.0, 0, 1, 80), (2.0, 1, 2, 70), (10_000.0, 0, 2, 60)];
+        let relations = scored_relations
+            .iter()
+            .map(|&(_, left, right, inliers)| (left, right, inliers))
+            .collect::<Vec<_>>();
+
+        let selected = maximum_inlier_spanning_tree_indices(3, &topology, &relations);
+
+        assert_eq!(selected, vec![0, 1]);
+        assert!(!selected.contains(&2));
+    }
+
+    #[test]
+    fn station_tree_breaks_equal_inlier_ties_by_row_then_column() {
+        // Station ids intentionally oppose the geometric order. This catches
+        // regressions to pair-index or insertion-order tie-breaking.
+        let topology = topology::StationTopology {
+            row: vec![1, 0, 1, 0],
+            column: vec![1, 1, 0, 0],
+            ..topology::StationTopology::default()
+        };
+        let relations = vec![(0, 1, 40), (0, 2, 40), (1, 3, 40), (2, 3, 40)];
+
+        let selected = maximum_inlier_spanning_tree_indices(4, &topology, &relations);
+
+        // Topology keys order 1->3 first, 2->3 second, then 0->1. The fourth
+        // edge closes a cycle and is excluded.
+        assert_eq!(selected, vec![2, 3, 0]);
+    }
+
+    #[test]
+    fn closure_residual_weight_is_exact_continuous_and_monotone() {
+        assert_eq!(closure_residual_weight(0.0), 1.0);
+        assert_eq!(closure_residual_weight(2.0), 1.0);
+        assert!((closure_residual_weight(4.0) - 0.55).abs() < 1e-12);
+        assert!((closure_residual_weight(6.0) - 0.1).abs() < 1e-12);
+        assert!((closure_residual_weight(12.0) - 0.05).abs() < 1e-12);
+        assert_eq!(closure_residual_weight(f64::INFINITY), 0.0);
+
+        let epsilon = 1e-9;
+        assert!(
+            (closure_residual_weight(2.0 - epsilon) - closure_residual_weight(2.0 + epsilon)).abs()
+                < epsilon
+        );
+        assert!(
+            (closure_residual_weight(6.0 - epsilon) - closure_residual_weight(6.0 + epsilon)).abs()
+                < epsilon
+        );
+        assert!(closure_residual_weight(2.0) >= 0.9);
+        assert!(closure_residual_weight(6.0) <= 0.1);
+
+        let samples = (0..=10_000)
+            .map(|sample| closure_residual_weight(sample as f64 / 100.0))
+            .collect::<Vec<_>>();
+        assert!(samples.windows(2).all(|pair| pair[0] >= pair[1]));
+    }
+
+    #[test]
+    fn closure_corner_limit_uses_overlap_short_side_and_clamps_instead_of_rejecting() {
+        let images = (0..2)
+            .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
+            .collect::<Vec<_>>();
+        let groups = (0..2)
+            .map(|index| FocusCaptureGroup {
+                members: vec![index],
+                anchor: index,
+                local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let edges = vec![(1.0, 0, 1, translation(-800.0), 2, 0.0)];
+        let initial = vec![Matrix3::identity(), translation(800.0)];
+        let mut corrections = vec![[0.0, 0.0], [100.0, 0.0]];
+
+        let (maximum, clamped) = clamp_station_translation_corrections(
+            &images,
+            &groups,
+            &edges,
+            &initial,
+            &mut corrections,
+        )
+        .expect("the accepted relation has a measurable overlap");
+
+        // The overlap is 200px wide and 1000px high, so 10% of its short
+        // side is 20px. The 100px proposal must be retained at that boundary.
+        assert_eq!(clamped, 1);
+        assert!((maximum - 20.0).abs() < 1e-9);
+        assert!((corrections[1][0] - 20.0).abs() < 1e-9);
+        let corrected = translation(corrections[1][0]) * initial[1];
+        assert!(
+            maximum_station_corner_displacement(&initial[1], &corrected, images[1].dimensions())
+                .is_some_and(|displacement| (displacement - 20.0).abs() < 1e-9)
+        );
+    }
+
+    #[test]
+    fn closure_corner_displacement_checks_all_four_corners() {
+        let dimensions = (1_000, 1_000);
+        let initial = Matrix3::identity();
+        // The top-left corner is fixed while the other three move. A center-
+        // only check would not describe the required station footprint bound.
+        let corrected = Matrix3::new(1.1, 0.0, 0.0, 0.0, 1.1, 0.0, 0.0, 0.0, 1.0);
+        let maximum = maximum_station_corner_displacement(&initial, &corrected, dimensions)
+            .expect("all projected corners are finite");
+        assert!((maximum - 100.0f64.hypot(100.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn closure_translation_solver_uses_relative_weighted_residual_convergence() {
+        let constraints = vec![
+            (0, 1, [100.0, 0.0], 1.0),
+            (1, 2, [100.0, 0.0], 1.0),
+            (0, 2, [200.0, 0.0], 1.0),
+        ];
+        let solve = solve_robust_closure_translations(3, 0, &constraints).expect("connected solve");
+
+        assert!(solve.converged);
+        assert!(solve.iterations < CLOSURE_MAX_ITERATIONS);
+        assert!((solve.corrections[1][0] - 100.0).abs() < 1e-3);
+        assert!((solve.corrections[2][0] - 200.0).abs() < 1e-3);
+        assert!(closure_relative_residual_decrease_converged(100.0, 99.995));
+        assert!(!closure_relative_residual_decrease_converged(100.0, 99.98));
+        assert!(!closure_relative_residual_decrease_converged(
+            100.0, 100.001
+        ));
     }
 
     #[test]
@@ -14755,13 +21841,13 @@ mod alignment_tests {
             .collect::<Vec<_>>();
         let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
         let base_poses = vec![translation(0.0), translation(100.0), translation(200.0)];
-        // The tree edges agree exactly with the seed.  The stronger 0->2
-        // closure observes a 5px residual and should move only group 2;
-        // scales and rotations must remain untouched.
+        // The tree edges agree exactly with the seed. The 0->2 closure
+        // observes a 2px residual and must stay inside both closure gates while
+        // moving only group 2; scale and rotation remain untouched.
         let edges = vec![
             (1.0, 0, 1, translation(-100.0), 2, 0.0),
             (1.0, 1, 2, translation(-100.0), 2, 0.0),
-            (100.0, 0, 2, translation(-205.0), 8, 0.0),
+            (100.0, 0, 2, translation(-202.0), 8, 0.0),
         ];
         let refined = refine_focus_group_projective_tree_poses(
             &images,
@@ -14773,9 +21859,232 @@ mod alignment_tests {
         )
         .expect("connected loop graph should refine");
         assert!(refined[2][(0, 2)] > 200.0);
-        assert!(refined[2][(0, 2)] < 205.1);
+        assert!(refined[2][(0, 2)] < 202.1);
         assert!((refined[2][(0, 0)] - 1.0).abs() < 1e-9);
         assert!((refined[2][(1, 1)] - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn closure_acceptance_uses_literal_iteration_residual_and_pair_boundaries() {
+        let boundary_pair = [ClosureDirectPairP95 {
+            left: 0,
+            right: 1,
+            p95_px: CLOSURE_DIRECT_PAIR_P95_LIMIT_PX,
+        }];
+        assert_eq!(
+            closure_acceptance(
+                3,
+                3,
+                true,
+                CLOSURE_MAX_ITERATIONS,
+                CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX,
+                &boundary_pair,
+            ),
+            ClosureAcceptance::Accepted
+        );
+        assert_eq!(
+            closure_acceptance(3, 3, true, 1, 2.000_001, &boundary_pair),
+            ClosureAcceptance::UnreliableResidual
+        );
+        assert_eq!(
+            closure_acceptance(3, 3, false, CLOSURE_MAX_ITERATIONS, 0.0, &boundary_pair),
+            ClosureAcceptance::UnreliableIterations
+        );
+        assert!(matches!(
+            closure_acceptance(
+                3,
+                3,
+                true,
+                1,
+                0.0,
+                &[ClosureDirectPairP95 {
+                    left: 0,
+                    right: 1,
+                    p95_px: 3.000_001,
+                }],
+            ),
+            ClosureAcceptance::UnreliablePairP95(_)
+        ));
+    }
+
+    #[test]
+    fn closure_accepts_converged_cycle_and_reports_direct_pair_maximum() {
+        let images = (0..3)
+            .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
+            .collect::<Vec<_>>();
+        let groups = (0..3)
+            .map(|index| FocusCaptureGroup {
+                members: vec![index],
+                anchor: index,
+                local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let base_poses = vec![translation(0.0), translation(100.0), translation(200.0)];
+        let edges = vec![
+            (1.0, 0, 1, translation(-100.0), 2, 0.0),
+            (1.0, 1, 2, translation(-100.0), 2, 0.0),
+            (1.0, 0, 2, translation(-200.0), 2, 0.0),
+        ];
+        let station_topology = topology::StationTopology {
+            row: vec![0, 0, 0],
+            column: vec![0, 1, 2],
+            ..topology::StationTopology::default()
+        };
+        let mut closure = stack_report::ClosureReport::default();
+
+        let accepted = refine_focus_group_projective_tree_poses_with_report(
+            &images,
+            &groups,
+            &edges,
+            &base_poses,
+            0,
+            1_000.0,
+            &station_topology,
+            2,
+            &mut closure,
+        )
+        .expect("consistent cycle must be accepted");
+
+        assert_eq!(closure.status, stack_report::ClosureStatus::Converged);
+        assert!(closure.iterations <= CLOSURE_MAX_ITERATIONS);
+        assert!(closure.residual_median_px <= CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX);
+        assert!(closure.max_direct_pair_p95_px <= CLOSURE_DIRECT_PAIR_P95_LIMIT_PX);
+        assert_eq!(closure.fallback_reason, None);
+        assert_eq!(closure.offending_pair, None);
+        assert_eq!(accepted.len(), base_poses.len());
+    }
+
+    #[test]
+    fn closure_without_cycle_skips_joint_solve_and_preserves_tree_bits() {
+        let images = (0..3)
+            .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
+            .collect::<Vec<_>>();
+        let groups = (0..3)
+            .map(|index| FocusCaptureGroup {
+                members: vec![index],
+                anchor: index,
+                local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let base_poses = vec![translation(-0.0), translation(100.25), translation(200.5)];
+        let tree_edges = vec![
+            (1.0, 0, 1, translation(-100.25), 2, 0.0),
+            (1.0, 1, 2, translation(-100.25), 2, 0.0),
+        ];
+        let station_topology = topology::StationTopology {
+            row: vec![0, 0, 0],
+            column: vec![0, 1, 2],
+            ..topology::StationTopology::default()
+        };
+        let mut closure = stack_report::ClosureReport::default();
+
+        let returned = refine_focus_group_projective_tree_poses_with_report(
+            &images,
+            &groups,
+            &tree_edges,
+            &base_poses,
+            0,
+            1_000.0,
+            &station_topology,
+            2,
+            &mut closure,
+        )
+        .expect("tree-only graph returns its initial poses");
+
+        assert_eq!(closure.status, stack_report::ClosureStatus::NoConstraints);
+        assert_eq!(closure.iterations, 0);
+        assert_eq!(closure.max_direct_pair_p95_px, 0.0);
+        assert_eq!(
+            closure.fallback_reason.as_deref(),
+            Some(degradation::CLOSURE_NO_CONSTRAINTS)
+        );
+        for (actual, expected) in returned.iter().zip(&base_poses) {
+            for (actual, expected) in actual.as_slice().iter().zip(expected.as_slice()) {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+        }
+    }
+
+    #[test]
+    fn focus_group_projective_seed_keeps_large_residual_relation_in_closure_report() {
+        let images = (0..3)
+            .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
+            .collect::<Vec<_>>();
+        let groups = (0..3)
+            .map(|index| FocusCaptureGroup {
+                members: vec![index],
+                anchor: index,
+                local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+            })
+            .collect::<Vec<_>>();
+        let translation = |x: f64| Matrix3::new(1.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let base_poses = vec![translation(0.0), translation(100.0), translation(200.0)];
+        // The 0->2 relation disagrees with the tree by 100px, beyond the old
+        // coordinate_scale * 0.08 pre-discard threshold of 80px. It remains an
+        // accepted, independently confirmed relation and must be downweighted
+        // rather than removed.
+        let edges = vec![
+            (1.0, 0, 1, translation(-100.0), 2, 0.0),
+            (1.0, 1, 2, translation(-100.0), 2, 0.0),
+            (1.0, 0, 2, translation(-300.0), 2, 0.0),
+        ];
+        let mut closure = stack_report::ClosureReport::default();
+        let station_topology = topology::StationTopology {
+            row: vec![0, 0, 0],
+            column: vec![0, 1, 2],
+            ..topology::StationTopology::default()
+        };
+
+        let refined = refine_focus_group_projective_tree_poses_with_report(
+            &images,
+            &groups,
+            &edges,
+            &base_poses,
+            0,
+            1_000.0,
+            &station_topology,
+            2,
+            &mut closure,
+        )
+        .expect("an unreliable joint solution must return the tree seed");
+
+        assert_eq!(closure.status, stack_report::ClosureStatus::Unreliable);
+        assert_eq!(
+            closure.fallback_reason.as_deref(),
+            Some(degradation::CLOSURE_UNRELIABLE_PAIR_P95)
+        );
+        let offending = closure
+            .offending_pair
+            .expect("the worst direct pair must be reported");
+        assert_eq!((offending.left_row, offending.left_column), (0, 0));
+        assert_eq!((offending.right_row, offending.right_column), (0, 2));
+        assert!(offending.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX);
+        for (actual, expected) in refined.iter().zip(&base_poses) {
+            for (actual, expected) in actual.as_slice().iter().zip(expected.as_slice()) {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+        }
+        assert_eq!(closure.participating_constraints, edges.len());
+        assert!(closure.iterations > 0);
+        assert!(closure.iterations <= CLOSURE_MAX_ITERATIONS);
+        assert!(closure.residual_median_px.is_finite());
+        assert!(closure.residual_p95_px >= closure.residual_median_px);
+        assert!(closure.max_corner_correction_px <= CLOSURE_MAX_CORNER_CORRECTION_PX);
+        assert_eq!(closure.constraint_weights.len(), edges.len());
+        let large_residual = closure
+            .constraint_weights
+            .iter()
+            .find(|relation| (relation.left, relation.right) == (0, 2))
+            .expect("large-residual relation must be reported");
+        assert!(large_residual.residual_px > 80.0);
+        assert!(large_residual.weight < 0.1);
+        assert_eq!(
+            large_residual.weight,
+            closure_residual_weight(large_residual.residual_px),
+            "reported weights must use the same production M-estimator multiplier"
+        );
     }
 
     #[test]
@@ -15672,6 +22981,12 @@ mod acceptance_tests {
                     false,
                     false,
                 )?;
+                if blend_mode == BlendMode::FocusStack {
+                    // Record the fit before it is rotated into the key
+                    // orientation; see `MatchInfo::canonical_homography`
+                    // (需求 14.6).
+                    match_info.canonical_homography = Some(match_info.homography);
+                }
                 if invert_for_storage {
                     match_info.homography = match_info.homography.try_inverse()?;
                     match_info.points = match_info
@@ -16320,6 +23635,66 @@ mod acceptance_tests {
             value.rotate_left(3) ^ ((x.wrapping_add(y) * 13) as u8),
             value.rotate_right(2) ^ ((x.wrapping_mul(3).wrapping_add(y * 5)) as u8),
         ])
+    }
+
+    /// 需求 1.9 excludes an undecodable Source_RAW and continues; 需求 1.8 then
+    /// rejects the run when fewer than two decodable sources are left.  The
+    /// panorama path shares this entry point and keeps its original behaviour:
+    /// it has no Capture_Station layer to exclude a source from, so it still
+    /// aborts on the first preparation error.
+    #[test]
+    // Like every other test that drives the whole entry point, this one needs the
+    // process-global sidecar storage, whose `OnceCell` cannot be shared with
+    // `sidecar_storage`'s own tests inside one test binary.
+    #[ignore = "initializes the process-global sidecar storage; run explicitly"]
+    fn undecodable_source_is_excluded_before_the_input_count_is_rejected() {
+        let fixture_dir = tempfile::tempdir().expect("temporary stack fixture should be writable");
+        let readable = fixture_dir.path().join("tile-000.png");
+        RgbImage::from_fn(96, 96, synthetic_texture_pixel)
+            .save_with_format(&readable, ImageFormat::Png)
+            .expect("synthetic stack tile should be writable");
+        let broken = fixture_dir.path().join("tile-001.png");
+        std::fs::write(&broken, b"not an image").expect("broken fixture should be writable");
+        let paths = vec![
+            readable.to_string_lossy().into_owned(),
+            broken.to_string_lossy().into_owned(),
+        ];
+
+        // Process global, set once by whichever test gets there first; any
+        // initialized root is usable here because this run never reaches a
+        // sidecar write.
+        let _ = crate::sidecar_storage::initialize(
+            &std::env::temp_dir().join("raw-editor-stack-decode-test-sidecars"),
+        );
+        let app = tauri::test::mock_app();
+        let focus_error = stitch_images_with_options(
+            paths.clone(),
+            app.handle().clone(),
+            AlignmentMode::Position,
+            BlendMode::FocusStack,
+            "test-image-stack-progress",
+        )
+        .err()
+        .expect("one decodable source is below the 需求 1.8 minimum of two");
+        assert!(
+            focus_error.contains("Only 1 of 2"),
+            "需求 1.9 must exclude the undecodable source and 需求 1.8 must then reject on the \
+             surviving count, got: {focus_error}"
+        );
+
+        let panorama_error = stitch_images_with_options(
+            paths,
+            app.handle().clone(),
+            AlignmentMode::Position,
+            BlendMode::Panorama,
+            "test-image-stack-progress",
+        )
+        .err()
+        .expect("the panorama path still aborts on the first preparation error");
+        assert!(
+            !panorama_error.contains("Only 1 of 2"),
+            "the panorama path must keep its original abort, got: {panorama_error}"
+        );
     }
 
     #[test]

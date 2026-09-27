@@ -38,6 +38,71 @@ pub(crate) struct PatchMatch {
     pub(crate) correlation: f64,
 }
 
+/// The similarity gates one patch match has to clear.
+///
+/// Split out of [`refine_warped_patch`] because the two callers correlate
+/// different quantities.  The inter-station mosaic path correlates raw intensity
+/// between two frames taken at the same focal plane, where a true match scores
+/// above 0.99 and 0.80 is already generous.  The Intra_Station_Registrar
+/// correlates a sharp frame against its own defocused counterpart after the
+/// matched low-pass of [`super::stack_pipeline::intra_station::match_focal_plane`],
+/// where the residual point-spread difference costs real correlation and the
+/// smoother score surface narrows the second-peak margin.  One number cannot
+/// serve both, and lowering the shared one would silently loosen the mosaic
+/// path.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PatchMatchGates {
+    /// Smallest normalised cross-correlation that counts as the same content.
+    pub(crate) min_correlation: f64,
+    /// Smallest gap between the peak and the best hypothesis at least 2.5
+    /// samples away, which is what separates a located feature from a repeated
+    /// texture.
+    pub(crate) min_peak_margin: f64,
+    /// Smallest per-sample variance of the source patch, in squared 8-bit
+    /// levels, below which the patch carries no localisable structure.
+    pub(crate) min_source_variance: f64,
+    /// Same for the target patch under a single hypothesis.
+    pub(crate) min_target_variance: f64,
+}
+
+impl PatchMatchGates {
+    /// The gates the mosaic comparison path has always used.
+    pub(crate) const LEGACY: Self = Self {
+        min_correlation: 0.80,
+        min_peak_margin: 0.006,
+        min_source_variance: 2.0,
+        min_target_variance: 1.0,
+    };
+}
+
+/// Everything one patch probe measured, including the hypotheses the gates
+/// rejected.
+///
+/// The rejected scores are the only way to state an accept rate and a precision
+/// for a similarity threshold instead of guessing one, so they are part of the
+/// return value rather than a side channel.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PatchProbe {
+    /// The match, when every gate passed.
+    pub(crate) matched: Option<PatchMatch>,
+    /// Correlation of the best integer hypothesis before the gates, or `None`
+    /// when the patch pair carried no comparable signal at all (the transform
+    /// scale, the patch support or the variance floor stopped the probe before
+    /// any hypothesis was scored).
+    pub(crate) best_correlation: Option<f64>,
+    /// Peak minus the best hypothesis at least 2.5 samples away, `None` when no
+    /// hypothesis was scored.
+    pub(crate) peak_margin: Option<f64>,
+}
+
+impl PatchProbe {
+    const UNMEASURABLE: Self = Self {
+        matched: None,
+        best_correlation: None,
+        peak_margin: None,
+    };
+}
+
 /// Search a small residual translation after applying the complete geometric
 /// transform to every patch sample. Correlation removes gain and black-level
 /// differences. The second-peak and boundary checks reject repeated textures
@@ -50,6 +115,42 @@ pub(crate) fn refine_warped_patch(
     radius: i32,
     search: i32,
 ) -> Option<PatchMatch> {
+    probe_warped_patch(
+        source,
+        target,
+        transform,
+        center,
+        radius,
+        search,
+        PatchMatchGates::LEGACY,
+    )
+    .matched
+}
+
+/// [`refine_warped_patch`] with caller-chosen gates, reporting the rejected
+/// scores as well.
+pub(crate) fn probe_warped_patch(
+    source: &GrayImage,
+    target: &GrayImage,
+    transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    radius: i32,
+    search: i32,
+    gates: PatchMatchGates,
+) -> PatchProbe {
+    probe_inner(source, target, transform, center, radius, search, gates)
+        .unwrap_or(PatchProbe::UNMEASURABLE)
+}
+
+fn probe_inner(
+    source: &GrayImage,
+    target: &GrayImage,
+    transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    radius: i32,
+    search: i32,
+    gates: PatchMatchGates,
+) -> Option<PatchProbe> {
     let predicted = project(transform, center)?;
     let horizontal = project(transform, center + nalgebra::Vector2::new(1.0, 0.0))?;
     let vertical = project(transform, center + nalgebra::Vector2::new(0.0, 1.0))?;
@@ -80,7 +181,7 @@ pub(crate) fn refine_warped_patch(
         *value -= mean;
         variance += *value * *value;
     }
-    if variance / count < 2.0 {
+    if variance / count < gates.min_source_variance {
         return None;
     }
     let score = |dx: f64, dy: f64| -> f64 {
@@ -96,7 +197,7 @@ pub(crate) fn refine_warped_patch(
             product += value * t;
         }
         let target_variance = squares - sum * sum / count;
-        if target_variance / count < 1.0 {
+        if target_variance / count < gates.min_target_variance {
             return -1.0;
         }
         (product / (variance * target_variance).sqrt()).clamp(-1.0, 1.0)
@@ -112,16 +213,24 @@ pub(crate) fn refine_warped_patch(
             }
         }
     }
-    if best.2 < 0.80 || best.0.abs() >= search as f64 || best.1.abs() >= search as f64 {
-        return None;
-    }
     let alternate = candidates
         .iter()
         .filter(|(x, y, _)| (*x as f64 - best.0).hypot(*y as f64 - best.1) >= 2.5)
         .map(|(_, _, s)| *s)
         .fold(-1.0f64, f64::max);
-    if best.2 - alternate < 0.006 {
-        return None;
+    // Everything from here on is a gate, so the measured scores are published
+    // whatever the verdict is.
+    let mut probe = PatchProbe {
+        matched: None,
+        best_correlation: Some(best.2),
+        peak_margin: Some(best.2 - alternate),
+    };
+    if best.2 < gates.min_correlation
+        || best.0.abs() >= search as f64
+        || best.1.abs() >= search as f64
+        || best.2 - alternate < gates.min_peak_margin
+    {
+        return Some(probe);
     }
     for step in [0.5, 0.25, 0.125, 0.0625] {
         let previous = best;
@@ -136,10 +245,12 @@ pub(crate) fn refine_warped_patch(
             }
         }
     }
-    Some(PatchMatch {
+    probe.matched = Some(PatchMatch {
         target: predicted + nalgebra::Vector2::new(best.0, best.1),
         correlation: best.2,
-    })
+    });
+    probe.best_correlation = Some(best.2);
+    Some(probe)
 }
 
 #[cfg(test)]

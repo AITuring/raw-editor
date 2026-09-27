@@ -14,6 +14,15 @@ const BRIEF_PATCH_SIZE: u32 = 32;
 const MATCH_RATIO_THRESHOLD: f32 = 0.8;
 const RANSAC_ITERATIONS: usize = 2500;
 const RANSAC_INLIER_THRESHOLD: f64 = 5.0;
+/// Minimum number of correspondences handed to one `rayon` task while scoring a
+/// RANSAC hypothesis.
+///
+/// Scoring one hypothesis is a handful of floating point operations per point,
+/// so the per-task dispatch cost dominates unless a task owns a sizeable run of
+/// points.  This is a scheduling granularity floor only: the inlier set is
+/// collected in ascending index order regardless of how the range is split, so
+/// no value here can change the result (需求 14.6).
+const RANSAC_INLIER_MIN_POINTS_PER_TASK: usize = 4096;
 const MAX_FEATURES: usize = 2000;
 const LOCAL_CONTRAST_CELL_SIZE: u32 = 160;
 const LOCAL_CONTRAST_MAX_GAIN: f32 = 4.0;
@@ -757,8 +766,14 @@ fn find_homography_ransac_points_with_solver(
     stable_four_point_solver: bool,
     minimum_inliers: usize,
 ) -> Option<(Matrix3<f64>, Vec<usize>)> {
+    // Site constant mixed with the run seed derived from the input content
+    // (需求 14.6). No wall clock and no thread id take part: with the run seed
+    // absent the expression collapses to the site constant, which is what the
+    // unit tests and the non focus stack path run with.
     let mut rng = StdRng::seed_from_u64(
-        0x9E37_79B9_7F4A_7C15u64 ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93),
+        0x9E37_79B9_7F4A_7C15u64
+            ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
+            ^ crate::panorama_utils::stack_pipeline::determinism::run_random_seed_mix(),
     );
     let mut best_h: Option<Matrix3<f64>> = None;
     let mut best_inliers: Vec<usize> = Vec::new();
@@ -802,6 +817,15 @@ fn find_homography_ransac_points_with_solver(
             let current_inliers: Vec<usize> = points
                 .par_iter()
                 .enumerate()
+                // Scheduling granularity only, exactly like
+                // `DETERMINISTIC_SUM_MIN_BLOCKS_PER_TASK`: this loop body runs
+                // `RANSAC_ITERATIONS` times per image pair, and splitting a
+                // match set of a few dozen points into one `rayon` task per
+                // point costs orders of magnitude more in dispatch than the
+                // arithmetic it distributes.  `collect` keeps the ascending
+                // index order whatever the split shape is, so the inlier set is
+                // bit identical for any `min_len` and any thread count.
+                .with_min_len(RANSAC_INLIER_MIN_POINTS_PER_TASK)
                 .filter_map(|(i, (p1, p2))| {
                     let p1_h = nalgebra::Point3::new(p1.x, p1.y, 1.0);
                     let p2_h_transformed = h * p1_h;

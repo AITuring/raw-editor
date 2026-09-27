@@ -44,7 +44,7 @@ assert.equal(
   backendPipelineVersion,
   'frontend and backend image-stack pipeline versions must change together',
 );
-assert.equal(frontendMaxSources, 200, 'the UI must accept the requested 200-image workflow');
+assert.equal(frontendMaxSources, 500, 'the UI must accept the requested 500-image workflow');
 assert.equal(frontendMaxSources, backendMaxSources, 'frontend and backend image-stack limits must stay aligned');
 assert.equal(frontendMaxSources, stitchingMaxSources, 'all stitching entry points must enforce the same source limit');
 assert.match(productivityActionsSource, /pipelineVersion:\s*IMAGE_STACK_PIPELINE_VERSION/);

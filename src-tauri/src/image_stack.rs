@@ -2,6 +2,10 @@ use crate::app_state::AppState;
 use crate::export_processing::ExportSettings;
 use crate::file_management::parse_virtual_path;
 use crate::panorama_stitching::{AlignmentMode, BlendMode, stitch_images_with_options};
+use crate::panorama_utils::stack_pipeline::degradation::{
+    DegradationLedger, DegradationManager, OutcomeDecision, OutputPublication,
+    StandardFinalOutputFileSystem,
+};
 use image::codecs::jpeg::{JpegDecoder, JpegEncoder};
 use image::codecs::png::{PngDecoder, PngEncoder};
 use image::codecs::tiff::{TiffDecoder, TiffEncoder};
@@ -32,6 +36,12 @@ const IMAGE_STACK_JPEG_QUALITY: u8 = 95;
 // a 382-frame scan to be split into independently warped mosaics.
 const IMAGE_STACK_MAX_SOURCES: usize = 500;
 const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.16.1";
+// Identifies the layered Stack_Pipeline itself rather than the frontend/backend
+// handshake.  It is one of the three ingredients of the Virtual_Tile cache key
+// (source paths, source SHA-256 set, pipeline version), so *any* change to a
+// grouping, registration, fusion, geometry, tone or composition stage must bump
+// it or a stale cache entry will be replayed.
+pub(crate) const STACK_PIPELINE_VERSION: &str = "stack-2026.09.22.2";
 
 fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
     if count < 2 {
@@ -482,12 +492,13 @@ fn default_image_stack_export_settings() -> ExportSettings {
     }
 }
 
-fn write_image_stack_output_with_settings(
+fn write_image_stack_output_for_run(
     image: &DynamicImage,
     output_path: &Path,
     output_format: ImageStackOutputFormat,
     export_settings: &ExportSettings,
     source_path: &str,
+    degradation_ledger: &DegradationLedger,
 ) -> Result<(), String> {
     let transformed_image =
         if export_settings.resize.is_some() || export_settings.watermark.is_some() {
@@ -563,27 +574,40 @@ fn write_image_stack_output_with_settings(
         export_settings.embed_color_profile,
     )?;
 
-    let persisted = temporary.persist(output_path).map_err(|error| {
-        format!(
-            "Failed to finalize the image-stack {} '{}': {}",
-            output_format.label(),
-            output_path.display(),
-            error.error
-        )
-    })?;
-    persisted.sync_all().map_err(|error| {
-        format!(
-            "Failed to finalize the image-stack {} on disk: {error}",
-            output_format.label()
-        )
-    })?;
+    let temporary_path = temporary.into_temp_path();
+    let mut file_system = StandardFinalOutputFileSystem;
+    match DegradationManager::new(degradation_ledger).publish_staged_output(
+        &mut file_system,
+        temporary_path.as_ref(),
+        output_path,
+    )? {
+        OutputPublication::Published(_) => Ok(()),
+        OutputPublication::Rejected => Err(
+            "The image-stack result was rejected; the diagnostic preview and Stack_Report were retained."
+                .to_string(),
+        ),
+        OutputPublication::Cancelled => Err(
+            "The image-stack export was cancelled; the diagnostic preview and Stack_Report were retained."
+                .to_string(),
+        ),
+    }
+}
 
-    #[cfg(unix)]
-    File::open(parent)
-        .and_then(|directory| directory.sync_all())
-        .map_err(|error| format!("Failed to sync the image-stack output folder: {error}"))?;
-
-    Ok(())
+fn write_image_stack_output_with_settings(
+    image: &DynamicImage,
+    output_path: &Path,
+    output_format: ImageStackOutputFormat,
+    export_settings: &ExportSettings,
+    source_path: &str,
+) -> Result<(), String> {
+    write_image_stack_output_for_run(
+        image,
+        output_path,
+        output_format,
+        export_settings,
+        source_path,
+        &DegradationLedger::new(),
+    )
 }
 
 #[cfg(test)]
@@ -791,6 +815,41 @@ pub async fn process_image_stack(
                     return Ok(());
                 }
 
+                // This is the one authoritative run-outcome decision. The
+                // report has already folded the same ledger on the stitching
+                // terminal path; carrying the snapshot with the image prevents
+                // a later save from consulting another run's global ledger.
+                let degradation_ledger =
+                    crate::panorama_utils::stack_pipeline::degradation::run_ledger_snapshot();
+                let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
+                if !outcome_decision.permits_final_output() {
+                    // The composed pixels remain available only as diagnostic
+                    // previews. They are intentionally not inserted into the
+                    // exportable result store, and no cleanup targets either
+                    // preview or the Stack_Report.
+                    let message = match outcome_decision {
+                        OutcomeDecision::Cancelled => {
+                            "Image-stack processing was cancelled; diagnostic output was retained."
+                        }
+                        OutcomeDecision::Rejected => {
+                            "The image-stack result was rejected; diagnostic output was retained."
+                        }
+                        OutcomeDecision::Success | OutcomeDecision::Degraded => unreachable!(),
+                    }
+                    .to_string();
+                    let _ = app_handle.emit(
+                        "image-stack-error",
+                        serde_json::json!({
+                            "message": message,
+                            "requestId": request_id,
+                            "result": outcome_decision.as_identifier(),
+                            "previewPath": previews.interaction_path,
+                            "detailPreviewPath": previews.detail_path,
+                        }),
+                    );
+                    return Err(message);
+                }
+
                 let result_id = Uuid::new_v4().to_string();
                 let (source_width, source_height) = image.dimensions();
                 {
@@ -800,7 +859,7 @@ pub async fn process_image_stack(
                         let _ = fs::remove_file(&previews.detail_path);
                         return Ok(());
                     }
-                    *stored_result = Some((result_id.clone(), image));
+                    *stored_result = Some((result_id.clone(), image, degradation_ledger));
                 }
                 let _ = app_handle.emit(
                     "image-stack-complete",
@@ -820,6 +879,7 @@ pub async fn process_image_stack(
                         "pipelineVersion": IMAGE_STACK_PIPELINE_VERSION,
                         "requestId": request_id,
                         "resultId": result_id,
+                        "result": outcome_decision.as_identifier(),
                     }),
                 );
                 Ok(())
@@ -863,7 +923,11 @@ mod tests {
         detail_preview_dimensions, encode_srgb_tiff, preview_dimensions,
         resolve_image_stack_output_path, validate_image_stack_pipeline_version,
         validate_image_stack_source_count, write_image_stack_output,
-        write_image_stack_output_with_settings, write_srgb_tiff,
+        write_image_stack_output_for_run, write_image_stack_output_with_settings, write_srgb_tiff,
+    };
+    use crate::panorama_utils::stack_pipeline::degradation::{
+        CLOSURE_UNRELIABLE_RESIDUAL, DegradationLedger, GEOMETRY_DISCONNECTED,
+        RUN_CANCELLED_BY_USER,
     };
 
     #[test]
@@ -874,11 +938,15 @@ mod tests {
     }
 
     #[test]
-    fn image_stack_accepts_five_hundred_sources_but_rejects_more() {
-        assert!(validate_image_stack_source_count(2).is_ok());
-        assert!(validate_image_stack_source_count(IMAGE_STACK_MAX_SOURCES).is_ok());
-        assert!(validate_image_stack_source_count(1).is_err());
-        assert!(validate_image_stack_source_count(IMAGE_STACK_MAX_SOURCES + 1).is_err());
+    fn task_7_31_source_count_boundaries_are_exact() {
+        let outcomes =
+            [0usize, 1, 2, 500, 501].map(|count| (count, validate_image_stack_source_count(count)));
+        assert!(outcomes[0].1.is_err(), "zero sources must be rejected");
+        assert!(outcomes[1].1.is_err(), "one source must be rejected");
+        assert!(outcomes[2].1.is_ok(), "two sources start the valid range");
+        assert_eq!(IMAGE_STACK_MAX_SOURCES, 500);
+        assert!(outcomes[3].1.is_ok(), "500 sources end the valid range");
+        assert!(outcomes[4].1.is_err(), "501 sources exceed the valid range");
     }
 
     #[test]
@@ -981,6 +1049,105 @@ mod tests {
                 .expect("read persisted TIFF ICC")
                 .as_deref(),
             Some(crate::color_management::srgb_v4_profile())
+        );
+    }
+
+    #[test]
+    fn rejected_stack_save_preserves_existing_outputs_and_removes_only_its_temp() {
+        let directory = tempfile::tempdir().expect("temporary rejected stack directory");
+        let output_path = directory.path().join("stack-result.tiff");
+        let report_path = directory.path().join("stack-report.json");
+        let preview_path = directory.path().join("diagnostic-preview.jpg");
+        fs::write(&output_path, b"pre-existing final").expect("seed existing final");
+        fs::write(&report_path, b"stack report").expect("seed report");
+        fs::write(&preview_path, b"diagnostic preview").expect("seed preview");
+
+        let source = DynamicImage::ImageRgb16(ImageBuffer::from_pixel(4, 3, Rgb([1, 2, 3])));
+        let mut ledger = DegradationLedger::new();
+        ledger.record(CLOSURE_UNRELIABLE_RESIDUAL, serde_json::Value::Null);
+        ledger.record(GEOMETRY_DISCONNECTED, serde_json::Value::Null);
+
+        let error = write_image_stack_output_for_run(
+            &source,
+            &output_path,
+            ImageStackOutputFormat::Tiff,
+            &default_image_stack_export_settings(),
+            "",
+            &ledger,
+        )
+        .expect_err("a rejected run must not publish its staged result");
+
+        assert!(error.contains("rejected"));
+        assert_eq!(
+            fs::read(&output_path).expect("read existing final"),
+            b"pre-existing final"
+        );
+        assert_eq!(
+            fs::read(&report_path).expect("read report"),
+            b"stack report"
+        );
+        assert_eq!(
+            fs::read(&preview_path).expect("read preview"),
+            b"diagnostic preview"
+        );
+        let entries = fs::read_dir(directory.path())
+            .expect("list rejected stack directory")
+            .map(|entry| entry.expect("directory entry").file_name())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            entries,
+            [
+                "diagnostic-preview.jpg",
+                "stack-report.json",
+                "stack-result.tiff"
+            ]
+            .into_iter()
+            .map(std::ffi::OsString::from)
+            .collect(),
+            "the rejected run must remove only its generated temporary file"
+        );
+    }
+
+    #[test]
+    fn cancelled_stack_save_preserves_existing_final_and_removes_only_its_temp() {
+        let directory = tempfile::tempdir().expect("temporary cancelled stack directory");
+        let output_path = directory.path().join("stack-result.tiff");
+        let user_path = directory.path().join("user-notes.txt");
+        fs::write(&output_path, b"pre-existing final").expect("seed existing final");
+        fs::write(&user_path, b"keep me").expect("seed user file");
+
+        let source = DynamicImage::ImageRgb16(ImageBuffer::from_pixel(4, 3, Rgb([1, 2, 3])));
+        let mut ledger = DegradationLedger::new();
+        ledger.record(GEOMETRY_DISCONNECTED, serde_json::Value::Null);
+        ledger.record(RUN_CANCELLED_BY_USER, serde_json::Value::Null);
+
+        let error = write_image_stack_output_for_run(
+            &source,
+            &output_path,
+            ImageStackOutputFormat::Tiff,
+            &default_image_stack_export_settings(),
+            "",
+            &ledger,
+        )
+        .expect_err("a cancelled run must not publish its staged result");
+
+        assert!(error.contains("cancelled"));
+        assert_eq!(
+            fs::read(&output_path).expect("read existing final"),
+            b"pre-existing final"
+        );
+        assert_eq!(fs::read(&user_path).expect("read user file"), b"keep me");
+        let entries = fs::read_dir(directory.path())
+            .expect("list cancelled stack directory")
+            .map(|entry| entry.expect("directory entry").file_name())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            entries,
+            ["stack-result.tiff", "user-notes.txt"]
+                .into_iter()
+                .map(std::ffi::OsString::from)
+                .collect(),
+            "the cancelled run must remove only its generated temporary file"
         );
     }
 
@@ -1295,7 +1462,7 @@ pub async fn save_image_stack(
         let result = result_handle
             .lock()
             .map_err(|_| "The image-stack result store is unavailable.".to_string())?;
-        let (stored_result_id, image) = result
+        let (stored_result_id, image, degradation_ledger) = result
             .as_ref()
             .ok_or_else(|| "No image-stack result is available to save.".to_string())?;
         if stored_result_id != &result_id {
@@ -1305,12 +1472,13 @@ pub async fn save_image_stack(
             );
         }
 
-        write_image_stack_output_with_settings(
+        write_image_stack_output_for_run(
             image,
             &output_path_for_task,
             output_format,
             &export_settings,
             &sidecar_source,
+            degradation_ledger,
         )?;
         drop(result);
         // Keep the canonical result cached so the same stack can be exported again in

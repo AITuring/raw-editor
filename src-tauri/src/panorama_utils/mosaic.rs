@@ -1,7 +1,14 @@
 //! Focus mosaics: refine residual geometry, choose sharp source detail, match
 //! only broad colour. The output is never an average of displaced fine detail.
-use super::registration::refine_warped_patch;
+use super::registration::{PatchMatchGates, probe_warped_patch, refine_warped_patch};
 use super::seam_cut;
+use super::stack_pipeline::degradation;
+use super::stack_pipeline::intra_station;
+use super::stack_pipeline::report::{IntraStationFrameRecord, IntraStationFrameStatus};
+use super::stack_pipeline::station_degradation::{
+    GroupJoinEvidence, StationMember, group_join_rejection, plan_station_fusion,
+    record_run_entries, record_run_group_join_rejection, station_plan_entries,
+};
 use super::stitching::{
     Projection, downsample_rgb_half, get_high_quality_interpolated_pixel, map_target_to_source,
     output_bounds, pixel_aligned_canvas, transformed_image_region,
@@ -10,7 +17,7 @@ use crate::panorama_stitching::ImageInfo;
 use image::{GrayImage, Luma, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Runtime};
 
@@ -18,16 +25,21 @@ use tauri::{AppHandle, Emitter, Runtime};
 #[path = "mosaic_diagnostics.rs"]
 mod diagnostics;
 
-const ANALYSIS_LONG_SIDE: u32 = 1400;
+// Actual configured intra-station analysis long side. Keep both compositor
+// paths on the same source of truth so Stack_Report records what production
+// used rather than the 2048 requirement ceiling (需求 2.2).
+const ANALYSIS_LONG_SIDE: u32 = intra_station::INTRA_STATION_ANALYSIS_LONG_SIDE;
 // Bound the grid per source layer, not by the full panorama width. At a
 // roughly 9504px layer footprint this yields approximately 19px cells, fine
 // enough for seams to route around individual strokes.
-const SELECTION_LONG_SIDE: u32 = 512;
+// Also the Focus_Fuser's ownership cell count (需求 3.1): the station plane's
+// long side is divided into at least this many cells.
+pub(super) const SELECTION_LONG_SIDE: u32 = 512;
 const LONG_SEQUENCE_SELECTION_LONG_SIDE: u32 = 768;
 // Streaming still makes one continuous decision for the whole source layer.
 // Keeping the analysis bounded preserves memory while preventing independent
 // 1024px tiles from choosing incompatible owners along their shared border.
-const STREAMING_ANALYSIS_LONG_SIDE: u32 = 1400;
+const STREAMING_ANALYSIS_LONG_SIDE: u32 = intra_station::INTRA_STATION_ANALYSIS_LONG_SIDE;
 const STREAMING_SELECTION_LONG_SIDE: u32 = 768;
 // Ownership is already regularised by the graph cut. A wide blur here mixes
 // focused and defocused focal planes across tens of native pixels on a 45MP
@@ -49,7 +61,9 @@ const STREAMING_ILLUMINATION_MAX_GAIN: f64 = 1.40;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
-const OWNERSHIP_MISMATCH_PENALTY: f64 = 2.4;
+// Selection cost added to a candidate that is sharper than the current
+// composite but photometrically inconsistent with it (需求 3.3 requires ≥ 1.0).
+pub(super) const OWNERSHIP_MISMATCH_PENALTY: f64 = 2.4;
 const STREAMING_TILE_SIZE: u32 = 1024;
 // A float RGB canvas costs twelve bytes per pixel before the ownership mask,
 // decoded RAW layer, and canonical 16-bit result are counted.  Switch to the
@@ -373,7 +387,7 @@ fn streaming_seam_harmonization(
     // unsharp-mask halo around calligraphy.  Group-constant gains cannot trace
     // glyph contours, and dark/strongly coloured foreground is excluded here.
     let paper = image::imageops::blur(&analysis, 2.0);
-    let mut pair_samples: HashMap<(u8, u8), Vec<[f64; 3]>> = HashMap::new();
+    let mut pair_samples: BTreeMap<(u8, u8), Vec<[f64; 3]>> = BTreeMap::new();
     let probe = 6u32;
     let mut sample_pair = |ax: u32, ay: u32, bx: u32, by: u32| {
         if mask.get_pixel(ax, ay)[0] == 0 || mask.get_pixel(bx, by)[0] == 0 {
@@ -429,7 +443,11 @@ fn streaming_seam_harmonization(
             }
         }
     }
-    let mut pair_offsets: HashMap<(u8, u8), ([f64; 3], f64)> = pair_samples
+    // The per-owner log gains below are solved by repeatedly accumulating
+    // `total += target * edge_weight` over every pair relation.  That floating
+    // point sum is order sensitive, so the relation list must be ordered by owner
+    // pair rather than by hash seed (需求 14.6).
+    let mut pair_offsets: BTreeMap<(u8, u8), ([f64; 3], f64)> = pair_samples
         .into_iter()
         .filter_map(|(pair, samples)| {
             (samples.len() >= 12).then(|| {
@@ -519,7 +537,9 @@ fn streaming_group_tone_relations_from_analysis(
         .height()
         .min(candidate.height())
         .min(base_owner.height());
-    let mut samples = HashMap::<(u8, u8), Vec<[f64; 3]>>::new();
+    // Ordered by owner pair: the returned relations are later folded into the
+    // shared `pair_offsets` map and into a float accumulation (需求 14.6).
+    let mut samples = BTreeMap::<(u8, u8), Vec<[f64; 3]>>::new();
     for y in (0..height).step_by(4) {
         for x in (0..width).step_by(4) {
             if base_mask.get_pixel(x, y)[0] == 0 || candidate_mask.get_pixel(x, y)[0] == 0 {
@@ -947,6 +967,16 @@ fn refine_layer_from_analysis(
     if supported.len() < 4 {
         println!(
             "    - Local registration: insufficient reliable texture; keeping verified global alignment"
+        );
+        // Observation only (requirement 12.7/12.9): the frame keeps the global
+        // model exactly as before, the ledger just records that it did.
+        degradation::record_run_degradation(
+            degradation::INTRA_STATION_LOCAL_FALLBACK,
+            serde_json::json!({
+                "stage": "mosaic_local_registration",
+                "supported_patches": supported.len(),
+                "minimum_patches": 4,
+            }),
         );
         return;
     }
@@ -1426,120 +1456,1229 @@ fn streaming_ownership_from_analysis(
     GrayImage::from_raw(grid_width, grid_height, labels).expect("ownership dimensions")
 }
 
+/// Sharpness_Score of a gray analysis image, sampled with `spacing` pixels
+/// between probes so a measurement can be taken at a bounded analysis
+/// resolution (需求 2.1 / 2.2).  `None` where the probe window would leave the
+/// image, which is what "valid pixels" means for a full frame.
+pub(crate) fn gray_analysis_sharpness(
+    image: &GrayImage,
+    x: f64,
+    y: f64,
+    spacing: f64,
+) -> Option<f64> {
+    let half = 6.0 * spacing + 1.0;
+    if !(x - half >= 0.0
+        && y - half >= 0.0
+        && x + half < f64::from(image.width())
+        && y + half < f64::from(image.height()))
+    {
+        return None;
+    }
+    Some(acutance(
+        |sample_x, sample_y| {
+            intra_station::gray_sample(
+                image,
+                x + (sample_x - x) * spacing,
+                y + (sample_y - y) * spacing,
+            )
+        },
+        x,
+        y,
+    ))
+}
+
+/// Which caller the native patch refinement is serving.
+///
+/// The intra-station registrar composites at native resolution by definition,
+/// so the analysis-scale early exit has no meaning there (需求 2.2).  The legacy
+/// mosaic comparison path keeps it, together with its original search radius
+/// and its single bidirectional gate, so its output stays byte identical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NativeRefineMode {
+    /// Legacy comparison path: `scale <= 2.0` returns without measuring.
+    LegacyMosaic,
+    /// Intra-station path: every control point passes the 需求 2.4/2.5/2.6 gates
+    /// and the frame keeps its local field only when it improves (需求 2.7).
+    IntraStation {
+        /// Native long side of the anchor frame, for the 需求 2.6 error gate.
+        anchor_long_side: u32,
+    },
+}
+
+impl NativeRefineMode {
+    /// `(matching window radius, translation search extent)` in patch samples.
+    ///
+    /// The legacy pair is unchanged.  The intra-station pair widens the window to
+    /// 33 native pixels at the finest pass (需求 2.3) and keeps the search support
+    /// inside the patch buffer, which is the only way `refine_warped_patch`
+    /// returns a match at all.
+    fn patch_geometry(self) -> (i32, i32) {
+        match self {
+            Self::LegacyMosaic => (10, 7),
+            Self::IntraStation { .. } => (
+                intra_station::INTRA_STATION_MATCH_RADIUS,
+                intra_station::INTRA_STATION_SEARCH_SAMPLES,
+            ),
+        }
+    }
+
+    fn anchor_long_side(self) -> Option<u32> {
+        match self {
+            Self::LegacyMosaic => None,
+            Self::IntraStation { anchor_long_side } => Some(anchor_long_side),
+        }
+    }
+
+    /// Half side of the patch buffers this mode builds.
+    fn patch_half(self) -> i32 {
+        match self {
+            Self::LegacyMosaic => intra_station::LEGACY_MOSAIC_PATCH_HALF,
+            Self::IntraStation { .. } => intra_station::INTRA_STATION_PATCH_HALF,
+        }
+    }
+
+    /// Similarity gates of one control point.
+    fn patch_gates(self) -> PatchMatchGates {
+        match self {
+            Self::LegacyMosaic => PatchMatchGates::LEGACY,
+            Self::IntraStation { .. } => intra_station::INTRA_STATION_PATCH_GATES,
+        }
+    }
+
+    /// `true` when the two sides of a patch pair have to be brought to a
+    /// comparable focal plane before they are correlated.
+    ///
+    /// Only the intra-station path needs it, because only there are the two
+    /// sides deliberately focused on different planes.  The mosaic path matches
+    /// two frames of the same plane and its output has to stay byte identical.
+    fn matches_focal_plane(self) -> bool {
+        matches!(self, Self::IntraStation { .. })
+    }
+}
+
+/// What one native refinement pass measured (需求 2.9).  Every field is an
+/// observation; the caller turns it into the report record.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct NativeRefineOutcome {
+    /// Control points that passed every gate in the final pass.
+    pub(crate) accepted_control_points: usize,
+    /// Control points whose measurement was attempted in the final pass.
+    pub(crate) evaluated_control_points: usize,
+    /// `1 - accepted / evaluated` (需求 2.6).
+    pub(crate) rejected_control_point_ratio: f64,
+    /// Median symmetric reprojection error of the global model, native pixels.
+    pub(crate) global_median_symmetric_error_px: f64,
+    /// Control points the global baseline median was formed from.  `0` means
+    /// 需求 2.7 has no baseline to compare against (需求 2.7 / 2.9).
+    pub(crate) global_baseline_samples: usize,
+    /// Median symmetric reprojection error after refinement, native pixels.
+    pub(crate) local_median_symmetric_error_px: f64,
+    /// Control points the refined median was formed from.
+    pub(crate) local_baseline_samples: usize,
+    /// How 需求 2.7 resolved (需求 2.9).
+    pub(crate) local_field_verdict: intra_station::LocalFieldVerdict,
+    /// Median `softer / sharper` high-frequency energy ratio of the control
+    /// point patch pairs before and after the focal-plane matched low-pass.
+    pub(crate) focal_plane_ratio_before: f64,
+    pub(crate) focal_plane_ratio_after: f64,
+    /// Largest observed bidirectional round trip, native pixels (需求 2.4).
+    pub(crate) max_bidirectional_round_trip_px: f64,
+    /// 需求 2.8 coverage of the accepted control point cells.
+    pub(crate) inlier_area_coverage: f64,
+    /// Measured distance between neighbouring control points, in native pixels
+    /// of the anchor frame (需求 2.3).  The grid step is fixed in *analysis*
+    /// units, so the native spacing is whatever the layer's analysis scale makes
+    /// it, and only a measurement can say what that was.
+    pub(crate) control_point_spacing_px: f64,
+    /// `true` when the whole local field was discarded (需求 2.7).
+    pub(crate) reverted_to_global: bool,
+    /// `true` when the mode declined to measure at all.
+    pub(crate) skipped: bool,
+    /// Accepted control point cells of the *final* spacing pass alone.
+    ///
+    /// Test-only, and the whole point of it is to be different from
+    /// `accepted_control_points`: 需求 2.8 counts the cells that contain an
+    /// accepted local match over the *whole* refinement, so the coverage is the
+    /// union over the spacing passes ([`intra_station::ControlPointGrid::absorb`])
+    /// while this is what the last pass on its own saw.  Property 8 asserts which
+    /// of the two the reported coverage is built from, and it can only do that if
+    /// it can see both.
+    #[cfg(test)]
+    pub(crate) last_pass_accepted_control_points: usize,
+    /// Control point cells whose centre lay on covered base in the final pass,
+    /// i.e. the denominator of 需求 2.8 in cells.  Test-only, for the same
+    /// reason.
+    #[cfg(test)]
+    pub(crate) valid_cells: usize,
+    /// Area of one control point cell in native pixels of the anchor frame.
+    /// Test-only, for the same reason.
+    #[cfg(test)]
+    pub(crate) cell_area_px: f64,
+}
+
+impl Default for NativeRefineOutcome {
+    fn default() -> Self {
+        Self {
+            accepted_control_points: 0,
+            evaluated_control_points: 0,
+            rejected_control_point_ratio: 0.0,
+            global_median_symmetric_error_px: 0.0,
+            global_baseline_samples: 0,
+            local_median_symmetric_error_px: 0.0,
+            local_baseline_samples: 0,
+            local_field_verdict: intra_station::LocalFieldVerdict::Indeterminate,
+            focal_plane_ratio_before: 1.0,
+            focal_plane_ratio_after: 1.0,
+            max_bidirectional_round_trip_px: 0.0,
+            inlier_area_coverage: 0.0,
+            control_point_spacing_px: 0.0,
+            reverted_to_global: false,
+            skipped: true,
+            #[cfg(test)]
+            last_pass_accepted_control_points: 0,
+            #[cfg(test)]
+            valid_cells: 0,
+            #[cfg(test)]
+            cell_area_px: 0.0,
+        }
+    }
+}
+
+impl NativeRefineOutcome {
+    /// 需求 2.7 / 2.8: the frame verdict implied by this measurement.
+    pub(crate) fn frame_status(&self) -> IntraStationFrameStatus {
+        intra_station::frame_status(
+            self.local_field_verdict.field_kept(),
+            self.inlier_area_coverage,
+        )
+    }
+}
+
+/// One `intra_station[*].frames[*]` entry (需求 2.9).  Shared by the in-memory
+/// and the tiled compositor so the report cannot describe one of them only.
+fn intra_station_frame_record(
+    path: &str,
+    into_anchor: Matrix3<f64>,
+    outcome: &NativeRefineOutcome,
+) -> IntraStationFrameRecord {
+    IntraStationFrameRecord {
+        path: path.to_string(),
+        transform: [
+            into_anchor[(0, 0)],
+            into_anchor[(0, 1)],
+            into_anchor[(0, 2)],
+            into_anchor[(1, 0)],
+            into_anchor[(1, 1)],
+            into_anchor[(1, 2)],
+            into_anchor[(2, 0)],
+            into_anchor[(2, 1)],
+            into_anchor[(2, 2)],
+        ],
+        inliers: outcome.accepted_control_points,
+        inlier_area_coverage: outcome.inlier_area_coverage,
+        control_point_spacing_px: outcome.control_point_spacing_px,
+        rejected_control_point_ratio: outcome.rejected_control_point_ratio,
+        median_symmetric_error_px: if outcome.reverted_to_global {
+            outcome.global_median_symmetric_error_px
+        } else {
+            outcome.local_median_symmetric_error_px
+        },
+        global_median_symmetric_error_px: outcome.global_median_symmetric_error_px,
+        global_baseline_samples: outcome.global_baseline_samples,
+        local_baseline_samples: outcome.local_baseline_samples,
+        local_field_verdict: outcome.local_field_verdict.record(),
+        focal_plane_ratio_before: outcome.focal_plane_ratio_before,
+        focal_plane_ratio_after: outcome.focal_plane_ratio_after,
+        status: outcome.frame_status(),
+    }
+}
+
+/// Median Sharpness_Score over the valid pixels of one Source_RAW, measured the
+/// same way the anchor selection of 需求 2.1 measures it.
+///
+/// This is what 需求 12.1 ranks the members of a degraded Capture_Station by.
+/// The measurement runs on the already prepared analysis image and on the fixed
+/// probe grid of [`intra_station::median_valid_sharpness`], so it costs a few
+/// thousand samples per frame and is independent of the canvas the station
+/// happens to be rendered on.
+///
+/// Shared with the default station path in [`super::stitching`], so a degraded
+/// station ranks its members by the same number whichever compositor rendered
+/// it.
+pub(crate) fn station_member_median_sharpness(info: &ImageInfo) -> f64 {
+    let analysis = &info.alignment_image;
+    let (width, height) = (analysis.width(), analysis.height());
+    let spacing = intra_station::analysis_probe_spacing(width.max(height));
+    intra_station::median_valid_sharpness(width, height, |x, y| {
+        gray_analysis_sharpness(analysis, x, y, spacing)
+    })
+}
+
+/// Masked base pixels of the already composited canvas, addressed in global
+/// canvas coordinates.
+///
+/// The non-streaming path wraps the whole canvas.  The streaming path wraps one
+/// [`STREAMING_TILE_SIZE`] tile at a time — a canvas of hundreds of megapixels
+/// never exists in memory there — so a control point whose matching window
+/// leaves the loaded tile has no base to measure against and is skipped, exactly
+/// as a control point over uncovered canvas is.  The residual field is a smooth
+/// Gaussian interpolation of the accepted observations, so the thin band along
+/// each tile border is carried by its neighbours.
+struct NativeRefineBase<'a> {
+    image: &'a Rgb32FImage,
+    mask: &'a GrayImage,
+    left: u32,
+    top: u32,
+}
+
+impl NativeRefineBase<'_> {
+    /// The composited pixel at a global canvas position, or `None` where the
+    /// position is outside this window or not yet covered.
+    fn masked(&self, gx: f64, gy: f64) -> Option<Rgb<f32>> {
+        let lx = gx - f64::from(self.left);
+        let ly = gy - f64::from(self.top);
+        if lx < 0.0 || ly < 0.0 {
+            return None;
+        }
+        let pixel = rgb_at(self.image, lx, ly)?;
+        (self.mask.get_pixel(lx as u32, ly as u32)[0] != 0).then_some(pixel)
+    }
+
+    fn covered(&self, gx: u32, gy: u32) -> bool {
+        let Some(lx) = gx.checked_sub(self.left) else {
+            return false;
+        };
+        let Some(ly) = gy.checked_sub(self.top) else {
+            return false;
+        };
+        lx < self.mask.width() && ly < self.mask.height() && self.mask.get_pixel(lx, ly)[0] != 0
+    }
+}
+
+/// Observations of one spacing pass.
+///
+/// Kept apart from the pass that applies them because the streaming path fills
+/// one accumulator from several tiles before the displacement field is built.
+struct NativeRefinePass {
+    observations: Vec<(Point2<f64>, [f64; 2], f64)>,
+    accepted_grid: intra_station::ControlPointGrid,
+    global_errors: Vec<f64>,
+    local_errors: Vec<f64>,
+    evaluated: usize,
+    valid_cells: usize,
+    max_round_trip: f64,
+    similarity: SimilarityStats,
+}
+
+impl NativeRefinePass {
+    fn new(width: u32, height: u32) -> Self {
+        let columns = (width.saturating_sub(40) as usize / NATIVE_REFINE_STEP as usize) + 1;
+        let rows = (height.saturating_sub(40) as usize / NATIVE_REFINE_STEP as usize) + 1;
+        Self {
+            observations: Vec::new(),
+            accepted_grid: intra_station::ControlPointGrid::new(columns, rows),
+            global_errors: Vec::new(),
+            local_errors: Vec::new(),
+            evaluated: 0,
+            valid_cells: 0,
+            max_round_trip: 0.0,
+            similarity: SimilarityStats::default(),
+        }
+    }
+}
+
+/// Width of one correlation bucket, and the value the lowest bucket starts at.
+const SIMILARITY_BUCKET_WIDTH: f64 = 0.05;
+const SIMILARITY_BUCKET_FLOOR: f64 = 0.50;
+const SIMILARITY_BUCKETS: usize = 10;
+
+/// Correlation the round-trip distribution is reported from, so the log states
+/// the tradeoff at the similarity floor that is actually in force.
+const SIMILARITY_REPORTED_FLOOR: f64 = intra_station::INTRA_STATION_MIN_CORRELATION;
+
+/// Which correlation bucket a score belongs to, or `None` below the floor.
+fn similarity_bucket(correlation: f64) -> Option<usize> {
+    if !correlation.is_finite() || correlation < SIMILARITY_BUCKET_FLOOR {
+        return None;
+    }
+    Some(
+        (((correlation - SIMILARITY_BUCKET_FLOOR) / SIMILARITY_BUCKET_WIDTH) as usize)
+            .min(SIMILARITY_BUCKETS - 1),
+    )
+}
+
+/// What the similarity gates of one pass actually saw.
+///
+/// This exists so the correlation threshold can be stated as a measured
+/// accept-rate/precision tradeoff rather than as a number someone liked.  The
+/// precision proxy is the share of each correlation bucket that then closed the
+/// 需求 2.4 bidirectional round trip within 0.40 native pixels: a bucket whose
+/// forward peak is real closes the round trip, a bucket matching a repeated
+/// texture does not.
+#[derive(Debug, Clone, Default)]
+struct SimilarityStats {
+    /// Forward peak correlation of every control point whose patch pair carried
+    /// comparable signal at all.
+    correlations: Vec<f64>,
+    /// Per bucket, how many control points reached the reverse match.
+    bucket_total: [usize; SIMILARITY_BUCKETS],
+    /// Per bucket, how many of those closed the round trip.
+    bucket_round_trip: [usize; SIMILARITY_BUCKETS],
+    /// Round trip in native pixels of every control point that reached the
+    /// reverse match at or above [`SIMILARITY_REPORTED_FLOOR`], so the 需求 2.4
+    /// tolerance can be read off a distribution instead of guessed.
+    accepted_round_trips: Vec<f64>,
+    /// Second-peak margin of those same control points, so the margin gate can
+    /// be checked against data too.
+    accepted_peak_margins: Vec<f64>,
+    /// `softer / sharper` high-frequency energy ratio of every measured pair,
+    /// before and after the matched low-pass.
+    focal_ratio_before: Vec<f64>,
+    focal_ratio_matched: Vec<f64>,
+    focal_ratio_after: Vec<f64>,
+    /// Sigma, in patch samples, the focal-plane match decided the two sides
+    /// differ by, and how often the descent ran out of budget.
+    focal_passes: Vec<f64>,
+    focal_capped: usize,
+}
+
+impl SimilarityStats {
+    fn absorb(&mut self, point: &NativeControlPoint) {
+        if let Some(correlation) = point.best_correlation {
+            self.correlations.push(correlation);
+            if let Some(bucket) = similarity_bucket(correlation)
+                && point.reverse_attempted
+            {
+                self.bucket_total[bucket] += 1;
+                if point.round_trip_closed {
+                    self.bucket_round_trip[bucket] += 1;
+                }
+                if correlation >= SIMILARITY_REPORTED_FLOOR {
+                    self.accepted_round_trips.push(point.round_trip_px);
+                    if let Some(margin) = point.peak_margin {
+                        self.accepted_peak_margins.push(margin);
+                    }
+                }
+            }
+        }
+        if let Some(focal) = point.focal_plane {
+            self.focal_ratio_before.push(focal.sharpness_ratio_before);
+            self.focal_ratio_matched.push(focal.sharpness_ratio_matched);
+            self.focal_ratio_after.push(focal.sharpness_ratio_after);
+            self.focal_passes.push(focal.matched_variance.sqrt());
+            self.focal_capped += usize::from(focal.capped);
+        }
+    }
+
+    /// One log line: the correlation distribution, the measured round-trip pass
+    /// rate per bucket and what the focal-plane match did.
+    fn summary(&mut self) -> String {
+        if self.correlations.is_empty() {
+            return "no measurable patch pair".to_string();
+        }
+        let percentile = |values: &mut Vec<f64>, fraction: f64| -> f64 {
+            values.sort_by(|left, right| left.total_cmp(right));
+            let index = ((values.len() - 1) as f64 * fraction).round() as usize;
+            values[index]
+        };
+        let p10 = percentile(&mut self.correlations, 0.10);
+        let p50 = percentile(&mut self.correlations, 0.50);
+        let p90 = percentile(&mut self.correlations, 0.90);
+        let buckets = (0..SIMILARITY_BUCKETS)
+            .filter(|&bucket| self.bucket_total[bucket] > 0)
+            .map(|bucket| {
+                format!(
+                    "{:.2}:{}/{}",
+                    SIMILARITY_BUCKET_FLOOR + bucket as f64 * SIMILARITY_BUCKET_WIDTH,
+                    self.bucket_round_trip[bucket],
+                    self.bucket_total[bucket]
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let focal = if self.focal_ratio_before.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ", focal-plane ratio p50 {:.3} -> {:.3} -> {:.3} at sigma p50/p90 {:.2}/{:.2} samples, {} capped",
+                percentile(&mut self.focal_ratio_before, 0.50),
+                percentile(&mut self.focal_ratio_matched, 0.50),
+                percentile(&mut self.focal_ratio_after, 0.50),
+                percentile(&mut self.focal_passes, 0.50),
+                percentile(&mut self.focal_passes, 0.90),
+                self.focal_capped
+            )
+        };
+        let round_trip = if self.accepted_round_trips.is_empty() {
+            String::new()
+        } else {
+            let total = self.accepted_round_trips.len();
+            let round_trips = &mut self.accepted_round_trips;
+            let p50 = percentile(round_trips, 0.50);
+            let p90 = percentile(round_trips, 0.90);
+            let within = |limit: f64| round_trips.iter().filter(|&&value| value <= limit).count();
+            let counted = format!(
+                ", round trip at correlation >= {SIMILARITY_REPORTED_FLOOR:.2} p50/p90 {p50:.2}/{p90:.2}px, within 0.40/0.70/1.00px {}/{}/{} of {total}",
+                within(0.40),
+                within(0.70),
+                within(1.00)
+            );
+            let margin = percentile(&mut self.accepted_peak_margins, 0.10);
+            format!("{counted}, second-peak margin p10 {margin:.4}")
+        };
+        format!(
+            "correlation p10/p50/p90 {p10:.3}/{p50:.3}/{p90:.3} over {} pairs{focal}{round_trip}, round trip closure by bucket [{buckets}]",
+            self.correlations.len()
+        )
+    }
+
+    fn median_focal_ratios(&mut self) -> (f64, f64) {
+        (
+            if self.focal_ratio_before.is_empty() {
+                1.0
+            } else {
+                intra_station::median_of(&mut self.focal_ratio_before)
+            },
+            if self.focal_ratio_after.is_empty() {
+                1.0
+            } else {
+                intra_station::median_of(&mut self.focal_ratio_after)
+            },
+        )
+    }
+}
+
+/// What one control point measured, before the order dependent 需求 2.5 gate.
+///
+/// Every field here is a function of that control point alone, which is what
+/// lets the expensive matching run in parallel while the neighbourhood gate
+/// stays a serial row-major walk.
+#[derive(Debug, Clone, Copy, Default)]
+struct NativeControlPoint {
+    /// The cell centre lies on covered base, so its area counts towards the
+    /// anchor frame's valid pixel area (需求 2.8).
+    covered: bool,
+    /// The patch pair was complete, so a match was attempted.
+    evaluated: bool,
+    /// Bidirectional round trip in native pixels, `0.0` when never measured.
+    round_trip_px: f64,
+    /// Forward peak correlation, `None` when the patch pair carried no
+    /// comparable signal at all.
+    best_correlation: Option<f64>,
+    /// `true` when the forward match cleared the similarity gates, so a reverse
+    /// match was run and the round trip is a real measurement.
+    reverse_attempted: bool,
+    /// `true` when that round trip closed inside the 需求 2.4 tolerance.
+    round_trip_closed: bool,
+    /// Gap between the correlation peak and the best hypothesis at least 2.5
+    /// samples away, `None` when no hypothesis was scored.
+    peak_margin: Option<f64>,
+    /// What the focal-plane matched low-pass did to this pair.
+    focal_plane: Option<intra_station::FocalPlaneMatch>,
+    /// Displacement in analysis units, its correlation, the local (round trip)
+    /// and global symmetric reprojection errors in native pixels.  `Some` as soon
+    /// as both directions matched, i.e. *before* the 需求 2.4 and 需求 2.6 gates.
+    ///
+    /// Published separately from [`Self::accepted`] so the gates can be stated as
+    /// a filter over a measurement rather than as the measurement itself.
+    measured: Option<([f64; 2], f64, f64, f64)>,
+    /// [`Self::measured`] once the 需求 2.4 and 需求 2.6 gates have passed.
+    accepted: Option<([f64; 2], f64, f64, f64)>,
+}
+
+/// Measure one control point: build the two patches, match both ways and apply
+/// every gate that does not depend on the other control points (需求 2.4 / 2.6).
+#[allow(clippy::too_many_arguments)]
+fn measure_native_control_point(
+    base: &NativeRefineBase<'_>,
+    sampler: &LayerSampler<'_>,
+    x: u32,
+    y: u32,
+    spacing: f64,
+    mode: NativeRefineMode,
+    match_radius: i32,
+    search_samples: i32,
+) -> NativeControlPoint {
+    let lx = x as f64 * sampler.scale;
+    let ly = y as f64 * sampler.scale;
+    // 需求 2.8 measures coverage against the anchor frame's valid pixel area;
+    // the control point cells whose centre is covered are exactly that area,
+    // discretised on this same grid.
+    let centre_x = (sampler.left as f64 + lx) as u32;
+    let centre_y = (sampler.top as f64 + ly) as u32;
+    let mut measurement = NativeControlPoint {
+        covered: base.covered(centre_x, centre_y),
+        ..Default::default()
+    };
+    let patch_half = mode.patch_half();
+    let side = (2 * patch_half + 1) as usize;
+    let half = f64::from(patch_half);
+    let mut base_patch = vec![0.0f64; side * side];
+    let mut candidate_patch = vec![0.0f64; side * side];
+    for py in 0..side {
+        for px in 0..side {
+            let dx = (px as f64 - half) * spacing;
+            let dy = (py as f64 - half) * spacing;
+            let gx = sampler.left as f64 + lx + dx;
+            let gy = sampler.top as f64 + ly + dy;
+            let Some(current) = base.masked(gx, gy) else {
+                return measurement;
+            };
+            let Some(candidate) = sampler.sample(lx + dx, ly + dy) else {
+                return measurement;
+            };
+            base_patch[py * side + px] = luma(current) * 255.0;
+            candidate_patch[py * side + px] = luma(candidate) * 255.0;
+        }
+    }
+    // A Capture_Station is a focus bracket: at this control point one of the two
+    // sides is near its focal plane and the other is not, and raw-intensity
+    // correlation cannot see two different point-spread functions as the same
+    // content.  Bring them to a comparable scale first (需求 2.3).
+    if mode.matches_focal_plane() {
+        measurement.focal_plane = Some(intra_station::match_focal_plane(
+            &mut base_patch,
+            &mut candidate_patch,
+            side,
+        ));
+    }
+    let quantise = |values: &[f64]| {
+        GrayImage::from_fn(side as u32, side as u32, |x, y| {
+            Luma([values[y as usize * side + x as usize]
+                .round()
+                .clamp(0.0, 255.0) as u8])
+        })
+    };
+    let a = quantise(&base_patch);
+    let b = quantise(&candidate_patch);
+    let gates = mode.patch_gates();
+    let p = Point2::new(half, half);
+    measurement.evaluated = true;
+    let forward = probe_warped_patch(
+        &a,
+        &b,
+        &Matrix3::identity(),
+        p,
+        match_radius,
+        search_samples,
+        gates,
+    );
+    measurement.best_correlation = forward.best_correlation;
+    measurement.peak_margin = forward.peak_margin;
+    let Some(found) = forward.matched else {
+        return measurement;
+    };
+    // The mosaic path keeps its second, stricter correlation floor; the
+    // intra-station path states its single floor in `gates` instead of gating
+    // twice at two different values.
+    if !mode.matches_focal_plane() && found.correlation < 0.90 {
+        return measurement;
+    }
+    measurement.reverse_attempted = true;
+    let Some(back) = probe_warped_patch(
+        &b,
+        &a,
+        &Matrix3::identity(),
+        found.target,
+        match_radius,
+        search_samples,
+        gates,
+    )
+    .matched
+    else {
+        return measurement;
+    };
+    // Both residuals are patch-sample distances; one sample step is `spacing`
+    // native pixels, so scaling by `spacing` puts every measurement below in
+    // native pixels of the anchor frame.
+    let round_trip_patch = (back.target - p).norm();
+    let round_trip_px = round_trip_patch * spacing;
+    measurement.round_trip_px = round_trip_px;
+    // The symmetric reprojection error of the global model at this control point
+    // is how far the two-way match says the frame has to move; after the
+    // correction the remaining two-way disagreement is the round trip.  Both are
+    // measurements of the completed bidirectional match, so they are recorded
+    // before either gate looks at them.
+    let global_error_px = (found.target - p).norm() * spacing;
+    let d = (found.target - p) * (spacing / sampler.scale);
+    measurement.measured = Some((
+        [d.x, d.y],
+        found.correlation,
+        round_trip_px,
+        global_error_px,
+    ));
+    measurement.round_trip_closed = match mode {
+        // The legacy path compares the round trip in patch sample units,
+        // exactly as it always did.
+        NativeRefineMode::LegacyMosaic => {
+            round_trip_patch <= intra_station::INTRA_STATION_BIDIRECTIONAL_TOLERANCE_PX
+        }
+        // 需求 2.4 measures in native pixels and allows 1.0; the stricter 0.40
+        // of this path is kept and the measured value is reported.
+        NativeRefineMode::IntraStation { .. } => {
+            intra_station::bidirectional_consistent(round_trip_px)
+        }
+    };
+    if !measurement.round_trip_closed {
+        return measurement;
+    }
+    if let Some(anchor_long_side) = mode.anchor_long_side() {
+        // 需求 2.6: an implausible displacement claim keeps the global model
+        // here and counts as a rejected control point.
+        if !intra_station::symmetric_error_accepted(global_error_px, anchor_long_side) {
+            return measurement;
+        }
+    }
+    measurement.accepted = measurement.measured;
+    measurement
+}
+
+/// Measure every control point whose matching window lies inside `base`.
+///
+/// Refine against the selected, native output samples. Upsampling a coarse
+/// displacement field alone leaves several pixels of error on 200MP input.
+/// These tiny patches keep native refinement independent of canvas size.
+///
+/// The matching runs in parallel because each control point is an independent
+/// measurement; the 需求 2.5 neighbourhood gate then walks the same grid
+/// serially in row-major order, so the accepted set is exactly what a fully
+/// serial walk accepts and is still a deterministic function of the
+/// photographs.
+fn collect_native_observations(
+    base: &NativeRefineBase<'_>,
+    sampler: &LayerSampler<'_>,
+    width: u32,
+    height: u32,
+    spacing: f64,
+    mode: NativeRefineMode,
+    pass: &mut NativeRefinePass,
+) {
+    let (match_radius, search_samples) = mode.patch_geometry();
+    debug_assert!(
+        intra_station::patch_support_fits(match_radius, search_samples, mode.patch_half()),
+        "the matching window and its search support must fit the patch buffer"
+    );
+    debug_assert!(
+        !matches!(mode, NativeRefineMode::IntraStation { .. })
+            || intra_station::native_search_reach_px(spacing)
+                <= intra_station::INTRA_STATION_SEARCH_RADIUS,
+        "需求 2.3 bounds the native search reach"
+    );
+    let columns = (20..width.saturating_sub(20))
+        .step_by(NATIVE_REFINE_STEP as usize)
+        .collect::<Vec<_>>();
+    let rows = (20..height.saturating_sub(20))
+        .step_by(NATIVE_REFINE_STEP as usize)
+        .collect::<Vec<_>>();
+    let measured = rows
+        .par_iter()
+        .map(|&y| {
+            columns
+                .iter()
+                .map(|&x| {
+                    measure_native_control_point(
+                        base,
+                        sampler,
+                        x,
+                        y,
+                        spacing,
+                        mode,
+                        match_radius,
+                        search_samples,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (grid_row, row) in measured.iter().enumerate() {
+        for (grid_column, measurement) in row.iter().enumerate() {
+            if measurement.covered {
+                pass.valid_cells += 1;
+            }
+            if !measurement.evaluated {
+                continue;
+            }
+            pass.evaluated += 1;
+            pass.similarity.absorb(measurement);
+            pass.max_round_trip = pass.max_round_trip.max(measurement.round_trip_px);
+            let Some((d, correlation, local_error_px, global_error_px)) = measurement.accepted
+            else {
+                continue;
+            };
+            if mode.anchor_long_side().is_some() {
+                // 需求 2.5: agree with the already accepted 8-neighbourhood, in
+                // native pixels.
+                let native = [d[0] * sampler.scale, d[1] * sampler.scale];
+                if !intra_station::neighbour_median_consistent(
+                    native,
+                    pass.accepted_grid.neighbour_median(grid_column, grid_row),
+                ) {
+                    continue;
+                }
+                pass.accepted_grid.accept(grid_column, grid_row, native);
+            }
+            pass.global_errors.push(global_error_px);
+            pass.local_errors.push(local_error_px);
+            pass.observations.push((
+                Point2::new(columns[grid_column] as f64, rows[grid_row] as f64),
+                d,
+                correlation,
+            ));
+        }
+    }
+}
+
+/// Fold one spacing pass into the outcome and, when it carries enough accepted
+/// control points, into the sampler's displacement field.
+#[allow(clippy::too_many_arguments)]
+fn apply_native_pass(
+    mut pass: NativeRefinePass,
+    sampler: &mut LayerSampler<'_>,
+    outcome: &mut NativeRefineOutcome,
+    accepted_cells: &mut intra_station::ControlPointGrid,
+    cell_area_px: f64,
+    spacing: f64,
+    is_entry_pass: bool,
+    mode: NativeRefineMode,
+) {
+    accepted_cells.absorb(&pass.accepted_grid);
+    // The legacy comparison path never populated the grid and never reported
+    // these counts, so it keeps counting one pass at a time.
+    let accepted = if mode == NativeRefineMode::LegacyMosaic {
+        pass.observations.len()
+    } else {
+        accepted_cells.accepted_count()
+    };
+    outcome.evaluated_control_points = pass.evaluated;
+    outcome.accepted_control_points = accepted;
+    outcome.rejected_control_point_ratio = if pass.evaluated == 0 {
+        0.0
+    } else {
+        1.0 - outcome.accepted_control_points as f64 / pass.evaluated as f64
+    };
+    outcome.max_bidirectional_round_trip_px = pass.max_round_trip;
+    // 需求 2.7 compares the refined frame against the *global* model, so the
+    // baseline has to be measured while the global model is still what the
+    // sampler carries.  That is the entry pass — but a pass whose accepted
+    // control points are too few to form a field leaves the sampler untouched,
+    // so the *next* pass is still measuring the global model and is the first
+    // one that can supply a baseline.  Claiming a baseline from a pass that
+    // supplied none is how the comparison ended up against 0.00px.
+    let no_baseline_yet =
+        outcome.global_baseline_samples < intra_station::INTRA_STATION_MIN_BASELINE_SAMPLES;
+    if (is_entry_pass || no_baseline_yet) && !pass.global_errors.is_empty() {
+        outcome.global_baseline_samples = pass.global_errors.len();
+        outcome.global_median_symmetric_error_px =
+            intra_station::median_of(&mut pass.global_errors);
+    }
+    outcome.local_baseline_samples = pass.local_errors.len();
+    outcome.local_median_symmetric_error_px = intra_station::median_of(&mut pass.local_errors);
+    outcome.inlier_area_coverage = intra_station::inlier_area_coverage(
+        accepted,
+        cell_area_px,
+        pass.valid_cells as f64 * cell_area_px,
+    );
+    #[cfg(test)]
+    {
+        outcome.last_pass_accepted_control_points = pass.accepted_grid.accepted_count();
+        outcome.valid_cells = pass.valid_cells;
+        outcome.cell_area_px = cell_area_px;
+    }
+    let (focal_before, focal_after) = pass.similarity.median_focal_ratios();
+    outcome.focal_plane_ratio_before = focal_before;
+    outcome.focal_plane_ratio_after = focal_after;
+    println!(
+        "    - Patch similarity ({spacing:.0}px samples): {}",
+        pass.similarity.summary()
+    );
+    if pass.observations.len() < intra_station::INTRA_STATION_MIN_BASELINE_SAMPLES {
+        return;
+    }
+    let observations = &pass.observations;
+    let mut field = sampler.residual.clone();
+    for gy in 0..field.height {
+        for gx in 0..field.width {
+            let p = Point2::new(gx as f64 * field.step, gy as f64 * field.step);
+            let mut sum = [0.0; 2];
+            let mut total = 0.0f64;
+            for (q, d, correlation) in observations {
+                let weight = (-(p - q).norm_squared()
+                    / (2.0 * NATIVE_FIELD_RADIUS * NATIVE_FIELD_RADIUS))
+                    .exp()
+                    * correlation.powi(8);
+                sum[0] += weight * d[0];
+                sum[1] += weight * d[1];
+                total += weight;
+            }
+            for (c, value) in sum.into_iter().enumerate() {
+                field.values[gy * field.width + gx][c] += value / total.max(0.1);
+            }
+        }
+    }
+    sampler.residual = field;
+    let correction = median(
+        &mut observations
+            .iter()
+            .map(|(_, d, _)| d[0].hypot(d[1]) * sampler.scale)
+            .collect::<Vec<_>>(),
+    );
+    println!(
+        "    - Native refinement ({spacing:.0}px samples): {} patches, median correction {correction:.2}px",
+        observations.len()
+    );
+}
+
+/// 需求 2.7 / 2.8: the per-frame verdict of a finished native refinement.
+fn finalize_native_refinement(
+    outcome: &mut NativeRefineOutcome,
+    sampler: &mut LayerSampler<'_>,
+    entry_field: Field<2>,
+    mode: NativeRefineMode,
+) {
+    if mode == NativeRefineMode::LegacyMosaic {
+        return;
+    }
+    // 需求 2.7: keep the local field only when it lowered the frame's median
+    // symmetric reprojection error.  A refinement that merely moved the error
+    // around is a worse description of the same photographs than the global
+    // model, so the whole frame goes back to the state it entered with.  When
+    // one of the two medians has too few samples to exist the comparison is
+    // unevaluable, and the requirement's condition — "not lower than" — is not
+    // satisfied by an absent value, so nothing is reverted on its behalf.
+    outcome.local_field_verdict = intra_station::local_field_verdict(
+        outcome.local_median_symmetric_error_px,
+        outcome.local_baseline_samples,
+        outcome.global_median_symmetric_error_px,
+        outcome.global_baseline_samples,
+    );
+    match outcome.local_field_verdict {
+        intra_station::LocalFieldVerdict::Kept => {}
+        intra_station::LocalFieldVerdict::Reverted => {
+            sampler.residual = entry_field;
+            outcome.reverted_to_global = true;
+            println!(
+                "    - Native refinement reverted: median symmetric error {:.2}px over {} points is not better than the global model's {:.2}px over {} points",
+                outcome.local_median_symmetric_error_px,
+                outcome.local_baseline_samples,
+                outcome.global_median_symmetric_error_px,
+                outcome.global_baseline_samples
+            );
+            degradation::record_run_degradation(
+                degradation::INTRA_STATION_LOCAL_FALLBACK,
+                serde_json::json!({
+                    "stage": "intra_station_native_refinement",
+                    "local_median_symmetric_error_px": outcome.local_median_symmetric_error_px,
+                    "local_baseline_samples": outcome.local_baseline_samples,
+                    "global_median_symmetric_error_px": outcome.global_median_symmetric_error_px,
+                    "global_baseline_samples": outcome.global_baseline_samples,
+                    "accepted_control_points": outcome.accepted_control_points,
+                }),
+            );
+        }
+        intra_station::LocalFieldVerdict::Indeterminate => {
+            println!(
+                "    - Native refinement indeterminate: {} local and {} global control points cannot form the 需求 2.7 comparison; the measured field is kept",
+                outcome.local_baseline_samples, outcome.global_baseline_samples
+            );
+            degradation::record_run_degradation(
+                degradation::INTRA_STATION_LOCAL_BASELINE_INDETERMINATE,
+                serde_json::json!({
+                    "stage": "intra_station_native_refinement",
+                    "local_median_symmetric_error_px": outcome.local_median_symmetric_error_px,
+                    "local_baseline_samples": outcome.local_baseline_samples,
+                    "global_median_symmetric_error_px": outcome.global_median_symmetric_error_px,
+                    "global_baseline_samples": outcome.global_baseline_samples,
+                    "minimum_baseline_samples":
+                        intra_station::INTRA_STATION_MIN_BASELINE_SAMPLES,
+                    "accepted_control_points": outcome.accepted_control_points,
+                }),
+            );
+        }
+    }
+    // 需求 2.8: a frame whose accepted control point cells cover less than 20%
+    // of the anchor frame's valid pixel area is a registration failure.
+    if outcome.inlier_area_coverage < intra_station::INTRA_STATION_MIN_INLIER_AREA_COVERAGE {
+        println!(
+            "    - Intra-station registration failed: inlier area coverage {:.3} below {:.2}",
+            outcome.inlier_area_coverage,
+            intra_station::INTRA_STATION_MIN_INLIER_AREA_COVERAGE
+        );
+        degradation::record_run_degradation(
+            degradation::INTRA_STATION_REGISTRATION_FAILED,
+            serde_json::json!({
+                "stage": "intra_station_native_refinement",
+                "inlier_area_coverage": outcome.inlier_area_coverage,
+                "minimum_inlier_area_coverage":
+                    intra_station::INTRA_STATION_MIN_INLIER_AREA_COVERAGE,
+                "accepted_control_points": outcome.accepted_control_points,
+                "evaluated_control_points": outcome.evaluated_control_points,
+            }),
+        );
+    }
+}
+
+/// Native patch refinement against an in-memory canvas (需求 2.3–2.8).
 fn refine_native_layer(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
     sampler: &mut LayerSampler<'_>,
     width: u32,
     height: u32,
-) {
-    if sampler.scale <= 2.0 {
-        return;
+    mode: NativeRefineMode,
+) -> NativeRefineOutcome {
+    let mut outcome = NativeRefineOutcome::default();
+    if mode == NativeRefineMode::LegacyMosaic && sampler.scale <= 2.0 {
+        return outcome;
     }
-    // Refine against the selected, native output samples. Upsampling a coarse
-    // displacement field alone leaves several pixels of error on 200MP input.
-    // These tiny patches keep native refinement independent of canvas size.
-    for spacing in [2.0, 1.0] {
-        let mut observations = Vec::<(Point2<f64>, [f64; 2], f64)>::new();
-        for y in (20..height.saturating_sub(20)).step_by(NATIVE_REFINE_STEP as usize) {
-            for x in (20..width.saturating_sub(20)).step_by(NATIVE_REFINE_STEP as usize) {
-                let lx = x as f64 * sampler.scale;
-                let ly = y as f64 * sampler.scale;
-                let mut a = GrayImage::new(57, 57);
-                let mut b = GrayImage::new(57, 57);
-                let mut valid = true;
-                'patch: for py in 0..57 {
-                    for px in 0..57 {
-                        let dx = (px as f64 - 28.0) * spacing;
-                        let dy = (py as f64 - 28.0) * spacing;
-                        let gx = sampler.left as f64 + lx + dx;
-                        let gy = sampler.top as f64 + ly + dy;
-                        let Some(current) = rgb_at(base, gx, gy) else {
-                            valid = false;
-                            break 'patch;
-                        };
-                        if base_mask.get_pixel(gx as u32, gy as u32)[0] == 0 {
-                            valid = false;
-                            break 'patch;
-                        }
-                        let Some(candidate) = sampler.sample(lx + dx, ly + dy) else {
-                            valid = false;
-                            break 'patch;
-                        };
-                        a.put_pixel(
-                            px,
-                            py,
-                            Luma([(luma(current) * 255.0).round().clamp(0.0, 255.0) as u8]),
-                        );
-                        b.put_pixel(
-                            px,
-                            py,
-                            Luma([(luma(candidate) * 255.0).round().clamp(0.0, 255.0) as u8]),
-                        );
+    outcome.skipped = false;
+    outcome.control_point_spacing_px = native_control_point_spacing_px(sampler.scale);
+    let entry_field = sampler.residual.clone();
+    let cell_area_px = (NATIVE_REFINE_STEP as f64 * sampler.scale).powi(2);
+    let mut accepted_cells = NativeRefinePass::new(width, height).accepted_grid;
+    let base = NativeRefineBase {
+        image: base,
+        mask: base_mask,
+        left: 0,
+        top: 0,
+    };
+    for (index, spacing) in [2.0, 1.0].into_iter().enumerate() {
+        let mut pass = NativeRefinePass::new(width, height);
+        collect_native_observations(&base, sampler, width, height, spacing, mode, &mut pass);
+        apply_native_pass(
+            pass,
+            sampler,
+            &mut outcome,
+            &mut accepted_cells,
+            cell_area_px,
+            spacing,
+            index == 0,
+            mode,
+        );
+    }
+    finalize_native_refinement(&mut outcome, sampler, entry_field, mode);
+    outcome
+}
+
+/// Native patch refinement against a tiled canvas (需求 2.3–2.8).
+///
+/// This is the same measurement as [`refine_native_layer`]; only the base pixels
+/// arrive one tile at a time, because the streaming compositor is used exactly
+/// when the canvas is too large to hold.  Without this entry point the whole of
+/// 需求 2.3–2.9 would be unreachable for every multi-station stack, which is the
+/// only kind of stack the streaming compositor ever sees.
+#[allow(clippy::too_many_arguments)]
+fn refine_native_layer_streaming(
+    store: &StreamingMosaicStore,
+    owner: Option<u8>,
+    sampler: &mut LayerSampler<'_>,
+    width: u32,
+    height: u32,
+    layer: (u32, u32, u32, u32),
+    mode: NativeRefineMode,
+) -> Result<NativeRefineOutcome, String> {
+    let mut outcome = NativeRefineOutcome {
+        skipped: false,
+        control_point_spacing_px: native_control_point_spacing_px(sampler.scale),
+        ..Default::default()
+    };
+    let entry_field = sampler.residual.clone();
+    let cell_area_px = (NATIVE_REFINE_STEP as f64 * sampler.scale).powi(2);
+    let mut accepted_cells = NativeRefinePass::new(width, height).accepted_grid;
+    let (left, right, top, bottom) = layer;
+    for (index, spacing) in [2.0, 1.0].into_iter().enumerate() {
+        let mut pass = NativeRefinePass::new(width, height);
+        for tile_row in top / store.tile_size..=bottom / store.tile_size {
+            for tile_column in left / store.tile_size..=right / store.tile_size {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    store.tile_extent(tile_column, tile_row);
+                let (tile, covered) = store.load_tile(tile_column, tile_row)?;
+                // A later focal plane of a station must register against its own
+                // camera position: pixels owned by another station are available
+                // for colour matching but never for residual motion.
+                let tile_mask = match owner {
+                    Some(group) => {
+                        let tile_owner = store.load_owner_tile(tile_column, tile_row);
+                        GrayImage::from_fn(tile_width, tile_height, |x, y| {
+                            Luma([
+                                if covered.get_pixel(x, y)[0] != 0
+                                    && tile_owner.get_pixel(x, y)[0] == group
+                                {
+                                    255
+                                } else {
+                                    0
+                                },
+                            ])
+                        })
                     }
-                }
-                if !valid {
-                    continue;
-                }
-                let p = Point2::new(28.0, 28.0);
-                let Some(found) = refine_warped_patch(&a, &b, &Matrix3::identity(), p, 10, 7)
-                else {
-                    continue;
+                    None => covered,
                 };
-                if found.correlation < 0.90 {
+                if tile_mask.as_raw().iter().all(|&value| value == 0) {
                     continue;
                 }
-                let Some(back) =
-                    refine_warped_patch(&b, &a, &Matrix3::identity(), found.target, 10, 7)
-                else {
-                    continue;
+                let base = NativeRefineBase {
+                    image: &tile,
+                    mask: &tile_mask,
+                    left: tile_left,
+                    top: tile_top,
                 };
-                if (back.target - p).norm() > 0.40 {
-                    continue;
-                }
-                let d = (found.target - p) * (spacing / sampler.scale);
-                observations.push((
-                    Point2::new(x as f64, y as f64),
-                    [d.x, d.y],
-                    found.correlation,
-                ));
+                collect_native_observations(
+                    &base, sampler, width, height, spacing, mode, &mut pass,
+                );
             }
         }
-        if observations.len() < 6 {
-            continue;
-        }
-        let mut field = sampler.residual.clone();
-        for gy in 0..field.height {
-            for gx in 0..field.width {
-                let p = Point2::new(gx as f64 * field.step, gy as f64 * field.step);
-                let mut sum = [0.0; 2];
-                let mut total = 0.0f64;
-                for (q, d, correlation) in &observations {
-                    let weight = (-(p - q).norm_squared()
-                        / (2.0 * NATIVE_FIELD_RADIUS * NATIVE_FIELD_RADIUS))
-                        .exp()
-                        * correlation.powi(8);
-                    sum[0] += weight * d[0];
-                    sum[1] += weight * d[1];
-                    total += weight;
-                }
-                for (c, value) in sum.into_iter().enumerate() {
-                    field.values[gy * field.width + gx][c] += value / total.max(0.1);
-                }
-            }
-        }
-        sampler.residual = field;
-        let correction = median(
-            &mut observations
-                .iter()
-                .map(|(_, d, _)| d[0].hypot(d[1]) * sampler.scale)
-                .collect::<Vec<_>>(),
-        );
-        println!(
-            "    - Native refinement ({spacing:.0}px samples): {} patches, median correction {correction:.2}px",
-            observations.len()
+        apply_native_pass(
+            pass,
+            sampler,
+            &mut outcome,
+            &mut accepted_cells,
+            cell_area_px,
+            spacing,
+            index == 0,
+            mode,
         );
     }
+    finalize_native_refinement(&mut outcome, sampler, entry_field, mode);
+    Ok(outcome)
+}
+
+/// Distance between neighbouring control points in native pixels (需求 2.3).
+///
+/// [`NATIVE_REFINE_STEP`] is a step in *analysis* units, so the native spacing
+/// is that step times the layer's analysis scale.  Published so the default
+/// station path can compare the measured spacing against the Focus_Fuser's
+/// ownership cell side.
+pub(crate) fn native_control_point_spacing_px(analysis_scale: f64) -> f64 {
+    NATIVE_REFINE_STEP as f64 * analysis_scale
+}
+
+/// The displacement field a native refinement left behind, addressed in canvas
+/// pixels (需求 2.3–2.7).
+///
+/// The refinement measures and corrects in the layer's analysis units; a caller
+/// that already holds the layer rendered on the canvas needs the same
+/// correction in canvas pixels, which is what [`Self::at`] returns.
+pub(crate) struct NativeResidualDisplacement {
+    field: Field<2>,
+    left: u32,
+    top: u32,
+    scale: f64,
+}
+
+impl NativeResidualDisplacement {
+    /// Canvas-pixel offset to add to a canvas position before sampling the
+    /// layer, i.e. exactly what [`LayerSampler::source_point`] adds.
+    pub(crate) fn at(&self, canvas_x: f64, canvas_y: f64) -> [f64; 2] {
+        let delta = self.field.at(
+            (canvas_x - f64::from(self.left)) / self.scale,
+            (canvas_y - f64::from(self.top)) / self.scale,
+        );
+        [delta[0] * self.scale, delta[1] * self.scale]
+    }
+
+    /// Largest correction the field carries, in canvas pixels.  Reported so a
+    /// run log shows whether the refinement moved anything at all.
+    pub(crate) fn max_offset_px(&self) -> f64 {
+        self.field
+            .values
+            .iter()
+            .map(|delta| delta[0].hypot(delta[1]) * self.scale)
+            .fold(0.0, f64::max)
+    }
+}
+
+/// One frame of the Intra_Station_Registrar on the default station path
+/// (需求 2.2–2.9).
+pub(crate) struct StationFrameRegistration {
+    /// The `intra_station[*].frames[*]` entry of 需求 2.9.
+    pub(crate) record: IntraStationFrameRecord,
+    /// The correction to apply to the already rendered layer, or `None` when
+    /// nothing was measured.
+    pub(crate) displacement: Option<NativeResidualDisplacement>,
+    /// Control points the final pass measured, for the run log.
+    pub(crate) evaluated_control_points: usize,
+}
+
+/// Register one non-anchor frame of a Capture_Station against the station's
+/// already composited canvas at native resolution (需求 2.2–2.9).
+///
+/// This is the entry point of the *default* station path.  It runs the same
+/// measurement as the mosaic comparison path — [`refine_layer`] twice at the
+/// analysis resolution of 需求 2.2, then [`refine_native_layer`] with the
+/// control point gates of 需求 2.3–2.8 — over a [`LayerSampler`] built from the
+/// frame's own source pixels, and hands back both the report record and the
+/// displacement field, so the caller's already rendered layer can be corrected
+/// by exactly what was measured.
+///
+/// `layer` is the frame's canvas footprint as the caller rendered it, and
+/// `transform` must be the pose that produced it: the sampler reproduces that
+/// geometry, which is what makes the measured displacement applicable to those
+/// pixels.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn register_station_frame_native(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    info: &ImageInfo,
+    source: &Rgb32FImage,
+    transform: &Matrix3<f64>,
+    projection: Projection,
+    offset: (f64, f64),
+    layer: (u32, u32, u32, u32),
+    anchor_long_side: u32,
+    into_anchor: Matrix3<f64>,
+) -> Option<StationFrameRegistration> {
+    let inverse = transform.try_inverse()?;
+    let (left, right, top, bottom) = layer;
+    if right <= left || bottom <= top {
+        return None;
+    }
+    let layer_width = right - left + 1;
+    let layer_height = bottom - top + 1;
+    // 需求 2.2: the two global + local rounds run at an analysis resolution whose
+    // long side stays inside INTRA_STATION_ANALYSIS_LONG_SIDE; the native patch
+    // refinement then runs on the native samples this sampler reaches.
+    let scale = (layer_width.max(layer_height) as f64 / ANALYSIS_LONG_SIDE as f64).max(1.0);
+    let analysis_width = (layer_width as f64 / scale).ceil() as u32;
+    let analysis_height = (layer_height as f64 / scale).ceil() as u32;
+    let mut sampler = LayerSampler {
+        info,
+        source,
+        source_divisor: 1.0,
+        inverse,
+        projection,
+        offset,
+        left,
+        top,
+        scale,
+        residual: Field::new(analysis_width, analysis_height, GRID_STEP as f64),
+    };
+    for _ in 0..intra_station::INTRA_STATION_ANALYSIS_ROUNDS {
+        refine_layer(
+            base,
+            base_mask,
+            &mut sampler,
+            analysis_width,
+            analysis_height,
+        );
+    }
+    let outcome = refine_native_layer(
+        base,
+        base_mask,
+        &mut sampler,
+        analysis_width,
+        analysis_height,
+        NativeRefineMode::IntraStation { anchor_long_side },
+    );
+    let record = intra_station_frame_record(&info.filename, into_anchor, &outcome);
+    Some(StationFrameRegistration {
+        record,
+        displacement: (!outcome.skipped).then(|| NativeResidualDisplacement {
+            field: sampler.residual,
+            left,
+            top,
+            scale,
+        }),
+        evaluated_control_points: outcome.evaluated_control_points,
+    })
 }
 
 /// Smooth per-channel log gain. Corrections are estimated from matched overlap
@@ -1652,11 +2791,34 @@ fn adjusted(pixel: Rgb<f32>, delta: [f64; 3]) -> Rgb<f32> {
 // gradients confuse sensor grain with detail and miss faded coloured marks
 // whose luminance nearly matches the substrate. Keep luminance and two colour
 // differences, suppress pixel noise in both axes, then measure coherent edges.
-fn acutance(mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>, x: f64, y: f64) -> f64 {
+fn acutance(sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>, x: f64, y: f64) -> f64 {
+    acutance_with_step(sample, x, y, 1.0)
+}
+
+/// Number of patch grid points per axis of one [`acutance`] measurement.
+pub(super) const ACUTANCE_PATCH_POINTS: u32 = 13;
+
+/// [`acutance`] with an explicit spacing between the 13×13 patch grid points.
+///
+/// `step = 1.0` reproduces the legacy measurement exactly (one grid point per
+/// native pixel, a ~13px window).  The Focus_Fuser passes a larger step so the
+/// effective window reaches the 32 native pixels 需求 3.2 asks for; the gradient
+/// stays "four sampling steps apart", so only the sample *positions* scale.
+pub(super) fn acutance_with_step(
+    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+    step: f64,
+) -> f64 {
+    let step = if step.is_finite() && step > 0.0 {
+        step
+    } else {
+        1.0
+    };
     let mut patch = [[[0.0; 3]; 13]; 13];
     for (j, row) in patch.iter_mut().enumerate() {
         for (i, value) in row.iter_mut().enumerate() {
-            let Some(p) = sample(x + i as f64 - 6.0, y + j as f64 - 6.0) else {
+            let Some(p) = sample(x + (i as f64 - 6.0) * step, y + (j as f64 - 6.0) * step) else {
                 return 0.0;
             };
             *value = [
@@ -1704,25 +2866,43 @@ fn acutance(mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>, x: f64, y: f64
 /// probes so sparse detail contributes; each probe filters pixel noise before
 /// measuring its edge response.
 fn cell_focus(
-    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
     x: f64,
     y: f64,
     cell_size: f64,
 ) -> f64 {
+    cell_focus_with_step(sample, x, y, cell_size, 1.0)
+}
+
+/// Probe positions of one ownership cell, relative to the cell centre.
+///
+/// Five probes cover the centre and all four corners. A stroke can cross any
+/// cell edge, so sampling only one diagonal can still land entirely on quiet
+/// paper and hide an in-focus candidate.  Published so the Focus_Fuser can
+/// assert that a candidate and the current composite measure the *same*
+/// positions inside a cell (需求 3.2) instead of assuming it.
+pub(super) fn cell_probe_offsets(cell_size: f64) -> [(f64, f64); 5] {
     let radius = (cell_size * 0.28).clamp(2.0, 18.0);
-    // Five probes cover the centre and all four corners. A stroke can cross
-    // any cell edge, so sampling only one diagonal can still land entirely
-    // on quiet paper and hide an in-focus candidate.
-    let offsets = [
+    [
         (-radius, -radius),
         (radius, -radius),
         (0.0, 0.0),
         (-radius, radius),
         (radius, radius),
-    ];
-    let mut values = offsets
+    ]
+}
+
+/// [`cell_focus`] with an explicit [`acutance_with_step`] window spacing.
+pub(super) fn cell_focus_with_step(
+    mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    x: f64,
+    y: f64,
+    cell_size: f64,
+    step: f64,
+) -> f64 {
+    let mut values = cell_probe_offsets(cell_size)
         .iter()
-        .filter_map(|(dx, dy)| Some(acutance(&mut sample, x + dx, y + dy)))
+        .map(|(dx, dy)| acutance_with_step(&mut sample, x + dx, y + dy, step))
         .filter(|v| v.is_finite())
         .collect::<Vec<_>>();
     if values.is_empty() {
@@ -1790,18 +2970,11 @@ fn streaming_cell_focus(
     y: f64,
     cell_size: f64,
 ) -> f64 {
-    let radius = (cell_size * 0.28).clamp(2.0, 18.0);
-    let mut values = [
-        (-radius, -radius),
-        (radius, -radius),
-        (0.0, 0.0),
-        (-radius, radius),
-        (radius, radius),
-    ]
-    .into_iter()
-    .filter_map(|(dx, dy)| streaming_acutance(&mut sample, x + dx, y + dy))
-    .filter(|value| value.is_finite())
-    .collect::<Vec<_>>();
+    let mut values = cell_probe_offsets(cell_size)
+        .into_iter()
+        .filter_map(|(dx, dy)| streaming_acutance(&mut sample, x + dx, y + dy))
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
     if values.is_empty() {
         return 0.0;
     }
@@ -1810,37 +2983,36 @@ fn streaming_cell_focus(
     (values[first] + values[(first + 1).min(values.len() - 1)]) * 0.5
 }
 
-fn ownership_disagreement(
-    base: &Rgb32FImage,
-    sampler: &LayerSampler<'_>,
-    tone: &Field<3>,
-    ax: f64,
-    ay: f64,
-    cell_size: f64,
-) -> f64 {
-    // A single sample at the cell centre can land on canvas and miss a brush
-    // stroke that crosses the same cell near an edge. Sample the whole cell
-    // instead, and retain a high percentile so a displaced contour vetoes the
-    // candidate even when most of the cell is quiet paper.
-    const OFFSETS: [f64; 5] = [0.15, 0.325, 0.5, 0.675, 0.85];
-    let side = OFFSETS.len();
+/// Fractional positions inside an ownership cell at which the candidate and the
+/// current composite are compared.  A single sample at the cell centre can land
+/// on canvas and miss a brush stroke that crosses the same cell near an edge.
+pub(super) const CELL_DIFFERENCE_OFFSETS: [f64; 5] = [0.15, 0.325, 0.5, 0.675, 0.85];
+
+/// Low-pass absolute colour differences inside one ownership cell.
+///
+/// Both closures are called with the *same* fractional cell offsets, which is
+/// how 需求 3.3's "candidate versus current composite in the same cell" stays a
+/// property of the code rather than of the caller: each closure maps the shared
+/// offset into its own coordinate space and returns `None` outside its coverage.
+///
+/// Individual high-frequency pixels are deliberately not compared. Defocus
+/// changes brush-edge samples substantially even when the geometry is correct; a
+/// displaced contour still changes the local mean over a 3×3 neighbourhood of
+/// probes and remains measurable.  The reduction of these values (high
+/// percentile for the legacy mosaic path, median for the Focus_Fuser) is left to
+/// the caller.
+pub(super) fn cell_low_pass_differences(
+    mut candidate_at: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    mut base_at: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+) -> Vec<f64> {
+    let side = CELL_DIFFERENCE_OFFSETS.len();
     let mut samples = vec![None; side * side];
-    for (yi, y_offset) in OFFSETS.iter().copied().enumerate() {
-        for (xi, x_offset) in OFFSETS.iter().copied().enumerate() {
-            let sample_index = yi * side + xi;
-            let sample_ax = ax + cell_size * x_offset;
-            let sample_ay = ay + cell_size * y_offset;
-            let lx = sample_ax * sampler.scale;
-            let ly = sample_ay * sampler.scale;
-            let gx = sampler.left as f64 + lx;
-            let gy = sampler.top as f64 + ly;
-            let Some(candidate) = sampler
-                .sample(lx, ly)
-                .map(|pixel| adjusted(pixel, tone.at(sample_ax, sample_ay)))
-            else {
+    for (yi, y_offset) in CELL_DIFFERENCE_OFFSETS.iter().copied().enumerate() {
+        for (xi, x_offset) in CELL_DIFFERENCE_OFFSETS.iter().copied().enumerate() {
+            let Some(candidate) = candidate_at(x_offset, y_offset) else {
                 continue;
             };
-            let Some(base_pixel) = rgb_at(base, gx, gy) else {
+            let Some(base_pixel) = base_at(x_offset, y_offset) else {
                 continue;
             };
             let candidate = candidate.0.map(f64::from);
@@ -1850,17 +3022,10 @@ fn ownership_disagreement(
                 .chain(base_pixel.iter())
                 .all(|v| v.is_finite())
             {
-                samples[sample_index] = Some((candidate, base_pixel));
+                samples[yi * side + xi] = Some((candidate, base_pixel));
             }
         }
     }
-    if samples.is_empty() {
-        return 1.0;
-    }
-    // Compare low-pass colour evidence rather than individual high-frequency
-    // pixels. Defocus changes brush-edge samples substantially even when the
-    // geometry is correct; a displaced contour still changes the local mean
-    // over a 3×3 neighbourhood and remains penalised.
     let side = side as isize;
     let mut disagreements = Vec::with_capacity(samples.len());
     for index in 0..samples.len() {
@@ -1876,7 +3041,7 @@ fn ownership_disagreement(
                 if y < 0 || x < 0 || y >= side || x >= side {
                     continue;
                 }
-                let neighbour = y as usize * OFFSETS.len() + x as usize;
+                let neighbour = y as usize * CELL_DIFFERENCE_OFFSETS.len() + x as usize;
                 let Some(Some((candidate, base))) = samples.get(neighbour) else {
                     continue;
                 };
@@ -1896,6 +3061,38 @@ fn ownership_disagreement(
             );
         }
     }
+    disagreements
+}
+
+fn ownership_disagreement(
+    base: &Rgb32FImage,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    ax: f64,
+    ay: f64,
+    cell_size: f64,
+) -> f64 {
+    // Retain a high percentile so a displaced contour vetoes the candidate even
+    // when most of the cell is quiet paper.  This is the legacy comparison
+    // path's reduction; the Focus_Fuser uses the median 需求 3.3 prescribes.
+    let mut disagreements = cell_low_pass_differences(
+        |x_offset, y_offset| {
+            let sample_ax = ax + cell_size * x_offset;
+            let sample_ay = ay + cell_size * y_offset;
+            sampler
+                .sample(sample_ax * sampler.scale, sample_ay * sampler.scale)
+                .map(|pixel| adjusted(pixel, tone.at(sample_ax, sample_ay)))
+        },
+        |x_offset, y_offset| {
+            let sample_ax = ax + cell_size * x_offset;
+            let sample_ay = ay + cell_size * y_offset;
+            rgb_at(
+                base,
+                sampler.left as f64 + sample_ax * sampler.scale,
+                sampler.top as f64 + sample_ay * sampler.scale,
+            )
+        },
+    );
     if disagreements.is_empty() {
         return 1.0;
     }
@@ -2154,6 +3351,60 @@ where
     let mut mask = GrayImage::new(width, height);
     let mut covered_bounds: Option<(u32, u32, u32, u32)> = None;
     let local_refinement_enabled = !sequence_gap_aware || images.len() <= 8;
+    // Everything past the streaming branch above has `capture_group_count <= 1`,
+    // so this loop composites one Capture_Station: layer 0 is the frame every
+    // later layer registers against, which makes this the intra-station path of
+    // 需求 2.2–2.9.  A `sequence_gap_aware` run is different in kind — a filename
+    // bridge joined captures that share no measured overlap — and stays on the
+    // legacy comparison behaviour, early exit included.
+    let intra_station_path = !sequence_gap_aware;
+    let anchor_long_side = images
+        .first()
+        .map(|info| info.width.max(info.height))
+        .unwrap_or(0);
+    let native_refine_mode = if intra_station_path {
+        NativeRefineMode::IntraStation { anchor_long_side }
+    } else {
+        NativeRefineMode::LegacyMosaic
+    };
+    let station_index = images
+        .first()
+        .and_then(|info| capture_group_ids.and_then(|ids| ids.get(&info.id)).copied())
+        .map(usize::from)
+        .unwrap_or(0);
+    let anchor_path = images
+        .first()
+        .map(|info| info.filename.clone())
+        .unwrap_or_default();
+    // 需求 2.1: the anchor frame carries the identity transform, so its record
+    // is the reference every other frame's transform is expressed against.
+    let anchor_to_world_inverse = images
+        .first()
+        .and_then(|info| homographies.get(&info.id))
+        .and_then(|transform| transform.try_inverse());
+    // 需求 12.1 / 12.2: the members this station fuses, each with the verdict
+    // the registrar reaches below.  The anchor carries the identity transform,
+    // so it is registered by definition.
+    let mut station_members = Vec::<StationMember>::new();
+    if intra_station_path {
+        if let Some(info) = images.first() {
+            intra_station::record_run_frame(
+                station_index,
+                &anchor_path,
+                IntraStationFrameRecord {
+                    path: info.filename.clone(),
+                    status: IntraStationFrameStatus::Anchor,
+                    inlier_area_coverage: 1.0,
+                    ..Default::default()
+                },
+            );
+            station_members.push(StationMember {
+                path: info.filename.clone(),
+                median_sharpness: station_member_median_sharpness(info),
+                status: IntraStationFrameStatus::Anchor,
+            });
+        }
+    }
     println!("  - Detail-preserving mosaic canvas: {width}x{height}");
     for (index, &info) in images.iter().enumerate() {
         let _ = app.emit(
@@ -2244,9 +3495,66 @@ where
             continue;
         }
         if index > 0 && local_refinement_enabled {
-            refine_layer(&result, &mask, &mut sampler, aw, ah);
-            refine_layer(&result, &mask, &mut sampler, aw, ah);
-            refine_native_layer(&result, &mask, &mut sampler, aw, ah);
+            // 需求 2.2: two global + local rounds at the analysis resolution,
+            // then the native patch refinement.
+            for _ in 0..intra_station::INTRA_STATION_ANALYSIS_ROUNDS {
+                refine_layer(&result, &mask, &mut sampler, aw, ah);
+            }
+            let outcome =
+                refine_native_layer(&result, &mask, &mut sampler, aw, ah, native_refine_mode);
+            if intra_station_path {
+                let into_anchor = anchor_to_world_inverse
+                    .map(|inverse| inverse * transform)
+                    .unwrap_or_else(Matrix3::identity);
+                let record = intra_station_frame_record(&info.filename, into_anchor, &outcome);
+                intra_station::record_run_frame(station_index, &anchor_path, record.clone());
+                // 需求 12.5: inlier spatial support below 20%, or an inlier
+                // median symmetric reprojection error above 0.01 x the long
+                // side, keeps this Source_RAW out of every Capture_Station.
+                // 需求 12.2: it is therefore excluded from this station's
+                // fusion, with its absolute path and reason identifier
+                // reported one by one.  A frame whose evidence was never
+                // measured (no control point was even evaluated) has nothing
+                // to judge and keeps the behaviour it had before.
+                let rejection = (outcome.evaluated_control_points > 0)
+                    .then(|| {
+                        group_join_rejection(&GroupJoinEvidence {
+                            path: info.filename.clone(),
+                            inlier_area_coverage: record.inlier_area_coverage,
+                            median_symmetric_error_px: record.median_symmetric_error_px,
+                            anchor_long_side_px: anchor_long_side,
+                        })
+                    })
+                    .flatten();
+                station_members.push(StationMember {
+                    path: info.filename.clone(),
+                    median_sharpness: station_member_median_sharpness(info),
+                    // The member status is what this station actually did with
+                    // the frame, so the plan below can never claim a frame was
+                    // excluded while its pixels are on the canvas.  With no
+                    // control point evaluated there is no local evidence to
+                    // judge and the frame is placed by its global model, which
+                    // is exactly `GlobalFallback`.
+                    status: match (rejection.is_some(), record.status) {
+                        (true, _) => IntraStationFrameStatus::Failed,
+                        (false, IntraStationFrameStatus::Failed) => {
+                            IntraStationFrameStatus::GlobalFallback
+                        }
+                        (false, status) => status,
+                    },
+                });
+                if let Some(rejection) = rejection {
+                    println!(
+                        "    - Rejected from every Capture_Station: inlier support {:.3} (minimum {:.2}), median symmetric error {:.2}px (limit {:.2}px)",
+                        rejection.inlier_area_coverage,
+                        rejection.minimum_inlier_area_coverage,
+                        rejection.median_symmetric_error_px,
+                        rejection.symmetric_error_limit_px
+                    );
+                    record_run_group_join_rejection(station_index, &rejection);
+                    continue;
+                }
+            }
         } else if index > 0 && sequence_gap_aware {
             println!("    - Long sequence: using verified global alignment for focus ownership");
         }
@@ -2325,6 +3633,25 @@ where
             None => (left, right, top, bottom),
         });
     }
+    // 需求 12.1 / 12.2: the station's fusion path, with every excluded
+    // Source_RAW listed individually.  `station_members` carries what the loop
+    // above really fused, so the recorded plan and the pixels agree.
+    if intra_station_path {
+        let plan = plan_station_fusion(&station_members);
+        let entries = station_plan_entries(station_index, &station_members, &plan);
+        if !entries.is_empty() {
+            println!(
+                "  - Capture_Station {station_index} fused {} of {} frame(s) ({:?})",
+                plan.fused.len(),
+                station_members.len(),
+                plan.mode
+            );
+            for excluded in &plan.excluded {
+                println!("    - Excluded '{}': {}", excluded.path, excluded.reason);
+            }
+        }
+        record_run_entries(&entries);
+    }
     let covered = mask.as_raw().iter().filter(|&&v| v != 0).count();
     if covered == 0 {
         return Err("The aligned stack has no covered pixels.".into());
@@ -2365,6 +3692,11 @@ where
     let store = StreamingMosaicStore::new(width, height)?;
     let mut seen_capture_groups = HashSet::new();
     let mut group_tone_relations = Vec::<GroupToneRelation>::new();
+    // 需求 2.1 / 2.9: the frame every later frame of a Capture_Station registers
+    // against is that station's first layer in render order.  Its absolute path,
+    // inverse world pose and native long side are what the other frames' records
+    // are expressed against.
+    let mut station_anchors = HashMap::<u8, (String, Option<Matrix3<f64>>, u32)>::new();
     println!(
         "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
@@ -2387,6 +3719,26 @@ where
         );
         let mut source = load(info)?;
         let transform = &homographies[&info.id];
+        if first_capture_group_layer {
+            station_anchors.insert(
+                capture_group_id,
+                (
+                    info.filename.clone(),
+                    transform.try_inverse(),
+                    info.width.max(info.height),
+                ),
+            );
+            intra_station::record_run_frame(
+                usize::from(capture_group_id),
+                &info.filename,
+                IntraStationFrameRecord {
+                    path: info.filename.clone(),
+                    status: IntraStationFrameStatus::Anchor,
+                    inlier_area_coverage: 1.0,
+                    ..Default::default()
+                },
+            );
+        }
         let mut source_divisor = 1.0;
         if projection == Projection::Planar {
             let center = Point3::new(info.width as f64 * 0.5, info.height as f64 * 0.5, 1.0);
@@ -2451,7 +3803,9 @@ where
             let refinement_mask = group_refinement_mask
                 .as_ref()
                 .unwrap_or(&base_analysis_mask);
-            for _ in 0..2 {
+            // 需求 2.2: two global + local rounds at the analysis resolution,
+            // then the native patch refinement below.
+            for _ in 0..intra_station::INTRA_STATION_ANALYSIS_ROUNDS {
                 let (candidate, candidate_mask) =
                     streaming_candidate_analysis(&sampler, analysis_width, analysis_height);
                 let (a, b, valid) = streaming_refinement_pair(
@@ -2461,6 +3815,35 @@ where
                     &candidate_mask,
                 );
                 refine_layer_from_analysis(&a, &b, &valid, &mut sampler);
+            }
+            // 需求 2.2–2.9: the native patch refinement that follows the two
+            // analysis rounds.  Only a later layer of a station already on the
+            // canvas is an intra-station registration; the first layer of a
+            // station has no same-station pixels to register against, so it is
+            // the anchor and keeps its global pose.
+            if !first_capture_group_layer {
+                let anchor = station_anchors.get(&capture_group_id);
+                let anchor_long_side = anchor
+                    .map(|&(_, _, long_side)| long_side)
+                    .unwrap_or_else(|| info.width.max(info.height));
+                let outcome = refine_native_layer_streaming(
+                    &store,
+                    Some(capture_group_id),
+                    &mut sampler,
+                    analysis_width,
+                    analysis_height,
+                    (left, right, top, bottom),
+                    NativeRefineMode::IntraStation { anchor_long_side },
+                )?;
+                let into_anchor = anchor
+                    .and_then(|&(_, inverse, _)| inverse)
+                    .map(|inverse| inverse * transform)
+                    .unwrap_or_else(Matrix3::identity);
+                intra_station::record_run_frame(
+                    usize::from(capture_group_id),
+                    anchor.map(|(path, _, _)| path.as_str()).unwrap_or_default(),
+                    intra_station_frame_record(&info.filename, into_anchor, &outcome),
+                );
             }
             let (candidate, candidate_mask) =
                 streaming_candidate_analysis(&sampler, analysis_width, analysis_height);
@@ -2841,6 +4224,250 @@ fn copy_sequence_gap_layer(
                 covered[x as usize] = 255;
             }
         });
+}
+
+/// Test-only access to the Intra_Station_Registrar control point internals of
+/// 需求 2.4 to 2.8.
+///
+/// Property 6 lives in `super::stack_pipeline::properties`, a sibling module that
+/// cannot see `LayerSampler`, `NativeRefinePass` or `measure_native_control_point`.
+/// The two drivers below assemble exactly what the in-memory compositor assembles
+/// — a native-resolution base with a full coverage mask, a layer sampler at
+/// `scale = 1.0` and an identity residual field — and then call the production
+/// functions unchanged, so the property tests the refinement rather than a model
+/// of it.
+#[cfg(test)]
+pub(crate) mod intra_station_test_access {
+    use super::*;
+
+    /// Everything one control point measured, plus the verdict the production
+    /// pass gave it.
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct ControlPointProbe {
+        /// Position in the refinement grid, row major.
+        pub(crate) column: usize,
+        pub(crate) row: usize,
+        /// The cell centre lies on covered base (需求 2.8).
+        pub(crate) covered: bool,
+        /// The patch pair was complete, so a match was attempted.
+        pub(crate) evaluated: bool,
+        /// Displacement of a completed bidirectional match, in native pixels of
+        /// the anchor frame, before the 需求 2.4 / 2.6 gates.  `None` when the
+        /// matcher's similarity gates or the reverse match stopped the
+        /// measurement, i.e. when there is no located match to judge.
+        pub(crate) displacement_px: Option<[f64; 2]>,
+        /// Bidirectional round trip of that match, in native pixels (需求 2.4).
+        pub(crate) round_trip_px: f64,
+        /// Symmetric reprojection error of the global model there, in native
+        /// pixels (需求 2.6).
+        pub(crate) symmetric_error_px: f64,
+        /// Forward peak correlation, `None` when no hypothesis was scored.
+        pub(crate) best_correlation: Option<f64>,
+        /// The displacement the production pass accepted at this position, i.e.
+        /// what the 需求 2.5 neighbourhood gate let through.
+        pub(crate) accepted_px: Option<[f64; 2]>,
+    }
+
+    /// One native refinement pass, measured control point by control point.
+    ///
+    /// Returns every grid position together with the accepted set of the real
+    /// pass and the observation positions that entered the displacement field.
+    pub(crate) fn probe_native_pass(
+        base: &Rgb32FImage,
+        layer: &Rgb32FImage,
+        anchor_long_side: u32,
+        spacing: f64,
+    ) -> (Vec<ControlPointProbe>, Vec<(usize, usize)>, usize) {
+        let (width, height) = base.dimensions();
+        let info = image_info_for_probe(layer);
+        let mask = GrayImage::from_pixel(width, height, Luma([255]));
+        let sampler = LayerSampler {
+            info: &info,
+            source: layer,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(width, height, GRID_STEP as f64),
+        };
+        let mode = NativeRefineMode::IntraStation { anchor_long_side };
+        let window = NativeRefineBase {
+            image: base,
+            mask: &mask,
+            left: 0,
+            top: 0,
+        };
+        let mut pass = NativeRefinePass::new(width, height);
+        collect_native_observations(&window, &sampler, width, height, spacing, mode, &mut pass);
+
+        let (match_radius, search_samples) = mode.patch_geometry();
+        let columns = (20..width.saturating_sub(20))
+            .step_by(NATIVE_REFINE_STEP as usize)
+            .collect::<Vec<_>>();
+        let rows = (20..height.saturating_sub(20))
+            .step_by(NATIVE_REFINE_STEP as usize)
+            .collect::<Vec<_>>();
+        let mut probes = Vec::with_capacity(columns.len() * rows.len());
+        for (row, &y) in rows.iter().enumerate() {
+            for (column, &x) in columns.iter().enumerate() {
+                // `collect_native_observations` took `&sampler`, so the sampler is
+                // in the state it measured with and re-measuring one control point
+                // reproduces its own measurement exactly.
+                let measurement = measure_native_control_point(
+                    &window,
+                    &sampler,
+                    x,
+                    y,
+                    spacing,
+                    mode,
+                    match_radius,
+                    search_samples,
+                );
+                probes.push(ControlPointProbe {
+                    column,
+                    row,
+                    covered: measurement.covered,
+                    evaluated: measurement.evaluated,
+                    displacement_px: measurement.measured.map(|(d, _, _, _)| d),
+                    round_trip_px: measurement.round_trip_px,
+                    symmetric_error_px: measurement
+                        .measured
+                        .map(|(_, _, _, error)| error)
+                        .unwrap_or(0.0),
+                    best_correlation: measurement.best_correlation,
+                    accepted_px: pass.accepted_grid.accepted_at(column, row),
+                });
+            }
+        }
+        let observations = pass
+            .observations
+            .iter()
+            .map(|(position, _, _)| {
+                let column = columns
+                    .iter()
+                    .position(|&x| f64::from(x) == position.x)
+                    .expect("an observation sits on a grid column");
+                let row = rows
+                    .iter()
+                    .position(|&y| f64::from(y) == position.y)
+                    .expect("an observation sits on a grid row");
+                (column, row)
+            })
+            .collect();
+        (probes, observations, pass.evaluated)
+    }
+
+    /// What a whole native refinement decided about one frame (需求 2.7 / 2.8).
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct RefinementProbe {
+        /// Accepted control point cells over *both* spacing passes, which is the
+        /// numerator 需求 2.8 defines.
+        pub(crate) accepted_control_points: usize,
+        /// Accepted control point cells of the final spacing pass alone.
+        pub(crate) last_pass_accepted_control_points: usize,
+        /// Control point cells whose centre lay on covered base in the final
+        /// pass: the denominator of 需求 2.8, in cells.
+        pub(crate) valid_cells: usize,
+        /// Area of one control point cell, in native pixels of the anchor frame.
+        pub(crate) cell_area_px: f64,
+        pub(crate) evaluated_control_points: usize,
+        pub(crate) local_baseline_samples: usize,
+        pub(crate) global_baseline_samples: usize,
+        /// Median symmetric reprojection error after the refinement, in native
+        /// pixels (需求 2.7).
+        pub(crate) local_median_symmetric_error_px: f64,
+        /// The same median for the global model (需求 2.7).
+        pub(crate) global_median_symmetric_error_px: f64,
+        pub(crate) local_field_verdict: intra_station::LocalFieldVerdict,
+        pub(crate) reverted_to_global: bool,
+        pub(crate) inlier_area_coverage: f64,
+        pub(crate) status: IntraStationFrameStatus,
+        /// `true` when the displacement field the sampler carries afterwards is
+        /// bit for bit the one it entered with, i.e. every control point position
+        /// kept the global model's displacement.
+        pub(crate) field_unchanged: bool,
+    }
+
+    /// Drive the whole native refinement of one frame (both spacing passes).
+    pub(crate) fn probe_native_refinement(
+        base: &Rgb32FImage,
+        layer: &Rgb32FImage,
+        anchor_long_side: u32,
+    ) -> RefinementProbe {
+        let (width, height) = base.dimensions();
+        let info = image_info_for_probe(layer);
+        let mask = GrayImage::from_pixel(width, height, Luma([255]));
+        let entry = Field::new(width, height, GRID_STEP as f64);
+        let mut sampler = LayerSampler {
+            info: &info,
+            source: layer,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: entry.clone(),
+        };
+        let outcome = refine_native_layer(
+            base,
+            &mask,
+            &mut sampler,
+            width,
+            height,
+            NativeRefineMode::IntraStation { anchor_long_side },
+        );
+        let field_unchanged = sampler.residual.values.len() == entry.values.len()
+            && sampler
+                .residual
+                .values
+                .iter()
+                .zip(entry.values.iter())
+                .all(|(left, right)| {
+                    left[0].to_bits() == right[0].to_bits()
+                        && left[1].to_bits() == right[1].to_bits()
+                });
+        RefinementProbe {
+            accepted_control_points: outcome.accepted_control_points,
+            last_pass_accepted_control_points: outcome.last_pass_accepted_control_points,
+            valid_cells: outcome.valid_cells,
+            cell_area_px: outcome.cell_area_px,
+            evaluated_control_points: outcome.evaluated_control_points,
+            local_baseline_samples: outcome.local_baseline_samples,
+            global_baseline_samples: outcome.global_baseline_samples,
+            local_median_symmetric_error_px: outcome.local_median_symmetric_error_px,
+            global_median_symmetric_error_px: outcome.global_median_symmetric_error_px,
+            local_field_verdict: outcome.local_field_verdict,
+            reverted_to_global: outcome.reverted_to_global,
+            inlier_area_coverage: outcome.inlier_area_coverage,
+            status: outcome.frame_status(),
+            field_unchanged,
+        }
+    }
+
+    fn image_info_for_probe(image: &Rgb32FImage) -> ImageInfo {
+        ImageInfo {
+            id: 0,
+            filename: "/tmp/stack-pipeline/intra-station-probe.NEF".to_string(),
+            width: image.width(),
+            height: image.height(),
+            alignment_image: image::DynamicImage::ImageRgb32F(image.clone()).to_luma8(),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: Some(75.0),
+            overview_reference: false,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3348,6 +4975,217 @@ mod tests {
         (noisy(&sharp, 0.020), noisy(&blurred, 0.080))
     }
 
+    /// Aperiodic paper grain.  A sum of sines would be rejected by
+    /// `refine_warped_patch`'s second-peak guard for looking like a repeated
+    /// stroke, which is the guard doing its job rather than a refinement failure.
+    fn refine_texture(width: u32, height: u32) -> Rgb32FImage {
+        let grain = Rgb32FImage::from_fn(width, height, |x, y| {
+            let hash = x.wrapping_mul(0x9e37_79b9) ^ y.wrapping_mul(0x85eb_ca6b);
+            let hash = (hash ^ (hash >> 15)).wrapping_mul(0x7feb_352d);
+            let value = 0.25 + 0.50 * ((hash >> 8) & 0xffff) as f32 / 65_535.0;
+            Rgb([value, value * 0.96, value * 0.90])
+        });
+        image::imageops::blur(&grain, 1.1)
+    }
+
+    /// The intra-station gates must leave usable control points.
+    ///
+    /// Without this the native refinement could reject every control point and
+    /// still look healthy from the outside: the frame simply reverts to its
+    /// global model, the output is byte identical to a run with no refinement at
+    /// all, and nothing fails.  That is exactly what a matching window radius of
+    /// 48 inside a 57×57 patch buffer does — `refine_warped_patch` needs a sample
+    /// at −20 and returns `None` for every position.
+    #[test]
+    fn intra_station_native_refinement_accepts_control_points() {
+        let base = refine_texture(256, 256);
+        // The layer is the same photograph displaced by a few native pixels,
+        // which is what focus breathing does inside one Capture_Station.
+        // Two native pixels: inside 需求 2.6's `0.01 × 256` error ceiling for this
+        // fixture, so the gate under test is the matching, not the ceiling.
+        let shifted = Rgb32FImage::from_fn(256, 256, |x, y| *base.get_pixel((x + 2).min(255), y));
+        let info = image_info(1, &shifted);
+        let mask = GrayImage::from_pixel(256, 256, Luma([255]));
+        let mut sampler = LayerSampler {
+            info: &info,
+            source: &shifted,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(256, 256, GRID_STEP as f64),
+        };
+        let outcome = refine_native_layer(
+            &base,
+            &mask,
+            &mut sampler,
+            256,
+            256,
+            NativeRefineMode::IntraStation {
+                anchor_long_side: 256,
+            },
+        );
+        assert!(
+            !outcome.skipped,
+            "需求 2.2 has no analysis-scale early exit"
+        );
+        assert!(
+            outcome.evaluated_control_points >= 64,
+            "the control point grid must reach the layer ({} evaluated)",
+            outcome.evaluated_control_points
+        );
+        assert!(
+            outcome.accepted_control_points >= 16,
+            "the 需求 2.4/2.5/2.6 gates must accept real matches, not reject every one ({}/{} accepted)",
+            outcome.accepted_control_points,
+            outcome.evaluated_control_points
+        );
+        assert!(
+            outcome.inlier_area_coverage > 0.0,
+            "需求 2.8 coverage must be measurable once control points are accepted"
+        );
+        // 需求 2.7 keeps a local field that lowered the frame's median symmetric
+        // reprojection error.  The baseline is the error of the global model, so a
+        // frame the refinement actually fixed must not be reverted.
+        assert!(
+            !outcome.reverted_to_global,
+            "a refinement that removed a real 2px displacement must be kept (global {:.2}px, local {:.2}px)",
+            outcome.global_median_symmetric_error_px, outcome.local_median_symmetric_error_px
+        );
+        // The comparison has to be made against a baseline that exists.  The
+        // regression this guards reverted every frame because the coarse pass
+        // accepted too few control points, `median_of(&[])` returned `0.0`, and
+        // no refinement can be below zero.
+        assert!(
+            outcome.global_baseline_samples >= intra_station::INTRA_STATION_MIN_BASELINE_SAMPLES,
+            "需求 2.7 needs a real global baseline, not an empty median ({} samples)",
+            outcome.global_baseline_samples
+        );
+        assert_eq!(
+            outcome.local_field_verdict,
+            intra_station::LocalFieldVerdict::Kept
+        );
+        assert_eq!(outcome.frame_status(), IntraStationFrameStatus::Local);
+    }
+
+    /// 需求 2.2 caps the *actual* intra-station analysis resolution at 2048
+    /// while the production compositors currently configure 1400. This also
+    /// guards Stack_Report's source value: both paths share the registrar's
+    /// actual configuration instead of reporting the ceiling.
+    #[test]
+    fn the_analysis_budgets_stay_inside_the_intra_station_bound() {
+        const {
+            assert!(
+                intra_station::INTRA_STATION_ANALYSIS_LONG_SIDE
+                    <= intra_station::INTRA_STATION_ANALYSIS_MAX_LONG_SIDE
+            );
+            assert!(ANALYSIS_LONG_SIDE == intra_station::INTRA_STATION_ANALYSIS_LONG_SIDE);
+            assert!(
+                STREAMING_ANALYSIS_LONG_SIDE == intra_station::INTRA_STATION_ANALYSIS_LONG_SIDE
+            );
+            assert!(ANALYSIS_LONG_SIDE <= intra_station::INTRA_STATION_ANALYSIS_MAX_LONG_SIDE);
+            assert!(
+                STREAMING_ANALYSIS_LONG_SIDE <= intra_station::INTRA_STATION_ANALYSIS_MAX_LONG_SIDE
+            );
+        };
+    }
+
+    /// The tiled compositor is the *only* path a multi-station stack ever takes,
+    /// so 需求 2.3–2.9 has to be measurable there.  Before this the native
+    /// refinement existed solely on the in-memory path, and every real focus
+    /// stack — three camera positions, an 8369×10114 canvas — skipped it
+    /// silently and produced output byte identical to a run without it.
+    #[test]
+    fn streaming_intra_station_refinement_measures_across_tiles() {
+        let width = 1_200u32;
+        let height = 256u32;
+        let base = refine_texture(width, height);
+        let store = StreamingMosaicStore::new(width, height).expect("streaming store");
+        assert!(
+            store.tile_columns > 1,
+            "the fixture must straddle a tile boundary"
+        );
+        for tile_row in 0..store.tile_rows {
+            for tile_column in 0..store.tile_columns {
+                let (left, top, tile_width, tile_height) = store.tile_extent(tile_column, tile_row);
+                let tile = Rgb32FImage::from_fn(tile_width, tile_height, |x, y| {
+                    *base.get_pixel(left + x, top + y)
+                });
+                let covered = GrayImage::from_pixel(tile_width, tile_height, Luma([255]));
+                let owner = GrayImage::from_pixel(tile_width, tile_height, Luma([1]));
+                store
+                    .save_tile(tile_column, tile_row, &tile, &covered)
+                    .expect("tile");
+                store
+                    .save_owner_tile(tile_column, tile_row, &owner)
+                    .expect("owner tile");
+            }
+        }
+        let shifted = Rgb32FImage::from_fn(width, height, |x, y| {
+            *base.get_pixel((x + 2).min(width - 1), y)
+        });
+        let info = image_info(1, &shifted);
+        fn layer_sampler<'a>(
+            source: &'a Rgb32FImage,
+            info: &'a ImageInfo,
+            width: u32,
+            height: u32,
+        ) -> LayerSampler<'a> {
+            LayerSampler {
+                info,
+                source,
+                source_divisor: 1.0,
+                inverse: Matrix3::identity(),
+                projection: Projection::Planar,
+                offset: (0.0, 0.0),
+                left: 0,
+                top: 0,
+                scale: 1.0,
+                residual: Field::new(width, height, GRID_STEP as f64),
+            }
+        }
+        let mode = NativeRefineMode::IntraStation {
+            anchor_long_side: 256,
+        };
+        let mut sampler = layer_sampler(&shifted, &info, width, height);
+        let outcome = refine_native_layer_streaming(
+            &store,
+            Some(1),
+            &mut sampler,
+            width,
+            height,
+            (0, width - 1, 0, height - 1),
+            mode,
+        )
+        .expect("streaming native refinement");
+        assert!(
+            outcome.accepted_control_points >= 16,
+            "the tiled path must measure real control points ({}/{} accepted)",
+            outcome.accepted_control_points,
+            outcome.evaluated_control_points
+        );
+        assert!(!outcome.reverted_to_global);
+        assert!(outcome.inlier_area_coverage > 0.20);
+        // 需求 2.2: a later focal plane registers against its own camera
+        // position, so canvas owned by another station is not a base at all.
+        let mut foreign = layer_sampler(&shifted, &info, width, height);
+        let ignored = refine_native_layer_streaming(
+            &store,
+            Some(7),
+            &mut foreign,
+            width,
+            height,
+            (0, width - 1, 0, height - 1),
+            mode,
+        )
+        .expect("streaming native refinement");
+        assert_eq!(ignored.accepted_control_points, 0);
+        assert_eq!(ignored.evaluated_control_points, 0);
+    }
+
     #[test]
     fn sensor_noise_cannot_hide_a_sharper_faint_colour_stroke() {
         let (sharp, noisy_blur) = noisy_colour_stroke_pair();
@@ -3457,16 +5295,31 @@ mod tests {
 
     #[test]
     fn enclosed_sharp_tile_replaces_blur_without_losing_coverage() {
-        let sharp = sharp_fixture();
+        // Four times the old 160x120 fixture, with the candidate a 320x320 crop
+        // instead of an 80x80 one.  On the small canvas the native control
+        // points had to sit at least one 57x57 patch away from the layer edge,
+        // which left 2 measurable cells out of 18 — an 11% inlier spatial
+        // support that is an artefact of an 80px layer, not of the photographs,
+        // and that 需求 2.8 / 12.2 correctly refuse to fuse.  A 320px layer
+        // measures 0.4 of its cells, so the test exercises the selection it is
+        // about; the exclusion path has its own unit tests in
+        // `stack_pipeline::station_degradation`.
+        let sharp = Rgb32FImage::from_fn(640, 480, |x, y| {
+            let value = 0.36
+                + 0.12 * (x as f32 * 0.75).sin()
+                + 0.10 * (y as f32 * 0.65).cos()
+                + 0.03 * ((x + y) as f32 * 0.19).sin();
+            Rgb([value * 1.1, value, value * 0.8])
+        });
         let base = image::imageops::blur(&sharp, 2.0);
-        let candidate = image::imageops::crop_imm(&sharp, 40, 20, 80, 80).to_image();
+        let candidate = image::imageops::crop_imm(&sharp, 160, 80, 320, 320).to_image();
         let sources = [base.clone(), candidate];
         let infos = [image_info(0, &sources[0]), image_info(1, &sources[1])];
         let transforms = HashMap::from([
             (0, Matrix3::identity()),
             (
                 1,
-                Matrix3::new(1.0, 0.0, 40.0, 0.0, 1.0, 20.0, 0.0, 0.0, 1.0),
+                Matrix3::new(1.0, 0.0, 160.0, 0.0, 1.0, 80.0, 0.0, 0.0, 1.0),
             ),
         ]);
         let app = tauri::test::mock_app();
@@ -3488,8 +5341,8 @@ mod tests {
         );
         let mut before = 0.0;
         let mut after = 0.0;
-        for y in 30..90 {
-            for x in 50..110 {
+        for y in 120..360 {
+            for x in 200..440 {
                 before += (base.get_pixel(x, y)[1] - sharp.get_pixel(x, y)[1]).powi(2);
                 after += (output.get_pixel(x, y)[1] - sharp.get_pixel(x, y)[1]).powi(2);
             }
