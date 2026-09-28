@@ -50,7 +50,7 @@ const STREAMING_HARMONIZATION_LONG_SIDE: u32 = 2400;
 // ownership boundary. A broad gain blur follows nearby dark strokes and draws
 // a visible halo even though the gain itself is constant per capture group.
 const STREAMING_GROUP_GAIN_FEATHER: f32 = 3.0;
-const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.45;
+const STREAMING_GROUP_GAIN_MAX_LOG: f64 = 0.223_143_551_314_209_76;
 // Camera-position lighting varies smoothly across a frame, so a seam needs a
 // much broader low-frequency transition than the ownership antialiasing.
 // These radii operate on the bounded 2400px analysis image.

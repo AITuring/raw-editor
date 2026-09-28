@@ -86,6 +86,7 @@ impl PhotometricModel {
     }
 
     /// Return the solved affine offset without applying it to a pixel.
+    #[allow(dead_code)]
     pub(crate) fn offset_at(&self, _preview_x: f64, _preview_y: f64) -> [f32; 3] {
         self.offset.map(|value| value as f32)
     }

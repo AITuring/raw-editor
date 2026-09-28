@@ -23,9 +23,13 @@ pub(crate) mod focus_fuser;
 /// Intra_Station_Registrar: anchor selection and registration gates (需求 2.1–2.9).
 pub(crate) mod intra_station;
 pub(crate) mod report;
+/// Residual_Warp: bounded overlap-local correction fields (需求 8.1–8.9).
+pub(crate) mod residual_warp;
 /// Degradation_Manager, station level: the degraded fusion paths and the
 /// "joins no Capture_Station" rejection (需求 12.1, 12.2, 12.5).
 pub(crate) mod station_degradation;
+/// Tone_Harmonizer: robust low-frequency affine correction after ownership.
+pub(crate) mod tone;
 /// Capture_Topology_Model: pose-free station row/column inference and
 /// ambiguity-forced candidate eligibility (需求 5.1, 5.2, 5.4, 5.7).
 pub(crate) mod topology;

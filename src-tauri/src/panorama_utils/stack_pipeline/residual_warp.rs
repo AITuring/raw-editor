@@ -492,14 +492,9 @@ impl WarpRegion {
         for row in 0..self.field.height {
             for column in 0..self.field.width {
                 let index = row * self.field.width + column;
-                let fade = edge_fade(
-                    &self.world,
-                    self.nodes[index].world.x,
-                    self.nodes[index].world.y,
-                );
                 self.field.values[index] = [
-                    self.nodes[index].displacement[0] * fade,
-                    self.nodes[index].displacement[1] * fade,
+                    self.nodes[index].displacement[0],
+                    self.nodes[index].displacement[1],
                 ];
             }
         }

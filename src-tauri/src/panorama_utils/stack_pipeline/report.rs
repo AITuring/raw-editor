@@ -30,6 +30,7 @@ use super::degradation::{self, DegradationLedger, RunResult};
 use super::focus_fuser;
 use super::intra_station::{self, INTRA_STATION_ANALYSIS_LONG_SIDE};
 use super::residual_warp;
+use super::tone;
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
 pub(crate) const STACK_REPORT_SCHEMA: u32 = 1;
@@ -1462,6 +1463,17 @@ impl StackReportRecorder {
                         report.residual_warp.regions = residual_warp;
                         report.residual_warp.identity = report.residual_warp.regions.is_empty();
                     }
+                });
+            }
+            // Tone_Harmonizer records are collected without threading the
+            // report through the compositor.  Snapshot them at the same
+            // terminating boundary so success, degraded and cancellation all
+            // expose the solved and bounded coefficients.
+            let tone_tiles = tone::run_records_snapshot();
+            if !tone_tiles.is_empty() {
+                self.update(|report| {
+                    report.tone.status = ToneStatus::Applied;
+                    report.tone.tiles = tone_tiles;
                 });
             }
         }
