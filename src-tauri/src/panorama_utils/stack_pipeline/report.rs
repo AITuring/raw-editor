@@ -29,6 +29,7 @@ use super::degradation::{self, DegradationLedger, RunResult};
 /// independent 2048 ceiling.
 use super::focus_fuser;
 use super::intra_station::{self, INTRA_STATION_ANALYSIS_LONG_SIDE};
+use super::residual_warp;
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
 pub(crate) const STACK_REPORT_SCHEMA: u32 = 1;
@@ -1448,6 +1449,18 @@ impl StackReportRecorder {
                 self.update(|report| {
                     if report.fusion.is_empty() {
                         report.fusion = fusion;
+                    }
+                });
+            }
+            // Residual_Warp is measured inside the stitching path, which has
+            // no report parameter.  Copy the run-scoped records at the same
+            // terminal point as Intra_Station and Focus_Fuser.
+            let residual_warp = residual_warp::run_records_snapshot();
+            if !residual_warp.is_empty() {
+                self.update(|report| {
+                    if report.residual_warp.regions.is_empty() {
+                        report.residual_warp.regions = residual_warp;
+                        report.residual_warp.identity = report.residual_warp.regions.is_empty();
                     }
                 });
             }

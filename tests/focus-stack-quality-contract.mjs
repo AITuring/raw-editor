@@ -19,6 +19,19 @@ const degradation = read(`${stackPipelineDir}/degradation.rs`);
 const stackReport = read(`${stackPipelineDir}/report.rs`);
 const determinism = read(`${stackPipelineDir}/determinism.rs`);
 const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
+const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
+const tone = read(`${stackPipelineDir}/tone.rs`);
+
+// Stage 5 photometric defaults are part of the quality contract.  Keep these
+// source-level assertions dependency-free so changing an exposure bound cannot
+// silently alter a real scan's calibration policy.
+assert.match(photometric, /max_samples_per_pair:\s*2048/);
+assert.match(photometric, /min_samples_per_pair:\s*1024/);
+assert.match(photometric, /min_sample_value:\s*0\.02/);
+assert.match(photometric, /max_sample_value:\s*0\.98/);
+assert.match(photometric, /max_abs_log_gain:\s*1\.25_f64\.ln\(\)/);
+assert.match(photometric, /allow_linear:\s*false/);
+assert.doesNotMatch(tone, /std::env::var/, 'Tone_Harmonizer must not read environment switches');
 
 const numberConstant = (source, name) => {
   const value = source.match(
