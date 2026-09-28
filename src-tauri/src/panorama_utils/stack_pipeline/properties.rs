@@ -10462,3 +10462,84 @@ proptest! {
         }
     }
 }
+
+// Stage 7 Quality_Gate self-checks (15.14, 15.16, 15.17).
+use super::quality_gate::{noise_sigma, roi_low_frequency_delta_e00, slanted_edge_mtf50};
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 66: MTF50_Normalized 不低于参考的 0.93 倍
+    #[test]
+    fn property_66_gaussian_slanted_edge_mtf50_self_check(
+        sigma in 0.65f32..1.85f32,
+    ) {
+        let width = 256u32;
+        let height = 256u32;
+        let angle = 7.0f64.to_radians();
+        let edge = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let distance = f64::from(x) - f64::from(y) * angle.tan() - 116.0;
+            let value = if distance >= 0.0 { 0.86 } else { 0.12 };
+            image::Rgb([value; 3])
+        });
+        let blurred = image::imageops::blur(&edge, sigma);
+        let measurement = slanted_edge_mtf50(&blurred, 1.0)
+            .expect("synthetic slanted edge must be measurable");
+        let analytic = (2.0f64.ln()).sqrt()
+            / (std::f64::consts::PI * 2.0f64.sqrt() * f64::from(sigma));
+        prop_assert!(measurement.f50_cycles_per_output_pixel.is_finite());
+        prop_assert!(measurement.normalized.is_finite());
+        // The finite 256px ROI, 4-point smoothing, Hamming window and the
+        // repository's sRGB Gaussian kernel introduce a bounded discrete bias.
+        prop_assert!((measurement.f50_cycles_per_output_pixel - analytic).abs()
+            <= 0.45 * analytic.max(0.01));
+        prop_assert!((measurement.normalized - measurement.f50_cycles_per_output_pixel).abs()
+            <= 1.0e-12);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 68: Noise_Sigma 比值落在规定范围
+    #[test]
+    fn property_68_noise_sigma_mad_self_check(
+        sigma in 0.002f64..0.030f64,
+        seed in any::<u64>(),
+    ) {
+        let width = 96u32;
+        let height = 96u32;
+        let mut state = seed | 1;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state as f64 / u64::MAX as f64) * 2.0 - 1.0
+        };
+        // The sRGB EOTF slope at 0.5 is approximately 0.93.
+        let srgb_sigma = sigma / 0.93;
+        let image = image::Rgb32FImage::from_fn(width, height, |_x, _y| {
+            let value = (0.5 + srgb_sigma * next()).clamp(0.0, 1.0) as f32;
+            image::Rgb([value; 3])
+        });
+        let estimated = noise_sigma(&image).expect("finite synthetic noise");
+        prop_assert!(estimated.is_finite());
+        prop_assert!(estimated / sigma >= 0.55 && estimated / sigma <= 1.45);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 69: ROI 低频均值色差不超过 2.0
+    #[test]
+    fn property_69_ciede2000_is_symmetric_and_zero_for_identity(
+        red_a in 0.0f32..1.0,
+        green_a in 0.0f32..1.0,
+        blue_a in 0.0f32..1.0,
+        red_b in 0.0f32..1.0,
+        green_b in 0.0f32..1.0,
+        blue_b in 0.0f32..1.0,
+    ) {
+        let left = image::Rgb32FImage::from_pixel(8, 8, image::Rgb([red_a, green_a, blue_a]));
+        let right = image::Rgb32FImage::from_pixel(8, 8, image::Rgb([red_b, green_b, blue_b]));
+        let forward = roi_low_frequency_delta_e00(&left, &right).expect("finite RGB pair");
+        let reverse = roi_low_frequency_delta_e00(&right, &left).expect("finite RGB pair");
+        prop_assert!(forward.is_finite());
+        prop_assert!((forward - reverse).abs() <= 1.0e-10);
+        let identity = roi_low_frequency_delta_e00(&left, &left).expect("identity RGB pair");
+        prop_assert!(identity.abs() <= 1.0e-10);
+    }
+}
