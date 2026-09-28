@@ -273,8 +273,8 @@ impl WarpRegion {
             }
         }
 
-        for index in 0..region.nodes.len() {
-            let Some(observation) = candidate[index] else {
+        for (index, observation) in candidate.iter().enumerate() {
+            let Some(observation) = observation else {
                 continue;
             };
             region.nodes[index] = WarpNode {
