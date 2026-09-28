@@ -10399,3 +10399,35 @@ proptest! {
         }
     }
 }
+
+// Task 11.13 / Property 46.
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 46: 形变沿边界法向在128px内单调衰减为零，区域外恒等。
+    // **Validates: Requirements 8.9**
+    #[test]
+    fn property_46_residual_edge_fade_is_monotonic(
+        displacement in 1.0f64..32.0,
+    ) {
+        use super::report::{WorldPoint, WorldRect};
+        use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion};
+        let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 1024.0, height: 1024.0 }, 4.0);
+        let observations = (0..17).flat_map(|row| (0..17).map(move |column| WarpObservation::new(
+            WorldPoint { x: column as f64 * 64.0, y: row as f64 * 64.0 }, [displacement, 0.0], 0.0,
+        ))).collect::<Vec<_>>();
+        let region = WarpRegion::from_observations(overlap, &observations);
+        let mut previous = 0.0;
+        for distance in (0..=128).step_by(8) {
+            let current = region.displacement_at(distance as f64, 512.0)[0];
+            prop_assert!(current + 1e-8 >= previous);
+            previous = current;
+        }
+        prop_assert_eq!(region.displacement_at(-1.0, 512.0), [0.0, 0.0]);
+        prop_assert_eq!(region.displacement_at(1025.0, 512.0), [0.0, 0.0]);
+    }
+}
