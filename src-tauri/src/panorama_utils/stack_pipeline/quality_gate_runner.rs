@@ -243,6 +243,82 @@ fn ratio(measured: f64, reference: f64, min: f64, max: f64) -> Option<(f64, bool
     quality_gate::compare_ratio(measured, reference, min, max, false).map(|v| (v.value, v.passed))
 }
 
+/// Keep the observation-only gate bounded on the full-resolution acceptance
+/// renders. The exact region labelling and distance transform are useful for
+/// ordinary unit-sized fixtures, but a 9k by 11k canvas would allocate and
+/// scan several gigabytes just to choose 512px ROIs. A deterministic lattice
+/// still checks ownership and coverage over every candidate ROI; the two
+/// criteria that require a complete canvas (effective coverage and boundary
+/// tracing) are recorded as unmeasurable below.
+fn select_sparse_rois(
+    coverage: &GrayImage,
+    ownership: &[u16],
+    origin: (f64, f64),
+) -> Vec<QualityRoi> {
+    let (width, height) = coverage.dimensions();
+    let side = quality_gate::QUALITY_ROI_SIDE;
+    if width < side || height < side {
+        return Vec::new();
+    }
+    let mut result = Vec::new();
+    for y in (0..=height - side).step_by(side as usize / 2) {
+        for x in (0..=width - side).step_by(side as usize / 2) {
+            let owner = ownership[(y * width + x) as usize];
+            if owner == 0 || coverage.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            let mut same_owner = true;
+            for ry in (0..side).step_by(32) {
+                for rx in (0..side).step_by(32) {
+                    let index = ((y + ry) * width + x + rx) as usize;
+                    if coverage.as_raw()[index] == 0 || ownership[index] != owner {
+                        same_owner = false;
+                        break;
+                    }
+                }
+                if !same_owner {
+                    break;
+                }
+            }
+            if same_owner {
+                result.push(QualityRoi {
+                    x,
+                    y,
+                    side,
+                    region_label: result.len() as u32 + 1,
+                    owner,
+                    world_origin: (origin.0 + f64::from(x), origin.1 + f64::from(y)),
+                    boundary_clearance: f64::from(side),
+                });
+                if result.len() == quality_gate::QUALITY_ROI_MAX_COUNT {
+                    return result;
+                }
+            }
+        }
+    }
+    result
+}
+
+fn sparse_confidence_coverage(coverage: &GrayImage, confidence: &[f32]) -> Option<f64> {
+    let (width, height) = coverage.dimensions();
+    let step = 16u32;
+    let mut covered = 0usize;
+    let mut low = 0usize;
+    for y in (0..height).step_by(step as usize) {
+        for x in (0..width).step_by(step as usize) {
+            let index = (y * width + x) as usize;
+            if coverage.as_raw()[index] == 0 {
+                continue;
+            }
+            covered += 1;
+            if confidence[index].is_finite() && confidence[index] < 0.05 {
+                low += 1;
+            }
+        }
+    }
+    (covered > 0).then(|| 1.0 - low as f64 / covered as f64)
+}
+
 /// Execute all nine criteria in record-only mode. No decision from the return
 /// value is applied to export; callers decide whether to block in a later task.
 pub(crate) fn run_quality_gate(
@@ -265,35 +341,45 @@ pub(crate) fn run_quality_gate(
         });
         return report;
     }
-    let regions = match quality_gate::label_owner_regions(input.ownership, input.coverage) {
-        Ok(value) => value,
-        Err(reason) => {
-            report.verdict = QualityGateVerdict::InsufficientEvidence;
-            report.unmeasurable.push(UnmeasurableRecord {
-                criterion: "all".to_string(),
-                world: WorldPoint {
-                    x: input.world_origin.0,
-                    y: input.world_origin.1,
-                },
-                reason: reason.to_string(),
-            });
-            return report;
-        }
-    };
-    let rois = match quality_gate::select_quality_rois(&regions, input.world_origin) {
-        Ok(value) => value.rois,
-        Err(reason) => {
-            report.verdict = QualityGateVerdict::InsufficientEvidence;
-            report.unmeasurable.push(UnmeasurableRecord {
-                criterion: "all".to_string(),
-                world: WorldPoint {
-                    x: input.world_origin.0,
-                    y: input.world_origin.1,
-                },
-                reason: reason.to_string(),
-            });
-            return report;
-        }
+    let large_plane =
+        (input.coverage.width() as u64).saturating_mul(input.coverage.height() as u64) > 40_000_000;
+    let (regions, rois) = if large_plane {
+        (
+            None,
+            select_sparse_rois(input.coverage, input.ownership, input.world_origin),
+        )
+    } else {
+        let regions = match quality_gate::label_owner_regions(input.ownership, input.coverage) {
+            Ok(value) => value,
+            Err(reason) => {
+                report.verdict = QualityGateVerdict::InsufficientEvidence;
+                report.unmeasurable.push(UnmeasurableRecord {
+                    criterion: "all".to_string(),
+                    world: WorldPoint {
+                        x: input.world_origin.0,
+                        y: input.world_origin.1,
+                    },
+                    reason: reason.to_string(),
+                });
+                return report;
+            }
+        };
+        let rois = match quality_gate::select_quality_rois(&regions, input.world_origin) {
+            Ok(value) => value.rois,
+            Err(reason) => {
+                report.verdict = QualityGateVerdict::InsufficientEvidence;
+                report.unmeasurable.push(UnmeasurableRecord {
+                    criterion: "all".to_string(),
+                    world: WorldPoint {
+                        x: input.world_origin.0,
+                        y: input.world_origin.1,
+                    },
+                    reason: reason.to_string(),
+                });
+                return report;
+            }
+        };
+        (Some(regions), rois)
     };
     report.roi_count = rois.len();
 
@@ -512,7 +598,12 @@ pub(crate) fn run_quality_gate(
         .iter()
         .filter_map(source_quad)
         .collect::<Vec<_>>();
-    match quality_gate::effective_pixel_coverage(input.coverage, &quads, input.world_origin) {
+    let effective_result = if large_plane {
+        Err("diagnostics_plane_too_large")
+    } else {
+        quality_gate::effective_pixel_coverage(input.coverage, &quads, input.world_origin)
+    };
+    match effective_result {
         Ok(EffectivePixelCoverage { ratio, .. }) => effective.push(
             input.world_origin,
             ratio,
@@ -537,50 +628,67 @@ pub(crate) fn run_quality_gate(
         quality_gate::QUALITY_BOUNDARY_P95_MAX,
         quality_gate::QUALITY_BOUNDARY_MAX,
     );
-    for left in &regions.regions {
-        for right in &regions.regions {
-            if left.label >= right.label || left.owner == right.owner {
-                continue;
-            }
-            let Ok(path) = quality_gate::trace_moore_boundary(&regions, left.label, right.label)
-            else {
-                continue;
-            };
-            match quality_gate::measure_boundary_strokes(input.output, &path, input.world_origin) {
-                Ok(measurement) => {
-                    for value in measurement.measurements {
+    if let Some(regions) = regions.as_ref() {
+        for left in &regions.regions {
+            for right in &regions.regions {
+                if left.label >= right.label || left.owner == right.owner {
+                    continue;
+                }
+                let Ok(path) =
+                    quality_gate::trace_moore_boundary(&regions, left.label, right.label)
+                else {
+                    continue;
+                };
+                match quality_gate::measure_boundary_strokes(
+                    input.output,
+                    &path,
+                    input.world_origin,
+                ) {
+                    Ok(measurement) => {
+                        for value in measurement.measurements {
+                            boundary.push(
+                                value.world,
+                                value.normal_error_px,
+                                "",
+                                value.normal_error_px <= quality_gate::QUALITY_BOUNDARY_MAX,
+                            );
+                        }
+                        // The criterion is defined by both the 95th percentile
+                        // and the absolute maximum. Keep the sampled points for
+                        // diagnostics and add one aggregate P95 measurement so a
+                        // high but sub-3px tail cannot be reported as a pass.
                         boundary.push(
-                            value.world,
-                            value.normal_error_px,
+                            input.world_origin,
+                            measurement.p95_error_px,
                             "",
-                            value.normal_error_px <= quality_gate::QUALITY_BOUNDARY_MAX,
+                            measurement.p95_error_px <= quality_gate::QUALITY_BOUNDARY_P95_MAX
+                                && measurement.max_error_px <= quality_gate::QUALITY_BOUNDARY_MAX,
                         );
                     }
-                    // The criterion is defined by both the 95th percentile
-                    // and the absolute maximum. Keep the sampled points for
-                    // diagnostics and add one aggregate P95 measurement so a
-                    // high but sub-3px tail cannot be reported as a pass.
-                    boundary.push(
-                        input.world_origin,
-                        measurement.p95_error_px,
-                        "",
-                        measurement.p95_error_px <= quality_gate::QUALITY_BOUNDARY_P95_MAX
-                            && measurement.max_error_px <= quality_gate::QUALITY_BOUNDARY_MAX,
-                    );
-                }
-                Err(reason) => {
-                    boundary.miss();
-                    unmeasurable.push(UnmeasurableRecord {
-                        criterion: boundary.name.to_string(),
-                        world: WorldPoint {
-                            x: input.world_origin.0,
-                            y: input.world_origin.1,
-                        },
-                        reason: reason.to_string(),
-                    });
+                    Err(reason) => {
+                        boundary.miss();
+                        unmeasurable.push(UnmeasurableRecord {
+                            criterion: boundary.name.to_string(),
+                            world: WorldPoint {
+                                x: input.world_origin.0,
+                                y: input.world_origin.1,
+                            },
+                            reason: reason.to_string(),
+                        });
+                    }
                 }
             }
         }
+    } else {
+        boundary.miss();
+        unmeasurable.push(UnmeasurableRecord {
+            criterion: boundary.name.to_string(),
+            world: WorldPoint {
+                x: input.world_origin.0,
+                y: input.world_origin.1,
+            },
+            reason: "diagnostics_plane_too_large".to_string(),
+        });
     }
 
     let mut confidence = Criterion::new(
@@ -612,6 +720,7 @@ pub(crate) fn run_quality_gate(
                 Some(1.0 - low as f64 / covered as f64)
             }
         }
+        _ if large_plane => sparse_confidence_coverage(input.coverage, input.confidence),
         _ => quality_gate::sharpness_confidence_coverage(input.coverage, input.confidence).ok(),
     };
     match confidence_value {
