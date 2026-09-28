@@ -785,7 +785,7 @@
 
 - [ ] 11. 阶段 5：局部形变与色调
 
-  - [~] 11.1 实现 `residual_warp.rs` 的启用条件与网格
+  - [x] 11.1 实现 `residual_warp.rs` 的启用条件与网格
     - `regions` 默认为空（恒等映射）；仅当某重叠区全局单应性重投影误差 P95 > 3.0 世界像素
       时为该区创建 `WarpRegion`
     - 新增常量 `RESIDUAL_WARP_NODE_STEP_PX = 64`，每方向 ≥4 节点；
@@ -793,7 +793,7 @@
     - 记录该区世界坐标范围与启用前实测 P95
     - _Requirements: 8.1, 8.2_
 
-  - [~] 11.2 实现节点位移三项约束与外推、衰减、单元回退
+  - [x] 11.2 实现节点位移三项约束与外推、衰减、单元回退
     - 新增 `RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX = 32`、
       `RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX = 8`、`RESIDUAL_WARP_BOUNDARY_DECAY_PX = 128`
     - 往返误差 ≤1.0 世界像素（复用 `refine_warped_patch()` 的双向匹配得反向位移），
@@ -808,13 +808,13 @@
     - 同步更新 `tests/focus-stack-quality-contract.mjs`：新增四个 `RESIDUAL_WARP_*` 常量断言
     - _Requirements: 8.3, 8.4, 8.5, 8.6, 8.8, 8.9, 8.10_
 
-  - [~] 11.3 把 `ResidualWarp` 与 `tile_to_world` 复合成单次采样
+  - [x] 11.3 把 `ResidualWarp` 与 `tile_to_world` 复合成单次采样
     - `Tile_Compositor` 对每个目标像素求
       `tile_coord = warp_inverse(tile_to_world_inverse(world_coord))` 后一次性采样，
       使瓦片 → 世界重采样不超过 1 次
     - _Requirements: 8.7_
 
-  - [~] 11.4 调整 `PhotometricOptions` 参数并补齐偏移项
+  - [x] 11.4 调整 `PhotometricOptions` 参数并补齐偏移项
     - `photometric.rs`：`min_sample_value` 0.01 → 0.02、`max_sample_value`
       `1 − 1/65535` → 0.98、`min_samples_per_pair` 32 → 1024、
       `max_abs_log_gain` `ln 2` → `ln 1.25`、`allow_linear` 保持 false
@@ -827,7 +827,7 @@
       默认值断言（0.02 / 0.98 / 1024 / `ln 1.25`）
     - _Requirements: 9.3, 9.9_
 
-  - [~] 11.5 实现 `tone.rs` 的低频带、MAD 过滤与高频残差保持
+  - [x] 11.5 实现 `tone.rs` 的低频带、MAD 过滤与高频残差保持
     - 低通 σ ≥ 64 世界像素，作用在亮度与 R、G、B 分量；
       实现上在 1/16 降采样网格上求低频场（σ = 4 网格像素）后双线性放大，
       与现有 `tone_field()` 的 `Field<3>` 机制一致
@@ -839,7 +839,7 @@
     - 无有效样本区域用恒等增益零偏移
     - _Requirements: 9.1, 9.2, 9.4, 9.7, 9.10_
 
-  - [~] 11.6 把色调阶段顺序移到接缝之后并复核边界带色差
+  - [x] 11.6 把色调阶段顺序移到接缝之后并复核边界带色差
     - 现有 `progressive_seam_stitcher` 是「先估曝光、再选接缝」，改为
       在 `Tile_Compositor` 完成接缝与输出 Ownership_Map **之后**调用 `Tone_Harmonizer`；
       接缝选择不得读取任何已校正像素
@@ -849,7 +849,7 @@
       > 色调协调状态标记降级
     - _Requirements: 9.5, 9.6, 9.8, 9.11_
 
-  - [~] 11.7 删除三个色调环境变量开关
+  - [x] 11.7 删除三个色调环境变量开关
     - 删除 `RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC`（`Tone_Harmonizer` 无条件调用）、
       `RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN`（空间项代码保留但不接线，
       由 `allow_linear = false` 单点控制）、`RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN`
@@ -905,9 +905,17 @@
     - **Property 52: Owner_Region 边界低频色差有界或被记录**
     - **Validates: Requirements 9.8, 9.11**
 
+  - 执行记录：11.1–11.7 已实现并分别保留提交；残差与色调报告沿用 run sink，
+    旧路径函数本体保持不变。11.8–11.19 可选属性测试暂未新增。
+
 - [~] 12. 阶段 5 检查点
   - 验证任意曝光差的合成扫描网格上边界带 Delta_E00 ≤1.5，
     且输出高频残差逐像素等于 owner 源图高频残差；确保所有测试通过，遇到问题询问用户。
+
+    - 执行记录：已落地残差场启用门槛、64px 网格、三项位移约束、外推与边界衰减；
+      色调默认值收紧为 0.02/0.98/1024/ln(1.25)，增加有界 affine offset、3×MAD 过滤、
+      1/16 低频场和 owner 高频残差保持；移除三个旧色调环境变量。待完整测试与
+      `langyuan-10`、`wenyuan-10` 真实门禁完成后勾选本检查点。
 
 - [ ] 13. 阶段 6：Tile_Compositor 成为默认路径
 
