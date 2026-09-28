@@ -10431,3 +10431,34 @@ proptest! {
         prop_assert_eq!(region.displacement_at(1025.0, 512.0), [0.0, 0.0]);
     }
 }
+
+// Task 11.14 / Property 47.
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 47: 证据不足时区域保持恒等并记录不足证据。
+    // **Validates: Requirements 8.10**
+    #[test]
+    fn property_47_insufficient_residual_evidence_is_identity(
+        observations in prop::collection::vec(
+            (0.0f64..192.0, 0.0f64..192.0, -8.0f64..8.0, -8.0f64..8.0),
+            0..16,
+        ),
+    ) {
+        use super::report::{WorldPoint, WorldRect};
+        use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion, RESIDUAL_WARP_MIN_VERIFIED_POINTS};
+        let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 192.0, height: 192.0 }, 3.01);
+        let samples = observations.iter().map(|&(x, y, dx, dy)| WarpObservation::new(WorldPoint { x, y }, [dx, dy], 1.0)).collect::<Vec<_>>();
+        let region = WarpRegion::from_observations(overlap, &samples);
+        prop_assert!(samples.len() < RESIDUAL_WARP_MIN_VERIFIED_POINTS);
+        prop_assert!(region.insufficient_evidence);
+        prop_assert!(region.is_identity());
+        for node in region.nodes() {
+            prop_assert_eq!(node.displacement, [0.0, 0.0]);
+        }
+    }
+}
