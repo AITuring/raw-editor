@@ -10203,3 +10203,83 @@ proptest! {
         );
     }
 }
+
+// Stage 7 backfill: task 11.8 (Property 41).
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 41: 局部形变只在 P95 > 3 的区域启用，64px 网格每方向至少四节点。
+    // **Validates: Requirements 8.1, 8.2**
+    #[test]
+    fn property_41_residual_regions_exactly_match_global_p95_gate(
+        origin in (-4096i32..4096, -4096i32..4096),
+        overlaps in prop::collection::vec(
+            (
+                1u16..1025,
+                1u16..1025,
+                prop_oneof![Just(3.0f64), Just(3.0f64 + f64::EPSILON * 2.0), 0.0f64..12.0],
+            ),
+            0..16,
+        ),
+    ) {
+        use super::report::{WorldPoint, WorldRect};
+        use super::residual_warp::{OverlapResidual, ResidualWarp};
+
+        let mut model = ResidualWarp::default();
+        prop_assert!(model.regions.is_empty());
+        prop_assert!(model.identity());
+        let mut expected = Vec::new();
+        for (index, &(width, height, p95)) in overlaps.iter().enumerate() {
+            let world = WorldRect {
+                left: origin.0 as f64 + index as f64 * 2048.0,
+                top: origin.1 as f64,
+                width: f64::from(width),
+                height: f64::from(height),
+            };
+            let overlap = OverlapResidual::new(index * 2, index * 2 + 1, world, p95);
+            let inserted = model.add_overlap(overlap);
+            if p95 > 3.0 {
+                prop_assert_eq!(inserted, Some(expected.len()));
+                expected.push(overlap);
+            } else {
+                prop_assert_eq!(inserted, None);
+                let mut measured = ResidualWarp::default();
+                prop_assert_eq!(measured.add_observations(overlap, &[]), None);
+                prop_assert!(measured.regions.is_empty());
+            }
+        }
+        prop_assert_eq!(model.regions.len(), expected.len());
+        for (region, overlap) in model.regions.iter().zip(&expected) {
+            prop_assert_eq!(region.world, overlap.world);
+            prop_assert_eq!((region.left_station, region.right_station), (overlap.left_station, overlap.right_station));
+            prop_assert_eq!(region.p95_before_px, overlap.p95_px);
+            prop_assert_eq!(region.node_step_px, 64);
+            prop_assert_eq!(region.columns, ((overlap.world.width / 64.0).ceil() as u32 + 1).max(4));
+            prop_assert_eq!(region.rows, ((overlap.world.height / 64.0).ceil() as u32 + 1).max(4));
+            prop_assert_eq!(region.node_count(), region.columns as usize * region.rows as usize);
+            for (index, node) in region.nodes().iter().enumerate() {
+                let column = index % region.columns as usize;
+                let row = index / region.columns as usize;
+                prop_assert_eq!(node.world, WorldPoint {
+                    x: overlap.world.left + column as f64 * 64.0,
+                    y: overlap.world.top + row as f64 * 64.0,
+                });
+                prop_assert_eq!(node.displacement, [0.0, 0.0]);
+            }
+        }
+        // Merely allocating an enabled region must not invent a deformation.
+        prop_assert!(model.identity());
+        for (station, point) in [
+            (usize::MAX, Point2::new(-0.0, origin.1 as f64)),
+            (0, Point2::new(origin.0 as f64 - 1.0, origin.1 as f64)),
+        ] {
+            let mapped = model.warp_inverse(point, station);
+            prop_assert_eq!(mapped.x.to_bits(), point.x.to_bits());
+            prop_assert_eq!(mapped.y.to_bits(), point.y.to_bits());
+        }
+    }
+}
