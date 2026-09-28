@@ -1118,3 +1118,39 @@ pub(crate) fn noise_sigma_ratio(
     }
     Ok(output_sigma / reference_sigma)
 }
+
+// ==================== task 15.5: low-frequency CIEDE2000 ====================
+/// The design fixes the ROI low-frequency mean to the mean of its fully opaque
+/// RGB samples. Using compensated f64 summation avoids a large RGB lowpass
+/// buffer and feeds the one canonical sRGB->D65 Lab->CIEDE2000 implementation.
+pub(crate) fn roi_low_frequency_delta_e00(
+    output: &image::Rgb32FImage,
+    reference: &image::Rgb32FImage,
+) -> Result<f64, &'static str> {
+    fn mean(image: &image::Rgb32FImage) -> Option<[f32; 3]> {
+        if image.width() == 0 || image.height() == 0 {
+            return None;
+        }
+        let mut sums = [0.0f64; 3];
+        let mut compensation = [0.0f64; 3];
+        for pixel in image.pixels() {
+            for channel in 0..3 {
+                if !pixel[channel].is_finite() {
+                    return None;
+                }
+                let value = f64::from(pixel[channel]) - compensation[channel];
+                let next = sums[channel] + value;
+                compensation[channel] = (next - sums[channel]) - value;
+                sums[channel] = next;
+            }
+        }
+        let count = f64::from(image.width()) * f64::from(image.height());
+        Some(sums.map(|v| (v / count) as f32))
+    }
+    if output.dimensions() != reference.dimensions() {
+        return Err(super::degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED);
+    }
+    let a = mean(output).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
+    let b = mean(reference).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
+    Ok(super::tone::delta_e00_rgb(a, b))
+}
