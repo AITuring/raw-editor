@@ -7586,6 +7586,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // stations then no longer sit where the source-stage canvas above was
     // measured.
     let mut station_poses_replaced = false;
+    #[allow(clippy::type_complexity)]
     let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, (f64, f64))> = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
     let panorama = match blend_mode {

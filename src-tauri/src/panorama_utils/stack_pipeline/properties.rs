@@ -184,8 +184,6 @@ proptest! {
         left in prop::array::uniform3(0.0f32..=1.0),
         right in prop::array::uniform3(0.0f32..=1.0),
     ) {
-        let left = left;
-        let right = right;
         let same = tone::delta_e00_rgb(left, left);
         let forward = tone::delta_e00_rgb(left, right);
         let backward = tone::delta_e00_rgb(right, left);

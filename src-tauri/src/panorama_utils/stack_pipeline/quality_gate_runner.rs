@@ -634,8 +634,7 @@ pub(crate) fn run_quality_gate(
                 if left.label >= right.label || left.owner == right.owner {
                     continue;
                 }
-                let Ok(path) =
-                    quality_gate::trace_moore_boundary(&regions, left.label, right.label)
+                let Ok(path) = quality_gate::trace_moore_boundary(regions, left.label, right.label)
                 else {
                     continue;
                 };

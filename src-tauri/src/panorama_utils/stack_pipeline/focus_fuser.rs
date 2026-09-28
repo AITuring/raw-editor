@@ -712,9 +712,11 @@ impl OwnershipCostGrid {
                 let base_i = owners[cell];
                 let base_j = owners[neighbour];
                 let pair = |left: u16, right: u16| {
-                    (left != NO_OWNER && right != NO_OWNER && left != right)
-                        .then_some(weight)
-                        .unwrap_or(0.0)
+                    if left != NO_OWNER && right != NO_OWNER && left != right {
+                        weight
+                    } else {
+                        0.0
+                    }
                 };
                 if fixed[cell] == 0 && fixed[neighbour] == 0 {
                     let e00 = pair(base_i, base_j);

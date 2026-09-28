@@ -123,10 +123,6 @@ impl RssSampler {
         }
     }
 
-    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.state.cancel)
-    }
-
     pub fn snapshot(&self, threshold_bytes: u64) -> RssSample {
         let peak = self.state.peak_rss_bytes.load(Ordering::Acquire);
         RssSample {
