@@ -9,6 +9,13 @@
 use image::{Rgb, Rgb32FImage};
 use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 
+/// Maximum affine offset allowed by the stack Tone_Harmonizer.
+///
+/// This is intentionally a small linear-light value.  Keeping it next to the
+/// photometric solver gives both the old progressive compositor and the new
+/// stack pipeline the same bound without an environment-variable switch.
+pub(crate) const PHOTOMETRIC_MAX_ABS_OFFSET: f64 = 0.02;
+
 #[derive(Clone, Debug)]
 pub(crate) struct PhotometricOptions {
     pub(crate) max_samples_per_pair: usize,
@@ -28,11 +35,11 @@ impl Default for PhotometricOptions {
     fn default() -> Self {
         Self {
             max_samples_per_pair: 2048,
-            min_samples_per_pair: 32,
-            min_sample_value: 0.01,
-            max_sample_value: 1.0 - 1.0 / 65535.0,
+            min_samples_per_pair: 1024,
+            min_sample_value: 0.02,
+            max_sample_value: 0.98,
             max_pair_log_scatter: 0.18,
-            max_abs_log_gain: 2.0_f64.ln(),
+            max_abs_log_gain: 1.25_f64.ln(),
             allow_linear: false,
             max_linear_log_gain: 0.10,
             linear_regularization: 0.10,
@@ -47,6 +54,11 @@ pub(crate) struct PhotometricModel {
     pub(crate) preview_width: u32,
     pub(crate) preview_height: u32,
     max_abs_log_gain: f64,
+    /// The bounded affine offset used by [`Self::apply`].
+    pub(crate) offset: [f64; 3],
+    /// Unbounded least-squares result, retained for Stack_Report diagnostics.
+    pub(crate) solved_offset: [f64; 3],
+    pub(crate) offset_clamped: bool,
 }
 
 impl PhotometricModel {
@@ -69,8 +81,13 @@ impl PhotometricModel {
     pub(crate) fn apply(&self, pixel: Rgb<f32>, x: f64, y: f64) -> Rgb<f32> {
         let gain = self.gain_at(x, y);
         Rgb(std::array::from_fn(|channel| {
-            pixel[channel] * gain[channel]
+            pixel[channel] * gain[channel] + self.offset[channel] as f32
         }))
+    }
+
+    /// Return the solved affine offset without applying it to a pixel.
+    pub(crate) fn offset_at(&self, _preview_x: f64, _preview_y: f64) -> [f32; 3] {
+        self.offset.map(|value| value as f32)
     }
 }
 
@@ -99,6 +116,8 @@ struct Observation {
     second_basis: [f64; 3],
     // gain(first) - gain(second) = log(pixel(second)/pixel(first)).
     delta: [f64; 3],
+    first_rgb: [f64; 3],
+    second_rgb: [f64; 3],
 }
 
 struct Pair {
@@ -124,6 +143,9 @@ pub(crate) fn calibrate_overlap_photometry(
             preview_width: image.width(),
             preview_height: image.height(),
             max_abs_log_gain: options.max_abs_log_gain.max(0.0),
+            offset: [0.0; 3],
+            solved_offset: [0.0; 3],
+            offset_clamped: false,
         })
         .collect();
     let geometry: Vec<_> = tiles
@@ -210,6 +232,7 @@ pub(crate) fn calibrate_overlap_photometry(
             linear_used = true;
         }
     }
+    solve_offsets(&mut models, &pairs, &components, PHOTOMETRIC_MAX_ABS_OFFSET);
     PhotometricCalibration {
         models,
         pairs: diagnostics,
@@ -345,6 +368,8 @@ fn sample_overlap(
                 first_basis: normalized_basis(first.width(), first.height(), ax, ay),
                 second_basis: normalized_basis(second.width(), second.height(), bx, by),
                 delta: std::array::from_fn(|channel| b[channel].ln() - a[channel].ln()),
+                first_rgb: a,
+                second_rgb: b,
             });
         }
     }
@@ -545,6 +570,88 @@ fn solve_linear(
         }
     }
     limit_constants(models, components, options.max_abs_log_gain.max(0.0));
+}
+
+/// Solve the additive part of the affine tone model after the multiplicative
+/// gains have converged.  A pair contributes the robust median of
+/// `gain(second) * second - gain(first) * first`, so the equation has the same
+/// direction as the log-gain relation (`offset[first] - offset[second]`).
+/// Components retain a zero-mean gauge, and the final value is clipped to the
+/// small linear-light bound required by Tone_Harmonizer.
+fn solve_offsets(
+    models: &mut [PhotometricModel],
+    pairs: &[Pair],
+    components: &[Vec<usize>],
+    max_abs_offset: f64,
+) {
+    if models.is_empty() || pairs.is_empty() {
+        return;
+    }
+    for channel in 0..3 {
+        let mut normal = DMatrix::zeros(models.len(), models.len());
+        let mut rhs = DVector::zeros(models.len());
+        for pair in pairs {
+            let mut values = Vec::with_capacity(pair.observations.len());
+            for observation in &pair.observations {
+                let first_gain = dot(
+                    models[pair.first].log_gain[channel],
+                    observation.first_basis,
+                )
+                .clamp(
+                    -models[pair.first].max_abs_log_gain,
+                    models[pair.first].max_abs_log_gain,
+                )
+                .exp();
+                let second_gain = dot(
+                    models[pair.second].log_gain[channel],
+                    observation.second_basis,
+                )
+                .clamp(
+                    -models[pair.second].max_abs_log_gain,
+                    models[pair.second].max_abs_log_gain,
+                )
+                .exp();
+                values.push(
+                    second_gain * observation.second_rgb[channel]
+                        - first_gain * observation.first_rgb[channel],
+                );
+            }
+            let value = median_value(values);
+            add_equation(
+                &mut normal,
+                &mut rhs,
+                &[(pair.first, 1.0), (pair.second, -1.0)],
+                value,
+                pair.weight,
+            );
+        }
+        add_gauges(&mut normal, components, 1);
+        let Some(decomposition) = normal.cholesky() else {
+            continue;
+        };
+        let solution = decomposition.solve(&rhs);
+        for (index, model) in models.iter_mut().enumerate() {
+            let solved = solution[index];
+            let bounded = solved.clamp(-max_abs_offset, max_abs_offset);
+            model.solved_offset[channel] = solved;
+            model.offset[channel] = bounded;
+            model.offset_clamped |= (solved - bounded).abs() > 1e-12;
+        }
+    }
+    for (index, model) in models.iter().enumerate() {
+        if model.offset_clamped {
+            crate::panorama_utils::stack_pipeline::degradation::record_run_degradation(
+                crate::panorama_utils::stack_pipeline::degradation::TONE_GAIN_CLAMPED,
+                serde_json::json!({
+                    "stage": "photometric_affine",
+                    "tile": index,
+                    "solved_offset": model.solved_offset,
+                    "offset": model.offset,
+                    "limit": max_abs_offset,
+                }),
+            );
+        }
+    }
 }
 
 fn validation_error(models: &[PhotometricModel], pairs: &[Pair]) -> f64 {
