@@ -854,9 +854,10 @@ pub(crate) fn reset_run_records() {
     with_run_records(Vec::clear);
 }
 
-/// Append one frame record to a per-station collection (需求 2.9).  Frames
-/// arrive in the order they are registered; the station entry is created on
-/// first use.  Separated from the global sink so it is testable on its own.
+/// Add one frame record to a per-station collection (需求 2.9).  Frames keep
+/// the order in which they were first registered and a re-registered path
+/// replaces its record; the station entry is created on first use.  Separated
+/// from the global sink so it is testable on its own.
 pub(crate) fn push_frame_record(
     records: &mut Vec<IntraStationReport>,
     station_index: usize,
@@ -881,7 +882,18 @@ pub(crate) fn push_frame_record(
     if station.anchor_path.is_empty() {
         station.anchor_path = anchor_path.to_string();
     }
-    station.frames.push(record);
+    // A station is rendered more than once per run (station matching, a
+    // rendering-prior repair, composition). Each render re-measures its frames,
+    // so the latest measurement replaces the frame's earlier record in place
+    // instead of listing the same Source_RAW twice in Stack_Report.
+    match station
+        .frames
+        .iter_mut()
+        .find(|frame| frame.path == record.path)
+    {
+        Some(existing) => *existing = record,
+        None => station.frames.push(record),
+    }
 }
 
 /// Record one frame of one Capture_Station of the current run (需求 2.9).

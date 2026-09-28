@@ -634,6 +634,40 @@ pub(crate) struct StationRelationCandidateRecord {
     /// Stable matcher stage such as `fitted`, `fitted_orientation_mismatch`, or
     /// `insufficient_grid_coverage`.
     pub failure_stage: String,
+    /// Area-averaging factors of the coarse-to-fine probe levels, coarsest first.
+    /// Every count above belongs to the last level in this list that was run.
+    #[serde(default)]
+    pub pyramid_factors: Vec<u32>,
+    /// Level whose measurements the counts above describe (1 = native pixels).
+    #[serde(default)]
+    pub measurement_factor: u32,
+    /// Seed of the bounded search: `rendering_prior` is the only authoritative
+    /// kind; `prior_free_features` only proposes a rendering-prior repair.
+    #[serde(default)]
+    pub seed: String,
+    /// RANSAC inliers of the prior-free covered-feature relation, 0 when unused.
+    #[serde(default)]
+    pub prior_free_inliers: usize,
+    /// True when either station was re-rendered from repaired source poses.
+    #[serde(default)]
+    pub after_prior_repair: bool,
+}
+
+/// One Capture_Station whose rendering prior was repaired from a measured
+/// prior-free Virtual_Tile relation before being rendered once more.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationPriorRepairRecord {
+    pub station: usize,
+    /// Station already consistent with the reference cluster.
+    pub fixed_station: usize,
+    /// Candidate pair `(left, right)` whose prior-free relation was used.
+    pub relation_left: usize,
+    pub relation_right: usize,
+    pub relation_inliers: usize,
+    /// World displacement of the repaired tile centre.
+    pub center_shift_px: f64,
+    /// `sqrt(σ1·σ2)` of the world correction's linear part.
+    pub correction_scale_ratio: f64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -641,6 +675,9 @@ pub(crate) struct StationRelationsReport {
     pub accepted: Vec<AcceptedStationRelationRecord>,
     /// One record for every topology candidate, including no-fit rejections.
     pub candidates: Vec<StationRelationCandidateRecord>,
+    /// Rendering-prior repairs applied before the authoritative measurement.
+    #[serde(default)]
+    pub prior_repairs: Vec<StationPriorRepairRecord>,
     pub rejected_count: usize,
     /// Rejection counts keyed by stable failure identifier (requirement 6.10).
     pub rejected_by_reason: BTreeMap<String, u64>,
