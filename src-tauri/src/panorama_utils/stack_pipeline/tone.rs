@@ -6,8 +6,10 @@
 //! edges, and texture tied to the source selected by the ownership map.
 
 use image::{GrayImage, Rgb, Rgb32FImage};
+use std::sync::Mutex;
 
 use super::degradation;
+use super::report::ToneTileRecord;
 
 /// Build the low-frequency field on one sixteenth of the output grid.
 pub(crate) const TONE_GRID_DIVISOR: u32 = 16;
@@ -19,6 +21,33 @@ pub(crate) const TONE_MIN_SAMPLES: usize = 1024;
 pub(crate) const TONE_MIN_GAIN: f32 = 1.0 / 1.25;
 pub(crate) const TONE_MAX_GAIN: f32 = 1.25;
 pub(crate) const TONE_MAX_ABS_OFFSET: f32 = 0.02;
+
+// Tone solving is reached from the compositor's free functions, which do not
+// carry a mutable Stack_Report reference.  Keep the same run-scoped sink used
+// by Intra_Station and Focus_Fuser; report publication takes one snapshot at
+// the terminating boundary.
+static RUN_RECORDS: Mutex<Vec<ToneTileRecord>> = Mutex::new(Vec::new());
+
+pub(crate) fn reset_run_records() {
+    RUN_RECORDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clear();
+}
+
+pub(crate) fn record_run_record(record: ToneTileRecord) {
+    RUN_RECORDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(record);
+}
+
+pub(crate) fn run_records_snapshot() -> Vec<ToneTileRecord> {
+    RUN_RECORDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ToneSample {
