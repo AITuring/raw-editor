@@ -1456,12 +1456,11 @@ impl StackReportRecorder {
             // Residual_Warp is measured inside the stitching path, which has
             // no report parameter.  Copy the run-scoped records at the same
             // terminal point as Intra_Station and Focus_Fuser.
-            let residual_warp = residual_warp::run_records_snapshot();
-            if !residual_warp.is_empty() {
+            let residual_report = residual_warp::run_report_snapshot();
+            if !residual_report.regions.is_empty() || !residual_report.identity {
                 self.update(|report| {
                     if report.residual_warp.regions.is_empty() {
-                        report.residual_warp.regions = residual_warp;
-                        report.residual_warp.identity = report.residual_warp.regions.is_empty();
+                        report.residual_warp = residual_report;
                     }
                 });
             }
@@ -1469,12 +1468,16 @@ impl StackReportRecorder {
             // report through the compositor.  Snapshot them at the same
             // terminating boundary so success, degraded and cancellation all
             // expose the solved and bounded coefficients.
-            let tone_tiles = tone::run_records_snapshot();
-            if !tone_tiles.is_empty() {
-                self.update(|report| {
-                    report.tone.status = ToneStatus::Applied;
-                    report.tone.tiles = tone_tiles;
-                });
+            if let Some(tone_report) = tone::run_report_snapshot() {
+                self.update(|report| report.tone = tone_report);
+            } else {
+                let tone_tiles = tone::run_records_snapshot();
+                if !tone_tiles.is_empty() {
+                    self.update(|report| {
+                        report.tone.status = ToneStatus::Applied;
+                        report.tone.tiles = tone_tiles;
+                    });
+                }
             }
         }
         // Every terminating path lands here, so this single call covers the

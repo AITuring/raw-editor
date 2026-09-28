@@ -11,7 +11,10 @@ use image::{GrayImage, Rgb, Rgb32FImage};
 use std::sync::Mutex;
 
 use super::degradation;
-use super::report::ToneTileRecord;
+use super::report::{
+    TONE_BOUNDARY_DELTA_E_THRESHOLD, ToneBoundaryViolationRecord, TonePairWithoutEvidenceRecord,
+    ToneReport, ToneStatus, ToneTileRecord,
+};
 
 /// Build the low-frequency field on one sixteenth of the output grid.
 pub(crate) const TONE_GRID_DIVISOR: u32 = 16;
@@ -29,12 +32,16 @@ pub(crate) const TONE_MAX_ABS_OFFSET: f32 = 0.02;
 // by Intra_Station and Focus_Fuser; report publication takes one snapshot at
 // the terminating boundary.
 static RUN_RECORDS: Mutex<Vec<ToneTileRecord>> = Mutex::new(Vec::new());
+static RUN_REPORT: Mutex<Option<ToneReport>> = Mutex::new(None);
 
 pub(crate) fn reset_run_records() {
     RUN_RECORDS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clear();
+    *RUN_REPORT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
 pub(crate) fn record_run_record(record: ToneTileRecord) {
@@ -49,6 +56,33 @@ pub(crate) fn run_records_snapshot() -> Vec<ToneTileRecord> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
+}
+
+pub(crate) fn record_run_report(report: ToneReport) {
+    *RUN_REPORT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(report);
+}
+
+pub(crate) fn run_report_snapshot() -> Option<ToneReport> {
+    RUN_REPORT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// One source's low-frequency field in output world coordinates.  `low` and
+/// `validity` stay at the one-sixteenth analysis resolution; no full-size
+/// low-frequency image is allocated by the harmoniser.
+#[derive(Debug, Clone)]
+pub(crate) struct ToneTile {
+    pub(crate) station_index: usize,
+    pub(crate) owner_id: u16,
+    pub(crate) low: Rgb32FImage,
+    pub(crate) validity: GrayImage,
+    pub(crate) world_origin: (f64, f64),
+    pub(crate) world_size: (f64, f64),
+    pub(crate) world_stride: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -101,10 +135,6 @@ impl ToneSolve {
 pub(crate) fn solve_tone_pair(samples: &[ToneSample]) -> ToneSolve {
     if samples.is_empty() {
         record_insufficient_samples(0);
-        record_run_record(ToneTileRecord {
-            samples: 0,
-            ..ToneTileRecord::default()
-        });
         return ToneSolve::identity(0);
     }
     let medians: [f32; 3] = std::array::from_fn(|channel| {
@@ -143,10 +173,6 @@ pub(crate) fn solve_tone_pair(samples: &[ToneSample]) -> ToneSolve {
         .collect();
     if retained.len() < TONE_MIN_SAMPLES {
         record_insufficient_samples(retained.len());
-        record_run_record(ToneTileRecord {
-            samples: retained.len() as u64,
-            ..ToneTileRecord::default()
-        });
         return ToneSolve::identity(retained.len());
     }
 
@@ -167,7 +193,7 @@ pub(crate) fn solve_tone_pair(samples: &[ToneSample]) -> ToneSolve {
         }
         let n = retained.len() as f64;
         let denominator = n.mul_add(sum_xx, -sum_x * sum_x);
-        if denominator.abs() > f64::EPSILON {
+        if denominator.abs() > 1e-6 {
             let gain = (n.mul_add(sum_xy, -sum_x * sum_y) / denominator) as f32;
             let offset = ((sum_y - f64::from(gain) * sum_x) / n) as f32;
             if gain.is_finite() {
@@ -175,6 +201,20 @@ pub(crate) fn solve_tone_pair(samples: &[ToneSample]) -> ToneSolve {
             }
             if offset.is_finite() {
                 solved_offset[channel] = offset;
+            }
+        } else if n > 0.0 {
+            // A constant-gray overlap cannot identify two affine coefficients
+            // independently.  Use the equivalent multiplicative solution,
+            // which remains observable, finite, and preserves the measured
+            // level instead of manufacturing a NaN or an arbitrary offset.
+            let mean_x = sum_x / n;
+            let mean_y = sum_y / n;
+            if mean_x.abs() > f64::EPSILON {
+                let gain = (mean_y / mean_x) as f32;
+                if gain.is_finite() {
+                    solved_gain[channel] = gain;
+                    solved_offset[channel] = (mean_y - f64::from(gain) * mean_x) as f32;
+                }
             }
         }
     }
@@ -205,15 +245,6 @@ pub(crate) fn solve_tone_pair(samples: &[ToneSample]) -> ToneSolve {
             }),
         );
     }
-    record_run_record(ToneTileRecord {
-        samples: retained.len() as u64,
-        gain: gain.map(f64::from),
-        offset: offset.map(f64::from),
-        solved_gain: solved_gain.map(f64::from),
-        solved_offset: solved_offset.map(f64::from),
-        clamped: gain_clamped,
-        ..ToneTileRecord::default()
-    });
     ToneSolve {
         gain,
         offset,
@@ -245,6 +276,14 @@ fn record_insufficient_samples(retained_samples: usize) {
 /// Estimate a low-frequency RGB field on a 1/16 grid and bilinearly expand it
 /// to the input dimensions.
 pub(crate) fn low_frequency_field(image: &Rgb32FImage) -> Rgb32FImage {
+    let low = low_frequency_grid(image);
+    bilinear_expand(&low, image.width(), image.height())
+}
+
+/// Analysis-resolution low-frequency field.  Callers that already retain an
+/// ownership grid should keep this image and map it by world coordinates,
+/// avoiding a full-resolution intermediate allocation.
+pub(crate) fn low_frequency_grid(image: &Rgb32FImage) -> Rgb32FImage {
     if image.width() == 0 || image.height() == 0 {
         return Rgb32FImage::new(image.width(), image.height());
     }
@@ -256,8 +295,7 @@ pub(crate) fn low_frequency_field(image: &Rgb32FImage) -> Rgb32FImage {
         low_height,
         image::imageops::FilterType::Triangle,
     );
-    let low = image::imageops::blur(&low, TONE_LOW_FREQUENCY_SIGMA);
-    bilinear_expand(&low, image.width(), image.height())
+    image::imageops::blur(&low, TONE_LOW_FREQUENCY_SIGMA)
 }
 
 /// Apply the low-frequency affine correction while preserving the owner's
@@ -311,6 +349,416 @@ pub(crate) fn harmonize_owned_tone(
 /// quality-gate stage.
 pub(crate) fn delta_e00_rgb(left: [f32; 3], right: [f32; 3]) -> f64 {
     ciede2000(rgb_to_lab(left), rgb_to_lab(right))
+}
+
+#[derive(Clone, Copy)]
+struct ToneTransform {
+    gain: [f32; 3],
+    offset: [f32; 3],
+    supported: bool,
+}
+
+impl ToneTransform {
+    const IDENTITY: Self = Self {
+        gain: [1.0; 3],
+        offset: [0.0; 3],
+        supported: false,
+    };
+}
+
+/// Apply all owner-level tone corrections after the immutable ownership plane
+/// has been selected.  Each `ToneTile` is an analysis-grid field in world
+/// coordinates, so the function samples at most one low-frequency pixel per
+/// output pixel and never allocates a second full-resolution RGB canvas.
+pub(crate) fn harmonize_after_ownership(
+    panorama: &mut Rgb32FImage,
+    owners: &[u16],
+    tiles: &[ToneTile],
+    world_origin: (f64, f64),
+) -> ToneReport {
+    harmonize_after_ownership_with_evidence(panorama, owners, tiles, world_origin, None)
+}
+
+/// Production-facing entry point used by the owner compositor. `width` is
+/// explicit because the ownership plane is commonly held as a flat immutable
+/// slice; the height is derived from the output image.
+pub(crate) fn harmonize_tone_tiles(
+    panorama: &mut Rgb32FImage,
+    owners: &[u16],
+    width: u32,
+    tiles: &[ToneTile],
+    evidence: &GrayImage,
+) -> ToneReport {
+    if width != panorama.width() {
+        let mut report = ToneReport::default();
+        report.status = ToneStatus::Identity;
+        record_run_report(report.clone());
+        return report;
+    }
+    harmonize_after_ownership_with_evidence(panorama, owners, tiles, (0.0, 0.0), Some(evidence))
+}
+
+fn harmonize_after_ownership_with_evidence(
+    panorama: &mut Rgb32FImage,
+    owners: &[u16],
+    tiles: &[ToneTile],
+    world_origin: (f64, f64),
+    evidence: Option<&GrayImage>,
+) -> ToneReport {
+    let mut report = ToneReport::default();
+    if panorama.width() == 0 || panorama.height() == 0 || tiles.is_empty() {
+        report.status = ToneStatus::Identity;
+        record_run_report(report.clone());
+        return report;
+    }
+    let pixel_count = panorama.width() as usize * panorama.height() as usize;
+    if owners.len() != pixel_count {
+        report.status = ToneStatus::Identity;
+        record_run_report(report.clone());
+        return report;
+    }
+
+    // Solve pairwise affine relations from the one-sixteenth fields, then
+    // propagate each relation from a deterministic lowest station anchor.
+    let mut adjacency: Vec<Vec<(usize, ToneSolve, bool)>> = vec![Vec::new(); tiles.len()];
+    let mut sample_support = vec![0usize; tiles.len()];
+    for left in 0..tiles.len() {
+        for right in left + 1..tiles.len() {
+            let samples = overlap_samples(&tiles[left], &tiles[right]);
+            let retained_before = samples.len();
+            let solve = solve_tone_pair(&samples);
+            if solve.status == ToneSolveStatus::Identity {
+                report
+                    .pairs_without_evidence
+                    .push(TonePairWithoutEvidenceRecord {
+                        left: tiles[left].station_index,
+                        right: tiles[right].station_index,
+                        retained_samples: solve.retained_samples.min(retained_before) as u64,
+                    });
+                continue;
+            }
+            sample_support[left] = sample_support[left].max(solve.retained_samples);
+            sample_support[right] = sample_support[right].max(solve.retained_samples);
+            // `true` means the current node is the owner side of the relation
+            // and the neighbour is the source side (owner ~= gain*source+offset).
+            adjacency[left].push((right, solve.clone(), true));
+            adjacency[right].push((left, solve, false));
+        }
+    }
+
+    let mut transforms = vec![ToneTransform::IDENTITY; tiles.len()];
+    let mut visited = vec![false; tiles.len()];
+    for anchor in 0..tiles.len() {
+        if visited[anchor] {
+            continue;
+        }
+        visited[anchor] = true;
+        transforms[anchor] = ToneTransform {
+            ..ToneTransform::IDENTITY
+        };
+        let mut queue = std::collections::VecDeque::from([anchor]);
+        while let Some(current) = queue.pop_front() {
+            for &(next, ref relation, forward) in &adjacency[current] {
+                if visited[next] {
+                    continue;
+                }
+                let parent = transforms[current];
+                let (gain, offset) = if forward {
+                    (
+                        std::array::from_fn(|channel| {
+                            parent.gain[channel] * relation.gain[channel]
+                        }),
+                        std::array::from_fn(|channel| {
+                            parent.gain[channel] * relation.offset[channel] + parent.offset[channel]
+                        }),
+                    )
+                } else {
+                    (
+                        std::array::from_fn(|channel| {
+                            parent.gain[channel] / relation.gain[channel].max(1e-6)
+                        }),
+                        std::array::from_fn(|channel| {
+                            (parent.offset[channel] - relation.offset[channel])
+                                / relation.gain[channel].max(1e-6)
+                        }),
+                    )
+                };
+                transforms[next] = ToneTransform {
+                    gain,
+                    offset,
+                    supported: true,
+                };
+                visited[next] = true;
+                queue.push_back(next);
+            }
+        }
+    }
+
+    for (index, tile) in tiles.iter().enumerate() {
+        let transform = transforms[index];
+        let clamped = transform
+            .gain
+            .iter()
+            .any(|value| *value < TONE_MIN_GAIN || *value > TONE_MAX_GAIN)
+            || transform
+                .offset
+                .iter()
+                .any(|value| value.abs() > TONE_MAX_ABS_OFFSET);
+        let gain = transform
+            .gain
+            .map(|value| value.clamp(TONE_MIN_GAIN, TONE_MAX_GAIN));
+        let offset = transform
+            .offset
+            .map(|value| value.clamp(-TONE_MAX_ABS_OFFSET, TONE_MAX_ABS_OFFSET));
+        if clamped {
+            degradation::record_run_degradation(
+                degradation::TONE_GAIN_CLAMPED,
+                serde_json::json!({
+                    "stage": "tone_harmonizer_graph",
+                    "station_index": tile.station_index,
+                    "solved_gain": transform.gain,
+                    "gain": gain,
+                    "solved_offset": transform.offset,
+                    "offset": offset,
+                }),
+            );
+        }
+        report.tiles.push(ToneTileRecord {
+            station_index: tile.station_index,
+            gain: gain.map(f64::from),
+            offset: offset.map(f64::from),
+            samples: sample_support[index] as u64,
+            clamped,
+            solved_gain: transform.gain.map(f64::from),
+            solved_offset: transform.offset.map(f64::from),
+        });
+    }
+
+    // A tile owns its own high-frequency residual.  The low field is sampled
+    // once and the residual is added back directly, preserving owner pixels in
+    // every region where no overlap evidence exists.
+    let output_width = panorama.width();
+    let output_height = panorama.height();
+    for (index, pixel) in panorama.as_mut().chunks_exact_mut(3).enumerate() {
+        let owner_id = owners[index];
+        let output_x = index as u32 % output_width;
+        let output_y = index as u32 / output_width;
+        let Some((tile_index, tile)) = tiles
+            .iter()
+            .enumerate()
+            .find(|(_, tile)| tile.owner_id == owner_id)
+        else {
+            continue;
+        };
+        let transform = transforms[tile_index];
+        if !transform.supported {
+            continue;
+        }
+        if transform
+            .gain
+            .iter()
+            .all(|value| (*value - 1.0).abs() <= f32::EPSILON)
+            && transform
+                .offset
+                .iter()
+                .all(|value| value.abs() <= f32::EPSILON)
+        {
+            continue;
+        }
+        if let Some(evidence) = evidence {
+            if output_x >= evidence.width()
+                || output_y >= evidence.height()
+                || evidence.get_pixel(output_x, output_y)[0] == 0
+            {
+                continue;
+            }
+        }
+        let world = (
+            world_origin.0 + output_x as f64,
+            world_origin.1 + output_y as f64,
+        );
+        let Some((low, valid)) = sample_tile(tile, world.0, world.1) else {
+            continue;
+        };
+        if !valid {
+            continue;
+        }
+        // `owner_low` is the same source field at this coordinate; only the
+        // source's broad tone is changed, while the original owner residual is
+        // retained exactly in the sum below.
+        for channel in 0..3 {
+            let owner = pixel[channel];
+            let owner_low = low[channel];
+            pixel[channel] = (transform.gain[channel] * low[channel]
+                + transform.offset[channel]
+                + (owner - owner_low))
+                .clamp(0.0, 1.0);
+        }
+    }
+
+    let corrected_low = |owner_id: u16, x: u32, y: u32| -> Option<[f32; 3]> {
+        let (tile_index, tile) = tiles
+            .iter()
+            .enumerate()
+            .find(|(_, tile)| tile.owner_id == owner_id)?;
+        let (low, valid) = sample_tile(tile, world_origin.0 + x as f64, world_origin.1 + y as f64)?;
+        if !valid {
+            return None;
+        }
+        let transform = transforms[tile_index];
+        Some(std::array::from_fn(|channel| {
+            transform.gain[channel].clamp(TONE_MIN_GAIN, TONE_MAX_GAIN) * low[channel]
+                + transform.offset[channel].clamp(-TONE_MAX_ABS_OFFSET, TONE_MAX_ABS_OFFSET)
+        }))
+    };
+    for y in 0..output_height {
+        for x in 0..output_width {
+            let index = y as usize * output_width as usize + x as usize;
+            let left_owner = owners[index];
+            if left_owner == 0 {
+                continue;
+            }
+            for (nx, ny) in [(x + 1, y), (x, y + 1)] {
+                if nx >= output_width || ny >= output_height {
+                    continue;
+                }
+                let right_index = ny as usize * panorama.width() as usize + nx as usize;
+                let right_owner = owners[right_index];
+                if right_owner == 0 || right_owner == left_owner {
+                    continue;
+                }
+                // Inspect the 16px band on both sides of the ownership edge,
+                // rather than only the two immediately adjacent pixels.
+                for distance in 0..16u32 {
+                    let (ax, ay) = if nx > x {
+                        (x.saturating_sub(distance), y)
+                    } else {
+                        (x, y.saturating_sub(distance))
+                    };
+                    let (bx, by) = if nx > x {
+                        (nx.saturating_add(distance).min(output_width - 1), ny)
+                    } else {
+                        (nx, ny.saturating_add(distance).min(output_height - 1))
+                    };
+                    let Some(left_low) = corrected_low(left_owner, ax, ay) else {
+                        continue;
+                    };
+                    let Some(right_low) = corrected_low(right_owner, bx, by) else {
+                        continue;
+                    };
+                    let delta = delta_e00_rgb(left_low, right_low);
+                    report.boundary_delta_e.max = report.boundary_delta_e.max.max(delta);
+                    if delta > TONE_BOUNDARY_DELTA_E_THRESHOLD
+                        && report.boundary_delta_e.violations.len() < 4096
+                    {
+                        report
+                            .boundary_delta_e
+                            .violations
+                            .push(ToneBoundaryViolationRecord {
+                                left: left_owner as usize,
+                                right: right_owner as usize,
+                                delta_e00: delta,
+                                world: super::report::WorldRect {
+                                    left: world_origin.0 + ax as f64,
+                                    top: world_origin.1 + ay as f64,
+                                    width: 1.0,
+                                    height: 1.0,
+                                },
+                            });
+                        degradation::record_run_degradation(
+                            degradation::TONE_BOUNDARY_DELTA_E_EXCEEDED,
+                            serde_json::json!({
+                                "left": left_owner,
+                                "right": right_owner,
+                                "delta_e00": delta,
+                                "x": ax,
+                                "y": ay,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    let has_pair_evidence = adjacency.iter().any(|edges| !edges.is_empty());
+    report.status = if !has_pair_evidence {
+        ToneStatus::Identity
+    } else if report.boundary_delta_e.violations.is_empty()
+        && report.pairs_without_evidence.is_empty()
+    {
+        ToneStatus::Applied
+    } else {
+        ToneStatus::Degraded
+    };
+    for tile in &report.tiles {
+        record_run_record(*tile);
+    }
+    record_run_report(report.clone());
+    report
+}
+
+fn overlap_samples(left: &ToneTile, right: &ToneTile) -> Vec<ToneSample> {
+    let left_stride = left.world_stride.max(f64::EPSILON);
+    let right_stride = right.world_stride.max(f64::EPSILON);
+    let left_end = (
+        left.world_origin.0 + left.world_size.0,
+        left.world_origin.1 + left.world_size.1,
+    );
+    let right_end = (
+        right.world_origin.0 + right.world_size.0,
+        right.world_origin.1 + right.world_size.1,
+    );
+    let min_x = left.world_origin.0.max(right.world_origin.0);
+    let min_y = left.world_origin.1.max(right.world_origin.1);
+    let max_x = left_end.0.min(right_end.0);
+    let max_y = left_end.1.min(right_end.1);
+    if max_x <= min_x || max_y <= min_y {
+        return Vec::new();
+    }
+    let step = left_stride.max(right_stride);
+    let columns = ((max_x - min_x) / step).floor() as usize + 1;
+    let rows = ((max_y - min_y) / step).floor() as usize + 1;
+    let mut samples = Vec::with_capacity(columns.saturating_mul(rows).min(16_384));
+    for row in 0..rows {
+        for column in 0..columns {
+            if samples.len() >= 16_384 {
+                return samples;
+            }
+            let x = min_x + (column as f64 + 0.5) * step;
+            let y = min_y + (row as f64 + 0.5) * step;
+            let Some((left_pixel, left_valid)) = sample_tile(left, x, y) else {
+                continue;
+            };
+            let Some((right_pixel, right_valid)) = sample_tile(right, x, y) else {
+                continue;
+            };
+            if left_valid && right_valid {
+                samples.push(ToneSample {
+                    owner: left_pixel,
+                    source: right_pixel,
+                });
+            }
+        }
+    }
+    samples
+}
+
+fn sample_tile(tile: &ToneTile, world_x: f64, world_y: f64) -> Option<([f32; 3], bool)> {
+    if !tile.world_stride.is_finite() || tile.world_stride <= 0.0 {
+        return None;
+    }
+    let x = ((world_x - tile.world_origin.0) / tile.world_stride).floor() as i64;
+    let y = ((world_y - tile.world_origin.1) / tile.world_stride).floor() as i64;
+    if x < 0 || y < 0 || x as u32 >= tile.low.width() || y as u32 >= tile.low.height() {
+        return None;
+    }
+    let x = x as u32;
+    let y = y as u32;
+    if x >= tile.validity.width() || y >= tile.validity.height() {
+        return Some((tile.low.get_pixel(x, y).0, false));
+    }
+    let valid = tile.validity.get_pixel(x, y)[0] != 0;
+    Some((tile.low.get_pixel(x, y).0, valid))
 }
 
 fn rgb_to_lab(rgb: [f32; 3]) -> [f64; 3] {
@@ -505,5 +953,23 @@ mod tests {
         let right = [0.71, 0.36, 0.19];
         assert!(delta_e00_rgb(left, left).abs() < 1e-12);
         assert!((delta_e00_rgb(left, right) - delta_e00_rgb(right, left)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn constant_gray_samples_have_a_finite_affine_solution() {
+        let samples = vec![
+            ToneSample {
+                owner: [0.44; 3],
+                source: [0.40; 3],
+            };
+            TONE_MIN_SAMPLES
+        ];
+        let solve = solve_tone_pair(&samples);
+        assert!(solve.gain.iter().all(|value| value.is_finite()));
+        assert!(solve.offset.iter().all(|value| value.is_finite()));
+        for channel in 0..3 {
+            let corrected = solve.gain[channel] * 0.40 + solve.offset[channel];
+            assert!((corrected - 0.44).abs() < 1e-4);
+        }
     }
 }

@@ -19,7 +19,9 @@ use serde::{Deserialize, Serialize};
 use super::super::mosaic::Field;
 use super::super::registration::refine_warped_patch;
 use super::degradation;
-use super::report::{RESIDUAL_WARP_NODE_STEP_PX, WarpRegionRecord, WorldPoint, WorldRect};
+use super::report::{
+    RESIDUAL_WARP_NODE_STEP_PX, ResidualWarpReport, WarpRegionRecord, WorldPoint, WorldRect,
+};
 
 /// A residual is considered large enough to warrant a local field only when
 /// the globally aligned overlap has P95 above this value (world pixels).
@@ -257,7 +259,7 @@ impl WarpRegion {
                 .then_with(|| a.world.x.total_cmp(&b.world.x))
         });
         let mut candidate = vec![None; region.nodes.len()];
-        for observation in accepted {
+        for observation in accepted.iter().copied() {
             let Some(index) = region.nearest_node(observation.world) else {
                 continue;
             };
@@ -283,6 +285,31 @@ impl WarpRegion {
                 valid: true,
                 round_trip_error_px: observation.round_trip_error_px,
             };
+        }
+        let cell_columns = region.columns.saturating_sub(1) as usize;
+        let cell_rows = region.rows.saturating_sub(1) as usize;
+        let mut global_cell_error = vec![f64::NAN; cell_columns * cell_rows];
+        let mut residual_cell_error = vec![f64::NAN; cell_columns * cell_rows];
+        for observation in &accepted {
+            if !observation.global_error_px.is_finite()
+                || !observation.residual_error_px.is_finite()
+                || cell_columns == 0
+                || cell_rows == 0
+            {
+                continue;
+            }
+            let Some(index) = region.nearest_node(observation.world) else {
+                continue;
+            };
+            let column = (index % region.field.width).min(cell_columns - 1);
+            let row = (index / region.field.width).min(cell_rows - 1);
+            let cell = row * cell_columns + column;
+            if !residual_cell_error[cell].is_finite()
+                || observation.residual_error_px < residual_cell_error[cell]
+            {
+                global_cell_error[cell] = observation.global_error_px;
+                residual_cell_error[cell] = observation.residual_error_px;
+            }
         }
         let unique_valid_nodes = region.nodes.iter().filter(|node| node.valid).count();
         if unique_valid_nodes < RESIDUAL_WARP_MIN_VERIFIED_POINTS {
@@ -316,6 +343,7 @@ impl WarpRegion {
         region.extrapolate_invalid_nodes();
         region.rebuild_field();
         region.update_metrics();
+        region.revert_cells(&global_cell_error, &residual_cell_error);
         region
     }
 
@@ -387,6 +415,7 @@ impl WarpRegion {
                 }),
             );
         }
+        self.enforce_all_neighbour_bound();
         self.rebuild_field();
         self.update_metrics();
     }
@@ -485,6 +514,104 @@ impl WarpRegion {
                 }
             }
         }
+        self.enforce_invalid_neighbour_bound();
+    }
+
+    /// Invalid-node extrapolation is itself subject to the same 32/8 gates as
+    /// measured nodes. Keep measured nodes fixed and pull only extrapolated
+    /// nodes towards their neighbours; samples with no support remain zero.
+    fn enforce_invalid_neighbour_bound(&mut self) {
+        for node in &mut self.nodes {
+            let magnitude = node.displacement[0].hypot(node.displacement[1]);
+            if magnitude > RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX {
+                let scale = RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX / magnitude;
+                node.displacement[0] *= scale;
+                node.displacement[1] *= scale;
+            }
+        }
+        for _ in 0..self.nodes.len().max(1) {
+            let mut changed = false;
+            for row in 0..self.field.height {
+                for column in 0..self.field.width {
+                    let index = row * self.field.width + column;
+                    if self.nodes[index].valid {
+                        continue;
+                    }
+                    for other in neighbour_indices(row, column, self.field.width, self.field.height)
+                    {
+                        let delta = displacement_delta(
+                            self.nodes[index].displacement,
+                            self.nodes[other].displacement,
+                        );
+                        if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX {
+                            continue;
+                        }
+                        let direction = [
+                            self.nodes[index].displacement[0] - self.nodes[other].displacement[0],
+                            self.nodes[index].displacement[1] - self.nodes[other].displacement[1],
+                        ];
+                        let scale = RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX / delta;
+                        self.nodes[index].displacement = [
+                            self.nodes[other].displacement[0] + direction[0] * scale,
+                            self.nodes[other].displacement[1] + direction[1] * scale,
+                        ];
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
+    /// Reverted cells are zeroed global-homography cells. Pull any adjacent
+    /// high residual toward the zero fallback so the 8px neighbour gate remains
+    /// true at the boundary of a reverted cell.
+    fn enforce_all_neighbour_bound(&mut self) {
+        for _ in 0..self.nodes.len().max(1) {
+            let mut changed = false;
+            for row in 0..self.field.height {
+                for column in 0..self.field.width {
+                    let index = row * self.field.width + column;
+                    for other in neighbour_indices(row, column, self.field.width, self.field.height)
+                    {
+                        if other <= index {
+                            continue;
+                        }
+                        let delta = displacement_delta(
+                            self.nodes[index].displacement,
+                            self.nodes[other].displacement,
+                        );
+                        if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX {
+                            continue;
+                        }
+                        let index_magnitude = self.nodes[index].displacement[0]
+                            .hypot(self.nodes[index].displacement[1]);
+                        let other_magnitude = self.nodes[other].displacement[0]
+                            .hypot(self.nodes[other].displacement[1]);
+                        let (high, low) = if index_magnitude >= other_magnitude {
+                            (index, other)
+                        } else {
+                            (other, index)
+                        };
+                        let direction = [
+                            self.nodes[high].displacement[0] - self.nodes[low].displacement[0],
+                            self.nodes[high].displacement[1] - self.nodes[low].displacement[1],
+                        ];
+                        let scale = RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX / delta;
+                        self.nodes[high].displacement = [
+                            self.nodes[low].displacement[0] + direction[0] * scale,
+                            self.nodes[low].displacement[1] + direction[1] * scale,
+                        ];
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
     }
 
     fn rebuild_field(&mut self) {
@@ -576,6 +703,41 @@ impl ResidualWarp {
         })
     }
 
+    /// Apply the inverse residual map for one station in world coordinates.
+    /// A residual is defined as `warped = world + displacement(world)`, so a
+    /// few fixed-point steps recover the source world point without replacing
+    /// the non-rigid field by a matrix.  Regions are keyed by their right-hand
+    /// station; absent regions are an exact identity.
+    pub(crate) fn inverse_world_for_station(
+        &self,
+        world: Point2<f64>,
+        station_id: usize,
+    ) -> Point2<f64> {
+        let Some(region) = self.regions.iter().find(|region| {
+            region.right_station == station_id && contains(&region.world, world.x, world.y)
+        }) else {
+            return world;
+        };
+        if self.identity() {
+            return world;
+        }
+        let mut source = world;
+        for _ in 0..4 {
+            let displacement = region.displacement_at(source.x, source.y);
+            let next = Point2::new(world.x - displacement[0], world.y - displacement[1]);
+            if (next - source).norm() < 1e-6 {
+                return next;
+            }
+            source = next;
+        }
+        source
+    }
+
+    /// Short compositor-facing alias for the world-space inverse query.
+    pub(crate) fn warp_inverse(&self, world: Point2<f64>, station_id: usize) -> Point2<f64> {
+        self.inverse_world_for_station(world, station_id)
+    }
+
     pub(crate) fn report_records(&self) -> Vec<WarpRegionRecord> {
         self.regions.iter().map(WarpRegion::report_record).collect()
     }
@@ -583,12 +745,16 @@ impl ResidualWarp {
 
 /// Run-scoped report sink, matching the Intra_Station and Focus_Fuser pattern.
 static RUN_RESIDUAL_WARP: Mutex<Vec<WarpRegionRecord>> = Mutex::new(Vec::new());
+static RUN_RESIDUAL_WARP_IDENTITY: Mutex<bool> = Mutex::new(true);
 
 pub(crate) fn reset_run_records() {
     RUN_RESIDUAL_WARP
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clear();
+    *RUN_RESIDUAL_WARP_IDENTITY
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
 }
 
 pub(crate) fn record_run_model(model: &ResidualWarp) {
@@ -596,6 +762,10 @@ pub(crate) fn record_run_model(model: &ResidualWarp) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     records.extend(model.report_records());
+    let mut identity = RUN_RESIDUAL_WARP_IDENTITY
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *identity &= model.identity();
 }
 
 pub(crate) fn run_records_snapshot() -> Vec<WarpRegionRecord> {
@@ -603,6 +773,15 @@ pub(crate) fn run_records_snapshot() -> Vec<WarpRegionRecord> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
+}
+
+pub(crate) fn run_report_snapshot() -> ResidualWarpReport {
+    ResidualWarpReport {
+        regions: run_records_snapshot(),
+        identity: *RUN_RESIDUAL_WARP_IDENTITY
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    }
 }
 
 /// Verify a forward match by matching the resulting point back into the source

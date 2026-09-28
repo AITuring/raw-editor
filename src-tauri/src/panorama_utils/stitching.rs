@@ -7,12 +7,14 @@ use super::stack_pipeline::intra_station;
 use super::stack_pipeline::report::{
     FusionReport, IntraStationFrameRecord, IntraStationFrameStatus, OwnershipGridSize,
 };
+use super::stack_pipeline::residual_warp;
 use super::stack_pipeline::station_degradation::{
     GroupJoinEvidence, GroupJoinRejection, StationMember, group_join_rejection,
     plan_station_fusion, record_run_entries, record_run_group_join_rejection, station_plan_entries,
 };
+use super::stack_pipeline::tone::{self, ToneTile};
 use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
-use image::{GrayImage, Rgb, Rgb32FImage};
+use image::{GrayImage, Luma, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -1538,6 +1540,11 @@ pub fn progressive_seam_stitcher<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    // Keep the tone/residual ledgers scoped to this compositor invocation.
+    // The panorama entry point also resets them at whole-run start (see the
+    // handoff snippet in the stage5 report).
+    tone::reset_run_records();
+    residual_warp::reset_run_records();
     if images.is_empty() {
         return Ok(Rgb32FImage::new(0, 0));
     }
@@ -2109,6 +2116,7 @@ where
     // Source-level semantic plane for the exact same write decisions. The u16
     // identifier is not capped at the 8-bit tone-group key above.
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
+    let mut tone_tiles = Vec::with_capacity(images.len());
     let row_stride = out_width as usize * 3;
     // A low-frequency consensus is accumulated from every virtual tile while
     // ownership is decided.  The final image keeps one tile's high-frequency
@@ -2337,6 +2345,19 @@ where
         let right = right.min(out_width.saturating_sub(1));
         let top = top.min(out_height.saturating_sub(1));
         let bottom = bottom.min(out_height.saturating_sub(1));
+        let low = tone::low_frequency_grid(&tile);
+        let low_width = low.width().max(1) as f64;
+        let low_height = low.height().max(1) as f64;
+        let world_size = ((right - left + 1) as f64, (bottom - top + 1) as f64);
+        tone_tiles.push(ToneTile {
+            station_index: image_info.id,
+            owner_id: (index + 1).min(u16::MAX as usize) as u16,
+            validity: GrayImage::from_pixel(low.width(), low.height(), Luma([255])),
+            low,
+            world_origin: (left as f64, top as f64),
+            world_size,
+            world_stride: (world_size.0 / low_width).max(world_size.1 / low_height),
+        });
         let image_width = tile.width() as f64;
         let image_height = tile.height() as f64;
         panorama
@@ -2621,6 +2642,21 @@ where
     // remaining owner-level tone difference using selected virtual-tile
     // regions at once; doing this after the consensus pass removes residual
     // source steps without averaging or replacing brush pixels.
+    if finishing == TileCompositorFinishing::LayeredVirtualTile {
+        let tone_report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &source_owner_ids,
+            out_width,
+            &tone_tiles,
+            &panorama_mask,
+        );
+        println!(
+            "  - Tone_Harmonizer: status={:?}, tiles={}, boundary_max_delta_e00={:.3}",
+            tone_report.status,
+            tone_report.tiles.len(),
+            tone_report.boundary_delta_e.max
+        );
+    }
     let empty_foreground = GrayImage::new(out_width, out_height);
     if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION").is_some() {
         if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {

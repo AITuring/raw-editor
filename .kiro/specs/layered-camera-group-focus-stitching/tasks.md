@@ -808,7 +808,7 @@
     - 同步更新 `tests/focus-stack-quality-contract.mjs`：新增四个 `RESIDUAL_WARP_*` 常量断言
     - _Requirements: 8.3, 8.4, 8.5, 8.6, 8.8, 8.9, 8.10_
 
-  - [x] 11.3 把 `ResidualWarp` 与 `tile_to_world` 复合成单次采样
+  - [~] 11.3 把 `ResidualWarp` 与 `tile_to_world` 复合成单次采样
     - `Tile_Compositor` 对每个目标像素求
       `tile_coord = warp_inverse(tile_to_world_inverse(world_coord))` 后一次性采样，
       使瓦片 → 世界重采样不超过 1 次
@@ -905,8 +905,9 @@
     - **Property 52: Owner_Region 边界低频色差有界或被记录**
     - **Validates: Requirements 9.8, 9.11**
 
-  - 执行记录：11.1–11.7 已实现并分别保留提交；残差与色调报告沿用 run sink，
-    旧路径函数本体保持不变。11.8–11.19 可选属性测试暂未新增。
+  - 执行记录：11.1–11.2、11.4–11.7 已实现并保留提交；残差与色调报告沿用 run sink，
+    默认 Tone_Harmonizer 已在 Ownership_Map 后调用。11.3 的实际站位 P95/观测接线待粘贴到
+    `panorama_stitching.rs`；11.8–11.19 可选属性测试暂未新增。
 
 - [~] 12. 阶段 5 检查点
   - 验证任意曝光差的合成扫描网格上边界带 Delta_E00 ≤1.5，
@@ -914,8 +915,9 @@
 
     - 执行记录：已落地残差场启用门槛、64px 网格、三项位移约束、外推与边界衰减；
       色调默认值收紧为 0.02/0.98/1024/ln(1.25)，增加有界 affine offset、3×MAD 过滤、
-      1/16 低频场和 owner 高频残差保持；移除三个旧色调环境变量。待完整测试与
-      `langyuan-10`、`wenyuan-10` 真实门禁完成后勾选本检查点。
+      1/16 低频场和 owner 高频残差保持；移除三个旧色调环境变量。两组真实门禁和完整测试已通过，
+      但 langyuan-10 报告边界 Delta_E00 最大 30.635（阈值 1.5），且 residual warp 的实际
+      站位 P95 接线仍待补入，故本检查点保持 [~]。
 
 - [ ] 13. 阶段 6：Tile_Compositor 成为默认路径
 
