@@ -10283,3 +10283,58 @@ proptest! {
         }
     }
 }
+
+// Stage 7 backfill snippets for tasks 11.9–11.14. Append each `proptest!`
+// block independently to properties.rs after task 11.8 is committed.
+
+// Task 11.9 / Property 42.
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 42: 写入的节点位移同时满足位移、邻接差与往返误差三项约束。
+    // **Validates: Requirements 8.3, 8.4, 8.5**
+    #[test]
+    fn property_42_residual_nodes_satisfy_all_three_gates(
+        displacement in (-8.0f64..8.0, -8.0f64..8.0),
+        round_trip in 0.0f64..=1.0,
+    ) {
+        use super::report::WorldRect;
+        use super::residual_warp::{OverlapResidual, WarpObservation};
+        let overlap = OverlapResidual::new(1, 2, WorldRect { left: 0.0, top: 0.0, width: 192.0, height: 192.0 }, 4.0);
+        let observations = (0..4).flat_map(|row| (0..4).map(move |column| WarpObservation::new(
+            super::report::WorldPoint { x: column as f64 * 64.0, y: row as f64 * 64.0 },
+            [displacement.0, displacement.1], round_trip,
+        ))).collect::<Vec<_>>();
+        let region = super::residual_warp::WarpRegion::from_observations(overlap, &observations);
+        if region.insufficient_evidence {
+            prop_assert!(region.is_identity());
+        }
+        for node in region.nodes() {
+            prop_assert!(node.displacement[0].hypot(node.displacement[1]) <= super::residual_warp::RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX + 1e-9);
+            if node.valid {
+                prop_assert!(node.round_trip_error_px <= super::residual_warp::RESIDUAL_WARP_MAX_ROUND_TRIP_ERROR_PX + 1e-9);
+            }
+        }
+        for row in 0..region.rows as usize {
+            for column in 0..region.columns as usize {
+                let index = row * region.columns as usize + column;
+                let mut neighbours = Vec::with_capacity(2);
+                if row > 0 {
+                    neighbours.push((row - 1) * region.columns as usize + column);
+                }
+                if column > 0 {
+                    neighbours.push(row * region.columns as usize + column - 1);
+                }
+                for other in neighbours {
+                    let delta = (region.nodes()[index].displacement[0] - region.nodes()[other].displacement[0])
+                        .hypot(region.nodes()[index].displacement[1] - region.nodes()[other].displacement[1]);
+                    prop_assert!(delta <= super::residual_warp::RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX + 1e-7);
+                }
+            }
+        }
+    }
+}

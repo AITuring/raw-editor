@@ -307,11 +307,11 @@ impl WarpRegion {
             global_cell_samples[cell].push(observation.global_error_px);
             residual_cell_samples[cell].push(observation.residual_error_px);
         }
-        let mut global_cell_error = global_cell_samples
+        let global_cell_error = global_cell_samples
             .iter_mut()
             .map(percentile95)
             .collect::<Vec<_>>();
-        let mut residual_cell_error = residual_cell_samples
+        let residual_cell_error = residual_cell_samples
             .iter_mut()
             .map(percentile95)
             .collect::<Vec<_>>();
@@ -358,6 +358,13 @@ impl WarpRegion {
 
     pub(crate) fn nodes(&self) -> &[WarpNode] {
         &self.nodes
+    }
+
+    pub(crate) fn is_identity(&self) -> bool {
+        self.field
+            .values
+            .iter()
+            .all(|value| value[0] == 0.0 && value[1] == 0.0)
     }
 
     /// Bilinearly sample the bounded residual at a world point.  The edge
