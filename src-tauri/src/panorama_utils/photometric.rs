@@ -215,8 +215,14 @@ pub(crate) fn calibrate_overlap_photometry(
         }
     }
 
-    let components = connected_components(tiles.len(), &pairs);
-    solve_constants(&mut models, &pairs, &components);
+    let components = connected_components(
+        tiles.len(),
+        &pairs
+            .iter()
+            .map(|pair| (pair.first, pair.second))
+            .collect::<Vec<_>>(),
+    );
+    solve_constants(&mut models, &pairs);
     limit_constants(&mut models, &components, options.max_abs_log_gain.max(0.0));
     let constant_error = validation_error(&models, &pairs);
     let mut corrected_error = constant_error;
@@ -233,7 +239,7 @@ pub(crate) fn calibrate_overlap_photometry(
             linear_used = true;
         }
     }
-    solve_offsets(&mut models, &pairs, &components, PHOTOMETRIC_MAX_ABS_OFFSET);
+    solve_offsets(&mut models, &pairs, PHOTOMETRIC_MAX_ABS_OFFSET);
     PhotometricCalibration {
         models,
         pairs: diagnostics,
@@ -394,11 +400,11 @@ fn rgb_distance(a: [f64; 3], b: [f64; 3]) -> f64 {
     ((0..3).map(|c| (a[c] - b[c]).powi(2)).sum::<f64>() / 3.0).sqrt()
 }
 
-fn connected_components(count: usize, pairs: &[Pair]) -> Vec<Vec<usize>> {
+fn connected_components(count: usize, pairs: &[(usize, usize)]) -> Vec<Vec<usize>> {
     let mut labels: Vec<_> = (0..count).collect();
-    for pair in pairs {
-        let old = labels[pair.second];
-        let new = labels[pair.first];
+    for &(first, second) in pairs {
+        let old = labels[second];
+        let new = labels[first];
         for label in &mut labels {
             if *label == old {
                 *label = new;
@@ -448,37 +454,109 @@ fn add_gauges(normal: &mut DMatrix<f64>, components: &[Vec<usize>], stride: usiz
     }
 }
 
-fn solve_constants(models: &mut [PhotometricModel], pairs: &[Pair], components: &[Vec<usize>]) {
+/// One equation `x[first] − x[second] = value` of a tile relation graph.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PairwiseDifference {
+    pub(crate) first: usize,
+    pub(crate) second: usize,
+    pub(crate) value: f64,
+    pub(crate) weight: f64,
+    /// Huber scale of the equation residual; `None` keeps the plain weight.
+    pub(crate) huber_scale: Option<f64>,
+}
+
+/// Weighted least squares over a relation graph: the joint solve shared by the
+/// log gains and the offsets of both this calibration and the stack
+/// Tone_Harmonizer. Each connected component is held at zero mean, so neither
+/// an arbitrary anchor nor input order sets its level, and a tile without an
+/// equation stays exactly zero. Equations with a Huber scale are reweighted
+/// iteratively, which bounds the pull of one inconsistent relation in a loop.
+pub(crate) fn solve_pairwise_differences(
+    count: usize,
+    equations: &[PairwiseDifference],
+) -> Option<Vec<f64>> {
+    let equations = equations
+        .iter()
+        .filter(|equation| {
+            equation.first < count
+                && equation.second < count
+                && equation.first != equation.second
+                && equation.value.is_finite()
+                && equation.weight.is_finite()
+                && equation.weight > 0.0
+        })
+        .copied()
+        .collect::<Vec<_>>();
+    let components = connected_components(
+        count,
+        &equations
+            .iter()
+            .map(|equation| (equation.first, equation.second))
+            .collect::<Vec<_>>(),
+    );
+    let iterations = if equations
+        .iter()
+        .any(|equation| equation.huber_scale.is_some())
+    {
+        12
+    } else {
+        1
+    };
+    let mut solution = DVector::zeros(count);
+    for iteration in 0..iterations {
+        let mut normal = DMatrix::zeros(count, count);
+        let mut rhs = DVector::zeros(count);
+        for equation in &equations {
+            let residual = solution[equation.first] - solution[equation.second] - equation.value;
+            let weight = equation.weight
+                * equation
+                    .huber_scale
+                    .map_or(1.0, |scale| huber_weight(residual, scale));
+            add_equation(
+                &mut normal,
+                &mut rhs,
+                &[(equation.first, 1.0), (equation.second, -1.0)],
+                equation.value,
+                weight,
+            );
+        }
+        add_gauges(&mut normal, &components, 1);
+        // A reweighted system keeps the last solved iterate; only a graph
+        // that cannot be solved at all has no solution.
+        let Some(decomposition) = normal.cholesky() else {
+            if iteration == 0 {
+                return None;
+            }
+            break;
+        };
+        let next = decomposition.solve(&rhs);
+        let change = (&next - &solution).amax();
+        solution = next;
+        if change < 1e-8 {
+            break;
+        }
+    }
+    Some(solution.iter().copied().collect())
+}
+
+fn solve_constants(models: &mut [PhotometricModel], pairs: &[Pair]) {
     if models.is_empty() {
         return;
     }
     for channel in 0..3 {
-        let mut solution = DVector::zeros(models.len());
-        for _ in 0..12 {
-            let mut normal = DMatrix::zeros(models.len(), models.len());
-            let mut rhs = DVector::zeros(models.len());
-            for pair in pairs {
-                let residual = solution[pair.first] - solution[pair.second] - pair.median[channel];
-                let weight = pair.weight * huber_weight(residual, 0.025 + pair.scatter);
-                add_equation(
-                    &mut normal,
-                    &mut rhs,
-                    &[(pair.first, 1.0), (pair.second, -1.0)],
-                    pair.median[channel],
-                    weight,
-                );
-            }
-            add_gauges(&mut normal, components, 1);
-            let Some(decomposition) = normal.cholesky() else {
-                break;
-            };
-            let next = decomposition.solve(&rhs);
-            let change = (&next - &solution).amax();
-            solution = next;
-            if change < 1e-8 {
-                break;
-            }
-        }
+        let equations = pairs
+            .iter()
+            .map(|pair| PairwiseDifference {
+                first: pair.first,
+                second: pair.second,
+                value: pair.median[channel],
+                weight: pair.weight,
+                huber_scale: Some(0.025 + pair.scatter),
+            })
+            .collect::<Vec<_>>();
+        let Some(solution) = solve_pairwise_differences(models.len(), &equations) else {
+            continue;
+        };
         for (index, model) in models.iter_mut().enumerate() {
             model.log_gain[channel][0] = solution[index];
         }
@@ -579,18 +657,12 @@ fn solve_linear(
 /// direction as the log-gain relation (`offset[first] - offset[second]`).
 /// Components retain a zero-mean gauge, and the final value is clipped to the
 /// small linear-light bound required by Tone_Harmonizer.
-fn solve_offsets(
-    models: &mut [PhotometricModel],
-    pairs: &[Pair],
-    components: &[Vec<usize>],
-    max_abs_offset: f64,
-) {
+fn solve_offsets(models: &mut [PhotometricModel], pairs: &[Pair], max_abs_offset: f64) {
     if models.is_empty() || pairs.is_empty() {
         return;
     }
     for channel in 0..3 {
-        let mut normal = DMatrix::zeros(models.len(), models.len());
-        let mut rhs = DVector::zeros(models.len());
+        let mut equations = Vec::with_capacity(pairs.len());
         for pair in pairs {
             let mut values = Vec::with_capacity(pair.observations.len());
             for observation in &pair.observations {
@@ -617,20 +689,17 @@ fn solve_offsets(
                         - first_gain * observation.first_rgb[channel],
                 );
             }
-            let value = median_value(values);
-            add_equation(
-                &mut normal,
-                &mut rhs,
-                &[(pair.first, 1.0), (pair.second, -1.0)],
-                value,
-                pair.weight,
-            );
+            equations.push(PairwiseDifference {
+                first: pair.first,
+                second: pair.second,
+                value: median_value(values),
+                weight: pair.weight,
+                huber_scale: None,
+            });
         }
-        add_gauges(&mut normal, components, 1);
-        let Some(decomposition) = normal.cholesky() else {
+        let Some(solution) = solve_pairwise_differences(models.len(), &equations) else {
             continue;
         };
-        let solution = decomposition.solve(&rhs);
         for (index, model) in models.iter_mut().enumerate() {
             let solved = solution[index];
             let bounded = solved.clamp(-max_abs_offset, max_abs_offset);

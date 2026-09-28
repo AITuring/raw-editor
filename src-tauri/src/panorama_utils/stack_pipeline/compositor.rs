@@ -20,6 +20,9 @@ use nalgebra::{Matrix3, Point2, Point3};
 /// once by the residual inverse; the caller then performs one pixel sample at
 /// the returned coordinate.  Keeping this as a pure function makes the
 /// single-resample contract testable without decoding a Virtual_Tile.
+/// Production samples through `map_target_to_source_with_residual`; this is
+/// its test oracle.
+#[cfg(test)]
 pub(crate) fn tile_coordinate_from_world(
     world: Point2<f64>,
     tile_to_world_inverse: &Matrix3<f64>,
@@ -64,6 +67,9 @@ fn project_inverse(matrix: &Matrix3<f64>, point: Point2<f64>) -> Option<Point2<f
 }
 
 /// Ownership is a semantic plane and tone correction must not rewrite it.
+/// Production hands the Tone_Harmonizer the ownership plane as an immutable
+/// slice, so requirement 9.6 holds by construction; tests assert it.
+#[cfg(test)]
 pub(crate) fn assert_ownership_unchanged(before: &[u16], after: &[u16]) {
     assert_eq!(
         before.len(),

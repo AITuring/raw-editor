@@ -13,9 +13,9 @@ use super::stack_pipeline::station_degradation::{
     GroupJoinEvidence, GroupJoinRejection, StationMember, group_join_rejection,
     plan_station_fusion, record_run_entries, record_run_group_join_rejection, station_plan_entries,
 };
-use super::stack_pipeline::tone::{self, ToneTile};
+use super::stack_pipeline::tone;
 use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
-use image::{GrayImage, Luma, Rgb, Rgb32FImage};
+use image::{GrayImage, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -1233,7 +1233,7 @@ impl ExposureCompensation {
         // The spatial field remains available for diagnostics, but production
         // uses the one robust overlap constant.  `allow_linear = false` is the
         // single photometric wiring decision for the default Tone_Harmonizer.
-        return self.representative_gain;
+        self.representative_gain
     }
 
     /// Diagnostic-only spatial scalar field retained for comparison reports.
@@ -1263,7 +1263,7 @@ impl ExposureCompensation {
         // become visible chromatic rectangles across a long scan.
         // Keep the per-cell RGB field for comparison diagnostics, while the
         // shipped path uses the robust representative value.
-        return self.representative_channel_gain;
+        self.representative_channel_gain
     }
 
     /// Diagnostic-only spatial RGB field retained for comparison reports.
@@ -2147,6 +2147,10 @@ where
     // identifier is not capped at the 8-bit tone-group key above.
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
     let mut tone_tiles = Vec::with_capacity(images.len());
+    let mut tone_tile_ids = Vec::with_capacity(images.len());
+    // Station indices and accepted Station_Relations of this run, published by
+    // the station solve; without them no tile pair is tone evidence.
+    let tone_topology = tone::run_topology_snapshot().unwrap_or_default();
     let row_stride = out_width as usize * 3;
     // A low-frequency consensus is accumulated from every virtual tile while
     // ownership is decided.  The final image keeps one tile's high-frequency
@@ -2380,19 +2384,28 @@ where
         let right = right.min(out_width.saturating_sub(1));
         let top = top.min(out_height.saturating_sub(1));
         let bottom = bottom.min(out_height.saturating_sub(1));
-        let low = tone::low_frequency_grid(&tile);
-        let low_width = low.width().max(1) as f64;
-        let low_height = low.height().max(1) as f64;
-        let world_size = ((right - left + 1) as f64, (bottom - top + 1) as f64);
-        tone_tiles.push(ToneTile {
-            station_index: image_info.id,
-            owner_id: (index + 1).min(u16::MAX as usize) as u16,
-            validity: GrayImage::from_pixel(low.width(), low.height(), Luma([255])),
-            low,
-            world_origin: (left as f64, top as f64),
-            world_size,
-            world_stride: (world_size.0 / low_width).max(world_size.1 / low_height),
-        });
+        // The tone field reads covered tile pixels only and is resampled
+        // through the same world-to-tile map the pixels below are drawn with,
+        // so neighbouring tiles are compared where they show the same content.
+        tone_tile_ids.push(image_info.id);
+        tone_tiles.push(tone::world_aligned_tone_tile(
+            tone_topology
+                .station_of(image_info.id)
+                .unwrap_or(image_info.id),
+            (index + 1).min(u16::MAX as usize) as u16,
+            &tile,
+            (left, top, right, bottom),
+            |x, y| {
+                map_target_to_source_with_residual(
+                    &inverse,
+                    Point3::new(x - offset_x, y - offset_y, 1.0),
+                    image_info,
+                    projection,
+                    &residual_model,
+                )
+                .map(|source| (source.x, source.y))
+            },
+        ));
         let image_width = tile.width() as f64;
         let image_height = tile.height() as f64;
         panorama
@@ -2682,12 +2695,19 @@ where
     // regions at once; doing this after the consensus pass removes residual
     // source steps without averaging or replacing brush pixels.
     if finishing == TileCompositorFinishing::LayeredVirtualTile {
+        let tone_tile_index = |image_id: usize| tone_tile_ids.iter().position(|&id| id == image_id);
+        let tone_relations = tone_topology
+            .accepted
+            .iter()
+            .filter_map(|&(left, right)| Some((tone_tile_index(left)?, tone_tile_index(right)?)))
+            .collect::<Vec<_>>();
         let tone_report = tone::harmonize_tone_tiles(
             &mut panorama,
             &source_owner_ids,
             out_width,
             &tone_tiles,
             &panorama_mask,
+            &tone_relations,
         );
         println!(
             "  - Tone_Harmonizer: status={:?}, tiles={}, boundary_max_delta_e00={:.3}",

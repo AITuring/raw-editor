@@ -6384,6 +6384,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // a later run must never see an earlier run's model (需求 8.1, 9.11).
     residual_warp::reset_run_records();
     tone::reset_run_records();
+    // The accepted Station_Relations the Tone_Harmonizer samples from belong to
+    // this run's station solve only (需求 9.1).
+    tone::reset_run_topology();
     // Capture_Topology_Model observations are likewise scoped to this run so
     // the report receives exactly the topology used by the production station
     // relation candidate gate (需求 5.1 / 5.7).
@@ -7981,6 +7984,25 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 &mut station_relations,
                             );
                             let component_count = station_relations.connectivity.components;
+                            // 需求 9.1: the Tone_Harmonizer samples only the
+                            // overlaps of these accepted relations.
+                            tone::record_run_topology(tone::ToneStationTopology {
+                                stations: tile_infos
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(station, tile)| (tile.id, station))
+                                    .collect(),
+                                accepted: station_relations
+                                    .accepted
+                                    .iter()
+                                    .filter_map(|relation| {
+                                        Some((
+                                            tile_infos.get(relation.left)?.id,
+                                            tile_infos.get(relation.right)?.id,
+                                        ))
+                                    })
+                                    .collect(),
+                            });
                             station_relations.candidates = tile_relation_candidates.clone();
                             station_relations.prior_repairs = prior_repair_records.clone();
                             if let Some(recorder) = stack_report.as_ref() {
