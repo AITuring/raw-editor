@@ -1284,3 +1284,691 @@ fn virtual_tile_polish_correspondences_skip_low_texture_templates() {
     assert_eq!(counts.probes, 25);
     assert_eq!(counts.textured, counts.probes);
 }
+
+/// Deterministic zero-mean pseudo-noise in `[-amplitude, amplitude]`.
+fn hashed_noise(x: u32, y: u32, seed: u32, amplitude: f64) -> f64 {
+    let mut value = x
+        .wrapping_mul(0x9E37_79B1)
+        .wrapping_add(y.wrapping_mul(0x85EB_CA77))
+        .wrapping_add(seed.wrapping_mul(0xC2B2_AE3D));
+    value ^= value >> 15;
+    value = value.wrapping_mul(0x2C1B_3C6D);
+    value ^= value >> 12;
+    (f64::from(value % 2_001) / 1_000.0 - 1.0) * amplitude
+}
+
+fn candidate_topology(station_count: usize) -> topology::StationTopology {
+    topology::StationTopology {
+        row: vec![0; station_count],
+        column: (0..station_count as u32).collect(),
+        candidates: (0..station_count)
+            .flat_map(|left| {
+                (left + 1..station_count).map(move |right| topology::CandidateAdjacency {
+                    left,
+                    right,
+                    kind: report::AdjacencyKind::SameRow,
+                    score: 1.0,
+                })
+            })
+            .collect(),
+        ..topology::StationTopology::default()
+    }
+}
+
+fn measured_relation(
+    homography: Matrix3<f64>,
+    points: Vec<(Point2<f64>, Point2<f64>)>,
+) -> MatchInfo {
+    MatchInfo {
+        homography,
+        inliers: points.len(),
+        sequence_bridge: false,
+        coarse_bridge: false,
+        candidate_points: points.clone(),
+        points,
+        top_candidate_points: Vec::new(),
+        dense_focus_points: Vec::new(),
+        foreground_feature_points: Vec::new(),
+        canonical_homography: None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 7. residual model selection
+// ---------------------------------------------------------------------------
+
+/// `rows × columns` measured pairs of `correction · initial` on a 500×400 tile.
+fn residual_selection_points(
+    initial: &Matrix3<f64>,
+    correction: &Matrix3<f64>,
+    columns: usize,
+    rows: usize,
+) -> Vec<(Point2<f64>, Point2<f64>)> {
+    let measured = correction * initial;
+    (0..rows)
+        .flat_map(|row| {
+            (0..columns).map(move |column| {
+                let source = Point2::new(
+                    40.0 + column as f64 * 420.0 / (columns - 1) as f64,
+                    35.0 + row as f64 * 330.0 / (rows - 1) as f64,
+                );
+                (source, transformed_point(&measured, source).unwrap())
+            })
+        })
+        .collect()
+}
+
+fn fit_residual_model(
+    points: &[(Point2<f64>, Point2<f64>)],
+    initial: &Matrix3<f64>,
+    selection: VirtualTileResidualSelection,
+) -> VirtualTileResidualModelOutcome {
+    virtual_tile_fit_measured_residual_model_with_threshold(
+        points,
+        initial,
+        (500, 400),
+        (500, 400),
+        STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+        virtual_tile_full_tile_bounds((500, 400)),
+        selection,
+        StationOverlapMeasure::Rectangles,
+    )
+}
+
+#[test]
+fn most_inliers_selection_keeps_the_richer_model_a_passing_translation_would_truncate() {
+    let initial = translation(-90.0, 5.0);
+    // A 0.9° rotation about the tile centre: a translation explains only the
+    // central band within 3px; the bounded affine explains every pair.
+    let correction = translation(1.5, -2.0) * about_center((250.0, 200.0), rotation(0.0157));
+    let points = residual_selection_points(&initial, &correction, 10, 8);
+
+    let lowest = fit_residual_model(
+        &points,
+        &initial,
+        VirtualTileResidualSelection::LowestComplexity,
+    );
+    let lowest_fit = lowest.fit.expect("the translation stage passes on its own");
+    assert_eq!(lowest_fit.model, "translation");
+    assert_eq!(lowest.translation.rejection_reason, "accepted");
+    assert_eq!(lowest.affine.rejection_reason, "not_run");
+    assert!(lowest_fit.inlier_indices.len() < points.len());
+
+    let most = fit_residual_model(&points, &initial, VirtualTileResidualSelection::MostInliers);
+    let most_fit = most.fit.expect("every stage is evaluated");
+    assert_eq!(most.translation.rejection_reason, "accepted");
+    assert_eq!(most.affine.rejection_reason, "accepted");
+    assert_ne!(most_fit.model, "translation");
+    assert_eq!(most_fit.inlier_indices.len(), points.len());
+    assert!(most_fit.inlier_indices.len() > lowest_fit.inlier_indices.len());
+    for (source, target) in &points {
+        let predicted = transformed_point(&most_fit.measured_homography, *source).unwrap();
+        assert!((predicted - target).norm() < 1e-6);
+    }
+}
+
+#[test]
+fn most_inliers_selection_breaks_an_inlier_tie_by_strictly_lower_median_error() {
+    let initial = translation(-90.0, 5.0);
+    // Small enough that the translation keeps every pair within 3px, yet
+    // leaves a measurable error that the affine stage removes.
+    let correction = translation(1.5, -2.0) * about_center((250.0, 200.0), rotation(0.004));
+    let points = residual_selection_points(&initial, &correction, 10, 8);
+
+    let lowest = fit_residual_model(
+        &points,
+        &initial,
+        VirtualTileResidualSelection::LowestComplexity,
+    );
+    let lowest_fit = lowest.fit.expect("translation passes");
+    assert_eq!(lowest_fit.model, "translation");
+    assert_eq!(lowest_fit.inlier_indices.len(), points.len());
+    assert!(lowest_fit.median_error_px > 0.1);
+
+    let most = fit_residual_model(&points, &initial, VirtualTileResidualSelection::MostInliers);
+    let most_fit = most.fit.expect("every stage is evaluated");
+    assert_eq!(most_fit.inlier_indices.len(), points.len());
+    assert_ne!(
+        most_fit.model, "translation",
+        "the tie goes to the lower error"
+    );
+    assert!(most_fit.median_error_px < lowest_fit.median_error_px);
+}
+
+// ---------------------------------------------------------------------------
+// 8. polish fit and polished station match
+// ---------------------------------------------------------------------------
+
+fn polish_truth() -> Matrix3<f64> {
+    translation(-60.0, 8.0)
+        * about_center((240.0, 180.0), rotation(0.008) * uniform_scale(1.004))
+        * Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.000_012, -0.000_008, 1.0)
+}
+
+#[test]
+fn virtual_tile_polish_fit_recovers_a_projective_relation_and_drops_outliers() {
+    let truth = polish_truth();
+    let mut correspondences = (0..8)
+        .flat_map(|row| (0..8).map(move |column| (row, column)))
+        .map(|(row, column)| {
+            let source = Point2::new(90.0 + 45.0 * column as f64, 40.0 + 40.0 * row as f64);
+            let target = transformed_point(&truth, source).unwrap()
+                + nalgebra::Vector2::new(
+                    hashed_noise(column, row, 1, 0.3),
+                    hashed_noise(column, row, 2, 0.3),
+                );
+            (source, target)
+        })
+        .collect::<Vec<_>>();
+    let true_count = correspondences.len();
+    for outlier in 0..16u32 {
+        let source = Point2::new(
+            100.0 + 21.0 * f64::from(outlier),
+            60.0 + 13.0 * f64::from(outlier),
+        );
+        let offset = nalgebra::Vector2::new(
+            25.0 + 2.0 * f64::from(outlier),
+            -30.0 + 3.0 * f64::from(outlier % 5),
+        );
+        correspondences.push((source, transformed_point(&truth, source).unwrap() + offset));
+    }
+    let threshold = VIRTUAL_TILE_POLISH_INLIER_THRESHOLD_NATIVE_PX;
+    let (fitted, inliers) = virtual_tile_polish_fit(&correspondences, threshold, (480, 360))
+        .expect("64 consistent pairs among 16 outliers");
+    assert_eq!(inliers, (0..true_count).collect::<Vec<_>>());
+    for (x, y) in [
+        (90.0, 40.0),
+        (405.0, 40.0),
+        (90.0, 320.0),
+        (405.0, 320.0),
+        (240.0, 180.0),
+    ] {
+        let point = Point2::new(x, y);
+        let error = (transformed_point(&fitted, point).unwrap()
+            - transformed_point(&truth, point).unwrap())
+        .norm();
+        assert!(error < 0.3, "{error} px at ({x}, {y})");
+    }
+
+    // Fewer than 24 consistent pairs is no relation.
+    assert!(virtual_tile_polish_fit(&correspondences[..20], threshold, (480, 360)).is_none());
+    // A mirrored relation is never a valid planar station relation.
+    let mirror = Matrix3::new(-1.0, 0.0, 480.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+    let mirrored = correspondences[..true_count]
+        .iter()
+        .map(|&(source, _)| (source, transformed_point(&mirror, source).unwrap()))
+        .collect::<Vec<_>>();
+    assert!(virtual_tile_polish_fit(&mirrored, threshold, (480, 360)).is_none());
+}
+
+#[test]
+fn virtual_tile_polished_station_match_recovers_a_perturbed_seed_on_noisy_planes() {
+    let (width, height) = (480u32, 360u32);
+    let truth = polish_truth();
+    let inverse = truth.try_inverse().unwrap();
+    let left = GrayImage::from_fn(width, height, |x, y| {
+        let value = textured_value(f64::from(x), f64::from(y)) + hashed_noise(x, y, 3, 3.0);
+        image::Luma([value.clamp(0.0, 255.0).round() as u8])
+    });
+    let right = GrayImage::from_fn(width, height, |x, y| {
+        let source = transformed_point(&inverse, Point2::new(f64::from(x), f64::from(y))).unwrap();
+        let value = textured_value(source.x, source.y) + hashed_noise(x, y, 4, 3.0);
+        image::Luma([value.clamp(0.0, 255.0).round() as u8])
+    });
+    let (left_info, right_info) = (plane_info(0, left), plane_info(1, right));
+    let coverage = full_coverage(width, height);
+    // The seed misses by a 2.5px shift and a 0.15° rotation: inside the
+    // first ±8px pass, outside the requirement-6.3 3px tolerance at the edges.
+    let seed = translation(2.5, -1.5) * about_center((240.0, 180.0), rotation(0.0026)) * truth;
+    let mut diagnostic = sample_candidate_record();
+    let relation = virtual_tile_polished_station_match(
+        &left_info,
+        &coverage,
+        &right_info,
+        &coverage,
+        1,
+        &seed,
+        ((width, height), (width, height)),
+        &mut diagnostic,
+    )
+    .unwrap_or_else(|| panic!("polish must recover the seed: {diagnostic:?}"));
+    assert_eq!(diagnostic.failure_stage, "fitted");
+    assert_eq!(diagnostic.residual_model, "polished_projective");
+    assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
+    assert!(diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT);
+    assert!(relation.canonical_homography.is_none());
+    for (x, y) in [
+        (120.0, 60.0),
+        (400.0, 60.0),
+        (120.0, 300.0),
+        (400.0, 300.0),
+        (260.0, 180.0),
+    ] {
+        let point = Point2::new(x, y);
+        let error = (transformed_point(&relation.homography, point).unwrap()
+            - transformed_point(&truth, point).unwrap())
+        .norm();
+        assert!(error < 0.75, "{error} px at ({x}, {y})");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4b. coverage-aware requirement-6.8 re-check through the station solver
+// ---------------------------------------------------------------------------
+
+#[test]
+fn virtual_tile_solver_rechecks_requirement_6_8_on_covered_pixels_only() {
+    // Tile 1 shows tile 0 shifted by (40, 6) but carries a zero-valued,
+    // uncovered band x ∈ [150, 250) inside the overlap.
+    let (width, height) = (400u32, 300u32);
+    let band = |x: u32| (150..250).contains(&x);
+    let left = textured_plane(width, height);
+    let right = GrayImage::from_fn(width, height, |x, y| {
+        if band(x) {
+            image::Luma([0])
+        } else {
+            image::Luma([textured_value(f64::from(x) + 40.0, f64::from(y) + 6.0).round() as u8])
+        }
+    });
+    let tiles = vec![plane_info(0, left), plane_info(1, right)];
+    let left_to_right = translation(-40.0, -6.0);
+    let points = [60.0, 100.0, 140.0, 180.0, 300.0, 340.0, 380.0]
+        .into_iter()
+        .flat_map(|x| (0..6).map(move |row| Point2::new(x, 30.0 + 50.0 * f64::from(row))))
+        .map(|source| (source, transformed_point(&left_to_right, source).unwrap()))
+        .collect::<Vec<_>>();
+    let matches = HashMap::from([((0, 1), measured_relation(left_to_right, points))]);
+    let initial = HashMap::from([
+        (tiles[0].id, Matrix3::identity()),
+        (tiles[1].id, left_to_right.try_inverse().unwrap()),
+    ]);
+    let station_topology = candidate_topology(2);
+    let solve = |coverages: &[stitching::CoverageMask]| {
+        let mut closure = report::ClosureReport::default();
+        let mut relations = report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            VirtualTileSolverCoverages {
+                quality: coverages,
+                overlap: coverages,
+                overlap_factor: 1,
+            },
+            &matches,
+            &initial,
+            &station_topology,
+            &mut closure,
+            &mut relations,
+        );
+        (solved, relations)
+    };
+
+    let masked = [
+        full_coverage(width, height),
+        coverage_from_fn(width, height, |x, _| !band(x)),
+    ];
+    let (solved, relations) = solve(&masked);
+    assert_eq!(solved.len(), 2, "{relations:?}");
+    assert_eq!(relations.accepted.len(), 1);
+
+    // Treating the band as content lets its zeros reach the low-frequency and
+    // edge-strength statistics, which then reject the same relation.
+    let unmasked = [full_coverage(width, height), full_coverage(width, height)];
+    let (solved, relations) = solve(&unmasked);
+    assert!(solved.is_empty(), "{relations:?}");
+    assert!(relations.accepted.is_empty());
+    assert!(
+        relations
+            .rejected_by_reason
+            .contains_key("station_relation_photometric_mismatch"),
+        "{relations:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// checkpoint 10: closure on a synthetic two-dimensional scan grid
+// ---------------------------------------------------------------------------
+
+/// Worst reprojection disagreement of one translation relation under `poses`,
+/// on a lattice over the left tile clipped to the right tile.
+fn translation_pair_error(
+    dimensions: (u32, u32),
+    poses: &[Matrix3<f64>],
+    left: usize,
+    right: usize,
+    left_to_right: &Matrix3<f64>,
+) -> f64 {
+    let (width, height) = (f64::from(dimensions.0), f64::from(dimensions.1));
+    let mut worst = 0.0f64;
+    for row in 0..=10 {
+        for column in 0..=10 {
+            let source = Point2::new(
+                (width - 1.0) * f64::from(column) / 10.0,
+                (height - 1.0) * f64::from(row) / 10.0,
+            );
+            let target = transformed_point(left_to_right, source).unwrap();
+            if !(0.0..width).contains(&target.x) || !(0.0..height).contains(&target.y) {
+                continue;
+            }
+            let error = (transformed_point(&poses[left], source).unwrap()
+                - transformed_point(&poses[right], target).unwrap())
+            .norm();
+            worst = worst.max(error);
+        }
+    }
+    worst
+}
+
+#[test]
+fn checkpoint_ten_scan_grid_closure_corrects_tree_drift_within_the_residual_bounds() {
+    use super::station_relation_test_access::{self, ClosureRelationView};
+
+    // A 3×3 serpentine scan; each spanning-tree step along the scan path adds
+    // (0.6, −0.4)px of drift, so the tree alone misplaces loop partners by up
+    // to five steps (3.6px) while every relation measures the true geometry.
+    let dimensions = (512u32, 384u32);
+    let serpentine = [
+        (0u32, 0u32),
+        (0, 1),
+        (0, 2),
+        (1, 2),
+        (1, 1),
+        (1, 0),
+        (2, 0),
+        (2, 1),
+        (2, 2),
+    ];
+    let world = |station: usize| {
+        let (row, column) = serpentine[station];
+        (f64::from(column) * 360.0, f64::from(row) * 270.0)
+    };
+    let drift = nalgebra::Vector2::new(0.6, -0.4);
+    let base = (0..serpentine.len())
+        .map(|station| {
+            let (x, y) = world(station);
+            translation(x + drift.x * station as f64, y + drift.y * station as f64)
+        })
+        .collect::<Vec<_>>();
+    let station_of = |row: u32, column: u32| {
+        serpentine
+            .iter()
+            .position(|&cell| cell == (row, column))
+            .unwrap()
+    };
+    let mut relations = Vec::new();
+    for row in 0..3u32 {
+        for column in 0..3u32 {
+            for (next_row, next_column) in [(row, column + 1), (row + 1, column)] {
+                if next_row > 2 || next_column > 2 {
+                    continue;
+                }
+                let (a, b) = (station_of(row, column), station_of(next_row, next_column));
+                let (left, right) = (a.min(b), a.max(b));
+                let ((left_x, left_y), (right_x, right_y)) = (world(left), world(right));
+                let noise = |salt: u32| hashed_noise(left as u32, right as u32, salt, 0.25);
+                let tree_edge = right == left + 1;
+                // Tree edges carry exactly the drifted placement the tree was
+                // built from; loop edges carry the true geometry.
+                let (dx, dy) = if tree_edge {
+                    (-drift.x, -drift.y)
+                } else {
+                    (noise(1), noise(2))
+                };
+                relations.push(ClosureRelationView {
+                    score: 1.0,
+                    left,
+                    right,
+                    left_to_right: translation(left_x - right_x + dx, left_y - right_y + dy),
+                    independent_support: 3,
+                    median_error_px: 0.5,
+                });
+            }
+        }
+    }
+    assert_eq!(relations.len(), 12, "6 horizontal + 6 vertical relations");
+    let tree_worst = relations
+        .iter()
+        .map(|relation| {
+            translation_pair_error(
+                dimensions,
+                &base,
+                relation.left,
+                relation.right,
+                &relation.left_to_right,
+            )
+        })
+        .fold(0.0f64, f64::max);
+    assert!(
+        tree_worst > 3.0,
+        "the drifted tree alone violates the pair bound: {tree_worst}"
+    );
+
+    let rows = serpentine.iter().map(|&(row, _)| row).collect::<Vec<_>>();
+    let columns = serpentine
+        .iter()
+        .map(|&(_, column)| column)
+        .collect::<Vec<_>>();
+    let run =
+        station_relation_test_access::closure_run(dimensions, &rows, &columns, &base, &relations);
+    assert_eq!(
+        run.report.status,
+        report::ClosureStatus::Converged,
+        "{:?}",
+        run.report
+    );
+    assert_eq!(run.report.participating_constraints, relations.len());
+    assert!(run.report.residual_median_px <= 2.0, "{:?}", run.report);
+    assert!(run.report.max_direct_pair_p95_px <= 3.0, "{:?}", run.report);
+    assert_eq!(run.report.offending_pair, None);
+    assert_eq!(run.report.clamped_stations, 0);
+    let closed_worst = relations
+        .iter()
+        .map(|relation| {
+            translation_pair_error(
+                dimensions,
+                &run.poses,
+                relation.left,
+                relation.right,
+                &relation.left_to_right,
+            )
+        })
+        .fold(0.0f64, f64::max);
+    assert!(closed_worst <= 3.0, "{closed_worst}");
+    assert!(closed_worst < tree_worst);
+}
+
+// ---------------------------------------------------------------------------
+// requirement 6.4 over the doubly covered overlap
+// ---------------------------------------------------------------------------
+
+#[test]
+fn virtual_tile_covered_overlap_area_counts_only_doubly_covered_pixels() {
+    let (width, height) = (100u32, 80u32);
+    let source = coverage_from_fn(width, height, |x, y| !(10..30).contains(&x) || y >= 40);
+    let target = coverage_from_fn(width, height, |x, y| x < 90 && !(50..60).contains(&y));
+    let count = |shift: u32| {
+        (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                x + shift < width && source.is_covered(x, y) && target.is_covered(x + shift, y)
+            })
+            .count() as f64
+    };
+    let area = |relation: &Matrix3<f64>| {
+        virtual_tile_covered_overlap_area(
+            &source,
+            (width, height),
+            &target,
+            (width, height),
+            1,
+            relation,
+        )
+        .unwrap()
+    };
+    assert_eq!(area(&Matrix3::identity()), count(0));
+    assert_eq!(area(&translation(20.0, 0.0)), count(20));
+
+    // A factor-2 mask pixel is a 2×2 block of relation pixels.
+    let coarse_source = full_coverage(50, 40);
+    let coarse_target = coverage_from_fn(50, 40, |x, _| x < 25);
+    let coarse = virtual_tile_covered_overlap_area(
+        &coarse_source,
+        (100, 80),
+        &coarse_target,
+        (101, 81),
+        2,
+        &Matrix3::identity(),
+    )
+    .unwrap();
+    assert_eq!(coarse, 25.0 * 40.0 * 4.0);
+
+    // A mask that does not tile its plane is no measurement.
+    assert!(
+        virtual_tile_covered_overlap_area(
+            &source,
+            (width + 2, height),
+            &target,
+            (width, height),
+            1,
+            &Matrix3::identity(),
+        )
+        .is_none()
+    );
+}
+
+#[test]
+fn covered_overlap_support_ignores_the_uncovered_part_of_the_rectangle_overlap() {
+    let (width, height) = (200u32, 100u32);
+    // Identity relation, the right half of the source uncovered: the covered
+    // overlap is half of the rectangle overlap.
+    let source = coverage_from_fn(width, height, |x, _| x < 100);
+    let target = full_coverage(width, height);
+    let points = [
+        (20.0, 20.0),
+        (80.0, 20.0),
+        (80.0, 70.0),
+        (20.0, 70.0),
+        (50.0, 45.0),
+    ]
+    .map(|(x, y)| (Point2::new(x, y), Point2::new(x, y)));
+    let hull = 60.0 * 50.0;
+    let rectangles = station_relation_spatial_support(
+        &points,
+        &Matrix3::identity(),
+        (width, height),
+        (width, height),
+    );
+    let covered = station_relation_spatial_support_with(
+        &points,
+        &Matrix3::identity(),
+        (width, height),
+        (width, height),
+        StationOverlapMeasure::Covered {
+            source: &source,
+            target: &target,
+            factor: 1,
+        },
+    );
+    assert!((rectangles - hull / 20_000.0).abs() < 1e-9, "{rectangles}");
+    assert!((covered - hull / 10_000.0).abs() < 1e-9, "{covered}");
+    // Fully covered masks reproduce the rectangle measure.
+    let full = station_relation_spatial_support_with(
+        &points,
+        &Matrix3::identity(),
+        (width, height),
+        (width, height),
+        StationOverlapMeasure::Covered {
+            source: &target,
+            target: &target,
+            factor: 1,
+        },
+    );
+    assert!((full - rectangles).abs() < 1e-9);
+    // No doubly covered pixel: no support at all.
+    let empty = coverage_from_fn(width, height, |_, _| false);
+    assert_eq!(
+        station_relation_spatial_support_with(
+            &points,
+            &Matrix3::identity(),
+            (width, height),
+            (width, height),
+            StationOverlapMeasure::Covered {
+                source: &empty,
+                target: &target,
+                factor: 1,
+            },
+        ),
+        0.0
+    );
+}
+
+#[test]
+fn virtual_tile_solver_measures_requirement_6_4_on_the_doubly_covered_overlap() {
+    // Tile 1 shows tile 0 shifted by (40, 6) everywhere, but tile 0 is only
+    // covered for x < 220: half of the rectangle overlap holds no tile content.
+    let (width, height) = (400u32, 300u32);
+    let left = textured_plane(width, height);
+    let right = GrayImage::from_fn(width, height, |x, y| {
+        image::Luma([textured_value(f64::from(x) + 40.0, f64::from(y) + 6.0).round() as u8])
+    });
+    let tiles = vec![plane_info(0, left), plane_info(1, right)];
+    let left_to_right = translation(-40.0, -6.0);
+    // 36 inliers spanning a 100×150 hull: 14% of the 360×294 rectangle
+    // overlap, 28% of the 180×294 doubly covered overlap.
+    let points = (0..6)
+        .flat_map(|row| (0..6).map(move |column| (row, column)))
+        .map(|(row, column)| {
+            let source = Point2::new(
+                80.0 + 20.0 * f64::from(column),
+                60.0 + 30.0 * f64::from(row),
+            );
+            (source, transformed_point(&left_to_right, source).unwrap())
+        })
+        .collect::<Vec<_>>();
+    let matches = HashMap::from([((0, 1), measured_relation(left_to_right, points))]);
+    let initial = HashMap::from([
+        (tiles[0].id, Matrix3::identity()),
+        (tiles[1].id, left_to_right.try_inverse().unwrap()),
+    ]);
+    let station_topology = candidate_topology(2);
+    let solve = |coverages: &[stitching::CoverageMask]| {
+        let mut closure = report::ClosureReport::default();
+        let mut relations = report::StationRelationsReport::default();
+        let solved = solve_virtual_tile_station_poses_with_report(
+            &tiles,
+            VirtualTileSolverCoverages {
+                quality: coverages,
+                overlap: coverages,
+                overlap_factor: 1,
+            },
+            &matches,
+            &initial,
+            &station_topology,
+            &mut closure,
+            &mut relations,
+        );
+        (solved, relations)
+    };
+
+    let covered = [
+        coverage_from_fn(width, height, |x, _| x < 220),
+        full_coverage(width, height),
+    ];
+    let (solved, relations) = solve(&covered);
+    assert_eq!(solved.len(), 2, "{relations:?}");
+    let support = relations.accepted[0].spatial_support;
+    assert!(
+        (support - 15_000.0 / (180.0 * 294.0)).abs() < 0.01,
+        "{support}"
+    );
+
+    // Counting the uncovered half as overlap drops the same evidence to 14%.
+    let pretended = [full_coverage(width, height), full_coverage(width, height)];
+    let (solved, relations) = solve(&pretended);
+    assert!(solved.is_empty(), "{relations:?}");
+    assert!(
+        relations
+            .rejected_by_reason
+            .contains_key("station_relation_low_spatial_support"),
+        "{relations:?}"
+    );
+}

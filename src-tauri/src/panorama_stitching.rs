@@ -7966,7 +7966,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         if tile_infos.len() >= 2 {
                             let solved = solve_virtual_tile_station_poses_with_report(
                                 &tile_infos,
-                                &pyramid.quality_coverages,
+                                pyramid.solver_coverages(),
                                 &tile_relations,
                                 &tile_homographies,
                                 station_topology,
@@ -11668,25 +11668,139 @@ fn station_relation_overlap_area(
     (area.is_finite() && area > f64::EPSILON).then_some(area)
 }
 
+/// What requirement 6.4 counts as a relation's overlap area.
+#[derive(Clone, Copy)]
+enum StationOverlapMeasure<'a> {
+    /// Source-image evidence: the geometric intersection of the two frames,
+    /// every pixel of which is image content.
+    Rectangles,
+    /// Virtual_Tile evidence: only pixels both Coverage_Masks cover. A tile's
+    /// bounding rectangle also holds uncovered corners, which carry no content,
+    /// can never hold an inlier and are never composited from both tiles
+    /// (需求 6.1). Mask pixel `p` is the block `[f·p, f·p + f)` of the
+    /// relation's pixels (`f = factor`, the [`VirtualTileMatchPlane`] layout).
+    Covered {
+        source: &'a stitching::CoverageMask,
+        target: &'a stitching::CoverageMask,
+        factor: u32,
+    },
+}
+
+/// Area, in the relation's pixels, of the source-plane pixels covered in
+/// `source_mask` whose image under `source_to_target` lands on a pixel
+/// covered in `target_mask`. `None` when a mask does not tile its plane.
+fn virtual_tile_covered_overlap_area(
+    source_mask: &stitching::CoverageMask,
+    source_dimensions: (u32, u32),
+    target_mask: &stitching::CoverageMask,
+    target_dimensions: (u32, u32),
+    factor: u32,
+    source_to_target: &Matrix3<f64>,
+) -> Option<f64> {
+    let factor = factor.max(1);
+    let tiles_plane = |mask: &stitching::CoverageMask, (width, height): (u32, u32)| {
+        mask.dimensions() == (width / factor, height / factor)
+    };
+    if !tiles_plane(source_mask, source_dimensions) || !tiles_plane(target_mask, target_dimensions)
+    {
+        return None;
+    }
+    let scale = f64::from(factor);
+    let offset = (scale - 1.0) * 0.5;
+    let (width, height) = source_mask.dimensions();
+    let (target_width, target_height) = target_mask.dimensions();
+    // Rows are independent and integer counts add exactly, so the parallel
+    // reduction does not depend on scheduling.
+    let covered = (0..height)
+        .into_par_iter()
+        .map(|y| {
+            (0..width)
+                .filter(|&x| source_mask.is_covered(x, y))
+                .filter(|&x| {
+                    let centre =
+                        Point2::new(scale * f64::from(x) + offset, scale * f64::from(y) + offset);
+                    transformed_point(source_to_target, centre).is_some_and(|target| {
+                        let column = ((target.x - offset) / scale).round();
+                        let row = ((target.y - offset) / scale).round();
+                        column >= 0.0
+                            && row >= 0.0
+                            && column < f64::from(target_width)
+                            && row < f64::from(target_height)
+                            && target_mask.is_covered(column as u32, row as u32)
+                    })
+                })
+                .count() as u64
+        })
+        .sum::<u64>();
+    Some(covered as f64 * scale * scale)
+}
+
 /// Requirement 6.4's literal support: inlier convex-hull area divided by the
-/// actual geometric overlap area, checked on both station planes.
+/// overlap area, checked on both station planes. This is the source-image
+/// measure (the frames' geometric intersection); Virtual_Tile evidence uses
+/// [`station_relation_spatial_support_with`] over the doubly covered overlap.
 fn station_relation_spatial_support(
     points: &[(Point2<f64>, Point2<f64>)],
     source_to_target: &Matrix3<f64>,
     source_dimensions: (u32, u32),
     target_dimensions: (u32, u32),
 ) -> f64 {
-    let Some(source_overlap) =
-        station_relation_overlap_area(source_to_target, source_dimensions, target_dimensions, true)
-    else {
-        return 0.0;
-    };
-    let Some(target_overlap) = station_relation_overlap_area(
+    station_relation_spatial_support_with(
+        points,
         source_to_target,
         source_dimensions,
         target_dimensions,
-        false,
-    ) else {
+        StationOverlapMeasure::Rectangles,
+    )
+}
+
+/// [`station_relation_spatial_support`] over the overlap `measure` defines.
+fn station_relation_spatial_support_with(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_to_target: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    measure: StationOverlapMeasure<'_>,
+) -> f64 {
+    let overlaps = match measure {
+        StationOverlapMeasure::Rectangles => station_relation_overlap_area(
+            source_to_target,
+            source_dimensions,
+            target_dimensions,
+            true,
+        )
+        .zip(station_relation_overlap_area(
+            source_to_target,
+            source_dimensions,
+            target_dimensions,
+            false,
+        )),
+        StationOverlapMeasure::Covered {
+            source,
+            target,
+            factor,
+        } => source_to_target.try_inverse().and_then(|target_to_source| {
+            virtual_tile_covered_overlap_area(
+                source,
+                source_dimensions,
+                target,
+                target_dimensions,
+                factor,
+                source_to_target,
+            )
+            .zip(virtual_tile_covered_overlap_area(
+                target,
+                target_dimensions,
+                source,
+                source_dimensions,
+                factor,
+                &target_to_source,
+            ))
+        }),
+    };
+    let Some((source_overlap, target_overlap)) =
+        overlaps.filter(|&(source, target)| source > f64::EPSILON && target > f64::EPSILON)
+    else {
         return 0.0;
     };
     let source_hull = convex_hull_area(points.iter().map(|point| point.0));
@@ -13606,14 +13720,42 @@ fn virtual_tile_fit_measured_residual_model(
         STATION_RELATION_MAX_MEDIAN_ERROR_PX,
         virtual_tile_full_tile_bounds(left_dimensions),
         VirtualTileResidualSelection::LowestComplexity,
+        StationOverlapMeasure::Rectangles,
     )
+}
+
+/// Re-measure a stage fit's requirement-6.4 support over `overlap`. The fits
+/// themselves rank hypotheses by inliers and error only, so the (costlier)
+/// covered overlap is measured once per stage rather than per hypothesis.
+fn virtual_tile_fit_with_overlap_support(
+    mut fit: VirtualTileResidualFit,
+    measured_points: &[(Point2<f64>, Point2<f64>)],
+    left_dimensions: (u32, u32),
+    right_dimensions: (u32, u32),
+    overlap: StationOverlapMeasure<'_>,
+) -> VirtualTileResidualFit {
+    if matches!(overlap, StationOverlapMeasure::Covered { .. }) {
+        let inlier_points = fit
+            .inlier_indices
+            .iter()
+            .map(|&index| measured_points[index])
+            .collect::<Vec<_>>();
+        fit.spatial_support = station_relation_spatial_support_with(
+            &inlier_points,
+            &fit.measured_homography,
+            left_dimensions,
+            right_dimensions,
+            overlap,
+        );
+    }
+    fit
 }
 
 /// Residual model fit in the pixels of one probe level. `inlier_threshold_px`
 /// is a symmetric error in those pixels, so the finest pyramid level passes the
 /// requirement-6.3 bound divided by its area-averaging factor. The correction
 /// bounds are evaluated over `evidence_bounds` (left-tile pixels), the region
-/// the probes actually measured.
+/// the probes actually measured; each stage's support over `overlap`.
 #[allow(clippy::too_many_arguments)]
 fn virtual_tile_fit_measured_residual_model_with_threshold(
     measured_points: &[(Point2<f64>, Point2<f64>)],
@@ -13623,14 +13765,25 @@ fn virtual_tile_fit_measured_residual_model_with_threshold(
     inlier_threshold_px: f64,
     evidence_bounds: (f64, f64, f64, f64),
     selection: VirtualTileResidualSelection,
+    overlap: StationOverlapMeasure<'_>,
 ) -> VirtualTileResidualModelOutcome {
+    let with_support = |fit: VirtualTileResidualFit| {
+        virtual_tile_fit_with_overlap_support(
+            fit,
+            measured_points,
+            left_dimensions,
+            right_dimensions,
+            overlap,
+        )
+    };
     let translation = virtual_tile_robust_translation_residual(
         measured_points,
         initial,
         left_dimensions,
         right_dimensions,
         inlier_threshold_px,
-    );
+    )
+    .map(with_support);
     let max_translation_consensus = translation
         .as_ref()
         .map_or(0, |fit| fit.inlier_indices.len());
@@ -13719,7 +13872,8 @@ fn virtual_tile_fit_measured_residual_model_with_threshold(
                 inlier_threshold_px,
                 evidence_bounds,
             )
-        });
+        })
+        .map(with_support);
     let affine_bounded = affine
         .as_ref()
         .map(|fit| {
@@ -13769,7 +13923,8 @@ fn virtual_tile_fit_measured_residual_model_with_threshold(
                 "small_projective",
                 inlier_threshold_px,
             )
-        });
+        })
+        .map(with_support);
     let projective_stage = residual_model_stage(projective.as_ref(), projective_bounded);
     let fit = match selection {
         VirtualTileResidualSelection::LowestComplexity => (projective_stage.rejection_reason
@@ -14085,11 +14240,18 @@ fn virtual_tile_direct_station_match_with_structure(
         .iter()
         .map(|(_, (_, source, target, _))| (*source, *target))
         .collect::<Vec<_>>();
-    diagnostic.hull_support = station_relation_spatial_support(
+    // Requirement 6.4 on the pixels both tiles cover, in this plane's pixels.
+    let overlap_measure = StationOverlapMeasure::Covered {
+        source: left_coverage,
+        target: right_coverage,
+        factor: 1,
+    };
+    diagnostic.hull_support = station_relation_spatial_support_with(
         &candidate_points,
         &left_to_right,
         left_tile.dimensions(),
         right_tile.dimensions(),
+        overlap_measure,
     );
     diagnostic.failure_stage = "insufficient_prefit_hull_support".to_string();
     if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
@@ -14145,6 +14307,7 @@ fn virtual_tile_direct_station_match_with_structure(
         inlier_threshold_px,
         evidence_bounds,
         VirtualTileResidualSelection::MostInliers,
+        overlap_measure,
     );
     diagnostic.max_residual_translation_consensus = model.max_translation_consensus;
     diagnostic.residual_translation = model.translation.clone();
@@ -14210,11 +14373,12 @@ fn virtual_tile_direct_station_match_with_structure(
         .map(|&(_, source, target, _)| (source, target))
         .collect::<Vec<_>>();
     diagnostic.fitted_inliers = points.len();
-    diagnostic.hull_support = station_relation_spatial_support(
+    diagnostic.hull_support = station_relation_spatial_support_with(
         &points,
         &refined,
         left_tile.dimensions(),
         right_tile.dimensions(),
+        overlap_measure,
     );
     diagnostic.failure_stage = "insufficient_fitted_hull_support".to_string();
     if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT {
@@ -14547,6 +14711,17 @@ impl VirtualTileMatchPyramid {
                 .collect(),
             native_dimensions: vec![(1, 1); station_count],
             quality_coverages: (0..station_count).map(|_| empty_coverage()).collect(),
+        }
+    }
+
+    /// The masks the station solver re-checks each relation on: the
+    /// relation-quality planes (requirement 6.8) and the finest match planes
+    /// (requirement 6.4's overlap area).
+    fn solver_coverages(&self) -> VirtualTileSolverCoverages<'_> {
+        VirtualTileSolverCoverages {
+            quality: &self.quality_coverages,
+            overlap: self.coverages.last().map_or(&[][..], Vec::as_slice),
+            overlap_factor: self.factors.last().copied().unwrap_or(1),
         }
     }
 
@@ -15113,8 +15288,17 @@ fn virtual_tile_polished_station_match(
     let (left_native, right_native) = native_dimensions;
     diagnostic.fitted_inliers = points.len();
     diagnostic.max_residual_translation_consensus = 0;
-    diagnostic.hull_support =
-        station_relation_spatial_support(&points, &native, left_native, right_native);
+    diagnostic.hull_support = station_relation_spatial_support_with(
+        &points,
+        &native,
+        left_native,
+        right_native,
+        StationOverlapMeasure::Covered {
+            source: left_coverage,
+            target: right_coverage,
+            factor,
+        },
+    );
     diagnostic.residual_magnitude_px = residual_distribution(match native.try_inverse() {
         Some(inverse) => points
             .iter()
@@ -16864,11 +17048,33 @@ fn solve_focus_capture_group_poses_with_report(
     )
 }
 
-/// `quality_coverages[i]` is the Coverage_Mask of `tiles[i].alignment_image`;
-/// the requirement-6.8 re-check samples only pixels both tiles cover.
+/// Coverage_Masks the station solver reads for Virtual_Tile evidence: every
+/// re-check it makes on a tile pair looks only at pixels both tiles cover
+/// (需求 6.1).
+#[derive(Clone, Copy)]
+struct VirtualTileSolverCoverages<'a> {
+    /// `quality[i]` covers `tiles[i].alignment_image` (the requirement-6.8
+    /// relation-quality plane).
+    quality: &'a [stitching::CoverageMask],
+    /// `overlap[i]` covers tile `i`'s finest match plane, `overlap_factor`
+    /// native pixels per plane pixel (the requirement-6.4 overlap area).
+    overlap: &'a [stitching::CoverageMask],
+    overlap_factor: u32,
+}
+
+impl<'a> VirtualTileSolverCoverages<'a> {
+    fn overlap_measure(&self, source: usize, target: usize) -> Option<StationOverlapMeasure<'a>> {
+        Some(StationOverlapMeasure::Covered {
+            source: self.overlap.get(source)?,
+            target: self.overlap.get(target)?,
+            factor: self.overlap_factor,
+        })
+    }
+}
+
 fn solve_virtual_tile_station_poses_with_report(
     tiles: &[ImageInfo],
-    quality_coverages: &[stitching::CoverageMask],
+    coverages: VirtualTileSolverCoverages<'_>,
     matches: &HashMap<(usize, usize), MatchInfo>,
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     station_topology: &topology::StationTopology,
@@ -16886,7 +17092,7 @@ fn solve_virtual_tile_station_poses_with_report(
         station_relations_report,
         StationRelationEvidenceKind::VirtualTile,
         Some(station_topology),
-        Some(quality_coverages),
+        Some(coverages),
     )
 }
 
@@ -16901,7 +17107,7 @@ fn solve_station_poses_for_evidence_with_report(
     station_relations_report: &mut stack_report::StationRelationsReport,
     evidence_kind: StationRelationEvidenceKind,
     supplied_topology: Option<&topology::StationTopology>,
-    quality_coverages: Option<&[stitching::CoverageMask]>,
+    coverages: Option<VirtualTileSolverCoverages<'_>>,
 ) -> HashMap<usize, Matrix3<f64>> {
     *translation_geometry_verified = false;
     *station_relations_report = stack_report::StationRelationsReport::default();
@@ -17130,12 +17336,19 @@ fn solve_station_poses_for_evidence_with_report(
         );
         // Virtual_Tile evidence is re-checked only where both tiles are
         // covered; a missing mask leaves the relation unmeasured (rejected).
-        let quality_coverage_pair = match quality_coverages {
+        let quality_coverage_pair = match coverages {
             None => Some(None),
             Some(coverages) => coverages
+                .quality
                 .get(quality_source)
-                .zip(coverages.get(quality_target))
+                .zip(coverages.quality.get(quality_target))
                 .map(Some),
+        };
+        // Requirement 6.4's overlap area: the frames' geometric intersection
+        // for source images, the doubly covered pixels for Virtual_Tiles.
+        let overlap_measure = match coverages {
+            None => Some(StationOverlapMeasure::Rectangles),
+            Some(coverages) => coverages.overlap_measure(quality_source, quality_target),
         };
         let dense_measurements = quality_coverage_pair.and_then(|coverages| {
             focus_overlap_quality_measurements_on_coverage(
@@ -17173,12 +17386,15 @@ fn solve_station_poses_for_evidence_with_report(
                     median_error_px: error,
                     scale_ratio: homography_scale_ratio(&quality_homography)
                         .unwrap_or(f64::INFINITY),
-                    spatial_support: station_relation_spatial_support(
-                        &quality_points,
-                        &quality_homography,
-                        measurement_source_dimensions,
-                        measurement_target_dimensions,
-                    ),
+                    spatial_support: overlap_measure.map_or(0.0, |measure| {
+                        station_relation_spatial_support_with(
+                            &quality_points,
+                            &quality_homography,
+                            measurement_source_dimensions,
+                            measurement_target_dimensions,
+                            measure,
+                        )
+                    }),
                     low_frequency_mean_relative_difference: dense_measurements
                         .map_or(f64::INFINITY, |measurements| {
                             measurements.low_frequency_mean_relative_difference
@@ -22409,6 +22625,20 @@ mod alignment_tests {
             })
             .collect()
     }
+    /// Solver coverages of tiles whose single analysis plane is covered
+    /// everywhere and doubles as their finest match plane.
+    fn fully_covered_solver_coverages<'a>(
+        tiles: &[ImageInfo],
+        masks: &'a [stitching::CoverageMask],
+    ) -> VirtualTileSolverCoverages<'a> {
+        VirtualTileSolverCoverages {
+            quality: masks,
+            overlap: masks,
+            overlap_factor: tiles
+                .first()
+                .map_or(1, |tile| tile.scale_factor.round().max(1.0) as u32),
+        }
+    }
     /// Relation-quality Coverage_Masks of tiles whose analysis planes are
     /// covered everywhere.
     fn fully_covered_quality_coverages(tiles: &[ImageInfo]) -> Vec<stitching::CoverageMask> {
@@ -22801,7 +23031,7 @@ mod alignment_tests {
             let mut report = stack_report::StationRelationsReport::default();
             let solved = solve_virtual_tile_station_poses_with_report(
                 &tiles,
-                &coverages,
+                fully_covered_solver_coverages(&tiles, &coverages),
                 &matches,
                 &initial,
                 &station_topology,
@@ -23332,7 +23562,7 @@ mod alignment_tests {
         let mut report = stack_report::StationRelationsReport::default();
         let solved = solve_virtual_tile_station_poses_with_report(
             &tiles,
-            &fully_covered_quality_coverages(&tiles),
+            fully_covered_solver_coverages(&tiles, &fully_covered_quality_coverages(&tiles)),
             &HashMap::new(),
             &initial,
             &synthetic_virtual_tile_topology(2),
@@ -23399,7 +23629,7 @@ mod alignment_tests {
         let mut final_relations = stack_report::StationRelationsReport::default();
         let solved = solve_virtual_tile_station_poses_with_report(
             &tiles,
-            &fully_covered_quality_coverages(&tiles),
+            fully_covered_solver_coverages(&tiles, &fully_covered_quality_coverages(&tiles)),
             &tile_matches,
             &initial,
             &synthetic_virtual_tile_topology(3),
@@ -23433,7 +23663,7 @@ mod alignment_tests {
         let mut relations = stack_report::StationRelationsReport::default();
         let solved = solve_virtual_tile_station_poses_with_report(
             &tiles,
-            &fully_covered_quality_coverages(&tiles),
+            fully_covered_solver_coverages(&tiles, &fully_covered_quality_coverages(&tiles)),
             &tile_matches,
             &initial,
             &synthetic_virtual_tile_topology(3),
@@ -23454,7 +23684,7 @@ mod alignment_tests {
         let mut relations = stack_report::StationRelationsReport::default();
         let solved = solve_virtual_tile_station_poses_with_report(
             &tiles,
-            &fully_covered_quality_coverages(&tiles),
+            fully_covered_solver_coverages(&tiles, &fully_covered_quality_coverages(&tiles)),
             &HashMap::new(),
             &initial,
             &synthetic_virtual_tile_topology(1),
