@@ -24,9 +24,12 @@ pub(crate) mod focus_fuser;
 pub(crate) mod intra_station;
 /// Quality_Gate pure ROI and image measurements (需求 15.1–15.6).
 pub(crate) mod quality_gate;
+pub(crate) mod quality_gate_runner;
 pub(crate) mod report;
 /// Residual_Warp: bounded overlap-local correction fields (需求 8.1–8.9).
 pub(crate) mod residual_warp;
+/// Run-scoped memory threshold and peak RSS sampling (需求 14.1--14.3).
+pub(crate) mod resources;
 /// Degradation_Manager, station level: the degraded fusion paths and the
 /// "joins no Capture_Station" rejection (需求 12.1, 12.2, 12.5).
 pub(crate) mod station_degradation;

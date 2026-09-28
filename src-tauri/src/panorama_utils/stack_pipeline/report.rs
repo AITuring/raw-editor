@@ -8,9 +8,8 @@
 //! defaults explicitly, so `tests/focus-stack-quality-contract.mjs` can assert
 //! the structure without decoding a single RAW file.
 //!
-//! This stage records only.  No field in here participates in a pass/fail
-//! decision yet; the Quality_Gate verdict stays [`QualityGateVerdict::NotRun`]
-//! until the gate itself is implemented.
+//! This stage records the run metrics. Quality_Gate remains observation-only
+//! until the later rejection-path task enables blocking export.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -964,8 +963,23 @@ pub(crate) struct QualityGateCriterionRecord {
     /// One of the stable criterion identifiers, e.g. `local_scale_median`.
     pub name: String,
     pub threshold: f64,
+    /// Lower/upper bounds are written for criteria whose acceptance range is
+    /// two-sided (for example Noise_Sigma). `threshold` remains the canonical
+    /// bound for backwards-compatible readers.
+    #[serde(default)]
+    pub threshold_min: Option<f64>,
+    #[serde(default)]
+    pub threshold_max: Option<f64>,
     pub measurable_count: usize,
     pub unmeasurable_count: usize,
+    /// Every measurable value, including passing values. The historical
+    /// `failed` field is retained as the compact failure diagnostic list.
+    #[serde(default)]
+    pub measured: Vec<FailedMeasurementRecord>,
+    /// Diagnostic-only criteria remain visible but do not establish a gate
+    /// failure (for example render scale below one or final sharpening).
+    #[serde(default)]
+    pub diagnostic: bool,
     pub failed: Vec<FailedMeasurementRecord>,
 }
 
@@ -1037,7 +1051,7 @@ impl Default for OutputReport {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ResourcesReport {
     pub memory_threshold_bytes: u64,
-    /// `default` or `setting` (requirement 14).
+    /// `default`, `user_configured`, or `auto_calibrated` (requirement 14).
     pub memory_threshold_source: String,
     pub physical_memory_bytes: u64,
     pub peak_rss_bytes: u64,

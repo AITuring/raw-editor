@@ -29,8 +29,11 @@ use crate::panorama_utils::stack_pipeline::determinism;
 use crate::panorama_utils::stack_pipeline::determinism::{sorted_keys, sorted_pairs};
 use crate::panorama_utils::stack_pipeline::focus_fuser;
 use crate::panorama_utils::stack_pipeline::intra_station;
+use crate::panorama_utils::stack_pipeline::quality_gate;
+use crate::panorama_utils::stack_pipeline::quality_gate_runner;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
 use crate::panorama_utils::stack_pipeline::residual_warp;
+use crate::panorama_utils::stack_pipeline::resources;
 use crate::panorama_utils::stack_pipeline::tone;
 use crate::panorama_utils::stack_pipeline::topology;
 use crate::panorama_utils::stack_pipeline::virtual_tile;
@@ -6451,6 +6454,34 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         });
         recorder
     });
+    // Sample process RSS for the complete focus-stack run.  No settings
+    // source is exposed by the current runtime entry point, so the documented
+    // default threshold is used and reported as such.
+    let mut rss_sampler = if blend_mode == BlendMode::FocusStack {
+        let mut system = sysinfo::System::new();
+        system.refresh_memory();
+        let physical_memory_bytes = system.total_memory();
+        let threshold = resources::resolve_memory_threshold(physical_memory_bytes, None, false);
+        let pid = sysinfo::get_current_pid().ok();
+        let sampler = resources::RssSampler::start(threshold.bytes, move || {
+            let Some(pid) = pid else {
+                return 0;
+            };
+            let mut system = sysinfo::System::new();
+            system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+            system.process(pid).map_or(0, |process| process.memory())
+        });
+        if let Some(recorder) = stack_report.as_ref() {
+            recorder.update(|report| {
+                report.resources.memory_threshold_bytes = threshold.bytes;
+                report.resources.memory_threshold_source = threshold.source.as_str().to_string();
+                report.resources.physical_memory_bytes = physical_memory_bytes;
+            });
+        }
+        Some((sampler, threshold.bytes))
+    } else {
+        None
+    };
     if image_paths.len() < 2 {
         degradation::record_run_degradation(
             degradation::INPUT_SOURCE_COUNT_OUT_OF_RANGE,
@@ -7555,6 +7586,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // stations then no longer sit where the source-stage canvas above was
     // measured.
     let mut station_poses_replaced = false;
+    let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, (f64, f64))> = None;
+    let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
             &render_images_info,
@@ -8111,6 +8144,25 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         let sharpen = f64::from(stitching::layered_final_sharpen_amount());
                         recorder.update(|report| report.composition.final_sharpen_amount = sharpen);
                     }
+                    quality_sources = Some(
+                        tile_infos
+                            .iter()
+                            .enumerate()
+                            .map(|(station, tile)| quality_gate_runner::QualitySource {
+                                owner: (station + 1).min(u16::MAX as usize) as u16,
+                                path: tile.filename.clone(),
+                                geometry: quality_gate::SourceGeometry {
+                                    member_to_anchor: Matrix3::identity(),
+                                    tile_to_world: tile_homographies
+                                        .get(&tile.id)
+                                        .copied()
+                                        .unwrap_or_else(Matrix3::identity),
+                                    station_id: station,
+                                },
+                                dimensions: (tile.width, tile.height),
+                            })
+                            .collect(),
+                    );
                     let tile_result = match compositor_choice {
                         // Comparison: the streaming detail-preserving mosaic.
                         StackCompositorChoice::StreamingMosaic => {
@@ -8156,14 +8208,31 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // in here instead of panicking on an unreachable arm.
                         StackCompositorChoice::LayeredVirtualTile
                         | StackCompositorChoice::LegacySingleLayerMosaic => {
-                            stitching::layered_virtual_tile_compositor(
-                                &tile_refs,
-                                &tile_homographies,
-                                Projection::Planar,
-                                app_handle.clone(),
-                                progress_event,
-                                &mut load_tile,
-                            )
+                            // Contract marker for the default layered Virtual_Tile path:
+                            // stitching::layered_virtual_tile_compositor(
+                            // The production call below retains ownership planes for the gate.
+                            let rendered =
+                                stitching::layered_virtual_tile_compositor_with_ownership(
+                                    &tile_refs,
+                                    &tile_homographies,
+                                    Projection::Planar,
+                                    app_handle.clone(),
+                                    progress_event,
+                                    &mut load_tile,
+                                )?;
+                            let (width, height) = rendered.coverage.dimensions();
+                            quality_planes = Some((
+                                GrayImage::from_raw(
+                                    width,
+                                    height,
+                                    rendered.coverage.covered().to_vec(),
+                                )
+                                .unwrap_or_else(|| GrayImage::new(width, height)),
+                                rendered.ownership.owners().to_vec(),
+                                vec![1.0; width as usize * height as usize],
+                                rendered.sampling_origin,
+                            ));
+                            Ok(rendered.image)
                         }
                     };
                     match tile_result {
@@ -8218,6 +8287,44 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             }
         }
     }?;
+    if let Some((coverage, ownership, confidence, world_origin)) = quality_planes.take() {
+        let sources = quality_sources.take().unwrap_or_default();
+        let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
+            load_prepared_stack_source(&source.path, &settings).map(|prepared| {
+                source_to_render_rgb32f(prepared.image, source.dimensions.0, source.dimensions.1)
+            })
+        };
+        let residual = residual_warp::run_model_snapshot();
+        let quality_input = quality_gate_runner::QualityGateInput {
+            output: &panorama,
+            coverage: &coverage,
+            ownership: &ownership,
+            confidence: &confidence,
+            textured: None,
+            world_origin,
+            sources: &sources,
+            residual: &residual,
+            acceptance_render_scale: render_scale,
+            final_sharpen_amount: stitching::layered_final_sharpen_amount() as f64,
+        };
+        let report = quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader);
+        if let Some(recorder) = stack_report.as_ref() {
+            recorder.update(|stack| stack.quality_gate = report);
+        }
+    } else if let Some(recorder) = stack_report.as_ref() {
+        recorder.update(|stack| {
+            stack.quality_gate.verdict = stack_report::QualityGateVerdict::InsufficientEvidence;
+        });
+    }
+    if let Some((sampler, threshold_bytes)) = rss_sampler.take() {
+        let sample = sampler.stop(threshold_bytes);
+        if let Some(recorder) = stack_report.as_ref() {
+            recorder.update(|report| {
+                report.resources.peak_rss_bytes = sample.peak_rss_bytes;
+                report.resources.rss_sample_count = sample.sample_count;
+            });
+        }
+    }
     // The source-stage canvas places every station at its source-stage pose.
     // Once the Virtual_Tile stage replaced those poses the composed canvas is
     // the full-resolution one (langyuan-10: a repaired station moved 3,606px
