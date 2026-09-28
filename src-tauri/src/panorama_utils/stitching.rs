@@ -1,4 +1,5 @@
 use super::photometric::{PhotometricModel, PhotometricOptions, calibrate_overlap_photometry};
+use super::stack_pipeline::compositor::tile_coordinate_with_residual;
 use super::stack_pipeline::degradation;
 use super::stack_pipeline::focus_fuser::{
     self, CandidateCells, CellSamplingPlan, OwnershipGridGeometry, StationFusion, cell_disagreement,
@@ -238,6 +239,34 @@ pub(super) fn map_target_to_source(
         image,
         projected_source.x / projected_source.z,
         projected_source.y / projected_source.z,
+        projection,
+    )
+}
+
+/// Map one output-world coordinate into a source tile while applying the
+/// optional run-scoped residual field. The empty model takes the exact legacy
+/// path. Planar output uses the compositor's single composed inverse; curved
+/// projections first move the world target and retain their existing inverse
+/// projection.
+fn map_target_to_source_with_residual(
+    inverse_homography: &Matrix3<f64>,
+    target: Point3<f64>,
+    image: &ImageInfo,
+    projection: Projection,
+    residual: &residual_warp::ResidualWarp,
+) -> Option<Point2<f64>> {
+    if residual.identity() {
+        return map_target_to_source(inverse_homography, target, image, projection);
+    }
+    let world = Point2::new(target.x, target.y);
+    if projection == Projection::Planar {
+        return tile_coordinate_with_residual(world, inverse_homography, residual, image.id);
+    }
+    let warped = residual.warp_inverse(world, image.id);
+    map_target_to_source(
+        inverse_homography,
+        Point3::new(warped.x, warped.y, target.z),
+        image,
         projection,
     )
 }
@@ -2083,6 +2112,7 @@ fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    let residual_model = residual_warp::run_model_snapshot();
     if images.is_empty() {
         return Ok(LayeredOwnershipRender {
             image: Rgb32FImage::new(0, 0),
@@ -2278,8 +2308,13 @@ where
             for tone_x in 0..tone_width {
                 let canvas_x = (tone_x as f64 + 0.5) * out_width as f64 / tone_width.max(1) as f64;
                 let target = Point3::new(canvas_x - offset_x, canvas_y - offset_y, 1.0);
-                let Some(source) = map_target_to_source(&inverse, target, image_info, projection)
-                else {
+                let Some(source) = map_target_to_source_with_residual(
+                    &inverse,
+                    target,
+                    image_info,
+                    projection,
+                    &residual_model,
+                ) else {
                     continue;
                 };
                 if source.x < 0.0
@@ -2374,9 +2409,13 @@ where
                 |(y, ((((row, quality_row), mask_row), owner_row), source_owner_row))| {
                     for x in left..=right {
                         let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
-                        let Some(source) =
-                            map_target_to_source(&inverse, target, image_info, projection)
-                        else {
+                        let Some(source) = map_target_to_source_with_residual(
+                            &inverse,
+                            target,
+                            image_info,
+                            projection,
+                            &residual_model,
+                        ) else {
                             continue;
                         };
                         if source.x < 0.0
