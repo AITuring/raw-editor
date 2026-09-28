@@ -22,6 +22,8 @@ pub(crate) mod determinism;
 pub(crate) mod focus_fuser;
 /// Intra_Station_Registrar: anchor selection and registration gates (需求 2.1–2.9).
 pub(crate) mod intra_station;
+/// Quality_Gate pure ROI and image measurements (需求 15.1–15.6).
+pub(crate) mod quality_gate;
 pub(crate) mod report;
 /// Residual_Warp: bounded overlap-local correction fields (需求 8.1–8.9).
 pub(crate) mod residual_warp;

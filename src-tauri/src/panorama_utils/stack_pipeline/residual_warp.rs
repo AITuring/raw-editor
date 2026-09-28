@@ -288,8 +288,8 @@ impl WarpRegion {
         }
         let cell_columns = region.columns.saturating_sub(1) as usize;
         let cell_rows = region.rows.saturating_sub(1) as usize;
-        let mut global_cell_error = vec![f64::NAN; cell_columns * cell_rows];
-        let mut residual_cell_error = vec![f64::NAN; cell_columns * cell_rows];
+        let mut global_cell_samples = vec![Vec::new(); cell_columns * cell_rows];
+        let mut residual_cell_samples = vec![Vec::new(); cell_columns * cell_rows];
         for observation in &accepted {
             if !observation.global_error_px.is_finite()
                 || !observation.residual_error_px.is_finite()
@@ -304,13 +304,17 @@ impl WarpRegion {
             let column = (index % region.field.width).min(cell_columns - 1);
             let row = (index / region.field.width).min(cell_rows - 1);
             let cell = row * cell_columns + column;
-            if !residual_cell_error[cell].is_finite()
-                || observation.residual_error_px < residual_cell_error[cell]
-            {
-                global_cell_error[cell] = observation.global_error_px;
-                residual_cell_error[cell] = observation.residual_error_px;
-            }
+            global_cell_samples[cell].push(observation.global_error_px);
+            residual_cell_samples[cell].push(observation.residual_error_px);
         }
+        let global_cell_error = global_cell_samples
+            .iter_mut()
+            .map(percentile95)
+            .collect::<Vec<_>>();
+        let residual_cell_error = residual_cell_samples
+            .iter_mut()
+            .map(percentile95)
+            .collect::<Vec<_>>();
         let unique_valid_nodes = region.nodes.iter().filter(|node| node.valid).count();
         if unique_valid_nodes < RESIDUAL_WARP_MIN_VERIFIED_POINTS {
             region.insufficient_evidence = true;
@@ -354,6 +358,13 @@ impl WarpRegion {
 
     pub(crate) fn nodes(&self) -> &[WarpNode] {
         &self.nodes
+    }
+
+    pub(crate) fn is_identity(&self) -> bool {
+        self.field
+            .values
+            .iter()
+            .all(|value| value[0] == 0.0 && value[1] == 0.0)
     }
 
     /// Bilinearly sample the bounded residual at a world point.  The edge
@@ -521,46 +532,43 @@ impl WarpRegion {
     /// measured nodes. Keep measured nodes fixed and pull only extrapolated
     /// nodes towards their neighbours; samples with no support remain zero.
     fn enforce_invalid_neighbour_bound(&mut self) {
-        for node in &mut self.nodes {
+        // Keep the support set fixed.  Using an already extrapolated invalid
+        // node as a neighbour would propagate one valid sample arbitrarily far
+        // across the grid and violate the three-node-radius requirement.
+        let snapshot = self.nodes.clone();
+        let width = self.field.width;
+        let height = self.field.height;
+        for index in 0..self.nodes.len() {
+            if snapshot[index].valid {
+                continue;
+            }
+            let node = &mut self.nodes[index];
             let magnitude = node.displacement[0].hypot(node.displacement[1]);
             if magnitude > RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX {
                 let scale = RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX / magnitude;
                 node.displacement[0] *= scale;
                 node.displacement[1] *= scale;
             }
-        }
-        for _ in 0..self.nodes.len().max(1) {
-            let mut changed = false;
-            for row in 0..self.field.height {
-                for column in 0..self.field.width {
-                    let index = row * self.field.width + column;
-                    if self.nodes[index].valid {
-                        continue;
-                    }
-                    for other in neighbour_indices(row, column, self.field.width, self.field.height)
-                    {
-                        let delta = displacement_delta(
-                            self.nodes[index].displacement,
-                            self.nodes[other].displacement,
-                        );
-                        if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX {
-                            continue;
-                        }
-                        let direction = [
-                            self.nodes[index].displacement[0] - self.nodes[other].displacement[0],
-                            self.nodes[index].displacement[1] - self.nodes[other].displacement[1],
-                        ];
-                        let scale = RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX / delta;
-                        self.nodes[index].displacement = [
-                            self.nodes[other].displacement[0] + direction[0] * scale,
-                            self.nodes[other].displacement[1] + direction[1] * scale,
-                        ];
-                        changed = true;
-                    }
+            let row = index / width;
+            let column = index % width;
+            for other in neighbour_indices(row, column, width, height) {
+                if !snapshot[other].valid {
+                    continue;
                 }
-            }
-            if !changed {
-                break;
+                let displacement = snapshot[other].displacement;
+                let delta = displacement_delta(node.displacement, displacement);
+                if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX {
+                    continue;
+                }
+                let direction = [
+                    node.displacement[0] - displacement[0],
+                    node.displacement[1] - displacement[1],
+                ];
+                let scale = RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX / delta;
+                node.displacement = [
+                    displacement[0] + direction[0] * scale,
+                    displacement[1] + direction[1] * scale,
+                ];
             }
         }
     }
@@ -883,6 +891,16 @@ fn neighbour_indices(row: usize, column: usize, width: usize, height: usize) -> 
 
 fn displacement_delta(left: [f64; 2], right: [f64; 2]) -> f64 {
     (left[0] - right[0]).hypot(left[1] - right[1])
+}
+
+fn percentile95(values: &mut Vec<f64>) -> f64 {
+    if values.is_empty() {
+        return f64::NAN;
+    }
+    values.sort_by(f64::total_cmp);
+    let rank = (values.len() * 95).div_ceil(100).max(1);
+    let index = rank.saturating_sub(1).min(values.len() - 1);
+    values[index]
 }
 
 fn edge_fade(world: &WorldRect, x: f64, y: f64) -> f64 {

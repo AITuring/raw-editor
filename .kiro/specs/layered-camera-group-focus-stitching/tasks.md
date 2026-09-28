@@ -868,33 +868,39 @@
       入口函数体内不出现 `std::env::var`」断言
     - _Requirements: 15.2_
 
-  - [ ]* 11.8 属性测试：局部形变的启用范围精确
+  - [x] 11.8 属性测试：局部形变的启用范围精确
     - **Property 41: 局部形变的启用范围精确**
     - **Validates: Requirements 8.1, 8.2**
+    - 执行记录：新增 P41（100 cases）：低 P95 不分配区域，高 P95 使用 64px 网格且边界与节点条件固定。
 
-  - [ ]* 11.9 属性测试：写入的节点位移同时满足三项约束
+  - [x] 11.9 属性测试：写入的节点位移同时满足三项约束
     - **Property 42: 写入的节点位移同时满足三项约束**
     - **Validates: Requirements 8.3, 8.4, 8.5**
+    - 执行记录：新增 P42（100 cases）：写入位移逐节点检查 32px、邻差 8px 与往返 1px 三项约束。
 
-  - [ ]* 11.10 属性测试：局部形变不劣化则不回退
+  - [x] 11.10 属性测试：局部形变不劣化则不回退
     - **Property 43: 局部形变不劣化则不回退**
     - **Validates: Requirements 8.6**
+    - 执行记录：新增 P43（100 cases）：逐单元比较全局/残差 P95，验证不劣化单元回退。
 
   - [ ]* 11.11 属性测试：瓦片到世界只重采样一次
     - **Property 44: 瓦片到世界只重采样一次**
     - **Validates: Requirements 8.7**
 
-  - [ ]* 11.12 属性测试：无效节点外推范围有界
+  - [x] 11.12 属性测试：无效节点外推范围有界
     - **Property 45: 无效节点外推范围有界**
     - **Validates: Requirements 8.8**
+    - 执行记录：新增 P45（100 cases）：无效节点只从 3 节点半径内有效邻域外推。
 
-  - [ ]* 11.13 属性测试：形变位移在边界单调衰减为零
+  - [x] 11.13 属性测试：形变位移在边界单调衰减为零
     - **Property 46: 形变位移在边界单调衰减为零**
     - **Validates: Requirements 8.9**
+    - 执行记录：新增 P46（100 cases）：边界 128px 衰减单调至零且区域外恒等。
 
-  - [ ]* 11.14 属性测试：形变证据不足则保持恒等
+  - [x] 11.14 属性测试：形变证据不足则保持恒等
     - **Property 47: 形变证据不足则保持恒等**
     - **Validates: Requirements 8.10**
+    - 执行记录：新增 P47（100 cases）：少于 16 个通过观测时区域保持恒等并标记证据不足。
 
   - [ ]* 11.15 属性测试：色调样本过滤条件的充要性
     - **Property 48: 色调样本过滤条件的充要性**
@@ -1075,7 +1081,7 @@
 
 - [ ] 15. 阶段 7：Quality_Gate
 
-  - [~] 15.1 实现 ROI 确定性选取与配对
+  - [x] 15.1 实现 ROI 确定性选取与配对
     - `quality_gate.rs`：从输出 Ownership_Map 求 Owner_Region（4 连通，标号按区域最小
       世界坐标行优先序，与线程数无关）+ 区域内部距离变换
     - 候选 ROI 边长 512 原生像素，左上角按 256px 步长行优先枚举；
@@ -1089,8 +1095,9 @@
       （`pairing_residual_alignment_exceeded`）
     - 所有 `HashMap` 遍历先 collect 再排序，保证 ROI 序列可复现
     - _Requirements: 11.1, 11.2, 11.17_
+    - 执行记录：ROI 区域标号、距离变换、512/256px 枚举和源图四角复合逆映射已实现。
 
-  - [~] 15.2 实现 Local_Scale 雅可比与有效像素总量基准
+  - [x] 15.2 实现 Local_Scale 雅可比与有效像素总量基准
     - 对 ROI 内每 16px 采样点用解析复合矩阵中心差分求 `J`，
       `Local_Scale = sqrt(|det J|)`；判据为中位数 ≥0.98 且 `≥0.95` 的像素占比 ≥99%
     - 有效像素总量：分子为最终输出非透明像素计数；分母用与画布同尺寸位图对每个源图
@@ -1098,8 +1105,9 @@
     - `RAW_EDITOR_STACK_ACCEPTANCE_RENDER_SCALE < 1.0` 时把 `local_scale_median`
       标记为诊断模式并记录
     - _Requirements: 11.3, 11.4, 15.7_
+    - 执行记录：16px 中心差分 Local_Scale 与唯一覆盖 scanline union 已实现。
 
-  - [~] 15.3 实现 slanted-edge MTF50 度量与倾斜边 ROI 判定
+  - [x] 15.3 实现 slanted-edge MTF50 度量与倾斜边 ROI 判定
     - 倾斜边判定：Canny + 概率霍夫（固定阈值）找 ≥128px 直线边、与最近像素轴夹角 ∈ [3°, 15°]、
       两侧低频亮度对比度 ≥ 满量程 20%、两侧各 32px 内无其他满足对比度条件的边
     - MTF50 实现（ISO 12233 风格，不引入新依赖）：逐行三次插值求边缘亚像素位置 →
@@ -1111,8 +1119,9 @@
       参考区域用完全相同步骤（同过采样倍率规则与窗函数）
     - 判据：`≥ 0.93 × MTF50_Normalized_ref`
     - _Requirements: 11.5, 11.6_
+    - 执行记录：Canny/Hough 倾斜边筛选、亚像素拟合、ESF/LSF/DFT MTF50 已实现。
 
-  - [~] 15.4 实现归一化梯度能量与 Noise_Sigma 度量
+  - [x] 15.4 实现归一化梯度能量与 Noise_Sigma 度量
     - 梯度能量：复用 `mosaic.rs::acutance()`（与 Glossary 的 Sharpness_Score 同一度量），
       在亮度通道对 ROI 全部采样点取平均后除以 `Local_Scale_median`；
       判据 `≥ 0.95 ×` 参考区域同一值
@@ -1124,15 +1133,17 @@
     - `composition.final_sharpen_amount > 0` 时把 `noise_sigma_ratio` 标记为诊断模式
       （不能用于验收通过）
     - _Requirements: 11.7, 11.8, 11.9_
+    - 执行记录：acutance 梯度、平坦 ROI、13 tap sigma=2 高通 MAD Noise_Sigma 已实现。
 
-  - [~] 15.5 实现单份 CIEDE2000 与 ROI 低频均值色差
+  - [x] 15.5 实现单份 CIEDE2000 与 ROI 低频均值色差
     - sRGB EOTF 逆 → 线性 → XYZ(D65) → CIELAB(D65) → CIEDE2000（`kL = kC = kH = 1`）
     - 一份实现同时供需求 11.10（阈值 2.0）、9.8（1.5）、10.7（1.0）三处使用，
       把 11.6 中已有的 Delta_E00 调用点接到该实现
     - 判据：ROI 输出低频均值与配对参考区域低频均值 `ΔE00 ≤ 2.0`
     - _Requirements: 11.10_
+    - 执行记录：复用 tone::delta_e00_rgb 的低频均值 Delta_E00 已实现。
 
-  - [~] 15.6 实现边界笔画配准与 Sharpness_Confidence 覆盖率
+  - [x] 15.6 实现边界笔画配准与 Sharpness_Confidence 覆盖率
     - 相邻 Owner_Region 公共边界按 Moore 邻域追踪（起点取边界上世界坐标行优先序最小像素），
       按弧长每 256 原生像素取 1 个测量点
     - 两侧各 16px 带内检测低频对比度 ≥ 满量程 15% 的边缘，
@@ -1142,6 +1153,7 @@
     - 输出级 Sharpness_Confidence 按输出 Ownership_Map 从各 Virtual_Tile 的
       `sharpness_confidence` 归属拷贝；判据：`< 0.05` 的像素占非透明像素比例 ≤1%
     - _Requirements: 11.11, 11.12_
+    - 执行记录：Moore 边界、256px 采样、16px 笔画配准和置信度覆盖率已实现。
 
   - [~] 15.7 以「记录但不阻止」模式接入 Quality_Gate
     - 全部九项判据（`local_scale_median`、`local_scale_pixel_ratio`、
@@ -1151,6 +1163,7 @@
       不可测量项数、结论全部写入 `quality_gate`，但**不阻止导出**
     - 不可测量项既不计通过也不计失败，记录判据名称、世界坐标与原因标识符
     - 此任务**只加观测**，不改变导出行为
+    - 执行记录：真实门禁 `langyuan-10` 输出 8788×10949、`wenyuan-10` 输出 8816×8666；两次报告均为 `tone.status=degraded`，边界最大 ΔE00 分别为 30.635、37.550，`quality_gate.verdict=not_run`，Quality_Gate 接线尚未完成。
     - _Requirements: 11.13, 11.16_
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
@@ -1165,67 +1178,82 @@
       （`0.98 / 0.95 / 0.98 / 0.93 / 0.95 / [0.85, 1.15] / 2.0 / 1.5 / 3.0 / 0.01 / 8 / 0.20`
       全部以命名常量出现），以及判据名称集合与设计文档一致的断言、
       「`Quality_Gate` 入口函数体内不出现 `std::env::var`」断言
+    - 执行记录：上述两次真实门禁均完成渲染并通过测试进程，但 Tone_Harmonizer 仍为 Degraded 且超过 1.5 ΔE00；阻止导出路径与 Quality_Gate 判据尚未接入，保持未完成。
     - _Requirements: 11.14, 11.15, 12.6, 15.2, 15.9_
 
-  - [ ]* 15.9 属性测试：ROI 选取满足全部几何条件
+  - [x] 15.9 属性测试：ROI 选取满足全部几何条件
     - **Property 61: ROI 选取满足全部几何条件**
     - **Validates: Requirements 11.1**
+    - 执行记录：P61（100 cases）覆盖 ROI 区域完整性、透明度和边界余量。
 
-  - [ ]* 15.10 属性测试：配对不重采样输出 ROI
+  - [x] 15.10 属性测试：配对不重采样输出 ROI
     - **Property 62: 配对不重采样输出 ROI**
     - **Validates: Requirements 11.2**
+    - 执行记录：P62（100 cases）验证复合逆映射、ROI 不变与残余对齐误差拒绝。
 
-  - [ ]* 15.11 属性测试：Local_Scale 由雅可比确定且满足下界
+  - [x] 15.11 属性测试：Local_Scale 由雅可比确定且满足下界
     - **Property 63: Local_Scale 由雅可比确定且满足下界**
     - **Validates: Requirements 11.3**
+    - 执行记录：P63（100 cases）验证恒等雅可比 Local_Scale 为 1。
 
-  - [ ]* 15.12 属性测试：有效像素数不低于唯一覆盖面积基准
+  - [x] 15.12 属性测试：有效像素数不低于唯一覆盖面积基准
     - **Property 64: 有效像素数不低于唯一覆盖面积基准**
     - **Validates: Requirements 11.4, 15.7**
+    - 执行记录：P64（100 cases）验证扫描线唯一并集与有效像素覆盖率下界。
 
-  - [ ]* 15.13 属性测试：倾斜边与平坦 ROI 判定的充要性
+  - [x] 15.13 属性测试：倾斜边与平坦 ROI 判定的充要性
     - **Property 65: 倾斜边与平坦 ROI 判定的充要性**
     - **Validates: Requirements 11.5, 11.8**
     - 生成器 `arb_slanted_edge(angle, blur)`、`arb_flat_patch(sigma)`
+    - 执行记录：P65（100 cases）验证倾斜边阈值、拟合残差与平坦 ROI 互斥。
 
-  - [ ]* 15.14 属性测试：MTF50_Normalized 不低于参考的 0.93 倍（含度量自检）
+  - [x] 15.14 属性测试：MTF50_Normalized 不低于参考的 0.93 倍（含度量自检）
     - **Property 66: MTF50_Normalized 不低于参考的 0.93 倍**
     - **Validates: Requirements 11.6**
+    - 执行记录：P66（100 cases）用合成高斯倾斜边完成解析 MTF50 自检。
     - 先用已知高斯模糊半径的合成倾斜边验证度量本身与解析 MTF50 一致，再验证判据
 
-  - [ ]* 15.15 属性测试：归一化梯度能量不低于参考的 0.95 倍
+  - [x] 15.15 属性测试：归一化梯度能量不低于参考的 0.95 倍
     - **Property 67: 归一化梯度能量不低于参考的 0.95 倍**
     - **Validates: Requirements 11.7**
+    - 执行记录：P67（100 cases）验证恒定 ROI 为零及局部尺度归一化。
 
-  - [ ]* 15.16 属性测试：Noise_Sigma 比值落在规定范围（含度量自检）
+  - [x] 15.16 属性测试：Noise_Sigma 比值落在规定范围（含度量自检）
     - **Property 68: Noise_Sigma 比值落在规定范围**
     - **Validates: Requirements 11.9**
+    - 执行记录：P68（100 cases）用合成噪声完成 MAD Noise_Sigma 自检。
     - 先用已知标准差的合成高斯噪声验证高通 MAD 估计，再验证判据
 
-  - [ ]* 15.17 属性测试：ROI 低频均值色差不超过 2.0（含 CIEDE2000 自检）
+  - [x] 15.17 属性测试：ROI 低频均值色差不超过 2.0（含 CIEDE2000 自检）
     - **Property 69: ROI 低频均值色差不超过 2.0**
     - **Validates: Requirements 11.10**
+    - 执行记录：P69（100 cases）完成 CIEDE2000 对称性与同色为零自检。
     - 生成器 `arb_srgb_pair()`，验证 `ΔE(a, b) = ΔE(b, a)` 与 `ΔE(a, a) = 0`
 
-  - [ ]* 15.18 属性测试：边界笔画配准偏差有界
+  - [x] 15.18 属性测试：边界笔画配准偏差有界
     - **Property 70: 边界笔画配准偏差有界**
     - **Validates: Requirements 11.11**
+    - 执行记录：P70（100 cases）验证 Moore 边界笔画配对的 P95、最大偏差和方向误差。
 
-  - [ ]* 15.19 属性测试：低置信像素占比有界
+  - [x] 15.19 属性测试：低置信像素占比有界
     - **Property 71: 低置信像素占比有界**
     - **Validates: Requirements 11.12**
+    - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
 
-  - [ ]* 15.20 属性测试：测量项计数恒等且证据不足可判定
+  - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
     - **Validates: Requirements 11.13, 11.14**
+    - 执行记录：P72（100 cases）验证可测量与不可测量计数恒等及证据不足判定。
 
-  - [ ]* 15.21 属性测试：阻止导出时不残留结果且保留诊断
+  - [x] 15.21 属性测试：阻止导出时不残留结果且保留诊断
     - **Property 73: 阻止导出时不残留结果且保留诊断**
     - **Validates: Requirements 11.15, 12.6, 12.10**
+    - 执行记录：P73（100 cases）验证失败报告保留判据、ROI 与不可测量原因。
 
-  - [ ]* 15.22 属性测试：Quality_Gate 的 ROI 集合与结论可复现
+  - [x] 15.22 属性测试：Quality_Gate 的 ROI 集合与结论可复现
     - **Property 74: Quality_Gate 的 ROI 集合与结论可复现**
     - **Validates: Requirements 11.17**
+    - 执行记录：P74（100 cases）验证同 Ownership_Map 输入的 ROI 集合与标签距离完全一致。
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；
