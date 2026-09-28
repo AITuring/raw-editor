@@ -21,6 +21,42 @@ const determinism = read(`${stackPipelineDir}/determinism.rs`);
 const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
 const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
 const tone = read(`${stackPipelineDir}/tone.rs`);
+const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
+
+// Stage 7 Quality_Gate thresholds and pure metric dependencies are part of the
+// source contract so wiring cannot silently use a relaxed acceptance band.
+for (const [name, value] of [
+  ['QUALITY_LOCAL_SCALE_MEDIAN_MIN', '0.98'],
+  ['QUALITY_LOCAL_SCALE_PIXEL_MIN', '0.95'],
+  ['QUALITY_LOCAL_SCALE_PIXEL_RATIO_MIN', '0.99'],
+  ['QUALITY_EFFECTIVE_PIXEL_RATIO_MIN', '0.98'],
+  ['QUALITY_MTF50_RATIO_MIN', '0.93'],
+  ['QUALITY_GRADIENT_RATIO_MIN', '0.95'],
+  ['QUALITY_NOISE_RATIO_MIN', '0.85'],
+  ['QUALITY_NOISE_RATIO_MAX', '1.15'],
+  ['QUALITY_ROI_DELTA_E00_MAX', '2.0'],
+  ['QUALITY_BOUNDARY_P95_MAX', '1.5'],
+  ['QUALITY_BOUNDARY_MAX', '3.0'],
+  ['QUALITY_LOW_CONFIDENCE_RATIO_MAX', '0.01'],
+]) {
+  assert.match(qualityGate, new RegExp(`${name}[^=]*=\\s*${value}`), `${name} must remain explicit`);
+}
+for (const criterion of [
+  'local_scale_median',
+  'local_scale_pixel_ratio',
+  'effective_pixel_count',
+  'mtf50_normalized',
+  'gradient_energy_normalized',
+  'noise_sigma_ratio',
+  'roi_delta_e00',
+  'boundary_stroke_alignment',
+  'sharpness_confidence_coverage',
+]) {
+  assert.ok(qualityGate.includes(`"${criterion}"`), `Quality_Gate criterion ${criterion} must remain stable`);
+}
+assert.match(qualityGate, /detect_lines\(/, 'MTF50 must use imageproc Hough');
+assert.match(qualityGate, /acutance_with_step\(/, 'gradient energy must reuse mosaic acutance');
+assert.match(qualityGate, /delta_e00_rgb\(/, 'Delta_E00 must use the canonical tone helper');
 
 // Stage 5 photometric defaults are part of the quality contract.  Keep these
 // source-level assertions dependency-free so changing an exposure bound cannot
