@@ -10365,3 +10365,37 @@ proptest! {
         prop_assert_eq!(region.reverted_cells as usize, expected);
     }
 }
+
+// Task 11.12 / Property 45.
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 45: 无效节点只从三节点半径内有效邻域外推，无邻域时严格为零。
+    // **Validates: Requirements 8.8**
+    #[test]
+    fn property_45_invalid_nodes_use_only_three_node_valid_support(
+        value in 0.0f64..8.0,
+    ) {
+        use super::report::{WorldPoint, WorldRect};
+        use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion};
+        let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 704.0, height: 704.0 }, 4.0);
+        let observations = (0..4).flat_map(|row| (0..4).map(move |column| WarpObservation::new(
+            WorldPoint { x: column as f64 * 64.0, y: row as f64 * 64.0 }, [value, 0.0], 0.0,
+        ))).collect::<Vec<_>>();
+        let region = WarpRegion::from_observations(overlap, &observations);
+        for node in region.nodes().iter().filter(|node| !node.valid) {
+            let supporting = region.nodes().iter().filter(|candidate| candidate.valid)
+                .map(|candidate| (candidate.world.x - node.world.x).hypot(candidate.world.y - node.world.y) / 64.0)
+                .fold(f64::INFINITY, f64::min);
+            if supporting > super::residual_warp::RESIDUAL_WARP_EXTRAPOLATION_RADIUS_NODES {
+                prop_assert_eq!(node.displacement, [0.0, 0.0]);
+            } else if node.displacement != [0.0, 0.0] {
+                prop_assert!(supporting <= super::residual_warp::RESIDUAL_WARP_EXTRAPOLATION_RADIUS_NODES);
+            }
+        }
+    }
+}
