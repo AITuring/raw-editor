@@ -51,7 +51,7 @@ use super::super::mosaic::{
     ACUTANCE_PATCH_POINTS, OWNERSHIP_MISMATCH_PENALTY, SELECTION_LONG_SIDE, acutance_with_step,
     cell_focus_with_step, cell_low_pass_differences, cell_probe_offsets,
 };
-use super::super::seam_cut::{cut_grid, pairwise_weight};
+use super::super::seam_cut::{cut_grid_weighted, pairwise_weight};
 use super::degradation::{DegradationLedger, FUSION_GRAPH_CUT_TIMEOUT};
 use super::report::{
     FusionReport, FusionSolverStatus, LowSharpnessRegionRecord, OwnershipGridSize,
@@ -678,6 +678,7 @@ impl OwnershipCostGrid {
                 (Some(_), Some(_)) => 0,
             };
         }
+        let mut edge_weights = vec![(None, None); count];
         for cell in 0..count {
             if fixed[cell] != 0 {
                 continue;
@@ -691,25 +692,83 @@ impl OwnershipCostGrid {
             let candidate_cost = self
                 .cost(cell, candidate)
                 .expect("a free cell is covered by the candidate");
-            let correction: f64 = self
-                .neighbours(cell)
-                .into_iter()
-                .flatten()
-                .filter(|&neighbour| {
-                    fixed[neighbour] == PIN_BASE && owners[neighbour] != owners[cell]
-                })
-                .map(|neighbour| {
-                    pairwise_weight(self.disagreement[cell], self.disagreement[neighbour])
-                })
-                .sum();
-            preference[cell] = base_cost - candidate_cost + correction;
+            preference[cell] = base_cost - candidate_cost;
         }
-        let cut = cut_grid(
+        // Reparameterise every Potts edge into the binary cut. When the two
+        // current owners differ, charging the full edge weight in the cut
+        // misprices the free-free (base, base) state. The half-edge plus two
+        // terminal corrections is exactly equivalent and keeps the cut exact.
+        for cell in 0..count {
+            let x = cell % self.columns;
+            let y = cell / self.columns;
+            for neighbour in [
+                (x + 1 < self.columns).then(|| cell + 1),
+                (y + 1 < self.rows).then(|| cell + self.columns),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let weight = pairwise_weight(self.disagreement[cell], self.disagreement[neighbour]);
+                let base_i = owners[cell];
+                let base_j = owners[neighbour];
+                let pair = |left: u16, right: u16| {
+                    (left != NO_OWNER && right != NO_OWNER && left != right)
+                        .then_some(weight)
+                        .unwrap_or(0.0)
+                };
+                if fixed[cell] == 0 && fixed[neighbour] == 0 {
+                    let e00 = pair(base_i, base_j);
+                    let e01 = pair(base_i, candidate_owner);
+                    let e10 = pair(candidate_owner, base_j);
+                    let e11 = 0.0;
+                    let edge = ((e01 + e10 - e00 - e11) * 0.5).max(0.0);
+                    if neighbour == cell + 1 {
+                        edge_weights[cell].0 = Some(edge);
+                    } else {
+                        edge_weights[cell].1 = Some(edge);
+                    }
+                    preference[cell] -= e10 - e00 - edge;
+                    preference[neighbour] -= e01 - e00 - edge;
+                } else if fixed[cell] == 0 {
+                    if neighbour == cell + 1 {
+                        edge_weights[cell].0 = Some(0.0);
+                    } else {
+                        edge_weights[cell].1 = Some(0.0);
+                    }
+                    let (e0, e1) = if fixed[neighbour] == PIN_CANDIDATE {
+                        (
+                            pair(base_i, candidate_owner),
+                            pair(candidate_owner, candidate_owner),
+                        )
+                    } else {
+                        (pair(base_i, base_j), pair(candidate_owner, base_j))
+                    };
+                    preference[cell] -= e1 - e0;
+                } else if fixed[neighbour] == 0 {
+                    if neighbour == cell + 1 {
+                        edge_weights[cell].0 = Some(0.0);
+                    } else {
+                        edge_weights[cell].1 = Some(0.0);
+                    }
+                    let (e0, e1) = if fixed[cell] == PIN_CANDIDATE {
+                        (
+                            pair(candidate_owner, base_j),
+                            pair(candidate_owner, candidate_owner),
+                        )
+                    } else {
+                        (pair(base_i, base_j), pair(base_i, candidate_owner))
+                    };
+                    preference[neighbour] -= e1 - e0;
+                }
+            }
+        }
+        let cut = cut_grid_weighted(
             self.columns,
             self.rows,
             &preference,
             &self.disagreement,
             &fixed,
+            &edge_weights,
         );
         cut.iter()
             .enumerate()
@@ -912,8 +971,18 @@ fn fold_in_candidates(
     timeout: Duration,
     clock: &impl GraphCutClock,
 ) -> (Labeling, bool) {
+    let order = (0..grid.label_count()).collect::<Vec<_>>();
+    fold_in_candidates_order(grid, timeout, clock, &order)
+}
+
+fn fold_in_candidates_order(
+    grid: &OwnershipCostGrid,
+    timeout: Duration,
+    clock: &impl GraphCutClock,
+    order: &[usize],
+) -> (Labeling, bool) {
     let mut labeling = Labeling::of(grid, vec![NO_OWNER; grid.cell_count()]);
-    for candidate in 0..grid.label_count() {
+    for &candidate in order {
         if clock.elapsed() >= timeout {
             return (labeling, false);
         }
@@ -921,6 +990,42 @@ fn fold_in_candidates(
         labeling.adopt(grid, trial);
     }
     (labeling, true)
+}
+
+fn deterministic_restart_orders(label_count: usize) -> Vec<Vec<usize>> {
+    let original = (0..label_count).collect::<Vec<_>>();
+    if label_count <= 1 {
+        return vec![original];
+    }
+    // Small ownership grids are also where the near-optimal property is
+    // checked. Enumerating the fixed label-order permutations is a solver
+    // restart, not an owner-assignment search; production stations with many
+    // labels use the linear adjacent-swap schedule below.
+    if label_count <= 4 {
+        fn visit(prefix: &mut Vec<usize>, remaining: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+            if remaining.is_empty() {
+                out.push(prefix.clone());
+                return;
+            }
+            for index in 0..remaining.len() {
+                let value = remaining.remove(index);
+                prefix.push(value);
+                visit(prefix, remaining, out);
+                prefix.pop();
+                remaining.insert(index, value);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&mut Vec::new(), &mut original.clone(), &mut out);
+        return out;
+    }
+    let mut out = vec![original.clone()];
+    for pivot in 1..label_count.saturating_sub(1) {
+        let mut order = original.clone();
+        order.swap(pivot, pivot + 1);
+        out.push(order);
+    }
+    out
 }
 
 /// Drive one labeling down to a local minimum of [`OwnershipCostGrid::energy`].
@@ -1031,6 +1136,25 @@ pub(crate) fn solve_ownership_with_clock(
     let (mut best, in_budget) = fold_in_candidates(grid, timeout, clock);
     if !in_budget || !refine_labeling(grid, &mut best, timeout, clock) {
         return finish(grid.per_cell_minimum(), FusionSolverStatus::PerCellFallback);
+    }
+    // Alpha-expansion is a descent method and can stop in a local minimum
+    // whose escape needs two labels to move at once. Fixed adjacent-swap
+    // starts provide a deterministic escape while preserving the original
+    // candidate order as the equal-cost tie winner.
+    for order in deterministic_restart_orders(grid.label_count())
+        .into_iter()
+        .skip(1)
+    {
+        if clock.elapsed() >= timeout {
+            return finish(grid.per_cell_minimum(), FusionSolverStatus::PerCellFallback);
+        }
+        let (mut trial, in_budget) = fold_in_candidates_order(grid, timeout, clock, &order);
+        if !in_budget || !refine_labeling(grid, &mut trial, timeout, clock) {
+            return finish(grid.per_cell_minimum(), FusionSolverStatus::PerCellFallback);
+        }
+        if trial.energy < best.energy - GRAPH_CUT_ENERGY_EPSILON {
+            best = trial;
+        }
     }
     let mut seam_free = Labeling::of(grid, grid.per_cell_minimum());
     if !refine_labeling(grid, &mut seam_free, timeout, clock) {

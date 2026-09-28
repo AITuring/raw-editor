@@ -126,10 +126,37 @@ pub(super) fn cut_grid(
     disagreement: &[f64],
     fixed: &[i8],
 ) -> Vec<u8> {
+    let count = width.saturating_mul(height);
+    let edge_weights = vec![(None, None); count];
+    cut_grid_weighted(
+        width,
+        height,
+        preference,
+        disagreement,
+        fixed,
+        &edge_weights,
+    )
+}
+
+/// Binary cut with an optional per-cell horizontal/vertical edge weight. The
+/// entry at `i` contains the optional weights for the right and lower edges of
+/// cell `i`; `None`
+/// retains the normal disagreement-derived weight. This keeps the original
+/// API and tie behaviour while allowing a correct alpha-expansion reparametr-
+/// isation for edges whose two current owners differ.
+pub(super) fn cut_grid_weighted(
+    width: usize,
+    height: usize,
+    preference: &[f64],
+    disagreement: &[f64],
+    fixed: &[i8],
+    edge_weights: &[(Option<f64>, Option<f64>)],
+) -> Vec<u8> {
     let count = width * height;
     assert_eq!(preference.len(), count);
     assert_eq!(disagreement.len(), count);
     assert_eq!(fixed.len(), count);
+    assert_eq!(edge_weights.len(), count);
     let source = count;
     let sink = count + 1;
     let mut graph = Graph {
@@ -152,7 +179,13 @@ pub(super) fn cut_grid(
         .into_iter()
         .flatten()
         {
-            let weight = pairwise_weight(disagreement[i], disagreement[neighbour]);
+            let explicit = if neighbour == i + 1 {
+                edge_weights[i].0
+            } else {
+                edge_weights[i].1
+            };
+            let weight = explicit
+                .unwrap_or_else(|| pairwise_weight(disagreement[i], disagreement[neighbour]));
             graph.connect(i, neighbour, weight, weight);
         }
     }

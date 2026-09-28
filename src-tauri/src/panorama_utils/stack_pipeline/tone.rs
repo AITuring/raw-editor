@@ -163,7 +163,7 @@ pub(crate) struct ToneTile {
 /// either tile covers alone. A tile's own field near its coverage edge
 /// averages only its own side, which next to a content gradient separates it
 /// from a neighbour whose field is still centred at that position.
-struct PairField {
+pub(crate) struct PairField {
     origin: (f64, f64),
     stride: f64,
     width: usize,
@@ -278,7 +278,7 @@ impl PairField {
 
     /// Every doubly and entirely covered cell whose two fields both lie in
     /// the usable luminance range, `first` as the owner side (需求 9.1).
-    fn samples(&self) -> Vec<ToneSample> {
+    pub(crate) fn samples(&self) -> Vec<ToneSample> {
         let usable = |pixel: [f32; 3]| {
             let luminance = 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2];
             (TONE_MIN_SAMPLE_LUMINANCE..=TONE_MAX_SAMPLE_LUMINANCE).contains(&luminance)
@@ -355,7 +355,7 @@ fn sample_log_gain(sample: &ToneSample) -> [f64; 3] {
 /// relation is estimated from. A sample is excluded when the distance of its
 /// log-gain vector from the per-channel median exceeds three times the median
 /// distance, so the three channels always keep the same samples.
-fn consistent_samples(samples: &[ToneSample]) -> Vec<ToneSample> {
+pub(crate) fn consistent_samples(samples: &[ToneSample]) -> Vec<ToneSample> {
     if samples.is_empty() {
         return Vec::new();
     }

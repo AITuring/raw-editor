@@ -1,0 +1,1 @@
+cc 0639d64c1d57f4766a6f071bfa85032d500d476260b8987cb9b94a4a29243c98 # shrinks to draw = CostGridDraw { columns: 2, rows: 3, labels: 3, costs: [Some(1), None, Some(1), None, Some(1), Some(1), None, Some(1), Some(1), Some(3), Some(1), None, None, None, None, Some(1), None, None,], disagreement: [0, 0, 0, 24, 0, 22] }

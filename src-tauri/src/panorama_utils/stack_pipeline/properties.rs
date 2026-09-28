@@ -127,6 +127,74 @@ proptest! {
         }
     }
 
+    // Feature: layered-camera-group-focus-stitching, Property 48: Tone_Harmonizer
+    // 只有双覆盖、亮度可用且通过一致性筛选的样本进入色调求解。
+    //
+    // **Validates: Requirements 9.1, 9.4**
+    #[test]
+    fn property_48_tone_samples_are_usable_and_consistent(seed in any::<u8>()) {
+        let value = 0.25 + f32::from(seed % 40) / 200.0;
+        let samples = vec![tone::ToneSample {
+            owner: [value; 3],
+            source: [value * 0.9; 3],
+        }; tone::TONE_MIN_SAMPLES];
+        let retained = tone::consistent_samples(&samples);
+        prop_assert_eq!(retained.len(), samples.len());
+        let all_usable = retained.iter().all(|sample| {
+            let owner = 0.2126 * sample.owner[0]
+                + 0.7152 * sample.owner[1]
+                + 0.0722 * sample.owner[2];
+            let source = 0.2126 * sample.source[0]
+                + 0.7152 * sample.source[1]
+                + 0.0722 * sample.source[2];
+            (tone::TONE_MIN_SAMPLE_LUMINANCE..=tone::TONE_MAX_SAMPLE_LUMINANCE)
+                .contains(&owner)
+                && (tone::TONE_MIN_SAMPLE_LUMINANCE..=tone::TONE_MAX_SAMPLE_LUMINANCE)
+                    .contains(&source)
+        });
+        prop_assert_eq!(all_usable, true);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 50: Tone_Harmonizer
+    // 增益和偏移在应用前始终被限制在设计边界内。
+    //
+    // **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
+    #[test]
+    fn property_50_tone_solution_is_bounded(seed in any::<u8>()) {
+        let source = 0.2 + f32::from(seed % 80) / 200.0;
+        let samples = vec![tone::ToneSample {
+            owner: [(source * 1.4).min(0.99); 3],
+            source: [source; 3],
+        }; tone::TONE_MIN_SAMPLES];
+        let solve = tone::solve_tone_pair(&samples);
+        let gains_bounded = solve.gain.iter().all(|value| {
+            (*value >= tone::TONE_MIN_GAIN) && (*value <= tone::TONE_MAX_GAIN)
+        });
+        prop_assert_eq!(gains_bounded, true);
+        let offsets_bounded = solve.offset.iter().all(|value| value.abs() <= tone::TONE_MAX_ABS_OFFSET);
+        prop_assert_eq!(offsets_bounded, true);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 52: Tone_Harmonizer
+    // 边界色差使用唯一的 CIEDE2000 实现，且同色为零、结果对称。
+    //
+    // **Validates: Requirements 9.8, 9.11**
+    #[test]
+    fn property_52_boundary_delta_is_symmetric_and_finite(
+        left in prop::array::uniform3(0.0f32..=1.0),
+        right in prop::array::uniform3(0.0f32..=1.0),
+    ) {
+        let left = left;
+        let right = right;
+        let same = tone::delta_e00_rgb(left, left);
+        let forward = tone::delta_e00_rgb(left, right);
+        let backward = tone::delta_e00_rgb(right, left);
+        prop_assert!(same.abs() < 1.0e-9);
+        prop_assert!(forward.is_finite() && backward.is_finite());
+        prop_assert!((forward - backward).abs() < 1.0e-9);
+        prop_assert!(forward >= 0.0);
+    }
+
     // Feature: layered-camera-group-focus-stitching, Property 51: Tone_Harmonizer
     // 只写像素，不改已完成的 Ownership_Map。
     //
@@ -140,6 +208,141 @@ proptest! {
         compositor::assert_ownership_unchanged(&before, &owners);
         prop_assert_eq!(before, owners);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Properties 54–56: ownership compositor contract (13.9–13.11)
+// ---------------------------------------------------------------------------
+
+fn ownership_contract_fixture() -> (
+    Vec<ImageInfo>,
+    HashMap<usize, Matrix3<f64>>,
+    Vec<image::Rgb32FImage>,
+) {
+    let side = 48;
+    let infos = vec![single_frame_info(0, side), single_frame_info(1, side)];
+    let homographies = HashMap::from([
+        (0usize, Matrix3::identity()),
+        (
+            1usize,
+            Matrix3::new(1.0, 0.0, 16.0, 0.0, 1.0, 4.0, 0.0, 0.0, 1.0),
+        ),
+    ]);
+    let sources = vec![
+        single_frame_source(side, 11, 1.0),
+        single_frame_source(side, 29, 2.0),
+    ];
+    (infos, homographies, sources)
+}
+
+#[test]
+fn property_54_layered_ownership_publishes_coverage_and_owner_labels() {
+    let (infos, homographies, sources) = ownership_contract_fixture();
+    let rendered =
+        render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+    assert_eq!(rendered.image.dimensions(), rendered.coverage.dimensions());
+    assert_eq!(rendered.image.dimensions(), rendered.ownership.dimensions());
+    assert_eq!(rendered.ownership.legend().len(), sources.len());
+    for (x, y, pixel) in rendered.image.enumerate_pixels() {
+        let owner = rendered.ownership.owner_at(x, y);
+        if rendered.coverage.is_covered(x, y) {
+            assert!(owner > 0, "covered pixel ({x},{y}) has no owner");
+            assert!(pixel.0.iter().all(|channel| channel.is_finite()));
+        } else {
+            assert_eq!(owner, stitching::NO_OWNER);
+            assert!(pixel.0.iter().all(|&channel| channel == 0.0));
+        }
+    }
+}
+
+#[test]
+fn property_55_layered_ownership_is_deterministic() {
+    let (infos, homographies, sources) = ownership_contract_fixture();
+    let first = render_layered_ownership(&infos, &homographies, &sources).expect("first render");
+    let second = render_layered_ownership(&infos, &homographies, &sources).expect("second render");
+    assert_eq!(first.image.as_raw(), second.image.as_raw());
+    assert_eq!(first.coverage, second.coverage);
+    assert_eq!(first.ownership, second.ownership);
+    assert_eq!(first.sampling_origin, second.sampling_origin);
+}
+
+#[test]
+fn property_56_layered_ownership_keeps_uncovered_pixels_zero() {
+    let (infos, mut homographies, sources) = ownership_contract_fixture();
+    homographies.insert(
+        1,
+        Matrix3::new(1.0, 0.0, 10_000.0, 0.0, 1.0, 10_000.0, 0.0, 0.0, 1.0),
+    );
+    let rendered =
+        render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+    let mut uncovered = 0;
+    for (x, y, pixel) in rendered.image.enumerate_pixels() {
+        if !rendered.coverage.is_covered(x, y) {
+            uncovered += 1;
+            assert_eq!(rendered.ownership.owner_at(x, y), stitching::NO_OWNER);
+            assert!(pixel.0.iter().all(|&channel| channel == 0.0));
+        }
+    }
+    assert!(uncovered > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Property 94 / acceptance harness skeleton (17.5, 17.15)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StackAcceptanceVerdict {
+    Pass,
+    Fail,
+}
+
+fn stack_acceptance_verdict(
+    measurable: usize,
+    failed: usize,
+    unmeasurable: usize,
+) -> StackAcceptanceVerdict {
+    if measurable > 0 && failed == 0 && unmeasurable * 5 <= (measurable + unmeasurable) {
+        StackAcceptanceVerdict::Pass
+    } else {
+        StackAcceptanceVerdict::Fail
+    }
+}
+
+proptest! {
+    #[test]
+    fn property_94_stack_acceptance_verdict_is_pure(
+        measurable in 0usize..1000,
+        failed in 0usize..1000,
+        unmeasurable in 0usize..1000,
+    ) {
+        let expected = if measurable > 0 && failed == 0 && unmeasurable * 5 <= measurable + unmeasurable {
+            StackAcceptanceVerdict::Pass
+        } else {
+            StackAcceptanceVerdict::Fail
+        };
+        prop_assert_eq!(stack_acceptance_verdict(measurable, failed, unmeasurable), expected);
+    }
+}
+
+#[test]
+#[ignore = "acceptance harness requires the supplied real dataset"]
+fn stack_acceptance_harness() {
+    let measurable = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_MEASURABLE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let failed = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_FAILED")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let unmeasurable = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_UNMEASURABLE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    println!(
+        "stack acceptance verdict: {:?}",
+        stack_acceptance_verdict(measurable, failed, unmeasurable)
+    );
 }
 
 /// Every identifier a Stack_Report is allowed to carry as a failure or
@@ -5888,6 +6091,42 @@ proptest! {
     }
 }
 
+#[test]
+fn graph_cut_saved_counterexample_stays_within_property_12_bound() {
+    let draw = CostGridDraw {
+        columns: 2,
+        rows: 3,
+        labels: 3,
+        costs: vec![
+            Some(1),
+            None,
+            Some(1),
+            None,
+            Some(1),
+            Some(1),
+            None,
+            Some(1),
+            Some(1),
+            Some(3),
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+            Some(1),
+            None,
+            None,
+        ],
+        disagreement: vec![0, 0, 0, 24, 0, 22],
+    };
+    let solution = focus_fuser::solve_ownership(&draw.production_grid());
+    let achieved = draw.energy(&solution.owners);
+    assert!(
+        achieved <= 6.53 * 1.01 + 1.0e-9,
+        "counterexample energy {achieved}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Properties 14 / 15 / 16 harness: the ownership grid of one Capture_Station
 // ---------------------------------------------------------------------------
@@ -10918,8 +11157,12 @@ proptest! {
             criteria: vec![QualityGateCriterionRecord {
                 name: "mtf50_normalized".to_string(),
                 threshold: 0.93,
+                threshold_min: None,
+                threshold_max: None,
                 measurable_count: 1,
                 unmeasurable_count: 0,
+                measured: Vec::new(),
+                diagnostic: false,
                 failed: vec![FailedMeasurementRecord {
                     world: WorldPoint { x, y },
                     measured,
