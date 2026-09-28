@@ -10543,3 +10543,67 @@ proptest! {
         prop_assert!(identity.abs() <= 1.0e-10);
     }
 }
+
+// Optional Stage 7 geometry properties (15.9, 15.11).
+use super::quality_gate::{
+    QUALITY_ROI_MARGIN, QUALITY_ROI_MAX_COUNT, QUALITY_ROI_SIDE, QualityRoi, SourceGeometry,
+    label_owner_regions, local_scale_for_roi, select_quality_rois,
+};
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 61: ROI 选取满足全部几何条件
+    #[test]
+    fn property_61_roi_selection_is_region_complete(split in 544u32..1024u32) {
+        let width = 1024u32;
+        let height = 512u32;
+        let owners = (0..width * height).map(|index| {
+            let x = index % width;
+            if x < split { 1u16 } else { 2u16 }
+        }).collect::<Vec<_>>();
+        let coverage = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let regions = label_owner_regions(&owners, &coverage)
+            .expect("synthetic ownership must label");
+        let selection = select_quality_rois(&regions, (0.0, 0.0))
+            .expect("at least one 512px ROI is measurable");
+        prop_assert!(!selection.rois.is_empty());
+        prop_assert!(selection.rois.len() <= QUALITY_ROI_MAX_COUNT);
+        for roi in selection.rois {
+            prop_assert_eq!(roi.side, QUALITY_ROI_SIDE);
+            let first = regions.labels[(roi.y * regions.width + roi.x) as usize];
+            for y in roi.y..roi.y + roi.side {
+                for x in roi.x..roi.x + roi.side {
+                    let index = (y * regions.width + x) as usize;
+                    prop_assert_eq!(regions.labels[index], first);
+                    prop_assert!(regions.distance_to_boundary[index] >= QUALITY_ROI_MARGIN);
+                }
+            }
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 63: Local_Scale 由雅可比确定且满足下界
+    #[test]
+    fn property_63_identity_jacobian_has_unit_local_scale(
+        tx in -4096.0f64..4096.0,
+        ty in -4096.0f64..4096.0,
+        render_scale in 0.25f64..1.5,
+    ) {
+        let roi = QualityRoi {
+            x: 0, y: 0, side: QUALITY_ROI_SIDE, region_label: 1, owner: 1,
+            world_origin: (512.0 + tx, 512.0 + ty), boundary_clearance: 64.0,
+        };
+        let geometry = SourceGeometry {
+            member_to_anchor: nalgebra::Matrix3::identity(),
+            tile_to_world: nalgebra::Matrix3::identity(),
+            station_id: 1,
+        };
+        let residual = super::residual_warp::ResidualWarp::new();
+        let measurement = local_scale_for_roi(&roi, &geometry, &residual, render_scale)
+            .expect("identity map is measurable");
+        prop_assert_eq!(measurement.samples, 1024);
+        prop_assert!((measurement.median - 1.0).abs() < 1.0e-10);
+        prop_assert!((measurement.fraction_at_least_095 - 1.0).abs() < 1.0e-10);
+        prop_assert_eq!(measurement.diagnostic_render_scale, render_scale < 1.0);
+    }
+}
