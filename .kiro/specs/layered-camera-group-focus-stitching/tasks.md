@@ -1164,6 +1164,11 @@
     - 不可测量项既不计通过也不计失败，记录判据名称、世界坐标与原因标识符
     - 此任务**只加观测**，不改变导出行为
     - 执行记录：真实门禁 `langyuan-10` 输出 8788×10949、`wenyuan-10` 输出 8816×8666；两次报告均为 `tone.status=degraded`，边界最大 ΔE00 分别为 30.635、37.550，`quality_gate.verdict=not_run`，Quality_Gate 接线尚未完成。
+    - 执行记录（合并色调修复 4398b8fa 后）：上一条的 30.635 / 37.550 测于不含色调修复的
+      a2eec81d 基线。合并后渲染路径只多出 `residual_warp.rs` 的修正（两组门禁均为
+      `residual_warp.identity=true`、0 个区域，不生效）与尚未接线的 `quality_gate.rs`，
+      输出与 4398b8fa 一致；4398b8fa 实测两组仍为 `tone.status=degraded`，边界最大 ΔE00
+      16.849 / 19.188，超限窗口 46 / 76（见检查点 12 记录），`quality_gate.verdict=not_run`。
     - _Requirements: 11.13, 11.16_
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径

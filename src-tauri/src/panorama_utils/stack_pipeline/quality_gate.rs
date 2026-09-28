@@ -382,10 +382,8 @@ pub(crate) fn map_roi_corners_to_source(
     residual: &residual_warp::ResidualWarp,
     residual_alignment_px: f64,
 ) -> Result<[Point2<f64>; 4], &'static str> {
-    if !residual_alignment_px.is_finite()
-        || residual_alignment_px < 0.0
-        || residual_alignment_px > 0.5
-    {
+    // NaN and infinities are outside the range as well.
+    if !(0.0..=0.5).contains(&residual_alignment_px) {
         return Err(degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED);
     }
     let (x, y) = roi.world_origin;
@@ -622,7 +620,6 @@ fn metric_median(mut values: Vec<f64>) -> f64 {
 
 /// Gaussian sigma 2.0, radius 6, exactly 13 taps; replicated borders are used
 /// identically for reference and output. The caller never resamples output.
-
 fn metric_gaussian_sigma2(plane: &[f64], width: usize, height: usize) -> Vec<f64> {
     let mut kernel = [0.0f64; 13];
     for (index, weight) in kernel.iter_mut().enumerate() {
@@ -719,6 +716,7 @@ fn metric_fit_line(points: &[(f64, f64)]) -> Option<(f64, f64, f64)> {
     Some((slope, intercept, rms))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn metric_refine_edge(
     plane: &[f64],
     width: usize,

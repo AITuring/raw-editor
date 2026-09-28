@@ -309,11 +309,11 @@ impl WarpRegion {
         }
         let global_cell_error = global_cell_samples
             .iter_mut()
-            .map(percentile95)
+            .map(|samples| percentile95(samples))
             .collect::<Vec<_>>();
         let residual_cell_error = residual_cell_samples
             .iter_mut()
-            .map(percentile95)
+            .map(|samples| percentile95(samples))
             .collect::<Vec<_>>();
         let unique_valid_nodes = region.nodes.iter().filter(|node| node.valid).count();
         if unique_valid_nodes < RESIDUAL_WARP_MIN_VERIFIED_POINTS {
@@ -893,7 +893,7 @@ fn displacement_delta(left: [f64; 2], right: [f64; 2]) -> f64 {
     (left[0] - right[0]).hypot(left[1] - right[1])
 }
 
-fn percentile95(values: &mut Vec<f64>) -> f64 {
+fn percentile95(values: &mut [f64]) -> f64 {
     if values.is_empty() {
         return f64::NAN;
     }
