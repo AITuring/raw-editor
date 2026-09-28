@@ -32,6 +32,48 @@ assert.match(photometric, /max_sample_value:\s*0\.98/);
 assert.match(photometric, /max_abs_log_gain:\s*1\.25_f64\.ln\(\)/);
 assert.match(photometric, /allow_linear:\s*false/);
 assert.doesNotMatch(tone, /std::env::var/, 'Tone_Harmonizer must not read environment switches');
+for (const variable of [
+  'RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC',
+  'RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN',
+  'RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN',
+]) {
+  assert.doesNotMatch(
+    stitching,
+    new RegExp(variable),
+    `${variable} must not gate Tone_Harmonizer in the production stitching path`,
+  );
+}
+
+// Stage 5 residual geometry keeps its activation and three node gates explicit
+// so a threshold change cannot silently widen the local warp domain.
+const residualWarp = read(`${stackPipelineDir}/residual_warp.rs`);
+for (const [name, value] of [
+  ['RESIDUAL_WARP_ENABLE_P95_PX', '3.0'],
+  ['RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX', '32.0'],
+  ['RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX', '8.0'],
+  ['RESIDUAL_WARP_MAX_ROUND_TRIP_ERROR_PX', '1.0'],
+]) {
+  assert.match(
+    residualWarp,
+    new RegExp(`(?:const|pub\\([^)]*\\) const)\\s+${name}[^=]*=\\s*${value}`),
+    `${name} must remain an explicit residual-warp gate`,
+  );
+}
+assert.match(
+  residualWarp,
+  /RESIDUAL_WARP_NODE_STEP_PX/,
+  'Residual_Warp must use the report node spacing constant',
+);
+assert.match(
+  residualWarp,
+  /Field<2>/,
+  'Residual_Warp must reuse mosaic::Field<2>',
+);
+const streamingGainClampCount = (mosaic.match(/STREAMING_GROUP_GAIN_MAX_LOG/g) || []).length;
+assert.ok(
+  streamingGainClampCount >= 4,
+  'all three streaming group gain clamp sites must share ln(1.25)',
+);
 
 const numberConstant = (source, name) => {
   const value = source.match(

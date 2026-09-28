@@ -1069,6 +1069,7 @@ fn focus_output_bounds(
     (min_x, max_x, min_y, max_y)
 }
 
+#[allow(dead_code)]
 fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
 }
@@ -1098,24 +1099,14 @@ fn apply_exposure_compensation_with_strength(
     strength: f32,
 ) -> Rgb<f32> {
     let strength = strength.clamp(0.0, 1.0);
-    if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_none() {
-        let gains = exposure.channel_gain_at(x, y).map(|gain| {
-            if gain.is_finite() && gain > 0.0 {
-                (gain.ln() * strength).exp()
-            } else {
-                1.0
-            }
-        });
-        apply_exposure_channel_gain(pixel, gains)
-    } else {
-        let gain = exposure.gain_at(x, y);
-        let gain = if gain.is_finite() && gain > 0.0 {
+    let gains = exposure.channel_gain_at(x, y).map(|gain| {
+        if gain.is_finite() && gain > 0.0 {
             (gain.ln() * strength).exp()
         } else {
             1.0
-        };
-        apply_exposure_gain(pixel, gain)
-    }
+        }
+    });
+    apply_exposure_channel_gain(pixel, gains)
 }
 
 fn panorama_detail_alpha(candidate_signed_distance: f32) -> f32 {
@@ -1198,7 +1189,8 @@ impl ExposureCompensation {
         self
     }
 
-    fn gain_at(&self, x: u32, y: u32) -> f32 {
+    #[allow(dead_code)]
+    fn gain_at(&self, _x: u32, _y: u32) -> f32 {
         if self.gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return 1.0;
         }
@@ -1207,9 +1199,15 @@ impl ExposureCompensation {
         // as rectangular tone steps on a long scan.  The default compositor
         // uses one robust overlap constant; spatial compensation is opt-in
         // for captures where illumination is known to vary within a station.
-        if std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none() {
-            return self.representative_gain;
-        }
+        // The spatial field remains available for diagnostics, but production
+        // uses the one robust overlap constant.  `allow_linear = false` is the
+        // single photometric wiring decision for the default Tone_Harmonizer.
+        return self.representative_gain;
+    }
+
+    /// Diagnostic-only spatial scalar field retained for comparison reports.
+    #[allow(dead_code)]
+    fn spatial_gain_at(&self, x: u32, y: u32) -> f32 {
         let grid_x = x as f64 / self.cell_size as f64;
         let grid_y = y as f64 / self.cell_size as f64;
         let x0 = (grid_x.floor() as usize).min(self.grid_width - 1);
@@ -1224,7 +1222,7 @@ impl ExposureCompensation {
         top * (1.0 - ty) + bottom * ty
     }
 
-    fn channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
+    fn channel_gain_at(&self, _x: u32, _y: u32) -> [f32; 3] {
         if self.channel_gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return [1.0; 3];
         }
@@ -1232,11 +1230,14 @@ impl ExposureCompensation {
         // one robust overlap constant per candidate.  A per-cell RGB field is
         // useful for a measured vignette, but its 256px cells can otherwise
         // become visible chromatic rectangles across a long scan.
-        if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_some()
-            || std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none()
-        {
-            return self.representative_channel_gain;
-        }
+        // Keep the per-cell RGB field for comparison diagnostics, while the
+        // shipped path uses the robust representative value.
+        return self.representative_channel_gain;
+    }
+
+    /// Diagnostic-only spatial RGB field retained for comparison reports.
+    #[allow(dead_code)]
+    fn spatial_channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
         let grid_x = x as f64 / self.cell_size as f64;
         let grid_y = y as f64 / self.cell_size as f64;
         let x0 = (grid_x.floor() as usize).min(self.grid_width - 1);
@@ -2133,72 +2134,68 @@ where
     // the full-resolution pass below applies that fixed model.  It is
     // opt-in while the cost is being evaluated because a tile preview is an
     // additional decode/render of each virtual station.
-    let photometric_models: Option<HashMap<usize, PhotometricModel>> =
-        if std::env::var_os("RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC").is_some() && images.len() > 1 {
-            let mut previews = Vec::with_capacity(images.len());
-            for image_info in images {
-                let image = load_image(image_info)?;
-                let longest = image.width().max(image.height()).max(1);
-                let scale = (1536.0 / longest as f64).min(1.0);
-                let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
-                let preview_height = ((image.height() as f64 * scale).round() as u32).max(2);
-                let preview = resize_rgb(&image, preview_width, preview_height);
-                let source_scale = Matrix3::new(
-                    image.width() as f64 / preview_width as f64,
-                    0.0,
-                    0.0,
-                    0.0,
-                    image.height() as f64 / preview_height as f64,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                );
-                let transform = global_homographies
-                    .get(&image_info.id)
-                    .copied()
-                    .ok_or_else(|| {
-                        format!("Missing focus tile pose for '{}'", image_info.filename)
-                    })?
-                    * source_scale;
-                previews.push((preview, transform));
-            }
-            let calibration =
-                calibrate_overlap_photometry(&previews, &PhotometricOptions::default());
-            let reliable_pairs = calibration
-                .pairs
-                .iter()
-                .filter(|pair| pair.reliable)
-                .count();
-            println!(
-                "  - Global virtual-tile photometry: reliable_pairs={}/{} error={:.4}->{:.4}",
-                reliable_pairs,
-                calibration.pairs.len(),
-                calibration.held_out_constant_error,
-                calibration.held_out_corrected_error
+    let photometric_models: Option<HashMap<usize, PhotometricModel>> = if images.len() > 1 {
+        let mut previews = Vec::with_capacity(images.len());
+        for image_info in images {
+            let image = load_image(image_info)?;
+            let longest = image.width().max(image.height()).max(1);
+            let scale = (1536.0 / longest as f64).min(1.0);
+            let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
+            let preview_height = ((image.height() as f64 * scale).round() as u32).max(2);
+            let preview = resize_rgb(&image, preview_width, preview_height);
+            let source_scale = Matrix3::new(
+                image.width() as f64 / preview_width as f64,
+                0.0,
+                0.0,
+                0.0,
+                image.height() as f64 / preview_height as f64,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
             );
-            // Observation only: unreliable pairs already fall back to the
-            // identity model inside `calibrate_overlap_photometry`.
-            if reliable_pairs < calibration.pairs.len() {
-                degradation::record_run_degradation(
-                    degradation::TONE_INSUFFICIENT_SAMPLES,
-                    serde_json::json!({
-                        "stage": "global_virtual_tile_photometry",
-                        "reliable_pairs": reliable_pairs,
-                        "pairs": calibration.pairs.len(),
-                    }),
-                );
-            }
-            Some(
-                images
-                    .iter()
-                    .enumerate()
-                    .map(|(index, image)| (image.id, calibration.models[index].clone()))
-                    .collect(),
-            )
-        } else {
-            None
-        };
+            let transform = global_homographies
+                .get(&image_info.id)
+                .copied()
+                .ok_or_else(|| format!("Missing focus tile pose for '{}'", image_info.filename))?
+                * source_scale;
+            previews.push((preview, transform));
+        }
+        let calibration = calibrate_overlap_photometry(&previews, &PhotometricOptions::default());
+        let reliable_pairs = calibration
+            .pairs
+            .iter()
+            .filter(|pair| pair.reliable)
+            .count();
+        println!(
+            "  - Global virtual-tile photometry: reliable_pairs={}/{} error={:.4}->{:.4}",
+            reliable_pairs,
+            calibration.pairs.len(),
+            calibration.held_out_constant_error,
+            calibration.held_out_corrected_error
+        );
+        // Observation only: unreliable pairs already fall back to the
+        // identity model inside `calibrate_overlap_photometry`.
+        if reliable_pairs < calibration.pairs.len() {
+            degradation::record_run_degradation(
+                degradation::TONE_INSUFFICIENT_SAMPLES,
+                serde_json::json!({
+                    "stage": "global_virtual_tile_photometry",
+                    "reliable_pairs": reliable_pairs,
+                    "pairs": calibration.pairs.len(),
+                }),
+            );
+        }
+        Some(
+            images
+                .iter()
+                .enumerate()
+                .map(|(index, image)| (image.id, calibration.models[index].clone()))
+                .collect(),
+        )
+    } else {
+        None
+    };
 
     for (index, image_info) in images.iter().enumerate() {
         let _ = app_handle.emit(
@@ -2224,9 +2221,17 @@ where
         let tile_width = tile.width().max(1) as f64;
         let tile_height = tile.height().max(1) as f64;
         let tile_short = tile_width.min(tile_height).max(1.0);
-        let photo_model = photometric_models
-            .as_ref()
-            .and_then(|models| models.get(&image_info.id));
+        // The layered compositor keeps hard Source_RAW ownership exact.  The
+        // calibration is still solved unconditionally for the Tone_Harmonizer
+        // report, while the retired comparison path is the only one that
+        // applies its pixels during this legacy ownership pass.
+        let photo_model = (finishing == TileCompositorFinishing::LegacyOwnership)
+            .then(|| {
+                photometric_models
+                    .as_ref()
+                    .and_then(|models| models.get(&image_info.id))
+            })
+            .flatten();
         // Requirement 3.6: the default ownership path may choose a sample, but
         // it must not change that sample's RGB while continuing to name the
         // source as owner. Keep exposure compensation only on the retired
