@@ -1078,6 +1078,7 @@
       （`pairing_residual_alignment_exceeded`）
     - 所有 `HashMap` 遍历先 collect 再排序，保证 ROI 序列可复现
     - _Requirements: 11.1, 11.2, 11.17_
+    - 执行记录：ROI 区域标号、距离变换、512/256px 枚举和源图四角复合逆映射已实现。
 
   - [x] 15.2 实现 Local_Scale 雅可比与有效像素总量基准
     - 对 ROI 内每 16px 采样点用解析复合矩阵中心差分求 `J`，
@@ -1087,6 +1088,7 @@
     - `RAW_EDITOR_STACK_ACCEPTANCE_RENDER_SCALE < 1.0` 时把 `local_scale_median`
       标记为诊断模式并记录
     - _Requirements: 11.3, 11.4, 15.7_
+    - 执行记录：16px 中心差分 Local_Scale 与唯一覆盖 scanline union 已实现。
 
   - [x] 15.3 实现 slanted-edge MTF50 度量与倾斜边 ROI 判定
     - 倾斜边判定：Canny + 概率霍夫（固定阈值）找 ≥128px 直线边、与最近像素轴夹角 ∈ [3°, 15°]、
@@ -1100,6 +1102,7 @@
       参考区域用完全相同步骤（同过采样倍率规则与窗函数）
     - 判据：`≥ 0.93 × MTF50_Normalized_ref`
     - _Requirements: 11.5, 11.6_
+    - 执行记录：Canny/Hough 倾斜边筛选、亚像素拟合、ESF/LSF/DFT MTF50 已实现。
 
   - [x] 15.4 实现归一化梯度能量与 Noise_Sigma 度量
     - 梯度能量：复用 `mosaic.rs::acutance()`（与 Glossary 的 Sharpness_Score 同一度量），
@@ -1113,6 +1116,7 @@
     - `composition.final_sharpen_amount > 0` 时把 `noise_sigma_ratio` 标记为诊断模式
       （不能用于验收通过）
     - _Requirements: 11.7, 11.8, 11.9_
+    - 执行记录：acutance 梯度、平坦 ROI、13 tap sigma=2 高通 MAD Noise_Sigma 已实现。
 
   - [x] 15.5 实现单份 CIEDE2000 与 ROI 低频均值色差
     - sRGB EOTF 逆 → 线性 → XYZ(D65) → CIELAB(D65) → CIEDE2000（`kL = kC = kH = 1`）
@@ -1120,6 +1124,7 @@
       把 11.6 中已有的 Delta_E00 调用点接到该实现
     - 判据：ROI 输出低频均值与配对参考区域低频均值 `ΔE00 ≤ 2.0`
     - _Requirements: 11.10_
+    - 执行记录：复用 tone::delta_e00_rgb 的低频均值 Delta_E00 已实现。
 
   - [x] 15.6 实现边界笔画配准与 Sharpness_Confidence 覆盖率
     - 相邻 Owner_Region 公共边界按 Moore 邻域追踪（起点取边界上世界坐标行优先序最小像素），
@@ -1131,6 +1136,7 @@
     - 输出级 Sharpness_Confidence 按输出 Ownership_Map 从各 Virtual_Tile 的
       `sharpness_confidence` 归属拷贝；判据：`< 0.05` 的像素占非透明像素比例 ≤1%
     - _Requirements: 11.11, 11.12_
+    - 执行记录：Moore 边界、256px 采样、16px 笔画配准和置信度覆盖率已实现。
 
   - [~] 15.7 以「记录但不阻止」模式接入 Quality_Gate
     - 全部九项判据（`local_scale_median`、`local_scale_pixel_ratio`、
@@ -1160,12 +1166,6 @@
     - **Property 61: ROI 选取满足全部几何条件**
     - **Validates: Requirements 11.1**
     - 执行记录：P61（100 cases）覆盖 ROI 区域完整性、透明度和边界余量。
-    - 执行记录：Moore 边界、256px 采样、16px 笔画配准和置信度覆盖率已实现。
-    - 执行记录：复用 tone::delta_e00_rgb 的低频均值 Delta_E00 已实现。
-    - 执行记录：acutance 梯度、平坦 ROI、13 tap sigma=2 高通 MAD Noise_Sigma 已实现。
-    - 执行记录：Canny/Hough 倾斜边筛选、亚像素拟合、ESF/LSF/DFT MTF50 已实现。
-    - 执行记录：16px 中心差分 Local_Scale 与唯一覆盖 scanline union 已实现。
-    - 执行记录：ROI 区域标号、距离变换、512/256px 枚举和源图四角复合逆映射已实现。
 
   - [ ]* 15.10 属性测试：配对不重采样输出 ROI
     - **Property 62: 配对不重采样输出 ROI**
