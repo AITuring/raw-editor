@@ -57,6 +57,7 @@ for (const criterion of [
 assert.match(qualityGate, /detect_lines\(/, 'MTF50 must use imageproc Hough');
 assert.match(qualityGate, /acutance_with_step\(/, 'gradient energy must reuse mosaic acutance');
 assert.match(qualityGate, /delta_e00_rgb\(/, 'Delta_E00 must use the canonical tone helper');
+assert.doesNotMatch(qualityGate, /std::env::var/, 'Quality_Gate must not read environment switches');
 
 // Stage 5 photometric defaults are part of the quality contract.  Keep these
 // source-level assertions dependency-free so changing an exposure bound cannot
