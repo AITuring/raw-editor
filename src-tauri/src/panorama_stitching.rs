@@ -30,6 +30,8 @@ use crate::panorama_utils::stack_pipeline::determinism::{sorted_keys, sorted_pai
 use crate::panorama_utils::stack_pipeline::focus_fuser;
 use crate::panorama_utils::stack_pipeline::intra_station;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
+use crate::panorama_utils::stack_pipeline::residual_warp;
+use crate::panorama_utils::stack_pipeline::tone;
 use crate::panorama_utils::stack_pipeline::topology;
 use crate::panorama_utils::stack_pipeline::virtual_tile;
 use crate::panorama_utils::stitching::{Projection, project_point};
@@ -6377,6 +6379,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // The Focus_Fuser records one entry per Capture_Station (需求 3.5 / 3.8 / 3.9)
     // through the same run scoped sink.
     focus_fuser::reset_run_records();
+    // Residual_Warp_Model and Tone_Harmonizer report through run scoped sinks
+    // as well, and the Tile_Compositor samples the recorded residual model, so
+    // a later run must never see an earlier run's model (需求 8.1, 9.11).
+    residual_warp::reset_run_records();
+    tone::reset_run_records();
     // Capture_Topology_Model observations are likewise scoped to this run so
     // the report receives exactly the topology used by the production station
     // relation candidate gate (需求 5.1 / 5.7).
