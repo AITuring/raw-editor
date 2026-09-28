@@ -173,16 +173,13 @@ pub(crate) fn label_owner_regions(
     for y in 0..height as usize {
         for x in 0..width as usize {
             let i = y * width as usize + x;
-            if labels[i] == 0
-                || x == 0
-                || y == 0
-                || x + 1 == width as usize
-                || y + 1 == height as usize
-                || labels[i - 1] != labels[i]
-                || labels[i + 1] != labels[i]
-                || labels[i - width as usize] != labels[i]
-                || labels[i + width as usize] != labels[i]
-            {
+            let label = labels[i];
+            let boundary = label == 0
+                || (x > 0 && labels[i - 1] != label)
+                || (x + 1 < width as usize && labels[i + 1] != label)
+                || (y > 0 && labels[i - width as usize] != label)
+                || (y + 1 < height as usize && labels[i + width as usize] != label);
+            if boundary {
                 squared[i] = 0.0;
             }
         }
@@ -404,4 +401,144 @@ pub(crate) fn map_roi_corners_to_source(
         result[index] = map_world_to_source(corner, geometry, residual)?;
     }
     Ok(result)
+}
+
+// ==================== task 15.2: local scale and unique coverage ====================
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LocalScaleMeasurement {
+    pub median: f64,
+    pub fraction_at_least_095: f64,
+    pub samples: usize,
+    pub diagnostic_render_scale: bool,
+}
+
+pub(crate) fn local_scale_for_roi(
+    roi: &QualityRoi,
+    geometry: &SourceGeometry,
+    residual: &residual_warp::ResidualWarp,
+    acceptance_render_scale: f64,
+) -> Result<LocalScaleMeasurement, &'static str> {
+    if roi.side == 0 || !acceptance_render_scale.is_finite() || acceptance_render_scale <= 0.0 {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    let mut scales = Vec::new();
+    // Differentiate the complete output->source map at +/-0.5 source-native
+    // pixels, then invert its area determinant to obtain source->output scale.
+    for y in (0..roi.side).step_by(16) {
+        for x in (0..roi.side).step_by(16) {
+            let center = Point2::new(
+                roi.world_origin.0 + f64::from(x),
+                roi.world_origin.1 + f64::from(y),
+            );
+            let xp = map_world_to_source(
+                center + nalgebra::Vector2::new(0.5, 0.0),
+                geometry,
+                residual,
+            )?;
+            let xm = map_world_to_source(
+                center - nalgebra::Vector2::new(0.5, 0.0),
+                geometry,
+                residual,
+            )?;
+            let yp = map_world_to_source(
+                center + nalgebra::Vector2::new(0.0, 0.5),
+                geometry,
+                residual,
+            )?;
+            let ym = map_world_to_source(
+                center - nalgebra::Vector2::new(0.0, 0.5),
+                geometry,
+                residual,
+            )?;
+            let dx = xp - xm;
+            let dy = yp - ym;
+            let determinant = (dx.x * dy.y - dx.y * dy.x).abs();
+            if !determinant.is_finite() || determinant <= 1e-12 {
+                return Err(degradation::OWNER_SOURCE_UNDECODABLE);
+            }
+            scales.push(determinant.sqrt());
+        }
+    }
+    scales.sort_by(f64::total_cmp);
+    let median = if scales.len() % 2 == 0 {
+        (scales[scales.len() / 2 - 1] + scales[scales.len() / 2]) * 0.5
+    } else {
+        scales[scales.len() / 2]
+    };
+    Ok(LocalScaleMeasurement {
+        median,
+        fraction_at_least_095: scales.iter().filter(|&&v| v >= 0.95).count() as f64
+            / scales.len() as f64,
+        samples: scales.len(),
+        diagnostic_render_scale: acceptance_render_scale < 1.0,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct EffectivePixelCoverage {
+    pub output_nontransparent: u64,
+    pub projected_union: u64,
+    pub ratio: f64,
+}
+
+pub(crate) fn effective_pixel_coverage(
+    coverage: &GrayImage,
+    source_quadrilaterals: &[[Point2<f64>; 4]],
+    canvas_world_origin: (f64, f64),
+) -> Result<EffectivePixelCoverage, &'static str> {
+    let (width, height) = coverage.dimensions();
+    if width == 0 || height == 0 || source_quadrilaterals.is_empty() {
+        return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
+    }
+    let mut union = vec![false; width as usize * height as usize];
+    for quad in source_quadrilaterals {
+        if !quad.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+            return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+        }
+        let min_y = quad
+            .iter()
+            .map(|p| p.y - canvas_world_origin.1)
+            .fold(f64::INFINITY, f64::min)
+            .floor()
+            .max(0.0) as u32;
+        let max_y = quad
+            .iter()
+            .map(|p| p.y - canvas_world_origin.1)
+            .fold(f64::NEG_INFINITY, f64::max)
+            .ceil()
+            .max(0.0) as u32;
+        for y in min_y..max_y.min(height) {
+            let scan_y = canvas_world_origin.1 + f64::from(y) + 0.5;
+            let mut intersections = Vec::with_capacity(4);
+            for edge in 0..4 {
+                let a = quad[edge];
+                let b = quad[(edge + 1) % 4];
+                if (a.y <= scan_y && scan_y < b.y) || (b.y <= scan_y && scan_y < a.y) {
+                    intersections.push(a.x + (scan_y - a.y) * (b.x - a.x) / (b.y - a.y));
+                }
+            }
+            intersections.sort_by(f64::total_cmp);
+            for pair in intersections.chunks_exact(2) {
+                let start = (pair[0] - canvas_world_origin.0 - 0.5).ceil().max(0.0) as u32;
+                let end = (pair[1] - canvas_world_origin.0 - 0.5).ceil().max(0.0) as u32;
+                for x in start..end.min(width) {
+                    union[(y * width + x) as usize] = true;
+                }
+            }
+        }
+    }
+    let projected_union = union.iter().filter(|&&covered| covered).count() as u64;
+    if projected_union == 0 {
+        return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
+    }
+    let output_nontransparent = coverage
+        .as_raw()
+        .iter()
+        .filter(|&&value| value != 0)
+        .count() as u64;
+    Ok(EffectivePixelCoverage {
+        output_nontransparent,
+        projected_union,
+        ratio: output_nontransparent as f64 / projected_union as f64,
+    })
 }
