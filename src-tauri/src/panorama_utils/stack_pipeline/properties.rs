@@ -10898,10 +10898,10 @@ proptest! {
         let unmeasurable = measurements.len() - measurable;
         prop_assert_eq!(measurable + unmeasurable, measurements.len());
         let insufficient = measurable < QUALITY_MIN_MEASURABLE
-            || (measurements.len() > 0
+            || (!measurements.is_empty()
                 && unmeasurable as f64 / measurements.len() as f64 > QUALITY_MAX_UNMEASURABLE_RATIO);
         prop_assert_eq!(insufficient, measurable < QUALITY_MIN_MEASURABLE ||
-            (measurements.len() > 0 && unmeasurable * 5 > measurements.len()));
+            (!measurements.is_empty() && unmeasurable * 5 > measurements.len()));
         prop_assert!(compare_ratio(0.0, 0.0, 0.93, 1.15, false).is_none());
     }
 
