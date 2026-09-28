@@ -1035,3 +1035,86 @@ pub(crate) fn slanted_edge_mtf50(
     }
     Err(ROI_NOT_SLANTED_EDGE)
 }
+
+// ==================== task 15.4: gradient, flat ROI and noise ====================
+/// Uses exactly the production acutance primitive, with RGB replaced by equal
+/// linear-luminance channels so chroma differences cannot masquerade as luma
+/// gradient energy. Replication gives every ROI pixel a complete 13x13 patch.
+pub(crate) fn normalized_gradient_energy(
+    image: &image::Rgb32FImage,
+    local_scale: f64,
+) -> Result<f64, &'static str> {
+    use super::degradation::{OWNER_SOURCE_UNDECODABLE, PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED};
+    if !local_scale.is_finite() || local_scale <= 0.0 {
+        return Err(PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED);
+    }
+    let plane = metric_luminance(image).ok_or(OWNER_SOURCE_UNDECODABLE)?;
+    let (width, height) = (image.width() as usize, image.height() as usize);
+    let mut total = 0.0;
+    for y in 0..height {
+        for x in 0..width {
+            total += super::super::mosaic::acutance_with_step(
+                |sx, sy| {
+                    let nx = (sx.round() as isize).clamp(0, width as isize - 1) as usize;
+                    let ny = (sy.round() as isize).clamp(0, height as isize - 1) as usize;
+                    Some(image::Rgb([plane[ny * width + nx] as f32; 3]))
+                },
+                x as f64,
+                y as f64,
+                1.0,
+            );
+        }
+    }
+    Ok(total / plane.len() as f64 / local_scale)
+}
+
+pub(crate) fn flat_roi(
+    image: &image::Rgb32FImage,
+    coverage: &image::GrayImage,
+) -> Result<FlatRoiEvidence, &'static str> {
+    use super::degradation::ROI_NOT_FLAT;
+    if image.dimensions() != coverage.dimensions() || coverage.pixels().any(|p| p[0] != 255) {
+        return Err(ROI_NOT_FLAT);
+    }
+    let plane = metric_luminance(image).ok_or(ROI_NOT_FLAT)?;
+    let low = metric_gaussian_sigma2(&plane, image.width() as usize, image.height() as usize);
+    let mean = low.iter().sum::<f64>() / low.len() as f64;
+    let std =
+        (low.iter().map(|value| (value - mean).powi(2)).sum::<f64>() / low.len() as f64).sqrt();
+    if std > FLAT_LOW_FREQUENCY_STD_MAX || detect_slanted_edge(image).is_ok() {
+        return Err(ROI_NOT_FLAT);
+    }
+    Ok(FlatRoiEvidence {
+        low_frequency_luma_std: std,
+        opaque_pixels: plane.len() as u64,
+    })
+}
+
+/// Defined estimator (not variance-renormalised): sigma=1.4826*MAD(highpass),
+/// with highpass = linear luminance - sigma2/radius6 Gaussian luminance.
+pub(crate) fn noise_sigma(image: &image::Rgb32FImage) -> Result<f64, &'static str> {
+    let plane = metric_luminance(image).ok_or(super::degradation::ROI_NOT_FLAT)?;
+    let low = metric_gaussian_sigma2(&plane, image.width() as usize, image.height() as usize);
+    let high: Vec<f64> = plane
+        .iter()
+        .zip(low)
+        .map(|(value, blurred)| value - blurred)
+        .collect();
+    let center = metric_median(high.clone());
+    Ok(1.4826 * metric_median(high.into_iter().map(|v| (v - center).abs()).collect()))
+}
+
+pub(crate) fn noise_sigma_ratio(
+    output: &image::Rgb32FImage,
+    reference: &image::Rgb32FImage,
+) -> Result<f64, &'static str> {
+    if output.dimensions() != reference.dimensions() {
+        return Err(super::degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED);
+    }
+    let output_sigma = noise_sigma(output)?;
+    let reference_sigma = noise_sigma(reference)?;
+    if reference_sigma <= f64::EPSILON {
+        return Err(super::degradation::ROI_NOT_FLAT);
+    }
+    Ok(output_sigma / reference_sigma)
+}
