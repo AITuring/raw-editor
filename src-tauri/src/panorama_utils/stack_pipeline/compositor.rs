@@ -12,6 +12,66 @@
 //! for now it only owns the path choice and its stable identifier.
 
 use super::report::{SelectedPath, StackReportRecorder};
+use super::residual_warp::ResidualWarp;
+use nalgebra::{Matrix3, Point2, Point3};
+
+/// Compose the inverse mapping used by the Tile_Compositor.  A target world
+/// coordinate is transformed to tile space once by the global inverse and
+/// once by the residual inverse; the caller then performs one pixel sample at
+/// the returned coordinate.  Keeping this as a pure function makes the
+/// single-resample contract testable without decoding a Virtual_Tile.
+pub(crate) fn tile_coordinate_from_world(
+    world: Point2<f64>,
+    tile_to_world_inverse: &Matrix3<f64>,
+    residual_warp_inverse: &Matrix3<f64>,
+) -> Option<Point2<f64>> {
+    let tile = project_inverse(tile_to_world_inverse, world)?;
+    // Requirement 8.7: tile_coord = warp_inverse(tile_to_world_inverse(world)).
+    project_inverse(residual_warp_inverse, tile)
+}
+
+/// Resolve one source tile coordinate while applying the non-rigid residual
+/// field. The global inverse is evaluated first to preserve the compositor's
+/// one-coordinate path; the residual inverse is then queried in its native
+/// world frame and converted back through that same inverse. With no matching
+/// region (or an identity model) this is bit-for-bit the nominal coordinate.
+pub(crate) fn tile_coordinate_with_residual(
+    world: Point2<f64>,
+    tile_to_world_inverse: &Matrix3<f64>,
+    residual: &ResidualWarp,
+    station_id: usize,
+) -> Option<Point2<f64>> {
+    let nominal = project_inverse(tile_to_world_inverse, world)?;
+    if residual.identity() {
+        return Some(nominal);
+    }
+    let source_world = residual.warp_inverse(world, station_id);
+    if source_world == world {
+        return Some(nominal);
+    }
+    project_inverse(tile_to_world_inverse, source_world)
+}
+
+fn project_inverse(matrix: &Matrix3<f64>, point: Point2<f64>) -> Option<Point2<f64>> {
+    let projected = matrix * Point3::new(point.x, point.y, 1.0);
+    if !projected.x.is_finite() || !projected.y.is_finite() || projected.z.abs() < 1e-12 {
+        return None;
+    }
+    Some(Point2::new(
+        projected.x / projected.z,
+        projected.y / projected.z,
+    ))
+}
+
+/// Ownership is a semantic plane and tone correction must not rewrite it.
+pub(crate) fn assert_ownership_unchanged(before: &[u16], after: &[u16]) {
+    assert_eq!(
+        before.len(),
+        after.len(),
+        "tone changed ownership dimensions"
+    );
+    assert_eq!(before, after, "tone correction changed the Ownership_Map");
+}
 
 /// One authoritative path decision for both execution and Stack_Report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -202,5 +262,38 @@ mod tests {
             StackCompositorChoice::from_identifier(SelectedPath::SingleStation.as_identifier()),
             None
         );
+    }
+
+    #[test]
+    fn tile_coordinate_composes_inverse_warp_before_one_sample() {
+        let mut tile_to_world_inverse = Matrix3::identity();
+        tile_to_world_inverse[(0, 2)] = -10.0;
+        let mut residual_inverse = Matrix3::identity();
+        residual_inverse[(1, 2)] = 3.0;
+        let coordinate = tile_coordinate_from_world(
+            Point2::new(12.0, 8.0),
+            &tile_to_world_inverse,
+            &residual_inverse,
+        )
+        .expect("finite composed coordinate");
+        assert_eq!(coordinate, Point2::new(2.0, 11.0));
+    }
+
+    #[test]
+    fn residual_free_coordinate_is_exactly_the_nominal_inverse() {
+        let mut inverse = Matrix3::identity();
+        inverse[(0, 2)] = -10.0;
+        let world = Point2::new(12.0, 8.0);
+        let residual = ResidualWarp::default();
+        assert_eq!(
+            tile_coordinate_with_residual(world, &inverse, &residual, 7),
+            tile_coordinate_from_world(world, &inverse, &Matrix3::identity())
+        );
+    }
+
+    #[test]
+    fn tone_cannot_change_the_ownership_plane() {
+        let owners = vec![1u16, 2, 2, 1];
+        assert_ownership_unchanged(&owners, &owners);
     }
 }

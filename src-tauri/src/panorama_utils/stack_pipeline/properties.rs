@@ -41,10 +41,105 @@ use super::virtual_tile::{
     self, CacheKeyInputs, CacheLookup, LeaseError, MAX_RESIDENT_VIRTUAL_TILES, StoreOutcome,
     VirtualTileStore, test_access,
 };
+use super::{compositor, tone};
 
 /// The exact shape requirement 12.7 fixes for a machine readable failure reason.
 fn reason_identifier_pattern() -> Regex {
     Regex::new(r"^[a-z0-9_]{1,64}$").expect("the reason identifier pattern must compile")
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 44: 瓦片到世界的逆映射
+    // 先组合 Residual_Warp 与 tile_to_world_inverse，再进行一次坐标投影，不能在
+    // 中间生成第二个采样图像。
+    //
+    // **Validates: Requirements 8.7**
+    #[test]
+    fn property_44_tile_world_mapping_is_one_composed_coordinate(
+        world_x in -1000.0f64..1000.0,
+        world_y in -1000.0f64..1000.0,
+        tile_tx in -100.0f64..100.0,
+        tile_ty in -100.0f64..100.0,
+        warp_tx in -100.0f64..100.0,
+        warp_ty in -100.0f64..100.0,
+    ) {
+        let mut tile_inverse = Matrix3::identity();
+        tile_inverse[(0, 2)] = tile_tx;
+        tile_inverse[(1, 2)] = tile_ty;
+        let mut warp_inverse = Matrix3::identity();
+        warp_inverse[(0, 2)] = warp_tx;
+        warp_inverse[(1, 2)] = warp_ty;
+        let coordinate = compositor::tile_coordinate_from_world(
+            Point2::new(world_x, world_y),
+            &tile_inverse,
+            &warp_inverse,
+        ).expect("finite composed inverse coordinate");
+        prop_assert!((coordinate.x - (world_x + tile_tx + warp_tx)).abs() < 1.0e-10);
+        prop_assert!((coordinate.y - (world_y + tile_ty + warp_ty)).abs() < 1.0e-10);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 49: Tone_Harmonizer
+    // 改变低频场时，输出仍保留 owner 的逐像素高频残差。
+    //
+    // **Validates: Requirements 9.2**
+    #[test]
+    fn property_49_tone_keeps_owner_high_frequency_residual(
+        owner_seed in any::<u8>(),
+        source_seed in any::<u8>(),
+    ) {
+        let width = 32;
+        let height = 32;
+        let source = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let value = (u32::from(source_seed) + x * 7 + y * 11) % 255;
+            image::Rgb([value as f32 / 255.0; 3])
+        });
+        let owner = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let value = (u32::from(owner_seed) + x * 13 + y * 5) % 255;
+            image::Rgb([value as f32 / 255.0; 3])
+        });
+        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let solve = tone::ToneSolve {
+            gain: [1.1, 0.95, 1.02],
+            offset: [0.01, -0.01, 0.0],
+            solved_gain: [1.1, 0.95, 1.02],
+            solved_offset: [0.01, -0.01, 0.0],
+            retained_samples: 1024,
+            gain_clamped: false,
+            status: tone::ToneSolveStatus::Applied,
+        };
+        let corrected = tone::apply_low_frequency_tone(&source, &owner, &evidence, &solve);
+        let source_low = tone::low_frequency_field(&source);
+        let owner_low = tone::low_frequency_field(&owner);
+        for (index, pixel) in corrected.pixels().enumerate() {
+            let x = (index as u32) % width;
+            let y = (index as u32) / width;
+            let source_value = source_low.get_pixel(x, y);
+            let owner_value = owner.get_pixel(x, y);
+            let owner_low_value = owner_low.get_pixel(x, y);
+            for channel in 0..3 {
+                let expected = solve.gain[channel] * source_value[channel]
+                    + solve.offset[channel]
+                    + owner_value[channel] - owner_low_value[channel];
+                prop_assert!((pixel[channel] - expected).abs() < 1.0e-6);
+            }
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 51: Tone_Harmonizer
+    // 只写像素，不改已完成的 Ownership_Map。
+    //
+    // **Validates: Requirements 9.5, 9.6**
+    #[test]
+    fn property_51_tone_preserves_ownership_map(owner_seed in any::<u64>()) {
+        let owners = (0..128u16)
+            .map(|index| (owner_seed.rotate_left(u32::from(index % 63)) as u16) ^ index)
+            .collect::<Vec<_>>();
+        let before = owners.clone();
+        compositor::assert_ownership_unchanged(&before, &owners);
+        prop_assert_eq!(before, owners);
+    }
 }
 
 /// Every identifier a Stack_Report is allowed to carry as a failure or

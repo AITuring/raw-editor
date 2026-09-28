@@ -1,4 +1,5 @@
 use super::photometric::{PhotometricModel, PhotometricOptions, calibrate_overlap_photometry};
+use super::stack_pipeline::compositor::tile_coordinate_with_residual;
 use super::stack_pipeline::degradation;
 use super::stack_pipeline::focus_fuser::{
     self, CandidateCells, CellSamplingPlan, OwnershipGridGeometry, StationFusion, cell_disagreement,
@@ -7,12 +8,14 @@ use super::stack_pipeline::intra_station;
 use super::stack_pipeline::report::{
     FusionReport, IntraStationFrameRecord, IntraStationFrameStatus, OwnershipGridSize,
 };
+use super::stack_pipeline::residual_warp;
 use super::stack_pipeline::station_degradation::{
     GroupJoinEvidence, GroupJoinRejection, StationMember, group_join_rejection,
     plan_station_fusion, record_run_entries, record_run_group_join_rejection, station_plan_entries,
 };
+use super::stack_pipeline::tone::{self, ToneTile};
 use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp, ImageInfo};
-use image::{GrayImage, Rgb, Rgb32FImage};
+use image::{GrayImage, Luma, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -236,6 +239,34 @@ pub(super) fn map_target_to_source(
         image,
         projected_source.x / projected_source.z,
         projected_source.y / projected_source.z,
+        projection,
+    )
+}
+
+/// Map one output-world coordinate into a source tile while applying the
+/// optional run-scoped residual field. The empty model takes the exact legacy
+/// path. Planar output uses the compositor's single composed inverse; curved
+/// projections first move the world target and retain their existing inverse
+/// projection.
+fn map_target_to_source_with_residual(
+    inverse_homography: &Matrix3<f64>,
+    target: Point3<f64>,
+    image: &ImageInfo,
+    projection: Projection,
+    residual: &residual_warp::ResidualWarp,
+) -> Option<Point2<f64>> {
+    if residual.identity() {
+        return map_target_to_source(inverse_homography, target, image, projection);
+    }
+    let world = Point2::new(target.x, target.y);
+    if projection == Projection::Planar {
+        return tile_coordinate_with_residual(world, inverse_homography, residual, image.id);
+    }
+    let warped = residual.warp_inverse(world, image.id);
+    map_target_to_source(
+        inverse_homography,
+        Point3::new(warped.x, warped.y, target.z),
+        image,
         projection,
     )
 }
@@ -1069,6 +1100,7 @@ fn focus_output_bounds(
     (min_x, max_x, min_y, max_y)
 }
 
+#[allow(dead_code)]
 fn apply_exposure_gain(pixel: Rgb<f32>, gain: f32) -> Rgb<f32> {
     Rgb([pixel[0] * gain, pixel[1] * gain, pixel[2] * gain])
 }
@@ -1098,24 +1130,14 @@ fn apply_exposure_compensation_with_strength(
     strength: f32,
 ) -> Rgb<f32> {
     let strength = strength.clamp(0.0, 1.0);
-    if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_none() {
-        let gains = exposure.channel_gain_at(x, y).map(|gain| {
-            if gain.is_finite() && gain > 0.0 {
-                (gain.ln() * strength).exp()
-            } else {
-                1.0
-            }
-        });
-        apply_exposure_channel_gain(pixel, gains)
-    } else {
-        let gain = exposure.gain_at(x, y);
-        let gain = if gain.is_finite() && gain > 0.0 {
+    let gains = exposure.channel_gain_at(x, y).map(|gain| {
+        if gain.is_finite() && gain > 0.0 {
             (gain.ln() * strength).exp()
         } else {
             1.0
-        };
-        apply_exposure_gain(pixel, gain)
-    }
+        }
+    });
+    apply_exposure_channel_gain(pixel, gains)
 }
 
 fn panorama_detail_alpha(candidate_signed_distance: f32) -> f32 {
@@ -1198,7 +1220,8 @@ impl ExposureCompensation {
         self
     }
 
-    fn gain_at(&self, x: u32, y: u32) -> f32 {
+    #[allow(dead_code)]
+    fn gain_at(&self, _x: u32, _y: u32) -> f32 {
         if self.gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return 1.0;
         }
@@ -1207,9 +1230,15 @@ impl ExposureCompensation {
         // as rectangular tone steps on a long scan.  The default compositor
         // uses one robust overlap constant; spatial compensation is opt-in
         // for captures where illumination is known to vary within a station.
-        if std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none() {
-            return self.representative_gain;
-        }
+        // The spatial field remains available for diagnostics, but production
+        // uses the one robust overlap constant.  `allow_linear = false` is the
+        // single photometric wiring decision for the default Tone_Harmonizer.
+        return self.representative_gain;
+    }
+
+    /// Diagnostic-only spatial scalar field retained for comparison reports.
+    #[allow(dead_code)]
+    fn spatial_gain_at(&self, x: u32, y: u32) -> f32 {
         let grid_x = x as f64 / self.cell_size as f64;
         let grid_y = y as f64 / self.cell_size as f64;
         let x0 = (grid_x.floor() as usize).min(self.grid_width - 1);
@@ -1224,7 +1253,7 @@ impl ExposureCompensation {
         top * (1.0 - ty) + bottom * ty
     }
 
-    fn channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
+    fn channel_gain_at(&self, _x: u32, _y: u32) -> [f32; 3] {
         if self.channel_gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return [1.0; 3];
         }
@@ -1232,11 +1261,14 @@ impl ExposureCompensation {
         // one robust overlap constant per candidate.  A per-cell RGB field is
         // useful for a measured vignette, but its 256px cells can otherwise
         // become visible chromatic rectangles across a long scan.
-        if std::env::var_os("RAW_EDITOR_SKIP_RGB_TILE_EXPOSURE_GAIN").is_some()
-            || std::env::var_os("RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN").is_none()
-        {
-            return self.representative_channel_gain;
-        }
+        // Keep the per-cell RGB field for comparison diagnostics, while the
+        // shipped path uses the robust representative value.
+        return self.representative_channel_gain;
+    }
+
+    /// Diagnostic-only spatial RGB field retained for comparison reports.
+    #[allow(dead_code)]
+    fn spatial_channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
         let grid_x = x as f64 / self.cell_size as f64;
         let grid_y = y as f64 / self.cell_size as f64;
         let x0 = (grid_x.floor() as usize).min(self.grid_width - 1);
@@ -1537,6 +1569,11 @@ pub fn progressive_seam_stitcher<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    // Keep the tone/residual ledgers scoped to this compositor invocation.
+    // The panorama entry point also resets them at whole-run start (see the
+    // handoff snippet in the stage5 report).
+    tone::reset_run_records();
+    residual_warp::reset_run_records();
     if images.is_empty() {
         return Ok(Rgb32FImage::new(0, 0));
     }
@@ -2075,6 +2112,7 @@ fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    let residual_model = residual_warp::run_model_snapshot();
     if images.is_empty() {
         return Ok(LayeredOwnershipRender {
             image: Rgb32FImage::new(0, 0),
@@ -2108,6 +2146,7 @@ where
     // Source-level semantic plane for the exact same write decisions. The u16
     // identifier is not capped at the 8-bit tone-group key above.
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
+    let mut tone_tiles = Vec::with_capacity(images.len());
     let row_stride = out_width as usize * 3;
     // A low-frequency consensus is accumulated from every virtual tile while
     // ownership is decided.  The final image keeps one tile's high-frequency
@@ -2133,72 +2172,68 @@ where
     // the full-resolution pass below applies that fixed model.  It is
     // opt-in while the cost is being evaluated because a tile preview is an
     // additional decode/render of each virtual station.
-    let photometric_models: Option<HashMap<usize, PhotometricModel>> =
-        if std::env::var_os("RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC").is_some() && images.len() > 1 {
-            let mut previews = Vec::with_capacity(images.len());
-            for image_info in images {
-                let image = load_image(image_info)?;
-                let longest = image.width().max(image.height()).max(1);
-                let scale = (1536.0 / longest as f64).min(1.0);
-                let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
-                let preview_height = ((image.height() as f64 * scale).round() as u32).max(2);
-                let preview = resize_rgb(&image, preview_width, preview_height);
-                let source_scale = Matrix3::new(
-                    image.width() as f64 / preview_width as f64,
-                    0.0,
-                    0.0,
-                    0.0,
-                    image.height() as f64 / preview_height as f64,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                );
-                let transform = global_homographies
-                    .get(&image_info.id)
-                    .copied()
-                    .ok_or_else(|| {
-                        format!("Missing focus tile pose for '{}'", image_info.filename)
-                    })?
-                    * source_scale;
-                previews.push((preview, transform));
-            }
-            let calibration =
-                calibrate_overlap_photometry(&previews, &PhotometricOptions::default());
-            let reliable_pairs = calibration
-                .pairs
-                .iter()
-                .filter(|pair| pair.reliable)
-                .count();
-            println!(
-                "  - Global virtual-tile photometry: reliable_pairs={}/{} error={:.4}->{:.4}",
-                reliable_pairs,
-                calibration.pairs.len(),
-                calibration.held_out_constant_error,
-                calibration.held_out_corrected_error
+    let photometric_models: Option<HashMap<usize, PhotometricModel>> = if images.len() > 1 {
+        let mut previews = Vec::with_capacity(images.len());
+        for image_info in images {
+            let image = load_image(image_info)?;
+            let longest = image.width().max(image.height()).max(1);
+            let scale = (1536.0 / longest as f64).min(1.0);
+            let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
+            let preview_height = ((image.height() as f64 * scale).round() as u32).max(2);
+            let preview = resize_rgb(&image, preview_width, preview_height);
+            let source_scale = Matrix3::new(
+                image.width() as f64 / preview_width as f64,
+                0.0,
+                0.0,
+                0.0,
+                image.height() as f64 / preview_height as f64,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
             );
-            // Observation only: unreliable pairs already fall back to the
-            // identity model inside `calibrate_overlap_photometry`.
-            if reliable_pairs < calibration.pairs.len() {
-                degradation::record_run_degradation(
-                    degradation::TONE_INSUFFICIENT_SAMPLES,
-                    serde_json::json!({
-                        "stage": "global_virtual_tile_photometry",
-                        "reliable_pairs": reliable_pairs,
-                        "pairs": calibration.pairs.len(),
-                    }),
-                );
-            }
-            Some(
-                images
-                    .iter()
-                    .enumerate()
-                    .map(|(index, image)| (image.id, calibration.models[index].clone()))
-                    .collect(),
-            )
-        } else {
-            None
-        };
+            let transform = global_homographies
+                .get(&image_info.id)
+                .copied()
+                .ok_or_else(|| format!("Missing focus tile pose for '{}'", image_info.filename))?
+                * source_scale;
+            previews.push((preview, transform));
+        }
+        let calibration = calibrate_overlap_photometry(&previews, &PhotometricOptions::default());
+        let reliable_pairs = calibration
+            .pairs
+            .iter()
+            .filter(|pair| pair.reliable)
+            .count();
+        println!(
+            "  - Global virtual-tile photometry: reliable_pairs={}/{} error={:.4}->{:.4}",
+            reliable_pairs,
+            calibration.pairs.len(),
+            calibration.held_out_constant_error,
+            calibration.held_out_corrected_error
+        );
+        // Observation only: unreliable pairs already fall back to the
+        // identity model inside `calibrate_overlap_photometry`.
+        if reliable_pairs < calibration.pairs.len() {
+            degradation::record_run_degradation(
+                degradation::TONE_INSUFFICIENT_SAMPLES,
+                serde_json::json!({
+                    "stage": "global_virtual_tile_photometry",
+                    "reliable_pairs": reliable_pairs,
+                    "pairs": calibration.pairs.len(),
+                }),
+            );
+        }
+        Some(
+            images
+                .iter()
+                .enumerate()
+                .map(|(index, image)| (image.id, calibration.models[index].clone()))
+                .collect(),
+        )
+    } else {
+        None
+    };
 
     for (index, image_info) in images.iter().enumerate() {
         let _ = app_handle.emit(
@@ -2224,9 +2259,17 @@ where
         let tile_width = tile.width().max(1) as f64;
         let tile_height = tile.height().max(1) as f64;
         let tile_short = tile_width.min(tile_height).max(1.0);
-        let photo_model = photometric_models
-            .as_ref()
-            .and_then(|models| models.get(&image_info.id));
+        // The layered compositor keeps hard Source_RAW ownership exact.  The
+        // calibration is still solved unconditionally for the Tone_Harmonizer
+        // report, while the retired comparison path is the only one that
+        // applies its pixels during this legacy ownership pass.
+        let photo_model = (finishing == TileCompositorFinishing::LegacyOwnership)
+            .then(|| {
+                photometric_models
+                    .as_ref()
+                    .and_then(|models| models.get(&image_info.id))
+            })
+            .flatten();
         // Requirement 3.6: the default ownership path may choose a sample, but
         // it must not change that sample's RGB while continuing to name the
         // source as owner. Keep exposure compensation only on the retired
@@ -2265,8 +2308,13 @@ where
             for tone_x in 0..tone_width {
                 let canvas_x = (tone_x as f64 + 0.5) * out_width as f64 / tone_width.max(1) as f64;
                 let target = Point3::new(canvas_x - offset_x, canvas_y - offset_y, 1.0);
-                let Some(source) = map_target_to_source(&inverse, target, image_info, projection)
-                else {
+                let Some(source) = map_target_to_source_with_residual(
+                    &inverse,
+                    target,
+                    image_info,
+                    projection,
+                    &residual_model,
+                ) else {
                     continue;
                 };
                 if source.x < 0.0
@@ -2332,6 +2380,19 @@ where
         let right = right.min(out_width.saturating_sub(1));
         let top = top.min(out_height.saturating_sub(1));
         let bottom = bottom.min(out_height.saturating_sub(1));
+        let low = tone::low_frequency_grid(&tile);
+        let low_width = low.width().max(1) as f64;
+        let low_height = low.height().max(1) as f64;
+        let world_size = ((right - left + 1) as f64, (bottom - top + 1) as f64);
+        tone_tiles.push(ToneTile {
+            station_index: image_info.id,
+            owner_id: (index + 1).min(u16::MAX as usize) as u16,
+            validity: GrayImage::from_pixel(low.width(), low.height(), Luma([255])),
+            low,
+            world_origin: (left as f64, top as f64),
+            world_size,
+            world_stride: (world_size.0 / low_width).max(world_size.1 / low_height),
+        });
         let image_width = tile.width() as f64;
         let image_height = tile.height() as f64;
         panorama
@@ -2348,9 +2409,13 @@ where
                 |(y, ((((row, quality_row), mask_row), owner_row), source_owner_row))| {
                     for x in left..=right {
                         let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
-                        let Some(source) =
-                            map_target_to_source(&inverse, target, image_info, projection)
-                        else {
+                        let Some(source) = map_target_to_source_with_residual(
+                            &inverse,
+                            target,
+                            image_info,
+                            projection,
+                            &residual_model,
+                        ) else {
                             continue;
                         };
                         if source.x < 0.0
@@ -2616,6 +2681,21 @@ where
     // remaining owner-level tone difference using selected virtual-tile
     // regions at once; doing this after the consensus pass removes residual
     // source steps without averaging or replacing brush pixels.
+    if finishing == TileCompositorFinishing::LayeredVirtualTile {
+        let tone_report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &source_owner_ids,
+            out_width,
+            &tone_tiles,
+            &panorama_mask,
+        );
+        println!(
+            "  - Tone_Harmonizer: status={:?}, tiles={}, boundary_max_delta_e00={:.3}",
+            tone_report.status,
+            tone_report.tiles.len(),
+            tone_report.boundary_delta_e.max
+        );
+    }
     let empty_foreground = GrayImage::new(out_width, out_height);
     if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION").is_some() {
         if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {
