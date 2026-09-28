@@ -10338,3 +10338,30 @@ proptest! {
         }
     }
 }
+
+// Task 11.10 / Property 43.
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 43: 局部形变不优于全局单应性的网格单元回退且计数准确。
+    // **Validates: Requirements 8.6**
+    #[test]
+    fn property_43_residual_cell_reverts_match_error_ordering(
+        global in prop::collection::vec(0.0f64..20.0, 9),
+        residual in prop::collection::vec(0.0f64..20.0, 9),
+    ) {
+        use super::report::WorldRect;
+        use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion};
+        let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 192.0, height: 192.0 }, 4.0);
+        let mut region = WarpRegion::from_observations(overlap, &(0..16).map(|index| WarpObservation::new(
+            super::report::WorldPoint { x: (index % 4) as f64 * 64.0, y: (index / 4) as f64 * 64.0 }, [1.0, 0.0], 0.0,
+        )).collect::<Vec<_>>());
+        region.revert_cells(&global, &residual);
+        let expected = global.iter().zip(&residual).filter(|(g, r)| **r >= **g).count();
+        prop_assert_eq!(region.reverted_cells as usize, expected);
+    }
+}
