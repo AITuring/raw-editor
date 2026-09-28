@@ -53,7 +53,8 @@
     "i18n:check": "i18next-cli extract --ci --dry-run && npm run i18n:runtime-check && npm run i18n:language-check",
     "i18n:language-check": "node src/i18n/check-language-resolution.mjs",
     "i18n:runtime-check": "node src/i18n/check-runtime.mjs",
-    "i18n:lint": "i18next-cli lint"
+    "i18n:lint": "i18next-cli lint",
+    "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml stack_acceptance_harness -- --ignored --nocapture"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
