@@ -752,16 +752,16 @@ pub(super) fn corrected_lower_left_capture_sample(
     Some(pixel)
 }
 
-#[derive(Clone)]
-struct Field<const N: usize> {
-    width: usize,
-    height: usize,
-    step: f64,
-    values: Vec<[f64; N]>,
+#[derive(Clone, Debug)]
+pub(crate) struct Field<const N: usize> {
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+    pub(crate) step: f64,
+    pub(crate) values: Vec<[f64; N]>,
 }
 
 impl<const N: usize> Field<N> {
-    fn new(width: u32, height: u32, step: f64) -> Self {
+    pub(crate) fn new(width: u32, height: u32, step: f64) -> Self {
         let width = (width as f64 / step).ceil() as usize + 1;
         let height = (height as f64 / step).ceil() as usize + 1;
         Self {
@@ -772,7 +772,7 @@ impl<const N: usize> Field<N> {
         }
     }
 
-    fn at(&self, x: f64, y: f64) -> [f64; N] {
+    pub(crate) fn at(&self, x: f64, y: f64) -> [f64; N] {
         let gx = (x / self.step).clamp(0.0, self.width as f64 - 1.0);
         let gy = (y / self.step).clamp(0.0, self.height as f64 - 1.0);
         let x0 = gx as usize;
@@ -788,6 +788,21 @@ impl<const N: usize> Field<N> {
                 + self.values[y1 * self.width + x1][c] * fx;
             a * (1.0 - fy) + b * fy
         })
+    }
+
+    /// Construct a field with an explicit lower bound on the number of
+    /// control nodes in each direction.  Residual_Warp uses this to retain a
+    /// four-node support even for a very small overlap; the legacy mosaic
+    /// field keeps the original geometry through [`Self::new`].
+    pub(crate) fn new_with_min_nodes(width: u32, height: u32, step: f64, min_nodes: usize) -> Self {
+        let mut field = Self::new(width, height, step);
+        let min_nodes = min_nodes.max(1);
+        if field.width < min_nodes || field.height < min_nodes {
+            field.width = field.width.max(min_nodes);
+            field.height = field.height.max(min_nodes);
+            field.values.resize(field.width * field.height, [0.0; N]);
+        }
+        field
     }
 }
 
