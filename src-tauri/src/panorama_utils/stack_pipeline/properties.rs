@@ -10546,8 +10546,9 @@ proptest! {
 
 // Optional Stage 7 geometry properties (15.9, 15.11).
 use super::quality_gate::{
-    QUALITY_ROI_MARGIN, QUALITY_ROI_MAX_COUNT, QUALITY_ROI_SIDE, QualityRoi, SourceGeometry,
-    label_owner_regions, local_scale_for_roi, select_quality_rois,
+    QUALITY_EFFECTIVE_PIXEL_RATIO_MIN, QUALITY_ROI_MARGIN, QUALITY_ROI_MAX_COUNT, QUALITY_ROI_SIDE,
+    QualityRoi, SourceGeometry, effective_pixel_coverage, label_owner_regions, local_scale_for_roi,
+    map_roi_corners_to_source, select_quality_rois,
 };
 
 proptest! {
@@ -10605,5 +10606,358 @@ proptest! {
         prop_assert!((measurement.median - 1.0).abs() < 1.0e-10);
         prop_assert!((measurement.fraction_at_least_095 - 1.0).abs() < 1.0e-10);
         prop_assert_eq!(measurement.diagnostic_render_scale, render_scale < 1.0);
+    }
+}
+
+// Stage 7 pairing and effective-coverage properties (15.10, 15.12).
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 62: 配对不重采样输出 ROI
+    // 输出 ROI 只作为坐标和像素网格的观测窗口传递；配对过程仅把四角映射回
+    // owner Source_RAW，并在残余对齐误差超限时拒绝该 ROI。
+    // **Validates: Requirements 11.2**
+    #[test]
+    fn property_62_pairing_keeps_output_roi_and_limits_reference_resampling(
+        world_x in -4096.0f64..4096.0,
+        world_y in -4096.0f64..4096.0,
+        scale_x in 0.5f64..2.0,
+        scale_y in 0.5f64..2.0,
+        translate_x in -512.0f64..512.0,
+        translate_y in -512.0f64..512.0,
+        residual_alignment_px in 0.0f64..1.0,
+    ) {
+        let roi = QualityRoi {
+            x: 256,
+            y: 512,
+            side: QUALITY_ROI_SIDE,
+            region_label: 7,
+            owner: 11,
+            world_origin: (world_x, world_y),
+            boundary_clearance: 64.0,
+        };
+        let before = roi.clone();
+        let mut tile_to_world = Matrix3::identity();
+        tile_to_world[(0, 0)] = scale_x;
+        tile_to_world[(1, 1)] = scale_y;
+        tile_to_world[(0, 2)] = translate_x;
+        tile_to_world[(1, 2)] = translate_y;
+        let geometry = SourceGeometry {
+            member_to_anchor: Matrix3::identity(),
+            tile_to_world,
+            station_id: 11,
+        };
+        let residual = super::residual_warp::ResidualWarp::new();
+        let paired = map_roi_corners_to_source(
+            &roi,
+            &geometry,
+            &residual,
+            residual_alignment_px,
+        );
+
+        // Pairing does not mutate, crop, or resample the output ROI.  The only
+        // allowed reference operation is this one inverse-coordinate mapping.
+        prop_assert_eq!(&roi, &before);
+        if residual_alignment_px > 0.5 {
+            prop_assert_eq!(paired, Err(super::degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED));
+        } else {
+            let corners = paired.expect("sub-pixel residual alignment is measurable");
+            let expected_x = (world_x - translate_x) / scale_x;
+            let expected_y = (world_y - translate_y) / scale_y;
+            prop_assert!((corners[0].x - expected_x).abs() < 1.0e-8);
+            prop_assert!((corners[0].y - expected_y).abs() < 1.0e-8);
+            let expected_last_x = (world_x + f64::from(QUALITY_ROI_SIDE - 1) - translate_x) / scale_x;
+            let expected_last_y = (world_y + f64::from(QUALITY_ROI_SIDE - 1) - translate_y) / scale_y;
+            prop_assert!((corners[2].x - expected_last_x).abs() < 1.0e-8);
+            prop_assert!((corners[2].y - expected_last_y).abs() < 1.0e-8);
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 64: 有效像素数不低于唯一覆盖面积基准
+    // 对整数边界的源图四边形，扫描线填充的并集只计重叠一次；完整输出覆盖
+    // 因此满足 0.98×唯一投影面积的有效像素下界。
+    // **Validates: Requirements 11.4, 15.7**
+    #[test]
+    fn property_64_effective_pixels_cover_unique_projected_union(
+        ax in 0u32..64,
+        ay in 0u32..64,
+        aw in 32u32..96,
+        ah in 32u32..96,
+        bx in 0u32..64,
+        by in 0u32..64,
+        bw in 32u32..96,
+        bh in 32u32..96,
+    ) {
+        const WIDTH: u32 = 192;
+        const HEIGHT: u32 = 192;
+        let a_right = ax + aw;
+        let a_bottom = ay + ah;
+        let b_right = bx + bw;
+        let b_bottom = by + bh;
+        let quad_a = [
+            Point2::new(f64::from(ax), f64::from(ay)),
+            Point2::new(f64::from(a_right), f64::from(ay)),
+            Point2::new(f64::from(a_right), f64::from(a_bottom)),
+            Point2::new(f64::from(ax), f64::from(a_bottom)),
+        ];
+        let quad_b = [
+            Point2::new(f64::from(bx), f64::from(by)),
+            Point2::new(f64::from(b_right), f64::from(by)),
+            Point2::new(f64::from(b_right), f64::from(b_bottom)),
+            Point2::new(f64::from(bx), f64::from(b_bottom)),
+        ];
+        let coverage = image::GrayImage::from_fn(WIDTH, HEIGHT, |x, y| {
+            let in_a = x >= ax && x < a_right && y >= ay && y < a_bottom;
+            let in_b = x >= bx && x < b_right && y >= by && y < b_bottom;
+            image::Luma([if in_a || in_b { 255 } else { 0 }])
+        });
+        let result = effective_pixel_coverage(&coverage, &[quad_a, quad_b], (0.0, 0.0))
+            .expect("integer source quadrilaterals have measurable coverage");
+        let overlap_width = a_right.min(b_right).saturating_sub(ax.max(bx));
+        let overlap_height = a_bottom.min(b_bottom).saturating_sub(ay.max(by));
+        let expected_union = u64::from(aw) * u64::from(ah)
+            + u64::from(bw) * u64::from(bh)
+            - u64::from(overlap_width) * u64::from(overlap_height);
+        prop_assert_eq!(result.projected_union, expected_union);
+        prop_assert_eq!(result.output_nontransparent, expected_union);
+        prop_assert!(result.ratio + 1.0e-12 >= QUALITY_EFFECTIVE_PIXEL_RATIO_MIN);
+    }
+}
+
+// Stage 7 Quality_Gate geometry classification properties (15.13, 15.15).
+use super::quality_gate::{detect_slanted_edge, flat_roi, normalized_gradient_energy};
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 65: 倾斜边与平坦 ROI 判定互斥且满足测量门槛。
+    #[test]
+    fn property_65_slanted_edge_and_flat_roi_are_classified(
+        angle_deg in 3.5f64..12.5,
+        low in 0.04f32..0.20,
+        high in 0.78f32..0.96,
+        flat in 0.15f32..0.85,
+    ) {
+        let width = 256u32;
+        let height = 256u32;
+        let theta = angle_deg.to_radians();
+        let edge = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let distance = f64::from(x) - f64::from(y) * theta.tan() - 96.0;
+            let value = if distance >= 0.0 { high } else { low };
+            image::Rgb([value; 3])
+        });
+        let coverage = image::GrayImage::from_pixel(width, height, image::Luma([u8::MAX]));
+        let evidence = detect_slanted_edge(&edge).expect("qualified synthetic edge must be detected");
+        prop_assert!(evidence.angle_deg >= 3.0 && evidence.angle_deg <= 15.0);
+        prop_assert!(evidence.length_px >= 128.0);
+        prop_assert!(evidence.contrast >= 0.20);
+        prop_assert!(evidence.line_fit_rms_px <= 0.5);
+        prop_assert!(flat_roi(&edge, &coverage).is_err());
+
+        let flat_image = image::Rgb32FImage::from_pixel(width, height, image::Rgb([flat; 3]));
+        let flat_evidence = flat_roi(&flat_image, &coverage)
+            .expect("constant, fully covered ROI must be classified as flat");
+        prop_assert_eq!(flat_evidence.opaque_pixels, u64::from(width) * u64::from(height));
+        prop_assert!(flat_evidence.low_frequency_luma_std <= 0.02);
+        prop_assert!(detect_slanted_edge(&flat_image).is_err());
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 67: 归一化梯度能量在恒等局部尺度下保持非负且对常量 ROI 为零。
+    #[test]
+    fn property_67_normalized_gradient_energy_is_scale_consistent(
+        value in 0.0f32..1.0,
+        local_scale in 0.25f64..4.0,
+    ) {
+        let width = 32u32;
+        let height = 32u32;
+        let flat = image::Rgb32FImage::from_pixel(width, height, image::Rgb([value; 3]));
+        let energy = normalized_gradient_energy(&flat, local_scale)
+            .expect("constant finite ROI must be measurable");
+        prop_assert!(energy.is_finite());
+        prop_assert!(energy.abs() <= 1.0e-12);
+
+        let ramp = image::Rgb32FImage::from_fn(width, height, |x, _y| {
+            let channel = (f64::from(x) / f64::from(width - 1)) as f32;
+            image::Rgb([channel; 3])
+        });
+        let unit = normalized_gradient_energy(&ramp, 1.0)
+            .expect("finite ramp ROI must be measurable");
+        let scaled = normalized_gradient_energy(&ramp, local_scale)
+            .expect("finite ramp ROI must be measurable");
+        prop_assert!(unit.is_finite() && scaled.is_finite());
+        prop_assert!(unit >= 0.0 && scaled >= 0.0);
+        prop_assert!((scaled * local_scale - unit).abs() <= 1.0e-10 * unit.max(1.0));
+    }
+}
+
+// Later Quality_Gate pure-property checks (15.18-15.22).
+use super::quality_gate::{
+    QUALITY_MAX_UNMEASURABLE_RATIO, QUALITY_MIN_MEASURABLE, compare_ratio,
+    measure_boundary_strokes, sharpness_confidence_coverage, sharpness_confidence_passes,
+    trace_moore_boundary,
+};
+use super::report::{
+    FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
+    UnmeasurableRecord, WorldPoint,
+};
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 70: 边界笔画配准偏差有界
+    #[test]
+    fn property_70_boundary_stroke_pairing_is_bounded(
+        level in 0.72f32..0.98f32,
+    ) {
+        let width = 128u32;
+        let height = 128u32;
+        let mut owners = vec![1u16; (width * height) as usize];
+        let mut image = image::Rgb32FImage::from_pixel(width, height, image::Rgb([0.10; 3]));
+        for y in 32..96 {
+            for x in 32..96 {
+                owners[(y * width + x) as usize] = 2;
+            }
+        }
+        // Put equal-width strokes on both sides of the top ownership edge.
+        // The measurement samples ±16 px from the boundary, so the paired
+        // edges are deliberately symmetric around y=32.
+        for y in 0..=20 {
+            for x in 0..width {
+                image.put_pixel(x, y, image::Rgb([level; 3]));
+            }
+        }
+        for y in 44..height {
+            for x in 0..width {
+                image.put_pixel(x, y, image::Rgb([level; 3]));
+            }
+        }
+        let coverage = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let regions = label_owner_regions(&owners, &coverage)
+            .expect("closed owner regions must label");
+        let mut boundary = trace_moore_boundary(&regions, 1, 2)
+            .expect("the inner owner must have a public boundary");
+        prop_assert!(!boundary.is_empty());
+        // Feed the measurement a straight top-segment window.  It is a
+        // contiguous Moore-traced boundary slice, and avoids sampling the
+        // square's corner where the normal is intentionally undefined.
+        boundary = (48..80).map(|x| (x, 32)).collect();
+        let report = measure_boundary_strokes(&image, &boundary, (0.0, 0.0))
+            .expect("the synthetic boundary has pairable strokes");
+        prop_assert!(report.pairable_count > 0);
+        prop_assert!(report.p95_error_px <= 3.0);
+        prop_assert!(report.max_error_px <= 3.0);
+        for measurement in report.measurements {
+            prop_assert!(measurement.orientation_error_deg <= 10.0);
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 71: 低置信像素占比有界
+    #[test]
+    fn property_71_low_confidence_coverage_matches_threshold(
+        low_count in 0usize..=1024usize,
+    ) {
+        let coverage = image::GrayImage::from_pixel(32, 32, image::Luma([255]));
+        let mut confidence = vec![0.8f32; 1024];
+        for value in confidence.iter_mut().take(low_count) {
+            *value = 0.04;
+        }
+        let coverage_ratio = sharpness_confidence_coverage(&coverage, &confidence)
+            .expect("fully covered confidence plane is measurable");
+        prop_assert!((coverage_ratio - (1024 - low_count) as f64 / 1024.0).abs() < 1.0e-12);
+        prop_assert_eq!(
+            sharpness_confidence_passes(&coverage, &confidence).unwrap(),
+            low_count <= 10,
+        );
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
+    #[test]
+    fn property_72_measurement_counts_are_conservative(
+        validity in prop::collection::vec(any::<bool>(), 0..=64),
+    ) {
+        let measurements = validity.iter().map(|&valid| {
+            if valid {
+                compare_ratio(1.0, 1.0, 0.93, 1.15, false)
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
+        let measurable = measurements.iter().filter(|item| item.is_some()).count();
+        let unmeasurable = measurements.len() - measurable;
+        prop_assert_eq!(measurable + unmeasurable, measurements.len());
+        let insufficient = measurable < QUALITY_MIN_MEASURABLE
+            || (measurements.len() > 0
+                && unmeasurable as f64 / measurements.len() as f64 > QUALITY_MAX_UNMEASURABLE_RATIO);
+        prop_assert_eq!(insufficient, measurable < QUALITY_MIN_MEASURABLE ||
+            (measurements.len() > 0 && unmeasurable * 5 > measurements.len()));
+        prop_assert!(compare_ratio(0.0, 0.0, 0.93, 1.15, false).is_none());
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 73: 阻止导出时不残留结果且保留诊断
+    #[test]
+    fn property_73_failed_gate_report_retains_diagnostics(
+        measured in 0.0f64..2.0,
+        x in -1000.0f64..1000.0,
+        y in -1000.0f64..1000.0,
+    ) {
+        let report = QualityGateReport {
+            verdict: QualityGateVerdict::Fail,
+            roi_count: 1,
+            criteria: vec![QualityGateCriterionRecord {
+                name: "mtf50_normalized".to_string(),
+                threshold: 0.93,
+                measurable_count: 1,
+                unmeasurable_count: 0,
+                failed: vec![FailedMeasurementRecord {
+                    world: WorldPoint { x, y },
+                    measured,
+                    owner_path: "owner://synthetic".to_string(),
+                }],
+            }],
+            unmeasurable: vec![UnmeasurableRecord {
+                criterion: "noise_sigma_ratio".to_string(),
+                world: WorldPoint { x, y },
+                reason: "roi_not_flat".to_string(),
+            }],
+        };
+        let encoded = serde_json::to_value(&report).expect("quality report is serializable");
+        prop_assert_eq!(&encoded["verdict"], "fail");
+        prop_assert_eq!(&encoded["roi_count"], 1);
+        prop_assert_eq!(&encoded["criteria"][0]["failed"][0]["owner_path"], "owner://synthetic");
+        prop_assert_eq!(&encoded["unmeasurable"][0]["reason"], "roi_not_flat");
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 74: Quality_Gate 的 ROI 集合与结论可复现
+    #[test]
+    fn property_74_roi_selection_is_reproducible(
+        split in 544u32..1024u32,
+        origin_x in -4096.0f64..4096.0,
+        origin_y in -4096.0f64..4096.0,
+    ) {
+        let width = 1024u32;
+        let height = 512u32;
+        let owners = (0..width * height).map(|index| {
+            if index % width < split { 1u16 } else { 2u16 }
+        }).collect::<Vec<_>>();
+        let coverage = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let regions_a = label_owner_regions(&owners, &coverage).expect("ownership labels");
+        let regions_b = label_owner_regions(&owners, &coverage).expect("same ownership labels");
+        let selection_a = select_quality_rois(&regions_a, (origin_x, origin_y));
+        let selection_b = select_quality_rois(&regions_b, (origin_x, origin_y));
+        prop_assert_eq!(selection_a, selection_b);
+        prop_assert_eq!(regions_a.labels, regions_b.labels);
+        prop_assert_eq!(regions_a.distance_to_boundary, regions_b.distance_to_boundary);
     }
 }
