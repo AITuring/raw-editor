@@ -8297,7 +8297,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 group_index,
                                 DiagnosticItem::ResidualField,
                                 "json",
-                                || b"[]".to_vec(),
+                                || {
+                                    serde_json::to_vec(&residual_warp::run_report_snapshot())
+                                        .unwrap_or_default()
+                                },
                             );
                             let ownership = masks.ownership.owners().to_vec();
                             diagnostics_recorder.record(
@@ -8324,7 +8327,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 group_index,
                                 DiagnosticItem::ToneField,
                                 "json",
-                                || b"[]".to_vec(),
+                                || {
+                                    serde_json::to_vec(&tone::run_report_snapshot())
+                                        .unwrap_or_default()
+                                },
                             );
                         }
                         Ok(rendered.into_image())
