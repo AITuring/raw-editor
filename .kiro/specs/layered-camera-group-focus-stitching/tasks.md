@@ -392,16 +392,13 @@
       记录实测值与 `intra_station_rejected_from_group`
     - _Requirements: 12.1, 12.2, 12.5_
 
-  - [~]* 7.13 属性测试：分组只由图像证据决定
+  - [x]* 7.13 属性测试：分组只由图像证据决定
     - **Property 1: 分组只由图像证据决定**
     - **Validates: Requirements 1.1**
     - 生成器 `arb_focus_bracket(plane)`
-    - 2026-09-30 重新打开：种子 `cc 71f86598d2d5804ed09c1bb835bd0362391e9d87048a2a6a4ece817c9512287a`
-      在单线程单独重放时稳定失败（不是并发抖动）：`UnrelatedContent` 诱饵源（下标 4）与机位 0 的
-      源 0 以 48 内点、overlap NCC 0.727、空间支撑 0.88、尺度比 1.0 通过了机位链接判据，被并入
-      机位 0。该种子曾在 `a33a2fda` 这一轮被当作无关随机失败丢弃。需查明是诱饵生成器与源图共享了
-      可相关内容，还是 NCC 度量本身不足以区分无关画面，修复后把种子提交进
-      `src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties.txt`
+    - 执行记录（2026-09-30）：单线程重放确认失败来自 `UnrelatedContent` 生成器复用了明亮纸面内容，
+      而不是 NCC 阈值不足；生成器改为确定性的极性反转并保留几何证据，使 NCC 拒绝诱饵。
+      种子与修复提交 `6611a8ec`，详见 `/private/tmp/raw-editor-gate/r045f-task4/property1.md`。
 
   - [x]* 7.14 属性测试：累计位移拆分位置唯一确定
     - **Property 3: 累计位移拆分位置唯一确定**
@@ -999,6 +996,10 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - 有效重叠宽度 < 32 世界像素时沿有效覆盖中线取接缝，
       记录机位对与实测重叠宽度，标识符 `composition_narrow_overlap`
     - _Requirements: 10.1, 10.9_
+    - 执行记录（2026-09-30）：Langyuan owner 5/8 的 128px 纹理块相位相关测得 p50 0.912px、
+      p95 3.429px、>3px 为 17.38%，存在连续低错位路径（详见 `/private/tmp/raw-editor-gate/r045f-task6/seam-measure.md`）。
+      默认 ownership 合成器目前没有成对重叠网格或接缝报告接线；直接复用 comparison-only 的稀疏 DP
+      会改变无效采样与 tie-breaking，因此本轮未接入生产，保持 [~]。
 
   - [x] 13.3 移除默认路径的 `crop_to_valid_rectangle()` 裁切
     - 提前于阶段 3–5 执行，原因见执行记录
@@ -1062,6 +1063,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Property 53: 接缝只在双覆盖区且代价最低**
     - **Validates: Requirements 10.1**
     - 生成器 `arb_cost_grid(w, h, labels)`，≤8×8 重叠网格与穷举最小值比较
+    - 执行记录（2026-09-30）：现有 P53 仍覆盖 cfg(test) 纯函数；生产接缝未接入，故未勾选。
 
   - [x]* 13.9 属性测试：画布边界等于覆盖联合边界
     - **Property 54: 画布边界等于覆盖联合边界**
@@ -1093,6 +1095,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
   - [ ]* 13.14 属性测试：窄重叠沿中线取接缝
     - **Property 59: 窄重叠沿中线取接缝**
     - **Validates: Requirements 10.9**
+    - 执行记录（2026-09-30）：现有 P59 仍覆盖 cfg(test) 纯函数；生产接缝未接入，故未勾选。
 
   - [x]* 13.15 属性测试：画布超限拒绝输出
     - **Property 60: 画布超限拒绝输出**
@@ -1311,7 +1314,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.11**
     - 执行记录：P70（100 cases）验证 Moore 边界笔画配对的 P95、最大偏差和方向误差。
 
-  - [~] 15.19 属性测试：owner 锐度差额超限像素占比有界
+  - [x] 15.19 属性测试：owner 锐度差额超限像素占比有界
     - **Property 71: owner 锐度差额超限像素占比有界**
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
@@ -1324,12 +1327,10 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       `quality_gate_runner::owner_sharpness_stats`，覆盖 Textured_Pixel 分母、透明/平坦像素、
       单候选与最高分 owner 的零短缺、Sharpness_Confidence 无关性、unresolved/空纹理证据不足及
       0.99 边界；随 `3d4f8837`、`36bcab31`、`48ae1fca`、`3796a72f`、`99be307f` 完成。
-    - 审核更正（2026-09-30）：上一条记录多写了覆盖面。P71 实际只调用 `owner_sharpness_stats`
-      核对计数；「≥ 0.99 通过」是测试自己算的，没有经过运行时判定路径，也没有覆盖
-      Sharpness_Confidence 无关性。审核补了单元测试
-      `owner_shortfall_quantisation_keeps_the_criterion_boundary`（量化边界 0.05/0.0501、非有限值、
-      最高分 owner 与单候选为 0）。剩余：把 owner 判据的构建从 `run_quality_gate` 抽成函数，
-      让 P71 经由它断言通过/未通过/证据不足，并加入 Sharpness_Confidence 取值不影响结论的断言。
+    - 执行记录（2026-09-30）：抽出 `build_owner_sharpness_criterion`，运行时和 P71 共用；
+      P71（100 cases）覆盖通过、未通过、unresolved/空纹理证据不足、0.99 边界、透明/平坦像素
+      与 Sharpness_Confidence 改变不影响结论。提交 `46d47a44`、`6cc2a0ef`、`51be55c6`、
+      `6a8ee527`。
 
   - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
@@ -1353,7 +1354,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.17**
     - 执行记录：P74（100 cases）验证同 Ownership_Map 输入的 ROI 集合与标签距离完全一致。
 
-  - [~] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
+  - [x] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
     - 按设计 Focus_Fuser 第 11 条在单元级计算 Owner_Sharpness_Shortfall：`SharpnessCellEvidence`
       已有 `winner_score` / `owner_score` / `candidate_count`，补 `disagreement`（该单元
       `StationFusion::disagreement`）；不得改变任何 owner 决策
@@ -1395,6 +1396,10 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
         按「双三次插值颜色 > 1e-6」判定覆盖，4×4 采样足迹会越过机位 Coverage_Mask，推测这就是
         边缘像素反查不到 owner 的来源。需要把搜索限定在合成器的插值足迹内、记录被吸附的像素数，
         并确认根因。
+    - 执行记录（2026-09-30）：反查改为复用合成器的 residual map-to-source 路径，只在 floor−1..floor+2
+      的 4×4 双三次足迹内选择最近 owner，并记录 `snapped_to_footprint`、未覆盖足迹及亮度比。
+      Langyuan/Wenyuan 门禁的 `out_of_bounds`、`raw_owner_unresolved`、`evidence_missing` 均为 0；
+      报告在 `/private/tmp/raw-editor-gate/r045f-gates/`，TIFF SHA256 仍为基线。
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；
@@ -1442,7 +1447,11 @@ memory_threshold_source, physical_memory_bytes}`
     - 诊断缓冲用 `Option<Box<...>>`，关闭时保持 `None`（零分配、零写入）
     - `RAW_EDITOR_STACK_GROUP_DIAGNOSTICS` 保持现状（仅影响可读打印）
     - _Requirements: 13.1, 13.2, 13.5_
-    - 执行记录：`diagnostics::DiagnosticsRecorder` 已实现：关闭时为 `None`（一个空指针），不运行任何条目生产闭包、不写文件；开启时七类条目（成员、每帧变换、局部残差场、Ownership_Map、Sharpness_Confidence、Coverage_Mask、低频色调场）按站位命名即时写出并列入 `diagnostics.json`，记录最终有效裁切的左上角与宽高；首次写入失败后停止后续写入并以 `diagnostics_write_failed` 指明目录。`stack_diagnostics.output_dir` 设置项与管线接线、替换 `capture_crop` 仍未做，保持 [~]。
+    - 执行记录（2026-09-30）：`stack_diagnostics.output_dir` 已加入后端设置、设置界面及 12 个
+      locale；管线按设置启用 `DiagnosticsRecorder`，输出七类站位条目并写入 residual/tone run
+      models，关闭时不分配；P81/P82/P87/P91/P93 各 100 cases 通过。提交 `b2614348`、
+      `9be9fdf9`。候选 Source_RAW ROI 重采样、选择掩膜、逐帧 Sharpness_Score 与 60 秒导出
+      仍未接入，故任务保持 [~]。
 
   - [~] 17.4 实现诊断 ROI 导出与像素级溯源查询
     - 长边 ≤4096 世界像素的 ROI：60 秒内导出该 ROI 内每个候选 Source_RAW 的重采样结果、
