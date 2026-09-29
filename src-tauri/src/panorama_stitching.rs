@@ -8450,7 +8450,33 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         let sources = quality_sources.take().unwrap_or_default();
         let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
             load_prepared_stack_source(&source.path, &settings).map(|prepared| {
-                source_to_render_rgb32f(prepared.image, source.dimensions.0, source.dimensions.1)
+                let mut rendered = source_to_render_rgb32f(
+                    prepared.image,
+                    source.dimensions.0,
+                    source.dimensions.1,
+                );
+                if is_raw_file(&source.path) {
+                    if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                        .ok()
+                        .and_then(|value| value.parse::<f32>().ok())
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                    {
+                        rendered
+                            .as_mut()
+                            .par_iter_mut()
+                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+                    } else if let Some(gain) = shared_raw_display_gain {
+                        rendered
+                            .as_mut()
+                            .par_iter_mut()
+                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+                    } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
+                        .is_none()
+                    {
+                        normalize_stack_raw_display_exposure(&mut rendered);
+                    }
+                }
+                rendered
             })
         };
         let residual = residual_warp::run_model_snapshot();

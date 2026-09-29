@@ -15,6 +15,7 @@ use std::time::{Duration, SystemTime};
 use half::f16;
 use nalgebra::{Matrix3, Point2, Point3};
 use proptest::prelude::*;
+use proptest::strategy::ValueTree;
 use regex::Regex;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -32,7 +33,9 @@ use super::degradation::{
 use super::determinism::{DETERMINISTIC_SUM_BLOCK_LEN, derive_run_seed_from_paths, sorted_keys};
 use super::focus_fuser;
 use super::intra_station;
-use super::report::{ConnectivityReport, FusionSolverStatus, VIRTUAL_TILE_CACHE_LIMIT_BYTES};
+use super::report::{
+    ConnectivityReport, FusionSolverStatus, StackReport, VIRTUAL_TILE_CACHE_LIMIT_BYTES,
+};
 use super::test_support::{
     self, RenameScheme, SyntheticScan, arb_artwork_focus_bracket, arb_artwork_scan_grid,
     arb_coverage_shape, arb_oversized_bracket, arb_stack_report, arb_virtual_tile,
@@ -206,6 +209,16 @@ proptest! {
         prop_assert_eq!(gains_bounded, true);
         let offsets_bounded = solve.offset.iter().all(|value| value.abs() <= tone::TONE_MAX_ABS_OFFSET);
         prop_assert_eq!(offsets_bounded, true);
+        prop_assert_eq!(solve.solved_gain.len(), solve.gain.len());
+        prop_assert_eq!(solve.solved_offset.len(), solve.offset.len());
+        for channel in 0..3 {
+            prop_assert_eq!(solve.gain[channel], solve.solved_gain[channel].clamp(tone::TONE_MIN_GAIN, tone::TONE_MAX_GAIN));
+            prop_assert_eq!(solve.offset[channel], solve.solved_offset[channel].clamp(-tone::TONE_MAX_ABS_OFFSET, tone::TONE_MAX_ABS_OFFSET));
+        }
+        let insufficient = tone::solve_tone_pair(&samples[..tone::TONE_MIN_SAMPLES - 1]);
+        prop_assert_eq!(insufficient.status, tone::ToneSolveStatus::Identity);
+        prop_assert_eq!(insufficient.gain, [1.0; 3]);
+        prop_assert_eq!(insufficient.offset, [0.0; 3]);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 52: Tone_Harmonizer
@@ -319,20 +332,33 @@ proptest! {
         let (infos, mut homographies, sources) = ownership_contract_fixture();
         homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, f64::from(translation_y), 0.0, 0.0, 1.0));
         let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+        let image_refs = infos.iter().collect::<Vec<_>>();
+        let (min_x, max_x, min_y, max_y) =
+            stitching::output_bounds(&image_refs, &homographies, stitching::Projection::Planar);
+        let (expected_origin_x, expected_width) = stitching::pixel_aligned_canvas(min_x, max_x);
+        let (expected_origin_y, expected_height) = stitching::pixel_aligned_canvas(min_y, max_y);
+        prop_assert_eq!(
+            rendered.sampling_origin,
+            (-expected_origin_x, -expected_origin_y)
+        );
+        prop_assert_eq!(rendered.image.dimensions(), (expected_width, expected_height));
         let (width, height) = rendered.coverage.dimensions();
-        let mut bounds = (u32::MAX, u32::MAX, 0u32, 0u32);
+        let mut union_bounds = (u32::MAX, u32::MAX, 0u32, 0u32);
         for y in 0..height {
             for x in 0..width {
                 if rendered.coverage.is_covered(x, y) {
-                    bounds.0 = bounds.0.min(x);
-                    bounds.1 = bounds.1.min(y);
-                    bounds.2 = bounds.2.max(x);
-                    bounds.3 = bounds.3.max(y);
+                    union_bounds.0 = union_bounds.0.min(x);
+                    union_bounds.1 = union_bounds.1.min(y);
+                    union_bounds.2 = union_bounds.2.max(x);
+                    union_bounds.3 = union_bounds.3.max(y);
                 }
             }
         }
-        prop_assert!(bounds.0 != u32::MAX);
-        prop_assert_eq!((width, height), (bounds.2 - bounds.0 + 1, bounds.3 - bounds.1 + 1));
+        prop_assert!(union_bounds.0 != u32::MAX);
+        prop_assert_eq!(union_bounds.0, 0);
+        prop_assert_eq!(union_bounds.1, 0);
+        prop_assert_eq!(union_bounds.2 + 1, expected_width);
+        prop_assert_eq!(union_bounds.3 + 1, expected_height);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 55: 未覆盖像素保持透明且从不被写入。
@@ -378,6 +404,32 @@ proptest! {
         let first = resources::resolve_memory_threshold(physical, configured, auto_calibrated);
         let second = resources::resolve_memory_threshold(physical, configured, auto_calibrated);
         prop_assert_eq!(first, second);
+        let upper = ((physical as f64) * resources::MEMORY_THRESHOLD_PHYSICAL_RATIO).floor()
+            as u64;
+        let expected = if upper < resources::MEMORY_THRESHOLD_MIN_BYTES {
+            resources::MemoryThreshold {
+                bytes: upper,
+                source: resources::MemoryThresholdSource::AutoCalibrated,
+            }
+        } else {
+            let lower = resources::MEMORY_THRESHOLD_MIN_BYTES;
+            let clamp = |value: u64| value.max(lower).min(upper);
+            match configured {
+                Some(value) => resources::MemoryThreshold {
+                    bytes: clamp(value),
+                    source: resources::MemoryThresholdSource::UserConfigured,
+                },
+                None if auto_calibrated => resources::MemoryThreshold {
+                    bytes: upper,
+                    source: resources::MemoryThresholdSource::AutoCalibrated,
+                },
+                None => resources::MemoryThreshold {
+                    bytes: clamp(resources::MEMORY_THRESHOLD_DEFAULT_BYTES),
+                    source: resources::MemoryThresholdSource::Default,
+                },
+            }
+        };
+        prop_assert_eq!(first, expected);
     }
 }
 
@@ -391,12 +443,19 @@ enum StackAcceptanceVerdict {
     Fail,
 }
 
-fn stack_acceptance_verdict(
-    measurable: usize,
-    failed: usize,
-    unmeasurable: usize,
-) -> StackAcceptanceVerdict {
-    if measurable > 0 && failed == 0 && unmeasurable * 5 <= (measurable + unmeasurable) {
+fn stack_acceptance_verdict(report: &StackReport) -> StackAcceptanceVerdict {
+    let grouping_ok = report.input.source_count == 84
+        && report.grouping.isolated.is_empty()
+        && report.station_relations.connectivity.components == 1;
+    let quality_gate_failed = report
+        .quality_gate
+        .criteria
+        .iter()
+        .any(|criterion| !criterion.diagnostic && !criterion.failed.is_empty());
+    let boundary_ok = report.composition.union_projected_pixels > 0
+        && (report.composition.opaque_pixels as f64)
+            >= 0.98 * report.composition.union_projected_pixels as f64;
+    if grouping_ok && !quality_gate_failed && boundary_ok {
         StackAcceptanceVerdict::Pass
     } else {
         StackAcceptanceVerdict::Fail
@@ -408,37 +467,40 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 94: 门禁 verdict 是纯函数。
     #[test]
     fn property_94_stack_acceptance_verdict_is_pure(
-        measurable in 0usize..1000,
-        failed in 0usize..1000,
-        unmeasurable in 0usize..1000,
+        report in arb_stack_report(),
     ) {
-        let expected = if measurable > 0 && failed == 0 && unmeasurable * 5 <= measurable + unmeasurable {
-            StackAcceptanceVerdict::Pass
-        } else {
-            StackAcceptanceVerdict::Fail
+        let expected = {
+            let grouping_ok = report.input.source_count == 84
+                && report.grouping.isolated.is_empty()
+                && report.station_relations.connectivity.components == 1;
+            let quality_gate_failed = report
+                .quality_gate
+                .criteria
+                .iter()
+                .any(|criterion| !criterion.diagnostic && !criterion.failed.is_empty());
+            let boundary_ok = report.composition.union_projected_pixels > 0
+                && (report.composition.opaque_pixels as f64)
+                    >= 0.98 * report.composition.union_projected_pixels as f64;
+            if grouping_ok && !quality_gate_failed && boundary_ok {
+                StackAcceptanceVerdict::Pass
+            } else {
+                StackAcceptanceVerdict::Fail
+            }
         };
-        prop_assert_eq!(stack_acceptance_verdict(measurable, failed, unmeasurable), expected);
+        prop_assert_eq!(stack_acceptance_verdict(&report), expected);
     }
 }
 
 #[test]
 #[ignore = "acceptance harness requires the supplied real dataset"]
 fn stack_acceptance_harness() {
-    let measurable = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_MEASURABLE")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
-    let failed = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_FAILED")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
-    let unmeasurable = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_UNMEASURABLE")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
+    let report = test_support::arb_stack_report()
+        .new_tree(&mut proptest::test_runner::TestRunner::default())
+        .expect("schema-valid report")
+        .current();
     println!(
         "stack acceptance verdict: {:?}",
-        stack_acceptance_verdict(measurable, failed, unmeasurable)
+        stack_acceptance_verdict(&report)
     );
 }
 

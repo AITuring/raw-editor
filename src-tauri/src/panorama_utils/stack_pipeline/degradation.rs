@@ -1019,4 +1019,68 @@ mod tests {
         assert!(!file_system.files.contains_key(final_path));
         assert!(file_system.renames.is_empty());
     }
+
+    #[test]
+    fn rss_cancellation_rejects_only_the_staged_output_and_keeps_diagnostics() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::time::Duration;
+
+        let rss = Arc::new(AtomicU64::new(128));
+        let next = Arc::clone(&rss);
+        let sampler = super::super::resources::RssSampler::start_with_interval(
+            64,
+            Duration::from_millis(1),
+            move || next.load(Ordering::Relaxed),
+        );
+        for _ in 0..100 {
+            if sampler.cancelled() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            sampler.cancelled(),
+            "injected RSS must request cancellation"
+        );
+        let sample = sampler.stop(64);
+        assert!(sample.threshold_exceeded);
+
+        let temporary = Path::new("/output/.stack-result.rss-cancelled.tmp");
+        let final_path = Path::new("/output/stack-result.tiff");
+        let report = Path::new("/diagnostics/stack-report-rss-cancelled.json");
+        let preview = Path::new("/diagnostics/rss-cancelled-preview.jpg");
+        let mut file_system = InjectedFileSystem::default();
+        file_system.put(temporary, b"partial output");
+        file_system.put(report, b"stack report");
+        file_system.put(preview, b"diagnostic preview");
+        let mut ledger = DegradationLedger::new();
+        ledger.record(
+            MEMORY_THRESHOLD_EXCEEDED,
+            json!({
+                "threshold_bytes": 64,
+                "peak_rss_bytes": sample.peak_rss_bytes,
+                "sample_count": sample.sample_count,
+            }),
+        );
+
+        assert_eq!(
+            DegradationManager::new(&ledger)
+                .publish_staged_output(&mut file_system, temporary, final_path)
+                .expect("RSS cancellation cleanup must succeed"),
+            OutputPublication::Rejected
+        );
+        assert!(!file_system.files.contains_key(temporary));
+        assert!(!file_system.files.contains_key(final_path));
+        assert_eq!(
+            file_system.contents(report),
+            Some(b"stack report".as_slice())
+        );
+        assert_eq!(
+            file_system.contents(preview),
+            Some(b"diagnostic preview".as_slice())
+        );
+        assert_eq!(file_system.removed, vec![temporary.to_path_buf()]);
+        assert!(file_system.renames.is_empty());
+    }
 }

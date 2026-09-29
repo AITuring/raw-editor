@@ -2499,6 +2499,7 @@ mod tests {
     /// The sink is a process global, so this is the only test that touches it.
     #[test]
     fn the_run_sink_keeps_one_record_per_station() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let record = |station_index: usize, cell_size_px: u32| FusionReport {
             station_index,
             cell_size_px,

@@ -2559,3 +2559,10 @@ flowchart LR
    `memory_threshold_exceeded`。当前运行入口没有用户设置源，因此来源记录为 `default`。
 4. 站位关系的双向匹配在 Virtual_Tile 合成前计算世界坐标误差 P95；只有 P95 大于 3 px 的重叠
    才交给 Residual_Warp，证据不足时保持恒等模型。
+5. Quality_Gate 解码 owner Source_RAW 时复用最终渲染路径的 RAW display gain/曝光归一化，
+   使参考 ROI 与输出处于同一显示编码；大画布稀疏 ROI 还必须通过 16px 的 Coverage/Ownership
+   环带检查后才可测量，边界附近样本保留为不可测量并记录世界坐标。
+6. Property 86 的低物理内存分支先于用户配置执行：当 `0.75 × physical < 4 GiB` 时直接
+   使用上界并标记 `auto_calibrated`。Acceptance_Harness 的纯判定按 Property 94 的三项条件
+   读取 Stack_Report：84 张全部入组且连通、Quality_Gate 无未通过判据、有效面积至少为联合面积
+   的 0.98 倍。

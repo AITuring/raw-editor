@@ -1,0 +1,31 @@
+# Parallel-suite replay evidence (2026-09-29)
+#
+# These are the exact payloads from /private/tmp/raw-editor-properties-final.log
+# and review5/grouping-flaky-seed.txt.  They are retained separately from
+# proptest's generated `cc` file because the three scalar payloads are replay
+# inputs for property helpers, not valid proptest regression lines.
+
+[property_75_every_failed_non_anchor_degrades_to_one_deterministic_production_source]
+scores = [Some(116), Some(365)]
+permutation_seed = 17155767282009907368
+texture_seed = 9300639506941516608
+exact_tie = true
+
+[property_76_partial_registration_failure_fuses_only_successful_production_frames]
+successful_count = 4
+failed_count = 2
+permutation_seed = 9501257891083706328
+
+[property_36_closure_corrections_are_clamped_and_reported]
+seed = 787596336838008496
+use_absolute_cap = true
+
+[grouping_and_topology_are_invariant_under_rename]
+cc = a27d43fcfd157267ab58050680837905edd56bbbad8644ff68c2f3b11d361768
+# shrinks to the SyntheticScan recorded in review5/grouping-flaky-seed.txt.
+
+# All four payloads pass when replayed separately on HEAD 13d0af6b and on the
+# c04687cf baseline.  The parallel-suite failure therefore remains evidence of
+# shared process-global run sinks, not proof that the grouping generator alone
+# caused every failure.
+cc a27d43fcfd157267ab58050680837905edd56bbbad8644ff68c2f3b11d361768 # shrinks to scan = SyntheticScan { plane: ArtworkPlane { width: 640, height: 640, mean_luma: 225 }, station_count: 2, station_neighbours: [(0, 1)], sources: [SyntheticSource { filename: "DSC_3680.NEF", content_plane: None, tile_to_plane: [[0.9992501403005745, 0.0, 0.0], [0.0, 0.9992501403005745, 0.0], [62.53890962833795, 63.45095947511787, 1.0]], exposure: 1.0428371700736438, defocus_sigma: 0.0, station: 0, layer: 0, capture_rank: 0 }, SyntheticSource { filename: "DSC_3681.NEF", content_plane: None, tile_to_plane: [[1.0003912372608075, 0.0, 0.0], [0.0, 1.0003912372608075, 0.0], [62.296119191671, 62.087496119954515, 1.0]], exposure: 1.0532655417743804, defocus_sigma: 0.0, station: 0, layer: 1, capture_rank: 1 }, SyntheticSource { filename: "DSC_3682.NEF", content_plane: None, tile_to_plane: [[0.9988029138579434, 0.0, 0.0], [0.0, 0.9988029138579434, 0.0], [192.91297214096036, 65.64723127465562, 1.0]], exposure: 0.9836973425558414, defocus_sigma: 0.0, station: 1, layer: 0, capture_rank: 2 }, SyntheticSource { filename: "DSC_3683.NEF", content_plane: None, tile_to_plane: [[0.9999233092690627, 0.0, 0.0], [0.0, 0.9999233092690627, 0.0], [192.1253698731745, 63.97358006351606, 1.0]], exposure: 0.9935343159813999, defocus_sigma: 0.0, station: 1, layer: 1, capture_rank: 3 }] }

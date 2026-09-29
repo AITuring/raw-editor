@@ -40,6 +40,18 @@ pub fn resolve_memory_threshold(
     let upper = ((physical_memory_bytes as f64) * MEMORY_THRESHOLD_PHYSICAL_RATIO)
         .floor()
         .min(u64::MAX as f64) as u64;
+
+    // A machine with less than 16/3 GiB of physical memory cannot satisfy the
+    // nominal 4 GiB lower bound.  In that case the physical-memory ceiling is
+    // the only safe threshold, and the report must say that it was
+    // auto-calibrated even when a stale user setting was supplied.
+    if upper < MEMORY_THRESHOLD_MIN_BYTES {
+        return MemoryThreshold {
+            bytes: upper,
+            source: MemoryThresholdSource::AutoCalibrated,
+        };
+    }
+
     let lower = MEMORY_THRESHOLD_MIN_BYTES.min(upper);
     let clamp = |value: u64| value.max(lower).min(upper);
     if let Some(value) = user_configured_bytes {
@@ -183,7 +195,20 @@ mod tests {
             resolve_memory_threshold(physical, None, true).source,
             MemoryThresholdSource::AutoCalibrated
         );
-        assert_eq!(resolve_memory_threshold(1, None, false).bytes, 0);
+        assert_eq!(
+            resolve_memory_threshold(1, None, false),
+            MemoryThreshold {
+                bytes: 0,
+                source: MemoryThresholdSource::AutoCalibrated,
+            }
+        );
+        assert_eq!(
+            resolve_memory_threshold(3 * 1024 * 1024 * 1024, Some(u64::MAX), false),
+            MemoryThreshold {
+                bytes: 3 * 1024 * 1024 * 1024 * 3 / 4,
+                source: MemoryThresholdSource::AutoCalibrated,
+            }
+        );
     }
 
     #[test]

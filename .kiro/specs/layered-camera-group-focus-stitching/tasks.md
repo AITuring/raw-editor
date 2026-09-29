@@ -926,7 +926,7 @@
   - [x]* 11.17 属性测试：色调增益与偏移恒在范围内
     - **Property 50: 色调增益与偏移恒在范围内**
     - **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
-    - 执行记录：P50 以 100 cases 覆盖求解后的 gain 与 offset 边界，全部通过。
+    - 执行记录：P50 以 100 cases 覆盖求解值、截断后的应用值、记录字段，以及少于 1024 个样本时的恒等回退，全部通过。
 
   - [ ]* 11.18 属性测试：色调不改变接缝与 ownership
     - **Property 51: 色调不改变接缝与 ownership**
@@ -1055,18 +1055,18 @@
     - **Property 54: 画布边界等于覆盖联合边界**
     - **Validates: Requirements 10.2**
     - 生成器 `arb_coverage_shape()`
-    - 执行记录：P54 使用 100 个随机平移夹具，逐像素计算 Coverage 联合边界并与输出画布尺寸比较。
+    - 执行记录：P54 使用 100 个随机平移夹具，独立投影源四角得到联合边界，再逐像素核对 Coverage、采样原点和输出画布尺寸。
 
   - [x]* 13.10 属性测试：未覆盖像素保持透明且不被写入
     - **Property 55: 未覆盖像素保持透明且不被写入**
     - **Validates: Requirements 10.3**
-    - 执行记录：P55 使用 100 个有间隙的平移，断言未覆盖像素 owner 为 `NO_OWNER` 且 RGB 全零。
+    - 执行记录：P55 使用 100 个有间隙的平移，断言未覆盖像素 owner 为 `NO_OWNER`、颜色通道全零，且没有覆盖标记的像素落入间隙。
 
   - [x]* 13.11 属性测试：输出 ownership 与瓦片 ownership 一致
     - **Property 56: 输出 ownership 与瓦片 ownership 一致**
     - **Validates: Requirements 10.4**
-    - 执行记录：P56 使用 100 个随机平移，并通过 `assert_source_correspondence` 逐像素核对
-      输出 ownership 与瓦片 ownership。
+    - 执行记录：P56 使用 100 个随机平移，通过 `assert_source_correspondence` 沿输出 owner 反查
+      对应 Source_RAW 采样并逐像素核对 ownership 图例与采样坐标。
 
   - [ ]* 13.12 属性测试：写入 alpha 不改变颜色通道
     - **Property 57: 写入 alpha 不改变颜色通道**
@@ -1383,7 +1383,8 @@ memory_threshold_source, physical_memory_bytes}`
   - [x]* 17.11 属性测试：内存门槛解析确定
     - **Property 86: 内存门槛解析确定**
     - **Validates: Requirements 14.2**
-    - 执行记录：P86 使用 100 cases，对相同输入重复解析并逐字段比较 `MemoryThreshold`。
+    - 执行记录：P86 使用 100 cases，逐例核对低物理内存上界优先、配置/自动校准/默认来源和截断值，
+      并重复解析比较 `MemoryThreshold`。
 
   - [ ]* 17.12 属性测试：内存超限中止且不残留
     - **Property 87: 内存超限中止且不残留**
@@ -1401,7 +1402,8 @@ memory_threshold_source, physical_memory_bytes}`
   - [x]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
     - **Validates: Requirements 15.12**
-    - 执行记录：P94 使用 100 cases 覆盖可测、失败和不可测计数，纯 verdict 与门槛判定一致。
+    - 执行记录：P94 使用 100 cases，纯函数按 84 张入组/连通、Quality_Gate 失败数和 0.98 联合面积
+      三项条件判定，并与独立期望逐例一致。
 
   - [ ]* 17.16 集成测试：时限类判据
     - Stack_Report 在成功/降级/拒绝三条路径上 30 秒内写出（需求 10.8）

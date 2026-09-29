@@ -298,6 +298,39 @@ fn select_sparse_rois(
                 }
             }
             if same_owner {
+                // A candidate must have a 16px owner/coverage margin on all
+                // four sides. Checking this narrow ring is equivalent to the
+                // distance-transform predicate used by the exact small-plane
+                // selector, while keeping the large-plane path bounded.
+                let margin = quality_gate::QUALITY_ROI_MARGIN as u32;
+                let margin_ok = x >= margin
+                    && y >= margin
+                    && x + side + margin <= width
+                    && y + side + margin <= height
+                    && (y - margin..y + side + margin).all(|row| {
+                        (x - margin..x).all(|column| {
+                            let index = (row * width + column) as usize;
+                            coverage.as_raw()[index] != 0 && ownership[index] == owner
+                        }) && (x + side..x + side + margin).all(|column| {
+                            let index = (row * width + column) as usize;
+                            coverage.as_raw()[index] != 0 && ownership[index] == owner
+                        })
+                    })
+                    && (y - margin..y).all(|row| {
+                        (x..x + side).all(|column| {
+                            let index = (row * width + column) as usize;
+                            coverage.as_raw()[index] != 0 && ownership[index] == owner
+                        })
+                    })
+                    && (y + side..y + side + margin).all(|row| {
+                        (x..x + side).all(|column| {
+                            let index = (row * width + column) as usize;
+                            coverage.as_raw()[index] != 0 && ownership[index] == owner
+                        })
+                    });
+                if !margin_ok {
+                    continue;
+                }
                 result.push(QualityRoi {
                     x,
                     y,
