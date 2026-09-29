@@ -356,7 +356,11 @@ proptest! {
         };
         let tiles = [tile(0, 1, 0.35), tile(1, 2, 0.55)];
         let evidence = image::GrayImage::from_fn(width, height, |x, y| {
-            image::Luma([if (x * 3 + y + owner_seed as u32) % 17 == 0 { 0 } else { 255 }])
+            image::Luma([if (x * 3 + y + owner_seed as u32).is_multiple_of(17) {
+                0
+            } else {
+                255
+            }])
         });
         let coverage_before = stitching::CoverageMask::from_gray(evidence.clone());
         let coverage_bytes_before = coverage_before.covered().to_vec();
@@ -814,9 +818,12 @@ proptest! {
         ];
         let mut report = stack_acceptance_baseline_report();
         prop_assert!(stack_acceptance_failures(&report).is_empty());
-        let expected = kinds.into_iter().zip(violations).filter_map(|(kind, inject)| {
-            inject.then(|| inject_acceptance_violation(&mut report, kind))
-        }).collect::<BTreeSet<_>>();
+        let expected = kinds
+            .into_iter()
+            .zip(violations)
+            .filter(|&(_, inject)| inject)
+            .map(|(kind, _)| inject_acceptance_violation(&mut report, kind))
+            .collect::<BTreeSet<_>>();
         let failures = stack_acceptance_failures(&report);
         prop_assert_eq!(failures.iter().map(|failure| failure.identifier).collect::<BTreeSet<_>>(), expected);
     }

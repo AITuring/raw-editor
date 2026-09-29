@@ -568,10 +568,12 @@ fn saved_output_metadata(
     })
 }
 
+type ImageStackDecoderParts = ((u32, u32), ColorType, Option<Vec<u8>>);
+
 fn image_stack_decoder_parts<D: ImageDecoder>(
     mut decoder: D,
     output_format: ImageStackOutputFormat,
-) -> Result<((u32, u32), ColorType, Option<Vec<u8>>), String> {
+) -> Result<ImageStackDecoderParts, String> {
     let dimensions = decoder.dimensions();
     let color_type = decoder.color_type();
     let icc_profile = decoder.icc_profile().map_err(|error| {
@@ -831,31 +833,35 @@ fn write_image_stack_output_for_run(
 /// The save command and export/report integration tests share this boundary.
 /// A failed image write returns before touching the report. Once publication
 /// succeeds, report failures are diagnostic and do not undo the saved image.
+struct ImageStackReportContext<'a> {
+    source_path: &'a str,
+    degradation_ledger: &'a DegradationLedger,
+    result_id: &'a str,
+    stack_report_path: Option<&'a Path>,
+}
+
 fn save_image_stack_output_for_result(
     image: &DynamicImage,
     output_path: &Path,
     output_format: ImageStackOutputFormat,
     export_settings: &ExportSettings,
-    source_path: &str,
-    degradation_ledger: &DegradationLedger,
-    result_id: &str,
-    stack_report_path: Option<&Path>,
+    context: ImageStackReportContext<'_>,
 ) -> Result<(), String> {
     write_image_stack_output_for_run(
         image,
         output_path,
         output_format,
         export_settings,
-        source_path,
-        degradation_ledger,
+        context.source_path,
+        context.degradation_ledger,
     )?;
-    if let Some(report_path) = stack_report_path {
+    if let Some(report_path) = context.stack_report_path {
         match read_image_stack_output_metadata(output_path, output_format) {
             Ok(metadata) => {
                 if let Err(error) =
                     crate::panorama_utils::stack_pipeline::report::update_stack_report_output(
                         report_path,
-                        result_id,
+                        context.result_id,
                         metadata.format,
                         metadata.bit_depth,
                         metadata.alpha_preserved,
@@ -864,12 +870,14 @@ fn save_image_stack_output_for_result(
                     )
                 {
                     eprintln!(
-                        "Image-stack result {result_id} was saved, but its Stack_Report could not be updated: {error}"
+                        "Image-stack result {} was saved, but its Stack_Report could not be updated: {error}",
+                        context.result_id
                     );
                 }
             }
             Err(error) => eprintln!(
-                "Image-stack result {result_id} was saved, but its output metadata could not be read back: {error}"
+                "Image-stack result {} was saved, but its output metadata could not be read back: {error}",
+                context.result_id
             ),
         }
     }
@@ -1605,10 +1613,12 @@ mod tests {
                 &output_path,
                 format,
                 &default_image_stack_export_settings(),
-                "",
-                &ledger,
-                result_id,
-                Some(&report_path),
+                super::ImageStackReportContext {
+                    source_path: "",
+                    degradation_ledger: &ledger,
+                    result_id,
+                    stack_report_path: Some(&report_path),
+                },
             )
             .expect("publish and report the output");
 
@@ -1656,10 +1666,12 @@ mod tests {
             &failed_path,
             ImageStackOutputFormat::Tiff,
             &default_image_stack_export_settings(),
-            "",
-            &ledger,
-            result_id,
-            Some(&report_path),
+            super::ImageStackReportContext {
+                source_path: "",
+                degradation_ledger: &ledger,
+                result_id,
+                stack_report_path: Some(&report_path),
+            },
         )
         .expect_err("a failed publication must return an error");
         assert!(!error.is_empty());
@@ -2203,10 +2215,12 @@ pub async fn save_image_stack(
             &output_path_for_task,
             output_format,
             &export_settings,
-            &sidecar_source,
-            degradation_ledger,
-            &result_id,
-            stack_report_path.as_deref(),
+            ImageStackReportContext {
+                source_path: &sidecar_source,
+                degradation_ledger,
+                result_id: &result_id,
+                stack_report_path: stack_report_path.as_deref(),
+            },
         )?;
         drop(result);
         // Keep the canonical result cached so the same stack can be exported again in

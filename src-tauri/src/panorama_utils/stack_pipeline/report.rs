@@ -1722,7 +1722,7 @@ fn write_stack_report_at(report: &StackReport, final_path: &Path) -> Result<Path
             temporary_path.display()
         )
     })?;
-    fs::rename(&temporary_path, &final_path).map_err(|error| {
+    fs::rename(&temporary_path, final_path).map_err(|error| {
         let _ = fs::remove_file(&temporary_path);
         format!(
             "Failed to publish the stack report {}: {error}",
