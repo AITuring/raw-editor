@@ -1110,7 +1110,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Property 89: 降内存措施不改变输出**
     - **Validates: Requirements 14.5**
 
-  - [x]* 13.17 单元测试：输出编码与降级提示
+  - [~]* 13.17 单元测试：输出编码与降级提示
     - 扩展 `image_stack.rs` 现有 `encode_srgb_tiff` 测试，断言 16 位 sRGB + ICC（需求 10.5）
     - JPEG 的位深/alpha 降级提示在写出前返回（需求 10.10）
     - 默认构建下分层路径、组级色调、Quality_Gate 三者生效且入口不含 `env_var` 判断（需求 15.2）
