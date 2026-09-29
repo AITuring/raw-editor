@@ -724,9 +724,10 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Property 40: 无闭环约束时直接输出生成树解**
     - **Validates: Requirements 7.10**
 
-  - [ ]* 9.28 属性测试：闭环降级不放松画质判据
+  - [x]* 9.28 属性测试：闭环降级不放松画质判据
     - **Property 77: 闭环降级不放松画质判据**
     - **Validates: Requirements 12.3**
+    - 执行记录（2026-09-30）：`property_77_closure_degradation_preserves_quality_gate_record` 100 cases；调用生产 `closure_run` 与 `run_quality_gate`，可靠/不可靠闭环均核对九项名称、阈值和结论，不可靠路径只记录几何降级。
 
   - [x]* 9.29 属性测试：拒绝优先于降级
     - **Property 80: 拒绝优先于降级**
@@ -925,18 +926,20 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - 执行记录：P48 通过 `PairField` 夹具复核双覆盖、Coverage、亮度可用性与 3×MAD 一致性
       筛选；100 cases 通过。已接受关系的配对条件仍由 `harmonize_tone_tiles` 的关系列表控制。
 
-  - [ ]* 11.16 属性测试：高频残差逐像素等于 owner
+  - [x]* 11.16 属性测试：高频残差逐像素等于 owner
     - **Property 49: 高频残差逐像素等于 owner**
     - **Validates: Requirements 9.2**
+    - 执行记录（2026-09-30）：`property_49_tone_keeps_owner_high_frequency_residual` 100 cases；走生产 `harmonize_tone_tiles`，独立 σ=64 低通 oracle 和 f32 舍入容差核对高频残差。
 
   - [x]* 11.17 属性测试：色调增益与偏移恒在范围内
     - **Property 50: 色调增益与偏移恒在范围内**
     - **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
     - 执行记录：P50 以 100 cases 覆盖求解值、截断后的应用值、记录字段，以及少于 1024 个样本时的恒等回退，全部通过。
 
-  - [ ]* 11.18 属性测试：色调不改变接缝与 ownership
+  - [x]* 11.18 属性测试：色调不改变接缝与 ownership
     - **Property 51: 色调不改变接缝与 ownership**
     - **Validates: Requirements 9.5, 9.6**
+    - 执行记录（2026-09-30）：`property_51_tone_preserves_ownership_map` 100 cases；生产色调合成后核对 Ownership、Coverage、未覆盖像素和接缝位置均不变。
 
   - [x]* 11.19 属性测试：Owner_Region 边界低频色差有界或被记录
     - **Property 52: Owner_Region 边界低频色差有界或被记录**
@@ -1048,6 +1051,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - _Requirements: 10.2, 10.5, 10.6, 10.7, 10.10, 10.11, 14.5_
     - 执行记录：已加 `MAX_OUTPUT_CANVAS_LONG_SIDE = 262_144` 与 `compositor::reject_oversized_canvas`，默认路径在分配画布前拒绝超限画布并记录 `canvas_long_side_exceeded`（实测宽高、长边、上限），`is_canvas_rejection` 使回退渲染器不再重试。分块合成、alpha 写出、位深/alpha 降级提示与预览派生仍未做，保持 [~]。
     - 执行记录（alpha 与降级提示）：`StitchOutcome.coverage` 把分层路径的输出 Coverage_Mask 带到导出；`canonicalize_image_stack_result_with_coverage` 生成 RGBA16（未覆盖 alpha=0、已覆盖 alpha=65535，颜色通道与无 alpha 规范化逐值相同），TIFF（含元数据流式写出，新增 RGBA16/RGBA8 写出）与 PNG 写出 alpha，JPEG 丢弃 alpha 通道但颜色不变；预览仍由 RGB 派生，门禁 JPEG 输出不变。新增命令 `image_stack_output_notices` 在写出前返回位深 <16 与透明度无法保留的提示（`output_bit_depth_downgraded` / `output_alpha_unsupported`），前端尚未调用；导出时写回 Stack_Report 的实际位深与 alpha 状态、1024px 分块断言仍未做，保持 [~]。
+    - 执行记录（2026-09-30）：T3 另外验证同一透明结果的 TIFF16、PNG16、JPEG 实际读回元数据并原子写回 Stack_Report；失败保存保持报告字节不变。1024px 分块断言仍未做。
 
   - [x] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
     - 删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER`（其语义成为默认路径）
@@ -1106,13 +1110,13 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Property 89: 降内存措施不改变输出**
     - **Validates: Requirements 14.5**
 
-  - [ ]* 13.17 单元测试：输出编码与降级提示
+  - [x]* 13.17 单元测试：输出编码与降级提示
     - 扩展 `image_stack.rs` 现有 `encode_srgb_tiff` 测试，断言 16 位 sRGB + ICC（需求 10.5）
     - JPEG 的位深/alpha 降级提示在写出前返回（需求 10.10）
     - 默认构建下分层路径、组级色调、Quality_Gate 三者生效且入口不含 `env_var` 判断（需求 15.2）
     - 诊断开关默认关闭、旧单层路径标识符正确（需求 15.3, 15.10）
     - _Requirements: 10.5, 10.10, 15.2, 15.3, 15.10_
-    - 执行记录：`output_fidelity_reports_bit_depth_and_alpha_downgrades_before_writing` 覆盖 JPEG 位深与 alpha 降级提示；16 位 sRGB + ICC 由既有 `exported_tiff_preserves_canonical_pixels_and_srgb_profile` 覆盖。默认构建入口无 env 判断与诊断开关默认关闭的单元测试未补，保持未勾选。
+    - 执行记录（2026-09-30）：T4 的 `quality_gate_record_mode_preserves_output_and_records_all_criteria`、`default_ownership_switches_are_all_off_for_the_layered_path` 与旧单层标识符测试通过；T3 增加三格式实际读回与失败保存原子性测试。`output_fidelity_reports_bit_depth_and_alpha_downgrades_before_writing` 覆盖 JPEG 位深与 alpha 降级提示；16 位 sRGB + ICC 由既有 `exported_tiff_preserves_canonical_pixels_and_srgb_profile` 覆盖。默认构建入口无 env 判断与诊断开关默认关闭的单元测试未补，保持未勾选。
 
 - [~] 14. 阶段 6 检查点
   - 验证画布边界逐值等于覆盖联合边界、未覆盖像素全透明、
@@ -1487,6 +1491,7 @@ memory_threshold_source, physical_memory_bytes}`
     - 执行记录（第二阶段）：harness 现在要求两个环境变量、严格枚举 84 个 NEF、检查报告目录
       不在素材目录内、运行前后文件快照与 SHA-256 一致，并通过默认 FocusStack 管线写报告；
       84 张实跑尚未完成，保持未勾选。
+    - 实跑记录（2026-09-30）：84 张只读副本运行 1262.71s 后因机位关系图 20 个不连通分量被拒绝；报告保留于 `/private/tmp/raw-editor-gate/r2/langyuan-84/stack-report-fa2f736a-4186-4b8b-8d06-41e6c1d68e65.json`，故本任务保持未勾选。
 
   - [ ]* 17.6 属性测试：诊断输出完整且与输出同坐标系
     - **Property 81: 诊断输出完整且与输出同坐标系**
@@ -1530,11 +1535,11 @@ memory_threshold_source, physical_memory_bytes}`
     - **Validates: Requirements 1.7, 2.9, 5.9, 6.10, 11.16**
     - 生成器 `arb_stack_report()`
 
-  - [ ]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
+  - [x]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
     - **Validates: Requirements 15.12**
     - 审核记录（2026-09-30）：上一版 P94 照抄实现且只覆盖三项条件，已重写为从满足条件的基准
-      报告注入十类违规并调用同一纯判定函数；等待第二阶段测试完成后再勾选。
+      报告注入十类违规并调用同一纯判定函数；2026-09-30 已跑 100 cases 通过。
 
   - [ ]* 17.16 集成测试：时限类判据
     - Stack_Report 在成功/降级/拒绝三条路径上 30 秒内写出（需求 10.8）
