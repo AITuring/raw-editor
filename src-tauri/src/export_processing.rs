@@ -42,7 +42,7 @@ use tiff::Directory as TiffDirectory;
 use tiff::encoder::{
     DirectoryEncoder as TiffDirectoryEncoder, TiffEncoder as StreamingTiffEncoder,
     TiffKindStandard, TiffValue, colortype::ColorType as TiffColorType, colortype::RGB8,
-    colortype::RGB16,
+    colortype::RGB16, colortype::RGBA8, colortype::RGBA16,
 };
 #[cfg(not(target_os = "android"))]
 use tiff::tags::{Tag as TiffTag, Type as TiffType};
@@ -2206,6 +2206,47 @@ pub(crate) fn encode_rgb8_tiff_with_metadata(
     )
 }
 
+/// RGBA16 variant of [`encode_rgb16_tiff_with_metadata`]: the fourth sample is
+/// the unassociated alpha written from the Coverage_Mask (需求 10.6).
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgba16_tiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgba16: &[u16],
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_rgb_tiff_with_metadata::<RGBA16>(
+        output,
+        width,
+        height,
+        rgba16,
+        embed_color_profile,
+        export_metadata,
+    )
+}
+
+/// RGBA8 variant of [`encode_rgb8_tiff_with_metadata`].
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgba8_tiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgba8: &[u8],
+    embed_color_profile: bool,
+    export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_rgb_tiff_with_metadata::<RGBA8>(
+        output,
+        width,
+        height,
+        rgba8,
+        embed_color_profile,
+        export_metadata,
+    )
+}
+
 #[cfg(not(target_os = "android"))]
 fn encode_rgb_tiff_with_metadata<C>(
     output: &mut fs::File,
@@ -2219,9 +2260,11 @@ where
     C: TiffColorType,
     [C::Inner]: TiffValue,
 {
+    // Three samples for RGB, four for RGB with the Coverage_Mask as alpha.
+    let samples_per_pixel = C::BITS_PER_SAMPLE.len();
     let expected_samples = (width as usize)
         .checked_mul(height as usize)
-        .and_then(|pixels| pixels.checked_mul(3))
+        .and_then(|pixels| pixels.checked_mul(samples_per_pixel))
         .ok_or_else(|| "The RGB TIFF dimensions exceed the addressable sample count".to_string())?;
     if data.len() != expected_samples {
         return Err(format!(

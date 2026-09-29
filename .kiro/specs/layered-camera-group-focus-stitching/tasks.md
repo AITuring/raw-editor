@@ -1040,6 +1040,7 @@
       预览仅由最终结果规范化显示编码像素降采样得到，与最终结果携带同一结果标识
     - _Requirements: 10.2, 10.5, 10.6, 10.7, 10.10, 10.11, 14.5_
     - 执行记录：已加 `MAX_OUTPUT_CANVAS_LONG_SIDE = 262_144` 与 `compositor::reject_oversized_canvas`，默认路径在分配画布前拒绝超限画布并记录 `canvas_long_side_exceeded`（实测宽高、长边、上限），`is_canvas_rejection` 使回退渲染器不再重试。分块合成、alpha 写出、位深/alpha 降级提示与预览派生仍未做，保持 [~]。
+    - 执行记录（alpha 与降级提示）：`StitchOutcome.coverage` 把分层路径的输出 Coverage_Mask 带到导出；`canonicalize_image_stack_result_with_coverage` 生成 RGBA16（未覆盖 alpha=0、已覆盖 alpha=65535，颜色通道与无 alpha 规范化逐值相同），TIFF（含元数据流式写出，新增 RGBA16/RGBA8 写出）与 PNG 写出 alpha，JPEG 丢弃 alpha 通道但颜色不变；预览仍由 RGB 派生，门禁 JPEG 输出不变。新增命令 `image_stack_output_notices` 在写出前返回位深 <16 与透明度无法保留的提示（`output_bit_depth_downgraded` / `output_alpha_unsupported`），前端尚未调用；导出时写回 Stack_Report 的实际位深与 alpha 状态、1024px 分块断言仍未做，保持 [~]。
 
   - [x] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
     - 删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER`（其语义成为默认路径）
@@ -1073,9 +1074,10 @@
     - 执行记录：P56 使用 100 个随机平移，通过 `assert_source_correspondence` 沿输出 owner 反查
       对应 Source_RAW 采样并逐像素核对 ownership 图例与采样坐标。
 
-  - [ ]* 13.12 属性测试：写入 alpha 不改变颜色通道
+  - [x]* 13.12 属性测试：写入 alpha 不改变颜色通道
     - **Property 57: 写入 alpha 不改变颜色通道**
     - **Validates: Requirements 10.6**
+    - 执行记录：`property_57_alpha_follows_coverage_without_changing_colour`（100 例，16 位 TIFF/PNG 写出再读回，alpha 与覆盖一致、颜色逐值等于无 alpha 规范化）与 `a_saved_tiff_with_alpha_validates_and_keeps_its_transparency`（生产保存路径）。
 
   - [x]* 13.13 属性测试：预览由最终结果派生且色差有界
     - **Property 58: 预览由最终结果派生且色差有界**
@@ -1101,6 +1103,7 @@
     - 默认构建下分层路径、组级色调、Quality_Gate 三者生效且入口不含 `env_var` 判断（需求 15.2）
     - 诊断开关默认关闭、旧单层路径标识符正确（需求 15.3, 15.10）
     - _Requirements: 10.5, 10.10, 15.2, 15.3, 15.10_
+    - 执行记录：`output_fidelity_reports_bit_depth_and_alpha_downgrades_before_writing` 覆盖 JPEG 位深与 alpha 降级提示；16 位 sRGB + ICC 由既有 `exported_tiff_preserves_canonical_pixels_and_srgb_profile` 覆盖。默认构建入口无 env 判断与诊断开关默认关闭的单元测试未补，保持未勾选。
 
 - [~] 14. 阶段 6 检查点
   - 验证画布边界逐值等于覆盖联合边界、未覆盖像素全透明、
@@ -1344,6 +1347,7 @@ memory_threshold_source, physical_memory_bytes}`
     - 诊断缓冲用 `Option<Box<...>>`，关闭时保持 `None`（零分配、零写入）
     - `RAW_EDITOR_STACK_GROUP_DIAGNOSTICS` 保持现状（仅影响可读打印）
     - _Requirements: 13.1, 13.2, 13.5_
+    - 执行记录：`diagnostics::DiagnosticsRecorder` 已实现：关闭时为 `None`（一个空指针），不运行任何条目生产闭包、不写文件；开启时七类条目（成员、每帧变换、局部残差场、Ownership_Map、Sharpness_Confidence、Coverage_Mask、低频色调场）按站位命名即时写出并列入 `diagnostics.json`，记录最终有效裁切的左上角与宽高；首次写入失败后停止后续写入并以 `diagnostics_write_failed` 指明目录。`stack_diagnostics.output_dir` 设置项与管线接线、替换 `capture_crop` 仍未做，保持 [~]。
 
   - [~] 17.4 实现诊断 ROI 导出与像素级溯源查询
     - 长边 ≤4096 世界像素的 ROI：60 秒内导出该 ROI 内每个候选 Source_RAW 的重采样结果、
@@ -1384,9 +1388,10 @@ memory_threshold_source, physical_memory_bytes}`
     - **Property 82: ROI 诊断导出同尺寸同原点**
     - **Validates: Requirements 13.3**
 
-  - [ ]* 17.8 属性测试：诊断关闭时零分配零写入
+  - [x]* 17.8 属性测试：诊断关闭时零分配零写入
     - **Property 83: 诊断关闭时零分配零写入**
     - **Validates: Requirements 13.5**
+    - 执行记录：`property_83_disabled_diagnostics_allocate_and_write_nothing`（100 例）与 `a_failed_diagnostic_write_stops_later_writes_and_names_the_directory`。
 
   - [x]* 17.9 属性测试：像素级溯源查询一致
     - **Property 84: 像素级溯源查询一致**
