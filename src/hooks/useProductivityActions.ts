@@ -20,6 +20,14 @@ const IMAGE_STACK_EXPORT_FORMATS: Record<ExportDialogFormat, { filterName: strin
   jpeg: { filterName: 'JPEG', extensions: ['jpg', 'jpeg'] },
 };
 
+type ImageStackOutputNotice = {
+  id: string;
+  params: {
+    format: string;
+    bitDepth?: number;
+  };
+};
+
 const getImageStackSuggestedPath = (
   firstPath: string,
   blendMode: ImageStackBlendMode,
@@ -146,13 +154,16 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
         const firstPath = imageStackModalState.sourcePaths[0];
         const exportFormat = settings.format;
         const format = IMAGE_STACK_EXPORT_FORMATS[exportFormat];
-        const outputNotices = await invoke<string[]>(Invokes.ImageStackOutputNotices, {
+        const outputNotices = await invoke<ImageStackOutputNotice[]>(Invokes.ImageStackOutputNotices, {
           outputFormat: exportFormat,
           bitDepth: settings.bitDepth,
           resultId: imageStackModalState.resultId,
         });
         if (outputNotices.length > 0) {
-          const accepted = await confirm(outputNotices.join('\n\n'), {
+          const translatedNotices = outputNotices.map(({ id, params }) =>
+            i18n.t(`modals.imageStack.outputDowngrades.${id}`, '', params),
+          );
+          const accepted = await confirm(translatedNotices.join('\n\n'), {
             title: i18n.t('modals.imageStack.save'),
             kind: 'warning',
             okLabel: i18n.t('modals.imageStack.save'),

@@ -45,6 +45,7 @@ assert.match(stackProcessingSource, /apply_export_resize_and_watermark/);
 assert.match(stackProcessingSource, /write_image_stack_output_with_settings/);
 assert.match(stackSaveSource, /let \(stored_result_id, image, degradation_ledger\) = result\s*\.as_ref\(\)/);
 assert.doesNotMatch(stackSaveSource, /\*result\s*=\s*None/);
+assert.match(productivitySource, /i18n\.t\(`modals\.imageStack\.outputDowngrades\.\$\{id\}`/);
 
 const bundled = await build({
   entryPoints: [path.join(repoRoot, 'src/features/export/exportDialog.ts')],
@@ -229,22 +230,35 @@ const exerciseStackSave = async (notices, confirmed) => {
     delete globalThis.__stackSaveContract;
   }
 };
-const declined = await exerciseStackSave(['Transparency will be lost.'], false);
+const declined = await exerciseStackSave(
+  [{ id: 'output_alpha_unsupported', params: { format: 'TIFF' } }],
+  false,
+);
 assert.equal(declined.result, null);
 assert.deepEqual(
   declined.calls.map(([name]) => name),
   ['image_stack_output_notices', 'confirm'],
 );
 assert.deepEqual(declined.calls[0][1], { outputFormat: 'tiff', bitDepth: 16, resultId: 'current-stack-result' });
-assert.equal(declined.calls[1][1], 'Transparency will be lost.');
+assert.equal(declined.calls[1][1], 'modals.imageStack.outputDowngrades.output_alpha_unsupported');
 assert.equal(declined.calls[1][2].kind, 'warning');
-const confirmed = await exerciseStackSave(['Bit depth will be reduced.', 'Transparency will be lost.'], true);
+const confirmed = await exerciseStackSave(
+  [
+    { id: 'output_bit_depth_downgraded', params: { format: 'JPEG', bitDepth: 8 } },
+    { id: 'output_alpha_unsupported', params: { format: 'JPEG' } },
+  ],
+  true,
+);
 assert.equal(confirmed.result, '/photos/export.tif');
 assert.deepEqual(
   confirmed.calls.map(([name]) => name),
   ['image_stack_output_notices', 'confirm', 'choose-path', 'save_image_stack', 'refresh'],
 );
-assert.equal(confirmed.calls[1][1], 'Bit depth will be reduced.\n\nTransparency will be lost.');
+assert.equal(
+  confirmed.calls[1][1],
+  'modals.imageStack.outputDowngrades.output_bit_depth_downgraded\n\n' +
+    'modals.imageStack.outputDowngrades.output_alpha_unsupported',
+);
 assert.equal(confirmed.calls[3][1].resultId, 'current-stack-result');
 const lossless = await exerciseStackSave([], false);
 assert.equal(lossless.result, '/photos/export.tif');

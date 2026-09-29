@@ -11,6 +11,7 @@ use image::codecs::png::{PngDecoder, PngEncoder};
 use image::codecs::tiff::{TiffDecoder, TiffEncoder};
 use image::imageops::FilterType;
 use image::{ColorType, DynamicImage, GenericImageView, ImageDecoder, ImageEncoder, RgbImage};
+use serde::Serialize;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Seek, Write};
@@ -145,6 +146,21 @@ struct OutputFidelity {
     alpha_preserved: bool,
 }
 
+/// A localized export warning.  The backend owns only the stable identifier
+/// and interpolation values; user-facing wording belongs to the frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OutputDowngradeNotice {
+    pub id: String,
+    pub params: OutputDowngradeParams,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OutputDowngradeParams {
+    pub format: String,
+    #[serde(rename = "bitDepth", skip_serializing_if = "Option::is_none")]
+    pub bit_depth: Option<u8>,
+}
+
 impl OutputFidelity {
     fn of(
         image: &DynamicImage,
@@ -169,22 +185,27 @@ impl OutputFidelity {
     /// The downgrade notices to show before writing, each led by its stable
     /// identifier (需求 10.10): fewer than 16 bits per channel, or
     /// transparent pixels that the format cannot keep.
-    fn downgrades(&self, output_format: ImageStackOutputFormat) -> Vec<String> {
+    fn downgrades(&self, output_format: ImageStackOutputFormat) -> Vec<OutputDowngradeNotice> {
         let mut notices = Vec::new();
         if self.bit_depth < 16 {
-            notices.push(format!(
-                "{}: the {} will be written with {} bits per channel instead of 16",
-                crate::panorama_utils::stack_pipeline::degradation::OUTPUT_BIT_DEPTH_DOWNGRADED,
-                output_format.label(),
-                self.bit_depth
-            ));
+            notices.push(OutputDowngradeNotice {
+                id: crate::panorama_utils::stack_pipeline::degradation::OUTPUT_BIT_DEPTH_DOWNGRADED
+                    .to_string(),
+                params: OutputDowngradeParams {
+                    format: output_format.label().to_string(),
+                    bit_depth: Some(self.bit_depth),
+                },
+            });
         }
         if self.has_transparency && !self.alpha_preserved {
-            notices.push(format!(
-                "{}: the {} cannot keep transparency, so uncovered pixels will be written opaque",
-                crate::panorama_utils::stack_pipeline::degradation::OUTPUT_ALPHA_UNSUPPORTED,
-                output_format.label()
-            ));
+            notices.push(OutputDowngradeNotice {
+                id: crate::panorama_utils::stack_pipeline::degradation::OUTPUT_ALPHA_UNSUPPORTED
+                    .to_string(),
+                params: OutputDowngradeParams {
+                    format: output_format.label().to_string(),
+                    bit_depth: None,
+                },
+            });
         }
         notices
     }
@@ -1314,14 +1335,12 @@ mod tests {
         let jpeg = super::OutputFidelity::of(&transparent, ImageStackOutputFormat::Jpeg, 16);
         let notices = jpeg.downgrades(ImageStackOutputFormat::Jpeg);
         assert_eq!(notices.len(), 2, "{notices:?}");
-        assert!(
-            notices[0].starts_with("output_bit_depth_downgraded"),
-            "{notices:?}"
-        );
-        assert!(
-            notices[1].starts_with("output_alpha_unsupported"),
-            "{notices:?}"
-        );
+        assert_eq!(notices[0].id, "output_bit_depth_downgraded");
+        assert_eq!(notices[0].params.format, "JPEG");
+        assert_eq!(notices[0].params.bit_depth, Some(8));
+        assert_eq!(notices[1].id, "output_alpha_unsupported");
+        assert_eq!(notices[1].params.format, "JPEG");
+        assert_eq!(notices[1].params.bit_depth, None);
 
         // A fully covered result loses nothing to a missing alpha channel.
         let opaque = super::canonicalize_image_stack_result(painted_result(8, 8, 3));
@@ -1825,7 +1844,7 @@ pub async fn image_stack_output_notices(
     bit_depth: u8,
     result_id: String,
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<OutputDowngradeNotice>, String> {
     let output_format = ImageStackOutputFormat::from_wire(&output_format)?;
     let result = state
         .image_stack_result

@@ -1518,6 +1518,10 @@
       "moveUp": "上移第 {{number}} 层",
       "openInEditor": "在编辑器中打开",
       "orderHint": "顺序重要",
+      "outputDowngrades": {
+        "output_alpha_unsupported": "{{format}} 无法保留透明度，因此未覆盖的像素将以不透明形式写入。",
+        "output_bit_depth_downgraded": "{{format}} 将以每通道 {{bitDepth}} 位写入，而不是 16 位。"
+      },
       "panorama": "全景拼接",
       "panoramaDescription": "将有重叠区域的画面合成为更大的画布。",
       "panoramaResult": "全景拼接",

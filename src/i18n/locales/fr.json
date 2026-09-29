@@ -1537,6 +1537,10 @@
       "moveUp": "Move layer {{number}} up",
       "openInEditor": "Open in Editor",
       "orderHint": "Order matters",
+      "outputDowngrades": {
+        "output_alpha_unsupported": "{{format}} ne peut pas conserver la transparence ; les pixels non couverts seront donc écrits opaques.",
+        "output_bit_depth_downgraded": "{{format}} sera écrit avec {{bitDepth}} bits par canal au lieu de 16."
+      },
       "panorama": "Panorama",
       "panoramaDescription": "Build a larger canvas from overlapping frames.",
       "panoramaResult": "Panorama",

@@ -1507,6 +1507,10 @@
       "moveUp": "Move layer {{number}} up",
       "openInEditor": "Open in Editor",
       "orderHint": "Order matters",
+      "outputDowngrades": {
+        "output_alpha_unsupported": "{{format}}은(는) 투명도를 보존할 수 없어 가려지지 않은 픽셀이 불투명하게 저장됩니다.",
+        "output_bit_depth_downgraded": "{{format}}이(가) 채널당 16비트 대신 {{bitDepth}}비트로 저장됩니다."
+      },
       "panorama": "Panorama",
       "panoramaDescription": "Build a larger canvas from overlapping frames.",
       "panoramaResult": "Panorama",

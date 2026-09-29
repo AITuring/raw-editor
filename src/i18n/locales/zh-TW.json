@@ -1518,6 +1518,10 @@
       "moveUp": "Move layer {{number}} up",
       "openInEditor": "Open in Editor",
       "orderHint": "Order matters",
+      "outputDowngrades": {
+        "output_alpha_unsupported": "{{format}} 無法保留透明度，因此未覆蓋的像素將以不透明形式寫入。",
+        "output_bit_depth_downgraded": "{{format}} 將以每通道 {{bitDepth}} 位寫入，而不是 16 位。"
+      },
       "panorama": "Panorama",
       "panoramaDescription": "Build a larger canvas from overlapping frames.",
       "panoramaResult": "Panorama",
