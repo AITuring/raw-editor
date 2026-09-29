@@ -107,9 +107,42 @@ pub(crate) struct OwnerSharpnessStats {
     pub unresolved_pixel_count: u64,
 }
 
+/// Marker of a covered output pixel without owner evidence in the quantised
+/// owner planes.
+pub(crate) const OWNER_EVIDENCE_UNKNOWN: u8 = u8::MAX;
+
+/// Quantise a `[0, 1]` owner-evidence value to hundredths.  Rounding up keeps
+/// every value strictly above a hundredth-aligned limit strictly above the
+/// quantised limit, so `quantize_hundredths(v) > hundredths(limit)` is exactly
+/// `v > limit`.  A non-finite value is evidence the lookup could not use.
+pub(crate) fn quantize_hundredths(value: f32) -> u8 {
+    if !value.is_finite() {
+        return OWNER_EVIDENCE_UNKNOWN;
+    }
+    (value * 100.0).ceil().clamp(0.0, 100.0) as u8
+}
+
+/// A hundredth-aligned threshold in the units of [`quantize_hundredths`].
+fn hundredths(limit: f64) -> u8 {
+    (limit * 100.0).round().clamp(0.0, 100.0) as u8
+}
+
+/// Owner shortfall limit of 需求 11.12 in quantised units.
+pub(crate) fn owner_shortfall_limit() -> u8 {
+    hundredths(f64::from(quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX))
+}
+
+/// Disagreement above which the Focus_Fuser's mismatch veto may have kept a
+/// less sharp owner, in quantised units.
+pub(crate) fn owner_disagreement_veto_limit() -> u8 {
+    hundredths(super::focus_fuser::OWNERSHIP_DISAGREEMENT_VETO)
+}
+
 /// Runtime owner-sharpness statistic used by the Quality_Gate and P71. The
 /// quantised planes are produced during the output->station reverse lookup;
-/// this function only counts them and never infers ownership.
+/// this function only counts them and never infers ownership.  The shortfall
+/// histogram and the veto count describe the Textured_Pixel that exceed the
+/// limit, which is the population the criterion judges.
 pub(crate) fn owner_sharpness_stats(
     coverage: &[u8],
     textured: &[u8],
@@ -123,6 +156,8 @@ pub(crate) fn owner_sharpness_stats(
     {
         return Err(degradation::DIAGNOSTICS_ROI_INVALID);
     }
+    let shortfall_limit = owner_shortfall_limit();
+    let veto_limit = owner_disagreement_veto_limit();
     let mut stats = OwnerSharpnessStats {
         shortfall_histogram: vec![0; 20],
         unresolved_pixel_count,
@@ -134,26 +169,23 @@ pub(crate) fn owner_sharpness_stats(
         .zip(shortfall)
         .zip(disagreement)
     {
-        if covered == 0 {
+        if covered == 0 || shortfall == OWNER_EVIDENCE_UNKNOWN {
             continue;
         }
-        if shortfall == u8::MAX {
-            continue;
-        }
-        let shortfall_exceeds = shortfall > 5;
-        if shortfall_exceeds {
-            let bucket = usize::from(shortfall.min(100)) * 20 / 101;
-            stats.shortfall_histogram[bucket.min(19)] += 1;
-        }
-        if is_textured != 0 {
-            stats.textured_pixels += 1;
-            stats.textured_shortfall += u64::from(shortfall_exceeds);
-        } else {
+        let shortfall_exceeds = shortfall > shortfall_limit;
+        if is_textured == 0 {
             stats.flat_pixels += 1;
             stats.flat_shortfall += u64::from(shortfall_exceeds);
+            continue;
         }
-        if shortfall_exceeds && disagreement > 20 {
-            stats.disagreement_veto_count += 1;
+        stats.textured_pixels += 1;
+        if shortfall_exceeds {
+            stats.textured_shortfall += 1;
+            let bucket = usize::from(shortfall.min(100)) * 20 / 101;
+            stats.shortfall_histogram[bucket.min(19)] += 1;
+            if disagreement != OWNER_EVIDENCE_UNKNOWN && disagreement > veto_limit {
+                stats.disagreement_veto_count += 1;
+            }
         }
     }
     Ok(stats)
@@ -1503,6 +1535,7 @@ pub(crate) fn run_quality_gate(
         .iter()
         .map(|s| s.geometry.station_id)
         .collect();
+    let shortfall_limit = owner_shortfall_limit();
     for station_id in stations {
         let owners: std::collections::BTreeSet<_> = input
             .sources
@@ -1547,11 +1580,11 @@ pub(crate) fn run_quality_gate(
                 if input.coverage.as_raw()[index] == 0 || !owners.contains(owner) {
                     continue;
                 }
-                if shortfall[index] == u8::MAX {
+                if shortfall[index] == OWNER_EVIDENCE_UNKNOWN {
                     continue;
                 }
                 let low = !input.confidence[index].is_finite() || input.confidence[index] < 0.05;
-                let exceeds = shortfall[index] > 5;
+                let exceeds = shortfall[index] > shortfall_limit;
                 if textured[index] != 0 {
                     textured_count += 1;
                     textured_low += u64::from(low);
@@ -1604,6 +1637,44 @@ pub(crate) fn run_quality_gate(
 mod tests {
     use super::*;
     use image::Luma;
+
+    /// 需求 11.12 judges `shortfall > 0.05` on quantised planes; the
+    /// quantisation must keep that boundary exact, and the cell definition
+    /// must give no shortfall to the best owner or to a lone candidate.
+    #[test]
+    fn owner_shortfall_quantisation_keeps_the_criterion_boundary() {
+        let limit = owner_shortfall_limit();
+        assert_eq!(limit, 5);
+        assert_eq!(owner_disagreement_veto_limit(), 20);
+        assert_eq!(quantize_hundredths(0.05), limit);
+        assert!(quantize_hundredths(0.0501) > limit);
+        assert!(quantize_hundredths(0.049) <= limit);
+        assert_eq!(quantize_hundredths(0.0), 0);
+        assert_eq!(quantize_hundredths(1.0), 100);
+        assert_eq!(quantize_hundredths(f32::NAN), OWNER_EVIDENCE_UNKNOWN);
+        assert_eq!(quantize_hundredths(f32::INFINITY), OWNER_EVIDENCE_UNKNOWN);
+
+        let best_owner = super::super::focus_fuser::SharpnessCellEvidence {
+            winner_score: 0.60,
+            runner_up_score: 0.50,
+            owner_score: 0.60,
+            candidate_count: 2,
+            disagreement: 0.0,
+        };
+        assert_eq!(best_owner.owner_shortfall(), 0.0);
+        let lone_candidate = super::super::focus_fuser::SharpnessCellEvidence {
+            owner_score: 0.30,
+            candidate_count: 1,
+            ..best_owner
+        };
+        assert_eq!(lone_candidate.owner_shortfall(), 0.0);
+        let weaker_owner = super::super::focus_fuser::SharpnessCellEvidence {
+            owner_score: 0.54,
+            ..best_owner
+        };
+        assert!((weaker_owner.owner_shortfall() - 0.10).abs() < 1.0e-6);
+        assert!(quantize_hundredths(weaker_owner.owner_shortfall()) > limit);
+    }
 
     #[test]
     fn confidence_distribution_accumulates_compact_cell_evidence() {

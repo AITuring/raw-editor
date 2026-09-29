@@ -26,22 +26,42 @@ const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
 // Revised 2026-09-29 evidence policy: content-inapplicable observations are
 // kept separate from technical failures, and a criterion can be explicitly
 // not-applicable when its conditional evidence is absent.
-assert.match(stackReport, /enum QualityGateVerdict[\s\S]*?NotApplicable/,
-  'quality reports must represent not_applicable separately from insufficient evidence');
-assert.match(stackReport, /rename_all = "snake_case"/,
-  'NotApplicable must serialize as the stable not_applicable identifier');
-assert.match(stackReport, /enum UnmeasurableCategory[\s\S]*?ContentNotApplicable[\s\S]*?Technical/,
-  'every unmeasurable observation must carry one of the two evidence categories');
-assert.match(stackReport, /rename_all = "snake_case"/,
-  'unmeasurable categories must serialize as content_not_applicable and technical');
-assert.match(stackReport, /pub category: UnmeasurableCategory/,
-  'unmeasurable report entries must serialize their evidence category');
-assert.match(stackReport, /content_not_applicable_count: usize/,
-  'criteria must count content-inapplicable observations separately');
-assert.match(stackReport, /technical_unmeasurable_count: usize/,
-  'criteria must count technical observations separately');
-assert.match(stackReport, /pub verdict: QualityGateVerdict/,
-  'each criterion must carry its own verdict');
+assert.match(
+  stackReport,
+  /enum QualityGateVerdict[\s\S]*?NotApplicable/,
+  'quality reports must represent not_applicable separately from insufficient evidence',
+);
+assert.match(
+  stackReport,
+  /rename_all = "snake_case"/,
+  'NotApplicable must serialize as the stable not_applicable identifier',
+);
+assert.match(
+  stackReport,
+  /enum UnmeasurableCategory[\s\S]*?ContentNotApplicable[\s\S]*?Technical/,
+  'every unmeasurable observation must carry one of the two evidence categories',
+);
+assert.match(
+  stackReport,
+  /rename_all = "snake_case"/,
+  'unmeasurable categories must serialize as content_not_applicable and technical',
+);
+assert.match(
+  stackReport,
+  /pub category: UnmeasurableCategory/,
+  'unmeasurable report entries must serialize their evidence category',
+);
+assert.match(
+  stackReport,
+  /content_not_applicable_count: usize/,
+  'criteria must count content-inapplicable observations separately',
+);
+assert.match(
+  stackReport,
+  /technical_unmeasurable_count: usize/,
+  'criteria must count technical observations separately',
+);
+assert.match(stackReport, /pub verdict: QualityGateVerdict/, 'each criterion must carry its own verdict');
 assert.match(
   read(`${stackPipelineDir}/quality_gate_runner.rs`),
   /fn criterion_verdict\([\s\S]*?QUALITY_MAX_UNMEASURABLE_RATIO[\s\S]*?NotApplicable/,
@@ -67,12 +87,37 @@ for (const [name, value] of [
   ['QUALITY_ROI_DELTA_E00_MAX', '2.0'],
   ['QUALITY_BOUNDARY_P95_MAX', '1.5'],
   ['QUALITY_BOUNDARY_MAX', '3.0'],
-  ['QUALITY_LOW_CONFIDENCE_RATIO_MAX', '0.01'],
+  ['QUALITY_OWNER_SHORTFALL_RATIO_MAX', '0.01'],
   ['OWNER_SHARPNESS_SHORTFALL_MAX', '0.05'],
-  ['OWNER_SHARPNESS_COVERAGE_MIN', '0.99'],
-  ['OWNERSHIP_DISAGREEMENT_VETO', '0.20'],
+  ['OWNER_SHARPNESS_COVERAGE_MIN', '1\\.0 - QUALITY_OWNER_SHORTFALL_RATIO_MAX'],
 ]) {
   assert.match(qualityGate, new RegExp(`${name}[^=]*=\\s*${value}`), `${name} must remain explicit`);
+}
+// The owner-shortfall statistic must judge with the named limits, not with a
+// second copy of the numbers, and the veto diagnostic must reuse the
+// Focus_Fuser's own constant.
+{
+  const runner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
+  assert.match(
+    runner,
+    /quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX/,
+    'owner shortfall must be judged against the named 0.05 limit',
+  );
+  assert.match(
+    runner,
+    /focus_fuser::OWNERSHIP_DISAGREEMENT_VETO/,
+    'the veto diagnostic must reuse the Focus_Fuser veto constant',
+  );
+  assert.doesNotMatch(
+    runner,
+    /shortfall(?:\[index\])? > 5\b|disagreement > 20\b/,
+    'owner evidence thresholds must not be restated as literals',
+  );
+  assert.match(
+    read(`${stackPipelineDir}/focus_fuser.rs`),
+    /OWNERSHIP_DISAGREEMENT_VETO: f64 = 0\.2;/,
+    'the Focus_Fuser veto stays at 0.2',
+  );
 }
 for (const criterion of [
   'local_scale_median',
@@ -129,21 +174,10 @@ for (const [name, value] of [
     `${name} must remain an explicit residual-warp gate`,
   );
 }
-assert.match(
-  residualWarp,
-  /RESIDUAL_WARP_NODE_STEP_PX/,
-  'Residual_Warp must use the report node spacing constant',
-);
-assert.match(
-  residualWarp,
-  /Field<2>/,
-  'Residual_Warp must reuse mosaic::Field<2>',
-);
+assert.match(residualWarp, /RESIDUAL_WARP_NODE_STEP_PX/, 'Residual_Warp must use the report node spacing constant');
+assert.match(residualWarp, /Field<2>/, 'Residual_Warp must reuse mosaic::Field<2>');
 const streamingGainClampCount = (mosaic.match(/STREAMING_GROUP_GAIN_MAX_LOG/g) || []).length;
-assert.ok(
-  streamingGainClampCount >= 4,
-  'all three streaming group gain clamp sites must share ln(1.25)',
-);
+assert.ok(streamingGainClampCount >= 4, 'all three streaming group gain clamp sites must share ln(1.25)');
 
 const numberConstant = (source, name) => {
   const value = source.match(

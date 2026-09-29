@@ -1091,6 +1091,10 @@ pub(crate) struct OwnerReverseLookupFailures {
     pub out_of_bounds: u64,
     #[serde(default)]
     pub raw_owner_unresolved: u64,
+    /// The owner was found but its ownership cell carried no finite
+    /// Sharpness_Score evidence.
+    #[serde(default)]
+    pub evidence_missing: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

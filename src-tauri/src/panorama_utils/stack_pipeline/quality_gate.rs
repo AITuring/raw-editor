@@ -17,10 +17,11 @@ pub(crate) const QUALITY_NOISE_RATIO_MAX: f64 = 1.15;
 pub(crate) const QUALITY_ROI_DELTA_E00_MAX: f64 = 2.0;
 pub(crate) const QUALITY_BOUNDARY_P95_MAX: f64 = 1.5;
 pub(crate) const QUALITY_BOUNDARY_MAX: f64 = 3.0;
-pub(crate) const QUALITY_LOW_CONFIDENCE_RATIO_MAX: f64 = 0.01;
+/// 需求 11.12: at most 1% of Textured_Pixel may have an owner more than 5%
+/// below the cell's best candidate.
+pub(crate) const QUALITY_OWNER_SHORTFALL_RATIO_MAX: f64 = 0.01;
 pub(crate) const OWNER_SHARPNESS_SHORTFALL_MAX: f32 = 0.05;
-pub(crate) const OWNER_SHARPNESS_COVERAGE_MIN: f64 = 0.99;
-pub(crate) const OWNERSHIP_DISAGREEMENT_VETO: f32 = 0.20;
+pub(crate) const OWNER_SHARPNESS_COVERAGE_MIN: f64 = 1.0 - QUALITY_OWNER_SHORTFALL_RATIO_MAX;
 pub(crate) const QUALITY_MIN_MEASURABLE: usize = 8;
 pub(crate) const QUALITY_MAX_UNMEASURABLE_RATIO: f64 = 0.20;
 pub(crate) const QUALITY_CRITERIA: [&str; 9] = [

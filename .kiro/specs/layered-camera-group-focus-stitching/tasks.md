@@ -392,10 +392,16 @@
       记录实测值与 `intra_station_rejected_from_group`
     - _Requirements: 12.1, 12.2, 12.5_
 
-  - [x]* 7.13 属性测试：分组只由图像证据决定
+  - [~]* 7.13 属性测试：分组只由图像证据决定
     - **Property 1: 分组只由图像证据决定**
     - **Validates: Requirements 1.1**
     - 生成器 `arb_focus_bracket(plane)`
+    - 2026-09-30 重新打开：种子 `cc 71f86598d2d5804ed09c1bb835bd0362391e9d87048a2a6a4ece817c9512287a`
+      在单线程单独重放时稳定失败（不是并发抖动）：`UnrelatedContent` 诱饵源（下标 4）与机位 0 的
+      源 0 以 48 内点、overlap NCC 0.727、空间支撑 0.88、尺度比 1.0 通过了机位链接判据，被并入
+      机位 0。该种子曾在 `a33a2fda` 这一轮被当作无关随机失败丢弃。需查明是诱饵生成器与源图共享了
+      可相关内容，还是 NCC 度量本身不足以区分无关画面，修复后把种子提交进
+      `src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties.txt`
 
   - [x]* 7.14 属性测试：累计位移拆分位置唯一确定
     - **Property 3: 累计位移拆分位置唯一确定**
@@ -1305,7 +1311,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.11**
     - 执行记录：P70（100 cases）验证 Moore 边界笔画配对的 P95、最大偏差和方向误差。
 
-  - [x] 15.19 属性测试：owner 锐度差额超限像素占比有界
+  - [~] 15.19 属性测试：owner 锐度差额超限像素占比有界
     - **Property 71: owner 锐度差额超限像素占比有界**
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
@@ -1318,6 +1324,12 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       `quality_gate_runner::owner_sharpness_stats`，覆盖 Textured_Pixel 分母、透明/平坦像素、
       单候选与最高分 owner 的零短缺、Sharpness_Confidence 无关性、unresolved/空纹理证据不足及
       0.99 边界；随 `3d4f8837`、`36bcab31`、`48ae1fca`、`3796a72f`、`99be307f` 完成。
+    - 审核更正（2026-09-30）：上一条记录多写了覆盖面。P71 实际只调用 `owner_sharpness_stats`
+      核对计数；「≥ 0.99 通过」是测试自己算的，没有经过运行时判定路径，也没有覆盖
+      Sharpness_Confidence 无关性。审核补了单元测试
+      `owner_shortfall_quantisation_keeps_the_criterion_boundary`（量化边界 0.05/0.0501、非有限值、
+      最高分 owner 与单候选为 0）。剩余：把 owner 判据的构建从 `run_quality_gate` 抽成函数，
+      让 P71 经由它断言通过/未通过/证据不足，并加入 Sharpness_Confidence 取值不影响结论的断言。
 
   - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
@@ -1341,7 +1353,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.17**
     - 执行记录：P74（100 cases）验证同 Ownership_Map 输入的 ROI 集合与标签距离完全一致。
 
-  - [x] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
+  - [~] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
     - 按设计 Focus_Fuser 第 11 条在单元级计算 Owner_Sharpness_Shortfall：`SharpnessCellEvidence`
       已有 `winner_score` / `owner_score` / `candidate_count`，补 `disagreement`（该单元
       `StationFusion::disagreement`）；不得改变任何 owner 决策
@@ -1368,6 +1380,21 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       unresolved 均为 0。实现提交 `3d4f8837`、`36bcab31`、`48ae1fca`、`3796a72f`、`99be307f`；
       两组门禁报告位于 `/private/tmp/raw-editor-gate/r0a2-final/lang/reports/` 与
       `/private/tmp/raw-editor-gate/r0a2-final/wen/reports/`，TIFF SHA256 保持基线。
+      实测 `owner_sharpness_coverage` 为 0.7459 / 0.6827（阈值 0.99）；超限像素的 shortfall 集中在
+      0.06–0.20（约 85%），其中 disagreement > 0.2 的只占 0.6% / 3.5%（这一轮的直方图与 veto
+      计数还包含平坦像素）。
+    - 审核（2026-09-30）：
+      - 判定改用命名常量：`QUALITY_OWNER_SHORTFALL_RATIO_MAX = 0.01`、
+        `OWNER_SHARPNESS_COVERAGE_MIN = 1 − 它`、`OWNER_SHARPNESS_SHORTFALL_MAX`，veto 复用
+        `focus_fuser::OWNERSHIP_DISAGREEMENT_VETO`；删掉只被契约引用、逻辑里却写成字面量 5 / 20
+        的重复常量。量化统一为 `quality_gate_runner::quantize_hundredths`。
+      - owner 已反查到但单元证据缺失或非有限的像素计入 unresolved（`evidence_missing`），不再被
+        静默跳过。直方图与 veto 计数只统计 Textured_Pixel，与判据口径一致。
+      - 仍未完成：反查现在把越界坐标无限制地夹到边缘，再在半径 3 内找任意有 owner 的像素，
+        unresolved 为 0 靠的是这个容差，而不是查明原因；修复前各分支的数量也没有报告。合成器
+        按「双三次插值颜色 > 1e-6」判定覆盖，4×4 采样足迹会越过机位 Coverage_Mask，推测这就是
+        边缘像素反查不到 owner 的来源。需要把搜索限定在合成器的插值足迹内、记录被吸附的像素数，
+        并确认根因。
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；

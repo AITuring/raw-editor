@@ -8520,18 +8520,29 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         .get(sy as usize * mask_width as usize + sx as usize)
                                         .copied()
                                         .unwrap_or(0);
-                                    if let Some(evidence) =
-                                        masks.sharpness_evidence.at_pixel(sx, sy)
+                                    let evidence = masks.sharpness_evidence.at_pixel(sx, sy);
+                                    let shortfall = evidence.map_or(
+                                        quality_gate_runner::OWNER_EVIDENCE_UNKNOWN,
+                                        |evidence| {
+                                            quality_gate_runner::quantize_hundredths(
+                                                evidence.owner_shortfall(),
+                                            )
+                                        },
+                                    );
+                                    // An owned pixel without usable cell evidence
+                                    // is an evidence gap, not a flat pixel (需求 11.12).
+                                    if shortfall == quality_gate_runner::OWNER_EVIDENCE_UNKNOWN
+                                        && covered_pixel(index)
                                     {
-                                        owner_shortfall[index] = (evidence.owner_shortfall()
-                                            * 100.0)
-                                            .ceil()
-                                            .clamp(0.0, 100.0)
-                                            as u8;
-                                        owner_disagreement[index] = (evidence.disagreement * 100.0)
-                                            .ceil()
-                                            .clamp(0.0, 100.0)
-                                            as u8;
+                                        unresolved_pixel_count += 1;
+                                        owner_reverse_lookup_failures.evidence_missing += 1;
+                                    }
+                                    if let Some(evidence) = evidence {
+                                        owner_shortfall[index] = shortfall;
+                                        owner_disagreement[index] =
+                                            quality_gate_runner::quantize_hundredths(
+                                                evidence.disagreement,
+                                            );
                                         quality_gate_runner::accumulate_confidence_score(
                                             &mut confidence_scores,
                                             rendered.coverage.covered()[index],

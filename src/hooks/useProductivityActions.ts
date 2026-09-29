@@ -160,8 +160,10 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           resultId: imageStackModalState.resultId,
         });
         if (outputNotices.length > 0) {
+          // An identifier without a translation must still reach the user, so
+          // it falls back to the stable identifier rather than an empty line.
           const translatedNotices = outputNotices.map(({ id, params }) =>
-            i18n.t(`modals.imageStack.outputDowngrades.${id}`, '', params),
+            i18n.t(`modals.imageStack.outputDowngrades.${id}`, { ...params, defaultValue: id }),
           );
           const accepted = await confirm(translatedNotices.join('\n\n'), {
             title: i18n.t('modals.imageStack.save'),
