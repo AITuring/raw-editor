@@ -69,7 +69,6 @@
 @@ -8867,6 +8926,42 @@
      (mapped.x.is_finite() && mapped.y.is_finite()).then_some(mapped)
  }
- 
 +
 +fn focus_world_overlap_rect(
 +    left: &ImageInfo,
