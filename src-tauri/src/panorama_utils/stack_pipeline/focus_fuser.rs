@@ -1356,6 +1356,22 @@ pub(crate) struct SharpnessCellEvidence {
     pub(crate) owner_score: f32,
     /// Number of candidates that supplied a measurement for this cell.
     pub(crate) candidate_count: u32,
+    /// Maximum pairwise disagreement observed while this cell was fused.
+    /// This is retained for report-only owner shortfall diagnostics and never
+    /// participates in the ownership decision.
+    pub(crate) disagreement: f32,
+}
+
+impl SharpnessCellEvidence {
+    /// Fraction of the winning score that the selected owner left on the
+    /// table. A single candidate has no shortfall by definition.
+    pub(crate) fn owner_shortfall(self) -> f32 {
+        if self.candidate_count <= 1 || self.winner_score <= 0.0 {
+            return 0.0;
+        }
+        ((self.winner_score - self.owner_score) / self.winner_score.max(f32::EPSILON))
+            .clamp(0.0, 1.0)
+    }
 }
 
 /// Cell-resolution evidence plus the geometry needed to map output pixels
@@ -1628,6 +1644,7 @@ impl StationFusion {
                 runner_up_score: self.second[cell] as f32,
                 owner_score: self.owner_sharpness[cell] as f32,
                 candidate_count: self.candidate_counts[cell],
+                disagreement: self.disagreement[cell] as f32,
             })
             .collect();
         SharpnessEvidenceGrid {

@@ -18,6 +18,9 @@ pub(crate) const QUALITY_ROI_DELTA_E00_MAX: f64 = 2.0;
 pub(crate) const QUALITY_BOUNDARY_P95_MAX: f64 = 1.5;
 pub(crate) const QUALITY_BOUNDARY_MAX: f64 = 3.0;
 pub(crate) const QUALITY_LOW_CONFIDENCE_RATIO_MAX: f64 = 0.01;
+pub(crate) const OWNER_SHARPNESS_SHORTFALL_MAX: f32 = 0.05;
+pub(crate) const OWNER_SHARPNESS_COVERAGE_MIN: f64 = 0.99;
+pub(crate) const OWNERSHIP_DISAGREEMENT_VETO: f32 = 0.20;
 pub(crate) const QUALITY_MIN_MEASURABLE: usize = 8;
 pub(crate) const QUALITY_MAX_UNMEASURABLE_RATIO: f64 = 0.20;
 pub(crate) const QUALITY_CRITERIA: [&str; 9] = [
@@ -29,7 +32,7 @@ pub(crate) const QUALITY_CRITERIA: [&str; 9] = [
     "noise_sigma_ratio",
     "roi_delta_e00",
     "boundary_stroke_alignment",
-    "sharpness_confidence_coverage",
+    "owner_sharpness_coverage",
 ];
 
 /// Diagnostic measurements remain visible but cannot establish acceptance.
@@ -1407,37 +1410,6 @@ pub(crate) fn measure_boundary_strokes(
         max_error_px: *errors.last().unwrap_or(&0.0),
         measurements,
     })
-}
-
-pub(crate) fn sharpness_confidence_coverage(
-    coverage: &GrayImage,
-    confidence: &[f32],
-) -> Result<f64, &'static str> {
-    if coverage.as_raw().len() != confidence.len() {
-        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
-    }
-    let covered = coverage.as_raw().iter().filter(|&&v| v != 0).count();
-    if covered == 0 {
-        return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
-    }
-    let low = coverage
-        .as_raw()
-        .iter()
-        .zip(confidence)
-        .filter(|pair| {
-            let (mask, confidence) = *pair;
-            *mask != 0 && confidence.is_finite() && *confidence < 0.05
-        })
-        .count();
-    Ok(1.0 - low as f64 / covered as f64)
-}
-
-// Hard confidence-coverage predicate used by Quality_Gate callers.
-pub(crate) fn sharpness_confidence_passes(
-    coverage: &GrayImage,
-    confidence: &[f32],
-) -> Result<bool, &'static str> {
-    Ok(sharpness_confidence_coverage(coverage, confidence)? >= 0.99)
 }
 
 #[cfg(test)]

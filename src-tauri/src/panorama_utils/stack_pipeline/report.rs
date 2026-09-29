@@ -1007,8 +1007,8 @@ pub(crate) struct QualityGateCriterionRecord {
     #[serde(default)]
     pub diagnostic: bool,
     pub failed: Vec<FailedMeasurementRecord>,
-    /// Requirement 11.12's split confidence evidence. These fields are only
-    /// populated for `sharpness_confidence_coverage`.
+    /// Requirement 11.12's split owner shortfall evidence. These fields are
+    /// populated for `owner_sharpness_coverage`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub textured_pixel_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1017,6 +1017,16 @@ pub(crate) struct QualityGateCriterionRecord {
     pub textured_low_confidence_ratio: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flat_low_confidence_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub textured_shortfall_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flat_shortfall_ratio: Option<f64>,
+    #[serde(default)]
+    pub shortfall_histogram: Vec<u64>,
+    #[serde(default)]
+    pub disagreement_veto_count: u64,
+    #[serde(default)]
+    pub unresolved_pixel_count: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1046,6 +1056,14 @@ pub(crate) struct QualityStationStatistic {
     pub textured_low_confidence_ratio: Option<f64>,
     #[serde(default)]
     pub flat_low_confidence_ratio: Option<f64>,
+    #[serde(default)]
+    pub textured_shortfall_count: u64,
+    #[serde(default)]
+    pub flat_shortfall_count: u64,
+    #[serde(default)]
+    pub textured_shortfall_ratio: Option<f64>,
+    #[serde(default)]
+    pub flat_shortfall_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1059,6 +1077,20 @@ pub(crate) struct ConfidenceScoreDistribution {
     /// Pixel-weighted counts in fixed 0.05-wide bins, including 1.0 in bin 20.
     pub winner_histogram: Vec<u64>,
     pub runner_up_histogram: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct OwnerReverseLookupFailures {
+    #[serde(default)]
+    pub compositor_owner_zero: u64,
+    #[serde(default)]
+    pub station_missing: u64,
+    #[serde(default)]
+    pub transform_failed: u64,
+    #[serde(default)]
+    pub out_of_bounds: u64,
+    #[serde(default)]
+    pub raw_owner_unresolved: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1100,6 +1132,8 @@ pub(crate) struct QualityGateReport {
     pub roi_photometry: Vec<RoiPhotometryRecord>,
     #[serde(default)]
     pub timing: QualityGateTimingRecord,
+    #[serde(default)]
+    pub owner_reverse_lookup_failures: OwnerReverseLookupFailures,
 }
 
 impl Default for QualityGateReport {
@@ -1112,6 +1146,7 @@ impl Default for QualityGateReport {
             confidence_scores: ConfidenceScoreDistribution::default(),
             roi_photometry: Vec::new(),
             timing: QualityGateTimingRecord::default(),
+            owner_reverse_lookup_failures: OwnerReverseLookupFailures::default(),
         }
     }
 }

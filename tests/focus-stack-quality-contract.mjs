@@ -68,6 +68,9 @@ for (const [name, value] of [
   ['QUALITY_BOUNDARY_P95_MAX', '1.5'],
   ['QUALITY_BOUNDARY_MAX', '3.0'],
   ['QUALITY_LOW_CONFIDENCE_RATIO_MAX', '0.01'],
+  ['OWNER_SHARPNESS_SHORTFALL_MAX', '0.05'],
+  ['OWNER_SHARPNESS_COVERAGE_MIN', '0.99'],
+  ['OWNERSHIP_DISAGREEMENT_VETO', '0.20'],
 ]) {
   assert.match(qualityGate, new RegExp(`${name}[^=]*=\\s*${value}`), `${name} must remain explicit`);
 }
@@ -80,7 +83,7 @@ for (const criterion of [
   'noise_sigma_ratio',
   'roi_delta_e00',
   'boundary_stroke_alignment',
-  'sharpness_confidence_coverage',
+  'owner_sharpness_coverage',
 ]) {
   assert.ok(qualityGate.includes(`"${criterion}"`), `Quality_Gate criterion ${criterion} must remain stable`);
 }

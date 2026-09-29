@@ -11211,13 +11211,10 @@ proptest! {
 }
 
 // Later Quality_Gate pure-property checks (15.18-15.22).
-use super::quality_gate::{
-    measure_boundary_strokes, sharpness_confidence_coverage, sharpness_confidence_passes,
-    trace_moore_boundary,
-};
+use super::quality_gate::{measure_boundary_strokes, trace_moore_boundary};
 use super::quality_gate_runner::{
     Criterion, classify_unmeasurable_reason, criterion_verdict, overall_verdict,
-    record_unmeasurable,
+    owner_sharpness_stats, record_unmeasurable,
 };
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
@@ -11278,23 +11275,55 @@ proptest! {
         }
     }
 
-    // Feature: layered-camera-group-focus-stitching, Property 71: 低置信像素占比有界
+    // Feature: layered-camera-group-focus-stitching, Property 71: 所有者锐度短缺覆盖率按 Textured_Pixel 计算
     #[test]
-    fn property_71_low_confidence_coverage_matches_threshold(
-        low_count in 0usize..=1024usize,
+    fn property_71_owner_sharpness_coverage_uses_runtime_statistics(
+        shortfall_count in 0usize..=1024usize,
+        transparent_count in 0usize..=64usize,
+        unresolved_count in 0usize..=16usize,
     ) {
-        let coverage = image::GrayImage::from_pixel(32, 32, image::Luma([255]));
-        let mut confidence = vec![0.8f32; 1024];
-        for value in confidence.iter_mut().take(low_count) {
-            *value = 0.04;
+        let mut coverage = vec![255u8; 1024];
+        let transparent_start = 1024 - transparent_count;
+        coverage[transparent_start..].fill(0);
+        let mut textured = vec![255u8; 1024];
+        // The final quarter is flat and must not enter the criterion's
+        // denominator, even though it remains covered.
+        textured[768..transparent_start].fill(0);
+        let mut shortfall = vec![5u8; 1024];
+        shortfall[..shortfall_count.min(768)].fill(6);
+        let mut disagreement = vec![0u8; 1024];
+        disagreement[..shortfall_count.min(768)].fill(21);
+        let covered_end = transparent_start.min(1024);
+        let unresolved = unresolved_count.min(covered_end);
+        let unresolved_start = covered_end.saturating_sub(unresolved);
+        for index in unresolved_start..covered_end {
+            shortfall[index] = u8::MAX;
+            disagreement[index] = u8::MAX;
         }
-        let coverage_ratio = sharpness_confidence_coverage(&coverage, &confidence)
-            .expect("fully covered confidence plane is measurable");
-        prop_assert!((coverage_ratio - (1024 - low_count) as f64 / 1024.0).abs() < 1.0e-12);
-        prop_assert_eq!(
-            sharpness_confidence_passes(&coverage, &confidence).unwrap(),
-            low_count <= 10,
+        let stats = owner_sharpness_stats(
+            &coverage,
+            &textured,
+            &shortfall,
+            &disagreement,
+            unresolved as u64,
+        )
+        .expect("runtime owner shortfall statistic accepts aligned planes");
+        let unresolved_textured = (unresolved_start..covered_end)
+            .filter(|&index| index < 768)
+            .count();
+        let expected_textured = (768usize.saturating_sub(unresolved_textured)) as u64;
+        let expected_shortfall = shortfall_count.min(expected_textured as usize) as u64;
+        prop_assert_eq!(stats.textured_pixels, expected_textured);
+        prop_assert_eq!(stats.textured_shortfall, expected_shortfall);
+        let coverage_ratio = (expected_textured > 0).then_some(
+            1.0 - expected_shortfall as f64 / expected_textured as f64,
         );
+        prop_assert_eq!(
+            coverage_ratio.map(|value| value >= 0.99),
+            (expected_textured > 0).then_some(expected_shortfall * 100 <= expected_textured),
+        );
+        prop_assert_eq!(stats.unresolved_pixel_count, unresolved as u64);
+        prop_assert_eq!(stats.disagreement_veto_count, expected_shortfall);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
@@ -11378,7 +11407,7 @@ proptest! {
                     "technical"
                 });
             }
-            let whole_image = matches!(name, "effective_pixel_count" | "sharpness_confidence_coverage");
+            let whole_image = matches!(name, "effective_pixel_count" | "owner_sharpness_coverage");
             let conditional = matches!(name, "mtf50_normalized" | "noise_sigma_ratio" | "boundary_stroke_alignment");
             let expected = if diagnostic {
                 QualityGateVerdict::NotApplicable
@@ -11410,7 +11439,7 @@ proptest! {
         prop_assert_eq!(overall_verdict(&criterion_records), expected_overall);
         // Exactly 20% is allowed; content-inapplicable observations never enter this denominator.
         for name in super::quality_gate::QUALITY_CRITERIA {
-            let whole_image = matches!(name, "effective_pixel_count" | "sharpness_confidence_coverage");
+            let whole_image = matches!(name, "effective_pixel_count" | "owner_sharpness_coverage");
             prop_assert_eq!(criterion_verdict(name, 8, 2, false, false, false), QualityGateVerdict::Pass);
             prop_assert_eq!(criterion_verdict(name, 8, 3, false, false, false), if whole_image {
                 QualityGateVerdict::Pass
@@ -11457,6 +11486,11 @@ proptest! {
                 excluded_flat_pixel_count: None,
                 textured_low_confidence_ratio: None,
                 flat_low_confidence_ratio: None,
+                textured_shortfall_ratio: None,
+                flat_shortfall_ratio: None,
+                shortfall_histogram: Vec::new(),
+                disagreement_veto_count: 0,
+                unresolved_pixel_count: 0,
             }],
             unmeasurable: vec![UnmeasurableRecord {
                 criterion: "noise_sigma_ratio".to_string(),
@@ -11465,8 +11499,9 @@ proptest! {
                 category: UnmeasurableCategory::ContentNotApplicable,
             }],
             timing: super::report::QualityGateTimingRecord::default(),
-                confidence_scores: Default::default(),
-                roi_photometry: Vec::new(),
+            confidence_scores: Default::default(),
+            roi_photometry: Vec::new(),
+            owner_reverse_lookup_failures: Default::default(),
         };
         let encoded = serde_json::to_value(&report).expect("quality report is serializable");
         prop_assert_eq!(&encoded["verdict"], "fail");

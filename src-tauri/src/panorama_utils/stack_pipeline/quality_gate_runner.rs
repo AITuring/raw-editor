@@ -41,6 +41,14 @@ pub(crate) struct QualityGateInput<'a> {
     pub ownership: &'a [u16],
     pub confidence: &'a [f32],
     pub textured: Option<&'a [u8]>,
+    /// Quantised owner shortfall in hundredths (0..=100) for each output
+    /// pixel. Keeping this as bytes avoids another full-size f32 plane.
+    pub owner_shortfall: Option<&'a [u8]>,
+    /// Quantised ownership disagreement in hundredths (0..=100).
+    pub owner_disagreement: Option<&'a [u8]>,
+    /// Covered output pixels for which the source reverse lookup could not
+    /// establish an owner. These are technical evidence gaps.
+    pub unresolved_pixel_count: u64,
     pub world_origin: (f64, f64),
     pub sources: &'a [QualitySource],
     pub residual: &'a ResidualWarp,
@@ -71,6 +79,11 @@ pub(super) struct Criterion {
     excluded_flat_pixel_count: Option<u64>,
     textured_low_confidence_ratio: Option<f64>,
     flat_low_confidence_ratio: Option<f64>,
+    textured_shortfall_ratio: Option<f64>,
+    flat_shortfall_ratio: Option<f64>,
+    shortfall_histogram: Vec<u64>,
+    disagreement_veto_count: u64,
+    unresolved_pixel_count: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -81,6 +94,67 @@ struct ConfidenceCoverageStats {
     flat_low: u64,
     textured_unknown: u64,
     flat_unknown: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct OwnerSharpnessStats {
+    pub textured_pixels: u64,
+    pub flat_pixels: u64,
+    pub textured_shortfall: u64,
+    pub flat_shortfall: u64,
+    pub shortfall_histogram: Vec<u64>,
+    pub disagreement_veto_count: u64,
+    pub unresolved_pixel_count: u64,
+}
+
+/// Runtime owner-sharpness statistic used by the Quality_Gate and P71. The
+/// quantised planes are produced during the output->station reverse lookup;
+/// this function only counts them and never infers ownership.
+pub(crate) fn owner_sharpness_stats(
+    coverage: &[u8],
+    textured: &[u8],
+    shortfall: &[u8],
+    disagreement: &[u8],
+    unresolved_pixel_count: u64,
+) -> Result<OwnerSharpnessStats, &'static str> {
+    if coverage.len() != textured.len()
+        || coverage.len() != shortfall.len()
+        || coverage.len() != disagreement.len()
+    {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    let mut stats = OwnerSharpnessStats {
+        shortfall_histogram: vec![0; 20],
+        unresolved_pixel_count,
+        ..OwnerSharpnessStats::default()
+    };
+    for (((&covered, &is_textured), &shortfall), &disagreement) in coverage
+        .iter()
+        .zip(textured)
+        .zip(shortfall)
+        .zip(disagreement)
+    {
+        if covered == 0 {
+            continue;
+        }
+        if shortfall == u8::MAX {
+            continue;
+        }
+        let shortfall_exceeds = shortfall > 5;
+        let bucket = usize::from(shortfall.min(100)) * 20 / 101;
+        stats.shortfall_histogram[bucket.min(19)] += 1;
+        if is_textured != 0 {
+            stats.textured_pixels += 1;
+            stats.textured_shortfall += u64::from(shortfall_exceeds);
+        } else {
+            stats.flat_pixels += 1;
+            stats.flat_shortfall += u64::from(shortfall_exceeds);
+        }
+        if shortfall_exceeds && disagreement > 20 {
+            stats.disagreement_veto_count += 1;
+        }
+    }
+    Ok(stats)
 }
 
 impl Default for Criterion {
@@ -103,6 +177,11 @@ impl Default for Criterion {
             excluded_flat_pixel_count: None,
             textured_low_confidence_ratio: None,
             flat_low_confidence_ratio: None,
+            textured_shortfall_ratio: None,
+            flat_shortfall_ratio: None,
+            shortfall_histogram: Vec::new(),
+            disagreement_veto_count: 0,
+            unresolved_pixel_count: 0,
         }
     }
 }
@@ -154,15 +233,24 @@ impl Criterion {
     }
 
     fn miss(&mut self, reason: &'static str) {
-        self.unmeasurable += 1;
+        self.miss_count(reason, 1);
+    }
+
+    fn miss_count(&mut self, reason: &'static str, count: u64) {
+        let count = usize::try_from(count).unwrap_or(usize::MAX);
+        self.unmeasurable = self.unmeasurable.saturating_add(count);
         match classify_unmeasurable_reason(reason) {
-            UnmeasurableCategory::ContentNotApplicable => self.content_not_applicable += 1,
-            UnmeasurableCategory::Technical => self.technical_unmeasurable += 1,
+            UnmeasurableCategory::ContentNotApplicable => {
+                self.content_not_applicable = self.content_not_applicable.saturating_add(count)
+            }
+            UnmeasurableCategory::Technical => {
+                self.technical_unmeasurable = self.technical_unmeasurable.saturating_add(count)
+            }
         }
         *self
             .unmeasurable_reasons
             .entry(reason.to_string())
-            .or_default() += 1;
+            .or_default() += count;
     }
 
     pub(super) fn finish(
@@ -198,6 +286,11 @@ impl Criterion {
             excluded_flat_pixel_count: self.excluded_flat_pixel_count,
             textured_low_confidence_ratio: self.textured_low_confidence_ratio,
             flat_low_confidence_ratio: self.flat_low_confidence_ratio,
+            textured_shortfall_ratio: self.textured_shortfall_ratio,
+            flat_shortfall_ratio: self.flat_shortfall_ratio,
+            shortfall_histogram: self.shortfall_histogram,
+            disagreement_veto_count: self.disagreement_veto_count,
+            unresolved_pixel_count: self.unresolved_pixel_count,
         }
     }
 }
@@ -225,10 +318,7 @@ pub(crate) fn criterion_verdict(
         name,
         "mtf50_normalized" | "noise_sigma_ratio" | "boundary_stroke_alignment"
     );
-    let whole_image = matches!(
-        name,
-        "effective_pixel_count" | "sharpness_confidence_coverage"
-    );
+    let whole_image = matches!(name, "effective_pixel_count" | "owner_sharpness_coverage");
     let dense = matches!(
         name,
         "local_scale_median"
@@ -1295,54 +1385,95 @@ pub(crate) fn run_quality_gate(
     timing.boundary_seconds = boundary_started.elapsed().as_secs_f64();
     timing.boundary_sample_count = boundary.observed_count + boundary.unmeasurable;
 
-    let mut confidence = Criterion::new(
-        "sharpness_confidence_coverage",
-        1.0 - quality_gate::QUALITY_LOW_CONFIDENCE_RATIO_MAX,
+    let mut owner_sharpness = Criterion::new(
+        "owner_sharpness_coverage",
+        quality_gate::OWNER_SHARPNESS_COVERAGE_MIN,
     );
-    // Without any known confidence value the criterion has no evidence.
     let confidence_stats = match input.textured {
         Some(textured) => confidence_coverage_stats(input.coverage, input.confidence, textured),
         None => None,
     };
-    match confidence_stats {
-        Some(stats) => {
-            confidence.textured_pixel_count = Some(stats.textured_pixels);
-            confidence.excluded_flat_pixel_count = Some(stats.flat_pixels);
-            confidence.textured_low_confidence_ratio = (stats.textured_pixels > 0
-                && stats.textured_unknown == 0)
-                .then_some(stats.textured_low as f64 / stats.textured_pixels as f64);
-            confidence.flat_low_confidence_ratio = (stats.flat_pixels > 0
-                && stats.flat_unknown == 0)
-                .then_some(stats.flat_low as f64 / stats.flat_pixels as f64);
-            if stats.textured_pixels == 0 || stats.textured_unknown > 0 {
-                confidence.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
+    let owner_stats = match (
+        input.textured,
+        input.owner_shortfall,
+        input.owner_disagreement,
+    ) {
+        (Some(textured), Some(shortfall), Some(disagreement)) => owner_sharpness_stats(
+            input.coverage.as_raw(),
+            textured,
+            shortfall,
+            disagreement,
+            input.unresolved_pixel_count,
+        )
+        .ok(),
+        _ => None,
+    };
+    match (confidence_stats, owner_stats) {
+        (Some(confidence_stats), Some(stats)) => {
+            owner_sharpness.textured_pixel_count = Some(stats.textured_pixels);
+            owner_sharpness.excluded_flat_pixel_count = Some(stats.flat_pixels);
+            owner_sharpness.textured_shortfall_ratio = (stats.textured_pixels > 0)
+                .then_some(stats.textured_shortfall as f64 / stats.textured_pixels as f64);
+            owner_sharpness.flat_shortfall_ratio = (stats.flat_pixels > 0)
+                .then_some(stats.flat_shortfall as f64 / stats.flat_pixels as f64);
+            owner_sharpness.shortfall_histogram = stats.shortfall_histogram.clone();
+            owner_sharpness.disagreement_veto_count = stats.disagreement_veto_count;
+            owner_sharpness.unresolved_pixel_count = stats.unresolved_pixel_count;
+            owner_sharpness.textured_low_confidence_ratio = (confidence_stats.textured_pixels > 0
+                && confidence_stats.textured_unknown == 0)
+                .then_some(
+                    confidence_stats.textured_low as f64 / confidence_stats.textured_pixels as f64,
+                );
+            owner_sharpness.flat_low_confidence_ratio = (confidence_stats.flat_pixels > 0
+                && confidence_stats.flat_unknown == 0)
+                .then_some(confidence_stats.flat_low as f64 / confidence_stats.flat_pixels as f64);
+            if stats.unresolved_pixel_count > 0 {
+                owner_sharpness.miss_count(
+                    degradation::OWNER_REVERSE_LOOKUP_UNRESOLVED,
+                    stats.unresolved_pixel_count,
+                );
                 unmeasurable.push(UnmeasurableRecord {
-                    criterion: confidence.name.to_string(),
+                    criterion: owner_sharpness.name.to_string(),
+                    world: WorldPoint {
+                        x: input.world_origin.0,
+                        y: input.world_origin.1,
+                    },
+                    reason: degradation::OWNER_REVERSE_LOOKUP_UNRESOLVED.to_string(),
+                    category: UnmeasurableCategory::Technical,
+                });
+            }
+            if stats.textured_pixels == 0 {
+                owner_sharpness.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
+                unmeasurable.push(UnmeasurableRecord {
+                    criterion: owner_sharpness.name.to_string(),
                     world: WorldPoint {
                         x: input.world_origin.0,
                         y: input.world_origin.1,
                     },
                     reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
-
                     category: classify_unmeasurable_reason(
                         degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE,
                     ),
                 });
             } else {
-                let value = 1.0 - stats.textured_low as f64 / stats.textured_pixels as f64;
-                confidence.push(input.world_origin, value, "", value >= confidence.threshold);
+                let value = 1.0 - stats.textured_shortfall as f64 / stats.textured_pixels as f64;
+                owner_sharpness.push(
+                    input.world_origin,
+                    value,
+                    "",
+                    value >= owner_sharpness.threshold,
+                );
             }
         }
-        None => {
-            confidence.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
+        _ => {
+            owner_sharpness.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
             unmeasurable.push(UnmeasurableRecord {
-                criterion: confidence.name.to_string(),
+                criterion: owner_sharpness.name.to_string(),
                 world: WorldPoint {
                     x: input.world_origin.0,
                     y: input.world_origin.1,
                 },
                 reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
-
                 category: classify_unmeasurable_reason(
                     degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE,
                 ),
@@ -1360,7 +1491,7 @@ pub(crate) fn run_quality_gate(
         noise,
         delta,
         boundary,
-        confidence,
+        owner_sharpness,
     ] {
         criteria.push(criterion.finish(&mut unmeasurable));
     }
@@ -1402,42 +1533,61 @@ pub(crate) fn run_quality_gate(
                 value: (denominator > 0).then_some(covered as f64 / denominator as f64),
                 ..Default::default()
             });
-        if let Some(textured) = input.textured {
+        if let (Some(textured), Some(shortfall)) = (input.textured, input.owner_shortfall) {
             let mut textured_count = 0u64;
             let mut flat_count = 0u64;
             let mut textured_low = 0u64;
             let mut flat_low = 0u64;
+            let mut textured_shortfall = 0u64;
+            let mut flat_shortfall = 0u64;
             for (index, owner) in input.ownership.iter().enumerate() {
                 if input.coverage.as_raw()[index] == 0 || !owners.contains(owner) {
                     continue;
                 }
+                if shortfall[index] == u8::MAX {
+                    continue;
+                }
                 let low = !input.confidence[index].is_finite() || input.confidence[index] < 0.05;
+                let exceeds = shortfall[index] > 5;
                 if textured[index] != 0 {
                     textured_count += 1;
                     textured_low += u64::from(low);
+                    textured_shortfall += u64::from(exceeds);
                 } else {
                     flat_count += 1;
                     flat_low += u64::from(low);
+                    flat_shortfall += u64::from(exceeds);
                 }
             }
-            let textured_high = textured_count.saturating_sub(textured_low);
-            criteria[8]
-                .station_statistics
-                .push(QualityStationStatistic {
-                    station_id,
-                    numerator: textured_high,
-                    denominator: textured_count,
-                    value: (textured_count > 0)
-                        .then_some(textured_high as f64 / textured_count as f64),
-                    textured_pixel_count: textured_count,
-                    excluded_flat_pixel_count: flat_count,
-                    textured_low_confidence_count: textured_low,
-                    flat_low_confidence_count: flat_low,
-                    textured_low_confidence_ratio: (textured_count > 0)
-                        .then_some(textured_low as f64 / textured_count as f64),
-                    flat_low_confidence_ratio: (flat_count > 0)
-                        .then_some(flat_low as f64 / flat_count as f64),
-                });
+            if let Some(owner_criterion) = criteria
+                .iter_mut()
+                .find(|criterion| criterion.name == "owner_sharpness_coverage")
+            {
+                owner_criterion
+                    .station_statistics
+                    .push(QualityStationStatistic {
+                        station_id,
+                        numerator: textured_count.saturating_sub(textured_shortfall),
+                        denominator: textured_count,
+                        value: (textured_count > 0).then_some(
+                            1.0 - textured_shortfall as f64 / textured_count.max(1) as f64,
+                        ),
+                        textured_pixel_count: textured_count,
+                        excluded_flat_pixel_count: flat_count,
+                        textured_low_confidence_count: textured_low,
+                        flat_low_confidence_count: flat_low,
+                        textured_low_confidence_ratio: (textured_count > 0)
+                            .then_some(textured_low as f64 / textured_count as f64),
+                        flat_low_confidence_ratio: (flat_count > 0)
+                            .then_some(flat_low as f64 / flat_count as f64),
+                        textured_shortfall_count: textured_shortfall,
+                        flat_shortfall_count: flat_shortfall,
+                        textured_shortfall_ratio: (textured_count > 0)
+                            .then_some(textured_shortfall as f64 / textured_count as f64),
+                        flat_shortfall_ratio: (flat_count > 0)
+                            .then_some(flat_shortfall as f64 / flat_count as f64),
+                    });
+            }
         }
     }
     report.verdict = overall_verdict(&criteria);
@@ -1464,6 +1614,7 @@ mod tests {
             runner_up_score: 0.59,
             owner_score: 0.60,
             candidate_count: 2,
+            disagreement: 0.0,
         };
         accumulate_confidence_score(&mut result, 255, 0.01, 255, evidence);
         accumulate_confidence_score(&mut result, 255, 0.05, 255, evidence);
@@ -1549,6 +1700,9 @@ mod tests {
             ownership: &ownership,
             confidence: &confidence,
             textured: Some(&textured),
+            owner_shortfall: None,
+            owner_disagreement: None,
+            unresolved_pixel_count: 0,
             world_origin: (0.0, 0.0),
             sources: &sources,
             residual: &residual,

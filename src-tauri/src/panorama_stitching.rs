@@ -7674,7 +7674,17 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // measured.
     let mut station_poses_replaced = false;
     #[allow(clippy::type_complexity)]
-    let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, Vec<u8>, (f64, f64))> = None;
+    let mut quality_planes: Option<(
+        GrayImage,
+        Vec<u16>,
+        Vec<f32>,
+        Vec<u8>,
+        Vec<u8>,
+        Vec<u8>,
+        u64,
+        (f64, f64),
+    )> = None;
+    let mut owner_reverse_lookup_failures = stack_report::OwnerReverseLookupFailures::default();
     let mut confidence_scores = stack_report::ConfidenceScoreDistribution {
         winner_histogram: vec![0; 21],
         runner_up_histogram: vec![0; 21],
@@ -8364,21 +8374,44 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 let mut ownership = rendered.ownership.owners().to_vec();
                                 let mut confidence = vec![f32::NAN; ownership.len()];
                                 let mut textured = vec![0u8; ownership.len()];
+                                // 0..=100 stores owner shortfall in hundredths;
+                                // 255 marks a covered pixel whose reverse lookup
+                                // could not establish a Source_RAW owner.
+                                let mut owner_shortfall = vec![u8::MAX; ownership.len()];
+                                let mut owner_disagreement = vec![u8::MAX; ownership.len()];
+                                let mut unresolved_pixel_count = 0u64;
+                                let covered_pixel = |index: usize| {
+                                    rendered.coverage.covered().get(index).copied().unwrap_or(0)
+                                        != 0
+                                };
                                 for (index, owner) in ownership.iter_mut().enumerate() {
                                     let compositor_owner = *owner;
                                     let tile_index = usize::from(compositor_owner).checked_sub(1);
                                     let Some(tile_index) = tile_index else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.compositor_owner_zero +=
+                                                1;
+                                        }
                                         continue;
                                     };
                                     let Some(&station) = group_order.get(tile_index) else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.station_missing += 1;
+                                        }
                                         continue;
                                     };
                                     let Some(masks) =
                                         station_masks.get(station).and_then(Option::as_ref)
                                     else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.station_missing += 1;
+                                        }
                                         continue;
                                     };
                                     let station_to_world = tile_homographies
@@ -8388,6 +8421,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     let Some(world_to_station) = station_to_world.try_inverse()
                                     else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.transform_failed += 1;
+                                        }
                                         continue;
                                     };
                                     let x = (index % width as usize) as f64;
@@ -8413,15 +8450,26 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         || sy >= f64::from(mask_height)
                                     {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.out_of_bounds += 1;
+                                        }
                                         continue;
                                     }
                                     let raw_local = masks.ownership.owner_at(sx as u32, sy as u32);
-                                    let Some(&raw_owner) =
-                                        raw_owner_ids.get(station).and_then(|owners| {
-                                            owners.get(usize::from(raw_local).saturating_sub(1))
+                                    let Some(raw_owner) =
+                                        raw_local.checked_sub(1).and_then(|index| {
+                                            raw_owner_ids
+                                                .get(station)
+                                                .and_then(|owners| owners.get(usize::from(index)))
+                                                .copied()
                                         })
                                     else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.raw_owner_unresolved += 1;
+                                        }
                                         continue;
                                     };
                                     *owner = raw_owner;
@@ -8435,6 +8483,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     if let Some(evidence) =
                                         masks.sharpness_evidence.at_pixel(sx as u32, sy as u32)
                                     {
+                                        owner_shortfall[index] = (evidence.owner_shortfall()
+                                            * 100.0)
+                                            .ceil()
+                                            .clamp(0.0, 100.0)
+                                            as u8;
+                                        owner_disagreement[index] = (evidence.disagreement * 100.0)
+                                            .ceil()
+                                            .clamp(0.0, 100.0)
+                                            as u8;
                                         quality_gate_runner::accumulate_confidence_score(
                                             &mut confidence_scores,
                                             rendered.coverage.covered()[index],
@@ -8457,6 +8514,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     ownership,
                                     confidence,
                                     textured,
+                                    owner_shortfall,
+                                    owner_disagreement,
+                                    unresolved_pixel_count,
                                     rendered.sampling_origin,
                                 ));
                                 rendered.image
@@ -8525,7 +8585,17 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         }
     }?;
     ensure_focus_memory_available(rss_sampler.as_ref())?;
-    if let Some((coverage, ownership, confidence, textured, world_origin)) = quality_planes.take() {
+    if let Some((
+        coverage,
+        ownership,
+        confidence,
+        textured,
+        owner_shortfall,
+        owner_disagreement,
+        unresolved_pixel_count,
+        world_origin,
+    )) = quality_planes.take()
+    {
         let sources = quality_sources.take().unwrap_or_default();
         let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
             load_prepared_stack_source(&source.path, &settings).map(|prepared| {
@@ -8565,6 +8635,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             ownership: &ownership,
             confidence: &confidence,
             textured: Some(&textured),
+            owner_shortfall: Some(&owner_shortfall),
+            owner_disagreement: Some(&owner_disagreement),
+            unresolved_pixel_count,
             world_origin,
             sources: &sources,
             residual: &residual,
@@ -8576,6 +8649,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             recorder.update(|stack| {
                 stack.quality_gate = report;
                 stack.quality_gate.confidence_scores = confidence_scores.clone();
+                stack.quality_gate.owner_reverse_lookup_failures =
+                    owner_reverse_lookup_failures.clone();
             });
         }
     } else if let Some(recorder) = stack_report.as_ref() {

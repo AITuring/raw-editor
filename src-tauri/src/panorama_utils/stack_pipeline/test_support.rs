@@ -49,7 +49,7 @@ pub const QUALITY_GATE_CRITERION_NAMES: &[&str] = &[
     "noise_sigma_ratio",
     "roi_delta_e00",
     "boundary_stroke_alignment",
-    "sharpness_confidence_coverage",
+    "owner_sharpness_coverage",
 ];
 
 /// A failure reason identifier together with the severity the design matrix
@@ -269,6 +269,7 @@ fn arb_quality_gate_report() -> impl Strategy<Value = QualityGateReport> {
                 timing: super::report::QualityGateTimingRecord::default(),
                 confidence_scores: Default::default(),
                 roi_photometry: Vec::new(),
+                owner_reverse_lookup_failures: Default::default(),
             },
         )
 }

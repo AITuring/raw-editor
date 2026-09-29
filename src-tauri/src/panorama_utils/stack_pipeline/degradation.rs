@@ -193,6 +193,8 @@ pub const SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED: &str = "slanted_edge_line_fit
 pub const LOCAL_SCALE_UNMEASURABLE: &str = "local_scale_unmeasurable";
 /// The final ownership plane did not carry Textured_Pixel evidence.
 pub const TEXTURED_PIXEL_PLANE_UNAVAILABLE: &str = "textured_pixel_plane_unavailable";
+/// Output ownership could not be traced back to a Source_RAW pixel.
+pub const OWNER_REVERSE_LOOKUP_UNRESOLVED: &str = "owner_reverse_lookup_unresolved";
 /// No sufficiently long edge support was found in the ROI.
 pub const SLANTED_EDGE_TOO_SHORT: &str = "slanted_edge_too_short";
 /// Edge support exists but its two sides do not reach the contrast floor.
@@ -480,6 +482,7 @@ pub const UNMEASURABLE_REASONS: &[&str] = &[
     SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED,
     LOCAL_SCALE_UNMEASURABLE,
     TEXTURED_PIXEL_PLANE_UNAVAILABLE,
+    OWNER_REVERSE_LOOKUP_UNRESOLVED,
     SLANTED_EDGE_TOO_SHORT,
     SLANTED_EDGE_CONTRAST_INSUFFICIENT,
     SLANTED_EDGE_ANGLE_OUT_OF_RANGE,
