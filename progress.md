@@ -38,3 +38,21 @@ Pending.
 - Commit `604e3288` and follow-up `3e720b8e`: save readback now writes actual format, bit depth, alpha, ICC and path to the matching Stack_Report atomically; TIFF16/PNG16/JPEG and failed-save tests pass.
 - Commit `95f1ec23`: production record-mode/default compositor unit coverage. Commit `44de5bed`: production tone P49/P51 tests. Commit `3f494e8d` and `64e5ad44`: production closure P77 and corrected property coverage. P49, P51 and P77 each passed 100 cases in focused runs.
 - P89 remains blocked because production has no switchable resident-tile limit; details are in `/private/tmp/raw-editor-gate/r2/t7-p89-blocker.md`.
+
+## Final verification (2026-09-30)
+
+- Full Rust suite: `652 passed / 0 failed / 28 ignored`; the record-only Quality_Gate test was
+  isolated from the process-wide parallel degradation ledger in `5e2f800d`.
+- Clippy: 130 warnings, with no additions relative to `/private/tmp/raw-editor-gate/review9/clippy.set`;
+  the type aliases and production-context refactor are in `77835cfd`.
+- Contracts, TypeScript, i18n checks, format check and `git diff --check` passed. Task 13.17 remains
+  `[~]` because the default-build and diagnostics-default assertions listed in its record are still
+  incomplete (`699f1cd6`).
+- Final Langyuan gate: report `/private/tmp/raw-editor-gate/r2/final-gates/lang/reports/stack-report-8759089b-1ad9-4a24-9d17-5d9e6b4c37c9.json`,
+  611.158 s, SHA `74942cfea3a1ede229b4449234d62c5429ddd635f7d65f3d6d158f7bc35595d7`,
+  peak RSS 11,095,736,320 bytes; QG `fail`, owner coverage 0.7458617, MTF50 `not_applicable`,
+  tone ΔE00 max 16.8491 with 46 windows, residual regions empty.
+- Final Wenyuan gate: report `/private/tmp/raw-editor-gate/r2/final-gates/wen/reports/stack-report-4019e66e-5915-4f94-a0b6-6774695704a2.json`,
+  491.879 s, SHA `86884740f93c876ee8647c0490fe05215e8bf76a35b33be8a48097798eb855ea`,
+  peak RSS 10,742,857,728 bytes; QG `fail`, owner coverage 0.6827111, MTF50 `not_applicable`,
+  tone ΔE00 max 19.1885 with 76 windows, residual regions empty.
