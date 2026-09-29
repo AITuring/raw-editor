@@ -8379,7 +8379,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 // could not establish a Source_RAW owner.
                                 let mut owner_shortfall = vec![u8::MAX; ownership.len()];
                                 let mut owner_disagreement = vec![u8::MAX; ownership.len()];
+                                // Report-only diagnostic plane: a non-transparent
+                                // output sample whose exact bicubic footprint
+                                // touched an uncovered station pixel.
+                                let mut footprint_uncovered = vec![0u8; ownership.len()];
                                 let mut unresolved_pixel_count = 0u64;
+                                let reverse_residual = residual_warp::run_model_snapshot();
                                 let covered_pixel = |index: usize| {
                                     rendered.coverage.covered().get(index).copied().unwrap_or(0)
                                         != 0
@@ -8429,12 +8434,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     };
                                     let x = (index % width as usize) as f64;
                                     let y = (index / width as usize) as f64;
-                                    let Some(local) = transformed_point(
+                                    let Some(local) = stitching::map_target_to_source_with_residual(
                                         &world_to_station,
-                                        Point2::new(
+                                        Point3::new(
                                             rendered.sampling_origin.0 + x,
                                             rendered.sampling_origin.1 + y,
+                                            1.0,
                                         ),
+                                        &tile_infos[station],
+                                        projection,
+                                        &reverse_residual,
                                     ) else {
                                         *owner = 0;
                                         if covered_pixel(index) {
@@ -8444,66 +8453,101 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         continue;
                                     };
                                     let (mask_width, mask_height) = masks.ownership.dimensions();
-                                    let sx = local.x.round();
-                                    let sy = local.y.round();
+                                    let rounded_x = local.x.round();
+                                    let rounded_y = local.y.round();
                                     let mut sampled = None;
-                                    if sx.is_finite()
-                                        && sy.is_finite()
+                                    let mut rounded_has_owner = false;
+                                    let mut footprint_has_uncovered = false;
+                                    if rounded_x.is_finite()
+                                        && rounded_y.is_finite()
                                         && mask_width > 0
                                         && mask_height > 0
                                     {
-                                        let base_x =
-                                            (sx as i64).clamp(0, i64::from(mask_width - 1));
-                                        let base_y =
-                                            (sy as i64).clamp(0, i64::from(mask_height - 1));
-                                        for radius in 0..=3i64 {
-                                            'search: for dy in -radius..=radius {
-                                                for dx in -radius..=radius {
-                                                    let px = base_x + dx;
-                                                    let py = base_y + dy;
-                                                    if px < 0
-                                                        || py < 0
-                                                        || px >= i64::from(mask_width)
-                                                        || py >= i64::from(mask_height)
-                                                    {
-                                                        continue;
-                                                    }
-                                                    let px = px as u32;
-                                                    let py = py as u32;
-                                                    let raw_local =
-                                                        masks.ownership.owner_at(px, py);
-                                                    if let Some(raw_owner) = raw_local
-                                                        .checked_sub(1)
-                                                        .and_then(|raw_index| {
-                                                            raw_owner_ids.get(station).and_then(
-                                                                |owners| {
-                                                                    owners
-                                                                        .get(usize::from(raw_index))
-                                                                        .copied()
-                                                                },
-                                                            )
-                                                        })
-                                                    {
-                                                        sampled = Some((px, py, raw_owner));
-                                                        break 'search;
-                                                    }
+                                        let floor_x = rounded_x.floor() as i64;
+                                        let floor_y = rounded_y.floor() as i64;
+                                        let mut nearest_distance = f64::INFINITY;
+                                        for dy in -1i64..=2 {
+                                            for dx in -1i64..=2 {
+                                                let Some(px) = floor_x.checked_add(dx) else {
+                                                    continue;
+                                                };
+                                                let Some(py) = floor_y.checked_add(dy) else {
+                                                    continue;
+                                                };
+                                                if px < 0
+                                                    || py < 0
+                                                    || px >= i64::from(mask_width)
+                                                    || py >= i64::from(mask_height)
+                                                {
+                                                    continue;
+                                                }
+                                                let px = px as u32;
+                                                let py = py as u32;
+                                                if masks
+                                                    .coverage
+                                                    .covered()
+                                                    .get(
+                                                        py as usize * mask_width as usize
+                                                            + px as usize,
+                                                    )
+                                                    .copied()
+                                                    .unwrap_or(0)
+                                                    == 0
+                                                {
+                                                    footprint_has_uncovered = true;
+                                                }
+                                                let raw_local = masks.ownership.owner_at(px, py);
+                                                let Some(raw_owner) = raw_local
+                                                    .checked_sub(1)
+                                                    .and_then(|raw_index| {
+                                                        raw_owner_ids.get(station).and_then(
+                                                            |owners| {
+                                                                owners
+                                                                    .get(usize::from(raw_index))
+                                                                    .copied()
+                                                            },
+                                                        )
+                                                    })
+                                                else {
+                                                    continue;
+                                                };
+                                                if f64::from(px) == rounded_x
+                                                    && f64::from(py) == rounded_y
+                                                {
+                                                    rounded_has_owner = true;
+                                                }
+                                                let distance = (f64::from(px) - local.x).mul_add(
+                                                    f64::from(px) - local.x,
+                                                    (f64::from(py) - local.y)
+                                                        * (f64::from(py) - local.y),
+                                                );
+                                                if distance < nearest_distance {
+                                                    nearest_distance = distance;
+                                                    sampled = Some((px, py, raw_owner));
                                                 }
                                             }
-                                            if sampled.is_some() {
-                                                break;
-                                            }
                                         }
+                                    }
+                                    if footprint_has_uncovered
+                                        && rendered
+                                            .image
+                                            .get_pixel(x as u32, y as u32)
+                                            .0
+                                            .iter()
+                                            .any(|value| *value > 1e-6)
+                                    {
+                                        footprint_uncovered[index] = 1;
                                     }
                                     let Some((sx, sy, raw_owner)) = sampled else {
                                         *owner = 0;
                                         if covered_pixel(index) {
                                             unresolved_pixel_count += 1;
-                                            if !sx.is_finite() || !sy.is_finite() {
+                                            if !rounded_x.is_finite() || !rounded_y.is_finite() {
                                                 owner_reverse_lookup_failures.transform_failed += 1;
-                                            } else if sx < 0.0
-                                                || sy < 0.0
-                                                || sx >= f64::from(mask_width)
-                                                || sy >= f64::from(mask_height)
+                                            } else if rounded_x < 0.0
+                                                || rounded_y < 0.0
+                                                || rounded_x >= f64::from(mask_width)
+                                                || rounded_y >= f64::from(mask_height)
                                             {
                                                 owner_reverse_lookup_failures.out_of_bounds += 1;
                                             } else {
@@ -8513,6 +8557,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         }
                                         continue;
                                     };
+                                    if !rounded_has_owner {
+                                        owner_reverse_lookup_failures.snapped_to_footprint += 1;
+                                    }
                                     *owner = raw_owner;
                                     confidence[index] = masks.confidence.value_at(sx, sy);
                                     textured[index] = masks
@@ -8552,6 +8599,65 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         );
                                     }
                                 }
+                                let mut brightness_ratio_sum = 0.0f64;
+                                let mut brightness_ratio_count = 0u64;
+                                for (index, &incomplete) in footprint_uncovered.iter().enumerate() {
+                                    if incomplete == 0 {
+                                        continue;
+                                    }
+                                    let x = index % width as usize;
+                                    let y = index / width as usize;
+                                    let center = rendered.image.get_pixel(x as u32, y as u32).0;
+                                    let center_luma = f64::from(center[0]) * 0.299
+                                        + f64::from(center[1]) * 0.587
+                                        + f64::from(center[2]) * 0.114;
+                                    if !center_luma.is_finite() || center_luma <= 1e-6 {
+                                        continue;
+                                    }
+                                    let mut neighbour_sum = 0.0f64;
+                                    let mut neighbour_count = 0u32;
+                                    for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                                        let nx = x as i32 + dx;
+                                        let ny = y as i32 + dy;
+                                        if nx < 0
+                                            || ny < 0
+                                            || nx >= width as i32
+                                            || ny >= height as i32
+                                        {
+                                            continue;
+                                        }
+                                        let neighbour_index =
+                                            ny as usize * width as usize + nx as usize;
+                                        if footprint_uncovered[neighbour_index] != 0
+                                            || rendered.coverage.covered()[neighbour_index] == 0
+                                        {
+                                            continue;
+                                        }
+                                        let pixel =
+                                            rendered.image.get_pixel(nx as u32, ny as u32).0;
+                                        let luma = f64::from(pixel[0]) * 0.299
+                                            + f64::from(pixel[1]) * 0.587
+                                            + f64::from(pixel[2]) * 0.114;
+                                        if luma.is_finite() && luma > 1e-6 {
+                                            neighbour_sum += luma;
+                                            neighbour_count += 1;
+                                        }
+                                    }
+                                    if neighbour_count > 0 {
+                                        brightness_ratio_sum += center_luma
+                                            / (neighbour_sum / f64::from(neighbour_count));
+                                        brightness_ratio_count += 1;
+                                    }
+                                }
+                                owner_reverse_lookup_failures.footprint_uncovered_nontransparent =
+                                    footprint_uncovered
+                                        .iter()
+                                        .filter(|&&value| value != 0)
+                                        .count() as u64;
+                                owner_reverse_lookup_failures.footprint_brightness_ratio =
+                                    (brightness_ratio_count > 0).then_some(
+                                        brightness_ratio_sum / brightness_ratio_count as f64,
+                                    );
                                 quality_sources = Some(raw_sources);
                                 let coverage_plane = GrayImage::from_raw(
                                     width,

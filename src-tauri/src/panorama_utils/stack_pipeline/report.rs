@@ -1091,10 +1091,21 @@ pub(crate) struct OwnerReverseLookupFailures {
     pub out_of_bounds: u64,
     #[serde(default)]
     pub raw_owner_unresolved: u64,
+    /// The rounded station pixel had no owner, but an owner was found in the
+    /// compositor's exact 4x4 bicubic sampling footprint.
+    #[serde(default)]
+    pub snapped_to_footprint: u64,
     /// The owner was found but its ownership cell carried no finite
     /// Sharpness_Score evidence.
     #[serde(default)]
     pub evidence_missing: u64,
+    /// Non-transparent output pixels whose source sampling footprint included
+    /// an uncovered station pixel. These are diagnostic-only dark-edge
+    /// measurements and do not alter compositor writes.
+    #[serde(default)]
+    pub footprint_uncovered_nontransparent: u64,
+    #[serde(default)]
+    pub footprint_brightness_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

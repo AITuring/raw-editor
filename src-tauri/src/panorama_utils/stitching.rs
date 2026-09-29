@@ -248,7 +248,7 @@ pub(super) fn map_target_to_source(
 /// path. Planar output uses the compositor's single composed inverse; curved
 /// projections first move the world target and retain their existing inverse
 /// projection.
-fn map_target_to_source_with_residual(
+pub(crate) fn map_target_to_source_with_residual(
     inverse_homography: &Matrix3<f64>,
     target: Point3<f64>,
     image: &ImageInfo,
