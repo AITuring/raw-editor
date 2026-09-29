@@ -141,8 +141,10 @@ pub(crate) fn owner_sharpness_stats(
             continue;
         }
         let shortfall_exceeds = shortfall > 5;
-        let bucket = usize::from(shortfall.min(100)) * 20 / 101;
-        stats.shortfall_histogram[bucket.min(19)] += 1;
+        if shortfall_exceeds {
+            let bucket = usize::from(shortfall.min(100)) * 20 / 101;
+            stats.shortfall_histogram[bucket.min(19)] += 1;
+        }
         if is_textured != 0 {
             stats.textured_pixels += 1;
             stats.textured_shortfall += u64::from(shortfall_exceeds);

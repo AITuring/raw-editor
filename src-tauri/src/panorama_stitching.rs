@@ -8437,6 +8437,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         ),
                                     ) else {
                                         *owner = 0;
+                                        if covered_pixel(index) {
+                                            unresolved_pixel_count += 1;
+                                            owner_reverse_lookup_failures.transform_failed += 1;
+                                        }
                                         continue;
                                     };
                                     let (mask_width, mask_height) = masks.ownership.dimensions();
