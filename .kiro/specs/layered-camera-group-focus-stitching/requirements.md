@@ -494,8 +494,9 @@
     (b) `local_scale_median`、`local_scale_pixel_ratio`、`gradient_energy_normalized`、
         `roi_delta_e00` 的可测量测量项少于 8 个时，结论为证据不足。
     (c) `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 的可测量测量项少于
-        8 个且 (a) 不成立时，结论为不适用，既不计为通过也不阻止导出；`mtf50_normalized` 不适用时
-        锐度由 `gradient_energy_normalized` 判定。
+        8 个、(a) 不成立且没有未通过的可测量测量项时，结论为不适用，既不计为通过也不阻止导出；
+        `mtf50_normalized` 不适用时锐度由 `gradient_energy_normalized` 判定。只要存在未通过的可测量
+        测量项，该判据按第 15 条为未通过，不论可测量项数量多少。
     (d) `effective_pixel_count` 与 `sharpness_confidence_coverage` 是整幅输出的单项统计，不受可测量
         项数量下限约束；其统计基准为空（唯一覆盖面积为 0 或 Textured_Pixel 数量为 0）时结论为证据
         不足。两者在 Stack_Report 中另按 Capture_Station 记录分项数值，分项数值不影响结论。

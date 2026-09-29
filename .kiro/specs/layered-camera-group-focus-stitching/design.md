@@ -893,8 +893,9 @@ Ownership_Map 归属拷贝得到。
      ⇒ `insufficient_evidence`。
   2. `local_scale_median`、`local_scale_pixel_ratio`、`gradient_energy_normalized`、`roi_delta_e00`
      可测量项 < 8 ⇒ `insufficient_evidence`。
-  3. `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 可测量项 < 8 且规则 1 不成立
-     ⇒ `not_applicable`（不通过也不阻止）；`mtf50_normalized` 不适用时锐度由
+  3. `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 可测量项 < 8、规则 1 不成立
+     且没有未通过的可测量项 ⇒ `not_applicable`（不通过也不阻止）；有任何未通过的可测量项 ⇒ `fail`
+     （需求 11.15 优先，2026-09-30 澄清）；`mtf50_normalized` 不适用时锐度由
      `gradient_energy_normalized` 判定。画作 ROI 里合格倾斜边很少，平坦 ROI 与倾斜边 ROI 互斥，
      这两类判据按内容适用性判定，而不是按全部 ROI 计不可测比例。
   4. `effective_pixel_count`、`sharpness_confidence_coverage` 为整幅输出的单项统计，不受 8 项下限约束；
@@ -1803,7 +1804,8 @@ _对于任意_ 判据，其可测量测量项数量与不可测量测量项数�
 每个不可测量项都记录判据名称、世界坐标位置与不可测量原因；
 每个不可测量项带原因类别；该判据结论按「不可测量与证据不足」一节的四条规则唯一确定：
 技术性不可测占比（不含内容不适用项）超过 20%，或非条件判据的可测量项少于 8 个时为证据不足；
-条件判据（MTF50、噪声、边界笔画配准）可测量项少于 8 个而技术性不可测占比不超过 20% 时为不适用；
+条件判据（MTF50、噪声、边界笔画配准）可测量项少于 8 个、技术性不可测占比不超过 20% 且没有未通过的
+可测量项时为不适用，有未通过的可测量项时为未通过；
 两个整幅单项统计只在统计基准为空时为证据不足。
 
 **Validates: Requirements 11.13, 11.14**
