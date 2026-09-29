@@ -1391,11 +1391,9 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
         的重复常量。量化统一为 `quality_gate_runner::quantize_hundredths`。
       - owner 已反查到但单元证据缺失或非有限的像素计入 unresolved（`evidence_missing`），不再被
         静默跳过。直方图与 veto 计数只统计 Textured_Pixel，与判据口径一致。
-      - 仍未完成：反查现在把越界坐标无限制地夹到边缘，再在半径 3 内找任意有 owner 的像素，
-        unresolved 为 0 靠的是这个容差，而不是查明原因；修复前各分支的数量也没有报告。合成器
-        按「双三次插值颜色 > 1e-6」判定覆盖，4×4 采样足迹会越过机位 Coverage_Mask，推测这就是
-        边缘像素反查不到 owner 的来源。需要把搜索限定在合成器的插值足迹内、记录被吸附的像素数，
-        并确认根因。
+      - 审核时发现的旧问题：反查曾把越界坐标夹到边缘并在半径 3 内搜索，导致 unresolved=0
+        不能说明原因；合成器按「双三次插值颜色 > 1e-6」判定覆盖，4×4 足迹可能越过机位
+        Coverage_Mask。该问题已由后续执行记录中的足迹反查修复。
     - 执行记录（2026-09-30）：反查改为复用合成器的 residual map-to-source 路径，只在 floor−1..floor+2
       的 4×4 双三次足迹内选择最近 owner，并记录 `snapped_to_footprint`、未覆盖足迹及亮度比。
       Langyuan/Wenyuan 门禁的 `out_of_bounds`、`raw_owner_unresolved`、`evidence_missing` 均为 0；
