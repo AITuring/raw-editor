@@ -28,13 +28,15 @@ use crate::panorama_stitching::{
 use crate::panorama_utils::{mosaic, processing, registration, stitching};
 
 use super::degradation::{
-    self, DegradationLedger, FAILURE_REASONS, MAX_REASON_IDENTIFIER_LENGTH, UNMEASURABLE_REASONS,
+    self, DegradationLedger, DegradationManager, FAILURE_REASONS, MAX_REASON_IDENTIFIER_LENGTH,
+    StandardFinalOutputFileSystem, UNMEASURABLE_REASONS,
 };
 use super::determinism::{DETERMINISTIC_SUM_BLOCK_LEN, derive_run_seed_from_paths, sorted_keys};
 use super::focus_fuser;
 use super::intra_station;
 use super::report::{
-    ConnectivityReport, FusionSolverStatus, StackReport, VIRTUAL_TILE_CACHE_LIMIT_BYTES,
+    ConnectivityReport, FusionSolverStatus, STACK_REPORT_TOP_LEVEL_FIELDS, StackReport,
+    VIRTUAL_TILE_CACHE_LIMIT_BYTES,
 };
 use super::test_support::{
     self, RenameScheme, SyntheticScan, arb_artwork_focus_bracket, arb_artwork_scan_grid,
@@ -11214,8 +11216,7 @@ proptest! {
 use super::quality_gate::{measure_boundary_strokes, trace_moore_boundary};
 use super::quality_gate_runner::{
     Criterion, OwnerSharpnessCriterionInput, build_owner_sharpness_criterion,
-    classify_unmeasurable_reason, criterion_verdict, overall_verdict, owner_sharpness_stats,
-    record_unmeasurable,
+    classify_unmeasurable_reason, criterion_verdict, overall_verdict, record_unmeasurable,
 };
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
@@ -11318,21 +11319,13 @@ proptest! {
             },
         );
         let report = criterion.finish(&mut evidence_records);
-        let stats = owner_sharpness_stats(
-            &coverage,
-            &textured,
-            &shortfall,
-            &disagreement,
-            unresolved as u64,
-        )
-        .expect("runtime owner shortfall statistic accepts aligned planes");
         let unresolved_textured = (unresolved_start..covered_end)
             .filter(|&index| index < 768)
             .count();
         let expected_textured = (768usize.saturating_sub(unresolved_textured)) as u64;
         let expected_shortfall = shortfall_count.min(expected_textured as usize) as u64;
-        prop_assert_eq!(stats.textured_pixels, expected_textured);
-        prop_assert_eq!(stats.textured_shortfall, expected_shortfall);
+        let expected_shortfall_ratio = (expected_textured > 0)
+            .then_some(expected_shortfall as f64 / expected_textured as f64);
         let coverage_ratio = (expected_textured > 0).then_some(
             1.0 - expected_shortfall as f64 / expected_textured as f64,
         );
@@ -11340,8 +11333,10 @@ proptest! {
             coverage_ratio.map(|value| value >= 0.99),
             (expected_textured > 0).then_some(expected_shortfall * 100 <= expected_textured),
         );
-        prop_assert_eq!(stats.unresolved_pixel_count, unresolved as u64);
-        prop_assert_eq!(stats.disagreement_veto_count, expected_shortfall);
+        prop_assert_eq!(report.textured_pixel_count, Some(expected_textured));
+        prop_assert_eq!(report.disagreement_veto_count, expected_shortfall);
+        prop_assert_eq!(report.unresolved_pixel_count, unresolved as u64);
+        prop_assert_eq!(report.textured_shortfall_ratio, expected_shortfall_ratio);
         let expected_verdict = if expected_textured == 0 || unresolved > 0 {
             QualityGateVerdict::InsufficientEvidence
         } else if expected_shortfall * 100 <= expected_textured {
@@ -11360,6 +11355,29 @@ proptest! {
         } else {
             prop_assert!(report.measured.is_empty());
         }
+        // Transparent pixels and covered flat pixels are excluded from the
+        // Textured_Pixel denominator, so arbitrary evidence in those slices
+        // cannot change the owner criterion.
+        let mut irrelevant_shortfall = shortfall.clone();
+        let mut irrelevant_disagreement = disagreement.clone();
+        irrelevant_shortfall[768..].fill(100);
+        irrelevant_disagreement[768..].fill(100);
+        let mut irrelevant_records = Vec::new();
+        let irrelevant = build_owner_sharpness_criterion(
+            OwnerSharpnessCriterionInput {
+                coverage: &coverage_image,
+                confidence: &confidence,
+                textured: Some(&textured),
+                shortfall: Some(&irrelevant_shortfall),
+                disagreement: Some(&irrelevant_disagreement),
+                unresolved_pixel_count: unresolved as u64,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut irrelevant_records,
+            },
+        )
+        .finish(&mut irrelevant_records);
+        prop_assert_eq!(irrelevant.verdict, report.verdict);
+        prop_assert_eq!(&irrelevant.measured, &report.measured);
         // The owner criterion uses only the owner-shortfall plane. Changing
         // Sharpness_Confidence can alter diagnostic ratios, but never the
         // verdict or the measured coverage value.
@@ -11379,7 +11397,7 @@ proptest! {
         )
         .finish(&mut changed_records);
         prop_assert_eq!(changed.verdict, report.verdict);
-        prop_assert_eq!(changed.measured, report.measured);
+        prop_assert_eq!(&changed.measured, &report.measured);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
@@ -11664,5 +11682,98 @@ proptest! {
             prop_assert_eq!(seam, vec![height / 2; width]);
         }
         prop_assert!(width.max(height) < 32);
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 87: 内存超限中止且不残留
+    // 超过内存门槛的运行只删除本次暂存结果，不发布部分输出。
+    //
+    // **Validates: Requirements 14.3**
+    #[test]
+    fn property_87_memory_overrun_removes_only_run_staging(
+        peak in 1u64..1024,
+        threshold in 1u64..1024,
+    ) {
+        let directory = tempfile::tempdir().expect("temporary output directory");
+        let temporary = directory.path().join(".stack-result.current.tmp");
+        let final_path = directory.path().join("stack-result.tiff");
+        std::fs::write(&temporary, b"partial output").expect("staged output");
+        let mut ledger = DegradationLedger::new();
+        if peak > threshold {
+            ledger.record(
+                degradation::MEMORY_THRESHOLD_EXCEEDED,
+                serde_json::json!({
+                    "threshold_bytes": threshold,
+                    "peak_rss_bytes": peak,
+                    "sample_count": 1,
+                }),
+            );
+        }
+        let publication = DegradationManager::new(&ledger)
+            .publish_staged_output(
+                &mut StandardFinalOutputFileSystem,
+                &temporary,
+                &final_path,
+            )
+            .expect("staged publication decision");
+        prop_assert!(!temporary.exists(), "run staging must never remain");
+        if peak > threshold {
+            prop_assert_eq!(publication, degradation::OutputPublication::Rejected);
+            prop_assert!(!final_path.exists(), "overrun must not publish partial output");
+        } else {
+            prop_assert!(matches!(publication, degradation::OutputPublication::Published(_)));
+            prop_assert!(final_path.exists(), "accepted output must be published");
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 91: 取消后不残留且状态可追溯
+    // 用户取消产生 cancelled 状态，只清理本次暂存结果并保留最终输出路径为空。
+    //
+    // **Validates: Requirements 14.8**
+    #[test]
+    fn property_91_cancelled_run_has_no_staging_residue(seed in any::<u64>()) {
+        let directory = tempfile::tempdir().expect("temporary output directory");
+        let temporary = directory.path().join(format!(".stack-result-{seed}.tmp"));
+        let final_path = directory.path().join("stack-result.tiff");
+        std::fs::write(&temporary, seed.to_le_bytes()).expect("staged output");
+        let mut ledger = DegradationLedger::new();
+        ledger.record(degradation::RUN_CANCELLED_BY_USER, serde_json::json!({
+            "generation": seed,
+        }));
+        let manager = DegradationManager::new(&ledger);
+        prop_assert_eq!(manager.decision(), degradation::OutcomeDecision::Cancelled);
+        let publication = manager
+            .publish_staged_output(
+                &mut StandardFinalOutputFileSystem,
+                &temporary,
+                &final_path,
+            )
+            .expect("cancelled publication decision");
+        prop_assert_eq!(publication, degradation::OutputPublication::Cancelled);
+        prop_assert!(!temporary.exists());
+        prop_assert!(!final_path.exists());
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 93: Stack_Report schema 完整且与返回值一致
+    // 任意生产 Stack_Report 都包含固定顶层字段，并可通过实际序列化路径往返。
+    //
+    // **Validates: Requirements 1.7, 2.9, 5.9, 6.10, 11.16**
+    #[test]
+    fn property_93_stack_report_schema_matches_serialized_value(mut report in arb_stack_report()) {
+        report.pipeline_version = STACK_PIPELINE_VERSION.to_string();
+        let encoded = report.to_json_string().expect("stack report serializes");
+        let value: Value = serde_json::from_str(&encoded).expect("stack report json");
+        for field in STACK_REPORT_TOP_LEVEL_FIELDS {
+            prop_assert!(value.get(*field).is_some(), "missing Stack_Report field {field}");
+        }
+        let round_trip: StackReport = serde_json::from_str(&encoded).expect("schema round trip");
+        prop_assert_eq!(round_trip, report);
     }
 }
