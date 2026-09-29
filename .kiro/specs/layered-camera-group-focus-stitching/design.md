@@ -877,15 +877,30 @@ Local_Scale(p) = sqrt(|det J|)
 
 #### Sharpness_Confidence 覆盖率（需求 11.12）
 
-以最终输出全部非透明像素为统计范围，`Sharpness_Confidence < 0.05` 的像素占比 ≤ 1%。
+以最终输出的全部 Textured_Pixel 为统计范围（需求 11.12），`Sharpness_Confidence < 0.05` 的像素
+占 Textured_Pixel 的比例 ≤ 1%；报告同时写入 Textured_Pixel 数量、被排除的平坦像素数量、两者各自的
+低置信占比，以及按 Capture_Station 的分项数值（分项只作诊断，不影响结论）。
 输出级 Sharpness_Confidence 由各 Virtual_Tile 的 `sharpness_confidence` 按输出
 Ownership_Map 归属拷贝得到。
 
 #### 不可测量与证据不足（需求 11.13/11.14）
 
-- 不可测量项既不计通过也不计失败，记录判据名称、世界坐标位置与原因标识符。
-- 任一判据的可测量项 < 8 个，或不可测量项占应测量项总数 > 20% ⇒ 该判据结论为
-  `insufficient_evidence`，阻止导出。
+- 不可测量项既不计通过也不计失败，记录判据名称、世界坐标位置、原因标识符与原因类别：
+  `content_not_applicable`（不属于倾斜边 ROI、不属于平坦 ROI、边界两侧无可配对边缘）或
+  `technical`（owner Source_RAW 不可解码、配对残余对齐误差 > 0.5px，以及其它测量前置失败）。
+- 判据结论取 `pass` / `fail` / `insufficient_evidence` / `not_applicable`（2026-09-29 用户确认的规则）：
+  1. 逐 ROI / 逐测量点判据的应测量项总数不含 `content_not_applicable` 项；`technical` 项占比 > 20%
+     ⇒ `insufficient_evidence`。
+  2. `local_scale_median`、`local_scale_pixel_ratio`、`gradient_energy_normalized`、`roi_delta_e00`
+     可测量项 < 8 ⇒ `insufficient_evidence`。
+  3. `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 可测量项 < 8 且规则 1 不成立
+     ⇒ `not_applicable`（不通过也不阻止）；`mtf50_normalized` 不适用时锐度由
+     `gradient_energy_normalized` 判定。画作 ROI 里合格倾斜边很少，平坦 ROI 与倾斜边 ROI 互斥，
+     这两类判据按内容适用性判定，而不是按全部 ROI 计不可测比例。
+  4. `effective_pixel_count`、`sharpness_confidence_coverage` 为整幅输出的单项统计，不受 8 项下限约束；
+     统计基准为空 ⇒ `insufficient_evidence`。
+- 整体结论：任一判据 `fail` ⇒ 阻止导出（需求 11.15）；任一判据 `insufficient_evidence` ⇒ 阻止导出；
+  其余判据全部为 `pass` 或 `not_applicable` ⇒ 通过。
 
 #### 阻止导出（需求 11.15）
 
@@ -1786,7 +1801,10 @@ _对于任意_ 最终输出，Sharpness_Confidence 低于 0.05 的像素占全�
 
 _对于任意_ 判据，其可测量测量项数量与不可测量测量项数量之和等于该判据应测量项总数；
 每个不可测量项都记录判据名称、世界坐标位置与不可测量原因；
-该判据结论为证据不足当且仅当其可测量测量项少于 8 个或不可测量项占比超过 20%。
+每个不可测量项带原因类别；该判据结论按「不可测量与证据不足」一节的四条规则唯一确定：
+技术性不可测占比（不含内容不适用项）超过 20%，或非条件判据的可测量项少于 8 个时为证据不足；
+条件判据（MTF50、噪声、边界笔画配准）可测量项少于 8 个而技术性不可测占比不超过 20% 时为不适用；
+两个整幅单项统计只在统计基准为空时为证据不足。
 
 **Validates: Requirements 11.13, 11.14**
 

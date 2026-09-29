@@ -1216,8 +1216,9 @@
     - 任一判据存在未通过的可测量项 → 阻止写出最终结果文件、保留诊断预览与中间产物、
       Source_RAW 字节不变，返回指明未通过判据名称与对应 ROI 世界坐标的错误，
       标识符 `quality_gate_criterion_failed`（Rejected）
-    - 任一判据可测量项 < 8 或不可测量占比 > 20% → 结论 `insufficient_evidence` 并阻止导出，
-      标识符 `quality_gate_insufficient_evidence`（Rejected）
+    - 判据结论按需求 11.14 的 (a)–(d) 四条规则确定（2026-09-29 修订）：`insufficient_evidence`
+      阻止导出，标识符 `quality_gate_insufficient_evidence`（Rejected）；条件判据证据不够时为
+      `not_applicable`，不阻止导出；两项整幅统计不受 8 项下限约束
     - Quality_Gate 成为导出的唯一闸门：导出函数只能从通过结论进入
     - 同步更新 `tests/focus-stack-quality-contract.mjs`：新增 Quality_Gate 阈值常量断言
       （`0.98 / 0.95 / 0.98 / 0.93 / 0.95 / [0.85, 1.15] / 2.0 / 1.5 / 3.0 / 0.01 / 8 / 0.20`
@@ -1285,10 +1286,11 @@
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
 
-  - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
+  - [ ] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
     - **Validates: Requirements 11.13, 11.14**
     - 执行记录：P72（100 cases）验证可测量与不可测量计数恒等及证据不足判定。
+    - 执行记录（2026-09-29）：需求 11.13/11.14 与 Property 72 已按用户确认的规则修订（不可测原因分「内容不适用 / 技术性」，新增 `not_applicable` 结论，整幅单项统计不受 8 项下限约束），现有 P72 测试按旧规则编写，需重写后再勾选。
 
   - [x] 15.21 属性测试：阻止导出时不残留结果且保留诊断
     - **Property 73: 阻止导出时不残留结果且保留诊断**

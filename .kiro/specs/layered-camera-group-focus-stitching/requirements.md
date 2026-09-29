@@ -482,13 +482,23 @@
     Textured_Pixel。Stack_Report 同时记录有纹理与平坦两个子集的像素数和各自低置信度占比，使该判据
     可复核，且无法通过缩小统计范围规避。
 
-13. IF 某个判据在某个 ROI 或某个边界测量点上不满足其测量前置条件（不属于倾斜边 ROI、不属于平坦
-    ROI、owner Source_RAW 不可解码、配对残余对齐误差超过 0.5 个原生像素、边界两侧无可配对边缘），
-    THEN THE Quality_Gate SHALL 把该测量项标记为不可测量，既不计入通过也不计入失败，并在
-    Stack_Report 中记录该测量项的判据名称、世界坐标位置和不可测量原因。
-14. IF 任一判据的可测量测量项少于 8 个，或某一判据被标记为不可测量的测量项占该判据应测量项总数的
-    比例超过 20%，THEN THE Quality_Gate SHALL 阻止导出，并在 Stack_Report 中把该判据结论记录为
-    证据不足。
+13. IF 某个判据在某个 ROI 或某个边界测量点上不满足其测量前置条件，THEN THE Quality_Gate SHALL 把该
+    测量项标记为不可测量，既不计入通过也不计入失败，并在 Stack_Report 中记录该测量项的判据名称、
+    世界坐标位置、不可测量原因和原因类别。原因类别分两类：内容不适用（不属于倾斜边 ROI、不属于
+    平坦 ROI、边界两侧无可配对边缘）与技术性不可测（owner Source_RAW 不可解码、配对残余对齐误差
+    超过 0.5 个原生像素）。
+14. THE Quality_Gate SHALL 按以下规则确定判据结论，结论为证据不足时阻止导出，并在 Stack_Report 中
+    记录该判据的结论、可测量与不可测量计数及原因：
+    (a) 对逐 ROI 或逐测量点的判据，应测量项总数不含内容不适用的测量项；技术性不可测的测量项占
+        应测量项总数的比例超过 20% 时，结论为证据不足。
+    (b) `local_scale_median`、`local_scale_pixel_ratio`、`gradient_energy_normalized`、
+        `roi_delta_e00` 的可测量测量项少于 8 个时，结论为证据不足。
+    (c) `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 的可测量测量项少于
+        8 个且 (a) 不成立时，结论为不适用，既不计为通过也不阻止导出；`mtf50_normalized` 不适用时
+        锐度由 `gradient_energy_normalized` 判定。
+    (d) `effective_pixel_count` 与 `sharpness_confidence_coverage` 是整幅输出的单项统计，不受可测量
+        项数量下限约束；其统计基准为空（唯一覆盖面积为 0 或 Textured_Pixel 数量为 0）时结论为证据
+        不足。两者在 Stack_Report 中另按 Capture_Station 记录分项数值，分项数值不影响结论。
 15. IF 任一判据存在未通过的可测量测量项，THEN THE Quality_Gate SHALL 阻止写出最终输出文件、保留
     诊断预览与已生成中间产物、保持全部 Source_RAW 字节不变，向调用方返回指明未通过判据的错误提示，
     并在 Stack_Report 中记录未通过判据名称、实测值、阈值、对应 ROI 或测量点的世界坐标位置和 owner
