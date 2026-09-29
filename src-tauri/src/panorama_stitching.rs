@@ -8446,33 +8446,70 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     let (mask_width, mask_height) = masks.ownership.dimensions();
                                     let sx = local.x.round();
                                     let sy = local.y.round();
-                                    if !sx.is_finite()
-                                        || !sy.is_finite()
-                                        || sx < 0.0
-                                        || sy < 0.0
-                                        || sx >= f64::from(mask_width)
-                                        || sy >= f64::from(mask_height)
+                                    let mut sampled = None;
+                                    if sx.is_finite()
+                                        && sy.is_finite()
+                                        && mask_width > 0
+                                        && mask_height > 0
                                     {
-                                        *owner = 0;
-                                        if covered_pixel(index) {
-                                            unresolved_pixel_count += 1;
-                                            owner_reverse_lookup_failures.out_of_bounds += 1;
+                                        let base_x =
+                                            (sx as i64).clamp(0, i64::from(mask_width - 1));
+                                        let base_y =
+                                            (sy as i64).clamp(0, i64::from(mask_height - 1));
+                                        for radius in 0..=3i64 {
+                                            'search: for dy in -radius..=radius {
+                                                for dx in -radius..=radius {
+                                                    let px = base_x + dx;
+                                                    let py = base_y + dy;
+                                                    if px < 0
+                                                        || py < 0
+                                                        || px >= i64::from(mask_width)
+                                                        || py >= i64::from(mask_height)
+                                                    {
+                                                        continue;
+                                                    }
+                                                    let px = px as u32;
+                                                    let py = py as u32;
+                                                    let raw_local =
+                                                        masks.ownership.owner_at(px, py);
+                                                    if let Some(raw_owner) = raw_local
+                                                        .checked_sub(1)
+                                                        .and_then(|raw_index| {
+                                                            raw_owner_ids.get(station).and_then(
+                                                                |owners| {
+                                                                    owners
+                                                                        .get(usize::from(raw_index))
+                                                                        .copied()
+                                                                },
+                                                            )
+                                                        })
+                                                    {
+                                                        sampled = Some((px, py, raw_owner));
+                                                        break 'search;
+                                                    }
+                                                }
+                                            }
+                                            if sampled.is_some() {
+                                                break;
+                                            }
                                         }
-                                        continue;
                                     }
-                                    let raw_local = masks.ownership.owner_at(sx as u32, sy as u32);
-                                    let Some(raw_owner) =
-                                        raw_local.checked_sub(1).and_then(|index| {
-                                            raw_owner_ids
-                                                .get(station)
-                                                .and_then(|owners| owners.get(usize::from(index)))
-                                                .copied()
-                                        })
-                                    else {
+                                    let Some((sx, sy, raw_owner)) = sampled else {
                                         *owner = 0;
                                         if covered_pixel(index) {
                                             unresolved_pixel_count += 1;
-                                            owner_reverse_lookup_failures.raw_owner_unresolved += 1;
+                                            if !sx.is_finite() || !sy.is_finite() {
+                                                owner_reverse_lookup_failures.transform_failed += 1;
+                                            } else if sx < 0.0
+                                                || sy < 0.0
+                                                || sx >= f64::from(mask_width)
+                                                || sy >= f64::from(mask_height)
+                                            {
+                                                owner_reverse_lookup_failures.out_of_bounds += 1;
+                                            } else {
+                                                owner_reverse_lookup_failures
+                                                    .raw_owner_unresolved += 1;
+                                            }
                                         }
                                         continue;
                                     };
