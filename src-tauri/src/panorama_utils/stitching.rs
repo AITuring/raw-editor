@@ -2160,6 +2160,29 @@ impl OwnershipCompositorSwitches {
     }
 }
 
+#[cfg(test)]
+mod compositor_switch_contract_tests {
+    use super::*;
+
+    #[test]
+    fn default_ownership_switches_are_all_off_for_the_layered_path() {
+        let switches = OwnershipCompositorSwitches::default();
+        assert!(!switches.tone_all_pixels);
+        assert!(!switches.soft_owner_boundary);
+        assert!(!switches.skip_exposure_gain);
+        assert!(!switches.low_frequency_consensus);
+        assert!(!switches.owner_tone_harmonization);
+        assert!(!switches.skip_owner_tone_harmonization);
+        assert!(!switches.final_low_frequency_illumination);
+        assert_eq!(switches.legacy_final_sharpen_amount, 0.85);
+        assert_eq!(
+            crate::panorama_utils::stack_pipeline::report::SelectedPath::LegacySingleLayerMosaic
+                .as_identifier(),
+            "legacy_single_layer_mosaic"
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
     images: &[&ImageInfo],

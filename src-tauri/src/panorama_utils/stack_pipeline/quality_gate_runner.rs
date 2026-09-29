@@ -1841,6 +1841,63 @@ mod tests {
     }
 
     #[test]
+    fn quality_gate_record_mode_preserves_output_and_records_all_criteria() {
+        // The gate is observation-only at this boundary: it may return a
+        // conclusion and diagnostics, but it cannot rewrite the composed
+        // pixels or add a publication-blocking degradation of its own.
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
+        let output = Rgb32FImage::from_pixel(1024, 1024, Rgb([0.4, 0.45, 0.5]));
+        let before = output.clone();
+        let coverage = GrayImage::from_pixel(1024, 1024, Luma([255]));
+        let ownership = vec![1u16; 1024 * 1024];
+        let confidence = vec![0.8f32; 1024 * 1024];
+        let textured = vec![255u8; 1024 * 1024];
+        let shortfall = vec![5u8; 1024 * 1024];
+        let disagreement = vec![0u8; 1024 * 1024];
+        let residual = ResidualWarp::new();
+        let sources = [QualitySource {
+            owner: 1,
+            path: "record-only.raw".to_string(),
+            geometry: SourceGeometry {
+                member_to_anchor: Matrix3::identity(),
+                tile_to_world: Matrix3::identity(),
+                station_id: 0,
+            },
+            dimensions: (1024, 1024),
+        }];
+        let input = QualityGateInput {
+            output: &output,
+            coverage: &coverage,
+            ownership: &ownership,
+            confidence: &confidence,
+            textured: Some(&textured),
+            owner_shortfall: Some(&shortfall),
+            owner_disagreement: Some(&disagreement),
+            unresolved_pixel_count: 0,
+            world_origin: (0.0, 0.0),
+            sources: &sources,
+            residual: &residual,
+            acceptance_render_scale: 1.0,
+            final_sharpen_amount: 0.0,
+        };
+        let report = run_quality_gate(&input, &mut |_source| Ok(output.clone()));
+
+        assert_eq!(
+            output, before,
+            "record-only Quality_Gate must not rewrite pixels"
+        );
+        assert_eq!(report.criteria.len(), quality_gate::QUALITY_CRITERIA.len());
+        assert!(
+            report
+                .criteria
+                .iter()
+                .all(|criterion| criterion.threshold.is_finite())
+        );
+        assert!(degradation::run_ledger_snapshot().entries().is_empty());
+    }
+
+    #[test]
     fn unmeasurable_reason_histograms_match_the_coordinate_records() {
         let roi = QualityRoi {
             x: 0,
