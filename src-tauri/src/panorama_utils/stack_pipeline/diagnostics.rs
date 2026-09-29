@@ -297,6 +297,155 @@ pub(crate) fn export_roi_planes(
     Ok(target)
 }
 
+/// The seven per-station diagnostic items (需求 13.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DiagnosticItem {
+    Members,
+    FrameTransforms,
+    ResidualField,
+    OwnershipMap,
+    SharpnessConfidence,
+    CoverageMask,
+    ToneField,
+}
+
+impl DiagnosticItem {
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Members,
+        Self::FrameTransforms,
+        Self::ResidualField,
+        Self::OwnershipMap,
+        Self::SharpnessConfidence,
+        Self::CoverageMask,
+        Self::ToneField,
+    ];
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Members => "members",
+            Self::FrameTransforms => "frame_transforms",
+            Self::ResidualField => "residual_field",
+            Self::OwnershipMap => "ownership_map",
+            Self::SharpnessConfidence => "sharpness_confidence",
+            Self::CoverageMask => "coverage_mask",
+            Self::ToneField => "tone_field",
+        }
+    }
+}
+
+/// Diagnostics_Recorder of one run (需求 13.1, 13.2, 13.5, 13.7).
+///
+/// Disabled, it holds `None`: no buffer exists, no producer runs and nothing
+/// is written (需求 13.5). Enabled, every item is written as soon as it is
+/// recorded, named and listed with its Capture_Station, so no full-size
+/// diagnostic buffer is retained. The first write failure stops all later
+/// writes; `finish` then reports it with the target directory, while the final
+/// output and the Stack_Report are left to their own writers (需求 13.7).
+pub(crate) struct DiagnosticsRecorder {
+    state: Option<Box<RecorderState>>,
+}
+
+struct RecorderState {
+    directory: PathBuf,
+    items: Vec<serde_json::Value>,
+    crop: Option<(i64, i64, u32, u32)>,
+    failure: Option<String>,
+}
+
+impl DiagnosticsRecorder {
+    /// `directory` is the user's `stack_diagnostics.output_dir`; `None` means
+    /// diagnostics are off.
+    pub(crate) fn new(directory: Option<PathBuf>) -> Self {
+        Self {
+            state: directory.map(|directory| {
+                Box::new(RecorderState {
+                    directory,
+                    items: Vec::new(),
+                    crop: None,
+                    failure: None,
+                })
+            }),
+        }
+    }
+
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.state.is_some()
+    }
+
+    /// Record one item of one station. `produce` runs only while the recorder
+    /// is enabled and has not failed, so a disabled run never builds the item.
+    pub(crate) fn record(
+        &mut self,
+        station: usize,
+        item: DiagnosticItem,
+        extension: &str,
+        produce: impl FnOnce() -> Vec<u8>,
+    ) {
+        let Some(state) = self.state.as_deref_mut() else {
+            return;
+        };
+        if state.failure.is_some() {
+            return;
+        }
+        let name = format!("station-{station:03}-{}.{extension}", item.as_str());
+        match std::fs::write(state.directory.join(&name), produce()) {
+            Ok(()) => state.items.push(serde_json::json!({
+                "station_index": station,
+                "item": item.as_str(),
+                "file": name,
+            })),
+            Err(error) => state.failure = Some(error.to_string()),
+        }
+    }
+
+    /// The final valid crop in world native pixels: its top-left corner and
+    /// size (需求 13.2).
+    pub(crate) fn record_crop(&mut self, left: i64, top: i64, width: u32, height: u32) {
+        if let Some(state) = self.state.as_deref_mut() {
+            state.crop = Some((left, top, width, height));
+        }
+    }
+
+    /// Write the manifest. `Ok(None)` when diagnostics are off.
+    pub(crate) fn finish(self) -> Result<Option<PathBuf>, String> {
+        let Some(state) = self.state else {
+            return Ok(None);
+        };
+        let directory = state.directory.clone();
+        let failed = |error: String| {
+            degradation::record_run_degradation(
+                degradation::DIAGNOSTICS_WRITE_FAILED,
+                serde_json::json!({
+                    "directory": directory.display().to_string(),
+                    "error": error,
+                }),
+            );
+            format!(
+                "{}: diagnostics could not be written to {}: {error}",
+                degradation::DIAGNOSTICS_WRITE_FAILED,
+                directory.display()
+            )
+        };
+        if let Some(error) = state.failure {
+            return Err(failed(error));
+        }
+        let manifest = serde_json::json!({
+            "crop": state.crop.map(|(left, top, width, height)| serde_json::json!({
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height,
+            })),
+            "items": state.items,
+        });
+        let path = state.directory.join("diagnostics.json");
+        let bytes =
+            serde_json::to_vec_pretty(&manifest).map_err(|error| failed(error.to_string()))?;
+        std::fs::write(&path, bytes).map_err(|error| failed(error.to_string()))?;
+        Ok(Some(path))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -482,5 +631,96 @@ mod tests {
             error.contains("/nonexistent/raw-editor-diagnostics"),
             "{error}"
         );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+        // Feature: layered-camera-group-focus-stitching, Property 83: 对于任意输入，在堆栈诊断
+        // 处于关闭状态时完整尺寸诊断缓冲的分配数量为 0，且不写入任何诊断文件。
+        //
+        // A disabled recorder never runs an item producer, so no full-size buffer is built
+        // for diagnostics, and it has no directory to write to; an enabled recorder given
+        // the same calls runs each producer exactly once and writes one file per item.
+        //
+        // **Validates: Requirements 13.5**
+        #[test]
+        fn property_83_disabled_diagnostics_allocate_and_write_nothing(
+            calls in proptest::collection::vec((0usize..8, 0usize..7, 1usize..4096), 0..24),
+        ) {
+            let watched = tempfile::tempdir().expect("temporary directory");
+            let produced = std::cell::Cell::new(0usize);
+            let mut recorder = DiagnosticsRecorder::new(None);
+            prop_assert!(!recorder.is_enabled());
+            for &(station, item, bytes) in &calls {
+                recorder.record(station, DiagnosticItem::ALL[item], "bin", || {
+                    produced.set(produced.get() + 1);
+                    vec![0u8; bytes]
+                });
+            }
+            recorder.record_crop(-3, 4, 100, 80);
+            prop_assert_eq!(produced.get(), 0, "a disabled recorder built a diagnostic buffer");
+            prop_assert_eq!(recorder.finish(), Ok(None));
+            prop_assert_eq!(std::fs::read_dir(watched.path()).expect("list").count(), 0);
+            prop_assert_eq!(
+                std::mem::size_of::<DiagnosticsRecorder>(),
+                std::mem::size_of::<usize>(),
+                "the disabled recorder is one null pointer"
+            );
+
+            let mut enabled = DiagnosticsRecorder::new(Some(watched.path().to_path_buf()));
+            let mut distinct = std::collections::BTreeSet::new();
+            for &(station, item, bytes) in &calls {
+                distinct.insert((station, item));
+                enabled.record(station, DiagnosticItem::ALL[item], "bin", || {
+                    produced.set(produced.get() + 1);
+                    vec![7u8; bytes]
+                });
+            }
+            prop_assert_eq!(produced.get(), calls.len());
+            let manifest = enabled.finish().expect("writable directory").expect("enabled");
+            let written = std::fs::read_dir(watched.path()).expect("list").count();
+            prop_assert_eq!(written, distinct.len() + 1, "one file per item plus the manifest");
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(manifest).expect("manifest")).expect("json");
+            for entry in manifest["items"].as_array().expect("items") {
+                let station = entry["station_index"].as_u64().expect("station");
+                let file = entry["file"].as_str().expect("file");
+                let expected_prefix = format!("station-{station:03}-");
+                prop_assert!(file.starts_with(&expected_prefix));
+            }
+            prop_assert_eq!(manifest["crop"].is_null(), true);
+        }
+    }
+
+    #[test]
+    fn a_failed_diagnostic_write_stops_later_writes_and_names_the_directory() {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let directory = root.path().join("diagnostics");
+        std::fs::create_dir(&directory).expect("create");
+        let mut recorder = DiagnosticsRecorder::new(Some(directory.clone()));
+        recorder.record(0, DiagnosticItem::Members, "json", || b"[]".to_vec());
+        recorder.record_crop(10, 20, 300, 200);
+        std::fs::remove_dir_all(&directory).expect("remove the target mid-run");
+        let later = std::cell::Cell::new(0usize);
+        recorder.record(0, DiagnosticItem::OwnershipMap, "png", || {
+            later.set(later.get() + 1);
+            Vec::new()
+        });
+        recorder.record(1, DiagnosticItem::ToneField, "bin", || {
+            later.set(later.get() + 1);
+            Vec::new()
+        });
+        assert_eq!(
+            later.get(),
+            1,
+            "only the failing write ran; later ones were skipped"
+        );
+        let error = recorder.finish().expect_err("the failure is reported");
+        assert!(
+            error.starts_with(degradation::DIAGNOSTICS_WRITE_FAILED),
+            "{error}"
+        );
+        assert!(error.contains(&directory.display().to_string()), "{error}");
     }
 }

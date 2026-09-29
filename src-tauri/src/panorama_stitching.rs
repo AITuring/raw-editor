@@ -540,6 +540,9 @@ struct FocusVerticalEdgeLine {
 
 pub(crate) struct StitchOutcome {
     pub image: DynamicImage,
+    /// The layered path's output Coverage_Mask, the same size as `image`;
+    /// the export writes it as alpha (需求 10.3 / 10.6).
+    pub coverage: Option<GrayImage>,
     pub full_canvas_width: u32,
     pub full_canvas_height: u32,
     pub render_scale: f64,
@@ -7553,6 +7556,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         return Ok(StitchOutcome {
             image: DynamicImage::ImageRgb32F(Rgb32FImage::new(1, 1)),
+            coverage: None,
             full_canvas_width,
             full_canvas_height,
             render_scale: 1.0,
@@ -7671,6 +7675,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let mut station_poses_replaced = false;
     #[allow(clippy::type_complexity)]
     let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, Vec<u8>, (f64, f64))> = None;
+    // The output Coverage_Mask the export writes as alpha (需求 10.6).
+    let mut output_coverage: Option<GrayImage> = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
@@ -8405,13 +8411,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         .unwrap_or(0);
                                 }
                                 quality_sources = Some(raw_sources);
+                                let coverage_plane = GrayImage::from_raw(
+                                    width,
+                                    height,
+                                    rendered.coverage.covered().to_vec(),
+                                )
+                                .unwrap_or_else(|| GrayImage::new(width, height));
+                                output_coverage = Some(coverage_plane.clone());
                                 quality_planes = Some((
-                                    GrayImage::from_raw(
-                                        width,
-                                        height,
-                                        rendered.coverage.covered().to_vec(),
-                                    )
-                                    .unwrap_or_else(|| GrayImage::new(width, height)),
+                                    coverage_plane,
                                     ownership,
                                     confidence,
                                     textured,
@@ -8576,8 +8584,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         recorder.write_once();
     }
 
+    // Only a mask of the delivered size can become its alpha.
+    let coverage = output_coverage.filter(|mask| mask.dimensions() == panorama.dimensions());
     Ok(StitchOutcome {
         image: DynamicImage::ImageRgb32F(panorama),
+        coverage,
         full_canvas_width,
         full_canvas_height,
         render_scale,

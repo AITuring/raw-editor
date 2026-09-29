@@ -121,11 +121,72 @@ impl ImageStackOutputFormat {
         }
     }
 
-    fn encoded_color_type(self, bit_depth: u8) -> ColorType {
-        match (self, bit_depth) {
-            (Self::Tiff | Self::Png, 16) => ColorType::Rgb16,
+    /// TIFF and PNG carry the Coverage_Mask as alpha; JPEG cannot (需求 10.6).
+    fn keeps_alpha(self) -> bool {
+        matches!(self, Self::Tiff | Self::Png)
+    }
+
+    fn encoded_color_type(self, bit_depth: u8, alpha: bool) -> ColorType {
+        match (self, bit_depth, alpha && self.keeps_alpha()) {
+            (Self::Tiff | Self::Png, 16, true) => ColorType::Rgba16,
+            (Self::Tiff | Self::Png, 16, false) => ColorType::Rgb16,
+            (Self::Tiff | Self::Png, _, true) => ColorType::Rgba8,
             _ => ColorType::Rgb8,
         }
+    }
+}
+
+/// What an export keeps of the canonical result (需求 10.5 / 10.6 / 10.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OutputFidelity {
+    bit_depth: u8,
+    /// The result has uncovered, transparent pixels.
+    has_transparency: bool,
+    alpha_preserved: bool,
+}
+
+impl OutputFidelity {
+    fn of(
+        image: &DynamicImage,
+        output_format: ImageStackOutputFormat,
+        requested_bit_depth: u8,
+    ) -> Self {
+        let has_transparency = match image {
+            DynamicImage::ImageRgba16(pixels) => pixels.pixels().any(|pixel| pixel[3] < u16::MAX),
+            DynamicImage::ImageRgba8(pixels) => pixels.pixels().any(|pixel| pixel[3] < u8::MAX),
+            _ => image.color().has_alpha() && image.to_rgba16().pixels().any(|p| p[3] < u16::MAX),
+        };
+        Self {
+            bit_depth: crate::export_processing::effective_export_bit_depth(
+                output_format.canonical_extension(),
+                requested_bit_depth,
+            ),
+            has_transparency,
+            alpha_preserved: output_format.keeps_alpha() && image.color().has_alpha(),
+        }
+    }
+
+    /// The downgrade notices to show before writing, each led by its stable
+    /// identifier (需求 10.10): fewer than 16 bits per channel, or
+    /// transparent pixels that the format cannot keep.
+    fn downgrades(&self, output_format: ImageStackOutputFormat) -> Vec<String> {
+        let mut notices = Vec::new();
+        if self.bit_depth < 16 {
+            notices.push(format!(
+                "{}: the {} will be written with {} bits per channel instead of 16",
+                crate::panorama_utils::stack_pipeline::degradation::OUTPUT_BIT_DEPTH_DOWNGRADED,
+                output_format.label(),
+                self.bit_depth
+            ));
+        }
+        if self.has_transparency && !self.alpha_preserved {
+            notices.push(format!(
+                "{}: the {} cannot keep transparency, so uncovered pixels will be written opaque",
+                crate::panorama_utils::stack_pipeline::degradation::OUTPUT_ALPHA_UNSUPPORTED,
+                output_format.label()
+            ));
+        }
+        notices
     }
 }
 
@@ -163,8 +224,48 @@ fn detail_preview_dimensions(width: u32, height: u32) -> (u32, u32) {
 /// Image stacking works on display-referred samples after RAW development. Freeze
 /// those samples once at 16-bit precision so preview and export cannot diverge by
 /// independently interpreting a floating-point TIFF as linear RGB.
+/// The opaque canonical form: production canonicalises through
+/// [`canonicalize_image_stack_result_with_coverage`]; tests and the gate
+/// harness use this RGB-only form.
+#[cfg(test)]
 pub(crate) fn canonicalize_image_stack_result(image: DynamicImage) -> DynamicImage {
     DynamicImage::ImageRgb16(image.to_rgb16())
+}
+
+/// The canonical result with the Coverage_Mask as alpha (需求 10.3 / 10.6):
+/// uncovered pixels fully transparent, covered pixels fully opaque, and the
+/// colour channels exactly those of [`canonicalize_image_stack_result`]. A
+/// missing or mismatched mask keeps the opaque RGB canonical form.
+pub(crate) fn canonicalize_image_stack_result_with_coverage(
+    image: DynamicImage,
+    coverage: Option<&image::GrayImage>,
+) -> DynamicImage {
+    let rgb = image.to_rgb16();
+    let Some(coverage) = coverage.filter(|mask| mask.dimensions() == rgb.dimensions()) else {
+        return DynamicImage::ImageRgb16(rgb);
+    };
+    let rgba = image::ImageBuffer::from_fn(rgb.width(), rgb.height(), |x, y| {
+        let [red, green, blue] = rgb.get_pixel(x, y).0;
+        let alpha = if coverage.get_pixel(x, y)[0] == 0 {
+            0
+        } else {
+            u16::MAX
+        };
+        image::Rgba([red, green, blue, alpha])
+    });
+    DynamicImage::ImageRgba16(rgba)
+}
+
+/// The pixels a lossless format stores: RGBA when the result carries its
+/// Coverage_Mask as alpha, RGB otherwise; colour channels are converted the
+/// same way either way, so writing alpha never changes them (需求 10.6).
+fn lossless_pixels(image: &DynamicImage, bit_depth: u8) -> DynamicImage {
+    match (bit_depth == 16, image.color().has_alpha()) {
+        (true, true) => DynamicImage::ImageRgba16(image.to_rgba16()),
+        (true, false) => DynamicImage::ImageRgb16(image.to_rgb16()),
+        (false, true) => DynamicImage::ImageRgba8(image.to_rgba8()),
+        (false, false) => DynamicImage::ImageRgb8(image.to_rgb8()),
+    }
 }
 
 fn encode_srgb_image_stack<W: Write + Seek>(
@@ -189,11 +290,7 @@ fn encode_srgb_image_stack<W: Write + Seek>(
                     format!("Failed to attach the image-stack TIFF color profile: {error}")
                 })?;
             }
-            let image_to_encode = if bit_depth == 16 {
-                DynamicImage::ImageRgb16(image.to_rgb16())
-            } else {
-                DynamicImage::ImageRgb8(image.to_rgb8())
-            };
+            let image_to_encode = lossless_pixels(image, bit_depth);
             image_to_encode
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
@@ -210,11 +307,7 @@ fn encode_srgb_image_stack<W: Write + Seek>(
                     format!("Failed to attach image-stack PNG metadata: {error}")
                 })?;
             }
-            let image_to_encode = if bit_depth == 16 {
-                DynamicImage::ImageRgb16(image.to_rgb16())
-            } else {
-                DynamicImage::ImageRgb8(image.to_rgb8())
-            };
+            let image_to_encode = lossless_pixels(image, bit_depth);
             image_to_encode
                 .write_with_encoder(encoder)
                 .map_err(|error| format!("Failed to encode image-stack PNG: {error}"))
@@ -259,9 +352,17 @@ fn encode_srgb_jpeg_streaming(
     embed_color_profile: bool,
     export_exif: Option<&[u8]>,
 ) -> Result<(), String> {
-    let rgb16 = image
-        .as_rgb16()
-        .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
+    // JPEG has no alpha (需求 10.10 notices this before writing): drop the
+    // Coverage_Mask channel, keeping the colour samples unchanged.
+    let without_alpha;
+    let rgb16 = match image.as_rgb16() {
+        Some(rgb16) => rgb16,
+        None if image.color().has_alpha() => {
+            without_alpha = image.to_rgb16();
+            &without_alpha
+        }
+        None => return Err("The canonical image-stack result is not RGB16.".to_string()),
+    };
     let (width, height) = rgb16.dimensions();
     let source_row_samples = (width as usize)
         .checked_mul(3)
@@ -339,6 +440,30 @@ fn encode_image_stack_file(
             export_settings.strip_gps,
             export_settings.metadata_overrides.as_ref(),
         )?;
+        // The Coverage_Mask travels as alpha; the colour samples are the same
+        // either way (需求 10.6).
+        if image.color().has_alpha() {
+            if bit_depth == 16 {
+                let rgba16 = image.to_rgba16();
+                return crate::export_processing::encode_rgba16_tiff_with_metadata(
+                    output,
+                    rgba16.width(),
+                    rgba16.height(),
+                    rgba16.as_raw(),
+                    export_settings.embed_color_profile,
+                    metadata.as_ref(),
+                );
+            }
+            let rgba8 = image.to_rgba8();
+            return crate::export_processing::encode_rgba8_tiff_with_metadata(
+                output,
+                rgba8.width(),
+                rgba8.height(),
+                rgba8.as_raw(),
+                export_settings.embed_color_profile,
+                metadata.as_ref(),
+            );
+        }
         let rgb16 = image
             .as_rgb16()
             .ok_or_else(|| "The canonical image-stack result is not RGB16.".to_string())?;
@@ -386,6 +511,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
     bit_depth: u8,
+    alpha: bool,
     expect_color_profile: bool,
 ) -> Result<(), String> {
     if decoder.dimensions() != dimensions {
@@ -397,7 +523,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
             decoder.dimensions().1
         ));
     }
-    if decoder.color_type() != output_format.encoded_color_type(bit_depth) {
+    if decoder.color_type() != output_format.encoded_color_type(bit_depth, alpha) {
         return Err(format!(
             "Saved image-stack {} has an unexpected pixel format ({:?}).",
             output_format.label(),
@@ -431,6 +557,7 @@ fn validate_image_stack_output(
     dimensions: (u32, u32),
     output_format: ImageStackOutputFormat,
     bit_depth: u8,
+    alpha: bool,
     expect_color_profile: bool,
 ) -> Result<(), String> {
     let open = || {
@@ -451,6 +578,7 @@ fn validate_image_stack_output(
             dimensions,
             output_format,
             bit_depth,
+            alpha,
             expect_color_profile,
         ),
         ImageStackOutputFormat::Png => validate_image_stack_decoder(
@@ -460,6 +588,7 @@ fn validate_image_stack_output(
             dimensions,
             output_format,
             bit_depth,
+            alpha,
             expect_color_profile,
         ),
         ImageStackOutputFormat::Jpeg => validate_image_stack_decoder(
@@ -469,6 +598,7 @@ fn validate_image_stack_output(
             dimensions,
             output_format,
             bit_depth,
+            alpha,
             expect_color_profile,
         ),
     }
@@ -571,6 +701,7 @@ fn write_image_stack_output_for_run(
             output_format.canonical_extension(),
             export_settings.bit_depth,
         ),
+        image.color().has_alpha(),
         export_settings.embed_color_profile,
     )?;
 
@@ -838,7 +969,12 @@ pub async fn process_image_stack(
                 let full_canvas_width = outcome.full_canvas_width;
                 let full_canvas_height = outcome.full_canvas_height;
                 let render_scale = outcome.render_scale;
-                let image = canonicalize_image_stack_result(outcome.image);
+                // The Coverage_Mask becomes alpha; the colour channels are the
+                // opaque canonical ones either way (需求 10.6).
+                let image = canonicalize_image_stack_result_with_coverage(
+                    outcome.image,
+                    outcome.coverage.as_ref(),
+                );
                 let _ = app_handle.emit("image-stack-progress", "Creating preview…");
                 // One identifier names the stored result and its previews (需求 10.7).
                 let result_id = Uuid::new_v4().to_string();
@@ -1113,6 +1249,105 @@ mod tests {
             proptest::prop_assert!(detail_name.starts_with(&result_id));
             proptest::prop_assert!(interaction_name.starts_with(&result_id));
             proptest::prop_assert_ne!(detail_name, interaction_name);
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: 100,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+
+        // Feature: layered-camera-group-focus-stitching, Property 57: 对于任意最终结果，以支持
+        // alpha 的格式写出时未覆盖像素的 alpha 为完全透明、已覆盖像素的 alpha 为完全不透明，
+        // 且已覆盖像素的颜色通道值与不写入 alpha 时逐值相同。
+        //
+        // The canonical result with its Coverage_Mask is written as 16-bit TIFF and PNG and
+        // read back; the colour channels are compared with the opaque canonical form.
+        //
+        // **Validates: Requirements 10.6**
+        #[test]
+        fn property_57_alpha_follows_coverage_without_changing_colour(
+            seed in proptest::prelude::any::<u64>(),
+            width in 4u32..40,
+            height in 4u32..40,
+        ) {
+            let result = painted_result(width, height, seed);
+            let coverage = image::GrayImage::from_fn(width, height, |x, y| {
+                let hash = (u64::from(x) * 73_856_093) ^ (u64::from(y) * 19_349_663) ^ seed;
+                image::Luma([if hash % 5 == 0 { 0 } else { 255 }])
+            });
+            let opaque = super::canonicalize_image_stack_result(result.clone()).to_rgb16();
+            let with_alpha =
+                super::canonicalize_image_stack_result_with_coverage(result, Some(&coverage));
+            for format in [ImageStackOutputFormat::Tiff, ImageStackOutputFormat::Png] {
+                let mut bytes = Cursor::new(Vec::new());
+                super::encode_srgb_image_stack(&with_alpha, &mut bytes, format, 95, 16, true, None)
+                    .expect("encode");
+                let decoded = image::load_from_memory(bytes.get_ref()).expect("decode");
+                proptest::prop_assert_eq!(decoded.color(), ColorType::Rgba16);
+                let decoded = decoded.to_rgba16();
+                for (x, y, pixel) in decoded.enumerate_pixels() {
+                    let covered = coverage.get_pixel(x, y)[0] != 0;
+                    proptest::prop_assert_eq!(pixel[3], if covered { u16::MAX } else { 0 });
+                    proptest::prop_assert_eq!(&pixel.0[..3], &opaque.get_pixel(x, y).0[..]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn output_fidelity_reports_bit_depth_and_alpha_downgrades_before_writing() {
+        let coverage =
+            image::GrayImage::from_fn(8, 8, |x, _| image::Luma([if x < 2 { 0 } else { 255 }]));
+        let transparent = super::canonicalize_image_stack_result_with_coverage(
+            painted_result(8, 8, 3),
+            Some(&coverage),
+        );
+        let tiff = super::OutputFidelity::of(&transparent, ImageStackOutputFormat::Tiff, 16);
+        assert_eq!(
+            (tiff.bit_depth, tiff.has_transparency, tiff.alpha_preserved),
+            (16, true, true)
+        );
+        assert!(tiff.downgrades(ImageStackOutputFormat::Tiff).is_empty());
+
+        let jpeg = super::OutputFidelity::of(&transparent, ImageStackOutputFormat::Jpeg, 16);
+        let notices = jpeg.downgrades(ImageStackOutputFormat::Jpeg);
+        assert_eq!(notices.len(), 2, "{notices:?}");
+        assert!(
+            notices[0].starts_with("output_bit_depth_downgraded"),
+            "{notices:?}"
+        );
+        assert!(
+            notices[1].starts_with("output_alpha_unsupported"),
+            "{notices:?}"
+        );
+
+        // A fully covered result loses nothing to a missing alpha channel.
+        let opaque = super::canonicalize_image_stack_result(painted_result(8, 8, 3));
+        let jpeg = super::OutputFidelity::of(&opaque, ImageStackOutputFormat::Jpeg, 16);
+        assert_eq!(jpeg.downgrades(ImageStackOutputFormat::Jpeg).len(), 1);
+        let png8 = super::OutputFidelity::of(&transparent, ImageStackOutputFormat::Png, 8);
+        assert_eq!(png8.downgrades(ImageStackOutputFormat::Png).len(), 1);
+    }
+
+    #[test]
+    fn a_saved_tiff_with_alpha_validates_and_keeps_its_transparency() {
+        let coverage = image::GrayImage::from_fn(16, 12, |x, y| {
+            image::Luma([if (x + y) % 7 == 0 { 0 } else { 255 }])
+        });
+        let image = super::canonicalize_image_stack_result_with_coverage(
+            painted_result(16, 12, 11),
+            Some(&coverage),
+        );
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("stack.tiff");
+        write_image_stack_output(&image, &path, ImageStackOutputFormat::Tiff)
+            .expect("the RGBA result is written and validated");
+        let decoded = image::open(&path).expect("reopen").to_rgba16();
+        for (x, y, pixel) in decoded.enumerate_pixels() {
+            let covered = coverage.get_pixel(x, y)[0] != 0;
+            assert_eq!(pixel[3], if covered { u16::MAX } else { 0 }, "({x}, {y})");
         }
     }
 
@@ -1578,6 +1813,34 @@ mod tests {
             println!("{}", output_path.display());
         }
     }
+}
+
+/// 需求 10.10: the notices of saving the current result in `output_format`
+/// with `bit_depth` (fewer than 16 bits per channel, or transparency the
+/// format cannot keep), returned before anything is written so the caller can
+/// show them ahead of `save_image_stack`.
+#[tauri::command]
+pub async fn image_stack_output_notices(
+    output_format: String,
+    bit_depth: u8,
+    result_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let output_format = ImageStackOutputFormat::from_wire(&output_format)?;
+    let result = state
+        .image_stack_result
+        .lock()
+        .map_err(|_| "The image-stack result store is unavailable.".to_string())?;
+    let (stored_result_id, image, _) = result
+        .as_ref()
+        .ok_or_else(|| "No image-stack result is available to save.".to_string())?;
+    if stored_result_id != &result_id {
+        return Err(
+            "The visible image-stack preview is no longer the current result. Please realign before saving."
+                .to_string(),
+        );
+    }
+    Ok(OutputFidelity::of(image, output_format, bit_depth).downgrades(output_format))
 }
 
 #[tauri::command]
