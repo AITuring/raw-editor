@@ -265,7 +265,9 @@ impl Criterion {
             self.technical_unmeasurable,
             !self.failed.is_empty(),
             self.diagnostic,
-            self.observed_count == 0,
+            self.observed_count == 0
+                || (self.name == "owner_sharpness_coverage"
+                    && self.unresolved_pixel_count > 0),
         );
         QualityGateCriterionRecord {
             name: self.name.to_string(),
