@@ -43,7 +43,7 @@ assert.match(exifProcessingSource, /ExifTag::Copyright/);
 assert.match(exifProcessingSource, /ExifTag::UserComment/);
 assert.match(stackProcessingSource, /apply_export_resize_and_watermark/);
 assert.match(stackProcessingSource, /write_image_stack_output_with_settings/);
-assert.match(stackSaveSource, /let \(stored_result_id, image\) = result\s*\.as_ref\(\)/);
+assert.match(stackSaveSource, /let \(stored_result_id, image, degradation_ledger\) = result\s*\.as_ref\(\)/);
 assert.doesNotMatch(stackSaveSource, /\*result\s*=\s*None/);
 
 const bundled = await build({
@@ -149,6 +149,109 @@ assert.equal(buildSuggestedExportPath('/photos/source.jpg?vc=3', '_edited', 'tif
 assert.equal(ensureExportPathExtension('/photos/export.jpeg', 'jpeg'), '/photos/export.jpeg');
 assert.equal(ensureExportPathExtension('/photos/export.png', 'tiff'), '/photos/export.tif');
 assert.equal(ensureExportPathExtension('/photos/export', 'png'), '/photos/export.png');
+
+const stackSaveMocks = {
+  react: 'export const useCallback = (callback) => callback;',
+  '@tauri-apps/api/core': 'export const invoke = (...args) => globalThis.__stackSaveContract.invoke(...args);',
+  '@tauri-apps/plugin-dialog': `
+    export const save = (...args) => globalThis.__stackSaveContract.save(...args);
+    export const confirm = (...args) => globalThis.__stackSaveContract.confirm(...args);
+  `,
+  '../store/useUIStore': `
+    export const useUIStore = Object.assign(
+      (selector) => selector(globalThis.__stackSaveContract.ui),
+      { getState: () => globalThis.__stackSaveContract.ui },
+    );
+  `,
+  '../store/useSettingsStore': `
+    export const useSettingsStore = { getState: () => ({ osPlatform: 'macos' }) };
+  `,
+  '../i18n': 'export default { t: (key) => key };',
+};
+const stackActionsBundle = await build({
+  entryPoints: [path.join(repoRoot, 'src/hooks/useProductivityActions.ts')],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node20',
+  write: false,
+  plugins: [
+    {
+      name: 'stack-save-contract',
+      setup(builder) {
+        builder.onResolve({ filter: /.*/ }, (args) =>
+          Object.hasOwn(stackSaveMocks, args.path) ? { path: args.path, namespace: 'stack-save-mock' } : null,
+        );
+        builder.onLoad({ filter: /.*/, namespace: 'stack-save-mock' }, (args) => ({
+          contents: stackSaveMocks[args.path],
+          loader: 'js',
+        }));
+      },
+    },
+  ],
+});
+const { useProductivityActions } = await import(
+  `data:text/javascript;base64,${Buffer.from(stackActionsBundle.outputFiles[0].contents).toString('base64')}`
+);
+const exerciseStackSave = async (notices, confirmed) => {
+  const calls = [];
+  const ui = {
+    imageStackModalState: { sourcePaths: ['/photos/source.nef'], resultId: 'current-stack-result' },
+    setUI(update) {
+      Object.assign(ui, update(ui));
+    },
+  };
+  globalThis.__stackSaveContract = {
+    ui,
+    async invoke(command, args) {
+      calls.push([command, args]);
+      if (command === 'image_stack_output_notices') return notices;
+      assert.equal(command, 'save_image_stack');
+      return '/photos/export.tif';
+    },
+    async confirm(message, options) {
+      calls.push(['confirm', message, options]);
+      return confirmed;
+    },
+    async save() {
+      calls.push(['choose-path']);
+      return '/photos/export.tif';
+    },
+  };
+  try {
+    const actions = useProductivityActions(
+      async () => calls.push(['refresh']),
+      () => {},
+    );
+    const result = await actions.handleSaveImageStack('focus', stackInitial);
+    return { calls, result };
+  } finally {
+    delete globalThis.__stackSaveContract;
+  }
+};
+const declined = await exerciseStackSave(['Transparency will be lost.'], false);
+assert.equal(declined.result, null);
+assert.deepEqual(
+  declined.calls.map(([name]) => name),
+  ['image_stack_output_notices', 'confirm'],
+);
+assert.deepEqual(declined.calls[0][1], { outputFormat: 'tiff', bitDepth: 16, resultId: 'current-stack-result' });
+assert.equal(declined.calls[1][1], 'Transparency will be lost.');
+assert.equal(declined.calls[1][2].kind, 'warning');
+const confirmed = await exerciseStackSave(['Bit depth will be reduced.', 'Transparency will be lost.'], true);
+assert.equal(confirmed.result, '/photos/export.tif');
+assert.deepEqual(
+  confirmed.calls.map(([name]) => name),
+  ['image_stack_output_notices', 'confirm', 'choose-path', 'save_image_stack', 'refresh'],
+);
+assert.equal(confirmed.calls[1][1], 'Bit depth will be reduced.\n\nTransparency will be lost.');
+assert.equal(confirmed.calls[3][1].resultId, 'current-stack-result');
+const lossless = await exerciseStackSave([], false);
+assert.equal(lossless.result, '/photos/export.tif');
+assert.deepEqual(
+  lossless.calls.map(([name]) => name),
+  ['image_stack_output_notices', 'choose-path', 'save_image_stack', 'refresh'],
+);
 
 console.log(
   'Validated the shared editor/stack export dialog, exact resize settings, format path handling, metadata modes, EXIF overrides, and ICC backend contract.',

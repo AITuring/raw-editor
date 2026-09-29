@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import { confirm, save } from '@tauri-apps/plugin-dialog';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import type { ImageStackAlignmentMode, ImageStackBlendMode } from '../store/useUIStore';
@@ -146,6 +146,20 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
         const firstPath = imageStackModalState.sourcePaths[0];
         const exportFormat = settings.format;
         const format = IMAGE_STACK_EXPORT_FORMATS[exportFormat];
+        const outputNotices = await invoke<string[]>(Invokes.ImageStackOutputNotices, {
+          outputFormat: exportFormat,
+          bitDepth: settings.bitDepth,
+          resultId: imageStackModalState.resultId,
+        });
+        if (outputNotices.length > 0) {
+          const accepted = await confirm(outputNotices.join('\n\n'), {
+            title: i18n.t('modals.imageStack.save'),
+            kind: 'warning',
+            okLabel: i18n.t('modals.imageStack.save'),
+            cancelLabel: i18n.t('modals.imageStack.cancel'),
+          });
+          if (!accepted) return null;
+        }
         const outputPath =
           useSettingsStore.getState().osPlatform === 'android'
             ? null
