@@ -11850,6 +11850,8 @@ proptest! {
             prop_assert!(value.get(*field).is_some(), "missing Stack_Report field {field}");
         }
         let round_trip: StackReport = serde_json::from_str(&encoded).expect("schema round trip");
-        prop_assert_eq!(round_trip, report);
+        // JSON is the wire contract.  Comparing the re-serialized value avoids
+        // treating a one-ulp f64 parse/print round trip as a schema mismatch.
+        prop_assert_eq!(serde_json::to_value(round_trip).expect("round-trip value"), value);
     }
 }

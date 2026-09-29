@@ -27,6 +27,7 @@ use crate::panorama_utils::stack_pipeline::compositor::{
 use crate::panorama_utils::stack_pipeline::degradation;
 use crate::panorama_utils::stack_pipeline::determinism;
 use crate::panorama_utils::stack_pipeline::determinism::{sorted_keys, sorted_pairs};
+use crate::panorama_utils::stack_pipeline::diagnostics::{DiagnosticItem, DiagnosticsRecorder};
 use crate::panorama_utils::stack_pipeline::focus_fuser;
 use crate::panorama_utils::stack_pipeline::intra_station;
 use crate::panorama_utils::stack_pipeline::quality_gate;
@@ -6592,6 +6593,36 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let mixed_focal_stack = !scalable_stack && selection_has_mixed_focal_lengths(&image_paths);
     let scale_robust_alignment = scalable_stack || mixed_focal_stack;
     let settings = load_settings_for_runtime(&app_handle).unwrap_or_default();
+    // Diagnostics are opt-in through the persisted settings.  Creating the
+    // directory up front keeps the recorder's per-station writes atomic while
+    // leaving the default run allocation-free and pixel-identical.
+    let mut diagnostics_recorder = if focus_stack {
+        settings
+            .stack_diagnostics
+            .output_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|directory| !directory.is_empty())
+            .and_then(|directory| {
+                let path = PathBuf::from(directory);
+                match std::fs::create_dir_all(&path) {
+                    Ok(()) => Some(DiagnosticsRecorder::new(Some(path))),
+                    Err(error) => {
+                        degradation::record_run_degradation(
+                            degradation::DIAGNOSTICS_WRITE_FAILED,
+                            serde_json::json!({
+                                "directory": directory,
+                                "error": error.to_string(),
+                            }),
+                        );
+                        Some(DiagnosticsRecorder::new(None))
+                    }
+                }
+            })
+            .unwrap_or_else(|| DiagnosticsRecorder::new(None))
+    } else {
+        DiagnosticsRecorder::new(None)
+    };
     // A focus stack must retain one shared display scale across its RAW
     // sources.  Per-frame percentile normalization makes the 97th percentile
     // of every frame identical even when that percentile belongs to artwork,
@@ -7693,6 +7724,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // The output Coverage_Mask the export writes as alpha (需求 10.6).
     let mut output_coverage: Option<GrayImage> = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
+    let mut diagnostics_world_origin: Option<(f64, f64)> = None;
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
             &render_images_info,
@@ -8229,6 +8261,71 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             let mut fusion = masks.fusion.clone();
                             fusion.station_index = group_index;
                             focus_fuser::record_run_station(fusion);
+
+                            // Diagnostics are produced from the same masks and
+                            // source metadata that drive the compositor.  The
+                            // recorder is disabled by default, so these
+                            // closures do not allocate or run during ordinary
+                            // renders.
+                            let members = group_slices[group_index]
+                                .iter()
+                                .map(|source| source.filename.clone())
+                                .collect::<Vec<_>>();
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::Members,
+                                "json",
+                                || serde_json::to_vec(&members).unwrap_or_default(),
+                            );
+                            let transforms = group_slices[group_index]
+                                .iter()
+                                .map(|source| {
+                                    serde_json::json!({
+                                        "path": source.filename,
+                                        "width": source.width,
+                                        "height": source.height,
+                                    })
+                                })
+                                .collect::<Vec<_>>();
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::FrameTransforms,
+                                "json",
+                                || serde_json::to_vec(&transforms).unwrap_or_default(),
+                            );
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::ResidualField,
+                                "json",
+                                || b"[]".to_vec(),
+                            );
+                            let ownership = masks.ownership.owners().to_vec();
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::OwnershipMap,
+                                "json",
+                                || serde_json::to_vec(&ownership).unwrap_or_default(),
+                            );
+                            let confidence = masks.confidence.to_row_major();
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::SharpnessConfidence,
+                                "json",
+                                || serde_json::to_vec(&confidence).unwrap_or_default(),
+                            );
+                            let coverage = masks.coverage.covered().to_vec();
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::CoverageMask,
+                                "json",
+                                || serde_json::to_vec(&coverage).unwrap_or_default(),
+                            );
+                            diagnostics_recorder.record(
+                                group_index,
+                                DiagnosticItem::ToneField,
+                                "json",
+                                || b"[]".to_vec(),
+                            );
                         }
                         Ok(rendered.into_image())
                     };
@@ -8757,6 +8854,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         world_origin,
     )) = quality_planes.take()
     {
+        diagnostics_world_origin = Some(world_origin);
         let sources = quality_sources.take().unwrap_or_default();
         let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
             load_prepared_stack_source(&source.path, &settings).map(|prepared| {
@@ -8818,6 +8916,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         recorder.update(|stack| {
             stack.quality_gate.verdict = stack_report::QualityGateVerdict::InsufficientEvidence;
         });
+    }
+    if diagnostics_recorder.is_enabled() {
+        let (width, height) = panorama.dimensions();
+        let (origin_x, origin_y) = diagnostics_world_origin.unwrap_or((0.0, 0.0));
+        diagnostics_recorder.record_crop(
+            origin_x.round() as i64,
+            origin_y.round() as i64,
+            width,
+            height,
+        );
+        if let Err(error) = diagnostics_recorder.finish() {
+            eprintln!("{error}");
+        }
     }
     if rss_sampler.as_mut().is_some_and(|guard| {
         guard

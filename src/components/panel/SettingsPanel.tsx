@@ -388,6 +388,7 @@ export default function SettingsPanel({
     rawPreprocessingColorNr: appSettings?.rawPreprocessingColorNr ?? 0.5,
     rawPreprocessingSharpening: appSettings?.rawPreprocessingSharpening ?? 0.35,
     applyPreprocessingToNonRaws: appSettings?.applyPreprocessingToNonRaws ?? false,
+    stackDiagnosticsOutputDir: appSettings?.stackDiagnostics?.outputDir ?? '',
   });
   const [restartRequired, setRestartRequired] = useState(false);
   const [activeCategory, setActiveCategory] = useState('general');
@@ -489,6 +490,7 @@ export default function SettingsPanel({
       rawPreprocessingColorNr: appSettings?.rawPreprocessingColorNr ?? 0.5,
       rawPreprocessingSharpening: appSettings?.rawPreprocessingSharpening ?? 0.35,
       applyPreprocessingToNonRaws: appSettings?.applyPreprocessingToNonRaws ?? false,
+      stackDiagnosticsOutputDir: appSettings?.stackDiagnostics?.outputDir ?? '',
     });
     setRestartRequired(false);
   }, [appSettings]);
@@ -1647,6 +1649,33 @@ export default function SettingsPanel({
                               : 'auto'
                           }
                           triggerClassName="bg-bg-primary"
+                        />
+                      </SettingItem>
+
+                      <SettingItem
+                        label={t('settings.processing.stackDiagnosticsOutputDir')}
+                        description={t('settings.processing.stackDiagnosticsOutputDirDesc')}
+                      >
+                        <Input
+                          aria-label={t('settings.processing.stackDiagnosticsOutputDir')}
+                          value={processingSettings.stackDiagnosticsOutputDir}
+                          placeholder={t('settings.processing.stackDiagnosticsOutputDirPlaceholder')}
+                          onChange={(event) => {
+                            const outputDir = event.target.value;
+                            setProcessingSettings((previous) => ({
+                              ...previous,
+                              stackDiagnosticsOutputDir: outputDir,
+                            }));
+                          }}
+                          onBlur={() =>
+                            onSettingsChange({
+                              ...appSettings,
+                              stackDiagnostics: {
+                                ...(appSettings?.stackDiagnostics ?? {}),
+                                outputDir: processingSettings.stackDiagnosticsOutputDir.trim() || null,
+                              },
+                            })
+                          }
                         />
                       </SettingItem>
 

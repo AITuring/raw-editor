@@ -603,6 +603,100 @@ mod tests {
         }
     }
 
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+        // Feature: layered-camera-group-focus-stitching, Property 81: 诊断输出完整且与输出同坐标系
+        // 每个开启的 Capture_Station 都产生七类诊断条目，清单中的裁切区域与输出坐标一致。
+        //
+        // **Validates: Requirements 13.1, 13.2**
+        #[test]
+        fn property_81_diagnostics_output_is_complete_and_in_one_coordinate_system(
+            stations in 1usize..6,
+            width in 8u32..48,
+            height in 8u32..48,
+        ) {
+            let directory = tempfile::tempdir().expect("temporary diagnostics directory");
+            let mut recorder = DiagnosticsRecorder::new(Some(directory.path().to_path_buf()));
+            for station in 0..stations {
+                for item in DiagnosticItem::ALL {
+                    recorder.record(station, item, "bin", || vec![station as u8, 1, 2]);
+                }
+            }
+            recorder.record_crop(-7, 11, width, height);
+            let manifest = recorder
+                .finish()
+                .expect("diagnostics manifest")
+                .expect("enabled diagnostics");
+            let value: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(manifest).expect("manifest bytes"),
+            )
+            .expect("manifest json");
+            let items = value["items"].as_array().expect("items array");
+            prop_assert_eq!(items.len(), stations * DiagnosticItem::ALL.len());
+            prop_assert_eq!(&value["crop"]["left"], &serde_json::json!(-7));
+            prop_assert_eq!(&value["crop"]["top"], &serde_json::json!(11));
+            prop_assert_eq!(&value["crop"]["width"], &serde_json::json!(width));
+            prop_assert_eq!(&value["crop"]["height"], &serde_json::json!(height));
+            for item in items {
+                let file = item["file"].as_str().expect("item file");
+                prop_assert!(directory.path().join(file).is_file());
+            }
+        }
+
+        // Feature: layered-camera-group-focus-stitching, Property 82: ROI 诊断导出同尺寸同原点
+        // 接受的世界 ROI 导出 ownership、coverage、confidence 与 roi.json 使用同一窗口。
+        //
+        // **Validates: Requirements 13.3**
+        #[test]
+        fn property_82_roi_export_preserves_size_and_origin(side in 16u32..64) {
+            let (ownership, stations, coverage, confidence) = planes(side, 3);
+            let offset = side / 4;
+            let extent = side / 2;
+            let roi = DiagnosticRoi {
+                left: i64::from(offset),
+                top: i64::from(offset),
+                width: extent,
+                height: extent,
+            };
+            let directory = tempfile::tempdir().expect("temporary diagnostics directory");
+            let target = export_roi_planes(
+                directory.path(),
+                roi,
+                (0, 0),
+                &ownership,
+                &stations,
+                &coverage,
+                &confidence,
+            )
+            .expect("central covered ROI exports");
+            let metadata: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(target.join("roi.json")).expect("ROI metadata"),
+            )
+            .expect("ROI metadata json");
+            let width = metadata["width"].as_u64().expect("metadata width") as u32;
+            let height = metadata["height"].as_u64().expect("metadata height") as u32;
+            prop_assert_eq!(width, extent);
+            prop_assert_eq!(height, extent);
+            prop_assert_eq!(&metadata["world_left"], &serde_json::json!(offset));
+            prop_assert_eq!(&metadata["world_top"], &serde_json::json!(offset));
+            let owners = image::open(target.join("ownership.png"))
+                .expect("ownership plane")
+                .to_luma16();
+            let covered = image::open(target.join("coverage.png"))
+                .expect("coverage plane")
+                .to_luma8();
+            prop_assert_eq!(owners.dimensions(), (width, height));
+            prop_assert_eq!(covered.dimensions(), (width, height));
+            prop_assert_eq!(
+                std::fs::metadata(target.join("confidence.f32"))
+                    .expect("confidence plane")
+                    .len(),
+                u64::from(width) * u64::from(height) * 4,
+            );
+        }
+    }
+
     #[test]
     fn a_missing_directory_is_a_diagnostics_write_failure_naming_it() {
         let (ownership, stations, coverage, confidence) = planes(16, 2);

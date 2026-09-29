@@ -398,6 +398,18 @@ pub fn default_open_tree_sections() -> Vec<String> {
     vec!["current".to_string()]
 }
 
+/// Optional diagnostics export settings for the focus-stack pipeline.
+/// Keeping the path nested makes it possible to add diagnostics controls
+/// without changing the shape of unrelated settings.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StackDiagnosticsSettings {
+    /// User-selected directory for per-station diagnostic planes. `None`
+    /// disables diagnostics and keeps the pipeline allocation-free.
+    #[serde(default)]
+    pub output_dir: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -532,6 +544,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub stack_compositor: Option<String>,
     #[serde(default)]
+    pub stack_diagnostics: StackDiagnosticsSettings,
+    #[serde(default)]
     pub workspace: WorkspaceState,
 }
 
@@ -625,6 +639,7 @@ impl Default for AppSettings {
             always_decode_raw_thumbnails: Some(false),
             // 需求 15.10: every comparison compositor is off by default.
             stack_compositor: None,
+            stack_diagnostics: StackDiagnosticsSettings::default(),
             workspace: WorkspaceState::default(),
         }
     }

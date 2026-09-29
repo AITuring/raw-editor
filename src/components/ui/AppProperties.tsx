@@ -246,6 +246,9 @@ export interface AppSettings {
   groupEditedFiles?: boolean;
   groupPreferredType?: GroupPreference; // legacy
   alwaysDecodeRawThumbnails?: boolean;
+  stackDiagnostics?: {
+    outputDir?: string | null;
+  };
   workspace?: WorkspaceState;
 }
 
