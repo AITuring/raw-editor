@@ -245,7 +245,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /select_and_record_run_path\(\s*station_count,\s*compositor_choice,\s*stack_report\.as_ref\(\),?\s*\)/,
+  /select_and_record_run_path\(\s*station_count,\s*compositor_choice,\s*stack_report\.(?:as_ref\(\)|as_deref\(\)),?\s*\)/,
   'production must use one boundary for compositor execution and Stack_Report path recording',
 );
 assert.match(

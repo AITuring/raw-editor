@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 
@@ -39,6 +39,61 @@ use crate::panorama_utils::stack_pipeline::topology;
 use crate::panorama_utils::stack_pipeline::virtual_tile;
 use crate::panorama_utils::stitching::{Projection, project_point};
 use crate::panorama_utils::{processing, stitching};
+
+/// Owns the run-scoped RSS sampler and publishes its final sample even when a
+/// focus-stack stage returns early.  The sampler only requests cancellation;
+/// the caller checks it at stage boundaries and returns before writing output.
+struct FocusRssGuard {
+    sampler: Option<resources::RssSampler>,
+    threshold_bytes: u64,
+    recorder: Option<Arc<stack_report::StackReportRecorder>>,
+}
+
+impl FocusRssGuard {
+    fn cancelled(&self) -> bool {
+        self.sampler
+            .as_ref()
+            .is_some_and(resources::RssSampler::cancelled)
+    }
+
+    fn finish(&mut self) -> Option<resources::RssSample> {
+        let sample = self
+            .sampler
+            .take()
+            .map(|sampler| sampler.stop(self.threshold_bytes))?;
+        if let Some(recorder) = self.recorder.as_ref() {
+            recorder.update(|report| {
+                report.resources.peak_rss_bytes = sample.peak_rss_bytes;
+                report.resources.rss_sample_count = sample.sample_count;
+                report.resources.memory_threshold_exceeded = sample.threshold_exceeded;
+            });
+        }
+        if sample.threshold_exceeded {
+            degradation::record_run_degradation(
+                degradation::MEMORY_THRESHOLD_EXCEEDED,
+                serde_json::json!({
+                    "threshold_bytes": self.threshold_bytes,
+                    "peak_rss_bytes": sample.peak_rss_bytes,
+                    "sample_count": sample.sample_count,
+                }),
+            );
+        }
+        Some(sample)
+    }
+}
+
+impl Drop for FocusRssGuard {
+    fn drop(&mut self) {
+        let _ = self.finish();
+    }
+}
+
+fn ensure_focus_memory_available(sampler: Option<&FocusRssGuard>) -> Result<(), String> {
+    if sampler.is_some_and(FocusRssGuard::cancelled) {
+        return Err("memory threshold exceeded during focus-stack run".to_string());
+    }
+    Ok(())
+}
 
 pub const BRIEF_DESCRIPTOR_SIZE: usize = 256;
 pub type Descriptor = [u8; BRIEF_DESCRIPTOR_SIZE / 8];
@@ -6368,6 +6423,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     blend_mode: BlendMode,
     progress_event: &str,
 ) -> Result<StitchOutcome, String> {
+    let _run_scope = degradation::begin_run_scope();
     let image_paths = image_paths
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
@@ -6452,7 +6508,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             report.resources.worker_threads = rayon::current_num_threads();
             report.resources.random_seed_source = determinism::run_random_seed_source().to_string();
         });
-        recorder
+        Arc::new(recorder)
     });
     // Sample process RSS for the complete focus-stack run.  No settings
     // source is exposed by the current runtime entry point, so the documented
@@ -6478,10 +6534,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 report.resources.physical_memory_bytes = physical_memory_bytes;
             });
         }
-        Some((sampler, threshold.bytes))
+        Some(FocusRssGuard {
+            sampler: Some(sampler),
+            threshold_bytes: threshold.bytes,
+            recorder: stack_report.clone(),
+        })
     } else {
         None
     };
+    ensure_focus_memory_available(rss_sampler.as_ref())?;
     if image_paths.len() < 2 {
         degradation::record_run_degradation(
             degradation::INPUT_SOURCE_COUNT_OUT_OF_RANGE,
@@ -7540,6 +7601,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     println!("Warping and blending images with progressive optimal seams...");
 
     let mut load_render_image = |image: &ImageInfo| {
+        ensure_focus_memory_available(rss_sampler.as_ref())?;
         let mut rendered = if let Some(full_image) = retained_full_images.remove(&image.id) {
             if full_image.dimensions() == image.dimensions() {
                 Ok(full_image)
@@ -7617,8 +7679,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 );
             }
             let station_count = focus_capture_groups.as_ref().map(|groups| groups.len());
-            let path_selection =
-                select_and_record_run_path(station_count, compositor_choice, stack_report.as_ref());
+            let path_selection = select_and_record_run_path(
+                station_count,
+                compositor_choice,
+                stack_report.as_deref(),
+            );
             if !path_selection.use_virtual_tiles {
                 stitching::focus_stack_stitcher(
                     &render_images_info,
@@ -8073,7 +8138,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         .iter()
                         .map(|&group_index| &tile_infos[group_index])
                         .collect::<Vec<_>>();
+                    let mut station_masks: Vec<Option<stitching::FocusStackTileMasks>> =
+                        (0..tile_infos.len()).map(|_| None).collect();
                     let mut load_tile = |tile: &ImageInfo| {
+                        ensure_focus_memory_available(rss_sampler.as_ref())?;
                         let group_index =
                             tile_group_indices.get(&tile.id).copied().ok_or_else(|| {
                                 format!("Missing virtual tile provenance {}", tile.id)
@@ -8113,6 +8181,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // the first caller that knows which station was rendered
                         // (需求 3.5 / 3.8 / 3.9).
                         if let Some(masks) = rendered.masks.as_ref() {
+                            station_masks[group_index] = Some(masks.clone());
                             let mut fusion = masks.fusion.clone();
                             fusion.station_index = group_index;
                             focus_fuser::record_run_station(fusion);
@@ -8145,25 +8214,6 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         let sharpen = f64::from(stitching::layered_final_sharpen_amount());
                         recorder.update(|report| report.composition.final_sharpen_amount = sharpen);
                     }
-                    quality_sources = Some(
-                        tile_infos
-                            .iter()
-                            .enumerate()
-                            .map(|(station, tile)| quality_gate_runner::QualitySource {
-                                owner: (station + 1).min(u16::MAX as usize) as u16,
-                                path: tile.filename.clone(),
-                                geometry: quality_gate::SourceGeometry {
-                                    member_to_anchor: Matrix3::identity(),
-                                    tile_to_world: tile_homographies
-                                        .get(&tile.id)
-                                        .copied()
-                                        .unwrap_or_else(Matrix3::identity),
-                                    station_id: station,
-                                },
-                                dimensions: (tile.width, tile.height),
-                            })
-                            .collect(),
-                    );
                     let tile_result = match compositor_choice {
                         // Comparison: the streaming detail-preserving mosaic.
                         StackCompositorChoice::StreamingMosaic => {
@@ -8209,6 +8259,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // in here instead of panicking on an unreachable arm.
                         StackCompositorChoice::LayeredVirtualTile
                         | StackCompositorChoice::LegacySingleLayerMosaic => {
+                            ensure_focus_memory_available(rss_sampler.as_ref())?;
                             // The ownership planes are retained for the Quality_Gate. A
                             // compositor error still reaches the fallback renderer below.
                             stitching::layered_virtual_tile_compositor_with_ownership(
@@ -8220,7 +8271,113 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 &mut load_tile,
                             )
                             .map(|rendered| {
+                                if let Some(recorder) = stack_report.as_ref() {
+                                    // The layered compositor decodes one full-size
+                                    // Virtual_Tile at a time; focus masks are retained
+                                    // separately and contain no pixel buffer.
+                                    recorder.record_max_resident_virtual_tiles(1);
+                                }
                                 let (width, height) = rendered.coverage.dimensions();
+                                // The compositor names the owning Virtual_Tile.  Resolve that
+                                // name back through the station's focus Ownership_Map so the
+                                // quality gate samples the actual Source_RAW that supplied the
+                                // pixel (output -> station -> virtual-tile coordinate -> raw
+                                // ownership cell), rather than a synthetic virtual path.
+                                let mut raw_sources = Vec::new();
+                                let mut raw_owner_ids = vec![Vec::new(); group_slices.len()];
+                                let mut next_owner = 1u16;
+                                for station in 0..group_slices.len() {
+                                    let station_to_world = tile_homographies
+                                        .get(&tile_infos[station].id)
+                                        .copied()
+                                        .unwrap_or_else(Matrix3::identity);
+                                    for source in group_slices[station] {
+                                        let owner = next_owner;
+                                        raw_owner_ids[station].push(owner);
+                                        raw_sources.push(quality_gate_runner::QualitySource {
+                                            owner,
+                                            path: source.filename.clone(),
+                                            geometry: quality_gate::SourceGeometry {
+                                                member_to_anchor: Matrix3::identity(),
+                                                tile_to_world: station_to_world
+                                                    * station_render_homographies
+                                                        .get(&source.id)
+                                                        .copied()
+                                                        .unwrap_or_else(Matrix3::identity),
+                                                station_id: station,
+                                            },
+                                            dimensions: (source.width, source.height),
+                                        });
+                                        next_owner = next_owner.saturating_add(1);
+                                    }
+                                }
+                                let mut ownership = rendered.ownership.owners().to_vec();
+                                let mut confidence = vec![f32::NAN; ownership.len()];
+                                for (index, owner) in ownership.iter_mut().enumerate() {
+                                    let compositor_owner = *owner;
+                                    let tile_index = usize::from(compositor_owner).checked_sub(1);
+                                    let Some(tile_index) = tile_index else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    let Some(&station) = group_order.get(tile_index) else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    let Some(masks) =
+                                        station_masks.get(station).and_then(Option::as_ref)
+                                    else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    let station_to_world = tile_homographies
+                                        .get(&tile_infos[station].id)
+                                        .copied()
+                                        .unwrap_or_else(Matrix3::identity);
+                                    let Some(world_to_station) = station_to_world.try_inverse()
+                                    else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    let x = (index % width as usize) as f64;
+                                    let y = (index / width as usize) as f64;
+                                    let Some(local) = transformed_point(
+                                        &world_to_station,
+                                        Point2::new(
+                                            rendered.sampling_origin.0 + x,
+                                            rendered.sampling_origin.1 + y,
+                                        ),
+                                    ) else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    let (mask_width, mask_height) = masks.ownership.dimensions();
+                                    let sx = local.x.round();
+                                    let sy = local.y.round();
+                                    if !sx.is_finite()
+                                        || !sy.is_finite()
+                                        || sx < 0.0
+                                        || sy < 0.0
+                                        || sx >= f64::from(mask_width)
+                                        || sy >= f64::from(mask_height)
+                                    {
+                                        *owner = 0;
+                                        continue;
+                                    }
+                                    let raw_local = masks.ownership.owner_at(sx as u32, sy as u32);
+                                    let Some(&raw_owner) =
+                                        raw_owner_ids.get(station).and_then(|owners| {
+                                            owners.get(usize::from(raw_local).saturating_sub(1))
+                                        })
+                                    else {
+                                        *owner = 0;
+                                        continue;
+                                    };
+                                    *owner = raw_owner;
+                                    confidence[index] =
+                                        masks.confidence.value_at(sx as u32, sy as u32);
+                                }
+                                quality_sources = Some(raw_sources);
                                 quality_planes = Some((
                                     GrayImage::from_raw(
                                         width,
@@ -8228,11 +8385,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         rendered.coverage.covered().to_vec(),
                                     )
                                     .unwrap_or_else(|| GrayImage::new(width, height)),
-                                    rendered.ownership.owners().to_vec(),
-                                    // Per-station Sharpness_Confidence is not composed
-                                    // into the output plane yet: NaN marks it unknown,
-                                    // so that criterion is recorded as unmeasurable.
-                                    vec![f32::NAN; width as usize * height as usize],
+                                    ownership,
+                                    confidence,
                                     rendered.sampling_origin,
                                 ));
                                 rendered.image
@@ -8291,6 +8445,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             }
         }
     }?;
+    ensure_focus_memory_available(rss_sampler.as_ref())?;
     if let Some((coverage, ownership, confidence, world_origin)) = quality_planes.take() {
         let sources = quality_sources.take().unwrap_or_default();
         let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
@@ -8320,14 +8475,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             stack.quality_gate.verdict = stack_report::QualityGateVerdict::InsufficientEvidence;
         });
     }
-    if let Some((sampler, threshold_bytes)) = rss_sampler.take() {
-        let sample = sampler.stop(threshold_bytes);
-        if let Some(recorder) = stack_report.as_ref() {
-            recorder.update(|report| {
-                report.resources.peak_rss_bytes = sample.peak_rss_bytes;
-                report.resources.rss_sample_count = sample.sample_count;
-            });
-        }
+    if rss_sampler.as_mut().is_some_and(|guard| {
+        guard
+            .finish()
+            .is_some_and(|sample| sample.threshold_exceeded)
+    }) {
+        return Err("memory threshold exceeded during focus-stack run".to_string());
     }
     // The source-stage canvas places every station at its source-stage pose.
     // Once the Virtual_Tile stage replaced those poses the composed canvas is

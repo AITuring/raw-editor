@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use image::{GrayImage, ImageBuffer, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Vector3};
 
+use super::degradation;
 use super::quality_gate::{self, EffectivePixelCoverage, QualityRoi, SourceGeometry};
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
@@ -55,6 +56,11 @@ struct Criterion {
     failed: Vec<FailedMeasurementRecord>,
     unmeasurable: usize,
     diagnostic: bool,
+    observed_count: usize,
+    /// Keep reports bounded when a large canvas has many boundary samples.
+    /// The count remains exact while only a deterministic prefix is retained
+    /// for the per-point diagnostics.
+    record_limit: usize,
 }
 
 impl Default for Criterion {
@@ -68,6 +74,8 @@ impl Default for Criterion {
             failed: Vec::new(),
             unmeasurable: 0,
             diagnostic: false,
+            observed_count: 0,
+            record_limit: usize::MAX,
         }
     }
 }
@@ -101,6 +109,7 @@ impl Criterion {
     }
 
     fn push(&mut self, world: (f64, f64), value: f64, owner_path: &str, pass: bool) {
+        self.observed_count = self.observed_count.saturating_add(1);
         let item = FailedMeasurementRecord {
             world: WorldPoint {
                 x: world.0,
@@ -109,8 +118,10 @@ impl Criterion {
             measured: value,
             owner_path: owner_path.to_string(),
         };
-        self.measured.push(item.clone());
-        if !pass {
+        if self.measured.len() < self.record_limit {
+            self.measured.push(item.clone());
+        }
+        if !pass && self.failed.len() < self.record_limit {
             self.failed.push(item);
         }
     }
@@ -127,7 +138,7 @@ impl Criterion {
             threshold: self.threshold,
             threshold_min: self.min,
             threshold_max: self.max,
-            measurable_count: self.measured.len(),
+            measurable_count: self.observed_count,
             unmeasurable_count: self.unmeasurable,
             measured: self.measured,
             diagnostic: self.diagnostic,
@@ -195,12 +206,19 @@ fn source_roi(
                 roi.world_origin.1 + f64::from(y),
             );
             let mapped = quality_gate::map_world_to_source(world, geometry, residual)?;
-            let sx = mapped
-                .x
-                .clamp(0.0, f64::from(source.width().saturating_sub(1)));
-            let sy = mapped
-                .y
-                .clamp(0.0, f64::from(source.height().saturating_sub(1)));
+            let max_x = f64::from(source.width().saturating_sub(1));
+            let max_y = f64::from(source.height().saturating_sub(1));
+            if !mapped.x.is_finite()
+                || !mapped.y.is_finite()
+                || mapped.x < 0.0
+                || mapped.y < 0.0
+                || mapped.x > max_x
+                || mapped.y > max_y
+            {
+                return Err(degradation::OWNER_SOURCE_UNDECODABLE);
+            }
+            let sx = mapped.x;
+            let sy = mapped.y;
             let x0 = sx.floor() as u32;
             let y0 = sy.floor() as u32;
             let x1 = (x0 + 1).min(source.width().saturating_sub(1));
@@ -247,9 +265,8 @@ fn ratio(measured: f64, reference: f64, min: f64, max: f64) -> Option<(f64, bool
 /// renders. The exact region labelling and distance transform are useful for
 /// ordinary unit-sized fixtures, but a 9k by 11k canvas would allocate and
 /// scan several gigabytes just to choose 512px ROIs. A deterministic lattice
-/// still checks ownership and coverage over every candidate ROI; the two
-/// criteria that require a complete canvas (effective coverage and boundary
-/// tracing) are recorded as unmeasurable below.
+/// still checks ownership and coverage over every pixel in a candidate ROI;
+/// effective coverage and boundary tracing use separate streaming passes.
 fn select_sparse_rois(
     coverage: &GrayImage,
     ownership: &[u16],
@@ -268,8 +285,8 @@ fn select_sparse_rois(
                 continue;
             }
             let mut same_owner = true;
-            for ry in (0..side).step_by(32) {
-                for rx in (0..side).step_by(32) {
+            for ry in 0..side {
+                for rx in 0..side {
                     let index = ((y + ry) * width + x + rx) as usize;
                     if coverage.as_raw()[index] == 0 || ownership[index] != owner {
                         same_owner = false;
@@ -299,13 +316,12 @@ fn select_sparse_rois(
     result
 }
 
-fn sparse_confidence_coverage(coverage: &GrayImage, confidence: &[f32]) -> Option<f64> {
+fn streaming_confidence_coverage(coverage: &GrayImage, confidence: &[f32]) -> Option<f64> {
     let (width, height) = coverage.dimensions();
-    let step = 16u32;
     let mut covered = 0usize;
     let mut low = 0usize;
-    for y in (0..height).step_by(step as usize) {
-        for x in (0..width).step_by(step as usize) {
+    for y in 0..height {
+        for x in 0..width {
             let index = (y * width + x) as usize;
             // A non-finite value is an unknown confidence, not a sharp pixel.
             if coverage.as_raw()[index] == 0 || !confidence[index].is_finite() {
@@ -318,6 +334,265 @@ fn sparse_confidence_coverage(coverage: &GrayImage, confidence: &[f32]) -> Optio
         }
     }
     (covered > 0).then(|| 1.0 - low as f64 / covered as f64)
+}
+
+/// Count the unique projected source coverage one scanline at a time. This is
+/// equivalent to `quality_gate::effective_pixel_coverage`, but never allocates
+/// a canvas-sized union bitmap (which is prohibitive for the acceptance
+/// renders). Only the current row's sorted intervals are resident.
+fn effective_pixel_coverage_streaming(
+    coverage: &GrayImage,
+    source_quadrilaterals: &[[Point2<f64>; 4]],
+    canvas_world_origin: (f64, f64),
+) -> Result<EffectivePixelCoverage, &'static str> {
+    let (width, height) = coverage.dimensions();
+    if width == 0 || height == 0 || source_quadrilaterals.is_empty() {
+        return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
+    }
+    let output_nontransparent = coverage
+        .as_raw()
+        .iter()
+        .filter(|&&value| value != 0)
+        .count() as u64;
+    let mut projected_union = 0u64;
+    for y in 0..height {
+        let scan_y = canvas_world_origin.1 + f64::from(y) + 0.5;
+        let mut intervals = Vec::<(f64, f64)>::new();
+        for quad in source_quadrilaterals {
+            if !quad
+                .iter()
+                .all(|point| point.x.is_finite() && point.y.is_finite())
+            {
+                return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+            }
+            let mut intersections = [0.0f64; 4];
+            let mut count = 0usize;
+            for edge in 0..4 {
+                let a = quad[edge];
+                let b = quad[(edge + 1) % 4];
+                if ((a.y <= scan_y && scan_y < b.y) || (b.y <= scan_y && scan_y < a.y))
+                    && count < intersections.len()
+                {
+                    intersections[count] = a.x + (scan_y - a.y) * (b.x - a.x) / (b.y - a.y);
+                    count += 1;
+                }
+            }
+            if count >= 2 {
+                intersections[..count].sort_by(f64::total_cmp);
+                for pair in intersections[..count].chunks_exact(2) {
+                    let start = (pair[0] - canvas_world_origin.0 - 0.5)
+                        .ceil()
+                        .max(0.0)
+                        .min(f64::from(width)) as u32;
+                    let end = (pair[1] - canvas_world_origin.0 - 0.5)
+                        .ceil()
+                        .max(0.0)
+                        .min(f64::from(width)) as u32;
+                    if end > start {
+                        intervals.push((f64::from(start), f64::from(end)));
+                    }
+                }
+            }
+        }
+        intervals.sort_by(|left, right| {
+            left.0
+                .total_cmp(&right.0)
+                .then_with(|| left.1.total_cmp(&right.1))
+        });
+        let mut union = 0u64;
+        let mut active: Option<(f64, f64)> = None;
+        for (start, end) in intervals {
+            let Some((active_start, active_end)) = active else {
+                active = Some((start, end));
+                continue;
+            };
+            if start > active_end {
+                union = union.saturating_add((active_end - active_start).max(0.0) as u64);
+                active = Some((start, end));
+            } else if end > active_end {
+                active = Some((active_start, end));
+            }
+        }
+        if let Some((active_start, active_end)) = active {
+            union = union.saturating_add((active_end - active_start).max(0.0) as u64);
+        }
+        projected_union = projected_union.saturating_add(union);
+    }
+    if projected_union == 0 {
+        return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
+    }
+    Ok(EffectivePixelCoverage {
+        output_nontransparent,
+        projected_union,
+        ratio: output_nontransparent as f64 / projected_union as f64,
+    })
+}
+
+/// Return the two-sided subpixel edge displacement at one ownership boundary.
+/// `normal` is either horizontal `(1,0)` or vertical `(0,1)` and is derived
+/// directly from the neighbouring ownership pixels, so no full label image is
+/// needed.
+fn boundary_point_error(image: &Rgb32FImage, x: u32, y: u32, normal: (f64, f64)) -> Option<f64> {
+    let (width, height) = image.dimensions();
+    let luminance = |pixel: Rgb<f32>| {
+        0.2126 * f64::from(pixel[0]) + 0.7152 * f64::from(pixel[1]) + 0.0722 * f64::from(pixel[2])
+    };
+    let mut sides = [(0.0f64, 0.0f64), (0.0f64, 0.0f64)];
+    for (side_index, side) in [-1.0f64, 1.0].into_iter().enumerate() {
+        let mut contrast_sum = 0.0;
+        let mut position_sum = 0.0;
+        let mut orientation_sum = 0.0;
+        for distance in 1..=16 {
+            let distance = f64::from(distance);
+            let sx = f64::from(x) + side * normal.0 * distance;
+            let sy = f64::from(y) + side * normal.1 * distance;
+            let ix = sx.round() as i32;
+            let iy = sy.round() as i32;
+            if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
+                continue;
+            }
+            let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
+                - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
+            let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
+                - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
+            let contrast = gx.hypot(gy) * 0.5;
+            if contrast < 0.15 {
+                continue;
+            }
+            contrast_sum += contrast;
+            position_sum += side * distance * contrast;
+            orientation_sum += gy.atan2(gx).to_degrees() * contrast;
+        }
+        if contrast_sum <= 0.0 {
+            return None;
+        }
+        sides[side_index] = (position_sum / contrast_sum, orientation_sum / contrast_sum);
+    }
+    let mut angle_error = (sides[0].1 - sides[1].1).abs() % 180.0;
+    if angle_error > 90.0 {
+        angle_error = 180.0 - angle_error;
+    }
+    (angle_error <= 10.0).then(|| (sides[0].0 + sides[1].0).abs())
+}
+
+/// Stream ownership transitions for large canvases. A fixed histogram keeps
+/// the P95 exact to 0.01px while retaining only a bounded diagnostic prefix.
+fn measure_large_boundaries(
+    image: &Rgb32FImage,
+    coverage: &GrayImage,
+    ownership: &[u16],
+    origin: (f64, f64),
+    criterion: &mut Criterion,
+    unmeasurable: &mut Vec<UnmeasurableRecord>,
+) {
+    let (width, height) = coverage.dimensions();
+    let width_usize = width as usize;
+    let mut seen = BTreeMap::<(u16, u16), u32>::new();
+    let mut hist = [0u64; 301];
+    let mut measured = 0u64;
+    let mut max_error = 0.0f64;
+    let mut first_world = origin;
+    let mut first_path = String::new();
+    let mut visit = |x: u32, y: u32, normal: (f64, f64), left: u16, right: u16| {
+        if left == 0 || right == 0 || left == right {
+            return;
+        }
+        let pair = if left < right {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        let counter = seen.entry(pair).or_default();
+        let sample = (*counter).is_multiple_of(256);
+        *counter = counter.saturating_add(1);
+        if !sample {
+            return;
+        }
+        let world = (origin.0 + f64::from(x), origin.1 + f64::from(y));
+        let Some(error) = boundary_point_error(image, x, y, normal) else {
+            unmeasurable.push(UnmeasurableRecord {
+                criterion: criterion.name.to_string(),
+                world: WorldPoint {
+                    x: world.0,
+                    y: world.1,
+                },
+                reason: degradation::BOUNDARY_NO_PAIRABLE_EDGE.to_string(),
+            });
+            criterion.miss();
+            return;
+        };
+        if measured == 0 {
+            first_world = world;
+            first_path = format!("owner:{}/owner:{}", pair.0, pair.1);
+        }
+        measured = measured.saturating_add(1);
+        max_error = max_error.max(error);
+        let bucket = (error.max(0.0) * 100.0).floor().min(300.0) as usize;
+        hist[bucket] = hist[bucket].saturating_add(1);
+        criterion.push(
+            world,
+            error,
+            &format!("owner:{}/owner:{}", pair.0, pair.1),
+            error <= quality_gate::QUALITY_BOUNDARY_MAX,
+        );
+    };
+    for y in 0..height {
+        for x in 0..width.saturating_sub(1) {
+            let index = (y * width + x) as usize;
+            if coverage.as_raw()[index] != 0
+                && coverage.as_raw()[index + 1] != 0
+                && ownership[index] != ownership[index + 1]
+            {
+                visit(x, y, (1.0, 0.0), ownership[index], ownership[index + 1]);
+            }
+        }
+    }
+    for y in 0..height.saturating_sub(1) {
+        for x in 0..width {
+            let index = (y * width + x) as usize;
+            if coverage.as_raw()[index] != 0
+                && coverage.as_raw()[index + width_usize] != 0
+                && ownership[index] != ownership[index + width_usize]
+            {
+                visit(
+                    x,
+                    y,
+                    (0.0, 1.0),
+                    ownership[index],
+                    ownership[index + width_usize],
+                );
+            }
+        }
+    }
+    if measured == 0 {
+        criterion.miss();
+        unmeasurable.push(UnmeasurableRecord {
+            criterion: criterion.name.to_string(),
+            world: WorldPoint {
+                x: origin.0,
+                y: origin.1,
+            },
+            reason: degradation::BOUNDARY_NO_PAIRABLE_EDGE.to_string(),
+        });
+        return;
+    }
+    let target = (measured * 95).div_ceil(100).max(1);
+    let mut cumulative = 0u64;
+    let mut p95 = 3.0;
+    for (index, count) in hist.iter().enumerate() {
+        cumulative = cumulative.saturating_add(*count);
+        if cumulative >= target {
+            p95 = index as f64 / 100.0;
+            break;
+        }
+    }
+    criterion.push(
+        first_world,
+        p95,
+        &first_path,
+        p95 <= quality_gate::QUALITY_BOUNDARY_P95_MAX
+            && max_error <= quality_gate::QUALITY_BOUNDARY_MAX,
+    );
 }
 
 /// Execute all nine criteria in record-only mode. No decision from the return
@@ -486,6 +761,7 @@ pub(crate) fn run_quality_gate(
                 input.residual,
                 input.acceptance_render_scale,
             );
+            let local = scale.as_ref().ok().map(|value| value.median).unwrap_or(1.0);
             match scale {
                 Ok(value) => {
                     local_scale.push(
@@ -508,15 +784,6 @@ pub(crate) fn run_quality_gate(
                     record_unmeasurable(&mut local_ratio, &mut unmeasurable, roi, reason);
                 }
             }
-            let local = quality_gate::local_scale_for_roi(
-                roi,
-                &source_info.geometry,
-                input.residual,
-                input.acceptance_render_scale,
-            )
-            .ok()
-            .map(|v| v.median)
-            .unwrap_or(1.0);
             match (
                 quality_gate::slanted_edge_mtf50(&output_roi, local),
                 quality_gate::slanted_edge_mtf50(&reference, 1.0),
@@ -599,11 +866,8 @@ pub(crate) fn run_quality_gate(
         .iter()
         .filter_map(source_quad)
         .collect::<Vec<_>>();
-    let effective_result = if large_plane {
-        Err("diagnostics_plane_too_large")
-    } else {
-        quality_gate::effective_pixel_coverage(input.coverage, &quads, input.world_origin)
-    };
+    let effective_result =
+        effective_pixel_coverage_streaming(input.coverage, &quads, input.world_origin);
     match effective_result {
         Ok(EffectivePixelCoverage { ratio, .. }) => effective.push(
             input.world_origin,
@@ -629,6 +893,7 @@ pub(crate) fn run_quality_gate(
         quality_gate::QUALITY_BOUNDARY_P95_MAX,
         quality_gate::QUALITY_BOUNDARY_MAX,
     );
+    boundary.record_limit = 2_048;
     if let Some(regions) = regions.as_ref() {
         for left in &regions.regions {
             for right in &regions.regions {
@@ -680,15 +945,14 @@ pub(crate) fn run_quality_gate(
             }
         }
     } else {
-        boundary.miss();
-        unmeasurable.push(UnmeasurableRecord {
-            criterion: boundary.name.to_string(),
-            world: WorldPoint {
-                x: input.world_origin.0,
-                y: input.world_origin.1,
-            },
-            reason: "diagnostics_plane_too_large".to_string(),
-        });
+        measure_large_boundaries(
+            input.output,
+            input.coverage,
+            input.ownership,
+            input.world_origin,
+            &mut boundary,
+            &mut unmeasurable,
+        );
     }
 
     let mut confidence = Criterion::new(
@@ -723,7 +987,7 @@ pub(crate) fn run_quality_gate(
                 Some(1.0 - low as f64 / covered as f64)
             }
         }
-        _ if large_plane => sparse_confidence_coverage(input.coverage, input.confidence),
+        _ if large_plane => streaming_confidence_coverage(input.coverage, input.confidence),
         _ => quality_gate::sharpness_confidence_coverage(input.coverage, input.confidence).ok(),
     };
     match confidence_value {

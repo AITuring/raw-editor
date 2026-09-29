@@ -21,7 +21,7 @@
 
 use std::io;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -598,6 +598,21 @@ impl DegradationLedger {
 /// observation additive: no signature changes, no behaviour changes, and a
 /// record is a push onto a `Vec` behind an uncontended lock.
 static RUN_LEDGER: Mutex<DegradationLedger> = Mutex::new(DegradationLedger::new());
+
+/// Serialises operations that use the process-wide run observation sinks.  The
+/// sinks predate concurrent runs and are intentionally kept signature-free;
+/// one guard now makes reset -> render -> snapshot an atomic run transaction.
+static RUN_SCOPE: Mutex<()> = Mutex::new(());
+
+pub(crate) struct RunScope(MutexGuard<'static, ()>);
+
+pub(crate) fn begin_run_scope() -> RunScope {
+    RunScope(
+        RUN_SCOPE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    )
+}
 
 fn with_run_ledger<T>(body: impl FnOnce(&mut DegradationLedger) -> T) -> T {
     let mut guard = RUN_LEDGER

@@ -1056,6 +1056,9 @@ pub(crate) struct ResourcesReport {
     pub physical_memory_bytes: u64,
     pub peak_rss_bytes: u64,
     pub rss_sample_count: u64,
+    /// The sampler observed the threshold before the run stopped at a
+    /// cooperative stage boundary.
+    pub memory_threshold_exceeded: bool,
     /// Highest number of simultaneously leased full-size Virtual_Tiles
     /// (requirement 14.4).
     pub max_resident_virtual_tiles: usize,
@@ -1073,6 +1076,7 @@ impl Default for ResourcesReport {
             physical_memory_bytes: 0,
             peak_rss_bytes: 0,
             rss_sample_count: 0,
+            memory_threshold_exceeded: false,
             max_resident_virtual_tiles: 0,
             network_requests: 0,
             worker_threads: 0,
@@ -1241,6 +1245,10 @@ pub(crate) fn resolve_stack_report_dir<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
 ) -> Option<PathBuf> {
     use tauri::Manager;
+
+    if let Some(directory) = std::env::var_os("RAW_EDITOR_STACK_REPORT_DIR") {
+        return Some(PathBuf::from(directory));
+    }
 
     app_handle
         .path()

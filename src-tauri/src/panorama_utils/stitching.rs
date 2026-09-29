@@ -557,6 +557,7 @@ pub(crate) enum ConfidenceMap {
 impl ConfidenceMap {
     /// Placeholder map: every pixel reads 0.0 (需求 3.9 treats "no runner-up
     /// evidence" as zero confidence).
+    #[cfg(test)]
     pub(crate) fn zero(width: u32, height: u32) -> Self {
         Self::Uniform {
             width,

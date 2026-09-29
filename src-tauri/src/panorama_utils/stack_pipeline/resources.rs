@@ -132,6 +132,12 @@ impl RssSampler {
         }
     }
 
+    /// Whether the background sampler has observed RSS above the run limit.
+    /// Callers use this at stage boundaries so cancellation is cooperative.
+    pub fn cancelled(&self) -> bool {
+        self.state.cancel.load(Ordering::Acquire)
+    }
+
     pub fn stop(mut self, threshold_bytes: u64) -> RssSample {
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
