@@ -93,47 +93,61 @@ proptest! {
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 49: Tone_Harmonizer
-    // 改变低频场时，输出仍保留 owner 的逐像素高频残差。
+    // applies the low-frequency correction while retaining the owner's exact
+    // high-frequency pixels.  The oracle deliberately uses source == owner:
+    // their low fields cancel algebraically, so this test does not call the
+    // production low-frequency helper to manufacture its expected values.
     //
     // **Validates: Requirements 9.2**
     #[test]
     fn property_49_tone_keeps_owner_high_frequency_residual(
         owner_seed in any::<u8>(),
-        source_seed in any::<u8>(),
+        offset_seed in any::<u8>(),
     ) {
         let width = 32;
         let height = 32;
-        let source = image::Rgb32FImage::from_fn(width, height, |x, y| {
-            let value = (u32::from(source_seed) + x * 7 + y * 11) % 255;
-            image::Rgb([value as f32 / 255.0; 3])
-        });
         let owner = image::Rgb32FImage::from_fn(width, height, |x, y| {
-            let value = (u32::from(owner_seed) + x * 13 + y * 5) % 255;
-            image::Rgb([value as f32 / 255.0; 3])
+            let base = (u32::from(owner_seed) + x * 13 + y * 5) % 200;
+            let residual = ((x * 17 + y * 23) % 37) as f32 / 255.0;
+            image::Rgb([
+                0.1 + base as f32 / 255.0 + residual,
+                0.15 + base as f32 / 300.0,
+                0.2 + base as f32 / 350.0,
+            ])
         });
-        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let source = owner.clone();
+        let evidence = image::GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([if (x + y + u32::from(owner_seed)) % 3 == 0 {
+                0
+            } else {
+                255
+            }])
+        });
+        let offset = [
+            (f32::from(offset_seed % 9) - 4.0) / 100.0,
+            (f32::from(offset_seed.rotate_left(1) % 9) - 4.0) / 100.0,
+            (f32::from(offset_seed.rotate_left(2) % 9) - 4.0) / 100.0,
+        ];
         let solve = tone::ToneSolve {
-            gain: [1.1, 0.95, 1.02],
-            offset: [0.01, -0.01, 0.0],
-            solved_gain: [1.1, 0.95, 1.02],
-            solved_offset: [0.01, -0.01, 0.0],
-            retained_samples: 1024,
+            gain: [1.0; 3],
+            offset,
+            solved_gain: [1.0; 3],
+            solved_offset: offset,
+            retained_samples: (width * height) as usize,
             gain_clamped: false,
             status: tone::ToneSolveStatus::Applied,
         };
         let corrected = tone::apply_low_frequency_tone(&source, &owner, &evidence, &solve);
-        let source_low = tone::low_frequency_field(&source);
-        let owner_low = tone::low_frequency_field(&owner);
         for (index, pixel) in corrected.pixels().enumerate() {
             let x = (index as u32) % width;
             let y = (index as u32) / width;
-            let source_value = source_low.get_pixel(x, y);
-            let owner_value = owner.get_pixel(x, y);
-            let owner_low_value = owner_low.get_pixel(x, y);
+            let original = owner.get_pixel(x, y);
             for channel in 0..3 {
-                let expected = solve.gain[channel] * source_value[channel]
-                    + solve.offset[channel]
-                    + owner_value[channel] - owner_low_value[channel];
+                let expected = if evidence.get_pixel(x, y)[0] == 0 {
+                    original[channel]
+                } else {
+                    original[channel] + offset[channel]
+                };
                 prop_assert!((pixel[channel] - expected).abs() < 1.0e-6);
             }
         }
@@ -285,15 +299,49 @@ proptest! {
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 51: Tone_Harmonizer
-    // 只写像素，不改已完成的 Ownership_Map。
+    // only writes panorama pixels; the production group-tone entry point never
+    // mutates the completed immutable Ownership_Map.
     //
     // **Validates: Requirements 9.5, 9.6**
     #[test]
     fn property_51_tone_preserves_ownership_map(owner_seed in any::<u64>()) {
-        let owners = (0..128u16)
-            .map(|index| (owner_seed.rotate_left(u32::from(index % 63)) as u16) ^ index)
+        let width = 32u32;
+        let height = 32u32;
+        let owners = (0..width * height)
+            .map(|index| {
+                if ((owner_seed.rotate_left((index % 63) as u32) ^ u64::from(index)) & 1) == 0 {
+                    1u16
+                } else {
+                    2u16
+                }
+            })
             .collect::<Vec<_>>();
         let before = owners.clone();
+        let mut panorama = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let value = (owner_seed.wrapping_add(u64::from(x * 17 + y * 31)) % 200) as f32 / 255.0;
+            image::Rgb([value, value * 0.9, value * 0.8])
+        });
+        let tile = |station_index: usize, owner_id: u16, scale: f32| tone::ToneTile {
+            station_index,
+            owner_id,
+            low: image::Rgb32FImage::from_pixel(width, height, image::Rgb([scale; 3])),
+            validity: image::GrayImage::from_pixel(width, height, image::Luma([255])),
+            world_origin: (0.0, 0.0),
+            world_size: (f64::from(width), f64::from(height)),
+            world_stride: 1.0,
+            cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb([scale; 3])),
+            cell_coverage: vec![1.0; (width * height) as usize],
+        };
+        let tiles = [tile(0, 1, 0.35), tile(1, 2, 0.55)];
+        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let _report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &owners,
+            width,
+            &tiles,
+            &evidence,
+            &[(0, 1)],
+        );
         compositor::assert_ownership_unchanged(&before, &owners);
         prop_assert_eq!(before, owners);
     }
