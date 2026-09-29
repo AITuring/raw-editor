@@ -1059,9 +1059,10 @@
     - **Property 57: 写入 alpha 不改变颜色通道**
     - **Validates: Requirements 10.6**
 
-  - [ ]* 13.13 属性测试：预览由最终结果派生且色差有界
+  - [x]* 13.13 属性测试：预览由最终结果派生且色差有界
     - **Property 58: 预览由最终结果派生且色差有界**
     - **Validates: Requirements 10.7**
+    - 执行记录：预览改由纯函数 `derive_preview_images` 从规范化结果像素降采样得到，结果标识在写预览前生成并用于预览文件名（`{result_id}-detail.jpg` / `-interaction.jpg`），与存储结果同一标识。`property_58_previews_derive_from_the_result_with_bounded_roi_delta_e`（100 例）按生产 JPEG 质量往返后验证 2×/4× 预览的 64px ROI 低频均值 Delta_E00 ≤ 1.0。
 
   - [ ]* 13.14 属性测试：窄重叠沿中线取接缝
     - **Property 59: 窄重叠沿中线取接缝**

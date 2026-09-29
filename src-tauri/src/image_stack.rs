@@ -699,8 +699,46 @@ fn encode_preview_jpeg(image: &RgbImage, path: &Path, quality: u8) -> Result<(),
         .map_err(|error| format!("Failed to finish image-stack preview: {error}"))
 }
 
+/// The detail and interaction previews of a canonical stack result (需求 10.7):
+/// both are downsampled from the result's own display-encoded pixels and from
+/// nothing else, so a preview can never show a different image than the one
+/// that is exported. `None` means the interaction preview is the detail one.
+fn derive_preview_images(
+    image: &DynamicImage,
+    (detail_width, detail_height): (u32, u32),
+    (interaction_width, interaction_height): (u32, u32),
+) -> (RgbImage, Option<RgbImage>) {
+    let (width, height) = image.dimensions();
+    let full_rgb = image.to_rgb8();
+    let detail_rgb = if (detail_width, detail_height) == (width, height) {
+        full_rgb
+    } else {
+        image::imageops::resize(&full_rgb, detail_width, detail_height, FilterType::Lanczos3)
+    };
+    let interaction_rgb =
+        ((interaction_width, interaction_height) != (detail_width, detail_height)).then(|| {
+            image::imageops::resize(
+                &detail_rgb,
+                interaction_width,
+                interaction_height,
+                FilterType::Lanczos3,
+            )
+        });
+    (detail_rgb, interaction_rgb)
+}
+
+/// Preview file names carry the result identifier, so the stored result and
+/// its previews are linked by one identifier (需求 10.7).
+fn preview_file_names(result_id: &str) -> (String, String) {
+    (
+        format!("{result_id}-detail.jpg"),
+        format!("{result_id}-interaction.jpg"),
+    )
+}
+
 fn write_preview_files(
     image: &DynamicImage,
+    result_id: &str,
     app_handle: &AppHandle,
 ) -> Result<PreviewFiles, String> {
     let (width, height) = image.dimensions();
@@ -709,12 +747,12 @@ fn write_preview_files(
     }
     let (interaction_width, interaction_height) = preview_dimensions(width, height);
     let (detail_width, detail_height) = detail_preview_dimensions(width, height);
-    let full_rgb = image.to_rgb8();
-    let detail_rgb = if (detail_width, detail_height) == (width, height) {
-        full_rgb
-    } else {
-        image::imageops::resize(&full_rgb, detail_width, detail_height, FilterType::Lanczos3)
-    };
+    let (detail_rgb, interaction_rgb) = derive_preview_images(
+        image,
+        (detail_width, detail_height),
+        (interaction_width, interaction_height),
+    );
+    let (detail_name, interaction_name) = preview_file_names(result_id);
 
     let preview_dir = app_handle
         .path()
@@ -723,24 +761,17 @@ fn write_preview_files(
         .join("image-stack-previews");
     fs::create_dir_all(&preview_dir)
         .map_err(|error| format!("Failed to create image-stack preview cache: {error}"))?;
-    let preview_id = Uuid::new_v4();
-    let detail_path = preview_dir.join(format!("{preview_id}-detail.jpg"));
+    let detail_path = preview_dir.join(detail_name);
     encode_preview_jpeg(&detail_rgb, &detail_path, DETAIL_PREVIEW_JPEG_QUALITY)?;
 
-    let interaction_path =
-        if (interaction_width, interaction_height) == (detail_width, detail_height) {
-            detail_path.clone()
-        } else {
-            let interaction_rgb = image::imageops::resize(
-                &detail_rgb,
-                interaction_width,
-                interaction_height,
-                FilterType::Lanczos3,
-            );
-            let path = preview_dir.join(format!("{preview_id}-interaction.jpg"));
+    let interaction_path = match interaction_rgb {
+        None => detail_path.clone(),
+        Some(interaction_rgb) => {
+            let path = preview_dir.join(interaction_name);
             encode_preview_jpeg(&interaction_rgb, &path, PREVIEW_JPEG_QUALITY)?;
             path
-        };
+        }
+    };
 
     if let Ok(entries) = fs::read_dir(&preview_dir) {
         for entry in entries.flatten() {
@@ -808,7 +839,9 @@ pub async fn process_image_stack(
                 let render_scale = outcome.render_scale;
                 let image = canonicalize_image_stack_result(outcome.image);
                 let _ = app_handle.emit("image-stack-progress", "Creating preview…");
-                let previews = write_preview_files(&image, &app_handle)?;
+                // One identifier names the stored result and its previews (需求 10.7).
+                let result_id = Uuid::new_v4().to_string();
+                let previews = write_preview_files(&image, &result_id, &app_handle)?;
                 if generation_handle.load(Ordering::SeqCst) != generation {
                     let _ = fs::remove_file(&previews.interaction_path);
                     let _ = fs::remove_file(&previews.detail_path);
@@ -850,7 +883,6 @@ pub async fn process_image_stack(
                     return Err(message);
                 }
 
-                let result_id = Uuid::new_v4().to_string();
                 let (source_width, source_height) = image.dimensions();
                 {
                     let mut stored_result = result_handle.lock().unwrap();
@@ -917,6 +949,10 @@ mod tests {
     };
 
     use super::{
+        DETAIL_PREVIEW_JPEG_QUALITY, FilterType, JpegEncoder, PREVIEW_JPEG_QUALITY, RgbImage,
+        derive_preview_images, preview_file_names,
+    };
+    use super::{
         DETAIL_PREVIEW_MAX_LONG_SIDE, DETAIL_PREVIEW_MAX_PIXELS, IMAGE_STACK_MAX_SOURCES,
         IMAGE_STACK_PIPELINE_VERSION, ImageStackOutputFormat, PREVIEW_MAX_LONG_SIDE,
         PREVIEW_MAX_PIXELS, canonicalize_image_stack_result, default_image_stack_export_settings,
@@ -970,6 +1006,113 @@ mod tests {
         assert!(detail_width as u64 * detail_height as u64 <= DETAIL_PREVIEW_MAX_PIXELS + 10_000);
         assert!(detail_width > portrait_width);
         assert!(detail_height > portrait_height);
+    }
+
+    /// A painted-looking result: smooth colour fields with brush-scale detail.
+    fn painted_result(width: u32, height: u32, seed: u64) -> DynamicImage {
+        let phase = (seed % 997) as f32 * 0.013;
+        let image = image::Rgb32FImage::from_fn(width, height, |x, y| {
+            let (fx, fy) = (x as f32, y as f32);
+            let broad = 0.45 + 0.25 * (fx * 0.021 + phase).sin() * (fy * 0.017 - phase).cos();
+            let detail = 0.04 * ((fx * 0.9 + fy * 0.7 + phase * 5.0).sin());
+            image::Rgb([
+                (broad + detail).clamp(0.0, 1.0),
+                (0.85 * broad + 0.05 + detail).clamp(0.0, 1.0),
+                (0.6 * broad + 0.15 - detail).clamp(0.0, 1.0),
+            ])
+        });
+        canonicalize_image_stack_result(DynamicImage::ImageRgb32F(image))
+    }
+
+    fn jpeg_round_trip(image: &RgbImage, quality: u8) -> RgbImage {
+        let mut bytes = Vec::new();
+        JpegEncoder::new_with_quality(&mut bytes, quality)
+            .encode_image(image)
+            .expect("in-memory preview JPEG");
+        image::load_from_memory(&bytes)
+            .expect("decode preview JPEG")
+            .to_rgb8()
+    }
+
+    fn roi_mean(image: &RgbImage, (x, y, side): (u32, u32, u32)) -> [f32; 3] {
+        let mut sum = [0.0f64; 3];
+        for py in y..y + side {
+            for px in x..x + side {
+                for (channel, value) in image.get_pixel(px, py).0.iter().enumerate() {
+                    sum[channel] += f64::from(*value) / 255.0;
+                }
+            }
+        }
+        let count = f64::from(side * side);
+        sum.map(|value| (value / count) as f32)
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: 100,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+
+        // Feature: layered-camera-group-focus-stitching, Property 58: 对于任意最终结果及其预览，
+        // 两者携带同一个结果标识，预览的每个像素都可由最终结果的规范化显示编码像素降采样得到，
+        // 且任意对应 ROI 的低频均值 Delta_E00 不超过 1.0。
+        //
+        // The previews are produced by `derive_preview_images` from the canonical result
+        // alone, encoded at the production JPEG qualities, and named by the result
+        // identifier. ROIs are aligned to the 2× and 4× downsampling so the preview ROI is
+        // exactly the final ROI's footprint.
+        //
+        // **Validates: Requirements 10.7**
+        #[test]
+        fn property_58_previews_derive_from_the_result_with_bounded_roi_delta_e(
+            seed in proptest::prelude::any::<u64>(),
+            cells in 4u32..10,
+            roi_x in 0u32..64,
+            roi_y in 0u32..64,
+        ) {
+            let side = cells * 32;
+            let result = painted_result(side, side, seed);
+            let detail_dims = (side / 2, side / 2);
+            let interaction_dims = (side / 4, side / 4);
+            let (detail, interaction) = derive_preview_images(&result, detail_dims, interaction_dims);
+            // Derived from the canonical pixels and from nothing else.
+            let expected_detail = image::imageops::resize(
+                &result.to_rgb8(),
+                detail_dims.0,
+                detail_dims.1,
+                FilterType::Lanczos3,
+            );
+            proptest::prop_assert_eq!(&detail, &expected_detail);
+            let interaction = interaction.expect("a smaller interaction preview");
+            let (again_detail, again_interaction) =
+                derive_preview_images(&result, detail_dims, interaction_dims);
+            proptest::prop_assert_eq!(&detail, &again_detail);
+            proptest::prop_assert_eq!(Some(&interaction), again_interaction.as_ref());
+
+            let final_rgb = result.to_rgb8();
+            let detail = jpeg_round_trip(&detail, DETAIL_PREVIEW_JPEG_QUALITY);
+            let interaction = jpeg_round_trip(&interaction, PREVIEW_JPEG_QUALITY);
+            // A 64 px final ROI anywhere on the 4-px lattice.
+            let roi_side = 64u32;
+            let x = (roi_x * 4).min(side - roi_side);
+            let y = (roi_y * 4).min(side - roi_side);
+            let reference = roi_mean(&final_rgb, (x, y, roi_side));
+            for (preview, factor) in [(&detail, 2u32), (&interaction, 4u32)] {
+                let mean = roi_mean(preview, (x / factor, y / factor, roi_side / factor));
+                let delta = crate::panorama_utils::stack_pipeline::tone::delta_e00_rgb(reference, mean);
+                proptest::prop_assert!(
+                    delta <= 1.0,
+                    "{factor}x preview ROI ({x}, {y}) Delta_E00 {delta}"
+                );
+            }
+
+            // The stored result and both preview files carry one identifier.
+            let result_id = format!("{seed:016x}");
+            let (detail_name, interaction_name) = preview_file_names(&result_id);
+            proptest::prop_assert!(detail_name.starts_with(&result_id));
+            proptest::prop_assert!(interaction_name.starts_with(&result_id));
+            proptest::prop_assert_ne!(detail_name, interaction_name);
+        }
     }
 
     #[test]
