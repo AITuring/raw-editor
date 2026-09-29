@@ -1398,6 +1398,9 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       的 4×4 双三次足迹内选择最近 owner，并记录 `snapped_to_footprint`、未覆盖足迹及亮度比。
       Langyuan/Wenyuan 门禁的 `out_of_bounds`、`raw_owner_unresolved`、`evidence_missing` 均为 0；
       报告在 `/private/tmp/raw-editor-gate/r045f-gates/`，TIFF SHA256 仍为基线。
+      最终源码复跑报告在 `/private/tmp/raw-editor-gate/r045f-final-gates/lang/reports/` 与
+      `/private/tmp/raw-editor-gate/r045f-final-gates/wen/reports/`，`owner_sharpness_coverage`
+      为 0.7458617 / 0.6827111。
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；
