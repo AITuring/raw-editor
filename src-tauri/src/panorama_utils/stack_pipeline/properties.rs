@@ -12025,6 +12025,96 @@ proptest! {
     }
 }
 
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 77: closure
+    // degradation is recorded as geometry evidence while the Quality_Gate's
+    // measured criteria, thresholds, and conclusion remain untouched.
+    //
+    // **Validates: Requirements 7.7, 7.9, 11.15, 12.7**
+    #[test]
+    fn property_77_closure_degradation_preserves_quality_gate_record(seed in any::<u64>()) {
+        use crate::panorama_stitching::station_relation_test_access::{
+            self, ClosureRelationView,
+        };
+
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
+        let signed_zero = if seed & 1 == 0 { 0.0 } else { -0.0 };
+        let base = vec![
+            translation_pose(signed_zero, -0.0),
+            translation_pose(100.25, 0.0),
+            translation_pose(200.5, 0.0),
+        ];
+        let relation = |left, right, tx| ClosureRelationView {
+            score: 1.0,
+            left,
+            right,
+            left_to_right: translation_pose(tx, 0.0),
+            independent_support: 2,
+            median_error_px: 0.0,
+        };
+        let run = station_relation_test_access::closure_run(
+            (400, 400),
+            &[2, 0, 1],
+            &[1, 2, 0],
+            &base,
+            &[
+                relation(0, 1, -109.25),
+                relation(1, 2, -109.25),
+                relation(0, 2, -191.5),
+            ],
+        );
+        prop_assert_eq!(run.report.status, super::report::ClosureStatus::Unreliable);
+        let ledger = degradation::run_ledger_snapshot();
+        let closure_reason_recorded = ledger.entries().iter().any(|entry| {
+            matches!(
+                entry.reason,
+                degradation::CLOSURE_UNRELIABLE_RESIDUAL
+                    | degradation::CLOSURE_UNRELIABLE_ITERATIONS
+                    | degradation::CLOSURE_UNRELIABLE_PAIR_P95
+            )
+        });
+        prop_assert!(closure_reason_recorded);
+
+        let quality_before = QualityGateReport {
+            verdict: if seed & 2 == 0 {
+                QualityGateVerdict::Pass
+            } else {
+                QualityGateVerdict::Fail
+            },
+            roi_count: 8 + (seed as usize % 32),
+            criteria: vec![QualityGateCriterionRecord {
+                name: "mtf50_normalized".to_string(),
+                threshold: 0.93,
+                measurable_count: 8,
+                verdict: QualityGateVerdict::Pass,
+                ..QualityGateCriterionRecord::default()
+            }],
+            ..QualityGateReport::default()
+        };
+        let recorder = super::report::StackReportRecorder::isolated("property-77", None);
+        recorder.update(|report| {
+            report.quality_gate = quality_before.clone();
+            report.closure = run.report.clone();
+        });
+        recorder.apply_degradation_ledger(&ledger);
+        let report = recorder.snapshot();
+
+        prop_assert_eq!(&report.quality_gate, &quality_before);
+        prop_assert_eq!(report.closure, run.report);
+        let closure_degradation_recorded = report.degradation.entries.iter().any(|entry| {
+            entry.reason == degradation::CLOSURE_UNRELIABLE_RESIDUAL
+                || entry.reason == degradation::CLOSURE_UNRELIABLE_ITERATIONS
+                || entry.reason == degradation::CLOSURE_UNRELIABLE_PAIR_P95
+        });
+        prop_assert!(closure_degradation_recorded);
+        prop_assert_eq!(report.quality_gate.criteria[0].threshold, 0.93);
+        prop_assert_eq!(report.quality_gate.criteria[0].verdict, QualityGateVerdict::Pass);
+    }
+}
+
 fn exhaustive_vertical_seam_cost(costs: &[f64], width: usize, height: usize) -> f64 {
     fn visit(costs: &[f64], width: usize, height: usize, row: usize, column: usize) -> f64 {
         let here = costs[row * width + column];
