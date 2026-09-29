@@ -411,6 +411,13 @@ pub struct FusionOutcome {
    只有 1 个候选时置 0。
 10. **低清晰度区域（需求 3.8）**：先求该机位全部单元胜出 Sharpness_Score 的 10 百分位，
     所有候选都低于该分位的单元标为低清晰度，按连通域合并后记录世界坐标位置与面积。
+11. **Owner_Sharpness_Shortfall（需求 11.12 使用，2026-09-30）**：
+    `shortfall = clamp((s_best − s_owner) / max(s_best, ε), 0, 1)`，`s_best` 与第 9 条的
+    `joint_gradient_scale` 相同，`s_owner` 是该单元**最终** owner 的归一化 Sharpness_Score
+    （`StationFusion::owner_sharpness`，每次候选夺得该单元时更新）；只有 1 个候选或 `s_best = 0`
+    时为 0。只写入单元级证据 `SharpnessCellEvidence`，不参与任何 owner 决策，因此不改变输出像素。
+    图割的平滑项有常数基底 `OWNERSHIP_PAIRWISE_BASE`，mismatch 惩罚会否决不一致的更清晰候选，
+    所以 shortfall 不恒为 0；这正是需求 11.12 要度量的量。
 
 ### Virtual_Tile_Store（扩展 `FocusVirtualTile` + 新增磁盘缓存）
 
@@ -875,19 +882,35 @@ Local_Scale(p) = sqrt(|det J|)
 4. 用与 slanted-edge 相同的逐行重心法求两侧边缘的亚像素位置，取法向偏差。
 5. 判据：配对边缘亚像素位置偏差 P95 ≤ 1.5px、最大值 ≤ 3.0px。
 
-#### Sharpness_Confidence 覆盖率（需求 11.12）
+#### Owner 锐度覆盖率 `owner_sharpness_coverage`（需求 11.12，2026-09-30 修订）
 
-以最终输出的全部 Textured_Pixel 为统计范围（需求 11.12），`Sharpness_Confidence < 0.05` 的像素
-占 Textured_Pixel 的比例 ≤ 1%；报告同时写入 Textured_Pixel 数量、被排除的平坦像素数量、两者各自的
-低置信占比，以及按 Capture_Station 的分项数值（分项只作诊断，不影响结论）。
-输出级 Sharpness_Confidence 由各 Virtual_Tile 的 `sharpness_confidence` 按输出
-Ownership_Map 归属拷贝得到。
+- 统计范围：最终输出的全部 Textured_Pixel。实测值 = Owner_Sharpness_Shortfall ≤ 0.05 的
+  Textured_Pixel 数 / Textured_Pixel 总数，通过条件实测值 ≥ `1 − 0.01 = 0.99`（等价于
+  shortfall > 0.05 的占比 ≤ 1%）。`0.05` 与 `0.01` 以命名常量出现。
+- 证据来源：Focus_Fuser 第 11 条的单元级 shortfall。站级逐像素值与 `confidence`、`textured`
+  使用**同一个**单元→像素映射（`focus_cell_plane_to_pixels`），输出级值按输出 Ownership_Map
+  反查（输出像素 → Capture_Station → 站坐标 → 站 Ownership_Map）归属拷贝，与输出级
+  Sharpness_Confidence 同一次反查完成，不另写坐标换算。
+- 无法反查到 owner 单元证据的非透明像素（owner 解析失败、站坐标越界、站 Ownership_Map 该处为
+  `NO_OWNER`、证据缺失）单独计数为
+  `unresolved_pixel_count`，既不计入 Textured_Pixel 也不计入平坦像素；计数 > 0 ⇒ 技术性不可测
+  ⇒ `insufficient_evidence`（需求 11.14(d)）。这类像素违反「每个非透明像素恰好一个 owner」，
+  出现即是反查实现的缺陷，应修复而不是容忍。
+- Stack_Report 写入：Textured_Pixel 数、被排除的平坦像素数、`unresolved_pixel_count`、两个子集的
+  shortfall > 0.05 占比；按 Capture_Station 的分项（分项只作诊断，不影响结论）。
+- 诊断（不影响结论）：Sharpness_Confidence < 0.05 在两个子集中的占比，以及已有的
+  `confidence_scores` 胜出/次优分布；shortfall > 0.05 的像素的 shortfall 20 桶直方图，以及其中
+  单元 disagreement > `OWNERSHIP_DISAGREEMENT_VETO`（mismatch 惩罚可能生效）的像素数。后一项用来
+  区分「配准不一致导致否决更清晰候选」与「平滑项导致接缝附近保留较模糊 owner」。
+- Virtual_Tile 缓存命中路径（需求 4.5）若不恢复单元级证据，该判据按技术性不可测处理，不得
+  静默跳过。
 
 #### 不可测量与证据不足（需求 11.13/11.14）
 
 - 不可测量项既不计通过也不计失败，记录判据名称、世界坐标位置、原因标识符与原因类别：
   `content_not_applicable`（不属于倾斜边 ROI、不属于平坦 ROI、边界两侧无可配对边缘）或
-  `technical`（owner Source_RAW 不可解码、配对残余对齐误差 > 0.5px，以及其它测量前置失败）。
+  `technical`（owner Source_RAW 不可解码、配对残余对齐误差 > 0.5px、非透明像素无法反查到 owner
+  单元证据，以及其它测量前置失败）。
 - 判据结论取 `pass` / `fail` / `insufficient_evidence` / `not_applicable`（2026-09-29 用户确认的规则）：
   1. 逐 ROI / 逐测量点判据的应测量项总数不含 `content_not_applicable` 项；`technical` 项占比 > 20%
      ⇒ `insufficient_evidence`。
@@ -898,8 +921,9 @@ Ownership_Map 归属拷贝得到。
      （需求 11.15 优先，2026-09-30 澄清）；`mtf50_normalized` 不适用时锐度由
      `gradient_energy_normalized` 判定。画作 ROI 里合格倾斜边很少，平坦 ROI 与倾斜边 ROI 互斥，
      这两类判据按内容适用性判定，而不是按全部 ROI 计不可测比例。
-  4. `effective_pixel_count`、`sharpness_confidence_coverage` 为整幅输出的单项统计，不受 8 项下限约束；
-     统计基准为空 ⇒ `insufficient_evidence`。
+  4. `effective_pixel_count`、`owner_sharpness_coverage` 为整幅输出的单项统计，不受 8 项下限约束；
+     统计基准为空 ⇒ `insufficient_evidence`；`owner_sharpness_coverage` 的 `unresolved_pixel_count > 0`
+     ⇒ `insufficient_evidence`。
 - 整体结论：任一判据 `fail` ⇒ 阻止导出（需求 11.15）；任一判据 `insufficient_evidence` ⇒ 阻止导出；
   其余判据全部为 `pass` 或 `not_applicable` ⇒ 通过。
 
@@ -1252,7 +1276,9 @@ RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR=<临时目录>
 `quality_gate.criteria[*].name` 的取值集合（稳定标识符）：
 `local_scale_median`、`local_scale_pixel_ratio`、`effective_pixel_count`、
 `mtf50_normalized`、`gradient_energy_normalized`、`noise_sigma_ratio`、
-`roi_delta_e00`、`boundary_stroke_alignment`、`sharpness_confidence_coverage`。
+`roi_delta_e00`、`boundary_stroke_alignment`、`owner_sharpness_coverage`。
+（2026-09-30：原 `sharpness_confidence_coverage` 随需求 11.12 修订改名，旧报告中的同位判据
+不可与新值直接比较。）
 
 ## Correctness Properties
 
@@ -1792,9 +1818,14 @@ _对于任意_ 相邻 Owner_Region 公共边界上的测量点，仅在两侧都
 
 **Validates: Requirements 11.11**
 
-### Property 71: 低置信像素占比有界
+### Property 71: owner 锐度差额超限像素占比有界
 
-_对于任意_ 最终输出，Sharpness_Confidence 低于 0.05 的像素占全部非透明像素的比例不超过 1%。
+_对于任意_ 覆盖掩膜、Textured_Pixel 掩膜与逐单元候选证据（最高值、owner 值、候选数），
+`owner_sharpness_coverage` 的实测值等于 Owner_Sharpness_Shortfall ≤ 0.05 的 Textured_Pixel 数除以
+Textured_Pixel 总数，判据通过当且仅当实测值 ≥ 0.99；透明像素与平坦像素的证据取值不改变实测值；
+owner 为该单元最高分候选、或该单元只有 1 个候选时 shortfall 为 0；Sharpness_Confidence 的取值
+不改变结论；存在无法反查到 owner 单元证据的非透明像素、或 Textured_Pixel 数为 0 时结论为证据不足。
+测试必须调用 Quality_Gate 运行时实际使用的统计函数，不得测试平行实现。
 
 **Validates: Requirements 11.12**
 
@@ -2366,7 +2397,7 @@ MAD 高通对已知噪声 σ、CIEDE2000 对标准测试向量），再验证管
 | 「明显失焦」（分辨率损失）               | ROI Local_Scale 中位数 ≥0.98 且 ≥0.95 的像素占比 ≥99%                              | Property 63（需求 11.3）                           |
 | 「明显失焦」（锐度损失）                 | 倾斜边 ROI 的 MTF50_Normalized ≥0.93×owner 参考                                    | Property 66（需求 11.6）                           |
 | 「明显失焦」（细节能量损失）             | 归一化梯度能量 ≥0.95×owner 参考                                                    | Property 67（需求 11.7）                           |
-| 「明显失焦」（选错焦平面）               | `Sharpness_Confidence < 0.05` 的像素占比 ≤1%；低清晰度区域被列出                   | Property 71（需求 11.12）、Property 14（需求 3.8） |
+| 「明显失焦」（选错焦平面）               | owner 低于单元最高 Sharpness_Score 95% 的 Textured_Pixel ≤1%；低清晰度区域被列出   | Property 71（需求 11.12）、Property 14（需求 3.8） |
 | 「失焦被锐化掩盖」                       | 默认 `final_sharpen_amount == 0.0`；`>0` 时 `noise_sigma_ratio` 判据标记为诊断模式 | 常规回归第 8 条 + Property 68（需求 11.9）         |
 | 「依赖参考图对齐」                       | Acceptance_Harness 不接受任何参考图路径参数；84 张为唯一输入                       | 需求 15.4（INTEGRATION）                           |
 | 「需要手动分组」                         | 84 张全部入组、孤立数 0、机位图单一连通                                            | 需求 15.5（INTEGRATION）                           |

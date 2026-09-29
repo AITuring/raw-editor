@@ -505,7 +505,7 @@
     - **Property 75: 全部非锚点帧失败时的单帧降级**
     - **Validates: Requirements 12.1**
     - 执行记录：种子 `permutation_seed=17155767282009907368,
-      texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通过；并发失败
+texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通过；并发失败
       是全局 run ledger 交错，已由 run scope 修复。
 
   - [x]* 7.29 属性测试：部分帧失败时只用成功帧
@@ -1184,12 +1184,15 @@
       `sharpness_confidence` 归属拷贝；判据：`< 0.05` 的像素占非透明像素比例 ≤1%
     - _Requirements: 11.11, 11.12_
     - 执行记录：Moore 边界、256px 采样、16px 笔画配准和置信度覆盖率已实现。
+    - 2026-09-30：需求 11.12 的判据改为 owner 锐度覆盖率（`owner_sharpness_coverage`），由 15.23
+      实现；本任务的置信度覆盖率降为诊断数值。
 
   - [x] 15.7 以「记录但不阻止」模式接入 Quality_Gate
     - 全部九项判据（`local_scale_median`、`local_scale_pixel_ratio`、
       `effective_pixel_count`、`mtf50_normalized`、`gradient_energy_normalized`、
       `noise_sigma_ratio`、`roi_delta_e00`、`boundary_stroke_alignment`、
-      `sharpness_confidence_coverage`）在导出前执行，把实测值、阈值、可测量项数、
+      `owner_sharpness_coverage`（2026-09-30 前为 `sharpness_confidence_coverage`，见 15.23））
+      在导出前执行，把实测值、阈值、可测量项数、
       不可测量项数、结论全部写入 `quality_gate`，但**不阻止导出**
     - 不可测量项既不计通过也不计失败，记录判据名称、世界坐标与原因标识符
     - 此任务**只加观测**，不改变导出行为
@@ -1302,10 +1305,15 @@
     - **Validates: Requirements 11.11**
     - 执行记录：P70（100 cases）验证 Moore 边界笔画配对的 P95、最大偏差和方向误差。
 
-  - [x] 15.19 属性测试：低置信像素占比有界
-    - **Property 71: 低置信像素占比有界**
+  - [ ] 15.19 属性测试：owner 锐度差额超限像素占比有界
+    - **Property 71: owner 锐度差额超限像素占比有界**
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
+    - 2026-09-30 取消勾选：原 P71 调用的 `quality_gate::sharpness_confidence_coverage` /
+      `sharpness_confidence_passes` 以全部非透明像素为范围，运行时并不使用（运行时用
+      `quality_gate_runner::confidence_coverage_stats`），测的是平行实现；且需求 11.12 已改判据。
+      按设计 Property 71 新文本重写，必须调用 15.23 中运行时实际使用的统计函数；两个旧辅助函数
+      无其它调用者时删除。
 
   - [ ] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
@@ -1325,6 +1333,29 @@
     - **Property 74: Quality_Gate 的 ROI 集合与结论可复现**
     - **Validates: Requirements 11.17**
     - 执行记录：P74（100 cases）验证同 Ownership_Map 输入的 ROI 集合与标签距离完全一致。
+
+  - [ ] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
+    - 按设计 Focus_Fuser 第 11 条在单元级计算 Owner_Sharpness_Shortfall：`SharpnessCellEvidence`
+      已有 `winner_score` / `owner_score` / `candidate_count`，补 `disagreement`（该单元
+      `StationFusion::disagreement`）；不得改变任何 owner 决策
+    - 站级逐像素值与 `confidence`、`textured` 使用同一个 `focus_cell_plane_to_pixels` 映射；
+      输出级值在 `panorama_stitching.rs` 现有的输出 ownership 反查循环中一并归属拷贝，
+      不新增整幅 `f32` 平面（`u8` 标志平面或流式计数均可）
+    - 判据标识符 `sharpness_confidence_coverage` → `owner_sharpness_coverage`，同步
+      `quality_gate.rs`、`quality_gate_runner.rs`、`test_support.rs`、`properties.rs`、`report.rs`
+      与 `tests/focus-stack-quality-contract.mjs`；阈值用命名常量（shortfall 上限 0.05、占比上限
+      0.01），数值不变
+    - `unresolved_pixel_count`：非透明但反查不到 owner 单元证据的像素单独计数，不再落入平坦像素；
+      计数大于 0 时判据为技术性不可测、结论为证据不足。`65dfbbf0` 门禁报告中这类像素 Langyuan
+      19 个、Wenyuan 95 个（有效像素分项分子之和与非透明像素数之差），先查明原因并修复反查，
+      使两组为 0。另有一处漏计：站 Ownership_Map 为 `NO_OWNER` 时，反查里的
+      `usize::from(raw_local).saturating_sub(1)` 取到下标 0，把像素记给了该站第 1 帧；
+      这也是反查失败，必须计入 unresolved，不得归属任何帧
+    - Sharpness_Confidence 的两个子集低置信占比与 `confidence_scores` 分布保留为诊断字段；
+      新增 shortfall > 0.05 像素的 20 桶直方图、其中 disagreement > 0.2 的像素数、按
+      Capture_Station 分项
+    - 只改报告，两组门禁输出 SHA256 必须保持 `74942cfe…` / `86884740…`
+    - _Requirements: 11.12, 11.13, 11.14_
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；

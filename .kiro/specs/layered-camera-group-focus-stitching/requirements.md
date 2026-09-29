@@ -57,6 +57,10 @@
 - **Ownership_Map**：把 Virtual_Tile 的每个有效像素映射到唯一一个 Source_RAW 标识的整数掩膜。
 - **Sharpness_Confidence**：Virtual_Tile 每个 ownership 单元的胜出 Sharpness_Score 与该单元次优候选
   Sharpness_Score 之差，按该单元共同梯度能量尺度归一化，取值范围 `[0, 1]`。
+- **Owner_Sharpness_Shortfall**：Virtual_Tile 每个 ownership 单元中，全部候选的最高 Sharpness_Score
+  与最终 owner 的 Sharpness_Score 之差除以该最高值，取值范围 `[0, 1]`；该单元只有 1 个候选或最高值
+  为 0 时取 0。它衡量 owner 比该单元最清晰的候选差多少，与 Sharpness_Confidence 使用同一组候选
+  Sharpness_Score。
 - **Textured_Pixel**：最终输出中所属 ownership 单元至少有 1 个候选的 Sharpness_Score 不低于 0.10 的
   非透明像素。此处的 Sharpness_Score 与本 Glossary 同名条目定义一致，即在原生分辨率、经二项式低通后
   测量的相隔 4 个原生像素的梯度能量，归一化到 `[0, 1]`；固定下界 0.10 表示该单元至少有一个候选达到
@@ -469,12 +473,25 @@
     边界两侧各 16 个原生像素带内检测低频对比度不小于满量程 15% 的边缘，仅把在两侧都被检出且方向差
     不超过 10 度的边缘作为同一笔画边缘配对，并要求配对边缘的亚像素位置偏差第 95 百分位不超过 1.5 个
     原生像素、最大值不超过 3.0 个原生像素。
-12. THE Quality_Gate SHALL 以最终输出的全部 Textured_Pixel 为统计范围，要求 Sharpness_Confidence
-    低于 0.05 的像素占 Textured_Pixel 数量的比例不超过 1%，并把 Textured_Pixel 数量、被排除的平坦
-    像素数量、Textured_Pixel 中 Sharpness_Confidence 低于 0.05 的像素占比和被排除平坦像素中
-    Sharpness_Confidence 低于 0.05 的像素占比一并写入 Stack_Report。
+12. THE Quality_Gate SHALL 以最终输出的全部 Textured_Pixel 为统计范围，要求 Owner_Sharpness_Shortfall
+    大于 0.05（即 owner 的 Sharpness_Score 低于该单元最高值的 95%）的像素占 Textured_Pixel 数量的比例
+    不超过 1%，并把 Textured_Pixel 数量、被排除的平坦像素数量、无法反查到 owner 单元证据的非透明像素
+    数量，以及 Textured_Pixel 与被排除平坦像素中 Owner_Sharpness_Shortfall 大于 0.05 的像素占比一并
+    写入 Stack_Report。无法反查到 owner 单元证据的非透明像素既不计入 Textured_Pixel，也不计入平坦像素。
+    Sharpness_Confidence 低于 0.05 的像素在两个子集中的占比作为诊断数值写入 Stack_Report，不影响结论。
 
-    说明（修订依据，实测）：本条原文以全部非透明像素为统计范围，实测不可满足。按 Requirement 3
+    说明（2026-09-30 判据修订依据，实测，用户确认）：修订前本条要求 Sharpness_Confidence 低于 0.05 的
+    Textured_Pixel 占比不超过 1%。按 Requirement 3 第 9 条，共同梯度能量尺度取该单元候选的最高
+    Sharpness_Score，所以 Sharpness_Confidence 低于 0.05 等价于"次优候选达到最高值的 95% 以上"：它衡量
+    两帧锐度有多接近，不衡量 owner 选得对不对；只有 1 个候选的单元按定义为 0，也被计为低置信。两个
+    10 张测试集实测：Langyuan 69,759,709 个 Textured_Pixel 中低置信占 42.2%，其中 96.3% 的最高与次优
+    候选都不低于 0.10、3.1% 只有 1 个候选、最高值低于 0.10 的为 0；Wenyuan 59,746,832 个中低置信占
+    43.1%，相应为 92.2%、7.0%、0。两帧都清晰或只有一帧可选时 owner 不会失焦，原判据分不出选对与选错。
+    本条的原意是"有内容的区域不要选到明显更模糊的焦平面"，因此改为直接检查 owner 与该单元最清晰候选
+    的差额。0.05、1% 与 Textured_Pixel 的 0.10 下界保持不变。Sharpness_Confidence 仍按 Requirement 3
+    第 9 条计算，并继续写入 Virtual_Tile、诊断输出与像素溯源。
+
+    说明（统计范围的修订依据，实测）：本条原文以全部非透明像素为统计范围，实测不可满足。按 Requirement 3
     第 9 条的定义，Sharpness_Confidence 为 `(s_best − s_second) / joint_gradient_scale`，纸绢底大片
     留白处两帧锐度几乎相同，该比值天然趋 0；三个机位实测 Sharpness_Confidence 低于 0.05 的非透明
     像素占比为 37.4%、34.9%、51.2%，与 1% 相差两个数量级。这些区域选哪一帧对输出像素无影响，低置信度
@@ -486,20 +503,22 @@
     测量项标记为不可测量，既不计入通过也不计入失败，并在 Stack_Report 中记录该测量项的判据名称、
     世界坐标位置、不可测量原因和原因类别。原因类别分两类：内容不适用（不属于倾斜边 ROI、不属于
     平坦 ROI、边界两侧无可配对边缘）与技术性不可测（owner Source_RAW 不可解码、配对残余对齐误差
-    超过 0.5 个原生像素）。
+    超过 0.5 个原生像素、非透明像素无法反查到 owner 单元证据）。
 14. THE Quality_Gate SHALL 按以下规则确定判据结论，结论为证据不足时阻止导出，并在 Stack_Report 中
     记录该判据的结论、可测量与不可测量计数及原因：
     (a) 对逐 ROI 或逐测量点的判据，应测量项总数不含内容不适用的测量项；技术性不可测的测量项占
-        应测量项总数的比例超过 20% 时，结论为证据不足。
+    应测量项总数的比例超过 20% 时，结论为证据不足。
     (b) `local_scale_median`、`local_scale_pixel_ratio`、`gradient_energy_normalized`、
-        `roi_delta_e00` 的可测量测量项少于 8 个时，结论为证据不足。
+    `roi_delta_e00` 的可测量测量项少于 8 个时，结论为证据不足。
     (c) `mtf50_normalized`、`noise_sigma_ratio`、`boundary_stroke_alignment` 的可测量测量项少于
-        8 个、(a) 不成立且没有未通过的可测量测量项时，结论为不适用，既不计为通过也不阻止导出；
-        `mtf50_normalized` 不适用时锐度由 `gradient_energy_normalized` 判定。只要存在未通过的可测量
-        测量项，该判据按第 15 条为未通过，不论可测量项数量多少。
-    (d) `effective_pixel_count` 与 `sharpness_confidence_coverage` 是整幅输出的单项统计，不受可测量
-        项数量下限约束；其统计基准为空（唯一覆盖面积为 0 或 Textured_Pixel 数量为 0）时结论为证据
-        不足。两者在 Stack_Report 中另按 Capture_Station 记录分项数值，分项数值不影响结论。
+    8 个、(a) 不成立且没有未通过的可测量测量项时，结论为不适用，既不计为通过也不阻止导出；
+    `mtf50_normalized` 不适用时锐度由 `gradient_energy_normalized` 判定。只要存在未通过的可测量
+    测量项，该判据按第 15 条为未通过，不论可测量项数量多少。
+    (d) `effective_pixel_count` 与 `owner_sharpness_coverage` 是整幅输出的单项统计，不受可测量
+    项数量下限约束；其统计基准为空（唯一覆盖面积为 0 或 Textured_Pixel 数量为 0）时结论为证据
+    不足；`owner_sharpness_coverage` 在存在无法反查到 owner 单元证据的非透明像素时按技术性不可测
+    处理，结论同为证据不足。两者在 Stack_Report 中另按 Capture_Station 记录分项数值，分项数值
+    不影响结论。
 15. IF 任一判据存在未通过的可测量测量项，THEN THE Quality_Gate SHALL 阻止写出最终输出文件、保留
     诊断预览与已生成中间产物、保持全部 Source_RAW 字节不变，向调用方返回指明未通过判据的错误提示，
     并在 Stack_Report 中记录未通过判据名称、实测值、阈值、对应 ROI 或测量点的世界坐标位置和 owner
