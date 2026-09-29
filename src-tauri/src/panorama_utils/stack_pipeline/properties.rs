@@ -11334,6 +11334,7 @@ proptest! {
                 threshold_max: None,
                 measurable_count: 1,
                 unmeasurable_count: 0,
+                unmeasurable_reasons: BTreeMap::new(),
                 measured: Vec::new(),
                 diagnostic: false,
                 failed: vec![FailedMeasurementRecord {
@@ -11341,12 +11342,17 @@ proptest! {
                     measured,
                     owner_path: "owner://synthetic".to_string(),
                 }],
+                textured_pixel_count: None,
+                excluded_flat_pixel_count: None,
+                textured_low_confidence_ratio: None,
+                flat_low_confidence_ratio: None,
             }],
             unmeasurable: vec![UnmeasurableRecord {
                 criterion: "noise_sigma_ratio".to_string(),
                 world: WorldPoint { x, y },
                 reason: "roi_not_flat".to_string(),
             }],
+            timing: super::report::QualityGateTimingRecord::default(),
         };
         let encoded = serde_json::to_value(&report).expect("quality report is serializable");
         prop_assert_eq!(&encoded["verdict"], "fail");
@@ -11375,5 +11381,77 @@ proptest! {
         prop_assert_eq!(selection_a, selection_b);
         prop_assert_eq!(regions_a.labels, regions_b.labels);
         prop_assert_eq!(regions_a.distance_to_boundary, regions_b.distance_to_boundary);
+    }
+}
+
+fn exhaustive_vertical_seam_cost(costs: &[f64], width: usize, height: usize) -> f64 {
+    fn visit(costs: &[f64], width: usize, height: usize, row: usize, column: usize) -> f64 {
+        let here = costs[row * width + column];
+        if row + 1 == height {
+            return here;
+        }
+        let start = column.saturating_sub(1);
+        let end = (column + 1).min(width - 1);
+        here + (start..=end)
+            .map(|next| visit(costs, width, height, row + 1, next))
+            .fold(f64::INFINITY, f64::min)
+    }
+    (0..width)
+        .map(|column| visit(costs, width, height, 0, column))
+        .fold(f64::INFINITY, f64::min)
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 100,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::SourceParallel("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 53: 接缝只在双覆盖区且代价最低
+    #[test]
+    fn property_53_seam_cost_is_minimum_with_boundary_penalty(
+        (width, height) in (1usize..=8, 1usize..=8),
+        disagreement in prop::collection::vec(0.0f64..=2.0, 1..=64),
+        boundary_distance in prop::collection::vec(0.0f64..=32.0, 1..=64),
+    ) {
+        let cell_count = width * height;
+        let costs = (0..cell_count)
+            .map(|index| compositor::seam_candidate_cost(
+                disagreement[index % disagreement.len()],
+                boundary_distance[index % boundary_distance.len()],
+            ))
+            .collect::<Vec<_>>();
+        let (path, selected_cost) = compositor::minimum_vertical_seam(&costs, width, height)
+            .expect("a non-empty overlap has a seam");
+        prop_assert_eq!(path.len(), height);
+        for row in 1..height {
+            prop_assert!((path[row] as isize - path[row - 1] as isize).abs() <= 1);
+        }
+        prop_assert!((selected_cost - exhaustive_vertical_seam_cost(&costs, width, height)).abs() <= 1.0e-10);
+        for index in 0..cell_count {
+            if boundary_distance[index % boundary_distance.len()] < 16.0 {
+                let disagreement = disagreement[index % disagreement.len()];
+                prop_assert!(costs[index] - disagreement >= 1.0 - 1.0e-12);
+            }
+        }
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 59: 窄重叠沿中线取接缝
+    #[test]
+    fn property_59_narrow_overlap_uses_its_centerline(
+        width in 1usize..32,
+        height in 1usize..32,
+    ) {
+        let Some((vertical, seam)) = compositor::narrow_overlap_centerline(width, height) else {
+            prop_assert!(width.max(height) >= 32);
+            return Ok(());
+        };
+        if vertical {
+            prop_assert_eq!(seam, vec![width / 2; height]);
+        } else {
+            prop_assert_eq!(seam, vec![height / 2; width]);
+        }
+        prop_assert!(width.max(height) < 32);
     }
 }

@@ -817,6 +817,7 @@ pub async fn process_image_stack(
     let result_handle = state.image_stack_result.clone();
     let generation_handle = state.image_stack_generation.clone();
     let generation = generation_handle.fetch_add(1, Ordering::SeqCst) + 1;
+    crate::panorama_utils::stack_pipeline::degradation::set_active_run_generation(generation);
     *result_handle.lock().unwrap() = None;
 
     let task = tokio::task::spawn_blocking(move || {

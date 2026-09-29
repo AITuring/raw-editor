@@ -8905,6 +8905,10 @@ pub(crate) struct FocusStackTileMasks {
     pub(crate) ownership: OwnershipMap,
     /// Per-pixel Sharpness_Confidence of the owning ownership cell (需求 3.9).
     pub(crate) confidence: ConfidenceMap,
+    /// Per-pixel Textured_Pixel evidence. A value of 255 means that at least
+    /// one candidate observed a Sharpness_Score at or above the fixed 0.10
+    /// floor in the owning cell (需求 11.12).
+    pub(crate) textured: Vec<u8>,
     /// The Focus_Fuser observations of 需求 3.5 / 3.8 / 3.9.  `station_index` is
     /// filled by the call site that knows it.
     pub(crate) fusion: FusionReport,
@@ -9153,6 +9157,36 @@ fn focus_cell_plane_to_pixels(
                 let cell_column = x / cell_size;
                 if cell_column < columns {
                     *value = cells[base + cell_column];
+                }
+            }
+        });
+    values
+}
+
+/// Expand the cell-level Textured_Pixel evidence onto the station plane.
+fn focus_cell_texture_to_pixels(
+    geometry: &OwnershipGridGeometry,
+    cells: &[bool],
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let mut values = vec![0u8; width as usize * height as usize];
+    let cell_size = geometry.cell_size_px.max(1) as usize;
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    values
+        .par_chunks_mut(width as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let cell_row = y / cell_size;
+            if cell_row >= rows {
+                return;
+            }
+            let base = cell_row * columns;
+            for (x, value) in row.iter_mut().enumerate() {
+                let cell_column = x / cell_size;
+                if cell_column < columns && cells[base + cell_column] {
+                    *value = 255;
                 }
             }
         });
@@ -9871,6 +9905,7 @@ where
     // plane is a pure translation of the world plane, so the tile's top-left
     // pixel sits at `(-offset_x, -offset_y)`.
     let confidence_cells = fusion.confidence();
+    let textured_cells = fusion.textured_cells();
     let low_sharpness_regions = fusion.low_sharpness_region_records((-offset_x, -offset_y));
     if !low_sharpness_regions.is_empty() {
         println!(
@@ -9884,6 +9919,8 @@ where
     }
     let confidence_values =
         focus_cell_plane_to_pixels(&fusion_geometry, &confidence_cells, out_width, out_height);
+    let textured_values =
+        focus_cell_texture_to_pixels(&fusion_geometry, &textured_cells, out_width, out_height);
     let mut fusion_report = FusionReport {
         cell_size_px: fusion_geometry.cell_size_px,
         grid: OwnershipGridSize {
@@ -9922,6 +9959,7 @@ where
                 coverage: CoverageMask::from_gray(merged_mask),
                 ownership,
                 confidence,
+                textured: textured_values,
                 fusion: fusion_report,
             })
         })

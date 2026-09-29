@@ -372,8 +372,20 @@ pub(crate) fn map_world_to_source(
     let inverse = (geometry.tile_to_world * geometry.member_to_anchor)
         .try_inverse()
         .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
-    let unwarped = residual.warp_inverse(world, geometry.station_id);
-    project_geometry(&inverse, unwarped)
+    map_world_to_source_with_inverse(world, geometry.station_id, residual, &inverse)
+}
+
+/// Map a world point using a precomputed composite inverse.  Quality_Gate
+/// samples millions of reference pixels per run; computing the same 3x3
+/// inverse for every pixel is pure overhead and does not alter the mapping.
+pub(crate) fn map_world_to_source_with_inverse(
+    world: Point2<f64>,
+    station_id: usize,
+    residual: &residual_warp::ResidualWarp,
+    inverse: &Matrix3<f64>,
+) -> Result<Point2<f64>, &'static str> {
+    let unwarped = residual.warp_inverse(world, station_id);
+    project_geometry(inverse, unwarped)
 }
 
 pub(crate) fn map_roi_corners_to_source(
@@ -799,7 +811,10 @@ fn metric_refine_edge(
 pub(crate) fn detect_slanted_edge(
     image: &image::Rgb32FImage,
 ) -> Result<SlantedEdgeEvidence, &'static str> {
-    use super::degradation::{ROI_NOT_SLANTED_EDGE, SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED};
+    use super::degradation::{
+        ROI_NOT_SLANTED_EDGE, SLANTED_EDGE_ANGLE_OUT_OF_RANGE, SLANTED_EDGE_CONTRAST_INSUFFICIENT,
+        SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED, SLANTED_EDGE_TOO_SHORT,
+    };
     let plane = metric_luminance(image).ok_or(ROI_NOT_SLANTED_EDGE)?;
     let (width, height) = (image.width() as usize, image.height() as usize);
     if width < 129 || height < 129 {
@@ -818,11 +833,15 @@ pub(crate) fn detect_slanted_edge(
             suppression_radius: 4,
         },
     );
+    let no_lines = lines.is_empty();
     let points: Vec<(f64, f64)> = edges
         .enumerate_pixels()
         .filter_map(|(x, y, p)| (p[0] != 0).then_some((f64::from(x), f64::from(y))))
         .collect();
     let mut candidates = Vec::new();
+    let mut had_support = false;
+    let mut had_long_support = false;
+    let mut had_angle_candidate = false;
     for line in lines {
         let angle = f64::from(line.angle_in_degrees).to_radians();
         let (sine, cosine) = angle.sin_cos();
@@ -835,6 +854,7 @@ pub(crate) fn detect_slanted_edge(
         // Keep near-axis candidates a little outside the final 3..15 degree
         // band; the subpixel line fit, not the 1-degree Hough bin, sets angle.
         if slope.abs().atan().to_degrees() > 17.0 {
+            had_angle_candidate = true;
             continue;
         }
         let mut support = vec![false; rows];
@@ -861,9 +881,11 @@ pub(crate) fn detect_slanted_edge(
             runs.push((start, last));
         }
         for (start, end) in runs {
+            had_support = true;
             if ((end - start) as f64) * (1.0 + slope * slope).sqrt() < MTF_EDGE_MIN_LENGTH_PX {
                 continue;
             }
+            had_long_support = true;
             if let Some(candidate) = metric_refine_edge(
                 &plane,
                 width,
@@ -889,6 +911,7 @@ pub(crate) fn detect_slanted_edge(
         if candidate.angle_deg < MTF_EDGE_MIN_ANGLE_DEG - 1e-6
             || candidate.angle_deg > MTF_EDGE_MAX_ANGLE_DEG + 1e-6
         {
+            had_angle_candidate = true;
             continue;
         }
         if candidate.line_fit_rms_px > MTF_LINE_MAX_RMS_PX {
@@ -919,6 +942,12 @@ pub(crate) fn detect_slanted_edge(
     }
     Err(if found_bad_fit {
         SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED
+    } else if had_angle_candidate {
+        SLANTED_EDGE_ANGLE_OUT_OF_RANGE
+    } else if had_long_support {
+        SLANTED_EDGE_CONTRAST_INSUFFICIENT
+    } else if had_support || no_lines {
+        SLANTED_EDGE_TOO_SHORT
     } else {
         ROI_NOT_SLANTED_EDGE
     })
@@ -1165,6 +1194,7 @@ pub(crate) struct BoundaryStrokeReport {
     pub measurements: Vec<BoundaryStrokeMeasurement>,
     pub pairable_count: usize,
     pub unpairable_count: usize,
+    pub unmeasurable: Vec<((f64, f64), &'static str)>,
     pub p95_error_px: f64,
     pub max_error_px: f64,
 }
@@ -1274,6 +1304,7 @@ pub(crate) fn measure_boundary_strokes(
     }
     let mut measurements = Vec::new();
     let mut unpairable_count = 0;
+    let mut unmeasurable = Vec::new();
     for (index, &(x, y)) in boundary.iter().enumerate().step_by(256) {
         let prev = boundary[(index + boundary.len() - 1) % boundary.len()];
         let next = boundary[(index + 1) % boundary.len()];
@@ -1321,6 +1352,10 @@ pub(crate) fn measure_boundary_strokes(
         }
         if best_left.0 <= 0.0 || best_right.0 <= 0.0 {
             unpairable_count += 1;
+            unmeasurable.push((
+                (world_origin.0 + f64::from(x), world_origin.1 + f64::from(y)),
+                degradation::BOUNDARY_LOW_CONTRAST,
+            ));
             continue;
         }
         let left_angle = best_left.2 / best_left.0;
@@ -1331,6 +1366,10 @@ pub(crate) fn measure_boundary_strokes(
         }
         if angle_error > 10.0 {
             unpairable_count += 1;
+            unmeasurable.push((
+                (world_origin.0 + f64::from(x), world_origin.1 + f64::from(y)),
+                degradation::BOUNDARY_ORIENTATION_MISMATCH,
+            ));
             continue;
         }
         let left_position = best_left.1 / best_left.0;
@@ -1356,6 +1395,7 @@ pub(crate) fn measure_boundary_strokes(
     Ok(BoundaryStrokeReport {
         pairable_count: measurements.len(),
         unpairable_count,
+        unmeasurable,
         p95_error_px: p95,
         max_error_px: *errors.last().unwrap_or(&0.0),
         measurements,

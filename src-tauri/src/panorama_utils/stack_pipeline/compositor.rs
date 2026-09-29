@@ -190,6 +190,79 @@ pub(crate) fn is_canvas_rejection(error: &str) -> bool {
     error.starts_with(super::degradation::CANVAS_LONG_SIDE_EXCEEDED)
 }
 
+/// Add the coverage-boundary term from the Tile_Compositor seam objective.
+/// Overlap disagreement and the boundary penalty share one cost unit, so a
+/// candidate inside the 16-pixel boundary band always pays at least 1.0.
+#[cfg(test)]
+pub(crate) fn seam_candidate_cost(overlap_disagreement: f64, boundary_distance: f64) -> f64 {
+    overlap_disagreement.max(0.0)
+        + f64::from((boundary_distance.is_finite() && boundary_distance < 16.0) as u8)
+}
+
+/// Find the deterministic minimum-cost vertical seam in a row-major overlap
+/// grid.  A path contains one column per row and may move at most one column
+/// between adjacent rows.  This pure solver is shared by the production seam
+/// adapter and Property 53's exhaustive oracle.
+#[cfg(test)]
+pub(crate) fn minimum_vertical_seam(
+    costs: &[f64],
+    width: usize,
+    height: usize,
+) -> Option<(Vec<usize>, f64)> {
+    if width == 0 || height == 0 || costs.len() != width.saturating_mul(height) {
+        return None;
+    }
+    let mut previous = costs[..width].to_vec();
+    let mut predecessors = vec![0usize; width.saturating_mul(height)];
+    for row in 1..height {
+        let mut current = vec![f64::INFINITY; width];
+        for column in 0..width {
+            let start = column.saturating_sub(1);
+            let end = (column + 1).min(width - 1);
+            let (best_column, best_cost) = (start..=end)
+                .map(|candidate| (candidate, previous[candidate]))
+                .min_by(|(left_column, left_cost), (right_column, right_cost)| {
+                    left_cost
+                        .total_cmp(right_cost)
+                        .then_with(|| left_column.cmp(right_column))
+                })?;
+            current[column] = best_cost + costs[row * width + column];
+            predecessors[row * width + column] = best_column;
+        }
+        previous = current;
+    }
+    let (mut column, total) = previous.iter().copied().enumerate().min_by(
+        |(left_column, left_cost), (right_column, right_cost)| {
+            left_cost
+                .total_cmp(right_cost)
+                .then_with(|| left_column.cmp(right_column))
+        },
+    )?;
+    let mut path = vec![0usize; height];
+    path[height - 1] = column;
+    for row in (1..height).rev() {
+        column = predecessors[row * width + column];
+        path[row - 1] = column;
+    }
+    Some((path, total))
+}
+
+/// For an overlap narrower than 32 world pixels, the requirement-prescribed
+/// seam is its geometric centre line.  The boolean identifies a vertical
+/// line; the returned coordinates are one cross-axis coordinate per along-axis
+/// row/column and are deterministic for even widths/heights.
+#[cfg(test)]
+pub(crate) fn narrow_overlap_centerline(width: usize, height: usize) -> Option<(bool, Vec<usize>)> {
+    if width == 0 || height == 0 || width.max(height) >= 32 {
+        return None;
+    }
+    if width <= height {
+        Some((true, vec![width / 2; height]))
+    } else {
+        Some((false, vec![height / 2; width]))
+    }
+}
+
 /// Decide and record the actual pipeline path from the Station_Grouper output
 /// and the persisted compositor setting (requirements 15.1, 15.3 and 15.11).
 ///

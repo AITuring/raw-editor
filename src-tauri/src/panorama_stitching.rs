@@ -89,6 +89,13 @@ impl Drop for FocusRssGuard {
 }
 
 fn ensure_focus_memory_available(sampler: Option<&FocusRssGuard>) -> Result<(), String> {
+    if degradation::run_generation_changed() {
+        degradation::record_run_degradation(
+            degradation::RUN_CANCELLED_BY_USER,
+            serde_json::json!({"reason": "newer_image_stack_generation"}),
+        );
+        return Err("image-stack run cancelled by a newer request".to_string());
+    }
     if sampler.is_some_and(FocusRssGuard::cancelled) {
         return Err("memory threshold exceeded during focus-stack run".to_string());
     }
@@ -6423,7 +6430,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     blend_mode: BlendMode,
     progress_event: &str,
 ) -> Result<StitchOutcome, String> {
-    let _run_scope = degradation::begin_run_scope();
+    let run_generation = degradation::active_run_generation();
+    let _run_scope = degradation::begin_run_scope_for_generation(run_generation).map_err(|_| {
+        "image-stack run cancelled by a newer request before it started".to_string()
+    })?;
     let image_paths = image_paths
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
@@ -6610,8 +6620,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .par_iter()
             .enumerate()
             .map(|(i, filename)| {
+                if degradation::run_generation_changed_for(run_generation) {
+                    return Err("image-stack run cancelled by a newer request".to_string());
+                }
                 println!("  - Processing '{}'", filename);
                 let prepared_source = load_prepared_stack_source(filename, &settings)?;
+                if degradation::run_generation_changed_for(run_generation) {
+                    return Err("image-stack run cancelled by a newer request".to_string());
+                }
                 let dynamic_image = prepared_source.image;
                 let focal_length_35mm = prepared_source.focal_length_35mm;
                 if focus_stack
@@ -6743,6 +6759,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     } else {
         prepare_images()
     };
+    ensure_focus_memory_available(rss_sampler.as_ref())?;
 
     // Preparation already finished for every source, so collect the whole batch
     // before propagating.  The caller still observes the first error exactly as
@@ -6898,6 +6915,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let match_results: Vec<Option<((usize, usize), MatchInfo)>> = pairs_to_check
         .par_iter()
         .map(|&(i, j)| {
+            if degradation::run_generation_changed_for(run_generation) {
+                return None;
+            }
             let _progress = PairMatchProgress {
                 completed: &matched_pair_count,
                 total: pairs_to_check.len(),
@@ -6965,6 +6985,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             Some(((i, j), match_info))
         })
         .collect();
+    ensure_focus_memory_available(rss_sampler.as_ref())?;
 
     for result in match_results.into_iter().flatten() {
         pairwise_matches.insert(result.0, result.1);
@@ -7649,7 +7670,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // measured.
     let mut station_poses_replaced = false;
     #[allow(clippy::type_complexity)]
-    let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, (f64, f64))> = None;
+    let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, Vec<u8>, (f64, f64))> = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
     let panorama = match blend_mode {
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
@@ -8313,6 +8334,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 }
                                 let mut ownership = rendered.ownership.owners().to_vec();
                                 let mut confidence = vec![f32::NAN; ownership.len()];
+                                let mut textured = vec![0u8; ownership.len()];
                                 for (index, owner) in ownership.iter_mut().enumerate() {
                                     let compositor_owner = *owner;
                                     let tile_index = usize::from(compositor_owner).checked_sub(1);
@@ -8376,6 +8398,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     *owner = raw_owner;
                                     confidence[index] =
                                         masks.confidence.value_at(sx as u32, sy as u32);
+                                    textured[index] = masks
+                                        .textured
+                                        .get(sy as usize * mask_width as usize + sx as usize)
+                                        .copied()
+                                        .unwrap_or(0);
                                 }
                                 quality_sources = Some(raw_sources);
                                 quality_planes = Some((
@@ -8387,6 +8414,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     .unwrap_or_else(|| GrayImage::new(width, height)),
                                     ownership,
                                     confidence,
+                                    textured,
                                     rendered.sampling_origin,
                                 ));
                                 rendered.image
@@ -8455,7 +8483,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         }
     }?;
     ensure_focus_memory_available(rss_sampler.as_ref())?;
-    if let Some((coverage, ownership, confidence, world_origin)) = quality_planes.take() {
+    if let Some((coverage, ownership, confidence, textured, world_origin)) = quality_planes.take() {
         let sources = quality_sources.take().unwrap_or_default();
         let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
             load_prepared_stack_source(&source.path, &settings).map(|prepared| {
@@ -8494,7 +8522,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             coverage: &coverage,
             ownership: &ownership,
             confidence: &confidence,
-            textured: None,
+            textured: Some(&textured),
             world_origin,
             sources: &sources,
             residual: &residual,

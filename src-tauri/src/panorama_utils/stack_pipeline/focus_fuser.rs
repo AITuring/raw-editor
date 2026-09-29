@@ -69,6 +69,9 @@ use super::report::{
 /// substrate stays close to `0`.
 pub(crate) const SHARPNESS_HALF_SCALE: f64 = 0.10;
 
+/// Requirement 11.12's absolute Textured_Pixel floor.
+pub(crate) const TEXTURED_PIXEL_SHARPNESS_FLOOR: f64 = 0.10;
+
 /// Side of the Sharpness_Score sampling window in native pixels (需求 3.2).
 pub(crate) const SHARPNESS_SAMPLE_WINDOW_PX: f64 = 32.0;
 
@@ -1564,6 +1567,17 @@ impl StationFusion {
                     self.second[cell],
                     self.candidate_counts[cell] as usize,
                 )
+            })
+            .collect()
+    }
+
+    /// A cell is textured when any observed candidate reaches the glossary's
+    /// fixed Sharpness_Score floor. `best` is updated for every candidate by
+    /// `seed`/`fold`, so this does not infer texture from confidence.
+    pub(crate) fn textured_cells(&self) -> Vec<bool> {
+        (0..self.geometry.cell_count())
+            .map(|cell| {
+                self.owners[cell] != NO_OWNER && self.best[cell] >= TEXTURED_PIXEL_SHARPNESS_FLOOR
             })
             .collect()
     }

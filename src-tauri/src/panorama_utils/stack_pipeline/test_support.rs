@@ -264,6 +264,7 @@ fn arb_quality_gate_report() -> impl Strategy<Value = QualityGateReport> {
                         reason: reason.to_string(),
                     })
                     .collect(),
+                timing: super::report::QualityGateTimingRecord::default(),
             },
         )
 }

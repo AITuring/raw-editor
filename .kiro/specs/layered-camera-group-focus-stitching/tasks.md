@@ -1210,6 +1210,15 @@
       Langyuan 可测计数 `256/256/1/0/256/99/256/6/1`、不可测总数 6501；Wenyuan
       `231/231/1/0/231/44/231/0/1`、不可测总数 13470。两组 verdict 均为 `fail` 但仍只记录；
       输出 SHA256 仍为 `74942cfea3a1ede2…` / `86884740f93c876e…`。
+    - 执行记录（`bee5516c` 后测量修正）：报告为
+      `/private/tmp/raw-editor-gate/review-next/langyuan-report/reports/stack-report-e7f0dece-b455-4f16-83f2-5e298076ba3f.json`
+      与 `/private/tmp/raw-editor-gate/review-next/wenyuan-report/reports/stack-report-d32bd569-01ac-4966-8a1a-5667b90212f4.json`。
+      Langyuan 可测计数 `256/256/1/0/256/99/256/6/1`、不可测总数 6501；Wenyuan
+      `231/231/1/0/231/44/231/0/1`、不可测总数 13470。MTF50 不可测原因、边界低对比度/方向不符、
+      Textured_Pixel 与平坦像素计数及低置信度比例均写入报告。撤回 residual warp 后的最终输出 SHA256
+      为 `74942cfea3a1ede2…` / `86884740f93c876e…`；实验曾启用 Wenyuan 一个 P95=9.5265px 区域，
+      但输出变为 `e3f88653e9f02f4e…` 且无 post-warp P95 证据，故未接入生产。
+      最终 Wenyuan 报告为 `/private/tmp/raw-editor-gate/review-next/wenyuan-final/reports/stack-report-1d9a8609-6ad4-4d07-b2aa-352170574a89.json`。
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
     - 在阶段 7 的「记录但不阻止」模式已在阆苑女仙 84 张上取得全部实测数字之后执行本任务
@@ -1333,6 +1342,10 @@ memory_threshold_source, physical_memory_bytes}`
     - _Requirements: 14.3, 14.7, 14.8, 14.9_
     - 执行记录：FocusRssGuard 在解码、合成和质量门边界检查取消标志；超限时在最终文件写入前
       返回，报告写入 `memory_threshold_exceeded`、门槛、峰值和样本数；注入 RSS 单测覆盖取消。
+    - 执行记录（新一轮 generation 取消）：新请求发布 generation 后，旧 run 在解码、匹配、合成和
+      Quality_Gate 检查点返回 `run_cancelled_by_user`，排队的新 run 在获得全局锁前检测过期并在
+      小于 1 秒内确认；`newer_generation_is_detected_without_cancelling_direct_runs` 与
+      `superseded_queued_generation_is_acknowledged_within_one_second` 覆盖该路径。
 
   - [~] 17.3 把 `mosaic_diagnostics.rs` 从 `#[cfg(test)]` 提升为设置项驱动
     - 从 `#[cfg(test)]` 改为正常编译，由设置项 `stack_diagnostics.output_dir` 控制

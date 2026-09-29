@@ -972,6 +972,9 @@ pub(crate) struct QualityGateCriterionRecord {
     pub threshold_max: Option<f64>,
     pub measurable_count: usize,
     pub unmeasurable_count: usize,
+    /// Stable reason histogram for every item that could not be measured.
+    #[serde(default)]
+    pub unmeasurable_reasons: BTreeMap<String, usize>,
     /// Every measurable value, including passing values. The historical
     /// `failed` field is retained as the compact failure diagnostic list.
     #[serde(default)]
@@ -981,6 +984,16 @@ pub(crate) struct QualityGateCriterionRecord {
     #[serde(default)]
     pub diagnostic: bool,
     pub failed: Vec<FailedMeasurementRecord>,
+    /// Requirement 11.12's split confidence evidence. These fields are only
+    /// populated for `sharpness_confidence_coverage`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub textured_pixel_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excluded_flat_pixel_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub textured_low_confidence_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flat_low_confidence_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -990,12 +1003,25 @@ pub(crate) struct UnmeasurableRecord {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct QualityGateTimingRecord {
+    pub decode_seconds: f64,
+    pub roi_sampling_seconds: f64,
+    pub boundary_seconds: f64,
+    pub effective_coverage_seconds: f64,
+    pub owner_source_decode_count: usize,
+    pub roi_reference_count: usize,
+    pub boundary_sample_count: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct QualityGateReport {
     pub verdict: QualityGateVerdict,
     pub roi_count: usize,
     pub criteria: Vec<QualityGateCriterionRecord>,
     pub unmeasurable: Vec<UnmeasurableRecord>,
+    #[serde(default)]
+    pub timing: QualityGateTimingRecord,
 }
 
 impl Default for QualityGateReport {
@@ -1005,6 +1031,7 @@ impl Default for QualityGateReport {
             roi_count: 0,
             criteria: Vec::new(),
             unmeasurable: Vec::new(),
+            timing: QualityGateTimingRecord::default(),
         }
     }
 }

@@ -19,9 +19,13 @@
 // consumes its identifiers.
 #![allow(dead_code)]
 
+use std::cell::Cell;
 use std::io;
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard, TryLockError};
+use std::thread;
+use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -185,6 +189,20 @@ pub const PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED: &str = "pairing_residual_alignmen
 pub const BOUNDARY_NO_PAIRABLE_EDGE: &str = "boundary_no_pairable_edge";
 /// The slanted edge line fit residual is too large to measure MTF50.
 pub const SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED: &str = "slanted_edge_line_fit_residual_exceeded";
+/// Local scale could not be estimated, so scale-normalised criteria are not measurable.
+pub const LOCAL_SCALE_UNMEASURABLE: &str = "local_scale_unmeasurable";
+/// The final ownership plane did not carry Textured_Pixel evidence.
+pub const TEXTURED_PIXEL_PLANE_UNAVAILABLE: &str = "textured_pixel_plane_unavailable";
+/// No sufficiently long edge support was found in the ROI.
+pub const SLANTED_EDGE_TOO_SHORT: &str = "slanted_edge_too_short";
+/// Edge support exists but its two sides do not reach the contrast floor.
+pub const SLANTED_EDGE_CONTRAST_INSUFFICIENT: &str = "slanted_edge_contrast_insufficient";
+/// Candidate edges exist but their angle is outside the 3..15 degree band.
+pub const SLANTED_EDGE_ANGLE_OUT_OF_RANGE: &str = "slanted_edge_angle_out_of_range";
+/// Boundary sampling found no edge on one or both sides.
+pub const BOUNDARY_LOW_CONTRAST: &str = "boundary_low_contrast";
+/// Boundary edges were found but their orientations disagree.
+pub const BOUNDARY_ORIENTATION_MISMATCH: &str = "boundary_orientation_mismatch";
 
 /// Severity of a degradation entry. `Rejected` means the run must not write a
 /// final result file; `Degraded` means the run continues with reduced evidence;
@@ -460,6 +478,13 @@ pub const UNMEASURABLE_REASONS: &[&str] = &[
     PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED,
     BOUNDARY_NO_PAIRABLE_EDGE,
     SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED,
+    LOCAL_SCALE_UNMEASURABLE,
+    TEXTURED_PIXEL_PLANE_UNAVAILABLE,
+    SLANTED_EDGE_TOO_SHORT,
+    SLANTED_EDGE_CONTRAST_INSUFFICIENT,
+    SLANTED_EDGE_ANGLE_OUT_OF_RANGE,
+    BOUNDARY_LOW_CONTRAST,
+    BOUNDARY_ORIENTATION_MISMATCH,
 ];
 
 /// Maximum identifier length allowed by requirement 12.7.
@@ -603,15 +628,92 @@ static RUN_LEDGER: Mutex<DegradationLedger> = Mutex::new(DegradationLedger::new(
 /// sinks predate concurrent runs and are intentionally kept signature-free;
 /// one guard now makes reset -> render -> snapshot an atomic run transaction.
 static RUN_SCOPE: Mutex<()> = Mutex::new(());
+/// The image-stack command increments this generation for every new request.
+/// A run that already owns `RUN_SCOPE` observes a newer generation at its
+/// cooperative checkpoints and exits instead of holding the process-wide sinks
+/// while a replacement request waits for a completed render.
+static ACTIVE_RUN_GENERATION: AtomicUsize = AtomicUsize::new(0);
 
-pub(crate) struct RunScope(MutexGuard<'static, ()>);
+thread_local! {
+    static OWNED_RUN_GENERATION: Cell<usize> = const { Cell::new(0) };
+}
 
+pub(crate) struct RunScope {
+    _guard: MutexGuard<'static, ()>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RunScopeCancelled;
+
+/// Acquire the process-wide observation scope while remaining responsive to a
+/// newer UI generation. A queued replacement run never takes ownership of a
+/// scope after its generation has already been superseded.
 pub(crate) fn begin_run_scope() -> RunScope {
-    RunScope(
-        RUN_SCOPE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    begin_run_scope_for_generation(0).expect("a direct run must acquire its scope")
+}
+
+pub(crate) fn begin_run_scope_for_generation(
+    generation: usize,
+) -> Result<RunScope, RunScopeCancelled> {
+    loop {
+        if generation_changed_for(generation, ACTIVE_RUN_GENERATION.load(Ordering::Acquire)) {
+            return Err(RunScopeCancelled);
+        }
+        match RUN_SCOPE.try_lock() {
+            Ok(guard) => {
+                if generation_changed_for(generation, ACTIVE_RUN_GENERATION.load(Ordering::Acquire))
+                {
+                    drop(guard);
+                    return Err(RunScopeCancelled);
+                }
+                OWNED_RUN_GENERATION.with(|owned| owned.set(generation));
+                return Ok(RunScope { _guard: guard });
+            }
+            Err(TryLockError::Poisoned(poisoned)) => {
+                let guard = poisoned.into_inner();
+                if generation_changed_for(generation, ACTIVE_RUN_GENERATION.load(Ordering::Acquire))
+                {
+                    drop(guard);
+                    return Err(RunScopeCancelled);
+                }
+                OWNED_RUN_GENERATION.with(|owned| owned.set(generation));
+                return Ok(RunScope { _guard: guard });
+            }
+            Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(5)),
+        }
+    }
+}
+
+pub(crate) fn active_run_generation() -> usize {
+    ACTIVE_RUN_GENERATION.load(Ordering::Acquire)
+}
+
+/// Publish the generation of the newest UI request.  The next run still waits
+/// for the scope to become available, but the previous owner sees the change at
+/// its next checkpoint and releases the scope promptly.
+pub(crate) fn set_active_run_generation(generation: usize) {
+    ACTIVE_RUN_GENERATION.store(generation, Ordering::Release);
+}
+
+/// Whether the run holding the process-wide scope has been superseded by a
+/// newer image-stack request.  A generation of zero is the direct/library test
+/// path and deliberately has no external cancellation source.
+pub(crate) fn run_generation_changed() -> bool {
+    OWNED_RUN_GENERATION.with(|owned| {
+        let generation = owned.get();
+        run_generation_changed_for(generation)
+    })
+}
+
+pub(crate) fn run_generation_changed_for(owned_generation: usize) -> bool {
+    generation_changed_for(
+        owned_generation,
+        ACTIVE_RUN_GENERATION.load(Ordering::Acquire),
     )
+}
+
+fn generation_changed_for(owned_generation: usize, active_generation: usize) -> bool {
+    owned_generation != 0 && active_generation != owned_generation
 }
 
 fn with_run_ledger<T>(body: impl FnOnce(&mut DegradationLedger) -> T) -> T {
@@ -1082,5 +1184,22 @@ mod tests {
         );
         assert_eq!(file_system.removed, vec![temporary.to_path_buf()]);
         assert!(file_system.renames.is_empty());
+    }
+
+    #[test]
+    fn newer_generation_is_detected_without_cancelling_direct_runs() {
+        assert!(!generation_changed_for(0, 1));
+        assert!(!generation_changed_for(9, 9));
+        assert!(generation_changed_for(9, 10));
+    }
+
+    #[test]
+    fn superseded_queued_generation_is_acknowledged_within_one_second() {
+        set_active_run_generation(42);
+        let started = std::time::Instant::now();
+        let result = begin_run_scope_for_generation(41);
+        assert!(matches!(result, Err(RunScopeCancelled)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        set_active_run_generation(0);
     }
 }
