@@ -268,8 +268,7 @@ impl Criterion {
             !self.failed.is_empty(),
             self.diagnostic,
             self.observed_count == 0
-                || (self.name == "owner_sharpness_coverage"
-                    && self.unresolved_pixel_count > 0),
+                || (self.name == "owner_sharpness_coverage" && self.unresolved_pixel_count > 0),
         );
         QualityGateCriterionRecord {
             name: self.name.to_string(),
@@ -334,10 +333,10 @@ pub(crate) fn criterion_verdict(
         || (!whole_image && technical_ratio > quality_gate::QUALITY_MAX_UNMEASURABLE_RATIO)
     {
         QualityGateVerdict::InsufficientEvidence
-    } else if sparse && measurable < quality_gate::QUALITY_MIN_MEASURABLE {
-        QualityGateVerdict::NotApplicable
     } else if has_failed {
         QualityGateVerdict::Fail
+    } else if sparse && measurable < quality_gate::QUALITY_MIN_MEASURABLE {
+        QualityGateVerdict::NotApplicable
     } else if dense && measurable < quality_gate::QUALITY_MIN_MEASURABLE {
         QualityGateVerdict::InsufficientEvidence
     } else {

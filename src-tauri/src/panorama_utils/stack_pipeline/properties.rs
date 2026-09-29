@@ -11417,10 +11417,10 @@ proptest! {
                 if failed { QualityGateVerdict::Fail } else { QualityGateVerdict::Pass }
             } else if technical_count * 5 > measurable + technical_count {
                 QualityGateVerdict::InsufficientEvidence
-            } else if conditional && measurable < 8 {
-                QualityGateVerdict::NotApplicable
             } else if failed {
                 QualityGateVerdict::Fail
+            } else if conditional && measurable < 8 {
+                QualityGateVerdict::NotApplicable
             } else if !conditional && measurable < 8 {
                 QualityGateVerdict::InsufficientEvidence
             } else {
