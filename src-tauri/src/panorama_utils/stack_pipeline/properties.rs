@@ -11213,8 +11213,8 @@ proptest! {
 // Later Quality_Gate pure-property checks (15.18-15.22).
 use super::quality_gate::{measure_boundary_strokes, trace_moore_boundary};
 use super::quality_gate_runner::{
-    Criterion, classify_unmeasurable_reason, criterion_verdict, overall_verdict,
-    owner_sharpness_stats, record_unmeasurable,
+    Criterion, build_owner_sharpness_criterion, classify_unmeasurable_reason, criterion_verdict,
+    overall_verdict, owner_sharpness_stats, record_unmeasurable,
 };
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
@@ -11300,6 +11300,21 @@ proptest! {
             shortfall[index] = u8::MAX;
             disagreement[index] = u8::MAX;
         }
+        let coverage_image = image::GrayImage::from_raw(32, 32, coverage.clone())
+            .expect("property coverage plane has the expected dimensions");
+        let confidence = vec![0.8f32; 1024];
+        let mut evidence_records = Vec::new();
+        let criterion = build_owner_sharpness_criterion(
+            &coverage_image,
+            &confidence,
+            Some(&textured),
+            Some(&shortfall),
+            Some(&disagreement),
+            unresolved as u64,
+            (0.0, 0.0),
+            &mut evidence_records,
+        );
+        let report = criterion.finish(&mut evidence_records);
         let stats = owner_sharpness_stats(
             &coverage,
             &textured,
@@ -11324,6 +11339,42 @@ proptest! {
         );
         prop_assert_eq!(stats.unresolved_pixel_count, unresolved as u64);
         prop_assert_eq!(stats.disagreement_veto_count, expected_shortfall);
+        let expected_verdict = if expected_textured == 0 || unresolved > 0 {
+            QualityGateVerdict::InsufficientEvidence
+        } else if expected_shortfall * 100 <= expected_textured {
+            QualityGateVerdict::Pass
+        } else {
+            QualityGateVerdict::Fail
+        };
+        prop_assert_eq!(report.verdict, expected_verdict);
+        prop_assert_eq!(report.measurable_count, u64::from(expected_textured > 0) as usize);
+        if expected_textured > 0 {
+            prop_assert_eq!(report.measured.len(), 1);
+            prop_assert_eq!(
+                report.measured[0].measured.to_bits(),
+                (1.0 - expected_shortfall as f64 / expected_textured as f64).to_bits()
+            );
+        } else {
+            prop_assert!(report.measured.is_empty());
+        }
+        // The owner criterion uses only the owner-shortfall plane. Changing
+        // Sharpness_Confidence can alter diagnostic ratios, but never the
+        // verdict or the measured coverage value.
+        let mut changed_records = Vec::new();
+        let changed_confidence = vec![f32::NAN; 1024];
+        let changed = build_owner_sharpness_criterion(
+            &coverage_image,
+            &changed_confidence,
+            Some(&textured),
+            Some(&shortfall),
+            Some(&disagreement),
+            unresolved as u64,
+            (0.0, 0.0),
+            &mut changed_records,
+        )
+        .finish(&mut changed_records);
+        prop_assert_eq!(changed.verdict, report.verdict);
+        prop_assert_eq!(changed.measured, report.measured);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
