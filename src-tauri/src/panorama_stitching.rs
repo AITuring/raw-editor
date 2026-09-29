@@ -8463,8 +8463,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         && mask_width > 0
                                         && mask_height > 0
                                     {
-                                        let floor_x = rounded_x.floor() as i64;
-                                        let floor_y = rounded_y.floor() as i64;
+                                        // The compositor's bicubic sampler uses the
+                                        // source coordinate's floor as its anchor;
+                                        // rounding is only a diagnostic for whether
+                                        // that nearest pixel carried an owner.
+                                        let floor_x = local.x.floor() as i64;
+                                        let floor_y = local.y.floor() as i64;
                                         let mut nearest_distance = f64::INFINITY;
                                         for dy in -1i64..=2 {
                                             for dx in -1i64..=2 {
@@ -8544,10 +8548,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                             unresolved_pixel_count += 1;
                                             if !rounded_x.is_finite() || !rounded_y.is_finite() {
                                                 owner_reverse_lookup_failures.transform_failed += 1;
-                                            } else if rounded_x < 0.0
-                                                || rounded_y < 0.0
-                                                || rounded_x >= f64::from(mask_width)
-                                                || rounded_y >= f64::from(mask_height)
+                                            } else if local.x < 0.0
+                                                || local.y < 0.0
+                                                || local.x >= f64::from(mask_width)
+                                                || local.y >= f64::from(mask_height)
                                             {
                                                 owner_reverse_lookup_failures.out_of_bounds += 1;
                                             } else {
