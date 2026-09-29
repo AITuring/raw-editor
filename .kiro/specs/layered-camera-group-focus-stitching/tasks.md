@@ -1039,8 +1039,9 @@
     - 复用 `canonicalize_image_stack_result()` / `write_preview_files()`：
       预览仅由最终结果规范化显示编码像素降采样得到，与最终结果携带同一结果标识
     - _Requirements: 10.2, 10.5, 10.6, 10.7, 10.10, 10.11, 14.5_
+    - 执行记录：已加 `MAX_OUTPUT_CANVAS_LONG_SIDE = 262_144` 与 `compositor::reject_oversized_canvas`，默认路径在分配画布前拒绝超限画布并记录 `canvas_long_side_exceeded`（实测宽高、长边、上限），`is_canvas_rejection` 使回退渲染器不再重试。分块合成、alpha 写出、位深/alpha 降级提示与预览派生仍未做，保持 [~]。
 
-  - [~] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
+  - [x] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
     - 删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER`（其语义成为默认路径）
     - 把 `RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC`、`progressive_seam_stitcher`、
       `focus_stack_stitcher` 的选择迁到 `StackCompositorChoice` 设置项；
@@ -1048,6 +1049,7 @@
     - 同步更新 `tests/focus-stack-quality-contract.mjs`：新增「`Tile_Compositor`
       入口函数体内不出现 `std::env::var`」断言
     - _Requirements: 15.2, 15.3, 15.10_
+    - 执行记录：删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER` 与 `RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC`，`StackCompositorChoice::resolve` 只读设置项；ownership 合成器的诊断开关收进 `OwnershipCompositorSwitches`，仅旧对照路径 `from_env` 读取，默认分层路径用全关的 `Default`，入口函数体内不再出现 `std::env::var`；契约新增对应断言。
 
   - [ ]* 13.8 属性测试：接缝只在双覆盖区且代价最低
     - **Property 53: 接缝只在双覆盖区且代价最低**
@@ -1075,17 +1077,19 @@
     - **Property 57: 写入 alpha 不改变颜色通道**
     - **Validates: Requirements 10.6**
 
-  - [ ]* 13.13 属性测试：预览由最终结果派生且色差有界
+  - [x]* 13.13 属性测试：预览由最终结果派生且色差有界
     - **Property 58: 预览由最终结果派生且色差有界**
     - **Validates: Requirements 10.7**
+    - 执行记录：预览改由纯函数 `derive_preview_images` 从规范化结果像素降采样得到，结果标识在写预览前生成并用于预览文件名（`{result_id}-detail.jpg` / `-interaction.jpg`），与存储结果同一标识。`property_58_previews_derive_from_the_result_with_bounded_roi_delta_e`（100 例）按生产 JPEG 质量往返后验证 2×/4× 预览的 64px ROI 低频均值 Delta_E00 ≤ 1.0。
 
   - [ ]* 13.14 属性测试：窄重叠沿中线取接缝
     - **Property 59: 窄重叠沿中线取接缝**
     - **Validates: Requirements 10.9**
 
-  - [ ]* 13.15 属性测试：画布超限拒绝输出
+  - [x]* 13.15 属性测试：画布超限拒绝输出
     - **Property 60: 画布超限拒绝输出**
     - **Validates: Requirements 10.11**
+    - 执行记录：`property_60_oversized_canvas_is_rejected_with_its_measured_size`（100 例）与 `layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile`（40000× 放大的 8px 瓦片，拒绝且不解码任何瓦片）。
 
   - [ ]* 13.16 属性测试：降内存措施不改变输出
     - **Property 89: 降内存措施不改变输出**
@@ -1349,6 +1353,7 @@ memory_threshold_source, physical_memory_bytes}`
     - ROI 长边 >4096 / 在裁切区外 / 与覆盖无交集 → 拒绝该次导出、不写部分结果、
       提示指明原因，标识符 `diagnostics_roi_invalid`
     - _Requirements: 13.3, 13.6, 13.7, 13.8_
+    - 执行记录：新增 `stack_pipeline/diagnostics.rs`：`validate_diagnostic_roi`（长边 >4096、完全在输出外、与覆盖无交集时以 `diagnostics_roi_invalid` 与原因拒绝，写入前判定）、`pixel_provenance`（站位、owner 绝对路径、Sharpness_Confidence、Coverage_Mask）与 `export_roi_planes`（只写用户目录，先写隐藏暂存目录再一次重命名发布，失败时删除暂存并以 `diagnostics_write_failed` 指明目录）。候选 Source_RAW 重采样、选择掩膜、逐帧 Sharpness_Score、60 秒时限与管线接线尚未完成，保持 [~]。
 
   - [x] 17.5 实现 `stack_acceptance_harness`
     - 复用 `panorama_reference_acceptance.rs` 的 `#[ignore]` + 环境变量素材路径 +
@@ -1381,13 +1386,15 @@ memory_threshold_source, physical_memory_bytes}`
     - **Property 83: 诊断关闭时零分配零写入**
     - **Validates: Requirements 13.5**
 
-  - [ ]* 17.9 属性测试：像素级溯源查询一致
+  - [x]* 17.9 属性测试：像素级溯源查询一致
     - **Property 84: 像素级溯源查询一致**
     - **Validates: Requirements 13.6**
+    - 执行记录：`property_84_pixel_provenance_matches_the_output_planes`（100 例）。
 
-  - [ ]* 17.10 属性测试：无效诊断 ROI 拒绝且不写部分结果
+  - [x]* 17.10 属性测试：无效诊断 ROI 拒绝且不写部分结果
     - **Property 85: 无效诊断 ROI 拒绝且不写部分结果**
     - **Validates: Requirements 13.8**
+    - 执行记录：`property_85_invalid_diagnostic_rois_are_refused_without_writing`（100 例，独立判定三种拒绝条件，并验证拒绝时目录为空、接受时只发布一个 ROI 目录）。
 
   - [x]* 17.11 属性测试：内存门槛解析确定
     - **Property 86: 内存门槛解析确定**

@@ -1134,6 +1134,27 @@ assert.match(
   'a run without a derived seed must clear the previous one instead of inheriting it',
 );
 
+// 任务 13.7: the compositor is chosen by the setting alone, and the default
+// Tile_Compositor entry reads no environment switch; the retired comparison
+// path keeps its diagnostic switches behind OwnershipCompositorSwitches::from_env.
+for (const variable of [
+  'RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER',
+  'RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC',
+]) {
+  assert.doesNotMatch(compositorChoice, new RegExp(variable), `${variable} must be deleted (任务 13.7)`);
+}
+{
+  const entry = stitching.indexOf('fn focus_tile_ownership_stitcher_with_finishing');
+  assert.ok(entry >= 0, 'the Tile_Compositor entry must exist');
+  const body = stitching.slice(entry, stitching.indexOf('\n}\n', entry));
+  assert.doesNotMatch(body, /std::env::var/, 'the Tile_Compositor entry must not read std::env::var (任务 13.7)');
+  assert.match(body, /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/);
+}
+// 任务 13.6 / 需求 10.11: the supported canvas limit is a named constant and a
+// rejection is never retried by the fallback renderer.
+assert.match(compositorChoice, /MAX_OUTPUT_CANVAS_LONG_SIDE: u64 = 262_144;/);
+assert.match(panorama, /is_canvas_rejection\(/, 'an oversized canvas must not fall back to another renderer');
+
 console.log(
   `Validated focus-stack quality guards: ${selectionLongSide}-cell ownership grid, native refinement, ` +
     `station evidence (${stationMinInliers} inliers / ${stationMinOverlapNcc} overlap NCC / ` +

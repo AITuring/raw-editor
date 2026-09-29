@@ -2102,6 +2102,60 @@ pub(crate) fn layered_final_sharpen_amount() -> f32 {
         .clamp(0.0, 1.25)
 }
 
+/// Diagnostic switches of the ownership compositor. The retired comparison
+/// path reads them once (`from_env`); the default layered path always uses
+/// `Default`, all off, so no environment variable changes its output
+/// (需求 15.2 / 15.10, 任务 13.7).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct OwnershipCompositorSwitches {
+    tone_all_pixels: bool,
+    soft_owner_boundary: bool,
+    skip_exposure_gain: bool,
+    low_frequency_consensus: bool,
+    owner_tone_harmonization: bool,
+    skip_owner_tone_harmonization: bool,
+    final_low_frequency_illumination: bool,
+    legacy_final_sharpen_amount: f32,
+}
+
+impl Default for OwnershipCompositorSwitches {
+    fn default() -> Self {
+        Self {
+            tone_all_pixels: false,
+            soft_owner_boundary: false,
+            skip_exposure_gain: false,
+            low_frequency_consensus: false,
+            owner_tone_harmonization: false,
+            skip_owner_tone_harmonization: false,
+            final_low_frequency_illumination: false,
+            legacy_final_sharpen_amount: 0.85,
+        }
+    }
+}
+
+impl OwnershipCompositorSwitches {
+    fn from_env() -> Self {
+        let set = |name: &str| std::env::var_os(name).is_some();
+        Self {
+            tone_all_pixels: set("RAW_EDITOR_FOCUS_TONE_ALL_PIXELS"),
+            soft_owner_boundary: set("RAW_EDITOR_FOCUS_SOFT_OWNER_BOUNDARY"),
+            skip_exposure_gain: set("RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN"),
+            low_frequency_consensus: set("RAW_EDITOR_ENABLE_FOCUS_TILE_LOW_FREQUENCY_CONSENSUS"),
+            owner_tone_harmonization: set("RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION"),
+            skip_owner_tone_harmonization: set("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION"),
+            final_low_frequency_illumination: set(
+                "RAW_EDITOR_ENABLE_FINAL_LOW_FREQUENCY_ILLUMINATION",
+            ),
+            legacy_final_sharpen_amount: std::env::var("RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT")
+                .ok()
+                .and_then(|value| value.parse::<f32>().ok())
+                .filter(|value| value.is_finite())
+                .unwrap_or(0.85)
+                .clamp(0.0, 1.25),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
     images: &[&ImageInfo],
@@ -2135,6 +2189,21 @@ where
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
+    // 需求 10.11: an unsupported canvas is rejected before any buffer exists.
+    if finishing == TileCompositorFinishing::LayeredVirtualTile
+        && let Some(rejection) = super::stack_pipeline::compositor::reject_oversized_canvas(
+            u64::from(out_width),
+            u64::from(out_height),
+        )
+    {
+        return Err(rejection);
+    }
+    // Only the retired comparison path reads its diagnostic switches; the
+    // default layered path has no environment precondition (任务 13.7).
+    let switches = match finishing {
+        TileCompositorFinishing::LegacyOwnership => OwnershipCompositorSwitches::from_env(),
+        TileCompositorFinishing::LayeredVirtualTile => OwnershipCompositorSwitches::default(),
+    };
     let mut panorama = Rgb32FImage::new(out_width, out_height);
     let mut panorama_mask = GrayImage::new(out_width, out_height);
     // An 8-bit interior-distance score is sufficient for deterministic tile
@@ -2170,8 +2239,8 @@ where
     // strokes out of the illumination solve; when disabled, the same
     // analysis-resolution consensus is still low-pass filtered before it is
     // applied, so it cannot replace the owned high-frequency detail.
-    let tone_all_pixels = std::env::var_os("RAW_EDITOR_FOCUS_TONE_ALL_PIXELS").is_some();
-    let soft_owner_boundary = std::env::var_os("RAW_EDITOR_FOCUS_SOFT_OWNER_BOUNDARY").is_some();
+    let tone_all_pixels = switches.tone_all_pixels;
+    let soft_owner_boundary = switches.soft_owner_boundary;
 
     // Pairwise exposure estimates against the progressively built panorama
     // are order dependent.  An optional bounded preview pass solves one
@@ -2283,7 +2352,7 @@ where
         // comparison path.
         let exposure_enabled = finishing == TileCompositorFinishing::LegacyOwnership
             && photo_model.is_none()
-            && std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN").is_none();
+            && !switches.skip_exposure_gain;
         let exposure = if !exposure_enabled {
             ExposureCompensation {
                 cell_size: 1,
@@ -2537,9 +2606,7 @@ where
         .iter()
         .filter(|&&value| value > 0)
         .count();
-    if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_LOW_FREQUENCY_CONSENSUS").is_some()
-        && tone_samples >= 128
-    {
+    if switches.low_frequency_consensus && tone_samples >= 128 {
         let tone_reference = Rgb32FImage::from_fn(tone_width, tone_height, |x, y| {
             let index = y as usize * tone_stride + x as usize;
             let weight = tone_weight[index];
@@ -2720,8 +2787,8 @@ where
         );
     }
     let empty_foreground = GrayImage::new(out_width, out_height);
-    if std::env::var_os("RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION").is_some() {
-        if std::env::var_os("RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION").is_none() {
+    if switches.owner_tone_harmonization {
+        if !switches.skip_owner_tone_harmonization {
             harmonize_focus_background_tone_with_owners(
                 &mut panorama,
                 &panorama_mask,
@@ -2738,7 +2805,7 @@ where
     // seam. The streaming illumination solve remains an opt-in diagnostic for
     // scenes where a broad lighting field is preferred; the owner-based solve
     // above is the default so it cannot flatten genuine artwork contrast.
-    if std::env::var_os("RAW_EDITOR_ENABLE_FINAL_LOW_FREQUENCY_ILLUMINATION").is_some() {
+    if switches.final_low_frequency_illumination {
         super::mosaic::smooth_streaming_low_frequency_illumination(&mut panorama);
     }
     // Tile warps and the final cubic sampling soften native edges once more.
@@ -2755,14 +2822,7 @@ where
     // keeps its 0.85 second pass.
     let final_sharpen_amount = match finishing {
         TileCompositorFinishing::LayeredVirtualTile => layered_final_sharpen_amount(),
-        TileCompositorFinishing::LegacyOwnership => {
-            std::env::var("RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT")
-                .ok()
-                .and_then(|value| value.parse::<f32>().ok())
-                .filter(|value| value.is_finite())
-                .unwrap_or(0.85)
-                .clamp(0.0, 1.25)
-        }
+        TileCompositorFinishing::LegacyOwnership => switches.legacy_final_sharpen_amount,
     };
     if final_sharpen_amount > 0.0 {
         sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
