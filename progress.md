@@ -56,3 +56,12 @@ Pending.
   491.879 s, SHA `86884740f93c876ee8647c0490fe05215e8bf76a35b33be8a48097798eb855ea`,
   peak RSS 10,742,857,728 bytes; QG `fail`, owner coverage 0.6827111, MTF50 `not_applicable`,
   tone ΔE00 max 19.1885 with 76 windows, residual regions empty.
+
+## T7 disposition
+
+- The existing diagnostics settings/recorder and P86/P83–P85 coverage remain as recorded in
+  `tasks.md`; the candidate Source_RAW resampling/selection-mask/60-second pipeline and the
+  P81/P82/P87/P91/P93 completion records were not added in this phase and remain unchecked.
+- P89 was audited against production: the resident Virtual_Tile ceiling is fixed at two and the
+  only variable lease limit is test-only, so no production switch exists to exercise without
+  changing the product contract. The blocker evidence is `/private/tmp/raw-editor-gate/r2/t7-p89-blocker.md`.
