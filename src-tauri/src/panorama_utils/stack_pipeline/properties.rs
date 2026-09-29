@@ -11398,6 +11398,82 @@ proptest! {
         .finish(&mut changed_records);
         prop_assert_eq!(changed.verdict, report.verdict);
         prop_assert_eq!(&changed.measured, &report.measured);
+
+        // Exercise the three evidence/threshold boundaries explicitly so the
+        // generated data cannot accidentally omit one of the required cases.
+        let boundary_coverage = image::GrayImage::from_pixel(10, 10, image::Luma([255]));
+        let boundary_confidence = vec![0.8f32; 100];
+        let boundary_textured = vec![255u8; 100];
+        let zero_disagreement = vec![0u8; 100];
+        let mut one_percent_shortfall = vec![5u8; 100];
+        one_percent_shortfall[0] = 6;
+        let mut boundary_records = Vec::new();
+        let boundary_pass = build_owner_sharpness_criterion(
+            OwnerSharpnessCriterionInput {
+                coverage: &boundary_coverage,
+                confidence: &boundary_confidence,
+                textured: Some(&boundary_textured),
+                shortfall: Some(&one_percent_shortfall),
+                disagreement: Some(&zero_disagreement),
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut boundary_records,
+            },
+        )
+        .finish(&mut boundary_records);
+        prop_assert_eq!(boundary_pass.verdict, QualityGateVerdict::Pass);
+        prop_assert_eq!(boundary_pass.measured[0].measured, 0.99);
+        one_percent_shortfall[1] = 6;
+        let mut boundary_fail_records = Vec::new();
+        let boundary_fail = build_owner_sharpness_criterion(
+            OwnerSharpnessCriterionInput {
+                coverage: &boundary_coverage,
+                confidence: &boundary_confidence,
+                textured: Some(&boundary_textured),
+                shortfall: Some(&one_percent_shortfall),
+                disagreement: Some(&zero_disagreement),
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut boundary_fail_records,
+            },
+        )
+        .finish(&mut boundary_fail_records);
+        prop_assert_eq!(boundary_fail.verdict, QualityGateVerdict::Fail);
+
+        let no_textured = vec![0u8; 100];
+        let mut no_textured_records = Vec::new();
+        let no_textured_result = build_owner_sharpness_criterion(
+            OwnerSharpnessCriterionInput {
+                coverage: &boundary_coverage,
+                confidence: &boundary_confidence,
+                textured: Some(&no_textured),
+                shortfall: Some(&one_percent_shortfall),
+                disagreement: Some(&zero_disagreement),
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut no_textured_records,
+            },
+        )
+        .finish(&mut no_textured_records);
+        prop_assert_eq!(no_textured_result.verdict, QualityGateVerdict::InsufficientEvidence);
+
+        let mut unresolved_shortfall = vec![5u8; 100];
+        unresolved_shortfall[0] = u8::MAX;
+        let mut unresolved_records = Vec::new();
+        let unresolved_result = build_owner_sharpness_criterion(
+            OwnerSharpnessCriterionInput {
+                coverage: &boundary_coverage,
+                confidence: &boundary_confidence,
+                textured: Some(&boundary_textured),
+                shortfall: Some(&unresolved_shortfall),
+                disagreement: Some(&zero_disagreement),
+                unresolved_pixel_count: 1,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut unresolved_records,
+            },
+        )
+        .finish(&mut unresolved_records);
+        prop_assert_eq!(unresolved_result.verdict, QualityGateVerdict::InsufficientEvidence);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
