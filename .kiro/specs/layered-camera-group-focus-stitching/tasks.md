@@ -1321,6 +1321,7 @@ memory_threshold_source, physical_memory_bytes}`
     - ROI 长边 >4096 / 在裁切区外 / 与覆盖无交集 → 拒绝该次导出、不写部分结果、
       提示指明原因，标识符 `diagnostics_roi_invalid`
     - _Requirements: 13.3, 13.6, 13.7, 13.8_
+    - 执行记录：新增 `stack_pipeline/diagnostics.rs`：`validate_diagnostic_roi`（长边 >4096、完全在输出外、与覆盖无交集时以 `diagnostics_roi_invalid` 与原因拒绝，写入前判定）、`pixel_provenance`（站位、owner 绝对路径、Sharpness_Confidence、Coverage_Mask）与 `export_roi_planes`（只写用户目录，先写隐藏暂存目录再一次重命名发布，失败时删除暂存并以 `diagnostics_write_failed` 指明目录）。候选 Source_RAW 重采样、选择掩膜、逐帧 Sharpness_Score、60 秒时限与管线接线尚未完成，保持 [~]。
 
   - [~] 17.5 实现 `stack_acceptance_harness`
     - 复用 `panorama_reference_acceptance.rs` 的 `#[ignore]` + 环境变量素材路径 +
@@ -1352,13 +1353,15 @@ memory_threshold_source, physical_memory_bytes}`
     - **Property 83: 诊断关闭时零分配零写入**
     - **Validates: Requirements 13.5**
 
-  - [ ]* 17.9 属性测试：像素级溯源查询一致
+  - [x]* 17.9 属性测试：像素级溯源查询一致
     - **Property 84: 像素级溯源查询一致**
     - **Validates: Requirements 13.6**
+    - 执行记录：`property_84_pixel_provenance_matches_the_output_planes`（100 例）。
 
-  - [ ]* 17.10 属性测试：无效诊断 ROI 拒绝且不写部分结果
+  - [x]* 17.10 属性测试：无效诊断 ROI 拒绝且不写部分结果
     - **Property 85: 无效诊断 ROI 拒绝且不写部分结果**
     - **Validates: Requirements 13.8**
+    - 执行记录：`property_85_invalid_diagnostic_rois_are_refused_without_writing`（100 例，独立判定三种拒绝条件，并验证拒绝时目录为空、接受时只发布一个 ROI 目录）。
 
   - [ ]* 17.11 属性测试：内存门槛解析确定
     - **Property 86: 内存门槛解析确定**

@@ -16,8 +16,11 @@
 /// (需求 15.1–15.3, 15.10, 15.11).
 pub(crate) mod compositor;
 pub(crate) mod degradation;
+// Diagnostics_Recorder: ROI validity, pixel provenance and ROI plane export.
 /// Deterministic iteration helpers shared by every stage (需求 14.6).
 pub(crate) mod determinism;
+#[allow(dead_code)]
+pub(crate) mod diagnostics;
 /// Focus_Fuser: ownership cell metrics and grid geometry (需求 3.1–3.3, 3.9).
 pub(crate) mod focus_fuser;
 /// Intra_Station_Registrar: anchor selection and registration gates (需求 2.1–2.9).
