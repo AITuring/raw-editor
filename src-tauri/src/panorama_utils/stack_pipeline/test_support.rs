@@ -134,6 +134,7 @@ fn arb_quality_gate_verdict() -> impl Strategy<Value = QualityGateVerdict> {
         Just(QualityGateVerdict::Pass),
         Just(QualityGateVerdict::Fail),
         Just(QualityGateVerdict::InsufficientEvidence),
+        Just(QualityGateVerdict::NotApplicable),
         Just(QualityGateVerdict::NotRun),
     ]
 }
@@ -262,9 +263,12 @@ fn arb_quality_gate_report() -> impl Strategy<Value = QualityGateReport> {
                         criterion: criterion.to_string(),
                         world: WorldPoint { x, y },
                         reason: reason.to_string(),
+                        category: super::quality_gate_runner::classify_unmeasurable_reason(reason),
                     })
                     .collect(),
                 timing: super::report::QualityGateTimingRecord::default(),
+                confidence_scores: Default::default(),
+                roi_photometry: Vec::new(),
             },
         )
 }

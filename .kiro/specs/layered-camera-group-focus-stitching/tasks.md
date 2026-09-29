@@ -1222,6 +1222,15 @@
       为 `74942cfea3a1ede2…` / `86884740f93c876e…`；实验曾启用 Wenyuan 一个 P95=9.5265px 区域，
       但输出变为 `e3f88653e9f02f4e…` 且无 post-warp P95 证据，故未接入生产。
       最终 Wenyuan 报告为 `/private/tmp/raw-editor-gate/review-next/wenyuan-final/reports/stack-report-1d9a8609-6ad4-4d07-b2aa-352170574a89.json`。
+    - 执行记录（`65dfbbf0` 最终代码门禁）：报告为
+      `/private/tmp/raw-editor-gate/rev65-corrected/lang-final/reports/stack-report-9f5cb0f1-6ea6-4179-8022-a9f18c0afe4d.json`
+      与 `/private/tmp/raw-editor-gate/rev65-corrected/wen-final/reports/stack-report-1ed13320-e790-4125-a114-20c707ca70fb.json`。
+      Langyuan 九项可测计数为 `256/256/1/0/256/99/256/6/1`，不可测分类为
+      `content=0/0/0/256/0/157/0/6088/0`、`technical=0`；Wenyuan 可测计数为
+      `256/256/1/0/256/73/256/0/1`，不可测分类为
+      `content=0/0/0/256/0/183/0/12901/0`、`technical=0`。两组 MTF50 均为
+      `not_applicable`，整体结论因可测量失败项为 `fail`，仍只记录不阻止导出。
+      输出 SHA256 保持 `74942cfea3a1ede2…` / `86884740f93c876e…`。
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
     - 在阶段 7 的「记录但不阻止」模式已在阆苑女仙 84 张上取得全部实测数字之后执行本任务
@@ -1298,11 +1307,13 @@
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
 
-  - [ ] 15.20 属性测试：测量项计数恒等且证据不足可判定
+  - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
     - **Validates: Requirements 11.13, 11.14**
     - 执行记录：P72（100 cases）验证可测量与不可测量计数恒等及证据不足判定。
-    - 执行记录（2026-09-29）：需求 11.13/11.14 与 Property 72 已按用户确认的规则修订（不可测原因分「内容不适用 / 技术性」，新增 `not_applicable` 结论，整幅单项统计不受 8 项下限约束），现有 P72 测试按旧规则编写，需重写后再勾选。
+    - 执行记录（2026-09-29）：P72（100 cases）按需求 11.13/11.14 的四条规则重写，覆盖
+      `content_not_applicable` / `technical` 分类、`not_applicable` 序列化、20% 技术性不可测边界、
+      条件/非条件判据的 8 项规则、整幅统计和整体结论优先级；失败种子无新增。
 
   - [x] 15.21 属性测试：阻止导出时不残留结果且保留诊断
     - **Property 73: 阻止导出时不残留结果且保留诊断**

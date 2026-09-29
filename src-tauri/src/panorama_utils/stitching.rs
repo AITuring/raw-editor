@@ -908,7 +908,11 @@ pub(crate) fn virtual_tile_from_render(
     tile_to_world: Matrix3<f64>,
     rendered: FocusStackTileRender,
 ) -> Result<VirtualTile, String> {
-    let FocusStackTileRender { image, masks } = rendered;
+    let FocusStackTileRender {
+        image,
+        masks,
+        sampling_origin: _,
+    } = rendered;
     let masks = masks.ok_or_else(|| {
         format!(
             "Capture station {} produced no ownership/coverage masks",
@@ -8909,6 +8913,10 @@ pub(crate) struct FocusStackTileMasks {
     /// one candidate observed a Sharpness_Score at or above the fixed 0.10
     /// floor in the owning cell (需求 11.12).
     pub(crate) textured: Vec<u8>,
+    /// Compact winner/runner-up Sharpness_Score evidence at ownership-cell
+    /// resolution.  This is report-only and is never consulted while writing
+    /// the fused pixels.
+    pub(crate) sharpness_evidence: focus_fuser::SharpnessEvidenceGrid,
     /// The Focus_Fuser observations of 需求 3.5 / 3.8 / 3.9.  `station_index` is
     /// filled by the call site that knows it.
     pub(crate) fusion: FusionReport,
@@ -8923,11 +8931,16 @@ pub(crate) struct FocusStackTileMasks {
 pub(crate) struct FocusStackTileRender {
     pub(crate) image: Rgb32FImage,
     pub(crate) masks: Option<FocusStackTileMasks>,
+    pub(crate) sampling_origin: (f64, f64),
 }
 
 impl FocusStackTileRender {
     fn unattributed(image: Rgb32FImage) -> Self {
-        Self { image, masks: None }
+        Self {
+            image,
+            masks: None,
+            sampling_origin: (0.0, 0.0),
+        }
     }
 
     pub(crate) fn into_image(self) -> Rgb32FImage {
@@ -9906,6 +9919,7 @@ where
     // pixel sits at `(-offset_x, -offset_y)`.
     let confidence_cells = fusion.confidence();
     let textured_cells = fusion.textured_cells();
+    let sharpness_evidence = fusion.sharpness_evidence();
     let low_sharpness_regions = fusion.low_sharpness_region_records((-offset_x, -offset_y));
     if !low_sharpness_regions.is_empty() {
         println!(
@@ -9960,6 +9974,7 @@ where
                 ownership,
                 confidence,
                 textured: textured_values,
+                sharpness_evidence,
                 fusion: fusion_report,
             })
         })
@@ -9967,6 +9982,7 @@ where
     Ok(FocusStackTileRender {
         image: merged,
         masks,
+        sampling_origin: (-offset_x, -offset_y),
     })
 }
 

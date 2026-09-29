@@ -1077,10 +1077,13 @@ pub(crate) fn normalized_gradient_energy(
     }
     let plane = metric_luminance(image).ok_or(OWNER_SOURCE_UNDECODABLE)?;
     let (width, height) = (image.width() as usize, image.height() as usize);
-    let mut total = 0.0;
-    for y in 0..height {
-        for x in 0..width {
-            total += super::super::mosaic::acutance_with_step(
+    use rayon::prelude::*;
+    let values: Vec<f64> = (0..width * height)
+        .into_par_iter()
+        .map(|index| {
+            let x = index % width;
+            let y = index / width;
+            super::super::mosaic::acutance_with_step(
                 |sx, sy| {
                     let nx = (sx.round() as isize).clamp(0, width as isize - 1) as usize;
                     let ny = (sy.round() as isize).clamp(0, height as isize - 1) as usize;
@@ -1089,9 +1092,12 @@ pub(crate) fn normalized_gradient_energy(
                 x as f64,
                 y as f64,
                 1.0,
-            );
-        }
-    }
+            )
+        })
+        .collect();
+    // Summing the indexed collection serially preserves the previous
+    // floating-point reduction order and therefore the report values.
+    let total = values.into_iter().sum::<f64>();
     Ok(total / plane.len() as f64 / local_scale)
 }
 
@@ -1150,35 +1156,36 @@ pub(crate) fn noise_sigma_ratio(
 /// The design fixes the ROI low-frequency mean to the mean of its fully opaque
 /// RGB samples. Using compensated f64 summation avoids a large RGB lowpass
 /// buffer and feeds the one canonical sRGB->D65 Lab->CIEDE2000 implementation.
+pub(crate) fn roi_mean_rgb(image: &image::Rgb32FImage) -> Option<[f32; 3]> {
+    if image.width() == 0 || image.height() == 0 {
+        return None;
+    }
+    let mut sums = [0.0f64; 3];
+    let mut compensation = [0.0f64; 3];
+    for pixel in image.pixels() {
+        for channel in 0..3 {
+            if !pixel[channel].is_finite() {
+                return None;
+            }
+            let value = f64::from(pixel[channel]) - compensation[channel];
+            let next = sums[channel] + value;
+            compensation[channel] = (next - sums[channel]) - value;
+            sums[channel] = next;
+        }
+    }
+    let count = f64::from(image.width()) * f64::from(image.height());
+    Some(sums.map(|v| (v / count) as f32))
+}
+
 pub(crate) fn roi_low_frequency_delta_e00(
     output: &image::Rgb32FImage,
     reference: &image::Rgb32FImage,
 ) -> Result<f64, &'static str> {
-    fn mean(image: &image::Rgb32FImage) -> Option<[f32; 3]> {
-        if image.width() == 0 || image.height() == 0 {
-            return None;
-        }
-        let mut sums = [0.0f64; 3];
-        let mut compensation = [0.0f64; 3];
-        for pixel in image.pixels() {
-            for channel in 0..3 {
-                if !pixel[channel].is_finite() {
-                    return None;
-                }
-                let value = f64::from(pixel[channel]) - compensation[channel];
-                let next = sums[channel] + value;
-                compensation[channel] = (next - sums[channel]) - value;
-                sums[channel] = next;
-            }
-        }
-        let count = f64::from(image.width()) * f64::from(image.height());
-        Some(sums.map(|v| (v / count) as f32))
-    }
     if output.dimensions() != reference.dimensions() {
         return Err(super::degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED);
     }
-    let a = mean(output).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
-    let b = mean(reference).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
+    let a = roi_mean_rgb(output).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
+    let b = roi_mean_rgb(reference).ok_or(super::degradation::OWNER_SOURCE_UNDECODABLE)?;
     Ok(super::tone::delta_e00_rgb(a, b))
 }
 
@@ -1431,4 +1438,40 @@ pub(crate) fn sharpness_confidence_passes(
     confidence: &[f32],
 ) -> Result<bool, &'static str> {
     Ok(sharpness_confidence_coverage(coverage, confidence)? >= 0.99)
+}
+
+#[cfg(test)]
+mod gradient_tests {
+    use super::*;
+    use image::{Rgb, Rgb32FImage};
+
+    #[test]
+    fn cached_gradient_matches_the_production_acutance_primitive() {
+        let mut image = Rgb32FImage::new(17, 19);
+        for (i, pixel) in image.pixels_mut().enumerate() {
+            let value = ((i * 37 % 251) as f32) / 251.0;
+            *pixel = Rgb([value, value * 0.93, value * 0.87]);
+        }
+        let plane = metric_luminance(&image).unwrap();
+        let width = image.width() as usize;
+        let height = image.height() as usize;
+        let expected = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                crate::panorama_utils::mosaic::acutance_with_step(
+                    |sx, sy| {
+                        let nx = (sx.round() as isize).clamp(0, width as isize - 1) as usize;
+                        let ny = (sy.round() as isize).clamp(0, height as isize - 1) as usize;
+                        Some(Rgb([plane[ny * width + nx] as f32; 3]))
+                    },
+                    x as f64,
+                    y as f64,
+                    1.0,
+                )
+            })
+            .sum::<f64>()
+            / plane.len() as f64;
+        let actual = normalized_gradient_energy(&image, 1.0).unwrap();
+        assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+    }
 }

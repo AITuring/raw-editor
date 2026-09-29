@@ -11212,13 +11212,16 @@ proptest! {
 
 // Later Quality_Gate pure-property checks (15.18-15.22).
 use super::quality_gate::{
-    QUALITY_MAX_UNMEASURABLE_RATIO, QUALITY_MIN_MEASURABLE, compare_ratio,
     measure_boundary_strokes, sharpness_confidence_coverage, sharpness_confidence_passes,
     trace_moore_boundary,
 };
+use super::quality_gate_runner::{
+    Criterion, classify_unmeasurable_reason, criterion_verdict, overall_verdict,
+    record_unmeasurable,
+};
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
-    UnmeasurableRecord, WorldPoint,
+    UnmeasurableCategory, UnmeasurableRecord, WorldPoint,
 };
 
 proptest! {
@@ -11297,24 +11300,128 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 72: 测量项计数恒等且证据不足可判定
     #[test]
     fn property_72_measurement_counts_are_conservative(
-        validity in prop::collection::vec(any::<bool>(), 0..=64),
+        measurable in 0usize..=32,
+        content_count in 0usize..=32,
+        technical_count in 0usize..=16,
+        has_failed in any::<bool>(),
+        diagnostic in any::<bool>(),
+        x in -10000.0f64..10000.0,
+        y in -10000.0f64..10000.0,
     ) {
-        let measurements = validity.iter().map(|&valid| {
-            if valid {
-                compare_ratio(1.0, 1.0, 0.93, 1.15, false)
-            } else {
-                None
+        let content_reasons = [
+            degradation::ROI_NOT_SLANTED_EDGE,
+            degradation::ROI_NOT_FLAT,
+            degradation::BOUNDARY_NO_PAIRABLE_EDGE,
+            degradation::SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED,
+            degradation::SLANTED_EDGE_TOO_SHORT,
+            degradation::SLANTED_EDGE_CONTRAST_INSUFFICIENT,
+            degradation::SLANTED_EDGE_ANGLE_OUT_OF_RANGE,
+            degradation::BOUNDARY_LOW_CONTRAST,
+            degradation::BOUNDARY_ORIENTATION_MISMATCH,
+        ];
+        let technical_reasons = [
+            degradation::OWNER_SOURCE_UNDECODABLE,
+            degradation::PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED,
+            degradation::LOCAL_SCALE_UNMEASURABLE,
+            degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE,
+            degradation::DIAGNOSTICS_ROI_INVALID,
+        ];
+        for reason in content_reasons {
+            prop_assert_eq!(classify_unmeasurable_reason(reason), UnmeasurableCategory::ContentNotApplicable);
+        }
+        for reason in technical_reasons {
+            prop_assert_eq!(classify_unmeasurable_reason(reason), UnmeasurableCategory::Technical);
+        }
+        let failed = has_failed && measurable > 0;
+        let mut criterion_records = Vec::new();
+        for name in super::quality_gate::QUALITY_CRITERIA {
+            let mut criterion = Criterion::new(name, 1.0);
+            criterion.diagnostic = diagnostic;
+            for index in 0..measurable {
+                criterion.push((x + index as f64, y), 1.0, "owner://property72", !(failed && index == 0));
             }
-        }).collect::<Vec<_>>();
-        let measurable = measurements.iter().filter(|item| item.is_some()).count();
-        let unmeasurable = measurements.len() - measurable;
-        prop_assert_eq!(measurable + unmeasurable, measurements.len());
-        let insufficient = measurable < QUALITY_MIN_MEASURABLE
-            || (!measurements.is_empty()
-                && unmeasurable as f64 / measurements.len() as f64 > QUALITY_MAX_UNMEASURABLE_RATIO);
-        prop_assert_eq!(insufficient, measurable < QUALITY_MIN_MEASURABLE ||
-            (!measurements.is_empty() && unmeasurable * 5 > measurements.len()));
-        prop_assert!(compare_ratio(0.0, 0.0, 0.93, 1.15, false).is_none());
+            let mut unmeasurable = Vec::new();
+            for index in 0..content_count + technical_count {
+                let reason = if index < content_count {
+                    content_reasons[index % content_reasons.len()]
+                } else {
+                    technical_reasons[(index - content_count) % technical_reasons.len()]
+                };
+                let roi = QualityRoi {
+                    x: 0, y: 0, side: 512, region_label: 1, owner: 1,
+                    world_origin: (x + index as f64, y), boundary_clearance: 16.0,
+                };
+                record_unmeasurable(&mut criterion, &mut unmeasurable, &roi, reason);
+            }
+            let result = criterion.finish(&mut unmeasurable);
+            prop_assert_eq!(result.measurable_count, measurable);
+            prop_assert_eq!(result.content_not_applicable_count, content_count);
+            prop_assert_eq!(result.technical_unmeasurable_count, technical_count);
+            prop_assert_eq!(result.unmeasurable_count, unmeasurable.len());
+            prop_assert_eq!(result.measurable_count + result.unmeasurable_count,
+                measurable + content_count + technical_count);
+            prop_assert_eq!(result.unmeasurable_reasons.values().sum::<usize>(), unmeasurable.len());
+            for (index, record) in unmeasurable.iter().enumerate() {
+                let expected_category = if index < content_count {
+                    UnmeasurableCategory::ContentNotApplicable
+                } else {
+                    UnmeasurableCategory::Technical
+                };
+                prop_assert_eq!(&record.criterion, name);
+                prop_assert_eq!(record.world, WorldPoint { x: x + index as f64, y });
+                prop_assert!(!record.reason.is_empty());
+                prop_assert_eq!(record.category, expected_category);
+                let encoded = serde_json::to_value(record).unwrap();
+                prop_assert_eq!(&encoded["category"], if index < content_count {
+                    "content_not_applicable"
+                } else {
+                    "technical"
+                });
+            }
+            let whole_image = matches!(name, "effective_pixel_count" | "sharpness_confidence_coverage");
+            let conditional = matches!(name, "mtf50_normalized" | "noise_sigma_ratio" | "boundary_stroke_alignment");
+            let expected = if diagnostic {
+                QualityGateVerdict::NotApplicable
+            } else if whole_image && measurable == 0 {
+                QualityGateVerdict::InsufficientEvidence
+            } else if whole_image {
+                if failed { QualityGateVerdict::Fail } else { QualityGateVerdict::Pass }
+            } else if technical_count * 5 > measurable + technical_count {
+                QualityGateVerdict::InsufficientEvidence
+            } else if conditional && measurable < 8 {
+                QualityGateVerdict::NotApplicable
+            } else if failed {
+                QualityGateVerdict::Fail
+            } else if !conditional && measurable < 8 {
+                QualityGateVerdict::InsufficientEvidence
+            } else {
+                QualityGateVerdict::Pass
+            };
+            prop_assert_eq!(result.verdict, expected);
+            criterion_records.push(result);
+        }
+        let expected_overall = if criterion_records.iter().any(|record| record.verdict == QualityGateVerdict::Fail) {
+            QualityGateVerdict::Fail
+        } else if criterion_records.iter().any(|record| record.verdict == QualityGateVerdict::InsufficientEvidence) {
+            QualityGateVerdict::InsufficientEvidence
+        } else {
+            QualityGateVerdict::Pass
+        };
+        prop_assert_eq!(overall_verdict(&criterion_records), expected_overall);
+        // Exactly 20% is allowed; content-inapplicable observations never enter this denominator.
+        for name in super::quality_gate::QUALITY_CRITERIA {
+            let whole_image = matches!(name, "effective_pixel_count" | "sharpness_confidence_coverage");
+            prop_assert_eq!(criterion_verdict(name, 8, 2, false, false, false), QualityGateVerdict::Pass);
+            prop_assert_eq!(criterion_verdict(name, 8, 3, false, false, false), if whole_image {
+                QualityGateVerdict::Pass
+            } else {
+                QualityGateVerdict::InsufficientEvidence
+            });
+        }
+        let pass_and_not_applicable = [QualityGateVerdict::Pass, QualityGateVerdict::NotApplicable]
+            .map(|verdict| QualityGateCriterionRecord { verdict, ..QualityGateCriterionRecord::default() });
+        prop_assert_eq!(overall_verdict(&pass_and_not_applicable), QualityGateVerdict::Pass);
+        prop_assert_eq!(serde_json::to_value(QualityGateVerdict::NotApplicable).unwrap(), "not_applicable");
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 73: 阻止导出时不残留结果且保留诊断
@@ -11334,6 +11441,10 @@ proptest! {
                 threshold_max: None,
                 measurable_count: 1,
                 unmeasurable_count: 0,
+                content_not_applicable_count: 0,
+                technical_unmeasurable_count: 0,
+                verdict: QualityGateVerdict::Fail,
+                station_statistics: Vec::new(),
                 unmeasurable_reasons: BTreeMap::new(),
                 measured: Vec::new(),
                 diagnostic: false,
@@ -11351,8 +11462,11 @@ proptest! {
                 criterion: "noise_sigma_ratio".to_string(),
                 world: WorldPoint { x, y },
                 reason: "roi_not_flat".to_string(),
+                category: UnmeasurableCategory::ContentNotApplicable,
             }],
             timing: super::report::QualityGateTimingRecord::default(),
+                confidence_scores: Default::default(),
+                roi_photometry: Vec::new(),
         };
         let encoded = serde_json::to_value(&report).expect("quality report is serializable");
         prop_assert_eq!(&encoded["verdict"], "fail");

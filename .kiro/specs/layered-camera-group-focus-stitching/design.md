@@ -2585,3 +2585,15 @@ flowchart LR
    使用上界并标记 `auto_calibrated`。Acceptance_Harness 的纯判定按 Property 94 的三项条件
    读取 Stack_Report：84 张全部入组且连通、Quality_Gate 无未通过判据、有效面积至少为联合面积
    的 0.98 倍。
+
+### 本轮生产决定（2026-09-29）
+
+1. `QualityGateVerdict` 对条件判据在没有足够适用内容时写出 `not_applicable`；技术性不可测先按
+   20% 比例判定证据不足，整幅统计只在统计基准为空时判定证据不足。不可测记录始终携带
+   `content_not_applicable` 或 `technical` 分类及世界坐标。
+2. Quality_Gate 的置信度诊断在输出 ownership 反查阶段按 ownership cell 累加胜出/次优分数，
+   不再保留三张完整尺寸分数平面；诊断分布不参与 ownership 决策。
+3. 梯度能量对固定行优先像素索引并行计算后按原顺序归约，保持浮点结果确定性；报告同时记录
+   参考重采样、MTF、梯度、噪声和 ΔE 的分项耗时。
+4. 图像堆栈保存前调用 `image_stack_output_notices`；存在降级提示时由保存对话框确认，取消确认
+   不会调用 `save_image_stack`。

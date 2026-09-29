@@ -23,6 +23,36 @@ const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
 const tone = read(`${stackPipelineDir}/tone.rs`);
 const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
 
+// Revised 2026-09-29 evidence policy: content-inapplicable observations are
+// kept separate from technical failures, and a criterion can be explicitly
+// not-applicable when its conditional evidence is absent.
+assert.match(stackReport, /enum QualityGateVerdict[\s\S]*?NotApplicable/,
+  'quality reports must represent not_applicable separately from insufficient evidence');
+assert.match(stackReport, /rename_all = "snake_case"/,
+  'NotApplicable must serialize as the stable not_applicable identifier');
+assert.match(stackReport, /enum UnmeasurableCategory[\s\S]*?ContentNotApplicable[\s\S]*?Technical/,
+  'every unmeasurable observation must carry one of the two evidence categories');
+assert.match(stackReport, /rename_all = "snake_case"/,
+  'unmeasurable categories must serialize as content_not_applicable and technical');
+assert.match(stackReport, /pub category: UnmeasurableCategory/,
+  'unmeasurable report entries must serialize their evidence category');
+assert.match(stackReport, /content_not_applicable_count: usize/,
+  'criteria must count content-inapplicable observations separately');
+assert.match(stackReport, /technical_unmeasurable_count: usize/,
+  'criteria must count technical observations separately');
+assert.match(stackReport, /pub verdict: QualityGateVerdict/,
+  'each criterion must carry its own verdict');
+assert.match(
+  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  /fn criterion_verdict\([\s\S]*?QUALITY_MAX_UNMEASURABLE_RATIO[\s\S]*?NotApplicable/,
+  'the four evidence rules must be implemented in one deterministic criterion function',
+);
+assert.match(
+  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  /fn overall_verdict\([\s\S]*?QualityGateVerdict::Fail[\s\S]*?InsufficientEvidence/,
+  'the overall gate verdict must give fail precedence over insufficient evidence',
+);
+
 // Stage 7 Quality_Gate thresholds and pure metric dependencies are part of the
 // source contract so wiring cannot silently use a relaxed acceptance band.
 for (const [name, value] of [

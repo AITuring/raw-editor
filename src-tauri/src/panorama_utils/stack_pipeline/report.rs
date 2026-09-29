@@ -941,14 +941,29 @@ pub(crate) struct CompositionReport {
 // ---------------------------------------------------------------------------
 
 /// Quality_Gate verdict (requirement 11.15 / 11.14).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum QualityGateVerdict {
     Pass,
     Fail,
     InsufficientEvidence,
-    /// The gate is not wired into the run yet (observation-only stage).
+    /// The criterion had no applicable content, but no technical evidence was
+    /// lost. This is distinct from insufficient evidence for the whole gate.
+    NotApplicable,
+    /// No Quality_Gate measurement was produced for this report.
+    #[default]
     NotRun,
+}
+
+/// Why one of the fixed quality-gate observations could not be measured.
+/// These names are part of the report contract so callers can distinguish an
+/// empty/content-inapplicable ROI from a broken input or measurement path.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum UnmeasurableCategory {
+    ContentNotApplicable,
+    #[default]
+    Technical,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -972,6 +987,14 @@ pub(crate) struct QualityGateCriterionRecord {
     pub threshold_max: Option<f64>,
     pub measurable_count: usize,
     pub unmeasurable_count: usize,
+    #[serde(default)]
+    pub content_not_applicable_count: usize,
+    #[serde(default)]
+    pub technical_unmeasurable_count: usize,
+    #[serde(default)]
+    pub station_statistics: Vec<QualityStationStatistic>,
+    #[serde(default)]
+    pub verdict: QualityGateVerdict,
     /// Stable reason histogram for every item that could not be measured.
     #[serde(default)]
     pub unmeasurable_reasons: BTreeMap<String, usize>,
@@ -1001,11 +1024,62 @@ pub(crate) struct UnmeasurableRecord {
     pub criterion: String,
     pub world: WorldPoint,
     pub reason: String,
+    #[serde(default)]
+    pub category: UnmeasurableCategory,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct QualityStationStatistic {
+    pub station_id: usize,
+    pub numerator: u64,
+    pub denominator: u64,
+    pub value: Option<f64>,
+    #[serde(default)]
+    pub textured_pixel_count: u64,
+    #[serde(default)]
+    pub excluded_flat_pixel_count: u64,
+    #[serde(default)]
+    pub textured_low_confidence_count: u64,
+    #[serde(default)]
+    pub flat_low_confidence_count: u64,
+    #[serde(default)]
+    pub textured_low_confidence_ratio: Option<f64>,
+    #[serde(default)]
+    pub flat_low_confidence_ratio: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ConfidenceScoreDistribution {
+    pub textured_low_count: u64,
+    pub both_scores_at_least_0_10: u64,
+    pub winner_below_0_10: u64,
+    pub single_candidate_count: u64,
+    pub winner_sum: f64,
+    pub runner_up_sum: f64,
+    /// Pixel-weighted counts in fixed 0.05-wide bins, including 1.0 in bin 20.
+    pub winner_histogram: Vec<u64>,
+    pub runner_up_histogram: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct RoiPhotometryRecord {
+    pub world: WorldPoint,
+    pub station_id: usize,
+    pub owner_path: String,
+    pub output_mean_rgb: [f32; 3],
+    pub reference_mean_rgb: [f32; 3],
+    pub channel_ratio: [Option<f64>; 3],
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct QualityGateTimingRecord {
     pub decode_seconds: f64,
+    pub reference_resampling_seconds: f64,
+    pub local_scale_seconds: f64,
+    pub slanted_edge_mtf_seconds: f64,
+    pub gradient_seconds: f64,
+    pub noise_seconds: f64,
+    pub delta_e_seconds: f64,
     pub roi_sampling_seconds: f64,
     pub boundary_seconds: f64,
     pub effective_coverage_seconds: f64,
@@ -1021,6 +1095,10 @@ pub(crate) struct QualityGateReport {
     pub criteria: Vec<QualityGateCriterionRecord>,
     pub unmeasurable: Vec<UnmeasurableRecord>,
     #[serde(default)]
+    pub confidence_scores: ConfidenceScoreDistribution,
+    #[serde(default)]
+    pub roi_photometry: Vec<RoiPhotometryRecord>,
+    #[serde(default)]
     pub timing: QualityGateTimingRecord,
 }
 
@@ -1031,6 +1109,8 @@ impl Default for QualityGateReport {
             roi_count: 0,
             criteria: Vec::new(),
             unmeasurable: Vec::new(),
+            confidence_scores: ConfidenceScoreDistribution::default(),
+            roi_photometry: Vec::new(),
             timing: QualityGateTimingRecord::default(),
         }
     }

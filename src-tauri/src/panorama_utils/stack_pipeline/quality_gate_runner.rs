@@ -16,7 +16,8 @@ use super::degradation;
 use super::quality_gate::{self, EffectivePixelCoverage, QualityRoi, SourceGeometry};
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport,
-    QualityGateTimingRecord, QualityGateVerdict, UnmeasurableRecord, WorldPoint,
+    QualityGateTimingRecord, QualityGateVerdict, QualityStationStatistic, RoiPhotometryRecord,
+    UnmeasurableCategory, UnmeasurableRecord, WorldPoint,
 };
 use super::residual_warp::ResidualWarp;
 
@@ -49,7 +50,7 @@ pub(crate) struct QualityGateInput<'a> {
 
 pub(crate) type SourceLoader<'a> = dyn FnMut(&QualitySource) -> Result<Rgb32FImage, String> + 'a;
 
-struct Criterion {
+pub(super) struct Criterion {
     name: &'static str,
     threshold: f64,
     min: Option<f64>,
@@ -57,8 +58,10 @@ struct Criterion {
     measured: Vec<FailedMeasurementRecord>,
     failed: Vec<FailedMeasurementRecord>,
     unmeasurable: usize,
+    content_not_applicable: usize,
+    technical_unmeasurable: usize,
     unmeasurable_reasons: BTreeMap<String, usize>,
-    diagnostic: bool,
+    pub(super) diagnostic: bool,
     observed_count: usize,
     /// Keep reports bounded when a large canvas has many boundary samples.
     /// The count remains exact while only a deterministic prefix is retained
@@ -90,6 +93,8 @@ impl Default for Criterion {
             measured: Vec::new(),
             failed: Vec::new(),
             unmeasurable: 0,
+            content_not_applicable: 0,
+            technical_unmeasurable: 0,
             unmeasurable_reasons: BTreeMap::new(),
             diagnostic: false,
             observed_count: 0,
@@ -103,7 +108,7 @@ impl Default for Criterion {
 }
 
 impl Criterion {
-    fn new(name: &'static str, threshold: f64) -> Self {
+    pub(super) fn new(name: &'static str, threshold: f64) -> Self {
         Self {
             name,
             threshold,
@@ -130,7 +135,7 @@ impl Criterion {
         }
     }
 
-    fn push(&mut self, world: (f64, f64), value: f64, owner_path: &str, pass: bool) {
+    pub(super) fn push(&mut self, world: (f64, f64), value: f64, owner_path: &str, pass: bool) {
         self.observed_count = self.observed_count.saturating_add(1);
         let item = FailedMeasurementRecord {
             world: WorldPoint {
@@ -150,15 +155,30 @@ impl Criterion {
 
     fn miss(&mut self, reason: &'static str) {
         self.unmeasurable += 1;
+        match classify_unmeasurable_reason(reason) {
+            UnmeasurableCategory::ContentNotApplicable => self.content_not_applicable += 1,
+            UnmeasurableCategory::Technical => self.technical_unmeasurable += 1,
+        }
         *self
             .unmeasurable_reasons
             .entry(reason.to_string())
             .or_default() += 1;
     }
 
-    fn finish(self, _unmeasurable: &mut Vec<UnmeasurableRecord>) -> QualityGateCriterionRecord {
+    pub(super) fn finish(
+        self,
+        _unmeasurable: &mut Vec<UnmeasurableRecord>,
+    ) -> QualityGateCriterionRecord {
         // `unmeasurable` records are appended by the caller while processing
         // each ROI; this method only carries the aggregate count.
+        let verdict = criterion_verdict(
+            self.name,
+            self.observed_count,
+            self.technical_unmeasurable,
+            !self.failed.is_empty(),
+            self.diagnostic,
+            self.observed_count == 0,
+        );
         QualityGateCriterionRecord {
             name: self.name.to_string(),
             threshold: self.threshold,
@@ -166,6 +186,10 @@ impl Criterion {
             threshold_max: self.max,
             measurable_count: self.observed_count,
             unmeasurable_count: self.unmeasurable,
+            content_not_applicable_count: self.content_not_applicable,
+            technical_unmeasurable_count: self.technical_unmeasurable,
+            verdict,
+            station_statistics: Vec::new(),
             unmeasurable_reasons: self.unmeasurable_reasons,
             measured: self.measured,
             diagnostic: self.diagnostic,
@@ -175,6 +199,75 @@ impl Criterion {
             textured_low_confidence_ratio: self.textured_low_confidence_ratio,
             flat_low_confidence_ratio: self.flat_low_confidence_ratio,
         }
+    }
+}
+
+pub(crate) fn criterion_verdict(
+    name: &str,
+    measurable: usize,
+    technical: usize,
+    has_failed: bool,
+    diagnostic: bool,
+    statistics_base_empty: bool,
+) -> QualityGateVerdict {
+    // Diagnostic criteria describe an unavailable measurement path. They do
+    // not establish a pass or fail result, even when a fallback value happens
+    // to satisfy the nominal threshold.
+    if diagnostic {
+        return QualityGateVerdict::NotApplicable;
+    }
+    let technical_ratio = if measurable + technical == 0 {
+        0.0
+    } else {
+        technical as f64 / (measurable + technical) as f64
+    };
+    let sparse = matches!(
+        name,
+        "mtf50_normalized" | "noise_sigma_ratio" | "boundary_stroke_alignment"
+    );
+    let whole_image = matches!(
+        name,
+        "effective_pixel_count" | "sharpness_confidence_coverage"
+    );
+    let dense = matches!(
+        name,
+        "local_scale_median"
+            | "local_scale_pixel_ratio"
+            | "gradient_energy_normalized"
+            | "roi_delta_e00"
+    );
+    if (whole_image && statistics_base_empty)
+        || (!whole_image && technical_ratio > quality_gate::QUALITY_MAX_UNMEASURABLE_RATIO)
+    {
+        QualityGateVerdict::InsufficientEvidence
+    } else if sparse && measurable < quality_gate::QUALITY_MIN_MEASURABLE {
+        QualityGateVerdict::NotApplicable
+    } else if has_failed {
+        QualityGateVerdict::Fail
+    } else if dense && measurable < quality_gate::QUALITY_MIN_MEASURABLE {
+        QualityGateVerdict::InsufficientEvidence
+    } else {
+        QualityGateVerdict::Pass
+    }
+}
+
+pub(crate) fn overall_verdict(criteria: &[QualityGateCriterionRecord]) -> QualityGateVerdict {
+    if criteria
+        .iter()
+        .any(|c| c.verdict == QualityGateVerdict::Fail)
+    {
+        QualityGateVerdict::Fail
+    } else if criteria.is_empty()
+        || criteria.iter().any(|c| {
+            !matches!(
+                c.verdict,
+                QualityGateVerdict::Pass | QualityGateVerdict::NotApplicable
+            )
+        })
+    {
+        QualityGateVerdict::InsufficientEvidence
+    } else {
+        QualityGateVerdict::Pass
     }
 }
 
@@ -279,12 +372,13 @@ fn source_roi(
     Ok(result)
 }
 
-fn record_unmeasurable(
+pub(super) fn record_unmeasurable(
     criterion: &mut Criterion,
     records: &mut Vec<UnmeasurableRecord>,
     roi: &QualityRoi,
     reason: &'static str,
 ) {
+    let category = classify_unmeasurable_reason(reason);
     criterion.miss(reason);
     records.push(UnmeasurableRecord {
         criterion: criterion.name.to_string(),
@@ -293,7 +387,23 @@ fn record_unmeasurable(
             y: roi.world_origin.1,
         },
         reason: reason.to_string(),
+        category,
     });
+}
+
+pub(crate) fn classify_unmeasurable_reason(reason: &str) -> UnmeasurableCategory {
+    match reason {
+        degradation::ROI_NOT_SLANTED_EDGE
+        | degradation::SLANTED_EDGE_ANGLE_OUT_OF_RANGE
+        | degradation::SLANTED_EDGE_CONTRAST_INSUFFICIENT
+        | degradation::SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED
+        | degradation::SLANTED_EDGE_TOO_SHORT
+        | degradation::ROI_NOT_FLAT
+        | degradation::BOUNDARY_NO_PAIRABLE_EDGE
+        | degradation::BOUNDARY_LOW_CONTRAST
+        | degradation::BOUNDARY_ORIENTATION_MISMATCH => UnmeasurableCategory::ContentNotApplicable,
+        _ => UnmeasurableCategory::Technical,
+    }
 }
 
 fn ratio(measured: f64, reference: f64, min: f64, max: f64) -> Option<(f64, bool)> {
@@ -394,7 +504,7 @@ fn confidence_coverage_stats(
     textured: &[u8],
 ) -> Option<ConfidenceCoverageStats> {
     let (width, height) = coverage.dimensions();
-    if textured.len() != confidence.len() {
+    if textured.len() != confidence.len() || confidence.len() != coverage.as_raw().len() {
         return None;
     }
     let mut stats = ConfidenceCoverageStats {
@@ -433,6 +543,37 @@ fn confidence_coverage_stats(
         }
     }
     Some(stats)
+}
+
+/// Accumulate one output pixel while the compositor maps it back to its
+/// ownership cell. Row-major calls preserve the diagnostic sum order without
+/// retaining three additional full-resolution score/candidate planes.
+pub(crate) fn accumulate_confidence_score(
+    result: &mut super::report::ConfidenceScoreDistribution,
+    covered: u8,
+    confidence: f32,
+    textured: u8,
+    evidence: super::focus_fuser::SharpnessCellEvidence,
+) {
+    if covered == 0 || textured == 0 || !confidence.is_finite() || confidence >= 0.05 {
+        return;
+    }
+    result.textured_low_count += 1;
+    result.winner_sum += f64::from(evidence.winner_score);
+    result.runner_up_sum += f64::from(evidence.runner_up_score);
+    let wb = (f64::from(evidence.winner_score).clamp(0.0, 1.0) * 20.0).floor() as usize;
+    let rb = (f64::from(evidence.runner_up_score).clamp(0.0, 1.0) * 20.0).floor() as usize;
+    result.winner_histogram.resize(21, 0);
+    result.runner_up_histogram.resize(21, 0);
+    result.winner_histogram[wb.min(20)] += 1;
+    result.runner_up_histogram[rb.min(20)] += 1;
+    if evidence.winner_score < 0.10 {
+        result.winner_below_0_10 += 1;
+    } else if evidence.winner_score >= 0.10 && evidence.runner_up_score >= 0.10 {
+        result.both_scores_at_least_0_10 += 1;
+    } else if evidence.candidate_count <= 1 {
+        result.single_candidate_count += 1;
+    }
 }
 
 /// Count the unique projected source coverage one scanline at a time. This is
@@ -628,6 +769,8 @@ fn measure_large_boundaries(
                         y: world.1,
                     },
                     reason: reason.to_string(),
+
+                    category: classify_unmeasurable_reason(reason),
                 });
                 criterion.miss(reason);
                 return;
@@ -686,6 +829,8 @@ fn measure_large_boundaries(
                     y: origin.1,
                 },
                 reason: degradation::BOUNDARY_NO_PAIRABLE_EDGE.to_string(),
+
+                category: classify_unmeasurable_reason(degradation::BOUNDARY_NO_PAIRABLE_EDGE),
             });
         }
         return;
@@ -729,6 +874,8 @@ pub(crate) fn run_quality_gate(
                 y: input.world_origin.1,
             },
             reason: "diagnostics_roi_invalid".to_string(),
+
+            category: classify_unmeasurable_reason("diagnostics_roi_invalid"),
         });
         return report;
     }
@@ -751,6 +898,8 @@ pub(crate) fn run_quality_gate(
                         y: input.world_origin.1,
                     },
                     reason: reason.to_string(),
+
+                    category: classify_unmeasurable_reason(reason),
                 });
                 return report;
             }
@@ -766,6 +915,8 @@ pub(crate) fn run_quality_gate(
                         y: input.world_origin.1,
                     },
                     reason: reason.to_string(),
+
+                    category: classify_unmeasurable_reason(reason),
                 });
                 return report;
             }
@@ -877,6 +1028,28 @@ pub(crate) fn run_quality_gate(
                 }
                 continue;
             };
+            timing.reference_resampling_seconds += roi_started.elapsed().as_secs_f64();
+            if let (Some(output_mean_rgb), Some(reference_mean_rgb)) = (
+                quality_gate::roi_mean_rgb(&output_roi),
+                quality_gate::roi_mean_rgb(&reference),
+            ) {
+                report.roi_photometry.push(RoiPhotometryRecord {
+                    world: WorldPoint {
+                        x: where_.0,
+                        y: where_.1,
+                    },
+                    station_id: source_info.geometry.station_id,
+                    owner_path: source_info.path.clone(),
+                    output_mean_rgb,
+                    reference_mean_rgb,
+                    channel_ratio: std::array::from_fn(|c| {
+                        (reference_mean_rgb[c] != 0.0).then_some(
+                            f64::from(output_mean_rgb[c]) / f64::from(reference_mean_rgb[c]),
+                        )
+                    }),
+                });
+            }
+            let scale_started = Instant::now();
             let scale = quality_gate::local_scale_for_roi(
                 roi,
                 &source_info.geometry,
@@ -906,7 +1079,9 @@ pub(crate) fn run_quality_gate(
                     record_unmeasurable(&mut local_ratio, &mut unmeasurable, roi, reason);
                 }
             }
+            timing.local_scale_seconds += scale_started.elapsed().as_secs_f64();
             if let Some(local) = local {
+                let mtf_started = Instant::now();
                 match (
                     quality_gate::slanted_edge_mtf50(&output_roi, local),
                     quality_gate::slanted_edge_mtf50(&reference, 1.0),
@@ -932,6 +1107,8 @@ pub(crate) fn run_quality_gate(
                         record_unmeasurable(&mut mtf, &mut unmeasurable, roi, reason)
                     }
                 }
+                timing.slanted_edge_mtf_seconds += mtf_started.elapsed().as_secs_f64();
+                let gradient_started = Instant::now();
                 match (
                     quality_gate::normalized_gradient_energy(&output_roi, local),
                     quality_gate::normalized_gradient_energy(&reference, 1.0),
@@ -957,6 +1134,7 @@ pub(crate) fn run_quality_gate(
                         record_unmeasurable(&mut gradient, &mut unmeasurable, roi, reason)
                     }
                 }
+                timing.gradient_seconds += gradient_started.elapsed().as_secs_f64();
             } else {
                 // MTF50 and gradient energy are scale-normalised quantities;
                 // substituting 1.0 would turn missing geometry into evidence.
@@ -964,6 +1142,7 @@ pub(crate) fn run_quality_gate(
                 record_unmeasurable(&mut mtf, &mut unmeasurable, roi, reason);
                 record_unmeasurable(&mut gradient, &mut unmeasurable, roi, reason);
             }
+            let noise_started = Instant::now();
             let full = GrayImage::from_pixel(roi.side, roi.side, image::Luma([255]));
             match (
                 quality_gate::noise_sigma_ratio(&output_roi, &reference),
@@ -980,6 +1159,8 @@ pub(crate) fn run_quality_gate(
                 ),
                 _ => record_unmeasurable(&mut noise, &mut unmeasurable, roi, "roi_not_flat"),
             }
+            timing.noise_seconds += noise_started.elapsed().as_secs_f64();
+            let delta_started = Instant::now();
             match quality_gate::roi_low_frequency_delta_e00(&output_roi, &reference) {
                 Ok(value) => delta.push(
                     where_,
@@ -989,6 +1170,7 @@ pub(crate) fn run_quality_gate(
                 ),
                 Err(reason) => record_unmeasurable(&mut delta, &mut unmeasurable, roi, reason),
             }
+            timing.delta_e_seconds += delta_started.elapsed().as_secs_f64();
             timing.roi_sampling_seconds += roi_started.elapsed().as_secs_f64();
         }
     }
@@ -1022,6 +1204,8 @@ pub(crate) fn run_quality_gate(
                     y: input.world_origin.1,
                 },
                 reason: reason.to_string(),
+
+                category: classify_unmeasurable_reason(reason),
             });
         }
     }
@@ -1058,6 +1242,8 @@ pub(crate) fn run_quality_gate(
                                     y: point.1,
                                 },
                                 reason: (*reason).to_string(),
+
+                                category: classify_unmeasurable_reason(reason),
                             });
                         }
                         for value in measurement.measurements {
@@ -1089,6 +1275,8 @@ pub(crate) fn run_quality_gate(
                                 y: input.world_origin.1,
                             },
                             reason: reason.to_string(),
+
+                            category: classify_unmeasurable_reason(reason),
                         });
                     }
                 }
@@ -1135,6 +1323,10 @@ pub(crate) fn run_quality_gate(
                         y: input.world_origin.1,
                     },
                     reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
+
+                    category: classify_unmeasurable_reason(
+                        degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE,
+                    ),
                 });
             } else {
                 let value = 1.0 - stats.textured_low as f64 / stats.textured_pixels as f64;
@@ -1150,6 +1342,10 @@ pub(crate) fn run_quality_gate(
                     y: input.world_origin.1,
                 },
                 reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
+
+                category: classify_unmeasurable_reason(
+                    degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE,
+                ),
             });
         }
     }
@@ -1168,23 +1364,83 @@ pub(crate) fn run_quality_gate(
     ] {
         criteria.push(criterion.finish(&mut unmeasurable));
     }
-    let has_failure = criteria
+    let stations: std::collections::BTreeSet<_> = input
+        .sources
         .iter()
-        .any(|criterion| !criterion.diagnostic && !criterion.failed.is_empty());
-    let insufficient = criteria.iter().any(|criterion| {
-        criterion.measurable_count < quality_gate::QUALITY_MIN_MEASURABLE
-            || (criterion.measurable_count + criterion.unmeasurable_count > 0
-                && criterion.unmeasurable_count as f64
-                    / (criterion.measurable_count + criterion.unmeasurable_count) as f64
-                    > quality_gate::QUALITY_MAX_UNMEASURABLE_RATIO)
-    });
-    report.verdict = if has_failure {
-        QualityGateVerdict::Fail
-    } else if insufficient {
-        QualityGateVerdict::InsufficientEvidence
-    } else {
-        QualityGateVerdict::Pass
-    };
+        .map(|s| s.geometry.station_id)
+        .collect();
+    for station_id in stations {
+        let owners: std::collections::BTreeSet<_> = input
+            .sources
+            .iter()
+            .filter(|s| s.geometry.station_id == station_id)
+            .map(|s| s.owner)
+            .collect();
+        let station_quads: Vec<_> = input
+            .sources
+            .iter()
+            .filter(|s| s.geometry.station_id == station_id)
+            .filter_map(source_quad)
+            .collect();
+        let covered = input
+            .ownership
+            .iter()
+            .zip(input.coverage.as_raw())
+            .filter(|(o, c)| **c != 0 && owners.contains(o))
+            .count() as u64;
+        let denominator =
+            effective_pixel_coverage_streaming(input.coverage, &station_quads, input.world_origin)
+                .ok()
+                .map(|r| r.projected_union)
+                .unwrap_or(0);
+        criteria[2]
+            .station_statistics
+            .push(QualityStationStatistic {
+                station_id,
+                numerator: covered,
+                denominator,
+                value: (denominator > 0).then_some(covered as f64 / denominator as f64),
+                ..Default::default()
+            });
+        if let Some(textured) = input.textured {
+            let mut textured_count = 0u64;
+            let mut flat_count = 0u64;
+            let mut textured_low = 0u64;
+            let mut flat_low = 0u64;
+            for (index, owner) in input.ownership.iter().enumerate() {
+                if input.coverage.as_raw()[index] == 0 || !owners.contains(owner) {
+                    continue;
+                }
+                let low = !input.confidence[index].is_finite() || input.confidence[index] < 0.05;
+                if textured[index] != 0 {
+                    textured_count += 1;
+                    textured_low += u64::from(low);
+                } else {
+                    flat_count += 1;
+                    flat_low += u64::from(low);
+                }
+            }
+            let textured_high = textured_count.saturating_sub(textured_low);
+            criteria[8]
+                .station_statistics
+                .push(QualityStationStatistic {
+                    station_id,
+                    numerator: textured_high,
+                    denominator: textured_count,
+                    value: (textured_count > 0)
+                        .then_some(textured_high as f64 / textured_count as f64),
+                    textured_pixel_count: textured_count,
+                    excluded_flat_pixel_count: flat_count,
+                    textured_low_confidence_count: textured_low,
+                    flat_low_confidence_count: flat_low,
+                    textured_low_confidence_ratio: (textured_count > 0)
+                        .then_some(textured_low as f64 / textured_count as f64),
+                    flat_low_confidence_ratio: (flat_count > 0)
+                        .then_some(flat_low as f64 / flat_count as f64),
+                });
+        }
+    }
+    report.verdict = overall_verdict(&criteria);
     report.criteria = criteria;
     report.unmeasurable = unmeasurable;
     report.timing = timing;
@@ -1195,6 +1451,31 @@ pub(crate) fn run_quality_gate(
 mod tests {
     use super::*;
     use image::Luma;
+
+    #[test]
+    fn confidence_distribution_accumulates_compact_cell_evidence() {
+        let mut result = super::super::report::ConfidenceScoreDistribution {
+            winner_histogram: vec![0; 21],
+            runner_up_histogram: vec![0; 21],
+            ..Default::default()
+        };
+        let evidence = super::super::focus_fuser::SharpnessCellEvidence {
+            winner_score: 0.60,
+            runner_up_score: 0.59,
+            owner_score: 0.60,
+            candidate_count: 2,
+        };
+        accumulate_confidence_score(&mut result, 255, 0.01, 255, evidence);
+        accumulate_confidence_score(&mut result, 255, 0.05, 255, evidence);
+        accumulate_confidence_score(&mut result, 255, 0.01, 0, evidence);
+        assert_eq!(result.textured_low_count, 1);
+        assert_eq!(result.both_scores_at_least_0_10, 1);
+        assert_eq!(result.winner_below_0_10, 0);
+        assert_eq!(result.winner_histogram[12], 1);
+        assert_eq!(result.runner_up_histogram[11], 1);
+        assert!((result.winner_sum - 0.60).abs() < 1e-6);
+        assert!((result.runner_up_sum - 0.59).abs() < 1e-6);
+    }
 
     #[test]
     fn textured_partition_excludes_transparency_and_keeps_the_fixed_confidence_boundary() {

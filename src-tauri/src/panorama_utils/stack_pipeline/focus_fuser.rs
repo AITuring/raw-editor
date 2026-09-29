@@ -1342,6 +1342,53 @@ pub(crate) fn confidence_summary(values: &[f32], covered: &[u8]) -> SharpnessCon
     }
 }
 
+/// The compact per-ownership-cell evidence retained for Quality_Gate
+/// diagnostics.  Keeping this at cell resolution avoids another full-size
+/// station plane while preserving the exact winner/runner values used by
+/// [`cell_confidence`].
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct SharpnessCellEvidence {
+    /// Largest normalised Sharpness_Score observed among the cell's candidates.
+    pub(crate) winner_score: f32,
+    /// Second-largest normalised Sharpness_Score observed among the candidates.
+    pub(crate) runner_up_score: f32,
+    /// Score of the source that owns the cell after the fusion decision.
+    pub(crate) owner_score: f32,
+    /// Number of candidates that supplied a measurement for this cell.
+    pub(crate) candidate_count: u32,
+}
+
+/// Cell-resolution evidence plus the geometry needed to map output pixels
+/// back to their common ownership cell.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SharpnessEvidenceGrid {
+    columns: u32,
+    rows: u32,
+    cell_size_px: u32,
+    cells: Vec<SharpnessCellEvidence>,
+}
+
+impl SharpnessEvidenceGrid {
+    pub(crate) fn at_pixel(&self, x: u32, y: u32) -> Option<SharpnessCellEvidence> {
+        let column = x / self.cell_size_px.max(1);
+        let row = y / self.cell_size_px.max(1);
+        if column >= self.columns || row >= self.rows {
+            return None;
+        }
+        self.cells
+            .get(row as usize * self.columns as usize + column as usize)
+            .copied()
+    }
+
+    pub(crate) fn cells(&self) -> &[SharpnessCellEvidence] {
+        &self.cells
+    }
+
+    pub(crate) fn dimensions(&self) -> (u32, u32, u32) {
+        (self.columns, self.rows, self.cell_size_px)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Station fusion driver (需求 3.4, 3.5, 3.6, 3.8, 3.9, 3.10)
 // ---------------------------------------------------------------------------
@@ -1569,6 +1616,26 @@ impl StationFusion {
                 )
             })
             .collect()
+    }
+
+    /// Preserve the exact winner and runner-up measurements used by
+    /// `confidence()` for report-only diagnostics.  This is deliberately a
+    /// compact ownership-cell grid and cannot influence the solved owners.
+    pub(crate) fn sharpness_evidence(&self) -> SharpnessEvidenceGrid {
+        let cells = (0..self.geometry.cell_count())
+            .map(|cell| SharpnessCellEvidence {
+                winner_score: self.best[cell] as f32,
+                runner_up_score: self.second[cell] as f32,
+                owner_score: self.owner_sharpness[cell] as f32,
+                candidate_count: self.candidate_counts[cell],
+            })
+            .collect();
+        SharpnessEvidenceGrid {
+            columns: self.geometry.columns,
+            rows: self.geometry.rows,
+            cell_size_px: self.geometry.cell_size_px,
+            cells,
+        }
     }
 
     /// A cell is textured when any observed candidate reaches the glossary's
@@ -2446,6 +2513,26 @@ mod tests {
         // Sharp half: winner 0.95, runner-up 0.5 -> (0.95 - 0.5) / 0.95.
         assert!((f64::from(confidence[5]) - 0.45 / 0.95).abs() < 1e-6);
         assert!(confidence.iter().all(|&value| (0.0..=1.0).contains(&value)));
+    }
+
+    /// The report evidence is the same winner/runner pair that feeds
+    /// Sharpness_Confidence, and maps back to the ownership cell containing a
+    /// pixel without allocating a full-resolution diagnostic plane.
+    #[test]
+    fn sharpness_evidence_preserves_winner_runner_and_owner_scores() {
+        let (mut fusion, _, _, candidate) = two_frame_station();
+        fusion.fold(1, &candidate);
+        let evidence = fusion.sharpness_evidence();
+        assert_eq!(evidence.dimensions(), (6, 1, 8));
+        let soft = evidence.at_pixel(4, 0).expect("cell evidence");
+        assert_eq!(soft.winner_score, 0.5);
+        assert_eq!(soft.runner_up_score, 0.05);
+        assert_eq!(soft.owner_score, 0.5);
+        assert_eq!(soft.candidate_count, 2);
+        let sharp = evidence.at_pixel(40, 7).expect("cell evidence");
+        assert_eq!(sharp.winner_score, 0.95);
+        assert_eq!(sharp.runner_up_score, 0.5);
+        assert_eq!(sharp.owner_score, 0.95);
     }
 
     /// 需求 3.10: a station of one frame carries no runner-up evidence at all,

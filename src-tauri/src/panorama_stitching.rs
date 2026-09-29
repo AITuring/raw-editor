@@ -7675,6 +7675,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let mut station_poses_replaced = false;
     #[allow(clippy::type_complexity)]
     let mut quality_planes: Option<(GrayImage, Vec<u16>, Vec<f32>, Vec<u8>, (f64, f64))> = None;
+    let mut confidence_scores = stack_report::ConfidenceScoreDistribution {
+        winner_histogram: vec![0; 21],
+        runner_up_histogram: vec![0; 21],
+        ..Default::default()
+    };
     // The output Coverage_Mask the export writes as alpha (需求 10.6).
     let mut output_coverage: Option<GrayImage> = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
@@ -8167,6 +8172,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         .collect::<Vec<_>>();
                     let mut station_masks: Vec<Option<stitching::FocusStackTileMasks>> =
                         (0..tile_infos.len()).map(|_| None).collect();
+                    let mut station_sampling_origins = vec![(0.0f64, 0.0f64); tile_infos.len()];
                     let mut load_tile = |tile: &ImageInfo| {
                         ensure_focus_memory_available(rss_sampler.as_ref())?;
                         let group_index =
@@ -8209,6 +8215,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // (需求 3.5 / 3.8 / 3.9).
                         if let Some(masks) = rendered.masks.as_ref() {
                             station_masks[group_index] = Some(masks.clone());
+                            station_sampling_origins[group_index] = rendered.sampling_origin;
                             let mut fusion = masks.fusion.clone();
                             fusion.station_index = group_index;
                             focus_fuser::record_run_station(fusion);
@@ -8318,6 +8325,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         .get(&tile_infos[station].id)
                                         .copied()
                                         .unwrap_or_else(Matrix3::identity);
+                                    let station_origin = station_sampling_origins
+                                        .get(station)
+                                        .copied()
+                                        .unwrap_or((0.0, 0.0));
+                                    let station_crop = Matrix3::new(
+                                        1.0,
+                                        0.0,
+                                        -station_origin.0,
+                                        0.0,
+                                        1.0,
+                                        -station_origin.1,
+                                        0.0,
+                                        0.0,
+                                        1.0,
+                                    );
                                     for source in group_slices[station] {
                                         let owner = next_owner;
                                         raw_owner_ids[station].push(owner);
@@ -8327,6 +8349,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                             geometry: quality_gate::SourceGeometry {
                                                 member_to_anchor: Matrix3::identity(),
                                                 tile_to_world: station_to_world
+                                                    * station_crop
                                                     * station_render_homographies
                                                         .get(&source.id)
                                                         .copied()
@@ -8409,6 +8432,17 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         .get(sy as usize * mask_width as usize + sx as usize)
                                         .copied()
                                         .unwrap_or(0);
+                                    if let Some(evidence) =
+                                        masks.sharpness_evidence.at_pixel(sx as u32, sy as u32)
+                                    {
+                                        quality_gate_runner::accumulate_confidence_score(
+                                            &mut confidence_scores,
+                                            rendered.coverage.covered()[index],
+                                            confidence[index],
+                                            textured[index],
+                                            evidence,
+                                        );
+                                    }
                                 }
                                 quality_sources = Some(raw_sources);
                                 let coverage_plane = GrayImage::from_raw(
@@ -8539,7 +8573,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         };
         let report = quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader);
         if let Some(recorder) = stack_report.as_ref() {
-            recorder.update(|stack| stack.quality_gate = report);
+            recorder.update(|stack| {
+                stack.quality_gate = report;
+                stack.quality_gate.confidence_scores = confidence_scores.clone();
+            });
         }
     } else if let Some(recorder) = stack_report.as_ref() {
         recorder.update(|stack| {
