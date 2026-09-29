@@ -797,8 +797,24 @@ impl SyntheticScan {
             // fit, so the 需求 1.1 correlation is what has to reject the pair.
             DecoySource::UnrelatedContent => {
                 station_neighbours.push((0, station));
+                // A second random artwork can share enough of the bright-paper
+                // background with the primary plane to produce a spurious NCC
+                // above 0.6. Build an explicitly decorrelated subject from the
+                // reference content instead: polarity inversion keeps variance
+                // and texture while guaranteeing that the overlap correlation
+                // cannot pass merely because both fixtures are mostly paper.
+                let mut state = seed | 1;
+                let decorrelated =
+                    GrayImage::from_fn(SYNTHETIC_TILE_SIDE, SYNTHETIC_TILE_SIDE, |x, y| {
+                        let base = self.plane.image().get_pixel(x, y)[0];
+                        let jitter = (splitmix64(&mut state) % 9) as i16 - 4;
+                        let inverted = 255i16 - i16::from(base) + jitter;
+                        Luma([inverted.clamp(0, 255) as u8])
+                    });
                 (
-                    Some(artwork_plane(seed | 1, 9)),
+                    Some(ArtworkPlane {
+                        image: Arc::new(decorrelated),
+                    }),
                     self.sources[reference].tile_to_plane,
                 )
             }
