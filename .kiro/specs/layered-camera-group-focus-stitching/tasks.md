@@ -916,7 +916,8 @@
   - [x]* 11.15 属性测试：色调样本过滤条件的充要性
     - **Property 48: 色调样本过滤条件的充要性**
     - **Validates: Requirements 9.1, 9.4**
-    - 执行记录：P48 复核了双覆盖样本的亮度可用性与 3×MAD 一致性筛选；100 cases 通过。
+    - 执行记录：P48 通过 `PairField` 夹具复核双覆盖、Coverage、亮度可用性与 3×MAD 一致性
+      筛选；100 cases 通过。已接受关系的配对条件仍由 `harmonize_tone_tiles` 的关系列表控制。
 
   - [ ]* 11.16 属性测试：高频残差逐像素等于 owner
     - **Property 49: 高频残差逐像素等于 owner**

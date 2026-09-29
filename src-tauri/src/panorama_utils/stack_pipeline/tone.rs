@@ -175,7 +175,7 @@ pub(crate) struct PairField {
 }
 
 impl PairField {
-    fn new(first: &ToneTile, second: &ToneTile) -> Option<Self> {
+    pub(crate) fn new(first: &ToneTile, second: &ToneTile) -> Option<Self> {
         let stride = first.world_stride.max(second.world_stride);
         if !stride.is_finite() || stride <= 0.0 {
             return None;

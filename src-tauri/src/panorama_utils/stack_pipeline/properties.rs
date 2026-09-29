@@ -141,25 +141,51 @@ proptest! {
     #[test]
     fn property_48_tone_samples_are_usable_and_consistent(seed in any::<u8>()) {
         let value = 0.25 + f32::from(seed % 40) / 200.0;
-        let samples = vec![tone::ToneSample {
-            owner: [value; 3],
-            source: [value * 0.9; 3],
-        }; tone::TONE_MIN_SAMPLES];
-        let retained = tone::consistent_samples(&samples);
-        prop_assert_eq!(retained.len(), samples.len());
-        let all_usable = retained.iter().all(|sample| {
-            let owner = 0.2126 * sample.owner[0]
-                + 0.7152 * sample.owner[1]
-                + 0.0722 * sample.owner[2];
-            let source = 0.2126 * sample.source[0]
-                + 0.7152 * sample.source[1]
-                + 0.0722 * sample.source[2];
+        let side = 32u32;
+        let tile = |coverage: Vec<f32>, pixel: [f32; 3]| {
+            tone::ToneTile {
+                station_index: 0,
+                owner_id: 1,
+                low: image::Rgb32FImage::from_pixel(side, side, image::Rgb(pixel)),
+                validity: image::GrayImage::from_pixel(side, side, image::Luma([255])),
+                world_origin: (0.0, 0.0),
+                world_size: (f64::from(side), f64::from(side)),
+                world_stride: 1.0,
+                cell_mean: image::Rgb32FImage::from_pixel(side, side, image::Rgb(pixel)),
+                cell_coverage: coverage,
+            }
+        };
+        let full = vec![1.0; tone::TONE_MIN_SAMPLES];
+        let first = tile(full.clone(), [value; 3]);
+        let second = tile(full, [value * 0.9; 3]);
+        let complete = tone::PairField::new(&first, &second)
+            .expect("the accepted overlap has a field")
+            .samples();
+        prop_assert_eq!(complete.len(), tone::TONE_MIN_SAMPLES);
+        let all_usable = complete.iter().all(|sample| {
+            let luminance = |pixel: [f32; 3]| {
+                0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
+            };
             (tone::TONE_MIN_SAMPLE_LUMINANCE..=tone::TONE_MAX_SAMPLE_LUMINANCE)
-                .contains(&owner)
+                .contains(&luminance(sample.owner))
                 && (tone::TONE_MIN_SAMPLE_LUMINANCE..=tone::TONE_MAX_SAMPLE_LUMINANCE)
-                    .contains(&source)
+                    .contains(&luminance(sample.source))
         });
-        prop_assert_eq!(all_usable, true);
+        prop_assert!(all_usable);
+        let mut partial_coverage = vec![1.0; tone::TONE_MIN_SAMPLES];
+        partial_coverage[usize::from(seed) % tone::TONE_MIN_SAMPLES] = 0.0;
+        let partial = tile(partial_coverage, [value; 3]);
+        let partial_samples = tone::PairField::new(&partial, &second)
+            .expect("the overlap remains geometrically valid")
+            .samples();
+        prop_assert_eq!(partial_samples.len(), tone::TONE_MIN_SAMPLES - 1);
+        let mut with_outlier = complete;
+        with_outlier.push(tone::ToneSample {
+            owner: [0.9; 3],
+            source: [0.1; 3],
+        });
+        let retained = tone::consistent_samples(&with_outlier);
+        prop_assert_eq!(retained.len(), tone::TONE_MIN_SAMPLES);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 50: Tone_Harmonizer
