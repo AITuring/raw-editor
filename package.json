@@ -54,7 +54,7 @@
     "i18n:language-check": "node src/i18n/check-language-resolution.mjs",
     "i18n:runtime-check": "node src/i18n/check-runtime.mjs",
     "i18n:lint": "i18next-cli lint",
-    "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml stack_acceptance_harness -- --ignored --nocapture"
+    "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_acceptance_harness -- --exact --ignored --nocapture"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

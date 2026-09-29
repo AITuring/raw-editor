@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -15,7 +15,6 @@ use std::time::{Duration, SystemTime};
 use half::f16;
 use nalgebra::{Matrix3, Point2, Point3};
 use proptest::prelude::*;
-use proptest::strategy::ValueTree;
 use regex::Regex;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -35,7 +34,8 @@ use super::determinism::{DETERMINISTIC_SUM_BLOCK_LEN, derive_run_seed_from_paths
 use super::focus_fuser;
 use super::intra_station;
 use super::report::{
-    ConnectivityReport, FusionSolverStatus, STACK_REPORT_TOP_LEVEL_FIELDS, StackReport,
+    ConnectivityReport, FusionReport, FusionSolverStatus, QualityGateCriterionRecord,
+    QualityGateVerdict, STACK_REPORT_TOP_LEVEL_FIELDS, SourceRecord, StackReport,
     VIRTUAL_TILE_CACHE_LIMIT_BYTES,
 };
 use super::test_support::{
@@ -439,28 +439,228 @@ proptest! {
 // Property 94 / acceptance harness skeleton (17.5, 17.15)
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum StackAcceptanceVerdict {
-    Pass,
-    Fail,
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StackAcceptanceFailure {
+    identifier: &'static str,
+    measured: String,
+    threshold: String,
 }
 
-fn stack_acceptance_verdict(report: &StackReport) -> StackAcceptanceVerdict {
-    let grouping_ok = report.input.source_count == 84
-        && report.grouping.isolated.is_empty()
-        && report.station_relations.connectivity.components == 1;
-    let quality_gate_failed = report
+/// The one production acceptance decision.  The harness and P94 both call
+/// this function; neither maintains a second copy of the acceptance rules.
+fn stack_acceptance_failures(report: &StackReport) -> Vec<StackAcceptanceFailure> {
+    let mut failures = Vec::new();
+    let mut add = |identifier: &'static str, measured: String, threshold: String| {
+        failures.push(StackAcceptanceFailure {
+            identifier,
+            measured,
+            threshold,
+        });
+    };
+    if report.input.source_count != 84 {
+        add(
+            "acceptance_source_count",
+            report.input.source_count.to_string(),
+            "84".to_string(),
+        );
+    }
+    if !report.grouping.isolated.is_empty() {
+        add(
+            "acceptance_isolated_sources",
+            report.grouping.isolated.len().to_string(),
+            "0".to_string(),
+        );
+    }
+    if report.station_relations.connectivity.components != 1 {
+        add(
+            "acceptance_connectivity_components",
+            report.station_relations.connectivity.components.to_string(),
+            "1".to_string(),
+        );
+    }
+    if report.quality_gate.verdict != QualityGateVerdict::Pass {
+        add(
+            "acceptance_quality_gate_verdict",
+            serde_json::to_string(&report.quality_gate.verdict).unwrap_or_default(),
+            "pass".to_string(),
+        );
+    }
+    let failed_criteria = report
         .quality_gate
         .criteria
         .iter()
-        .any(|criterion| !criterion.diagnostic && !criterion.failed.is_empty());
-    let boundary_ok = report.composition.union_projected_pixels > 0
-        && (report.composition.opaque_pixels as f64)
-            >= 0.98 * report.composition.union_projected_pixels as f64;
-    if grouping_ok && !quality_gate_failed && boundary_ok {
-        StackAcceptanceVerdict::Pass
+        .filter(|criterion| {
+            !criterion.diagnostic
+                && (criterion.verdict == QualityGateVerdict::Fail || !criterion.failed.is_empty())
+        })
+        .count();
+    if failed_criteria != 0 {
+        add(
+            "acceptance_failed_criteria",
+            failed_criteria.to_string(),
+            "0".to_string(),
+        );
+    }
+    let union = report.composition.union_projected_pixels;
+    let opaque_ratio = if union == 0 {
+        0.0
     } else {
-        StackAcceptanceVerdict::Fail
+        report.composition.opaque_pixels as f64 / union as f64
+    };
+    if union == 0 || opaque_ratio < 0.98 {
+        add(
+            "acceptance_opaque_union_ratio",
+            format!("{opaque_ratio:.9}"),
+            "0.98".to_string(),
+        );
+    }
+    if report.resources.peak_rss_bytes > report.resources.memory_threshold_bytes {
+        add(
+            "acceptance_peak_rss",
+            report.resources.peak_rss_bytes.to_string(),
+            report.resources.memory_threshold_bytes.to_string(),
+        );
+    }
+    if report.resources.network_requests != 0 {
+        add(
+            "acceptance_network_requests",
+            report.resources.network_requests.to_string(),
+            "0".to_string(),
+        );
+    }
+    let non_graph_cut = report
+        .fusion
+        .iter()
+        .filter(|fusion| fusion.solver_status != FusionSolverStatus::GraphCut)
+        .count();
+    if non_graph_cut != 0 {
+        add(
+            "acceptance_fusion_solver_status",
+            non_graph_cut.to_string(),
+            "0".to_string(),
+        );
+    }
+    let changed_sources = report
+        .input
+        .sources
+        .iter()
+        .filter(|source| {
+            source.sha256_before.is_empty()
+                || source.sha256_after.is_empty()
+                || source.sha256_before != source.sha256_after
+        })
+        .count();
+    if report.input.sources.len() != 84 || changed_sources != 0 {
+        add(
+            "acceptance_source_sha256_stable",
+            format!(
+                "records={}, changed={changed_sources}",
+                report.input.sources.len()
+            ),
+            "84 records, changed=0".to_string(),
+        );
+    }
+    failures
+}
+
+fn stack_acceptance_baseline_report() -> StackReport {
+    let mut report = StackReport::default();
+    let paths = (0..84)
+        .map(|index| format!("/fixture/DSC_{:04}.NEF", 3680 + index))
+        .collect::<Vec<_>>();
+    report.input.source_count = 84;
+    report.input.sources = paths
+        .iter()
+        .map(|path| SourceRecord {
+            path: path.clone(),
+            sha256_before: "a".repeat(64),
+            sha256_after: "a".repeat(64),
+            decoded: true,
+        })
+        .collect();
+    report.grouping.station_count = 1;
+    report.station_relations.connectivity.components = 1;
+    report.composition.union_projected_pixels = 10_000;
+    report.composition.opaque_pixels = 9_800;
+    report.resources.memory_threshold_bytes = 100;
+    report.resources.peak_rss_bytes = 100;
+    report.resources.network_requests = 0;
+    report.fusion = vec![FusionReport {
+        station_index: 0,
+        solver_status: FusionSolverStatus::GraphCut,
+        ..FusionReport::default()
+    }];
+    report.quality_gate.verdict = QualityGateVerdict::Pass;
+    report.quality_gate.criteria = vec![QualityGateCriterionRecord {
+        name: "baseline".to_string(),
+        verdict: QualityGateVerdict::Pass,
+        ..QualityGateCriterionRecord::default()
+    }];
+    report
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AcceptanceViolationKind {
+    SourceCount,
+    Isolated,
+    Connectivity,
+    QualityVerdict,
+    FailedCriterion,
+    OpaqueRatio,
+    PeakRss,
+    Network,
+    Solver,
+    SourceDigest,
+}
+
+fn inject_acceptance_violation(
+    report: &mut StackReport,
+    kind: AcceptanceViolationKind,
+) -> &'static str {
+    match kind {
+        AcceptanceViolationKind::SourceCount => {
+            report.input.source_count = 83;
+            "acceptance_source_count"
+        }
+        AcceptanceViolationKind::Isolated => {
+            report.grouping.isolated.push(Default::default());
+            "acceptance_isolated_sources"
+        }
+        AcceptanceViolationKind::Connectivity => {
+            report.station_relations.connectivity.components = 2;
+            "acceptance_connectivity_components"
+        }
+        AcceptanceViolationKind::QualityVerdict => {
+            report.quality_gate.verdict = QualityGateVerdict::Fail;
+            "acceptance_quality_gate_verdict"
+        }
+        AcceptanceViolationKind::FailedCriterion => {
+            report.quality_gate.criteria[0].verdict = QualityGateVerdict::Fail;
+            report.quality_gate.criteria[0]
+                .failed
+                .push(Default::default());
+            "acceptance_failed_criteria"
+        }
+        AcceptanceViolationKind::OpaqueRatio => {
+            report.composition.opaque_pixels = 9_700;
+            "acceptance_opaque_union_ratio"
+        }
+        AcceptanceViolationKind::PeakRss => {
+            report.resources.peak_rss_bytes = 101;
+            "acceptance_peak_rss"
+        }
+        AcceptanceViolationKind::Network => {
+            report.resources.network_requests = 1;
+            "acceptance_network_requests"
+        }
+        AcceptanceViolationKind::Solver => {
+            report.fusion[0].solver_status = FusionSolverStatus::PerCellFallback;
+            "acceptance_fusion_solver_status"
+        }
+        AcceptanceViolationKind::SourceDigest => {
+            report.input.sources[0].sha256_after = "b".repeat(64);
+            "acceptance_source_sha256_stable"
+        }
     }
 }
 
@@ -469,41 +669,129 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 94: 门禁 verdict 是纯函数。
     #[test]
     fn property_94_stack_acceptance_verdict_is_pure(
-        report in arb_stack_report(),
+        kind in prop_oneof![
+            Just(AcceptanceViolationKind::SourceCount),
+            Just(AcceptanceViolationKind::Isolated),
+            Just(AcceptanceViolationKind::Connectivity),
+            Just(AcceptanceViolationKind::QualityVerdict),
+            Just(AcceptanceViolationKind::FailedCriterion),
+            Just(AcceptanceViolationKind::OpaqueRatio),
+            Just(AcceptanceViolationKind::PeakRss),
+            Just(AcceptanceViolationKind::Network),
+            Just(AcceptanceViolationKind::Solver),
+            Just(AcceptanceViolationKind::SourceDigest),
+        ],
     ) {
-        let expected = {
-            let grouping_ok = report.input.source_count == 84
-                && report.grouping.isolated.is_empty()
-                && report.station_relations.connectivity.components == 1;
-            let quality_gate_failed = report
-                .quality_gate
-                .criteria
-                .iter()
-                .any(|criterion| !criterion.diagnostic && !criterion.failed.is_empty());
-            let boundary_ok = report.composition.union_projected_pixels > 0
-                && (report.composition.opaque_pixels as f64)
-                    >= 0.98 * report.composition.union_projected_pixels as f64;
-            if grouping_ok && !quality_gate_failed && boundary_ok {
-                StackAcceptanceVerdict::Pass
-            } else {
-                StackAcceptanceVerdict::Fail
-            }
-        };
-        prop_assert_eq!(stack_acceptance_verdict(&report), expected);
+        let mut report = stack_acceptance_baseline_report();
+        let expected = inject_acceptance_violation(&mut report, kind);
+        let failures = stack_acceptance_failures(&report);
+        prop_assert_eq!(failures.iter().map(|failure| failure.identifier).collect::<Vec<_>>(), vec![expected]);
     }
 }
 
 #[test]
 #[ignore = "acceptance harness requires the supplied real dataset"]
 fn stack_acceptance_harness() {
-    let report = test_support::arb_stack_report()
-        .new_tree(&mut proptest::test_runner::TestRunner::default())
-        .expect("schema-valid report")
-        .current();
-    println!(
-        "stack acceptance verdict: {:?}",
-        stack_acceptance_verdict(&report)
+    let source_dir = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR")
+        .map(PathBuf::from)
+        .expect("RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR is required");
+    let report_dir = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR")
+        .map(PathBuf::from)
+        .expect("RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR is required");
+    let source_dir = source_dir
+        .canonicalize()
+        .expect("acceptance source directory must exist");
+    let report_for_check = if report_dir.exists() {
+        report_dir
+            .canonicalize()
+            .expect("acceptance report directory must be canonicalizable")
+    } else {
+        report_dir.clone()
+    };
+    assert!(
+        !report_for_check.starts_with(&source_dir),
+        "acceptance report directory must not be inside the source directory"
     );
+    fs::create_dir_all(&report_dir).expect("acceptance report directory must be writable");
+    let mut paths = Vec::with_capacity(84);
+    let mut missing = Vec::new();
+    for index in 3680..=3763 {
+        let name = format!("DSC_{index}.NEF");
+        let path = source_dir.join(&name);
+        if path.is_file() {
+            paths.push(path);
+        } else {
+            missing.push(name);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "missing acceptance sources: {missing:?}"
+    );
+    let before = acceptance_source_snapshot(&source_dir);
+    let source_strings = paths
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    // The harness owns this process-wide variable for the duration of the ignored run.
+    unsafe {
+        std::env::set_var("RAW_EDITOR_STACK_REPORT_DIR", &report_dir);
+    }
+    crate::sidecar_storage::initialize(Path::new(
+        "/private/tmp/raw-editor-stack-acceptance-sidecars",
+    ))
+    .expect("acceptance sidecar storage should initialize");
+    let app = tauri::test::mock_app();
+    crate::panorama_stitching::stitch_images_with_options(
+        source_strings,
+        app.handle().clone(),
+        crate::panorama_stitching::AlignmentMode::Auto,
+        crate::panorama_stitching::BlendMode::FocusStack,
+        "test-stack-acceptance-progress",
+    )
+    .expect("84-image acceptance pipeline should terminate with a report");
+    let after = acceptance_source_snapshot(&source_dir);
+    assert_eq!(
+        before, after,
+        "acceptance source directory changed during run"
+    );
+    let report_path = fs::read_dir(&report_dir)
+        .expect("acceptance report directory should be readable")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .max_by_key(|path| {
+            fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+        })
+        .expect("acceptance pipeline should write a Stack_Report JSON");
+    let report: StackReport = serde_json::from_slice(
+        &fs::read(&report_path).expect("acceptance report should be readable"),
+    )
+    .expect("acceptance report should match Stack_Report schema");
+    let failures = stack_acceptance_failures(&report);
+    if !failures.is_empty() {
+        eprintln!("acceptance unmet conditions: {failures:?}");
+    }
+    assert!(failures.is_empty(), "acceptance conditions were not met");
+}
+
+fn acceptance_source_snapshot(source_dir: &Path) -> BTreeMap<String, (u64, String)> {
+    fs::read_dir(source_dir)
+        .expect("acceptance source directory should be readable")
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            let size = fs::metadata(&path).ok()?.len();
+            let digest = virtual_tile::source_file_sha256(&path).ok()?;
+            Some((name, (size, virtual_tile::hex_digest(&digest))))
+        })
+        .collect::<BTreeMap<_, _>>()
 }
 
 /// Every identifier a Stack_Report is allowed to carry as a failure or
@@ -11219,8 +11507,8 @@ use super::quality_gate_runner::{
     classify_unmeasurable_reason, criterion_verdict, overall_verdict, record_unmeasurable,
 };
 use super::report::{
-    FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
-    UnmeasurableCategory, UnmeasurableRecord, WorldPoint,
+    FailedMeasurementRecord, QualityGateReport, UnmeasurableCategory, UnmeasurableRecord,
+    WorldPoint,
 };
 
 proptest! {

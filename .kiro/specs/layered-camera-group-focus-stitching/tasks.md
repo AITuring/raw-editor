@@ -1466,7 +1466,7 @@ memory_threshold_source, physical_memory_bytes}`
     - _Requirements: 13.3, 13.6, 13.7, 13.8_
     - 执行记录：新增 `stack_pipeline/diagnostics.rs`：`validate_diagnostic_roi`（长边 >4096、完全在输出外、与覆盖无交集时以 `diagnostics_roi_invalid` 与原因拒绝，写入前判定）、`pixel_provenance`（站位、owner 绝对路径、Sharpness_Confidence、Coverage_Mask）与 `export_roi_planes`（只写用户目录，先写隐藏暂存目录再一次重命名发布，失败时删除暂存并以 `diagnostics_write_failed` 指明目录）。候选 Source_RAW 重采样、选择掩膜、逐帧 Sharpness_Score、60 秒时限与管线接线尚未完成，保持 [~]。
 
-  - [x] 17.5 实现 `stack_acceptance_harness`
+  - [ ] 17.5 实现 `stack_acceptance_harness`
     - 复用 `panorama_reference_acceptance.rs` 的 `#[ignore]` + 环境变量素材路径 +
       生产 RAW 加载器 + JSON 清单骨架；**不接受任何参考图像或外部单应性清单参数**
     - 入口变量 `RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR` /
@@ -1482,8 +1482,11 @@ memory_threshold_source, physical_memory_bytes}`
     - 失败时保留已产出报告并记录未满足判据的标识符、实测值与阈值
     - 新增 `npm run stack-acceptance:check` 脚本入口
     - _Requirements: 15.4, 15.5, 15.6, 15.7, 15.8, 15.12_
-    - 执行记录：已添加 `#[ignore]` 的 `stack_acceptance_harness`、纯 verdict 函数与
-      `npm run stack-acceptance:check`；按要求未在 84 张 NEF 上运行。
+    - 审核记录（2026-09-30）：上一版只生成随机报告，判定只检查三项，不能作为验收 harness；
+      该实现已在第二阶段重做，待 84 张实跑完成后再勾选。
+    - 执行记录（第二阶段）：harness 现在要求两个环境变量、严格枚举 84 个 NEF、检查报告目录
+      不在素材目录内、运行前后文件快照与 SHA-256 一致，并通过默认 FocusStack 管线写报告；
+      84 张实跑尚未完成，保持未勾选。
 
   - [ ]* 17.6 属性测试：诊断输出完整且与输出同坐标系
     - **Property 81: 诊断输出完整且与输出同坐标系**
@@ -1527,11 +1530,11 @@ memory_threshold_source, physical_memory_bytes}`
     - **Validates: Requirements 1.7, 2.9, 5.9, 6.10, 11.16**
     - 生成器 `arb_stack_report()`
 
-  - [x]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
+  - [ ]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
     - **Validates: Requirements 15.12**
-    - 执行记录：P94 使用 100 cases，纯函数按 84 张入组/连通、Quality_Gate 失败数和 0.98 联合面积
-      三项条件判定，并与独立期望逐例一致。
+    - 审核记录（2026-09-30）：上一版 P94 照抄实现且只覆盖三项条件，已重写为从满足条件的基准
+      报告注入十类违规并调用同一纯判定函数；等待第二阶段测试完成后再勾选。
 
   - [ ]* 17.16 集成测试：时限类判据
     - Stack_Report 在成功/降级/拒绝三条路径上 30 秒内写出（需求 10.8）
