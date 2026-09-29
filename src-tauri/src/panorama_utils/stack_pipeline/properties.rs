@@ -11447,6 +11447,12 @@ proptest! {
                 QualityGateVerdict::InsufficientEvidence
             });
         }
+        // A measurable conditional criterion with a failed observation is a
+        // real failure even when fewer than eight observations are available.
+        prop_assert_eq!(
+            criterion_verdict("boundary_stroke_alignment", 1, 0, true, false, false),
+            QualityGateVerdict::Fail
+        );
         let pass_and_not_applicable = [QualityGateVerdict::Pass, QualityGateVerdict::NotApplicable]
             .map(|verdict| QualityGateCriterionRecord { verdict, ..QualityGateCriterionRecord::default() });
         prop_assert_eq!(overall_verdict(&pass_and_not_applicable), QualityGateVerdict::Pass);
