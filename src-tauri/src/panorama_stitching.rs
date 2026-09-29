@@ -6603,10 +6603,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .as_deref()
             .map(str::trim)
             .filter(|directory| !directory.is_empty())
-            .and_then(|directory| {
+            .map(|directory| {
                 let path = PathBuf::from(directory);
                 match std::fs::create_dir_all(&path) {
-                    Ok(()) => Some(DiagnosticsRecorder::new(Some(path))),
+                    Ok(()) => DiagnosticsRecorder::new(Some(path)),
                     Err(error) => {
                         degradation::record_run_degradation(
                             degradation::DIAGNOSTICS_WRITE_FAILED,
@@ -6615,7 +6615,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 "error": error.to_string(),
                             }),
                         );
-                        Some(DiagnosticsRecorder::new(None))
+                        DiagnosticsRecorder::new(None)
                     }
                 }
             })
