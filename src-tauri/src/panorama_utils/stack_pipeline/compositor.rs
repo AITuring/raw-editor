@@ -146,29 +146,48 @@ impl StackCompositorChoice {
     /// default layered path, which is what keeps 需求 15.2 (no external
     /// precondition for the default path) and 需求 15.10 (comparison switches
     /// off by default) true for a fresh install.
+    ///
+    /// The setting is the only source (任务 13.7): the two pre-setting
+    /// environment switches are gone, so no environment variable can select
+    /// or disable a compositor.
     pub(crate) fn resolve(setting: Option<&str>) -> Self {
-        if let Some(legacy) = Self::legacy_environment_override() {
-            return legacy;
-        }
         setting.and_then(Self::from_identifier).unwrap_or_default()
     }
+}
 
-    /// The two pre-setting environment switches, kept only so an in-flight
-    /// diagnostic session keeps working.  任务 13.7 deletes both of them; the
-    /// setting above is already authoritative for a default build because
-    /// neither variable is set there.
-    fn legacy_environment_override() -> Option<Self> {
-        if std::env::var_os("RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC").is_some() {
-            return Some(Self::StreamingMosaic);
-        }
-        // The ownership compositor's semantics became the default path in
-        // 任务 13.1, so this variable is now a no-op that resolves to the
-        // default rather than to a separate path.
-        if std::env::var_os("RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER").is_some() {
-            return Some(Self::LayeredVirtualTile);
-        }
-        None
+/// Longest supported output canvas side in world native pixels (需求 10.2).
+pub(crate) const MAX_OUTPUT_CANVAS_LONG_SIDE: u64 = 262_144;
+
+/// The rejection of an output canvas whose long side exceeds
+/// [`MAX_OUTPUT_CANVAS_LONG_SIDE`] (需求 10.11). The error starts with the
+/// stable `canvas_long_side_exceeded` identifier and the degradation ledger
+/// records the measured size and the limit; `None` means the canvas is
+/// supported. Callers evaluate it before any canvas buffer is allocated.
+pub(crate) fn reject_oversized_canvas(width: u64, height: u64) -> Option<String> {
+    let long_side = width.max(height);
+    if long_side <= MAX_OUTPUT_CANVAS_LONG_SIDE {
+        return None;
     }
+    super::degradation::record_run_degradation(
+        super::degradation::CANVAS_LONG_SIDE_EXCEEDED,
+        serde_json::json!({
+            "width": width,
+            "height": height,
+            "long_side": long_side,
+            "limit": MAX_OUTPUT_CANVAS_LONG_SIDE,
+        }),
+    );
+    Some(format!(
+        "{}: the output canvas {width}x{height} exceeds the supported long side of {} pixels",
+        super::degradation::CANVAS_LONG_SIDE_EXCEEDED,
+        MAX_OUTPUT_CANVAS_LONG_SIDE
+    ))
+}
+
+/// `true` for an error produced by [`reject_oversized_canvas`]: a terminal
+/// rejection that no fallback renderer may retry.
+pub(crate) fn is_canvas_rejection(error: &str) -> bool {
+    error.starts_with(super::degradation::CANVAS_LONG_SIDE_EXCEEDED)
 }
 
 /// Decide and record the actual pipeline path from the Station_Grouper output
@@ -244,20 +263,111 @@ mod tests {
 
     #[test]
     fn unset_and_unknown_settings_resolve_to_the_default_path() {
-        // The environment overrides are read by `resolve`, so this test only
-        // asserts the parsing half that cannot be affected by the ambient
-        // environment of the test binary.
+        // 任务 13.7: the setting is the only input of `resolve`.
         assert_eq!(StackCompositorChoice::from_identifier(""), None);
         assert_eq!(StackCompositorChoice::from_identifier("nope"), None);
         assert_eq!(
-            StackCompositorChoice::from_identifier("  Streaming_Mosaic "),
-            Some(StackCompositorChoice::StreamingMosaic)
+            StackCompositorChoice::resolve(Some("  Streaming_Mosaic ")),
+            StackCompositorChoice::StreamingMosaic
         );
-        assert_eq!(
-            None.and_then(StackCompositorChoice::from_identifier)
-                .unwrap_or_default(),
-            StackCompositorChoice::LayeredVirtualTile
+        for setting in [None, Some(""), Some("nope")] {
+            assert_eq!(
+                StackCompositorChoice::resolve(setting),
+                StackCompositorChoice::LayeredVirtualTile
+            );
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: 100,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+
+        // Feature: layered-camera-group-focus-stitching, Property 60: 对于任意联合覆盖边界，若其
+        // 长边超过支持的画布上限，则不写出最终结果文件，且实测画布尺寸与该上限被记录。
+        //
+        // The same function writes the `canvas_long_side_exceeded` ledger entry; the
+        // returned error, which becomes the run's error, carries the measured size and the
+        // limit, and `is_canvas_rejection` keeps every fallback renderer from retrying.
+        //
+        // **Validates: Requirements 10.11**
+        #[test]
+        fn property_60_oversized_canvas_is_rejected_with_its_measured_size(
+            width in 1u64..600_000,
+            height in 1u64..600_000,
+        ) {
+            let rejection = reject_oversized_canvas(width, height);
+            proptest::prop_assert_eq!(
+                rejection.is_some(),
+                width.max(height) > MAX_OUTPUT_CANVAS_LONG_SIDE
+            );
+            if let Some(error) = rejection {
+                proptest::prop_assert!(is_canvas_rejection(&error), "{}", error);
+                let measured = format!("{width}x{height}");
+                proptest::prop_assert!(error.contains(&measured), "{}", error);
+                proptest::prop_assert!(
+                    error.contains(&MAX_OUTPUT_CANVAS_LONG_SIDE.to_string()),
+                    "{}",
+                    error
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn canvas_limit_boundary_is_inclusive() {
+        assert!(reject_oversized_canvas(MAX_OUTPUT_CANVAS_LONG_SIDE, 1).is_none());
+        assert!(reject_oversized_canvas(1, MAX_OUTPUT_CANVAS_LONG_SIDE).is_none());
+        assert!(reject_oversized_canvas(MAX_OUTPUT_CANVAS_LONG_SIDE + 1, 1).is_some());
+        assert!(!is_canvas_rejection("Virtual tile 3 dimensions changed"));
+    }
+
+    #[test]
+    fn layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile() {
+        use crate::panorama_stitching::ImageInfo;
+        use crate::panorama_utils::stitching;
+        // An 8 px tile placed at 40,000× spans 320,000 world pixels.
+        let info = ImageInfo {
+            id: 0,
+            filename: "/station/oversized/0000.NEF".to_string(),
+            width: 8,
+            height: 8,
+            alignment_image: image::GrayImage::new(1, 1),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: Some(75.0),
+            overview_reference: false,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        };
+        let homographies = std::collections::HashMap::from([(
+            0usize,
+            Matrix3::new(40_000.0, 0.0, 0.0, 0.0, 40_000.0, 0.0, 0.0, 0.0, 1.0),
+        )]);
+        let app = tauri::test::mock_app();
+        let mut loads = 0usize;
+        let mut load = |_: &ImageInfo| -> Result<image::Rgb32FImage, String> {
+            loads += 1;
+            Ok(image::Rgb32FImage::new(8, 8))
+        };
+        let result = stitching::layered_virtual_tile_compositor_with_ownership(
+            &[&info],
+            &homographies,
+            stitching::Projection::Planar,
+            app.handle().clone(),
+            "compositor-canvas-limit-test",
+            &mut load,
         );
+        let Err(error) = result else {
+            panic!("an oversized canvas must be rejected");
+        };
+        assert!(is_canvas_rejection(&error), "{error}");
+        assert_eq!(loads, 0, "no tile may be decoded for a rejected canvas");
     }
 
     #[test]

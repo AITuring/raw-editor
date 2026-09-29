@@ -1024,8 +1024,9 @@
     - 复用 `canonicalize_image_stack_result()` / `write_preview_files()`：
       预览仅由最终结果规范化显示编码像素降采样得到，与最终结果携带同一结果标识
     - _Requirements: 10.2, 10.5, 10.6, 10.7, 10.10, 10.11, 14.5_
+    - 执行记录：已加 `MAX_OUTPUT_CANVAS_LONG_SIDE = 262_144` 与 `compositor::reject_oversized_canvas`，默认路径在分配画布前拒绝超限画布并记录 `canvas_long_side_exceeded`（实测宽高、长边、上限），`is_canvas_rejection` 使回退渲染器不再重试。分块合成、alpha 写出、位深/alpha 降级提示与预览派生仍未做，保持 [~]。
 
-  - [~] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
+  - [x] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
     - 删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER`（其语义成为默认路径）
     - 把 `RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC`、`progressive_seam_stitcher`、
       `focus_stack_stitcher` 的选择迁到 `StackCompositorChoice` 设置项；
@@ -1033,6 +1034,7 @@
     - 同步更新 `tests/focus-stack-quality-contract.mjs`：新增「`Tile_Compositor`
       入口函数体内不出现 `std::env::var`」断言
     - _Requirements: 15.2, 15.3, 15.10_
+    - 执行记录：删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER` 与 `RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC`，`StackCompositorChoice::resolve` 只读设置项；ownership 合成器的诊断开关收进 `OwnershipCompositorSwitches`，仅旧对照路径 `from_env` 读取，默认分层路径用全关的 `Default`，入口函数体内不再出现 `std::env::var`；契约新增对应断言。
 
   - [ ]* 13.8 属性测试：接缝只在双覆盖区且代价最低
     - **Property 53: 接缝只在双覆盖区且代价最低**
@@ -1065,9 +1067,10 @@
     - **Property 59: 窄重叠沿中线取接缝**
     - **Validates: Requirements 10.9**
 
-  - [ ]* 13.15 属性测试：画布超限拒绝输出
+  - [x]* 13.15 属性测试：画布超限拒绝输出
     - **Property 60: 画布超限拒绝输出**
     - **Validates: Requirements 10.11**
+    - 执行记录：`property_60_oversized_canvas_is_rejected_with_its_measured_size`（100 例）与 `layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile`（40000× 放大的 8px 瓦片，拒绝且不解码任何瓦片）。
 
   - [ ]* 13.16 属性测试：降内存措施不改变输出
     - **Property 89: 降内存措施不改变输出**

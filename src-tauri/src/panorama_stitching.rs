@@ -8241,6 +8241,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     };
                     match tile_result {
                         Ok(image) => Ok(image),
+                        // 需求 10.11: an oversized canvas is a rejection, not a
+                        // failure a fallback renderer may retry.
+                        Err(error)
+                            if crate::panorama_utils::stack_pipeline::compositor::is_canvas_rejection(
+                                &error,
+                            ) =>
+                        {
+                            Err(error)
+                        }
                         Err(error) => {
                             let message = format!(
                                 "Virtual-tile panorama failed ({error}); falling back to the existing focus renderer."
