@@ -1197,6 +1197,12 @@
       `256/256/1/0/256/95/256/6/1`；Wenyuan 为 `233/233/1/0/233/70/233/0/1`。
       两组均记录九项阈值、失败/不可测世界坐标和原因，仍不阻止导出；输出 SHA256 与基线
       完全一致（`74942cfe…` / `86884740…`）。
+    - 执行记录（最终代码门禁）：报告分别为
+      `/private/tmp/raw-editor-gate/review6/task-final-langyuan/reports/stack-report-67ef811a-a209-46d2-834c-f35a4463edea.json`
+      与 `/private/tmp/raw-editor-gate/review6/task-final-wenyuan/reports/stack-report-1abc7a93-b624-4e70-be97-74a9f87c35f9.json`。
+      Langyuan 可测计数 `256/256/1/0/256/99/256/6/1`、不可测总数 6501；Wenyuan
+      `231/231/1/0/231/44/231/0/1`、不可测总数 13470。两组 verdict 均为 `fail` 但仍只记录；
+      输出 SHA256 仍为 `74942cfea3a1ede2…` / `86884740f93c876e…`。
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
     - 在阶段 7 的「记录但不阻止」模式已在阆苑女仙 84 张上取得全部实测数字之后执行本任务
