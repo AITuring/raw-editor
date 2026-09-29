@@ -43,7 +43,7 @@ assert.match(exifProcessingSource, /ExifTag::Copyright/);
 assert.match(exifProcessingSource, /ExifTag::UserComment/);
 assert.match(stackProcessingSource, /apply_export_resize_and_watermark/);
 assert.match(stackProcessingSource, /write_image_stack_output_with_settings/);
-assert.match(stackSaveSource, /let \(stored_result_id, image, degradation_ledger\) = result\s*\.as_ref\(\)/);
+assert.match(stackSaveSource, /let \(stored_result_id, image, degradation_ledger, stack_report_path\) = result\s*\.as_ref\(\)/);
 assert.doesNotMatch(stackSaveSource, /\*result\s*=\s*None/);
 assert.match(productivitySource, /i18n\.t\(`modals\.imageStack\.outputDowngrades\.\$\{id\}`/);
 

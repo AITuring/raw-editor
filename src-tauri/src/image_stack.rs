@@ -828,6 +828,54 @@ fn write_image_stack_output_for_run(
     }
 }
 
+/// The save command and export/report integration tests share this boundary.
+/// A failed image write returns before touching the report. Once publication
+/// succeeds, report failures are diagnostic and do not undo the saved image.
+fn save_image_stack_output_for_result(
+    image: &DynamicImage,
+    output_path: &Path,
+    output_format: ImageStackOutputFormat,
+    export_settings: &ExportSettings,
+    source_path: &str,
+    degradation_ledger: &DegradationLedger,
+    result_id: &str,
+    stack_report_path: Option<&Path>,
+) -> Result<(), String> {
+    write_image_stack_output_for_run(
+        image,
+        output_path,
+        output_format,
+        export_settings,
+        source_path,
+        degradation_ledger,
+    )?;
+    if let Some(report_path) = stack_report_path {
+        match read_image_stack_output_metadata(output_path, output_format) {
+            Ok(metadata) => {
+                if let Err(error) =
+                    crate::panorama_utils::stack_pipeline::report::update_stack_report_output(
+                        report_path,
+                        result_id,
+                        metadata.format,
+                        metadata.bit_depth,
+                        metadata.alpha_preserved,
+                        metadata.icc,
+                        output_path,
+                    )
+                {
+                    eprintln!(
+                        "Image-stack result {result_id} was saved, but its Stack_Report could not be updated: {error}"
+                    );
+                }
+            }
+            Err(error) => eprintln!(
+                "Image-stack result {result_id} was saved, but its output metadata could not be read back: {error}"
+            ),
+        }
+    }
+    Ok(())
+}
+
 fn write_image_stack_output_with_settings(
     image: &DynamicImage,
     output_path: &Path,
@@ -1524,6 +1572,105 @@ mod tests {
     }
 
     #[test]
+    fn saved_result_updates_report_for_all_formats_and_failed_save_leaves_it_unchanged() {
+        let directory = tempfile::tempdir().expect("temporary image-stack directory");
+        let coverage = image::GrayImage::from_fn(10, 8, |x, y| {
+            image::Luma([if (x + y) % 3 == 0 { 0 } else { 255 }])
+        });
+        let transparent = super::canonicalize_image_stack_result_with_coverage(
+            painted_result(10, 8, 29),
+            Some(&coverage),
+        );
+        let ledger = DegradationLedger::new();
+        let result_id = "result-integrated";
+        let recorder = crate::panorama_utils::stack_pipeline::report::StackReportRecorder::isolated(
+            "stack-test-integrated-output",
+            Some(directory.path().to_path_buf()),
+        );
+        let report_path = recorder.write_once().expect("write Stack_Report");
+        crate::panorama_utils::stack_pipeline::report::assign_stack_report_result_id(
+            &report_path,
+            result_id,
+        )
+        .expect("assign result ID");
+
+        for (format, extension, expected_bit_depth, expected_alpha) in [
+            (ImageStackOutputFormat::Tiff, "tiff", 16, true),
+            (ImageStackOutputFormat::Png, "png", 16, true),
+            (ImageStackOutputFormat::Jpeg, "jpg", 8, false),
+        ] {
+            let output_path = directory.path().join(format!("integrated.{extension}"));
+            super::save_image_stack_output_for_result(
+                &transparent,
+                &output_path,
+                format,
+                &default_image_stack_export_settings(),
+                "",
+                &ledger,
+                result_id,
+                Some(&report_path),
+            )
+            .expect("publish and report the output");
+
+            let metadata = super::read_image_stack_output_metadata(&output_path, format)
+                .expect("read published output metadata");
+            assert_eq!(metadata.format, format.label());
+            assert_eq!(metadata.bit_depth, expected_bit_depth);
+            assert_eq!(metadata.alpha_preserved, expected_alpha);
+            assert_eq!(metadata.icc, "sRGB");
+
+            let report: crate::panorama_utils::stack_pipeline::report::StackReport =
+                serde_json::from_str(&fs::read_to_string(&report_path).expect("read report"))
+                    .expect("parse report");
+            assert!(report.output.written);
+            assert_eq!(report.output.result_id, result_id);
+            assert_eq!(report.output.format, format.label());
+            assert_eq!(report.output.path, output_path.to_string_lossy());
+            assert_eq!(report.output.bit_depth, expected_bit_depth);
+            assert_eq!(report.output.alpha_preserved, expected_alpha);
+            assert_eq!(report.output.icc, "sRGB");
+
+            match format {
+                ImageStackOutputFormat::Tiff | ImageStackOutputFormat::Png => {
+                    let decoded = image::open(&output_path)
+                        .expect("decode alpha output")
+                        .to_rgba16();
+                    let transparent_pixels = decoded.pixels().filter(|pixel| pixel[3] == 0).count();
+                    let expected_transparent_pixels =
+                        coverage.pixels().filter(|pixel| pixel[0] == 0).count();
+                    assert_eq!(transparent_pixels, expected_transparent_pixels);
+                }
+                ImageStackOutputFormat::Jpeg => {
+                    let decoded = image::open(&output_path).expect("decode JPEG");
+                    assert!(!decoded.color().has_alpha());
+                }
+            }
+        }
+
+        let report_before_failure = fs::read(&report_path).expect("read report before failure");
+        let blocked_parent = directory.path().join("blocked-output");
+        fs::write(&blocked_parent, b"not a directory").expect("create blocked parent");
+        let failed_path = blocked_parent.join("failed.tiff");
+        let error = super::save_image_stack_output_for_result(
+            &transparent,
+            &failed_path,
+            ImageStackOutputFormat::Tiff,
+            &default_image_stack_export_settings(),
+            "",
+            &ledger,
+            result_id,
+            Some(&report_path),
+        )
+        .expect_err("a failed publication must return an error");
+        assert!(!error.is_empty());
+        assert_eq!(
+            fs::read(&report_path).expect("read report after failure"),
+            report_before_failure,
+            "failed saves must leave Stack_Report untouched"
+        );
+    }
+
+    #[test]
     fn canonical_stack_result_is_display_encoded_rgb16() {
         let source =
             DynamicImage::ImageRgb32F(Rgb32FImage::from_pixel(2, 1, Rgb([0.25, 0.5, 0.75])));
@@ -2051,38 +2198,17 @@ pub async fn save_image_stack(
             );
         }
 
-        write_image_stack_output_for_run(
+        save_image_stack_output_for_result(
             image,
             &output_path_for_task,
             output_format,
             &export_settings,
             &sidecar_source,
             degradation_ledger,
+            &result_id,
+            stack_report_path.as_deref(),
         )?;
-        let stack_report_path = stack_report_path.clone();
         drop(result);
-        if let Some(report_path) = stack_report_path.as_deref() {
-            match read_image_stack_output_metadata(&output_path_for_task, output_format) {
-                Ok(metadata) => {
-                    if let Err(error) = crate::panorama_utils::stack_pipeline::report::update_stack_report_output(
-                        report_path,
-                        &result_id,
-                        metadata.format,
-                        metadata.bit_depth,
-                        metadata.alpha_preserved,
-                        metadata.icc,
-                        &output_path_for_task,
-                    ) {
-                        eprintln!(
-                            "Image-stack result {result_id} was saved, but its Stack_Report could not be updated: {error}"
-                        );
-                    }
-                }
-                Err(error) => eprintln!(
-                    "Image-stack result {result_id} was saved, but its output metadata could not be read back: {error}"
-                ),
-            }
-        }
         // Keep the canonical result cached so the same stack can be exported again in
         // another format or to another destination without running the expensive alignment
         // pass a second time. The encoded file is the export contract. Copying the source
