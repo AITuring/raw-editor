@@ -527,36 +527,85 @@ fn encode_image_stack_file(
     })
 }
 
-fn validate_image_stack_decoder<D: ImageDecoder>(
-    mut decoder: D,
-    dimensions: (u32, u32),
-    output_format: ImageStackOutputFormat,
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SavedOutputMetadata {
+    format: String,
     bit_depth: u8,
-    alpha: bool,
-    expect_color_profile: bool,
-) -> Result<(), String> {
-    if decoder.dimensions() != dimensions {
+    alpha_preserved: bool,
+    icc: String,
+}
+
+fn saved_output_metadata(
+    output_format: ImageStackOutputFormat,
+    color_type: ColorType,
+    icc_profile: Option<&[u8]>,
+) -> Result<SavedOutputMetadata, String> {
+    let channels = color_type.channel_count();
+    if channels == 0 {
         return Err(format!(
-            "Saved image-stack dimensions do not match the result (expected {}×{}, found {}×{}).",
-            dimensions.0,
-            dimensions.1,
-            decoder.dimensions().0,
-            decoder.dimensions().1
+            "Saved image-stack {} has no channels.",
+            output_format.label()
         ));
     }
-    if decoder.color_type() != output_format.encoded_color_type(bit_depth, alpha) {
-        return Err(format!(
-            "Saved image-stack {} has an unexpected pixel format ({:?}).",
+    let bits_per_channel = color_type.bits_per_pixel() / u16::from(channels);
+    let bit_depth = u8::try_from(bits_per_channel).map_err(|_| {
+        format!(
+            "Saved image-stack {} has an unsupported channel bit depth ({} bits).",
             output_format.label(),
-            decoder.color_type()
-        ));
-    }
-    let saved_profile = decoder.icc_profile().map_err(|error| {
+            bits_per_channel
+        )
+    })?;
+    let icc = match icc_profile {
+        Some(profile) if profile == crate::color_management::srgb_v4_profile() => "sRGB",
+        Some(_) => "embedded",
+        None => "none",
+    };
+    Ok(SavedOutputMetadata {
+        format: output_format.label().to_string(),
+        bit_depth,
+        alpha_preserved: color_type.has_alpha(),
+        icc: icc.to_string(),
+    })
+}
+
+fn image_stack_decoder_parts<D: ImageDecoder>(
+    mut decoder: D,
+    output_format: ImageStackOutputFormat,
+) -> Result<((u32, u32), ColorType, Option<Vec<u8>>), String> {
+    let dimensions = decoder.dimensions();
+    let color_type = decoder.color_type();
+    let icc_profile = decoder.icc_profile().map_err(|error| {
         format!(
             "Failed to validate the image-stack {} color profile: {error}",
             output_format.label()
         )
     })?;
+    Ok((dimensions, color_type, icc_profile))
+}
+
+fn validate_image_stack_decoder<D: ImageDecoder>(
+    decoder: D,
+    dimensions: (u32, u32),
+    output_format: ImageStackOutputFormat,
+    bit_depth: u8,
+    alpha: bool,
+    expect_color_profile: bool,
+) -> Result<SavedOutputMetadata, String> {
+    let (saved_dimensions, color_type, saved_profile) =
+        image_stack_decoder_parts(decoder, output_format)?;
+    if saved_dimensions != dimensions {
+        return Err(format!(
+            "Saved image-stack dimensions do not match the result (expected {}×{}, found {}×{}).",
+            dimensions.0, dimensions.1, saved_dimensions.0, saved_dimensions.1
+        ));
+    }
+    if color_type != output_format.encoded_color_type(bit_depth, alpha) {
+        return Err(format!(
+            "Saved image-stack {} has an unexpected pixel format ({:?}).",
+            output_format.label(),
+            color_type
+        ));
+    }
     if expect_color_profile {
         if saved_profile.as_deref() != Some(crate::color_management::srgb_v4_profile()) {
             return Err(format!(
@@ -570,7 +619,7 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
             output_format.label()
         ));
     }
-    Ok(())
+    saved_output_metadata(output_format, color_type, saved_profile.as_deref())
 }
 
 fn validate_image_stack_output(
@@ -580,7 +629,7 @@ fn validate_image_stack_output(
     bit_depth: u8,
     alpha: bool,
     expect_color_profile: bool,
-) -> Result<(), String> {
+) -> Result<SavedOutputMetadata, String> {
     let open = || {
         File::open(output_path)
             .map(BufReader::new)
@@ -623,6 +672,40 @@ fn validate_image_stack_output(
             expect_color_profile,
         ),
     }
+}
+
+fn read_image_stack_output_metadata(
+    output_path: &Path,
+    output_format: ImageStackOutputFormat,
+) -> Result<SavedOutputMetadata, String> {
+    let open = || {
+        File::open(output_path)
+            .map(BufReader::new)
+            .map_err(|error| {
+                format!(
+                    "Failed to reopen the saved image-stack {}: {error}",
+                    output_format.label()
+                )
+            })
+    };
+    let (_, color_type, icc_profile) = match output_format {
+        ImageStackOutputFormat::Tiff => image_stack_decoder_parts(
+            TiffDecoder::new(open()?)
+                .map_err(|error| format!("Failed to read the saved image-stack TIFF: {error}"))?,
+            output_format,
+        )?,
+        ImageStackOutputFormat::Png => image_stack_decoder_parts(
+            PngDecoder::new(open()?)
+                .map_err(|error| format!("Failed to read the saved image-stack PNG: {error}"))?,
+            output_format,
+        )?,
+        ImageStackOutputFormat::Jpeg => image_stack_decoder_parts(
+            JpegDecoder::new(open()?)
+                .map_err(|error| format!("Failed to read the saved image-stack JPEG: {error}"))?,
+            output_format,
+        )?,
+    };
+    saved_output_metadata(output_format, color_type, icc_profile.as_deref())
 }
 
 #[cfg(test)]
@@ -999,6 +1082,17 @@ pub async fn process_image_stack(
                 let _ = app_handle.emit("image-stack-progress", "Creating preview…");
                 // One identifier names the stored result and its previews (需求 10.7).
                 let result_id = Uuid::new_v4().to_string();
+                if let Some(report_path) = outcome.stack_report_path.as_ref()
+                    && let Err(error) =
+                        crate::panorama_utils::stack_pipeline::report::assign_stack_report_result_id(
+                            report_path,
+                            &result_id,
+                        )
+                {
+                    eprintln!(
+                        "Image-stack result {result_id} could not be linked to its Stack_Report: {error}"
+                    );
+                }
                 let previews = write_preview_files(&image, &result_id, &app_handle)?;
                 if generation_handle.load(Ordering::SeqCst) != generation {
                     let _ = fs::remove_file(&previews.interaction_path);
@@ -1049,7 +1143,12 @@ pub async fn process_image_stack(
                         let _ = fs::remove_file(&previews.detail_path);
                         return Ok(());
                     }
-                    *stored_result = Some((result_id.clone(), image, degradation_ledger));
+                    *stored_result = Some((
+                        result_id.clone(),
+                        image,
+                        degradation_ledger,
+                        outcome.stack_report_path.clone(),
+                    ));
                 }
                 let _ = app_handle.emit(
                     "image-stack-complete",
@@ -1368,6 +1467,60 @@ mod tests {
             let covered = coverage.get_pixel(x, y)[0] != 0;
             assert_eq!(pixel[3], if covered { u16::MAX } else { 0 }, "({x}, {y})");
         }
+    }
+
+    #[test]
+    fn saved_output_metadata_matches_tiff_png_alpha_and_jpeg_files() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let coverage = image::GrayImage::from_fn(12, 9, |x, y| {
+            image::Luma([if (x + y) % 4 == 0 { 0 } else { 255 }])
+        });
+        let with_alpha = super::canonicalize_image_stack_result_with_coverage(
+            painted_result(12, 9, 17),
+            Some(&coverage),
+        );
+        let tiff_path = directory.path().join("stack.tiff");
+        write_image_stack_output(&with_alpha, &tiff_path, ImageStackOutputFormat::Tiff)
+            .expect("write 16-bit TIFF");
+        assert_eq!(
+            super::read_image_stack_output_metadata(&tiff_path, ImageStackOutputFormat::Tiff)
+                .expect("read TIFF metadata"),
+            super::SavedOutputMetadata {
+                format: "TIFF".to_string(),
+                bit_depth: 16,
+                alpha_preserved: true,
+                icc: "sRGB".to_string(),
+            }
+        );
+
+        let png_path = directory.path().join("stack.png");
+        write_image_stack_output(&with_alpha, &png_path, ImageStackOutputFormat::Png)
+            .expect("write 16-bit PNG");
+        assert_eq!(
+            super::read_image_stack_output_metadata(&png_path, ImageStackOutputFormat::Png)
+                .expect("read PNG metadata"),
+            super::SavedOutputMetadata {
+                format: "PNG".to_string(),
+                bit_depth: 16,
+                alpha_preserved: true,
+                icc: "sRGB".to_string(),
+            }
+        );
+
+        let opaque = super::canonicalize_image_stack_result(painted_result(12, 9, 17));
+        let jpeg_path = directory.path().join("stack.jpg");
+        write_image_stack_output(&opaque, &jpeg_path, ImageStackOutputFormat::Jpeg)
+            .expect("write JPEG");
+        assert_eq!(
+            super::read_image_stack_output_metadata(&jpeg_path, ImageStackOutputFormat::Jpeg)
+                .expect("read JPEG metadata"),
+            super::SavedOutputMetadata {
+                format: "JPEG".to_string(),
+                bit_depth: 8,
+                alpha_preserved: false,
+                icc: "sRGB".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -1850,7 +2003,7 @@ pub async fn image_stack_output_notices(
         .image_stack_result
         .lock()
         .map_err(|_| "The image-stack result store is unavailable.".to_string())?;
-    let (stored_result_id, image, _) = result
+    let (stored_result_id, image, _, _) = result
         .as_ref()
         .ok_or_else(|| "No image-stack result is available to save.".to_string())?;
     if stored_result_id != &result_id {
@@ -1888,7 +2041,7 @@ pub async fn save_image_stack(
         let result = result_handle
             .lock()
             .map_err(|_| "The image-stack result store is unavailable.".to_string())?;
-        let (stored_result_id, image, degradation_ledger) = result
+        let (stored_result_id, image, degradation_ledger, stack_report_path) = result
             .as_ref()
             .ok_or_else(|| "No image-stack result is available to save.".to_string())?;
         if stored_result_id != &result_id {
@@ -1906,7 +2059,30 @@ pub async fn save_image_stack(
             &sidecar_source,
             degradation_ledger,
         )?;
+        let stack_report_path = stack_report_path.clone();
         drop(result);
+        if let Some(report_path) = stack_report_path.as_deref() {
+            match read_image_stack_output_metadata(&output_path_for_task, output_format) {
+                Ok(metadata) => {
+                    if let Err(error) = crate::panorama_utils::stack_pipeline::report::update_stack_report_output(
+                        report_path,
+                        &result_id,
+                        metadata.format,
+                        metadata.bit_depth,
+                        metadata.alpha_preserved,
+                        metadata.icc,
+                        &output_path_for_task,
+                    ) {
+                        eprintln!(
+                            "Image-stack result {result_id} was saved, but its Stack_Report could not be updated: {error}"
+                        );
+                    }
+                }
+                Err(error) => eprintln!(
+                    "Image-stack result {result_id} was saved, but its output metadata could not be read back: {error}"
+                ),
+            }
+        }
         // Keep the canonical result cached so the same stack can be exported again in
         // another format or to another destination without running the expensive alignment
         // pass a second time. The encoded file is the export contract. Copying the source

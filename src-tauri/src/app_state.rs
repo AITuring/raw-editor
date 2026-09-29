@@ -169,6 +169,7 @@ pub struct AppState {
                 String,
                 DynamicImage,
                 crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+                Option<PathBuf>,
             )>,
         >,
     >,

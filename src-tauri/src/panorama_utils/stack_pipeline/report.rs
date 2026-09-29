@@ -32,7 +32,7 @@ use super::residual_warp;
 use super::tone;
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
-pub(crate) const STACK_REPORT_SCHEMA: u32 = 1;
+pub(crate) const STACK_REPORT_SCHEMA: u32 = 2;
 
 /// 64 GiB Virtual_Tile cache budget (requirement 4.4).
 pub(crate) const VIRTUAL_TILE_CACHE_LIMIT_BYTES: u64 = 68_719_476_736;
@@ -1179,6 +1179,8 @@ pub(crate) struct PreviewRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct OutputReport {
     pub written: bool,
+    #[serde(default)]
+    pub format: String,
     pub path: String,
     pub bit_depth: u8,
     pub alpha_preserved: bool,
@@ -1191,6 +1193,7 @@ impl Default for OutputReport {
     fn default() -> Self {
         Self {
             written: false,
+            format: String::new(),
             path: String::new(),
             bit_depth: 16,
             alpha_preserved: false,
@@ -1690,20 +1693,29 @@ pub(crate) fn write_stack_report(
     report: &StackReport,
     directory: &Path,
 ) -> Result<PathBuf, String> {
-    let json = report.to_json_string()?;
-    fs::create_dir_all(directory).map_err(|error| {
-        format!(
-            "Failed to create the stack report directory {}: {error}",
-            directory.display()
-        )
-    })?;
     let run_id = if report.run_id.is_empty() {
         "unknown".to_string()
     } else {
         report.run_id.clone()
     };
     let final_path = directory.join(format!("stack-report-{run_id}.json"));
-    let temporary_path = directory.join(format!(".stack-report-{run_id}.json.tmp"));
+    write_stack_report_at(report, &final_path)
+}
+
+fn write_stack_report_at(report: &StackReport, final_path: &Path) -> Result<PathBuf, String> {
+    let json = report.to_json_string()?;
+    let directory = final_path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(directory).map_err(|error| {
+        format!(
+            "Failed to create the stack report directory {}: {error}",
+            directory.display()
+        )
+    })?;
+    let run_id = final_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("stack-report");
+    let temporary_path = directory.join(format!(".{run_id}.tmp"));
     fs::write(&temporary_path, json.as_bytes()).map_err(|error| {
         format!(
             "Failed to write the stack report {}: {error}",
@@ -1717,7 +1729,76 @@ pub(crate) fn write_stack_report(
             final_path.display()
         )
     })?;
-    Ok(final_path)
+    Ok(final_path.to_path_buf())
+}
+
+fn rewrite_stack_report<F>(report_path: &Path, apply: F) -> Result<(), String>
+where
+    F: FnOnce(&mut StackReport) -> Result<(), String>,
+{
+    let json = fs::read_to_string(report_path).map_err(|error| {
+        format!(
+            "Failed to read the Stack_Report {}: {error}",
+            report_path.display()
+        )
+    })?;
+    let mut report: StackReport = serde_json::from_str(&json).map_err(|error| {
+        format!(
+            "Failed to parse the Stack_Report {}: {error}",
+            report_path.display()
+        )
+    })?;
+    apply(&mut report)?;
+    write_stack_report_at(&report, report_path)?;
+    Ok(())
+}
+
+/// Attach the result identifier to the report written by the matching stack
+/// run.  This is done before the result enters the export store, so a later
+/// save can update only the report belonging to the visible result.
+pub(crate) fn assign_stack_report_result_id(
+    report_path: &Path,
+    result_id: &str,
+) -> Result<(), String> {
+    rewrite_stack_report(report_path, |report| {
+        if !report.output.result_id.is_empty() && report.output.result_id != result_id {
+            return Err(format!(
+                "Stack_Report result ID '{}' does not match '{}'.",
+                report.output.result_id, result_id
+            ));
+        }
+        report.output.result_id = result_id.to_string();
+        Ok(())
+    })
+}
+
+/// Record the metadata observed by reopening a successfully published output.
+/// The rewrite uses the same temporary-file-plus-rename boundary as the initial
+/// report, so readers never observe a partially updated document.
+pub(crate) fn update_stack_report_output(
+    report_path: &Path,
+    result_id: &str,
+    format: String,
+    bit_depth: u8,
+    alpha_preserved: bool,
+    icc: String,
+    output_path: &Path,
+) -> Result<(), String> {
+    rewrite_stack_report(report_path, |report| {
+        if report.output.result_id != result_id {
+            return Err(format!(
+                "Stack_Report result ID '{}' does not match '{}'.",
+                report.output.result_id, result_id
+            ));
+        }
+        report.output.written = true;
+        report.output.format = format;
+        report.output.path = output_path.to_string_lossy().into_owned();
+        report.output.bit_depth = bit_depth;
+        report.output.alpha_preserved = alpha_preserved;
+        report.output.icc = icc;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -1858,6 +1939,57 @@ mod tests {
             parsed.finished_at_epoch_ms >= parsed.started_at_epoch_ms,
             "the finish timestamp must be recorded when the report is written"
         );
+    }
+
+    #[test]
+    fn output_metadata_updates_only_the_matching_result_atomically() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let recorder = StackReportRecorder::isolated(
+            "stack-test-output",
+            Some(directory.path().to_path_buf()),
+        );
+        let report_path = recorder.write_once().expect("write report");
+        assign_stack_report_result_id(&report_path, "result-42").expect("assign result ID");
+        let output_path = directory.path().join("stack.tiff");
+        update_stack_report_output(
+            &report_path,
+            "result-42",
+            "TIFF".to_string(),
+            16,
+            true,
+            "sRGB".to_string(),
+            &output_path,
+        )
+        .expect("update output metadata");
+
+        let parsed: StackReport = serde_json::from_str(
+            &fs::read_to_string(&report_path).expect("updated report must be readable"),
+        )
+        .expect("updated report must parse");
+        assert!(parsed.output.written);
+        assert_eq!(parsed.output.result_id, "result-42");
+        assert_eq!(parsed.output.format, "TIFF");
+        assert_eq!(parsed.output.bit_depth, 16);
+        assert!(parsed.output.alpha_preserved);
+        assert_eq!(parsed.output.icc, "sRGB");
+        assert_eq!(parsed.output.path, output_path.to_string_lossy());
+        assert!(
+            !report_path
+                .with_file_name(".stack-report-stack-test-output.json.tmp")
+                .exists(),
+            "the atomic rewrite must clean up its temporary file"
+        );
+        let error = update_stack_report_output(
+            &report_path,
+            "different-result",
+            "PNG".to_string(),
+            8,
+            false,
+            "none".to_string(),
+            &directory.path().join("other.png"),
+        )
+        .expect_err("a different result must not overwrite the report");
+        assert!(error.contains("does not match"));
     }
 
     #[test]

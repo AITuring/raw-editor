@@ -548,6 +548,10 @@ pub(crate) struct StitchOutcome {
     pub full_canvas_height: u32,
     pub render_scale: f64,
     pub ordered_paths: Vec<String>,
+    /// The report written for this focus-stack run.  Image-stack export fills
+    /// in the result identifier and output metadata after the file is
+    /// published, while keeping the report tied to the same run.
+    pub stack_report_path: Option<PathBuf>,
 }
 
 fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
@@ -7592,6 +7596,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             full_canvas_height,
             render_scale: 1.0,
             ordered_paths,
+            stack_report_path: None,
         });
     }
     let render_scale = if blend_mode == BlendMode::Panorama {
@@ -8962,6 +8967,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 
     let _ = app_handle.emit(progress_event, "Finalizing image result...");
 
+    // Only a mask of the delivered size can become the result alpha.
+    let coverage = output_coverage.filter(|mask| mask.dimensions() == panorama.dimensions());
+
     if let Some(recorder) = stack_report.as_ref() {
         let (width, height) = panorama.dimensions();
         recorder.update(|report| {
@@ -8971,11 +8979,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         });
         // Flush eagerly so the report exists before the result travels back to
         // the caller; the drop guard then becomes a no-op.
-        recorder.write_once();
+        let stack_report_path = recorder.write_once();
+
+        return Ok(StitchOutcome {
+            image: DynamicImage::ImageRgb32F(panorama),
+            coverage,
+            full_canvas_width,
+            full_canvas_height,
+            render_scale,
+            ordered_paths,
+            stack_report_path,
+        });
     }
 
-    // Only a mask of the delivered size can become its alpha.
-    let coverage = output_coverage.filter(|mask| mask.dimensions() == panorama.dimensions());
     Ok(StitchOutcome {
         image: DynamicImage::ImageRgb32F(panorama),
         coverage,
@@ -8983,6 +8999,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         full_canvas_height,
         render_scale,
         ordered_paths,
+        stack_report_path: None,
     })
 }
 
