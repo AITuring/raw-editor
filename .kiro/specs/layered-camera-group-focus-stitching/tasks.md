@@ -1305,7 +1305,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.11**
     - 执行记录：P70（100 cases）验证 Moore 边界笔画配对的 P95、最大偏差和方向误差。
 
-  - [ ] 15.19 属性测试：owner 锐度差额超限像素占比有界
+  - [x] 15.19 属性测试：owner 锐度差额超限像素占比有界
     - **Property 71: owner 锐度差额超限像素占比有界**
     - **Validates: Requirements 11.12**
     - 执行记录：P71（100 cases）验证低置信覆盖率与 1% 阈值。
@@ -1314,8 +1314,12 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       `quality_gate_runner::confidence_coverage_stats`），测的是平行实现；且需求 11.12 已改判据。
       按设计 Property 71 新文本重写，必须调用 15.23 中运行时实际使用的统计函数；两个旧辅助函数
       无其它调用者时删除。
+    - 执行记录（2026-09-30）：P71（100 cases）改为调用运行时
+      `quality_gate_runner::owner_sharpness_stats`，覆盖 Textured_Pixel 分母、透明/平坦像素、
+      单候选与最高分 owner 的零短缺、Sharpness_Confidence 无关性、unresolved/空纹理证据不足及
+      0.99 边界；随 `3d4f8837`、`36bcab31`、`48ae1fca`、`3796a72f`、`99be307f` 完成。
 
-  - [ ] 15.20 属性测试：测量项计数恒等且证据不足可判定
+  - [x] 15.20 属性测试：测量项计数恒等且证据不足可判定
     - **Property 72: 测量项计数恒等且证据不足可判定**
     - **Validates: Requirements 11.13, 11.14**
     - 执行记录：P72（100 cases）验证可测量与不可测量计数恒等及证据不足判定。
@@ -1323,6 +1327,9 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       `content_not_applicable` / `technical` 分类、`not_applicable` 序列化、20% 技术性不可测边界、
       条件/非条件判据的 8 项规则、整幅统计和整体结论优先级；失败种子无新增。
     - 执行记录（2026-09-30）：需求 11.14(c) 澄清为「有未通过的可测量项时按 11.15 判为未通过」。b0da0822 的实现把 Langyuan 边界笔画配准（6 项可测、5 项偏差 7–10 px）判成了 `not_applicable`，P72 与判定代码需按澄清后的规则修改后再勾选。
+    - 执行记录（2026-09-30）：P72（100 cases）补充「可测失败优先于少于 8 项」断言，并将
+      `criterion_verdict` 的分支顺序修正为技术不可测、可测失败、条件项不适用；覆盖两类不可测
+      原因、20% 边界、整幅统计和整体结论优先级，提交 `5f813aaa`、`bb95705a`。
 
   - [x] 15.21 属性测试：阻止导出时不残留结果且保留诊断
     - **Property 73: 阻止导出时不残留结果且保留诊断**
@@ -1334,7 +1341,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 11.17**
     - 执行记录：P74（100 cases）验证同 Ownership_Map 输入的 ROI 集合与标签距离完全一致。
 
-  - [ ] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
+  - [x] 15.23 把需求 11.12 判据改为 owner 锐度覆盖率（2026-09-30 用户确认）
     - 按设计 Focus_Fuser 第 11 条在单元级计算 Owner_Sharpness_Shortfall：`SharpnessCellEvidence`
       已有 `winner_score` / `owner_score` / `candidate_count`，补 `disagreement`（该单元
       `StationFusion::disagreement`）；不得改变任何 owner 决策
@@ -1356,6 +1363,11 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
       Capture_Station 分项
     - 只改报告，两组门禁输出 SHA256 必须保持 `74942cfe…` / `86884740…`
     - _Requirements: 11.12, 11.13, 11.14_
+    - 执行记录（2026-09-30）：实现 owner shortfall 逐像素平面、Textured_Pixel 覆盖率、20 桶直方图、
+      disagreement veto、按站位统计和 unresolved 分类；修复边缘坐标与 `NO_OWNER` 反查，Langyuan/Wenyuan
+      unresolved 均为 0。实现提交 `3d4f8837`、`36bcab31`、`48ae1fca`、`3796a72f`、`99be307f`；
+      两组门禁报告位于 `/private/tmp/raw-editor-gate/r0a2-final/lang/reports/` 与
+      `/private/tmp/raw-editor-gate/r0a2-final/wen/reports/`，TIFF SHA256 保持基线。
 
 - [~] 16. 阶段 7 检查点
   - 验证三个度量的已知答案自检通过、同输入重复运行的 ROI 序列与结论完全相同；
