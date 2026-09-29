@@ -8514,15 +8514,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         continue;
                                     };
                                     *owner = raw_owner;
-                                    confidence[index] =
-                                        masks.confidence.value_at(sx as u32, sy as u32);
+                                    confidence[index] = masks.confidence.value_at(sx, sy);
                                     textured[index] = masks
                                         .textured
                                         .get(sy as usize * mask_width as usize + sx as usize)
                                         .copied()
                                         .unwrap_or(0);
                                     if let Some(evidence) =
-                                        masks.sharpness_evidence.at_pixel(sx as u32, sy as u32)
+                                        masks.sharpness_evidence.at_pixel(sx, sy)
                                     {
                                         owner_shortfall[index] = (evidence.owner_shortfall()
                                             * 100.0)
