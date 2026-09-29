@@ -2557,8 +2557,9 @@ flowchart LR
 3. FocusStack 启动 `RssSampler`，每 500 ms 读取可注入的 RSS 源；超出解析门槛时设置共享取消标志。
    阶段边界检查该标志并在写最终结果前返回，报告写入峰值、样本数和
    `memory_threshold_exceeded`。当前运行入口没有用户设置源，因此来源记录为 `default`。
-4. 站位关系的双向匹配在 Virtual_Tile 合成前计算世界坐标误差 P95；只有 P95 大于 3 px 的重叠
-   才交给 Residual_Warp，证据不足时保持恒等模型。
+4. （实验，未采用）站位关系的双向匹配在 Virtual_Tile 合成前计算世界坐标误差 P95，只把 P95 大于
+   3 px 的重叠交给 Residual_Warp。该实验没有证明启用区域的 P95 下降，生产路径仍为恒等模型；
+   补丁保存在仓库外（`/private/tmp/raw-editor-gate/residual-11.3.patch`），任务 11.3 保持未完成。
 5. Quality_Gate 解码 owner Source_RAW 时复用最终渲染路径的 RAW display gain/曝光归一化，
    使参考 ROI 与输出处于同一显示编码；大画布稀疏 ROI 还必须通过 16px 的 Coverage/Ownership
    环带检查后才可测量，边界附近样本保留为不可测量并记录世界坐标。

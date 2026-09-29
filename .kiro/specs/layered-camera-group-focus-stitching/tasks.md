@@ -836,7 +836,7 @@
       使瓦片 → 世界重采样不超过 1 次
     - 执行记录：在 Wenyuan 实验中启用站位双向匹配 P95=9.5265px 的区域，输出保持基线
       SHA256，但没有记录到启用区域的 post-warp P95 下降，故未接入生产路径；实验补丁保存在
-      `residual-11.3.patch`，两组最终门禁均为 `residual_warp.identity=true`、空区域。
+      `/private/tmp/raw-editor-gate/residual-11.3.patch`（仓库外），两组最终门禁均为 `residual_warp.identity=true`、空区域。
     - _Requirements: 8.7_
 
   - [x] 11.4 调整 `PhotometricOptions` 参数并补齐偏移项
