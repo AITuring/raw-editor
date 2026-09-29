@@ -307,11 +307,12 @@ fn sparse_confidence_coverage(coverage: &GrayImage, confidence: &[f32]) -> Optio
     for y in (0..height).step_by(step as usize) {
         for x in (0..width).step_by(step as usize) {
             let index = (y * width + x) as usize;
-            if coverage.as_raw()[index] == 0 {
+            // A non-finite value is an unknown confidence, not a sharp pixel.
+            if coverage.as_raw()[index] == 0 || !confidence[index].is_finite() {
                 continue;
             }
             covered += 1;
-            if confidence[index].is_finite() && confidence[index] < 0.05 {
+            if confidence[index] < 0.05 {
                 low += 1;
             }
         }
@@ -694,7 +695,10 @@ pub(crate) fn run_quality_gate(
         "sharpness_confidence_coverage",
         1.0 - quality_gate::QUALITY_LOW_CONFIDENCE_RATIO_MAX,
     );
+    // Without any known confidence value the criterion has no evidence.
+    let confidence_known = input.confidence.iter().any(|value| value.is_finite());
     let confidence_value = match input.textured {
+        _ if !confidence_known => None,
         Some(textured) if textured.len() == input.confidence.len() => {
             let covered = input
                 .coverage

@@ -8209,31 +8209,34 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // in here instead of panicking on an unreachable arm.
                         StackCompositorChoice::LayeredVirtualTile
                         | StackCompositorChoice::LegacySingleLayerMosaic => {
-                            // Contract marker for the default layered Virtual_Tile path:
-                            // stitching::layered_virtual_tile_compositor(
-                            // The production call below retains ownership planes for the gate.
-                            let rendered =
-                                stitching::layered_virtual_tile_compositor_with_ownership(
-                                    &tile_refs,
-                                    &tile_homographies,
-                                    Projection::Planar,
-                                    app_handle.clone(),
-                                    progress_event,
-                                    &mut load_tile,
-                                )?;
-                            let (width, height) = rendered.coverage.dimensions();
-                            quality_planes = Some((
-                                GrayImage::from_raw(
-                                    width,
-                                    height,
-                                    rendered.coverage.covered().to_vec(),
-                                )
-                                .unwrap_or_else(|| GrayImage::new(width, height)),
-                                rendered.ownership.owners().to_vec(),
-                                vec![1.0; width as usize * height as usize],
-                                rendered.sampling_origin,
-                            ));
-                            Ok(rendered.image)
+                            // The ownership planes are retained for the Quality_Gate. A
+                            // compositor error still reaches the fallback renderer below.
+                            stitching::layered_virtual_tile_compositor_with_ownership(
+                                &tile_refs,
+                                &tile_homographies,
+                                Projection::Planar,
+                                app_handle.clone(),
+                                progress_event,
+                                &mut load_tile,
+                            )
+                            .map(|rendered| {
+                                let (width, height) = rendered.coverage.dimensions();
+                                quality_planes = Some((
+                                    GrayImage::from_raw(
+                                        width,
+                                        height,
+                                        rendered.coverage.covered().to_vec(),
+                                    )
+                                    .unwrap_or_else(|| GrayImage::new(width, height)),
+                                    rendered.ownership.owners().to_vec(),
+                                    // Per-station Sharpness_Confidence is not composed
+                                    // into the output plane yet: NaN marks it unknown,
+                                    // so that criterion is recorded as unmeasurable.
+                                    vec![f32::NAN; width as usize * height as usize],
+                                    rendered.sampling_origin,
+                                ));
+                                rendered.image
+                            })
                         }
                     };
                     match tile_result {

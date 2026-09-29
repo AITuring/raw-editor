@@ -250,7 +250,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /stitching::layered_virtual_tile_compositor\(/,
+  /stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default focus-stack path must compose through the layered Virtual_Tile compositor (任务 13.1)',
 );
 // 任务 13.3: the default path takes the covered union bounds and nothing else.
@@ -322,7 +322,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /solve_virtual_tile_station_poses_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor\(/,
+  /solve_virtual_tile_station_poses_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default path must publish authoritative fused-tile relations and poses before composition',
 );
 assert.match(

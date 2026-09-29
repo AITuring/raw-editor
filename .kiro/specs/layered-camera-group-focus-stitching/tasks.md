@@ -480,6 +480,7 @@
     - 生成器 `arb_cost_grid(w, h, labels)`，≤3×3、≤3 标签与穷举比较
     - 多标签 Potts 的 alpha-expansion 不保证精确全局最优；断言生产总代价不超过穷举最优值的
       `1.01` 倍，同时保持每个已覆盖单元唯一 owner、重复输入标签逐位一致与 tie-break 确定性
+    - 执行记录（复核）：随机种子 `cc 0639d64c…` 找到反例（2×3、3 标签，6.62 > 1.01×6.53）。已修正 alpha-expansion 移动能量的重参数化（`seam_cut::cut_grid_weighted` 显式边权）并加入确定性标签顺序重启；种子写入 proptest-regressions，新增 `graph_cut_saved_counterexample_stays_within_property_12_bound`。两组真实门禁三站均为 graph_cut，输出字节不变。
 
   - [x]* 7.24 属性测试：低清晰度区域判定与分位数一致
     - **Property 14: 低清晰度区域判定与分位数一致**
@@ -905,6 +906,7 @@
   - [ ]* 11.15 属性测试：色调样本过滤条件的充要性
     - **Property 48: 色调样本过滤条件的充要性**
     - **Validates: Requirements 9.1, 9.4**
+    - 执行记录：已添加 `property_48_tone_samples_are_usable_and_consistent`，待复核是否覆盖「当且仅当」全部条件后再勾选。
 
   - [ ]* 11.16 属性测试：高频残差逐像素等于 owner
     - **Property 49: 高频残差逐像素等于 owner**
@@ -913,6 +915,7 @@
   - [ ]* 11.17 属性测试：色调增益与偏移恒在范围内
     - **Property 50: 色调增益与偏移恒在范围内**
     - **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
+    - 执行记录：已添加 `property_50_tone_solution_is_bounded`，待复核后再勾选。
 
   - [ ]* 11.18 属性测试：色调不改变接缝与 ownership
     - **Property 51: 色调不改变接缝与 ownership**
@@ -921,6 +924,7 @@
   - [ ]* 11.19 属性测试：Owner_Region 边界低频色差有界或被记录
     - **Property 52: Owner_Region 边界低频色差有界或被记录**
     - **Validates: Requirements 9.8, 9.11**
+    - 执行记录：现有 `property_52_boundary_delta_is_symmetric_and_finite` 只验证 Delta_E 对称且有限，未覆盖「≤1.5 或被记录并降级」，保持未勾选。
 
   - 执行记录：11.1–11.2、11.4–11.7 已实现并保留提交；残差与色调报告沿用 run sink，
     默认 Tone_Harmonizer 已在 Ownership_Map 后调用。11.3 的实际站位 P95/观测接线待粘贴到
@@ -1039,6 +1043,7 @@
     - **Property 54: 画布边界等于覆盖联合边界**
     - **Validates: Requirements 10.2**
     - 生成器 `arb_coverage_shape()`
+    - 执行记录：`property_54/55/56_layered_ownership_*` 是固定夹具单测，内容与 P54–P56 定义不符（未验证画布等于覆盖联合边界、输出 ownership 等于瓦片 ownership），13.9–13.11 保持未勾选。
 
   - [ ]* 13.10 属性测试：未覆盖像素保持透明且不被写入
     - **Property 55: 未覆盖像素保持透明且不被写入**
@@ -1170,6 +1175,7 @@
       输出与 4398b8fa 一致；4398b8fa 实测两组仍为 `tone.status=degraded`，边界最大 ΔE00
       16.849 / 19.188，超限窗口 46 / 76（见检查点 12 记录），`quality_gate.verdict=not_run`。
     - _Requirements: 11.13, 11.16_
+    - 执行记录（记录模式接线）：九项判据在导出前执行并写入 `quality_gate`，不阻止导出；两组门禁输出 sha256 与基线一致（74942cfe… / 86884740…）。结论均为 `insufficient_evidence`：owner 仍是 `virtual://focus-group-*` 站位瓦片，无法解码回 Source_RAW（`owner_source_undecodable` 1536 处），超大诊断平面 2 处；Sharpness_Confidence 尚未合成到输出平面，按不可测记录。保持 [~]，待输出 ownership 映射回 Source_RAW 并接入置信度平面。
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
     - 在阶段 7 的「记录但不阻止」模式已在阆苑女仙 84 张上取得全部实测数字之后执行本任务
@@ -1279,6 +1285,7 @@ memory_threshold_source, physical_memory_bytes}`
       （`memory_safe_panorama_render_scale()` 只作用于 `BlendMode::Panorama`），
       这是需求 11.3 的必要前提
     - _Requirements: 14.1, 14.2_
+    - 执行记录：`resources.rs` 已实现纯函数门槛解析、500 ms RSS 采样（RSS 源可注入）与超限取消标志；运行开始启动，报告边界写入峰值 RSS、样本数、门槛、物理内存与来源（两组门禁峰值 9.69 / 9.96 GB，来源 default）。设置项来源与取消标志接入中途取消（17.2）未完成，保持 [~]。
 
   - [~] 17.2 实现内存超限中止与取消路径
     - 超门槛立即设置取消标志 → 各阶段在下一个检查点退出 → 删除本次运行临时文件 →
@@ -1327,6 +1334,7 @@ memory_threshold_source, physical_memory_bytes}`
     - 失败时保留已产出报告并记录未满足判据的标识符、实测值与阈值
     - 新增 `npm run stack-acceptance:check` 脚本入口
     - _Requirements: 15.4, 15.5, 15.6, 15.7, 15.8, 15.12_
+    - 执行记录：已添加 `#[ignore]` 的 `stack_acceptance_harness` 与 `npm run stack-acceptance:check`，未在 84 张上运行，保持 [~]。
 
   - [ ]* 17.6 属性测试：诊断输出完整且与输出同坐标系
     - **Property 81: 诊断输出完整且与输出同坐标系**
@@ -1351,6 +1359,7 @@ memory_threshold_source, physical_memory_bytes}`
   - [ ]* 17.11 属性测试：内存门槛解析确定
     - **Property 86: 内存门槛解析确定**
     - **Validates: Requirements 14.2**
+    - 执行记录：目前只有单元测试 `threshold_resolution_clamps_and_records_source`，100 例属性测试未加，保持未勾选。
 
   - [ ]* 17.12 属性测试：内存超限中止且不残留
     - **Property 87: 内存超限中止且不残留**
@@ -1368,6 +1377,7 @@ memory_threshold_source, physical_memory_bytes}`
   - [ ]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
     - **Validates: Requirements 15.12**
+    - 执行记录：已添加 `property_94_stack_acceptance_verdict_is_pure`，待复核后再勾选。
 
   - [ ]* 17.16 集成测试：时限类判据
     - Stack_Report 在成功/降级/拒绝三条路径上 30 秒内写出（需求 10.8）
