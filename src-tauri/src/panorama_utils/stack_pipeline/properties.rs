@@ -11213,8 +11213,9 @@ proptest! {
 // Later Quality_Gate pure-property checks (15.18-15.22).
 use super::quality_gate::{measure_boundary_strokes, trace_moore_boundary};
 use super::quality_gate_runner::{
-    Criterion, build_owner_sharpness_criterion, classify_unmeasurable_reason, criterion_verdict,
-    overall_verdict, owner_sharpness_stats, record_unmeasurable,
+    Criterion, OwnerSharpnessCriterionInput, build_owner_sharpness_criterion,
+    classify_unmeasurable_reason, criterion_verdict, overall_verdict, owner_sharpness_stats,
+    record_unmeasurable,
 };
 use super::report::{
     FailedMeasurementRecord, QualityGateCriterionRecord, QualityGateReport, QualityGateVerdict,
@@ -11305,14 +11306,16 @@ proptest! {
         let confidence = vec![0.8f32; 1024];
         let mut evidence_records = Vec::new();
         let criterion = build_owner_sharpness_criterion(
-            &coverage_image,
-            &confidence,
-            Some(&textured),
-            Some(&shortfall),
-            Some(&disagreement),
-            unresolved as u64,
-            (0.0, 0.0),
-            &mut evidence_records,
+            OwnerSharpnessCriterionInput {
+                coverage: &coverage_image,
+                confidence: &confidence,
+                textured: Some(&textured),
+                shortfall: Some(&shortfall),
+                disagreement: Some(&disagreement),
+                unresolved_pixel_count: unresolved as u64,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut evidence_records,
+            },
         );
         let report = criterion.finish(&mut evidence_records);
         let stats = owner_sharpness_stats(
@@ -11363,14 +11366,16 @@ proptest! {
         let mut changed_records = Vec::new();
         let changed_confidence = vec![f32::NAN; 1024];
         let changed = build_owner_sharpness_criterion(
-            &coverage_image,
-            &changed_confidence,
-            Some(&textured),
-            Some(&shortfall),
-            Some(&disagreement),
-            unresolved as u64,
-            (0.0, 0.0),
-            &mut changed_records,
+            OwnerSharpnessCriterionInput {
+                coverage: &coverage_image,
+                confidence: &changed_confidence,
+                textured: Some(&textured),
+                shortfall: Some(&shortfall),
+                disagreement: Some(&disagreement),
+                unresolved_pixel_count: unresolved as u64,
+                world_origin: (0.0, 0.0),
+                unmeasurable: &mut changed_records,
+            },
         )
         .finish(&mut changed_records);
         prop_assert_eq!(changed.verdict, report.verdict);

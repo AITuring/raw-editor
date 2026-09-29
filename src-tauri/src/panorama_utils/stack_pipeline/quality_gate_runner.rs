@@ -982,29 +982,34 @@ fn measure_large_boundaries(
 /// Build the owner-sharpness criterion from the exact planes retained by the
 /// compositor.  Keeping this construction here makes the runtime report and
 /// Property 71 exercise the same statistic, threshold, and evidence policy.
+pub(crate) struct OwnerSharpnessCriterionInput<'a> {
+    pub(crate) coverage: &'a GrayImage,
+    pub(crate) confidence: &'a [f32],
+    pub(crate) textured: Option<&'a [u8]>,
+    pub(crate) shortfall: Option<&'a [u8]>,
+    pub(crate) disagreement: Option<&'a [u8]>,
+    pub(crate) unresolved_pixel_count: u64,
+    pub(crate) world_origin: (f64, f64),
+    pub(crate) unmeasurable: &'a mut Vec<UnmeasurableRecord>,
+}
+
 pub(crate) fn build_owner_sharpness_criterion(
-    coverage: &GrayImage,
-    confidence: &[f32],
-    textured: Option<&[u8]>,
-    shortfall: Option<&[u8]>,
-    disagreement: Option<&[u8]>,
-    unresolved_pixel_count: u64,
-    world_origin: (f64, f64),
-    unmeasurable: &mut Vec<UnmeasurableRecord>,
+    input: OwnerSharpnessCriterionInput<'_>,
 ) -> Criterion {
     let mut criterion = Criterion::new(
         "owner_sharpness_coverage",
         quality_gate::OWNER_SHARPNESS_COVERAGE_MIN,
     );
-    let confidence_stats =
-        textured.and_then(|textured| confidence_coverage_stats(coverage, confidence, textured));
-    let owner_stats = match (textured, shortfall, disagreement) {
+    let confidence_stats = input
+        .textured
+        .and_then(|textured| confidence_coverage_stats(input.coverage, input.confidence, textured));
+    let owner_stats = match (input.textured, input.shortfall, input.disagreement) {
         (Some(textured), Some(shortfall), Some(disagreement)) => owner_sharpness_stats(
-            coverage.as_raw(),
+            input.coverage.as_raw(),
             textured,
             shortfall,
             disagreement,
-            unresolved_pixel_count,
+            input.unresolved_pixel_count,
         )
         .ok(),
         _ => None,
@@ -1033,11 +1038,11 @@ pub(crate) fn build_owner_sharpness_criterion(
                     degradation::OWNER_REVERSE_LOOKUP_UNRESOLVED,
                     stats.unresolved_pixel_count,
                 );
-                unmeasurable.push(UnmeasurableRecord {
+                input.unmeasurable.push(UnmeasurableRecord {
                     criterion: criterion.name.to_string(),
                     world: WorldPoint {
-                        x: world_origin.0,
-                        y: world_origin.1,
+                        x: input.world_origin.0,
+                        y: input.world_origin.1,
                     },
                     reason: degradation::OWNER_REVERSE_LOOKUP_UNRESOLVED.to_string(),
                     category: UnmeasurableCategory::Technical,
@@ -1045,11 +1050,11 @@ pub(crate) fn build_owner_sharpness_criterion(
             }
             if stats.textured_pixels == 0 {
                 criterion.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
-                unmeasurable.push(UnmeasurableRecord {
+                input.unmeasurable.push(UnmeasurableRecord {
                     criterion: criterion.name.to_string(),
                     world: WorldPoint {
-                        x: world_origin.0,
-                        y: world_origin.1,
+                        x: input.world_origin.0,
+                        y: input.world_origin.1,
                     },
                     reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
                     category: classify_unmeasurable_reason(
@@ -1058,16 +1063,16 @@ pub(crate) fn build_owner_sharpness_criterion(
                 });
             } else {
                 let value = 1.0 - stats.textured_shortfall as f64 / stats.textured_pixels as f64;
-                criterion.push(world_origin, value, "", value >= criterion.threshold);
+                criterion.push(input.world_origin, value, "", value >= criterion.threshold);
             }
         }
         _ => {
             criterion.miss(degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE);
-            unmeasurable.push(UnmeasurableRecord {
+            input.unmeasurable.push(UnmeasurableRecord {
                 criterion: criterion.name.to_string(),
                 world: WorldPoint {
-                    x: world_origin.0,
-                    y: world_origin.1,
+                    x: input.world_origin.0,
+                    y: input.world_origin.1,
                 },
                 reason: degradation::TEXTURED_PIXEL_PLANE_UNAVAILABLE.to_string(),
                 category: classify_unmeasurable_reason(
@@ -1520,16 +1525,16 @@ pub(crate) fn run_quality_gate(
     timing.boundary_seconds = boundary_started.elapsed().as_secs_f64();
     timing.boundary_sample_count = boundary.observed_count + boundary.unmeasurable;
 
-    let owner_sharpness = build_owner_sharpness_criterion(
-        input.coverage,
-        input.confidence,
-        input.textured,
-        input.owner_shortfall,
-        input.owner_disagreement,
-        input.unresolved_pixel_count,
-        input.world_origin,
-        &mut unmeasurable,
-    );
+    let owner_sharpness = build_owner_sharpness_criterion(OwnerSharpnessCriterionInput {
+        coverage: input.coverage,
+        confidence: input.confidence,
+        textured: input.textured,
+        shortfall: input.owner_shortfall,
+        disagreement: input.owner_disagreement,
+        unresolved_pixel_count: input.unresolved_pixel_count,
+        world_origin: input.world_origin,
+        unmeasurable: &mut unmeasurable,
+    });
 
     let mut criteria = Vec::new();
     for criterion in [
