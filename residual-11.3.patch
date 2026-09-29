@@ -1,0 +1,111 @@
+--- a/src-tauri/src/panorama_stitching.rs
++++ b/src-tauri/src/panorama_stitching.rs
+@@ -8214,6 +8214,65 @@
+                         let sharpen = f64::from(stitching::layered_final_sharpen_amount());
+                         recorder.update(|report| report.composition.final_sharpen_amount = sharpen);
+                     }
++                    // Build Residual_Warp from bidirectional station matches before composition.
++                    let mut residual_model = residual_warp::ResidualWarp::new();
++                    for (&(left, right), relation) in &tile_relations {
++                        let (Some(left_tile), Some(right_tile)) =
++                            (tile_infos.get(left), tile_infos.get(right))
++                        else {
++                            continue;
++                        };
++                        let (Some(left_to_world), Some(right_to_world)) = (
++                            tile_homographies.get(&left_tile.id),
++                            tile_homographies.get(&right_tile.id),
++                        ) else {
++                            continue;
++                        };
++                        let Some(world) = focus_world_overlap_rect(
++                            left_tile,
++                            right_tile,
++                            left_to_world,
++                            right_to_world,
++                        ) else {
++                            continue;
++                        };
++                        let mut errors = Vec::new();
++                        let mut observations = Vec::new();
++                        for &(left_point, right_point) in &relation.points {
++                            let (Some(left_world), Some(right_world)) = (
++                                transformed_point(left_to_world, left_point),
++                                transformed_point(right_to_world, right_point),
++                            ) else {
++                                continue;
++                            };
++                            let error = (right_world - left_world).norm();
++                            if !error.is_finite() {
++                                continue;
++                            }
++                            errors.push(error);
++                            observations.push(residual_warp::WarpObservation::new(
++                                stack_report::WorldPoint {
++                                    x: right_world.x,
++                                    y: right_world.y,
++                                },
++                                [left_world.x - right_world.x, left_world.y - right_world.y],
++                                0.0,
++                            ));
++                        }
++                        if errors.is_empty() {
++                            continue;
++                        }
++                        errors.sort_by(f64::total_cmp);
++                        let p95_index = ((errors.len() - 1) * 95 / 100).min(errors.len() - 1);
++                        let overlap = residual_warp::OverlapResidual::new(
++                            left,
++                            right,
++                            world,
++                            errors[p95_index],
++                        );
++                        let _ = residual_model.add_observations(overlap, &observations);
++                    }
++                    residual_warp::record_run_model(&residual_model);
+                     let tile_result = match compositor_choice {
+                         // Comparison: the streaming detail-preserving mosaic.
+                         StackCompositorChoice::StreamingMosaic => {
+@@ -8867,6 +8926,42 @@
+     (mapped.x.is_finite() && mapped.y.is_finite()).then_some(mapped)
+ }
+ 
++
++fn focus_world_overlap_rect(
++    left: &ImageInfo,
++    right: &ImageInfo,
++    left_to_world: &Matrix3<f64>,
++    right_to_world: &Matrix3<f64>,
++) -> Option<stack_report::WorldRect> {
++    let bounds = |image: &ImageInfo, transform: &Matrix3<f64>| {
++        let corners = [
++            Point2::new(0.0, 0.0),
++            Point2::new(f64::from(image.width), 0.0),
++            Point2::new(f64::from(image.width), f64::from(image.height)),
++            Point2::new(0.0, f64::from(image.height)),
++        ];
++        let points = corners
++            .into_iter()
++            .filter_map(|corner| transformed_point(transform, corner))
++            .collect::<Vec<_>>();
++        (points.len() == 4).then(|| (
++            points.iter().map(|point| point.x).fold(f64::INFINITY, f64::min),
++            points.iter().map(|point| point.x).fold(f64::NEG_INFINITY, f64::max),
++            points.iter().map(|point| point.y).fold(f64::INFINITY, f64::min),
++            points.iter().map(|point| point.y).fold(f64::NEG_INFINITY, f64::max),
++        ))
++    };
++    let (left_min_x, left_max_x, left_min_y, left_max_y) = bounds(left, left_to_world)?;
++    let (right_min_x, right_max_x, right_min_y, right_max_y) = bounds(right, right_to_world)?;
++    let min_x = left_min_x.max(right_min_x);
++    let max_x = left_max_x.min(right_max_x);
++    let min_y = left_min_y.max(right_min_y);
++    let max_y = left_max_y.min(right_max_y);
++    (max_x > min_x && max_y > min_y).then_some(stack_report::WorldRect {
++        left: min_x, top: min_y, width: max_x - min_x, height: max_y - min_y,
++    })
++}
++
+ fn homography_preserves_focus_orientation(
+     transform: &Matrix3<f64>,
+     dimensions: (u32, u32),

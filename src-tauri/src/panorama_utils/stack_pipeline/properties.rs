@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
@@ -41,7 +42,13 @@ use super::virtual_tile::{
     self, CacheKeyInputs, CacheLookup, LeaseError, MAX_RESIDENT_VIRTUAL_TILES, StoreOutcome,
     VirtualTileStore, test_access,
 };
-use super::{compositor, tone};
+use super::{compositor, resources, tone};
+
+/// The production observation sinks are process-wide for compatibility with
+/// the existing stitching entry point.  Property helpers hold one run scope
+/// across reset, render, and snapshot so parallel proptest cases cannot
+/// interleave their evidence.
+static PROPERTY_RUN_SCOPE: Mutex<()> = Mutex::new(());
 
 /// The exact shape requirement 12.7 fixes for a machine readable failure reason.
 fn reason_identifier_pattern() -> Regex {
@@ -176,21 +183,64 @@ proptest! {
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 52: Tone_Harmonizer
-    // 边界色差使用唯一的 CIEDE2000 实现，且同色为零、结果对称。
+    // 每个 Owner_Region 边界的 ΔE00 不超过 1.5；超过时必须记录并降级。
     //
     // **Validates: Requirements 9.8, 9.11**
     #[test]
-    fn property_52_boundary_delta_is_symmetric_and_finite(
+    fn property_52_boundary_delta_is_bounded_or_degraded(
         left in prop::array::uniform3(0.0f32..=1.0),
         right in prop::array::uniform3(0.0f32..=1.0),
     ) {
-        let same = tone::delta_e00_rgb(left, left);
-        let forward = tone::delta_e00_rgb(left, right);
-        let backward = tone::delta_e00_rgb(right, left);
-        prop_assert!(same.abs() < 1.0e-9);
-        prop_assert!(forward.is_finite() && backward.is_finite());
-        prop_assert!((forward - backward).abs() < 1.0e-9);
-        prop_assert!(forward >= 0.0);
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
+        tone::reset_run_records();
+        let left = left.map(|value| 0.05 + 0.9 * value);
+        let right = right.map(|value| 0.05 + 0.9 * value);
+        let width = 32u32;
+        let height = 32u32;
+        let tile = |station_index: usize, owner_id: u16, value: [f32; 3]| tone::ToneTile {
+            station_index,
+            owner_id,
+            low: image::Rgb32FImage::from_pixel(width, height, image::Rgb(value)),
+            validity: image::GrayImage::from_pixel(width, height, image::Luma([255])),
+            world_origin: (0.0, 0.0),
+            world_size: (f64::from(width), f64::from(height)),
+            world_stride: 1.0,
+            cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb(value)),
+            cell_coverage: vec![1.0; (width * height) as usize],
+        };
+        let tiles = [tile(0, 1, left), tile(1, 2, right)];
+        let owners = (0..height)
+            .flat_map(|_| (0..width).map(|x| if x < width / 2 { 1 } else { 2 }))
+            .collect::<Vec<_>>();
+        let mut panorama = image::Rgb32FImage::from_fn(width, height, |x, _| {
+            if x < width / 2 {
+                image::Rgb(left)
+            } else {
+                image::Rgb(right)
+            }
+        });
+        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &owners,
+            width,
+            &tiles,
+            &evidence,
+            &[(0, 1)],
+        );
+        let delta = report.boundary_delta_e.max;
+        prop_assert!(delta.is_finite() && delta >= 0.0);
+        if delta > super::report::TONE_BOUNDARY_DELTA_E_THRESHOLD {
+            prop_assert!(
+                degradation::run_ledger_snapshot()
+                    .entries()
+                    .iter()
+                    .any(|entry| entry.reason == degradation::TONE_BOUNDARY_DELTA_E_EXCEEDED)
+            );
+        } else {
+            prop_assert!(delta <= super::report::TONE_BOUNDARY_DELTA_E_THRESHOLD);
+        }
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 51: Tone_Harmonizer
@@ -233,55 +283,76 @@ fn ownership_contract_fixture() -> (
     (infos, homographies, sources)
 }
 
-#[test]
-fn property_54_layered_ownership_publishes_coverage_and_owner_labels() {
-    let (infos, homographies, sources) = ownership_contract_fixture();
-    let rendered =
-        render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
-    assert_eq!(rendered.image.dimensions(), rendered.coverage.dimensions());
-    assert_eq!(rendered.image.dimensions(), rendered.ownership.dimensions());
-    assert_eq!(rendered.ownership.legend().len(), sources.len());
-    for (x, y, pixel) in rendered.image.enumerate_pixels() {
-        let owner = rendered.ownership.owner_at(x, y);
-        if rendered.coverage.is_covered(x, y) {
-            assert!(owner > 0, "covered pixel ({x},{y}) has no owner");
-            assert!(pixel.0.iter().all(|channel| channel.is_finite()));
-        } else {
-            assert_eq!(owner, stitching::NO_OWNER);
-            assert!(pixel.0.iter().all(|&channel| channel == 0.0));
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+
+    // Feature: layered-camera-group-focus-stitching, Property 54: Layered_Virtual_Tile
+    // 的画布边界等于所有 Coverage_Mask 的覆盖联合边界。
+    #[test]
+    fn property_54_layered_canvas_is_coverage_union(translation_x in -24i32..=24, translation_y in -24i32..=24) {
+        let (infos, mut homographies, sources) = ownership_contract_fixture();
+        homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, f64::from(translation_y), 0.0, 0.0, 1.0));
+        let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+        let (width, height) = rendered.coverage.dimensions();
+        let mut bounds = (u32::MAX, u32::MAX, 0u32, 0u32);
+        for y in 0..height {
+            for x in 0..width {
+                if rendered.coverage.is_covered(x, y) {
+                    bounds.0 = bounds.0.min(x);
+                    bounds.1 = bounds.1.min(y);
+                    bounds.2 = bounds.2.max(x);
+                    bounds.3 = bounds.3.max(y);
+                }
+            }
         }
+        prop_assert!(bounds.0 != u32::MAX);
+        prop_assert_eq!((width, height), (bounds.2 - bounds.0 + 1, bounds.3 - bounds.1 + 1));
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 55: 未覆盖像素保持透明且从不被写入。
+    #[test]
+    fn property_55_layered_uncovered_pixels_are_transparent(translation_x in 96i32..=180) {
+        let (infos, mut homographies, sources) = ownership_contract_fixture();
+        homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, 0.0, 0.0, 0.0, 1.0));
+        let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+        let mut uncovered = 0usize;
+        for (x, y, pixel) in rendered.image.enumerate_pixels() {
+            if !rendered.coverage.is_covered(x, y) {
+                uncovered += 1;
+                prop_assert_eq!(rendered.ownership.owner_at(x, y), stitching::NO_OWNER);
+                prop_assert!(pixel.0.iter().all(|&channel| channel == 0.0));
+            }
+        }
+        prop_assert!(uncovered > 0);
+    }
+
+    // Feature: layered-camera-group-focus-stitching, Property 56: 输出 Ownership_Map 等于瓦片 ownership。
+    #[test]
+    fn property_56_layered_output_ownership_matches_tile(translation_x in -12i32..=28) {
+        let (infos, mut homographies, sources) = ownership_contract_fixture();
+        homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, 4.0, 0.0, 0.0, 1.0));
+        let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
+        let result = assert_source_correspondence(&rendered, &infos, &homographies, &sources, false, true);
+        prop_assert!(result.is_ok());
+        let (_, _, uncovered) = result.expect("ownership correspondence");
+        prop_assert!(uncovered < (rendered.image.width() * rendered.image.height()) as usize);
     }
 }
 
-#[test]
-fn property_55_layered_ownership_is_deterministic() {
-    let (infos, homographies, sources) = ownership_contract_fixture();
-    let first = render_layered_ownership(&infos, &homographies, &sources).expect("first render");
-    let second = render_layered_ownership(&infos, &homographies, &sources).expect("second render");
-    assert_eq!(first.image.as_raw(), second.image.as_raw());
-    assert_eq!(first.coverage, second.coverage);
-    assert_eq!(first.ownership, second.ownership);
-    assert_eq!(first.sampling_origin, second.sampling_origin);
-}
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
 
-#[test]
-fn property_56_layered_ownership_keeps_uncovered_pixels_zero() {
-    let (infos, mut homographies, sources) = ownership_contract_fixture();
-    homographies.insert(
-        1,
-        Matrix3::new(1.0, 0.0, 10_000.0, 0.0, 1.0, 10_000.0, 0.0, 0.0, 1.0),
-    );
-    let rendered =
-        render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
-    let mut uncovered = 0;
-    for (x, y, pixel) in rendered.image.enumerate_pixels() {
-        if !rendered.coverage.is_covered(x, y) {
-            uncovered += 1;
-            assert_eq!(rendered.ownership.owner_at(x, y), stitching::NO_OWNER);
-            assert!(pixel.0.iter().all(|&channel| channel == 0.0));
-        }
+    // Feature: layered-camera-group-focus-stitching, Property 86: 内存门槛解析是确定的。
+    #[test]
+    fn property_86_memory_threshold_resolution_is_deterministic(
+        physical in 0u64..(64 * 1024 * 1024 * 1024),
+        configured in prop::option::of(0u64..(64 * 1024 * 1024 * 1024)),
+        auto_calibrated in any::<bool>(),
+    ) {
+        let first = resources::resolve_memory_threshold(physical, configured, auto_calibrated);
+        let second = resources::resolve_memory_threshold(physical, configured, auto_calibrated);
+        prop_assert_eq!(first, second);
     }
-    assert!(uncovered > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +378,8 @@ fn stack_acceptance_verdict(
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
+    // Feature: layered-camera-group-focus-stitching, Property 94: 门禁 verdict 是纯函数。
     #[test]
     fn property_94_stack_acceptance_verdict_is_pure(
         measurable in 0usize..1000,
@@ -1600,6 +1673,7 @@ proptest! {
     fn grouping_and_topology_are_invariant_under_rename_and_import_order(
         scan in arb_artwork_scan_grid()
     ) {
+        let _run_scope = degradation::begin_run_scope();
         prop_assume!(scan.station_count() >= 2);
 
         let (reference, witness) = grouping_topology(&scan);
@@ -6950,6 +7024,10 @@ fn render_station_tile(
     homographies: &HashMap<usize, Matrix3<f64>>,
     sources: &[image::Rgb32FImage],
 ) -> Result<stitching::FocusStackTileRender, String> {
+    let _property_scope = PROPERTY_RUN_SCOPE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
@@ -7333,6 +7411,10 @@ fn render_failed_non_anchor_station(
     ),
     String,
 > {
+    let _property_scope = PROPERTY_RUN_SCOPE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
     let anchor_path = infos
@@ -7716,6 +7798,10 @@ fn render_registration_boundary(
     ),
     String,
 > {
+    let _property_scope = PROPERTY_RUN_SCOPE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
     let anchor_path = infos
@@ -10076,6 +10162,7 @@ proptest! {
         seed in any::<u64>(),
         use_absolute_cap in any::<bool>(),
     ) {
+        let _run_scope = degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access::{self, ClosureRelationView};
 
         let (dimensions, overlap_short_side) = if use_absolute_cap {

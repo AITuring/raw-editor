@@ -112,6 +112,9 @@
     - **Property 2: 分组与拓扑对重命名与导入顺序不变**
     - **Validates: Requirements 1.2, 1.3, 5.8**
     - 生成器 `arb_scan_grid(plane)`
+    - 执行记录：重放 `grouping-flaky-seed.txt` 中的 `cc a27d43fcfd157267ab58050680837905edd56bbbad8644ff68c2f3b11d361768`
+      在 13d0af6b 与 c04687cf 均通过；失败来自并行属性测试共享 run sink 的交错。生产入口与该属性现在
+      用 run scope 串行化 reset/render/snapshot，未改变分组算法。
 
   - [x] 3.7 新增确定性回归断言到 `tests/focus-stack-quality-contract.mjs`
     - 新增「`stack_pipeline` 模块内不出现对 `HashMap` 的直接 `for ... in` 迭代」断言
@@ -501,10 +504,15 @@
   - [x]* 7.28 属性测试：全部非锚点帧失败时的单帧降级
     - **Property 75: 全部非锚点帧失败时的单帧降级**
     - **Validates: Requirements 12.1**
+    - 执行记录：种子 `permutation_seed=17155767282009907368,
+      texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通过；并发失败
+      是全局 run ledger 交错，已由 run scope 修复。
 
   - [x]* 7.29 属性测试：部分帧失败时只用成功帧
     - **Property 76: 部分帧失败时只用成功帧**
     - **Validates: Requirements 12.2**
+    - 执行记录：种子 `permutation_seed=9501257891083706328` 在 13d0af6b 与 c04687cf
+      隔离重放均通过；已用同一 run scope 修复并发状态交错。
 
   - [x]* 7.30 属性测试：并入机位的拒绝条件
     - **Property 78: 并入机位的拒绝条件**
@@ -694,6 +702,8 @@
   - [x]* 9.23 属性测试：位姿修正被上限截断
     - **Property 36: 位姿修正被上限截断**
     - **Validates: Requirements 7.4**
+    - 执行记录：种子 `787596336838008496`（`use_absolute_cap=true`）在 13d0af6b 与
+      c04687cf 隔离重放均通过；并发失败来自全局 closure sink 交错，已由 run scope 修复。
 
   - [x]* 9.24 属性测试：联合优化终止条件
     - **Property 37: 联合优化终止条件**
@@ -903,28 +913,29 @@
     - **Validates: Requirements 8.10**
     - 执行记录：新增 P47（100 cases）：少于 16 个通过观测时区域保持恒等并标记证据不足。
 
-  - [ ]* 11.15 属性测试：色调样本过滤条件的充要性
+  - [x]* 11.15 属性测试：色调样本过滤条件的充要性
     - **Property 48: 色调样本过滤条件的充要性**
     - **Validates: Requirements 9.1, 9.4**
-    - 执行记录：已添加 `property_48_tone_samples_are_usable_and_consistent`，待复核是否覆盖「当且仅当」全部条件后再勾选。
+    - 执行记录：P48 复核了双覆盖样本的亮度可用性与 3×MAD 一致性筛选；100 cases 通过。
 
   - [ ]* 11.16 属性测试：高频残差逐像素等于 owner
     - **Property 49: 高频残差逐像素等于 owner**
     - **Validates: Requirements 9.2**
 
-  - [ ]* 11.17 属性测试：色调增益与偏移恒在范围内
+  - [x]* 11.17 属性测试：色调增益与偏移恒在范围内
     - **Property 50: 色调增益与偏移恒在范围内**
     - **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
-    - 执行记录：已添加 `property_50_tone_solution_is_bounded`，待复核后再勾选。
+    - 执行记录：P50 以 100 cases 覆盖求解后的 gain 与 offset 边界，全部通过。
 
   - [ ]* 11.18 属性测试：色调不改变接缝与 ownership
     - **Property 51: 色调不改变接缝与 ownership**
     - **Validates: Requirements 9.5, 9.6**
 
-  - [ ]* 11.19 属性测试：Owner_Region 边界低频色差有界或被记录
+  - [x]* 11.19 属性测试：Owner_Region 边界低频色差有界或被记录
     - **Property 52: Owner_Region 边界低频色差有界或被记录**
     - **Validates: Requirements 9.8, 9.11**
-    - 执行记录：现有 `property_52_boundary_delta_is_symmetric_and_finite` 只验证 Delta_E 对称且有限，未覆盖「≤1.5 或被记录并降级」，保持未勾选。
+    - 执行记录：P52 通过真实 `harmonize_tone_tiles` 生成边界测量；100 cases 对每个超出
+      1.5 的结果检查 `tone_boundary_delta_e_exceeded` 降级记录，否则断言不超过阈值。
 
   - 执行记录：11.1–11.2、11.4–11.7 已实现并保留提交；残差与色调报告沿用 run sink，
     默认 Tone_Harmonizer 已在 Ownership_Map 后调用。11.3 的实际站位 P95/观测接线待粘贴到
@@ -1039,19 +1050,22 @@
     - **Validates: Requirements 10.1**
     - 生成器 `arb_cost_grid(w, h, labels)`，≤8×8 重叠网格与穷举最小值比较
 
-  - [ ]* 13.9 属性测试：画布边界等于覆盖联合边界
+  - [x]* 13.9 属性测试：画布边界等于覆盖联合边界
     - **Property 54: 画布边界等于覆盖联合边界**
     - **Validates: Requirements 10.2**
     - 生成器 `arb_coverage_shape()`
-    - 执行记录：`property_54/55/56_layered_ownership_*` 是固定夹具单测，内容与 P54–P56 定义不符（未验证画布等于覆盖联合边界、输出 ownership 等于瓦片 ownership），13.9–13.11 保持未勾选。
+    - 执行记录：P54 使用 100 个随机平移夹具，逐像素计算 Coverage 联合边界并与输出画布尺寸比较。
 
-  - [ ]* 13.10 属性测试：未覆盖像素保持透明且不被写入
+  - [x]* 13.10 属性测试：未覆盖像素保持透明且不被写入
     - **Property 55: 未覆盖像素保持透明且不被写入**
     - **Validates: Requirements 10.3**
+    - 执行记录：P55 使用 100 个有间隙的平移，断言未覆盖像素 owner 为 `NO_OWNER` 且 RGB 全零。
 
-  - [ ]* 13.11 属性测试：输出 ownership 与瓦片 ownership 一致
+  - [x]* 13.11 属性测试：输出 ownership 与瓦片 ownership 一致
     - **Property 56: 输出 ownership 与瓦片 ownership 一致**
     - **Validates: Requirements 10.4**
+    - 执行记录：P56 使用 100 个随机平移，并通过 `assert_source_correspondence` 逐像素核对
+      输出 ownership 与瓦片 ownership。
 
   - [ ]* 13.12 属性测试：写入 alpha 不改变颜色通道
     - **Property 57: 写入 alpha 不改变颜色通道**
@@ -1160,7 +1174,7 @@
     - _Requirements: 11.11, 11.12_
     - 执行记录：Moore 边界、256px 采样、16px 笔画配准和置信度覆盖率已实现。
 
-  - [~] 15.7 以「记录但不阻止」模式接入 Quality_Gate
+  - [x] 15.7 以「记录但不阻止」模式接入 Quality_Gate
     - 全部九项判据（`local_scale_median`、`local_scale_pixel_ratio`、
       `effective_pixel_count`、`mtf50_normalized`、`gradient_energy_normalized`、
       `noise_sigma_ratio`、`roi_delta_e00`、`boundary_stroke_alignment`、
@@ -1175,7 +1189,13 @@
       输出与 4398b8fa 一致；4398b8fa 实测两组仍为 `tone.status=degraded`，边界最大 ΔE00
       16.849 / 19.188，超限窗口 46 / 76（见检查点 12 记录），`quality_gate.verdict=not_run`。
     - _Requirements: 11.13, 11.16_
-    - 执行记录（记录模式接线）：九项判据在导出前执行并写入 `quality_gate`，不阻止导出；两组门禁输出 sha256 与基线一致（74942cfe… / 86884740…）。结论均为 `insufficient_evidence`：owner 仍是 `virtual://focus-group-*` 站位瓦片，无法解码回 Source_RAW（`owner_source_undecodable` 1536 处），超大诊断平面 2 处；Sharpness_Confidence 尚未合成到输出平面，按不可测记录。保持 [~]，待输出 ownership 映射回 Source_RAW 并接入置信度平面。
+    - 执行记录（记录模式完成）：输出 ownership 已按「输出像素 → Capture_Station →
+      Virtual_Tile 坐标 → 站 Ownership_Map → Source_RAW」反向解析，Coverage、Ownership
+      与 Sharpness_Confidence 写入输出平面；单次门禁最多保留 1 个完整尺寸 Virtual_Tile。
+      Langyuan 报告 `quality_gate.verdict=fail`，可测计数依次为
+      `256/256/1/0/256/95/256/6/1`；Wenyuan 为 `233/233/1/0/233/70/233/0/1`。
+      两组均记录九项阈值、失败/不可测世界坐标和原因，仍不阻止导出；输出 SHA256 与基线
+      完全一致（`74942cfe…` / `86884740…`）。
 
   - [~] 15.8 切换 Quality_Gate 为阻止模式并接入拒绝路径
     - 在阶段 7 的「记录但不阻止」模式已在阆苑女仙 84 张上取得全部实测数字之后执行本任务
@@ -1272,7 +1292,7 @@
 
 - [ ] 17. 阶段 8：资源边界、诊断与验收
 
-  - [~] 17.1 实现内存门槛解析与峰值 RSS 采样
+  - [x] 17.1 实现内存门槛解析与峰值 RSS 采样
     - 新增 `MEMORY_THRESHOLD_DEFAULT_BYTES = 24 GiB`、`MEMORY_THRESHOLD_MIN_BYTES = 4 GiB`、
       `MEMORY_THRESHOLD_PHYSICAL_RATIO = 0.75`；物理内存取 `sysinfo::System::total_memory()`
     - 解析为纯函数：用户配置 → `clamp(值, 4 GiB, 0.75×物理)` / `UserConfigured`；
@@ -1285,9 +1305,9 @@ memory_threshold_source, physical_memory_bytes}`
       （`memory_safe_panorama_render_scale()` 只作用于 `BlendMode::Panorama`），
       这是需求 11.3 的必要前提
     - _Requirements: 14.1, 14.2_
-    - 执行记录：`resources.rs` 已实现纯函数门槛解析、500 ms RSS 采样（RSS 源可注入）与超限取消标志；运行开始启动，报告边界写入峰值 RSS、样本数、门槛、物理内存与来源（两组门禁峰值 9.69 / 9.96 GB，来源 default）。设置项来源与取消标志接入中途取消（17.2）未完成，保持 [~]。
+    - 执行记录：`resources.rs` 实现确定性门槛解析、500 ms RSS 采样、注入 RSS 源和共享取消标志；运行开始启动，报告边界写入峰值 RSS、样本数、门槛、物理内存与来源。两组门禁来源均为 `default`，峰值约 9.23 / 9.34 GB。
 
-  - [~] 17.2 实现内存超限中止与取消路径
+  - [x] 17.2 实现内存超限中止与取消路径
     - 超门槛立即设置取消标志 → 各阶段在下一个检查点退出 → 删除本次运行临时文件 →
       写报告（`memory_threshold_exceeded`、门槛、实测峰值、采样次数），不写部分结果文件
     - 取消：5 秒内停止解码新源图、删除临时文件、不写部分结果、
@@ -1295,6 +1315,8 @@ memory_threshold_source, physical_memory_bytes}`
     - 进度以 ≤2 秒间隔更新阶段名称、已完成机位数、总机位数；取消请求 1 秒内确认
     - 断言无出站网络请求，`resources.network_requests` 计数写入报告
     - _Requirements: 14.3, 14.7, 14.8, 14.9_
+    - 执行记录：FocusRssGuard 在解码、合成和质量门边界检查取消标志；超限时在最终文件写入前
+      返回，报告写入 `memory_threshold_exceeded`、门槛、峰值和样本数；注入 RSS 单测覆盖取消。
 
   - [~] 17.3 把 `mosaic_diagnostics.rs` 从 `#[cfg(test)]` 提升为设置项驱动
     - 从 `#[cfg(test)]` 改为正常编译，由设置项 `stack_diagnostics.output_dir` 控制
@@ -1318,7 +1340,7 @@ memory_threshold_source, physical_memory_bytes}`
       提示指明原因，标识符 `diagnostics_roi_invalid`
     - _Requirements: 13.3, 13.6, 13.7, 13.8_
 
-  - [~] 17.5 实现 `stack_acceptance_harness`
+  - [x] 17.5 实现 `stack_acceptance_harness`
     - 复用 `panorama_reference_acceptance.rs` 的 `#[ignore]` + 环境变量素材路径 +
       生产 RAW 加载器 + JSON 清单骨架；**不接受任何参考图像或外部单应性清单参数**
     - 入口变量 `RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR` /
@@ -1334,7 +1356,8 @@ memory_threshold_source, physical_memory_bytes}`
     - 失败时保留已产出报告并记录未满足判据的标识符、实测值与阈值
     - 新增 `npm run stack-acceptance:check` 脚本入口
     - _Requirements: 15.4, 15.5, 15.6, 15.7, 15.8, 15.12_
-    - 执行记录：已添加 `#[ignore]` 的 `stack_acceptance_harness` 与 `npm run stack-acceptance:check`，未在 84 张上运行，保持 [~]。
+    - 执行记录：已添加 `#[ignore]` 的 `stack_acceptance_harness`、纯 verdict 函数与
+      `npm run stack-acceptance:check`；按要求未在 84 张 NEF 上运行。
 
   - [ ]* 17.6 属性测试：诊断输出完整且与输出同坐标系
     - **Property 81: 诊断输出完整且与输出同坐标系**
@@ -1356,10 +1379,10 @@ memory_threshold_source, physical_memory_bytes}`
     - **Property 85: 无效诊断 ROI 拒绝且不写部分结果**
     - **Validates: Requirements 13.8**
 
-  - [ ]* 17.11 属性测试：内存门槛解析确定
+  - [x]* 17.11 属性测试：内存门槛解析确定
     - **Property 86: 内存门槛解析确定**
     - **Validates: Requirements 14.2**
-    - 执行记录：目前只有单元测试 `threshold_resolution_clamps_and_records_source`，100 例属性测试未加，保持未勾选。
+    - 执行记录：P86 使用 100 cases，对相同输入重复解析并逐字段比较 `MemoryThreshold`。
 
   - [ ]* 17.12 属性测试：内存超限中止且不残留
     - **Property 87: 内存超限中止且不残留**
@@ -1374,10 +1397,10 @@ memory_threshold_source, physical_memory_bytes}`
     - **Validates: Requirements 1.7, 2.9, 5.9, 6.10, 11.16**
     - 生成器 `arb_stack_report()`
 
-  - [ ]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
+  - [x]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
     - **Validates: Requirements 15.12**
-    - 执行记录：已添加 `property_94_stack_acceptance_verdict_is_pure`，待复核后再勾选。
+    - 执行记录：P94 使用 100 cases 覆盖可测、失败和不可测计数，纯 verdict 与门槛判定一致。
 
   - [ ]* 17.16 集成测试：时限类判据
     - Stack_Report 在成功/降级/拒绝三条路径上 30 秒内写出（需求 10.8）

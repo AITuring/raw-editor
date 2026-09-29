@@ -2545,3 +2545,17 @@ flowchart LR
     S7 --> S8[阶段 8<br/>资源 + 诊断 + 验收]
     S8 --> S9[阶段 9<br/>文档收口]
 ```
+
+### 本轮实现决定（2026-09-29）
+
+1. Quality_Gate 的 Source_RAW 溯源沿输出 ownership 反向解析：先由输出 owner 找到
+   Capture_Station，再用 `sampling_origin` 和站位变换得到 Virtual_Tile 坐标，读取该站
+   `Ownership_Map` 与 `Sharpness_Confidence`，最后映射到该站的 Source_RAW 几何。每个站只保留
+   Coverage、Ownership 和置信度平面；完整尺寸 Virtual_Tile 逐站解码，报告的常驻峰值为 1。
+2. 大画布 Quality_Gate 使用扫描线覆盖并集和稀疏 ownership 边界采样，ROI 仍逐像素读取，避免
+   为诊断再分配一张完整尺寸覆盖图。不可测量项保留判据名、原因和世界坐标，Quality_Gate 仍只记录。
+3. FocusStack 启动 `RssSampler`，每 500 ms 读取可注入的 RSS 源；超出解析门槛时设置共享取消标志。
+   阶段边界检查该标志并在写最终结果前返回，报告写入峰值、样本数和
+   `memory_threshold_exceeded`。当前运行入口没有用户设置源，因此来源记录为 `default`。
+4. 站位关系的双向匹配在 Virtual_Tile 合成前计算世界坐标误差 P95；只有 P95 大于 3 px 的重叠
+   才交给 Residual_Warp，证据不足时保持恒等模型。
