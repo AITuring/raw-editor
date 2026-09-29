@@ -35,7 +35,7 @@ use super::focus_fuser;
 use super::intra_station;
 use super::report::{
     ConnectivityReport, FusionReport, FusionSolverStatus, QualityGateCriterionRecord,
-    QualityGateVerdict, STACK_REPORT_TOP_LEVEL_FIELDS, SourceRecord, StackReport,
+    QualityGateVerdict, STACK_REPORT_TOP_LEVEL_FIELDS, SourceRecord, StackReport, ToneStatus,
     VIRTUAL_TILE_CACHE_LIMIT_BYTES,
 };
 use super::test_support::{
@@ -94,61 +94,82 @@ proptest! {
 
     // Feature: layered-camera-group-focus-stitching, Property 49: Tone_Harmonizer
     // applies the low-frequency correction while retaining the owner's exact
-    // high-frequency pixels.  The oracle deliberately uses source == owner:
-    // their low fields cancel algebraically, so this test does not call the
-    // production low-frequency helper to manufacture its expected values.
+    // high-frequency pixels. The production group entry point is exercised;
+    // the oracle independently measures a sigma >= 64px full-resolution
+    // Gaussian field and does not call the production low-frequency helper.
     //
     // **Validates: Requirements 9.2**
     #[test]
-    fn property_49_tone_keeps_owner_high_frequency_residual(
-        owner_seed in any::<u8>(),
-        offset_seed in any::<u8>(),
-    ) {
-        let width = 32;
-        let height = 32;
+    fn property_49_tone_keeps_owner_high_frequency_residual(owner_seed in any::<u8>()) {
+        let width = 128u32;
+        let height = 128u32;
+        let level = 0.30 + f32::from(owner_seed % 80) / 400.0;
+        let source_level = (level * (0.82 + f32::from(owner_seed % 11) / 100.0)).clamp(0.08, 0.9);
         let owner = image::Rgb32FImage::from_fn(width, height, |x, y| {
-            let base = (u32::from(owner_seed) + x * 13 + y * 5) % 200;
-            let residual = ((x * 17 + y * 23) % 37) as f32 / 255.0;
+            let broad = (f32::from(((x * 7 + y * 11) % 97) as u8) / 96.0) * 0.012;
+            let residual = if (x + y + u32::from(owner_seed)) % 2 == 0 {
+                0.028
+            } else {
+                -0.028
+            };
             image::Rgb([
-                0.1 + base as f32 / 255.0 + residual,
-                0.15 + base as f32 / 300.0,
-                0.2 + base as f32 / 350.0,
+                level + broad + residual,
+                level * 0.92 + broad + residual,
+                level * 0.84 + broad + residual,
             ])
         });
-        let source = owner.clone();
-        let evidence = image::GrayImage::from_fn(width, height, |x, y| {
-            image::Luma([if (x + y + u32::from(owner_seed)) % 3 == 0 {
-                0
-            } else {
-                255
-            }])
-        });
-        let offset = [
-            (f32::from(offset_seed % 9) - 4.0) / 100.0,
-            (f32::from(offset_seed.rotate_left(1) % 9) - 4.0) / 100.0,
-            (f32::from(offset_seed.rotate_left(2) % 9) - 4.0) / 100.0,
-        ];
-        let solve = tone::ToneSolve {
-            gain: [1.0; 3],
-            offset,
-            solved_gain: [1.0; 3],
-            solved_offset: offset,
-            retained_samples: (width * height) as usize,
-            gain_clamped: false,
-            status: tone::ToneSolveStatus::Applied,
+        let mut panorama = owner.clone();
+        let constant_tile = |station_index: usize, owner_id: u16, value: f32| tone::ToneTile {
+            station_index,
+            owner_id,
+            low: image::Rgb32FImage::from_pixel(width, height, image::Rgb([value; 3])),
+            validity: image::GrayImage::from_pixel(width, height, image::Luma([255])),
+            world_origin: (0.0, 0.0),
+            world_size: (f64::from(width), f64::from(height)),
+            world_stride: 1.0,
+            cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb([value; 3])),
+            cell_coverage: vec![1.0; (width * height) as usize],
         };
-        let corrected = tone::apply_low_frequency_tone(&source, &owner, &evidence, &solve);
-        for (index, pixel) in corrected.pixels().enumerate() {
-            let x = (index as u32) % width;
-            let y = (index as u32) / width;
-            let original = owner.get_pixel(x, y);
+        let tiles = [
+            constant_tile(0, 1, level),
+            constant_tile(1, 2, source_level),
+        ];
+        let owners = vec![1u16; (width * height) as usize];
+        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &owners,
+            width,
+            &tiles,
+            &evidence,
+            &[(0, 1)],
+        );
+        prop_assert_eq!(report.status, ToneStatus::Applied);
+        prop_assert!(report.tiles.iter().all(|tile| tile.samples >= tone::TONE_MIN_SAMPLES as u64));
+
+        // Independent oracle: direct full-resolution Gaussian blur with a
+        // 64px standard deviation, rather than `low_frequency_field`.
+        let sigma = 64.0f32;
+        let owner_low = image::imageops::blur(&owner, sigma);
+        let corrected_low = image::imageops::blur(&panorama, sigma);
+        let kernel_taps = (6.0 * sigma).ceil() + 1.0;
+        let tolerance = 8.0 * kernel_taps * f32::EPSILON * (1.0 + level);
+        for (index, (owner_pixel, corrected_pixel)) in owner_low
+            .pixels()
+            .zip(corrected_low.pixels())
+            .enumerate()
+        {
+            let original = owner.get_pixel((index as u32) % width, (index as u32) / width);
+            let corrected = panorama.get_pixel((index as u32) % width, (index as u32) / width);
             for channel in 0..3 {
-                let expected = if evidence.get_pixel(x, y)[0] == 0 {
-                    original[channel]
-                } else {
-                    original[channel] + offset[channel]
-                };
-                prop_assert!((pixel[channel] - expected).abs() < 1.0e-6);
+                let owner_residual = original[channel] - owner_pixel[channel];
+                let corrected_residual = corrected[channel] - corrected_pixel[channel];
+                prop_assert!(
+                    (owner_residual - corrected_residual).abs() <= tolerance,
+                    "high-frequency residual drift at {index}:{channel}: {} > {}",
+                    (owner_residual - corrected_residual).abs(),
+                    tolerance
+                );
             }
         }
     }
@@ -300,16 +321,16 @@ proptest! {
 
     // Feature: layered-camera-group-focus-stitching, Property 51: Tone_Harmonizer
     // only writes panorama pixels; the production group-tone entry point never
-    // mutates the completed immutable Ownership_Map.
+    // mutates Coverage_Mask, seam positions, or the completed Ownership_Map.
     //
     // **Validates: Requirements 9.5, 9.6**
     #[test]
     fn property_51_tone_preserves_ownership_map(owner_seed in any::<u64>()) {
-        let width = 32u32;
-        let height = 32u32;
+        let width = 64u32;
+        let height = 64u32;
         let owners = (0..width * height)
             .map(|index| {
-                if ((owner_seed.rotate_left((index % 63) as u32) ^ u64::from(index)) & 1) == 0 {
+                if index % width < width / 2 {
                     1u16
                 } else {
                     2u16
@@ -321,6 +342,7 @@ proptest! {
             let value = (owner_seed.wrapping_add(u64::from(x * 17 + y * 31)) % 200) as f32 / 255.0;
             image::Rgb([value, value * 0.9, value * 0.8])
         });
+        let panorama_before = panorama.clone();
         let tile = |station_index: usize, owner_id: u16, scale: f32| tone::ToneTile {
             station_index,
             owner_id,
@@ -333,7 +355,30 @@ proptest! {
             cell_coverage: vec![1.0; (width * height) as usize],
         };
         let tiles = [tile(0, 1, 0.35), tile(1, 2, 0.55)];
-        let evidence = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+        let evidence = image::GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([if (x * 3 + y + owner_seed as u32) % 17 == 0 { 0 } else { 255 }])
+        });
+        let coverage_before = stitching::CoverageMask::from_gray(evidence.clone());
+        let coverage_bytes_before = coverage_before.covered().to_vec();
+        let seam_positions = |map: &[u16]| {
+            (0..height)
+                .flat_map(|y| {
+                    (0..width).filter_map(move |x| {
+                        let index = y as usize * width as usize + x as usize;
+                        let horizontal = x + 1 < width
+                            && map[index] != map[index + 1];
+                        let vertical = y + 1 < height
+                            && map[index] != map[index + width as usize];
+                        (horizontal || vertical).then_some((x, y))
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        let seam_before = seam_positions(&owners);
+        let tile_coverage_before = tiles
+            .iter()
+            .map(|tile| tile.cell_coverage.clone())
+            .collect::<Vec<_>>();
         let _report = tone::harmonize_tone_tiles(
             &mut panorama,
             &owners,
@@ -343,7 +388,21 @@ proptest! {
             &[(0, 1)],
         );
         compositor::assert_ownership_unchanged(&before, &owners);
-        prop_assert_eq!(before, owners);
+        prop_assert_eq!(&before, &owners);
+        let coverage_after = stitching::CoverageMask::from_gray(evidence.clone());
+        prop_assert_eq!(coverage_after.covered(), coverage_bytes_before.as_slice());
+        for y in 0..height {
+            for x in 0..width {
+                if evidence.get_pixel(x, y)[0] == 0 {
+                    prop_assert_eq!(panorama.get_pixel(x, y), panorama_before.get_pixel(x, y));
+                }
+            }
+        }
+        prop_assert_eq!(seam_positions(&owners), seam_before);
+        prop_assert_eq!(
+            tiles.iter().map(|tile| tile.cell_coverage.clone()).collect::<Vec<_>>(),
+            tile_coverage_before
+        );
     }
 }
 
@@ -505,10 +564,32 @@ fn stack_acceptance_failures(report: &StackReport) -> Vec<StackAcceptanceFailure
             threshold,
         });
     };
-    if report.input.source_count != 84 {
+    let sources = report
+        .input
+        .sources
+        .iter()
+        .map(|source| source.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let members = report
+        .grouping
+        .stations
+        .iter()
+        .flat_map(|station| station.members.iter().map(String::as_str))
+        .collect::<Vec<_>>();
+    let grouped = members.iter().copied().collect::<BTreeSet<_>>();
+    if report.input.source_count != 84
+        || sources.len() != 84
+        || members.len() != 84
+        || grouped != sources
+    {
         add(
             "acceptance_source_count",
-            report.input.source_count.to_string(),
+            format!(
+                "input={}, grouped={}, unique={}",
+                report.input.source_count,
+                members.len(),
+                grouped.len()
+            ),
             "84".to_string(),
         );
     }
@@ -627,6 +708,11 @@ fn stack_acceptance_baseline_report() -> StackReport {
         })
         .collect();
     report.grouping.station_count = 1;
+    report.grouping.stations = vec![super::report::StationRecord {
+        index: 0,
+        members: paths,
+        ..super::report::StationRecord::default()
+    }];
     report.station_relations.connectivity.components = 1;
     report.composition.union_projected_pixels = 10_000;
     report.composition.opaque_pixels = 9_800;
@@ -717,23 +803,22 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 94: 门禁 verdict 是纯函数。
     #[test]
     fn property_94_stack_acceptance_verdict_is_pure(
-        kind in prop_oneof![
-            Just(AcceptanceViolationKind::SourceCount),
-            Just(AcceptanceViolationKind::Isolated),
-            Just(AcceptanceViolationKind::Connectivity),
-            Just(AcceptanceViolationKind::QualityVerdict),
-            Just(AcceptanceViolationKind::FailedCriterion),
-            Just(AcceptanceViolationKind::OpaqueRatio),
-            Just(AcceptanceViolationKind::PeakRss),
-            Just(AcceptanceViolationKind::Network),
-            Just(AcceptanceViolationKind::Solver),
-            Just(AcceptanceViolationKind::SourceDigest),
-        ],
+        violations in prop::collection::vec(any::<bool>(), 10),
     ) {
+        let kinds = [
+            AcceptanceViolationKind::SourceCount, AcceptanceViolationKind::Isolated,
+            AcceptanceViolationKind::Connectivity, AcceptanceViolationKind::QualityVerdict,
+            AcceptanceViolationKind::FailedCriterion, AcceptanceViolationKind::OpaqueRatio,
+            AcceptanceViolationKind::PeakRss, AcceptanceViolationKind::Network,
+            AcceptanceViolationKind::Solver, AcceptanceViolationKind::SourceDigest,
+        ];
         let mut report = stack_acceptance_baseline_report();
-        let expected = inject_acceptance_violation(&mut report, kind);
+        prop_assert!(stack_acceptance_failures(&report).is_empty());
+        let expected = kinds.into_iter().zip(violations).filter_map(|(kind, inject)| {
+            inject.then(|| inject_acceptance_violation(&mut report, kind))
+        }).collect::<BTreeSet<_>>();
         let failures = stack_acceptance_failures(&report);
-        prop_assert_eq!(failures.iter().map(|failure| failure.identifier).collect::<Vec<_>>(), vec![expected]);
+        prop_assert_eq!(failures.iter().map(|failure| failure.identifier).collect::<BTreeSet<_>>(), expected);
     }
 }
 
@@ -790,14 +875,13 @@ fn stack_acceptance_harness() {
     ))
     .expect("acceptance sidecar storage should initialize");
     let app = tauri::test::mock_app();
-    crate::panorama_stitching::stitch_images_with_options(
+    let pipeline_result = crate::panorama_stitching::stitch_images_with_options(
         source_strings,
         app.handle().clone(),
         crate::panorama_stitching::AlignmentMode::Auto,
         crate::panorama_stitching::BlendMode::FocusStack,
         "test-stack-acceptance-progress",
-    )
-    .expect("84-image acceptance pipeline should terminate with a report");
+    );
     let after = acceptance_source_snapshot(&source_dir);
     assert_eq!(
         before, after,
@@ -821,23 +905,46 @@ fn stack_acceptance_harness() {
         &fs::read(&report_path).expect("acceptance report should be readable"),
     )
     .expect("acceptance report should match Stack_Report schema");
+    if let Err(error) = &pipeline_result {
+        eprintln!("acceptance pipeline stopped: {error}");
+    }
     let failures = stack_acceptance_failures(&report);
     if !failures.is_empty() {
         eprintln!("acceptance unmet conditions: {failures:?}");
     }
-    assert!(failures.is_empty(), "acceptance conditions were not met");
+    assert!(
+        failures.is_empty() && pipeline_result.is_ok(),
+        "acceptance conditions were not met"
+    );
 }
 
 fn acceptance_source_snapshot(source_dir: &Path) -> BTreeMap<String, (u64, String)> {
+    let required = (3680..=3763)
+        .map(|index| format!("DSC_{index}.NEF"))
+        .collect::<BTreeSet<_>>();
     fs::read_dir(source_dir)
         .expect("acceptance source directory should be readable")
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
+        .map(|entry| {
+            let entry = entry.expect("every source directory entry must be readable");
             let path = entry.path();
-            let name = path.file_name()?.to_string_lossy().into_owned();
-            let size = fs::metadata(&path).ok()?.len();
-            let digest = virtual_tile::source_file_sha256(&path).ok()?;
-            Some((name, (size, virtual_tile::hex_digest(&digest))))
+            let name = entry
+                .file_name()
+                .into_string()
+                .expect("source filenames must be UTF-8");
+            let size = entry
+                .metadata()
+                .expect("source metadata must be readable")
+                .len();
+            // Extra files are inventoried by name/size only; their contents are never read.
+            let digest = if required.contains(&name) {
+                virtual_tile::hex_digest(
+                    &virtual_tile::source_file_sha256(&path)
+                        .expect("every required NEF must be hashable"),
+                )
+            } else {
+                String::new()
+            };
+            (name, (size, digest))
         })
         .collect::<BTreeMap<_, _>>()
 }
@@ -12030,88 +12137,184 @@ proptest! {
 
     // Feature: layered-camera-group-focus-stitching, Property 77: closure
     // degradation is recorded as geometry evidence while the Quality_Gate's
-    // measured criteria, thresholds, and conclusion remain untouched.
+    // complete measured criterion set, thresholds, and conclusion remain
+    // unchanged.
     //
-    // **Validates: Requirements 7.7, 7.9, 11.15, 12.7**
+    // **Validates: Requirements 7.7, 7.9, 11.15, 12.3**
     #[test]
-    fn property_77_closure_degradation_preserves_quality_gate_record(seed in any::<u64>()) {
+    fn property_77_closure_degradation_preserves_quality_gate_record(
+        seed in any::<u64>(),
+        reliable in any::<bool>(),
+    ) {
         use crate::panorama_stitching::station_relation_test_access::{
             self, ClosureRelationView,
         };
+        use super::quality_gate::{self, SourceGeometry};
+        use super::quality_gate_runner::{run_quality_gate, QualityGateInput, QualitySource};
+        use super::residual_warp::ResidualWarp;
 
         let _run_scope = degradation::begin_run_scope();
         degradation::reset_run_ledger();
-        let signed_zero = if seed & 1 == 0 { 0.0 } else { -0.0 };
-        let base = vec![
-            translation_pose(signed_zero, -0.0),
-            translation_pose(100.25, 0.0),
-            translation_pose(200.5, 0.0),
-        ];
-        let relation = |left, right, tx| ClosureRelationView {
-            score: 1.0,
-            left,
-            right,
-            left_to_right: translation_pose(tx, 0.0),
-            independent_support: 2,
-            median_error_px: 0.0,
-        };
-        let run = station_relation_test_access::closure_run(
-            (400, 400),
-            &[2, 0, 1],
-            &[1, 2, 0],
-            &base,
-            &[
-                relation(0, 1, -109.25),
-                relation(1, 2, -109.25),
-                relation(0, 2, -191.5),
-            ],
-        );
-        prop_assert_eq!(run.report.status, super::report::ClosureStatus::Unreliable);
-        let ledger = degradation::run_ledger_snapshot();
-        let closure_reason_recorded = ledger.entries().iter().any(|entry| {
-            matches!(
-                entry.reason,
-                degradation::CLOSURE_UNRELIABLE_RESIDUAL
-                    | degradation::CLOSURE_UNRELIABLE_ITERATIONS
-                    | degradation::CLOSURE_UNRELIABLE_PAIR_P95
-            )
-        });
-        prop_assert!(closure_reason_recorded);
 
-        let quality_before = QualityGateReport {
-            verdict: if seed & 2 == 0 {
-                QualityGateVerdict::Pass
-            } else {
-                QualityGateVerdict::Fail
-            },
-            roi_count: 8 + (seed as usize % 32),
-            criteria: vec![QualityGateCriterionRecord {
-                name: "mtf50_normalized".to_string(),
-                threshold: 0.93,
-                measurable_count: 8,
-                verdict: QualityGateVerdict::Pass,
-                ..QualityGateCriterionRecord::default()
-            }],
-            ..QualityGateReport::default()
+        // Run the production Quality_Gate twice around the production closure
+        // boundary. The fixture has one full 512px owner region so all nine
+        // criterion records are built by `run_quality_gate`, rather than a
+        // hand-written report standing in for its output.
+        let run_quality_gate_fixture = || {
+            let width = 512;
+            let height = 512;
+            let output = image::Rgb32FImage::from_fn(width, height, |x, y| {
+                let ramp = ((x.wrapping_mul(17) + y.wrapping_mul(31)) % 251) as f32 / 251.0;
+                image::Rgb([0.2 + ramp * 0.6, 0.25 + ramp * 0.5, 0.3 + ramp * 0.4])
+            });
+            let coverage = image::GrayImage::from_pixel(width, height, image::Luma([255]));
+            let ownership = vec![1u16; (width * height) as usize];
+            let confidence = vec![0.8f32; (width * height) as usize];
+            let textured = vec![255u8; (width * height) as usize];
+            let shortfall = vec![0u8; (width * height) as usize];
+            let disagreement = vec![0u8; (width * height) as usize];
+            let residual = ResidualWarp::new();
+            let source = QualitySource {
+                owner: 1,
+                path: "property-77-owner.raw".to_string(),
+                geometry: SourceGeometry {
+                    member_to_anchor: Matrix3::identity(),
+                    tile_to_world: Matrix3::identity(),
+                    station_id: 0,
+                },
+                dimensions: (width, height),
+            };
+            let input = QualityGateInput {
+                output: &output,
+                coverage: &coverage,
+                ownership: &ownership,
+                confidence: &confidence,
+                textured: Some(&textured),
+                owner_shortfall: Some(&shortfall),
+                owner_disagreement: Some(&disagreement),
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                sources: std::slice::from_ref(&source),
+                residual: &residual,
+                acceptance_render_scale: 1.0,
+                final_sharpen_amount: 0.0,
+            };
+            run_quality_gate(&input, &mut |_source| Ok(output.clone()))
         };
+        let quality_before = run_quality_gate_fixture();
+
+        let (run, expected_status) = if reliable {
+            let (dimensions, rows, columns, base, relations) = accepted_closure_fixture(seed);
+            (
+                station_relation_test_access::closure_run(
+                    dimensions,
+                    &rows,
+                    &columns,
+                    &base,
+                    &relations,
+                ),
+                super::report::ClosureStatus::Converged,
+            )
+        } else {
+            let signed_zero = if seed & 1 == 0 { 0.0 } else { -0.0 };
+            let base = vec![
+                translation_pose(signed_zero, -0.0),
+                translation_pose(100.25, 0.0),
+                translation_pose(200.5, 0.0),
+            ];
+            let relation = |left, right, tx| ClosureRelationView {
+                score: 1.0,
+                left,
+                right,
+                left_to_right: translation_pose(tx, 0.0),
+                independent_support: 2,
+                median_error_px: 0.0,
+            };
+            (
+                station_relation_test_access::closure_run(
+                    (400, 400),
+                    &[2, 0, 1],
+                    &[1, 2, 0],
+                    &base,
+                    &[
+                        relation(0, 1, -109.25),
+                        relation(1, 2, -109.25),
+                        relation(0, 2, -191.5),
+                    ],
+                ),
+                super::report::ClosureStatus::Unreliable,
+            )
+        };
+        prop_assert_eq!(run.report.status, expected_status);
+        let quality_after = run_quality_gate_fixture();
+
+        let criterion_signature = |report: &QualityGateReport| {
+            report
+                .criteria
+                .iter()
+                .map(|criterion| {
+                    (
+                        criterion.name.clone(),
+                        criterion.threshold,
+                        criterion.threshold_min,
+                        criterion.threshold_max,
+                        criterion.verdict,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        prop_assert_eq!(quality_before.verdict, quality_after.verdict);
+        prop_assert_eq!(criterion_signature(&quality_before), criterion_signature(&quality_after));
+        prop_assert_eq!(
+            quality_before.criteria.iter().map(|criterion| criterion.name.as_str()).collect::<Vec<_>>(),
+            quality_gate::QUALITY_CRITERIA.to_vec(),
+        );
+        for criterion in &quality_after.criteria {
+            let expected_threshold = match criterion.name.as_str() {
+                "local_scale_median" => quality_gate::QUALITY_LOCAL_SCALE_MEDIAN_MIN,
+                "local_scale_pixel_ratio" => quality_gate::QUALITY_LOCAL_SCALE_PIXEL_RATIO_MIN,
+                "effective_pixel_count" => quality_gate::QUALITY_EFFECTIVE_PIXEL_RATIO_MIN,
+                "mtf50_normalized" => quality_gate::QUALITY_MTF50_RATIO_MIN,
+                "gradient_energy_normalized" => quality_gate::QUALITY_GRADIENT_RATIO_MIN,
+                "noise_sigma_ratio" => quality_gate::QUALITY_NOISE_RATIO_MIN,
+                "roi_delta_e00" => quality_gate::QUALITY_ROI_DELTA_E00_MAX,
+                "boundary_stroke_alignment" => quality_gate::QUALITY_BOUNDARY_P95_MAX,
+                "owner_sharpness_coverage" => quality_gate::OWNER_SHARPNESS_COVERAGE_MIN,
+                _ => unreachable!("run_quality_gate emitted an unknown criterion"),
+            };
+            prop_assert_eq!(criterion.threshold, expected_threshold);
+        }
+
+        let ledger = degradation::run_ledger_snapshot();
         let recorder = super::report::StackReportRecorder::isolated("property-77", None);
         recorder.update(|report| {
-            report.quality_gate = quality_before.clone();
+            report.quality_gate = quality_after.clone();
             report.closure = run.report.clone();
         });
         recorder.apply_degradation_ledger(&ledger);
         let report = recorder.snapshot();
-
-        prop_assert_eq!(&report.quality_gate, &quality_before);
         prop_assert_eq!(report.closure, run.report);
-        let closure_degradation_recorded = report.degradation.entries.iter().any(|entry| {
-            entry.reason == degradation::CLOSURE_UNRELIABLE_RESIDUAL
-                || entry.reason == degradation::CLOSURE_UNRELIABLE_ITERATIONS
-                || entry.reason == degradation::CLOSURE_UNRELIABLE_PAIR_P95
-        });
-        prop_assert!(closure_degradation_recorded);
-        prop_assert_eq!(report.quality_gate.criteria[0].threshold, 0.93);
-        prop_assert_eq!(report.quality_gate.criteria[0].verdict, QualityGateVerdict::Pass);
+        if reliable {
+            let has_unreliable_degradation = report.degradation.entries.iter().any(|entry| {
+                matches!(
+                    entry.reason.as_str(),
+                    degradation::CLOSURE_UNRELIABLE_RESIDUAL
+                        | degradation::CLOSURE_UNRELIABLE_ITERATIONS
+                        | degradation::CLOSURE_UNRELIABLE_PAIR_P95
+                )
+            });
+            prop_assert!(!has_unreliable_degradation);
+        } else {
+            let has_unreliable_degradation = report.degradation.entries.iter().any(|entry| {
+                matches!(
+                    entry.reason.as_str(),
+                    degradation::CLOSURE_UNRELIABLE_RESIDUAL
+                        | degradation::CLOSURE_UNRELIABLE_ITERATIONS
+                        | degradation::CLOSURE_UNRELIABLE_PAIR_P95
+                )
+            });
+            prop_assert!(has_unreliable_degradation);
+        }
     }
 }
 
