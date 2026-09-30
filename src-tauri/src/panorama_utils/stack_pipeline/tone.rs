@@ -1695,6 +1695,8 @@ mod tests {
 
     #[test]
     fn harmonized_tiles_match_a_darker_neighbour_without_uncovered_bias() {
+        // `harmonize_tone_tiles` writes the process-wide run ledger.
+        let _run_scope = degradation::begin_run_scope();
         // Tile 0 covers world x ∈ [0, 1024); tile 1 covers [512, 1408) and is
         // 10% darker. Its first 128 columns (world 384..512, inside tile 0)
         // are uncovered zeros that must not bias the pair relation.
@@ -1749,6 +1751,7 @@ mod tests {
 
     #[test]
     fn only_accepted_station_relations_are_tone_pairs() {
+        let _run_scope = degradation::begin_run_scope();
         // Two overlapping tiles 20% apart, but no accepted Station_Relation
         // between them: their overlap is no tone evidence (需求 9.1).
         let (width, height) = (1_536u32, 640u32);
@@ -1787,6 +1790,7 @@ mod tests {
 
     #[test]
     fn an_accepted_relation_without_a_covered_overlap_is_recorded_without_evidence() {
+        let _run_scope = degradation::begin_run_scope();
         let left = shifted_tile(256, 256, 0.0, 1.0, 0..0);
         // The bounding boxes intersect on world x ∈ [192, 256), but tile 1 is
         // uncovered there: no doubly covered cell and so no retained sample.
@@ -1825,6 +1829,7 @@ mod tests {
 
     #[test]
     fn applied_correction_is_continuous_across_analysis_cells() {
+        let _run_scope = degradation::begin_run_scope();
         // A 30% step on a strong horizontal gradient. The correction is
         // `(gain − 1) · low + offset`; read from the analysis grid by nearest
         // cell it would step by ≈1e-3 every 16 px, bilinear it changes per
@@ -1894,6 +1899,7 @@ mod tests {
     // high-frequency residual (需求 9.2).
     #[test]
     fn synthetic_scan_grid_with_exposure_steps_meets_the_boundary_bound() {
+        let _run_scope = degradation::begin_run_scope();
         let (columns, rows) = (3usize, 2usize);
         let (tile_width, tile_height, step) = (1_024u32, 1_024u32, 512u32);
         let width = step * (columns as u32 - 1) + tile_width;

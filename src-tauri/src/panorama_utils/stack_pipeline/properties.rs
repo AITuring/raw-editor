@@ -101,6 +101,10 @@ proptest! {
     // **Validates: Requirements 9.2**
     #[test]
     fn property_49_tone_keeps_owner_high_frequency_residual(owner_seed in any::<u8>()) {
+        // `harmonize_tone_tiles` records tone degradations in the process-wide
+        // run ledger, so it must run inside the run scope like a real run.
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
         let width = 128u32;
         let height = 128u32;
         let level = 0.30 + f32::from(owner_seed % 80) / 400.0;
@@ -326,6 +330,9 @@ proptest! {
     // **Validates: Requirements 9.5, 9.6**
     #[test]
     fn property_51_tone_preserves_ownership_map(owner_seed in any::<u64>()) {
+        // Same run-scope requirement as P49: tone writes the run ledger.
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
         let width = 64u32;
         let height = 64u32;
         let owners = (0..width * height)

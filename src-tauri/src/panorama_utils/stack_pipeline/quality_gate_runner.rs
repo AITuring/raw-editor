@@ -1894,11 +1894,20 @@ mod tests {
                 .iter()
                 .all(|criterion| criterion.threshold.is_finite())
         );
-        // The process-wide degradation ledger is shared by parallel tests and
-        // by the surrounding render scope.  Quality_Gate's record-only
-        // contract is observable here through the unchanged pixels and full
-        // criterion record; ledger ownership is covered by its dedicated
-        // degradation tests and cannot be asserted from this parallel test.
+        // Record-only means the gate writes no ledger entry of its own.  Some
+        // tests still call ledger-writing production code without holding the
+        // run scope, so unrelated entries can appear here in a parallel run;
+        // only the gate's own vocabulary is asserted.
+        let gate_entries = degradation::run_ledger_snapshot()
+            .entries()
+            .iter()
+            .filter(|entry| {
+                entry.reason.starts_with("quality_gate")
+                    || degradation::UNMEASURABLE_REASONS.contains(&entry.reason)
+            })
+            .map(|entry| entry.reason.to_string())
+            .collect::<Vec<_>>();
+        assert!(gate_entries.is_empty(), "{gate_entries:?}");
     }
 
     #[test]
