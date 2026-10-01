@@ -69,6 +69,20 @@
 4. Wenyuan 的梯度/噪声失败和较大的色调边界色差都集中在机位 2 相关的区域。
 5. 15.8 阻止模式与 17.5 验收依赖以上各项。
 
+## 本轮执行记录（2026-10-02，基于 `addde054`）
+
+- T1：Station_Relations_Report 新增 `unmeasured_count`、`rejected_by_failure_stage`；候选保留
+  `predicted_overlap_area_px` 与显式 `model_fitted`；no-fit 路径不再伪造判据失败。84 张报告示例为
+  378 candidates、359 unmeasured、8 accepted，失败阶段统计见
+  `/private/tmp/raw-editor-gate/r3/langyuan84-run/stack-report-74fc1360-5104-41a4-8dc6-74ab5fdcd64b.json`。
+  提交 `ef4c2f67`。
+- T2：84 张只读副本运行 1093.30s，因 20 个不连通机位分量拒绝；PNG/元数据与逐对 SIFT/RANSAC
+  分析在 `/private/tmp/raw-editor-gate/r3/tiles/` 和
+  `/private/tmp/raw-editor-gate/r3/relations/langyuan84-relations.md`，先验布局误差 41/63、拓扑不一致
+  38/63、小重叠或稀疏 17/63。搜索半径和机位关系阈值未改。
+- T4：测试 ledger 写入口在 `cfg(test)` 下要求全局 run scope；41 个违规测试均补 scope，P49/P51 等记录模式断言恢复为
+  未过滤的 `entries().is_empty()`；串行全套测试三轮均 652 passed / 0 failed / 28 ignored。提交 `ef4c2f67`。
+
 ## Tasks
 
 - [x] 1. 阶段 0：一致性清理与观测骨架（无行为变更）
@@ -1537,6 +1551,7 @@ memory_threshold_source, physical_memory_bytes}`
       不在素材目录内、运行前后文件快照与 SHA-256 一致，并通过默认 FocusStack 管线写报告；
       84 张实跑尚未完成，保持未勾选。
     - 实跑记录（2026-09-30）：84 张只读副本运行 1262.71s 后因机位关系图 20 个不连通分量被拒绝；报告保留于 `/private/tmp/raw-editor-gate/r2/langyuan-84/stack-report-fa2f736a-4186-4b8b-8d06-41e6c1d68e65.json`，故本任务保持未勾选。
+    - 复核记录（2026-10-02）：用只读副本再次运行 1093.30s，仍因 20 个不连通分量拒绝；新报告与 T2 离线关系表在 `/private/tmp/raw-editor-gate/r3/`，故仍保持未勾选。
 
   - [ ]* 17.6 属性测试：诊断输出完整且与输出同坐标系
     - **Property 81: 诊断输出完整且与输出同坐标系**
