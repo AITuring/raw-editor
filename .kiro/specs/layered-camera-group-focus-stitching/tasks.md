@@ -80,6 +80,7 @@
   分析在 `/private/tmp/raw-editor-gate/r3/tiles/` 和
   `/private/tmp/raw-editor-gate/r3/relations/langyuan84-relations.md`，先验布局误差 41/63、拓扑不一致
   38/63、小重叠或稀疏 17/63。搜索半径和机位关系阈值未改。
+  复核说明：上述比例来自第一次 rendering-prior 埋点，不能作为 prior-free 后的最终根因或漏候选证据；最终报告包含全部 378 个候选、52 条 prior-free 记录和 6 条最终 fitted 提案，但没有提案连接最大权威簇 `{3,10,17,24}`，因此没有 prior repair。`10→12` 的粗模型最终因 polished support 不足被拒。详见离线报告的“最终报告对照”一节；本轮未修改先验、拓扑或任何设计数值。
 - T4：测试 ledger 写入口在 `cfg(test)` 下要求全局 run scope；41 个违规测试均补 scope，P49/P51 等记录模式断言恢复为
   未过滤的 `entries().is_empty()`；串行全套测试三轮均 652 passed / 0 failed / 28 ignored。提交 `ef4c2f67`。
 
