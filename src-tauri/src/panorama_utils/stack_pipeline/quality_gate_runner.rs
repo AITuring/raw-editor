@@ -1894,20 +1894,8 @@ mod tests {
                 .iter()
                 .all(|criterion| criterion.threshold.is_finite())
         );
-        // Record-only means the gate writes no ledger entry of its own.  Some
-        // tests still call ledger-writing production code without holding the
-        // run scope, so unrelated entries can appear here in a parallel run;
-        // only the gate's own vocabulary is asserted.
-        let gate_entries = degradation::run_ledger_snapshot()
-            .entries()
-            .iter()
-            .filter(|entry| {
-                entry.reason.starts_with("quality_gate")
-                    || degradation::UNMEASURABLE_REASONS.contains(&entry.reason)
-            })
-            .map(|entry| entry.reason.to_string())
-            .collect::<Vec<_>>();
-        assert!(gate_entries.is_empty(), "{gate_entries:?}");
+        // Record-only means the gate writes no ledger entry of its own.
+        assert!(degradation::run_ledger_snapshot().entries().is_empty());
     }
 
     #[test]

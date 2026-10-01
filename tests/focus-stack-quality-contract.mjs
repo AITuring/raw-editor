@@ -557,6 +557,21 @@ assert.match(
   'rejected relation defects must be aggregated by stable reason',
 );
 assert.match(
+  stackReport,
+  /pub unmeasured_count: usize[\s\S]*pub rejected_by_failure_stage: BTreeMap<String, u64>/,
+  'station relation reports must separate no-model candidates from criterion failures',
+);
+assert.match(
+  stackReport,
+  /predicted_overlap_area_px: f64[\s\S]*model_fitted: bool/,
+  'candidate diagnostics must retain the prior overlap and explicit model-fit evidence',
+);
+assert.match(
+  panorama,
+  /summarize_candidate_measurements\(\)/,
+  'the production station report must populate measurement summaries from candidates',
+);
+assert.match(
   panorama,
   /capture_sequence_weight_boost_never_reaches_station_membership/,
   'the capture-sequence weight boost must stay out of station membership',

@@ -238,6 +238,7 @@ proptest! {
     // **Validates: Requirements 9.3, 9.7, 9.9, 9.10**
     #[test]
     fn property_50_tone_solution_is_bounded(seed in any::<u8>()) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let source = 0.2 + f32::from(seed % 80) / 200.0;
         let samples = vec![tone::ToneSample {
             owner: [(source * 1.4).min(0.99); 3],
@@ -449,6 +450,7 @@ proptest! {
     // 的画布边界等于所有 Coverage_Mask 的覆盖联合边界。
     #[test]
     fn property_54_layered_canvas_is_coverage_union(translation_x in -24i32..=24, translation_y in -24i32..=24) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let (infos, mut homographies, sources) = ownership_contract_fixture();
         homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, f64::from(translation_y), 0.0, 0.0, 1.0));
         let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
@@ -501,6 +503,7 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 56: 输出 Ownership_Map 等于瓦片 ownership。
     #[test]
     fn property_56_layered_output_ownership_matches_tile(translation_x in -12i32..=28) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let (infos, mut homographies, sources) = ownership_contract_fixture();
         homographies.insert(1, Matrix3::new(1.0, 0.0, f64::from(translation_x), 0.0, 1.0, 4.0, 0.0, 0.0, 1.0));
         let rendered = render_layered_ownership(&infos, &homographies, &sources).expect("compositor render");
@@ -1705,6 +1708,7 @@ proptest! {
     // **Validates: Requirements 14.6**
     #[test]
     fn stack_output_is_reproducible_byte_for_byte(scan in arb_artwork_scan_grid()) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         prop_assume!(scan.station_count() >= 2);
 
         let reference = run_synthetic_stack(&scan);
@@ -3218,6 +3222,7 @@ proptest! {
         access in prop::collection::vec(any::<usize>(), 0..6),
         budget_quarters in 1u64..=4,
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let directory = TempDir::new().expect("temp dir");
         prop_assert_eq!(
             VirtualTileStore::new(directory.path()).limit_bytes(),
@@ -4899,6 +4904,7 @@ proptest! {
         scan in arb_artwork_focus_bracket(),
         probe in any::<usize>(),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         prop_assert_eq!(
             intra_station::INTRA_STATION_ANCHOR_SHARPNESS_TIE,
             REQUIRED_ANCHOR_SHARPNESS_TIE
@@ -5306,6 +5312,7 @@ proptest! {
     fn local_match_acceptance_is_exactly_the_three_requirement_gates(
         pair in test_support::arb_intra_station_layer_pair(),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         // The measured constants of task 7.5 are the requirement's numbers, and
         // the patch geometry they sit on is the one 需求 2.3 allows.
         prop_assert_eq!(
@@ -5575,6 +5582,7 @@ proptest! {
     fn local_refinement_is_reverted_exactly_when_it_does_not_improve(
         pair in test_support::arb_intra_station_verdict_pair(),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         prop_assert_eq!(
             intra_station::INTRA_STATION_MIN_BASELINE_SAMPLES,
             REQUIRED_MIN_BASELINE_SAMPLES
@@ -5730,6 +5738,7 @@ proptest! {
     fn inlier_area_coverage_is_the_union_over_passes_and_decides_the_failure(
         pair in test_support::arb_intra_station_verdict_pair(),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         prop_assert_eq!(
             intra_station::INTRA_STATION_MIN_INLIER_AREA_COVERAGE,
             REQUIRED_MIN_INLIER_AREA_COVERAGE
@@ -7574,7 +7583,6 @@ fn render_station_tile(
     let _property_scope = PROPERTY_RUN_SCOPE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
@@ -7644,6 +7652,7 @@ proptest! {
         seed in any::<u64>(),
         detail in 0.05f64..0.6,
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let case = SINGLE_FRAME_CURSOR.fetch_add(1, Ordering::Relaxed);
         let mut branches = 0usize;
 
@@ -9124,6 +9133,7 @@ proptest! {
         seed in any::<u64>(),
         projective_draw in any::<bool>(),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let case = SOURCE_OWNERSHIP_CURSOR.fetch_add(1, Ordering::Relaxed);
         // Rotate deterministically so the final run necessarily sees both geometry branches even
         // if proptest's random booleans happen to cluster.
@@ -10197,6 +10207,7 @@ proptest! {
     // **Validates: Requirements 6.5, 6.9, 6.10**
     #[test]
     fn property_30_station_relation_defects_map_to_exact_reasons(seed in any::<u64>()) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access;
 
         let mut masks = (0u16..=u8::MAX as u16).map(|mask| mask as u8).collect::<Vec<_>>();
@@ -10246,6 +10257,7 @@ proptest! {
         width in 128u32..768,
         height in 128u32..768,
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access;
 
         let signed = |shift: u32, magnitude: f64| {
@@ -10439,6 +10451,7 @@ proptest! {
     // **Validates: Requirements 7.2**
     #[test]
     fn property_34_all_accepted_relations_participate_in_closure(seed in any::<u64>()) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access::{self, ClosureRelationView};
 
         let rows = vec![0, 0, 1, 1];
@@ -10928,6 +10941,7 @@ proptest! {
     // **Validates: Requirements 7.7, 7.9**
     #[test]
     fn property_39_unreliable_closure_preserves_tree_pose_bits(seed in any::<u64>()) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access::{self, ClosureRelationView};
 
         let signed_zero = if seed & 1 == 0 { 0.0 } else { -0.0 };
@@ -11008,6 +11022,7 @@ proptest! {
         seed in any::<u64>(),
         station_count in 2usize..10,
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::station_relation_test_access::{self, ClosureRelationView};
 
         let mut state = seed ^ 0x40d7_10c1_05e5_7eed;
@@ -11225,6 +11240,7 @@ proptest! {
         global in prop::collection::vec(0.0f64..20.0, 9),
         residual in prop::collection::vec(0.0f64..20.0, 9),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use super::report::WorldRect;
         use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion};
         let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 192.0, height: 192.0 }, 4.0);
@@ -11320,6 +11336,7 @@ proptest! {
             0..16,
         ),
     ) {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use super::report::{WorldPoint, WorldRect};
         use super::residual_warp::{OverlapResidual, WarpObservation, WarpRegion, RESIDUAL_WARP_MIN_VERIFIED_POINTS};
         let overlap = OverlapResidual::new(0, 1, WorldRect { left: 0.0, top: 0.0, width: 192.0, height: 192.0 }, 3.01);
@@ -12491,6 +12508,20 @@ proptest! {
         let value: Value = serde_json::from_str(&encoded).expect("stack report json");
         for field in STACK_REPORT_TOP_LEVEL_FIELDS {
             prop_assert!(value.get(*field).is_some(), "missing Stack_Report field {field}");
+        }
+        let station_relations = value
+            .get("station_relations")
+            .and_then(Value::as_object)
+            .expect("station_relations schema object");
+        prop_assert!(station_relations.get("unmeasured_count").is_some());
+        prop_assert!(station_relations.get("rejected_by_failure_stage").is_some());
+        if let Some(candidate) = station_relations
+            .get("candidates")
+            .and_then(Value::as_array)
+            .and_then(|candidates| candidates.first())
+        {
+            prop_assert!(candidate.get("predicted_overlap_area_px").is_some());
+            prop_assert!(candidate.get("model_fitted").is_some());
         }
         let round_trip: StackReport = serde_json::from_str(&encoded).expect("schema round trip");
         // JSON is the wire contract.  Comparing the re-serialized value avoids

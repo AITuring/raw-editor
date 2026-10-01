@@ -538,6 +538,7 @@ mod tests {
             origin_x in -20i64..20,
             origin_y in -20i64..20,
         ) {
+            let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
             let side = 32u32;
             let (ownership, stations, coverage, confidence) = planes(side, 3);
             let roi = DiagnosticRoi { left, top, width, height };
@@ -699,6 +700,7 @@ mod tests {
 
     #[test]
     fn a_missing_directory_is_a_diagnostics_write_failure_naming_it() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let (ownership, stations, coverage, confidence) = planes(16, 2);
         let directory = Path::new("/nonexistent/raw-editor-diagnostics");
         let roi = DiagnosticRoi {
@@ -789,6 +791,7 @@ mod tests {
 
     #[test]
     fn a_failed_diagnostic_write_stops_later_writes_and_names_the_directory() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let root = tempfile::tempdir().expect("temporary directory");
         let directory = root.path().join("diagnostics");
         std::fs::create_dir(&directory).expect("create");

@@ -1108,6 +1108,8 @@ fn sample_candidate_record() -> report::StationRelationCandidateRecord {
     report::StationRelationCandidateRecord {
         left: 0,
         right: 1,
+        predicted_overlap_area_px: 12_345.0,
+        model_fitted: true,
         evidence_kind: report::StationRelationEvidenceKind::VirtualTile,
         grid_probe_count: 120,
         measurable_patch_count: 90,
@@ -1146,6 +1148,8 @@ fn station_relation_records_deserialise_without_checkpoint_ten_fields() {
     let mut legacy = value;
     let object = legacy.as_object_mut().unwrap();
     for key in [
+        "predicted_overlap_area_px",
+        "model_fitted",
         "pyramid_factors",
         "measurement_factor",
         "seed",
@@ -1158,6 +1162,8 @@ fn station_relation_records_deserialise_without_checkpoint_ten_fields() {
     assert_eq!(
         parsed,
         report::StationRelationCandidateRecord {
+            predicted_overlap_area_px: 0.0,
+            model_fitted: false,
             pyramid_factors: Vec::new(),
             measurement_factor: 0,
             seed: String::new(),
@@ -1558,6 +1564,7 @@ fn virtual_tile_polished_station_match_recovers_a_perturbed_seed_on_noisy_planes
 
 #[test]
 fn virtual_tile_solver_rechecks_requirement_6_8_on_covered_pixels_only() {
+    let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
     // Tile 1 shows tile 0 shifted by (40, 6) but carries a zero-valued,
     // uncovered band x ∈ [150, 250) inside the overlap.
     let (width, height) = (400u32, 300u32);
@@ -1903,6 +1910,7 @@ fn covered_overlap_support_ignores_the_uncovered_part_of_the_rectangle_overlap()
 
 #[test]
 fn virtual_tile_solver_measures_requirement_6_4_on_the_doubly_covered_overlap() {
+    let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
     // Tile 1 shows tile 0 shifted by (40, 6) everywhere, but tile 0 is only
     // covered for x < 220: half of the rectangle overlap holds no tile content.
     let (width, height) = (400u32, 300u32);

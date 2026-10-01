@@ -22,6 +22,8 @@
 use std::cell::Cell;
 use std::io;
 use std::path::Path;
+#[cfg(test)]
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::thread;
@@ -631,6 +633,8 @@ static RUN_LEDGER: Mutex<DegradationLedger> = Mutex::new(DegradationLedger::new(
 /// sinks predate concurrent runs and are intentionally kept signature-free;
 /// one guard now makes reset -> render -> snapshot an atomic run transaction.
 static RUN_SCOPE: Mutex<()> = Mutex::new(());
+#[cfg(test)]
+static RUN_SCOPE_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// The image-stack command increments this generation for every new request.
 /// A run that already owns `RUN_SCOPE` observes a newer generation at its
 /// cooperative checkpoints and exits instead of holding the process-wide sinks
@@ -643,6 +647,13 @@ thread_local! {
 
 pub(crate) struct RunScope {
     _guard: MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for RunScope {
+    fn drop(&mut self) {
+        RUN_SCOPE_ACTIVE.store(false, Ordering::Release);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -670,6 +681,8 @@ pub(crate) fn begin_run_scope_for_generation(
                     return Err(RunScopeCancelled);
                 }
                 OWNED_RUN_GENERATION.with(|owned| owned.set(generation));
+                #[cfg(test)]
+                RUN_SCOPE_ACTIVE.store(true, Ordering::Release);
                 return Ok(RunScope { _guard: guard });
             }
             Err(TryLockError::Poisoned(poisoned)) => {
@@ -680,6 +693,8 @@ pub(crate) fn begin_run_scope_for_generation(
                     return Err(RunScopeCancelled);
                 }
                 OWNED_RUN_GENERATION.with(|owned| owned.set(generation));
+                #[cfg(test)]
+                RUN_SCOPE_ACTIVE.store(true, Ordering::Release);
                 return Ok(RunScope { _guard: guard });
             }
             Err(TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(5)),
@@ -719,6 +734,15 @@ fn generation_changed_for(owned_generation: usize, active_generation: usize) -> 
     owned_generation != 0 && active_generation != owned_generation
 }
 
+#[cfg(test)]
+#[track_caller]
+fn assert_run_scope() {
+    assert!(
+        RUN_SCOPE_ACTIVE.load(Ordering::Acquire),
+        "run ledger write requires degradation::begin_run_scope()"
+    );
+}
+
 fn with_run_ledger<T>(body: impl FnOnce(&mut DegradationLedger) -> T) -> T {
     let mut guard = RUN_LEDGER
         .lock()
@@ -728,13 +752,19 @@ fn with_run_ledger<T>(body: impl FnOnce(&mut DegradationLedger) -> T) -> T {
 
 /// Starts a fresh observation window. Called once per stitching run before any
 /// diagnostic point can fire.
+#[cfg_attr(test, track_caller)]
 pub fn reset_run_ledger() {
+    #[cfg(test)]
+    assert_run_scope();
     with_run_ledger(DegradationLedger::clear);
 }
 
 /// Records an active degraded or rejected path of the current run. Parallel to
 /// the existing `println!` diagnostics; it never affects control flow.
+#[cfg_attr(test, track_caller)]
 pub fn record_run_degradation(reason: &'static str, detail: Value) {
+    #[cfg(test)]
+    assert_run_scope();
     with_run_ledger(|ledger| ledger.record(reason, detail));
 }
 

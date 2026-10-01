@@ -1435,6 +1435,7 @@ mod tests {
 
     #[test]
     fn fewer_than_1024_samples_keep_identity() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let samples = vec![
             ToneSample {
                 owner: [0.5; 3],

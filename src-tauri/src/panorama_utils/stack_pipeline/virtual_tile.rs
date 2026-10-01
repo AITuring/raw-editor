@@ -2122,6 +2122,7 @@ mod tests {
 
     #[test]
     fn exceeding_the_budget_evicts_whole_entries_oldest_access_first() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let directory = TempDir::new().expect("temp dir");
         // A budget of one entry, so writing the third must leave exactly one.
         let store = VirtualTileStore::new(directory.path()).with_limit_bytes(1);
@@ -2164,6 +2165,7 @@ mod tests {
 
     #[test]
     fn eviction_never_leaves_a_partial_entry_behind() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let directory = TempDir::new().expect("temp dir");
         let store = VirtualTileStore::new(directory.path()).with_limit_bytes(1);
         let inputs = sample_inputs();

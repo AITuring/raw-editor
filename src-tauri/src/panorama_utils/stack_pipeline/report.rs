@@ -602,6 +602,13 @@ pub(crate) struct ResidualModelStageRecord {
 pub(crate) struct StationRelationCandidateRecord {
     pub left: usize,
     pub right: usize,
+    /// Geometric overlap predicted by the rendering prior, in left-tile
+    /// analysis pixels at `measurement_factor`, at the search-radius calculation.
+    #[serde(default)]
+    pub predicted_overlap_area_px: f64,
+    /// Whether the diagnostic measurement level fitted a model from pixels.
+    #[serde(default)]
+    pub model_fitted: bool,
     /// Candidate provenance is explicit even when no model could be fitted.
     pub evidence_kind: StationRelationEvidenceKind,
     /// Deterministic fused-pixel grid locations considered inside predicted overlap.
@@ -682,8 +689,39 @@ pub(crate) struct StationRelationsReport {
     pub rejected_count: usize,
     /// Rejection counts keyed by stable failure identifier (requirement 6.10).
     pub rejected_by_reason: BTreeMap<String, u64>,
+    /// Candidates for which no residual model could be fitted.
+    #[serde(default)]
+    pub unmeasured_count: usize,
+    /// Rejected candidates grouped by the matcher stage that stopped them.
+    #[serde(default)]
+    pub rejected_by_failure_stage: BTreeMap<String, u64>,
     pub discarded_single_layer_evidence: Vec<DiscardedEvidenceRecord>,
     pub connectivity: ConnectivityReport,
+}
+
+impl StationRelationsReport {
+    /// Summarize the final candidate attempt independently of the measured
+    /// Requirement 6 rejection reasons. A fitted model can still fail its
+    /// support or orientation gate, or a later solver acceptance criterion.
+    pub(crate) fn summarize_candidate_measurements(&mut self) {
+        self.unmeasured_count = 0;
+        self.rejected_by_failure_stage.clear();
+        for candidate in &self.candidates {
+            if !candidate.model_fitted {
+                self.unmeasured_count += 1;
+            }
+            let accepted = self.accepted.iter().any(|relation| {
+                (relation.left == candidate.left && relation.right == candidate.right)
+                    || (relation.left == candidate.right && relation.right == candidate.left)
+            });
+            if !accepted {
+                *self
+                    .rejected_by_failure_stage
+                    .entry(candidate.failure_stage.clone())
+                    .or_default() += 1;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

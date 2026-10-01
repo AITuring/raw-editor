@@ -370,6 +370,7 @@ mod tests {
             width in 1u64..600_000,
             height in 1u64..600_000,
         ) {
+            let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
             let rejection = reject_oversized_canvas(width, height);
             proptest::prop_assert_eq!(
                 rejection.is_some(),
@@ -390,6 +391,7 @@ mod tests {
 
     #[test]
     fn canvas_limit_boundary_is_inclusive() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         assert!(reject_oversized_canvas(MAX_OUTPUT_CANVAS_LONG_SIDE, 1).is_none());
         assert!(reject_oversized_canvas(1, MAX_OUTPUT_CANVAS_LONG_SIDE).is_none());
         assert!(reject_oversized_canvas(MAX_OUTPUT_CANVAS_LONG_SIDE + 1, 1).is_some());
@@ -398,6 +400,7 @@ mod tests {
 
     #[test]
     fn layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         use crate::panorama_stitching::ImageInfo;
         use crate::panorama_utils::stitching;
         // An 8 px tile placed at 40,000× spans 320,000 world pixels.

@@ -5115,6 +5115,7 @@ mod tests {
     /// silently and produced output byte identical to a run without it.
     #[test]
     fn streaming_intra_station_refinement_measures_across_tiles() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let width = 1_200u32;
         let height = 256u32;
         let base = refine_texture(width, height);
@@ -5310,6 +5311,7 @@ mod tests {
 
     #[test]
     fn enclosed_sharp_tile_replaces_blur_without_losing_coverage() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         // Four times the old 160x120 fixture, with the candidate a 320x320 crop
         // instead of an 80x80 one.  On the small canvas the native control
         // points had to sit at least one 57x57 patch away from the layer edge,

@@ -8182,6 +8182,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     .collect(),
                             });
                             station_relations.candidates = tile_relation_candidates.clone();
+                            station_relations.summarize_candidate_measurements();
                             station_relations.prior_repairs = prior_repair_records.clone();
                             if let Some(recorder) = stack_report.as_ref() {
                                 recorder.update(|report| {
@@ -12286,32 +12287,15 @@ fn station_relation_is_accepted_with_report(
     false
 }
 
-/// Record a topology candidate for which descriptor/patch matching produced no
-/// measured model. Infinity is used internally for unavailable errors and
-/// ratios; report serialization remains the existing stable reason counters.
+/// A topology candidate without a measured model was rejected, but no
+/// Requirement 6 acceptance criterion was measured. Its matcher diagnostics
+/// supply the separate unmeasured and failure-stage summaries at publication.
 fn record_station_relation_no_fit(
-    left: usize,
-    right: usize,
+    _left: usize,
+    _right: usize,
     report: &mut stack_report::StationRelationsReport,
 ) {
-    let measurements = StationRelationMeasurements {
-        inliers: 0,
-        median_error_px: f64::INFINITY,
-        scale_ratio: f64::INFINITY,
-        spatial_support: 0.0,
-        low_frequency_mean_relative_difference: f64::INFINITY,
-        edge_strength_ratio: f64::INFINITY,
-        median_edge_orientation_difference_degrees: f64::INFINITY,
-        // No fitted quad exists; avoid claiming a contradictory fold in
-        // addition to the explicit zero/unknown evidence reasons.
-        preserves_convex_orientation: true,
-    };
-    let accepted =
-        station_relation_is_accepted_with_report(left, right, f64::INFINITY, &measurements, report);
-    debug_assert!(
-        !accepted,
-        "zero-evidence station candidate cannot be accepted"
-    );
+    report.rejected_count += 1;
 }
 
 fn polygon_signed_double_area(points: &[Point2<f64>]) -> f64 {
@@ -13623,6 +13607,8 @@ fn virtual_tile_descriptor_guided_station_match(
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
         left,
         right,
+        predicted_overlap_area_px: 0.0,
+        model_fitted: false,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
         grid_probe_count: 0,
         measurable_patch_count: 0,
@@ -13690,6 +13676,7 @@ fn virtual_tile_descriptor_guided_station_match(
     ) else {
         return (None, diagnostic);
     };
+    diagnostic.predicted_overlap_area_px = predicted_overlap_area;
 
     let left_eligible = left_tile
         .features
@@ -13864,6 +13851,7 @@ fn virtual_tile_descriptor_guided_station_match(
     else {
         return (None, diagnostic);
     };
+    diagnostic.model_fitted = true;
     let seed_points = seed_inliers
         .iter()
         .map(|&index| candidate_points[index])
@@ -14786,6 +14774,8 @@ fn virtual_tile_direct_station_match_with_structure(
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
         left,
         right,
+        predicted_overlap_area_px: 0.0,
+        model_fitted: false,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
         grid_probe_count: 0,
         measurable_patch_count: 0,
@@ -14851,6 +14841,7 @@ fn virtual_tile_direct_station_match_with_structure(
     ) else {
         return (None, diagnostic);
     };
+    diagnostic.predicted_overlap_area_px = predicted_overlap_area;
     let grid = virtual_tile_direct_grid_points(overlap_bounds);
     diagnostic.grid_probe_count = grid.len();
     diagnostic.failure_stage = "insufficient_grid_probes".to_string();
@@ -15090,6 +15081,7 @@ fn virtual_tile_direct_station_match_with_structure(
     let Some(fit) = model.fit else {
         return (None, diagnostic);
     };
+    diagnostic.model_fitted = true;
     diagnostic.residual_model = fit.model.to_string();
     let refined = fit.measured_homography;
 
@@ -16018,6 +16010,11 @@ fn virtual_tile_polished_station_match(
     let mut relation = normalized_homography(&(from_native * seed_native * to_native))?;
     let mut counts = VirtualTilePolishCounts::default();
     let mut fitted = None;
+    // Preserve a model fitted by a preceding coarse level: a later polish
+    // failure is a measured candidate with an insufficient final refinement,
+    // not an unmeasured pair.
+    let had_model = diagnostic.model_fitted;
+    diagnostic.model_fitted = had_model;
     diagnostic.residual_model = "polished_projective".to_string();
     for search in VIRTUAL_TILE_POLISH_SEARCH_PASSES {
         diagnostic.failure_stage = "no_predicted_overlap".to_string();
@@ -16026,6 +16023,13 @@ fn virtual_tile_polished_station_match(
             left_plane.dimensions(),
             right_plane.dimensions(),
         )?;
+        diagnostic.predicted_overlap_area_px = station_relation_overlap_area(
+            &relation,
+            left_plane.dimensions(),
+            right_plane.dimensions(),
+            true,
+        )
+        .unwrap_or(0.0);
         let correspondences = virtual_tile_polish_correspondences(
             &left_plane.alignment_image,
             left_coverage,
@@ -16047,6 +16051,7 @@ fn virtual_tile_polished_station_match(
         diagnostic.failure_stage = "polished_fit_failed".to_string();
         let (homography, inliers) =
             virtual_tile_polish_fit(&correspondences, threshold, left_plane.dimensions())?;
+        diagnostic.model_fitted = true;
         relation = homography;
         fitted = Some((homography, inliers, correspondences));
     }
@@ -22653,6 +22658,7 @@ mod alignment_tests {
 
     #[test]
     fn compact_three_station_focus_run_executes_strict_station_solver() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let capture_numbers = [1000, 1009, 1001, 1008, 1002, 1007, 1003, 1006, 1004, 1005];
         let images = capture_numbers
             .iter()
@@ -23754,6 +23760,7 @@ mod alignment_tests {
 
     #[test]
     fn virtual_tile_solver_reads_a_key_direction_relation_in_either_content_direction() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         // Tile 1 shows tile 0's content shifted by `shift`: left p ↔ right p − shift.
         let (side, shift) = (1_000u32, nalgebra::Vector2::new(40.0, 6.0));
         let texture = |x: f64, y: f64| {
@@ -24326,7 +24333,8 @@ mod alignment_tests {
     }
 
     #[test]
-    fn virtual_tile_no_fit_candidate_reports_stable_reasons() {
+    fn virtual_tile_no_fit_candidate_reports_unmeasured_without_inventing_reasons() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let tiles = synthetic_virtual_tiles(2);
         let initial = tiles
             .iter()
@@ -24346,21 +24354,28 @@ mod alignment_tests {
         assert!(solved.is_empty());
         assert_eq!(report.accepted.len(), 0);
         assert_eq!(report.rejected_count, 1);
-        for reason in [
-            degradation::STATION_RELATION_LOW_INLIERS,
-            degradation::STATION_RELATION_HIGH_REPROJECTION_ERROR,
-            degradation::STATION_RELATION_SCALE_OUT_OF_RANGE,
-            degradation::STATION_RELATION_LOW_SPATIAL_SUPPORT,
-            degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH,
-            degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH,
-            degradation::STATION_RELATION_EDGE_ORIENTATION_MISMATCH,
-        ] {
-            assert_eq!(report.rejected_by_reason.get(reason), Some(&1));
-        }
+        assert!(report.rejected_by_reason.is_empty());
+        let (_, diagnostic) = virtual_tile_direct_station_match(
+            0,
+            1,
+            &[],
+            &[],
+            &HashMap::new(),
+            STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+        );
+        report.candidates = vec![diagnostic];
+        report.summarize_candidate_measurements();
+        assert_eq!(report.unmeasured_count, 1);
+        assert_eq!(
+            report.rejected_by_failure_stage,
+            BTreeMap::from([("missing_input".to_string(), 1)])
+        );
+        assert!(report.rejected_by_reason.is_empty());
     }
 
     #[test]
     fn default_two_stage_flow_solves_ten_sources_as_three_fused_stations() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let images = (0..10)
             .map(|index| focus_textured_test_image(index, &format!("source-{index}.raw")))
             .collect::<Vec<_>>();
@@ -24427,6 +24442,7 @@ mod alignment_tests {
 
     #[test]
     fn true_virtual_tile_disconnection_rejects_before_composition() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let tiles = synthetic_virtual_tiles(3);
         let tile_matches = HashMap::from([((0, 1), observed_translation_match(0.0, 0.0, 36))]);
         let initial = tiles
@@ -24487,6 +24503,7 @@ mod alignment_tests {
 
     #[test]
     fn disconnected_station_graph_rejects_full_mosaic_and_reports_components() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         degradation::reset_run_ledger();
         let mut images = vec![
             focus_test_image(0, "/synthetic/station-a-1.nef"),
@@ -24577,6 +24594,7 @@ mod alignment_tests {
 
     #[test]
     fn focus_capture_group_consensus_rejects_a_single_conflicting_edge() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
             focus_test_image(1, "DSC_1002.NEF"),
@@ -24636,6 +24654,7 @@ mod alignment_tests {
 
     #[test]
     fn focus_capture_group_solver_keeps_multi_layer_coarse_consensus() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
             focus_test_image(1, "DSC_1002.NEF"),
@@ -24686,6 +24705,7 @@ mod alignment_tests {
 
     #[test]
     fn focus_capture_group_solver_rejects_out_of_contract_station_scale() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let mut images = vec![
             focus_test_image(0, "DSC_1001.NEF"),
             focus_test_image(1, "DSC_1002.NEF"),
@@ -25001,6 +25021,7 @@ mod alignment_tests {
 
     #[test]
     fn closure_without_cycle_skips_joint_solve_and_preserves_tree_bits() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let images = (0..3)
             .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
             .collect::<Vec<_>>();
@@ -25053,6 +25074,7 @@ mod alignment_tests {
 
     #[test]
     fn focus_group_projective_seed_keeps_large_residual_relation_in_closure_report() {
+        let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         let images = (0..3)
             .map(|index| focus_test_image(index, &format!("capture-{index}.NEF")))
             .collect::<Vec<_>>();
