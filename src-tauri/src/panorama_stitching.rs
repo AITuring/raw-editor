@@ -16012,9 +16012,7 @@ fn virtual_tile_polished_station_match(
     let mut fitted = None;
     // Preserve a model fitted by a preceding coarse level: a later polish
     // failure is a measured candidate with an insufficient final refinement,
-    // not an unmeasured pair.
-    let had_model = diagnostic.model_fitted;
-    diagnostic.model_fitted = had_model;
+    // not an unmeasured pair. The diagnostic already carries that flag.
     diagnostic.residual_model = "polished_projective".to_string();
     for search in VIRTUAL_TILE_POLISH_SEARCH_PASSES {
         diagnostic.failure_stage = "no_predicted_overlap".to_string();
