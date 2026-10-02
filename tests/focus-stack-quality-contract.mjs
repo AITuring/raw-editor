@@ -1230,7 +1230,9 @@ for (const variable of [
   assert.ok(entry >= 0, 'the Tile_Compositor entry must exist');
   const body = stitching.slice(entry, stitching.indexOf('\n}\n', entry));
   assert.doesNotMatch(body, /std::env::var/, 'the Tile_Compositor entry must not read std::env::var (任务 13.7)');
-  assert.match(body, /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/);
+  assert.match(body, /ownership_compositor_switches\(finishing\)/, 'the entry must use the production switch resolver');
+  const resolver = stitching.slice(stitching.indexOf('fn ownership_compositor_switches'));
+  assert.match(resolver, /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/, 'the resolver must keep layered defaults disabled');
 }
 // 任务 13.6 / 需求 10.11: the supported canvas limit is a named constant and a
 // rejection is never retried by the fallback renderer.
