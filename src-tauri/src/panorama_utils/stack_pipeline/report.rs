@@ -14,8 +14,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -1937,6 +1937,52 @@ mod tests {
                 serde_json::to_value(variant).expect("serialization must succeed"),
                 Value::from(identifier)
             );
+        }
+    }
+
+    #[test]
+    fn recorder_publishes_component_values_on_every_terminating_path() {
+        // Property 93 is about the report emitted by the component, not only
+        // serde round-tripping an arbitrary in-memory value.  Exercise the
+        // recorder's actual terminal write for each result and verify that the
+        // selected path, Quality_Gate result and terminal timestamps survive
+        // the disk boundary together.
+        for (result, selected_path) in [
+            (StackRunResult::Success, SelectedPath::LayeredVirtualTile),
+            (
+                StackRunResult::Rejected,
+                SelectedPath::LegacySingleLayerMosaic,
+            ),
+            (StackRunResult::Cancelled, SelectedPath::SingleStation),
+        ] {
+            let directory = tempfile::tempdir().expect("report directory");
+            let recorder = StackReportRecorder::isolated(
+                "property-93-terminal",
+                Some(directory.path().to_path_buf()),
+            );
+            recorder.set_selected_path(selected_path);
+            recorder.set_result(result);
+            recorder.update(|report| {
+                report.quality_gate.verdict = QualityGateVerdict::Pass;
+                report.quality_gate.criteria = vec![QualityGateCriterionRecord {
+                    name: "effective_pixel_count".to_string(),
+                    verdict: QualityGateVerdict::Pass,
+                    measurable_count: 1,
+                    ..Default::default()
+                }];
+            });
+
+            let path = recorder
+                .write_once()
+                .expect("terminal report must be written");
+            let encoded = fs::read_to_string(path).expect("terminal report is readable");
+            let published: StackReport =
+                serde_json::from_str(&encoded).expect("published report schema");
+            assert_eq!(published.selected_path, selected_path);
+            assert_eq!(published.degradation.result, result);
+            assert_eq!(published.quality_gate.verdict, QualityGateVerdict::Pass);
+            assert_eq!(published.quality_gate.criteria.len(), 1);
+            assert!(published.finished_at_epoch_ms >= published.started_at_epoch_ms);
         }
     }
 

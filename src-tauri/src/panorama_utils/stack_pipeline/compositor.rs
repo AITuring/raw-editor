@@ -388,6 +388,120 @@ mod tests {
         );
     }
 
+    #[test]
+    fn default_layered_entry_runs_group_tone_and_quality_gate_components() {
+        // Exercise the same production component entry points selected by a
+        // fresh install: the layered path, group Tone_Harmonizer and the
+        // record-only Quality_Gate.  Keeping this fixture synthetic avoids a
+        // RAW decode while still asserting the returned values that the
+        // pipeline publishes to Stack_Report.
+        use crate::panorama_utils::stack_pipeline::report::{QualityGateVerdict, ToneStatus};
+        use crate::panorama_utils::stack_pipeline::{
+            degradation, quality_gate, quality_gate_runner, residual_warp, tone,
+        };
+        use image::{GrayImage, Luma, Rgb, Rgb32FImage};
+        use nalgebra::Matrix3;
+
+        let _run_scope = degradation::begin_run_scope();
+        let recorder = StackReportRecorder::isolated("default-layered-components", None);
+        let selection = select_and_record_run_path(
+            Some(2),
+            StackCompositorChoice::resolve(None),
+            Some(&recorder),
+        );
+        assert_eq!(selection.selected_path, SelectedPath::LayeredVirtualTile);
+        assert!(selection.use_virtual_tiles);
+
+        let (width, height) = (1_536u32, 512u32);
+        let low_size = (64, 32);
+        let tile = |station_index, owner_id, origin, value| tone::ToneTile {
+            station_index,
+            owner_id,
+            low: Rgb32FImage::from_pixel(low_size.0, low_size.1, Rgb([value; 3])),
+            validity: GrayImage::from_pixel(low_size.0, low_size.1, Luma([255])),
+            world_origin: (origin, 0.0),
+            world_size: (1_024.0, 512.0),
+            world_stride: 16.0,
+            cell_mean: Rgb32FImage::from_pixel(low_size.0, low_size.1, Rgb([value; 3])),
+            cell_coverage: vec![1.0; low_size.0 as usize * low_size.1 as usize],
+        };
+        let tiles = [tile(0, 1, 0.0, 0.40), tile(1, 2, 512.0, 0.36)];
+        let owners = (0..height)
+            .flat_map(|_| (0..width).map(|x| if x < 768 { 1u16 } else { 2u16 }))
+            .collect::<Vec<_>>();
+        let mut panorama = Rgb32FImage::from_fn(width, height, |x, _| {
+            Rgb([if x < 768 { 0.40 } else { 0.36 }; 3])
+        });
+        let tone_report = tone::harmonize_tone_tiles(
+            &mut panorama,
+            &owners,
+            width,
+            &tiles,
+            &GrayImage::from_pixel(width, height, Luma([255])),
+            &[(0, 1)],
+        );
+        assert_eq!(tone_report.status, ToneStatus::Applied);
+        assert_eq!(tone_report.tiles.len(), 2);
+
+        let (qg_width, qg_height) = (1_024u32, 1_024u32);
+        let output = Rgb32FImage::from_fn(qg_width, qg_height, |x, y| {
+            let value = 0.2 + 0.3 * ((x + y) % 37) as f32 / 36.0;
+            Rgb([value, value * 0.9, value * 0.8])
+        });
+        let coverage = GrayImage::from_pixel(qg_width, qg_height, Luma([255]));
+        let ownership = vec![1u16; (qg_width * qg_height) as usize];
+        let confidence = vec![0.8f32; ownership.len()];
+        let textured = vec![255u8; ownership.len()];
+        let shortfall = vec![0u8; ownership.len()];
+        let disagreement = vec![0u8; ownership.len()];
+        let source = quality_gate_runner::QualitySource {
+            owner: 1,
+            path: "synthetic.raw".to_string(),
+            geometry: quality_gate::SourceGeometry {
+                member_to_anchor: Matrix3::identity(),
+                tile_to_world: Matrix3::identity(),
+                station_id: 0,
+            },
+            dimensions: (qg_width, qg_height),
+        };
+        let residual = residual_warp::ResidualWarp::new();
+        let sources = [source];
+        let input = quality_gate_runner::QualityGateInput {
+            output: &output,
+            coverage: &coverage,
+            ownership: &ownership,
+            confidence: &confidence,
+            textured: Some(&textured),
+            owner_shortfall: Some(&shortfall),
+            owner_disagreement: Some(&disagreement),
+            unresolved_pixel_count: 0,
+            world_origin: (0.0, 0.0),
+            sources: &sources,
+            residual: &residual,
+            acceptance_render_scale: 1.0,
+            final_sharpen_amount: 0.0,
+        };
+        let quality_report =
+            quality_gate_runner::run_quality_gate(&input, &mut |_source| Ok(output.clone()));
+        assert_eq!(
+            quality_report.criteria.len(),
+            quality_gate::QUALITY_CRITERIA.len()
+        );
+        assert_ne!(quality_report.verdict, QualityGateVerdict::NotRun);
+
+        recorder.update(|report| {
+            report.tone = tone_report.clone();
+            report.quality_gate = quality_report.clone();
+        });
+        let published = recorder.snapshot();
+        assert_eq!(published.selected_path, SelectedPath::LayeredVirtualTile);
+        assert_eq!(published.tone.status, ToneStatus::Applied);
+        assert_eq!(
+            published.quality_gate.criteria.len(),
+            quality_gate::QUALITY_CRITERIA.len()
+        );
+    }
+
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig {
             cases: 100,
