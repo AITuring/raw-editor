@@ -685,6 +685,29 @@ fn focus_overlap_quality_on_coverage_rejects_mismatched_masks_and_sparse_overlap
 // ---------------------------------------------------------------------------
 
 #[test]
+fn prior_free_seed_fallback_requires_a_fitted_polish_support_failure() {
+    assert!(virtual_tile_prior_free_seed_fallback_conditions(
+        true,
+        "insufficient_polished_support",
+        STATION_RELATION_MIN_INLIERS,
+        STATION_RELATION_MIN_INLIERS,
+    ));
+    for (model_fitted, stage, fitted, prior_free) in [
+        (false, "insufficient_polished_support", 24, 24),
+        (true, "fitted", 24, 24),
+        (true, "insufficient_polished_support", 23, 24),
+        (true, "insufficient_polished_support", 24, 23),
+    ] {
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            model_fitted,
+            stage,
+            fitted,
+            prior_free,
+        ));
+    }
+}
+
+#[test]
 fn plan_virtual_tile_prior_repairs_needs_proposals_and_two_clusters() {
     let tile_to_world = sample_tile_to_world();
     let topology = line_topology(4);

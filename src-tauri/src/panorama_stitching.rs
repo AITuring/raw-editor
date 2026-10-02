@@ -8002,6 +8002,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     left_to_right: verified.homography,
                                     inliers: verified.inliers,
                                 });
+                            } else if virtual_tile_prior_free_seed_fallback_allowed(&diagnostic) {
+                                // Keep this relation out of the authoritative graph. It only
+                                // moves the unfixed cluster close enough for a fresh Virtual_Tile
+                                // render, after which the regular measurement pass verifies it.
+                                proposals.push(VirtualTilePriorProposal {
+                                    left,
+                                    right,
+                                    left_to_right: seed,
+                                    inliers: feature_inliers,
+                                });
                             }
                             replace_virtual_tile_candidate_record(
                                 &mut tile_relation_candidates,
@@ -16159,6 +16169,34 @@ fn virtual_tile_prior_free_relation(
     (native.try_inverse().is_some()
         && homography_preserves_focus_orientation(&native, left_native_dimensions))
     .then_some((native, inliers.len()))
+}
+
+/// A covered-feature seed can still repair a rendering prior when the
+/// subsequent finest-plane polish fitted a model but its inlier hull missed
+/// the fixed spatial-support gate. The seed remains a proposal only: the
+/// repaired station is rendered again and the ordinary bounded matcher must
+/// accept the resulting relation before it enters the pose solver.
+fn virtual_tile_prior_free_seed_fallback_conditions(
+    model_fitted: bool,
+    failure_stage: &str,
+    fitted_inliers: usize,
+    prior_free_inliers: usize,
+) -> bool {
+    model_fitted
+        && failure_stage == "insufficient_polished_support"
+        && fitted_inliers >= STATION_RELATION_MIN_INLIERS
+        && prior_free_inliers >= STATION_RELATION_MIN_INLIERS
+}
+
+fn virtual_tile_prior_free_seed_fallback_allowed(
+    diagnostic: &stack_report::StationRelationCandidateRecord,
+) -> bool {
+    virtual_tile_prior_free_seed_fallback_conditions(
+        diagnostic.model_fitted,
+        &diagnostic.failure_stage,
+        diagnostic.fitted_inliers,
+        diagnostic.prior_free_inliers,
+    )
 }
 
 fn log_virtual_tile_candidate(
