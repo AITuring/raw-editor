@@ -12533,13 +12533,48 @@ proptest! {
                 &final_path,
             )
             .expect("staged publication decision");
+
+        // The terminating report must carry the same evidence that drove the
+        // rejection.  Keep this oracle independent of the publication helper:
+        // a future change that drops one of these fields must fail the property
+        // even if the temporary file cleanup still happens to be correct.
+        let recorder = super::report::StackReportRecorder::isolated("property-87", None);
+        recorder.update(|report| {
+            report.resources.memory_threshold_bytes = threshold;
+            report.resources.peak_rss_bytes = peak;
+            report.resources.rss_sample_count = 1;
+            report.resources.memory_threshold_exceeded = peak > threshold;
+        });
+        recorder.apply_degradation_ledger(&ledger);
+        let report = recorder.snapshot();
+        prop_assert_eq!(
+            report.resources.memory_threshold_bytes,
+            threshold,
+            "the effective threshold must be reported"
+        );
+        prop_assert_eq!(report.resources.peak_rss_bytes, peak);
+        prop_assert_eq!(report.resources.rss_sample_count, 1);
+        prop_assert_eq!(
+            report.resources.memory_threshold_exceeded,
+            peak > threshold
+        );
         prop_assert!(!temporary.exists(), "run staging must never remain");
         if peak > threshold {
             prop_assert_eq!(publication, degradation::OutputPublication::Rejected);
             prop_assert!(!final_path.exists(), "overrun must not publish partial output");
+            let entry = report
+                .degradation
+                .entries
+                .iter()
+                .find(|entry| entry.reason == degradation::MEMORY_THRESHOLD_EXCEEDED)
+                .expect("memory overrun must be recorded");
+            prop_assert_eq!(entry.detail["threshold_bytes"].as_u64(), Some(threshold));
+            prop_assert_eq!(entry.detail["peak_rss_bytes"].as_u64(), Some(peak));
+            prop_assert_eq!(entry.detail["sample_count"].as_u64(), Some(1));
         } else {
             prop_assert!(matches!(publication, degradation::OutputPublication::Published(_)));
             prop_assert!(final_path.exists(), "accepted output must be published");
+            prop_assert!(report.degradation.entries.is_empty());
         }
     }
 
@@ -12552,6 +12587,15 @@ proptest! {
         let directory = tempfile::tempdir().expect("temporary output directory");
         let temporary = directory.path().join(format!(".stack-result-{seed}.tmp"));
         let final_path = directory.path().join("stack-result.tiff");
+        let source_path = directory.path().join("source.NEF");
+        let cache_path = directory.path().join("virtual-tile.cache");
+        let source_bytes = seed.to_le_bytes().repeat(4);
+        let cache_bytes = seed.rotate_left(17).to_le_bytes().repeat(8);
+        std::fs::write(&source_path, &source_bytes).expect("source fixture");
+        std::fs::write(&cache_path, &cache_bytes).expect("cache fixture");
+        let source_before = virtual_tile::source_file_sha256(&source_path)
+            .expect("source digest before cancellation");
+        let cache_before = std::fs::read(&cache_path).expect("cache bytes before cancellation");
         std::fs::write(&temporary, seed.to_le_bytes()).expect("staged output");
         let mut ledger = DegradationLedger::new();
         ledger.record(degradation::RUN_CANCELLED_BY_USER, serde_json::json!({
@@ -12569,6 +12613,29 @@ proptest! {
         prop_assert_eq!(publication, degradation::OutputPublication::Cancelled);
         prop_assert!(!temporary.exists());
         prop_assert!(!final_path.exists());
+
+        // Cancellation is allowed to discard only this run's temporary
+        // output.  Existing Source_RAW bytes and Virtual_Tile cache entries
+        // must remain byte-for-byte unchanged.
+        let source_after = virtual_tile::source_file_sha256(&source_path)
+            .expect("source digest after cancellation");
+        let cache_after = std::fs::read(&cache_path).expect("cache bytes after cancellation");
+        prop_assert_eq!(source_after, source_before);
+        prop_assert_eq!(cache_after, cache_before);
+
+        let recorder = super::report::StackReportRecorder::isolated("property-91", None);
+        recorder.set_result(super::report::StackRunResult::Cancelled);
+        recorder.apply_degradation_ledger(&ledger);
+        let report = recorder.snapshot();
+        prop_assert_eq!(
+            report.degradation.result,
+            super::report::StackRunResult::Cancelled
+        );
+        prop_assert!(report
+            .degradation
+            .entries
+            .iter()
+            .any(|entry| entry.reason == degradation::RUN_CANCELLED_BY_USER));
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 93: Stack_Report schema 完整且与返回值一致

@@ -1199,6 +1199,32 @@ mod tests {
             }),
         );
 
+        // Exercise the same terminating evidence path as production: the
+        // injected sampler's peak and sample count must reach Stack_Report,
+        // alongside the machine-readable ledger detail that caused rejection.
+        let recorder = super::super::report::StackReportRecorder::isolated("rss-cancelled", None);
+        recorder.update(|report| {
+            report.resources.memory_threshold_bytes = 64;
+            report.resources.peak_rss_bytes = sample.peak_rss_bytes;
+            report.resources.rss_sample_count = sample.sample_count;
+            report.resources.memory_threshold_exceeded = sample.threshold_exceeded;
+        });
+        recorder.apply_degradation_ledger(&ledger);
+        let stack_report = recorder.snapshot();
+        assert_eq!(stack_report.resources.memory_threshold_bytes, 64);
+        assert_eq!(stack_report.resources.peak_rss_bytes, sample.peak_rss_bytes);
+        assert_eq!(stack_report.resources.rss_sample_count, sample.sample_count);
+        assert!(stack_report.resources.memory_threshold_exceeded);
+        let entry = stack_report
+            .degradation
+            .entries
+            .iter()
+            .find(|entry| entry.reason == MEMORY_THRESHOLD_EXCEEDED)
+            .expect("the overrun reason must be present in Stack_Report");
+        assert_eq!(entry.detail["threshold_bytes"], 64);
+        assert_eq!(entry.detail["peak_rss_bytes"], sample.peak_rss_bytes);
+        assert_eq!(entry.detail["sample_count"], sample.sample_count);
+
         assert_eq!(
             DegradationManager::new(&ledger)
                 .publish_staged_output(&mut file_system, temporary, final_path)
