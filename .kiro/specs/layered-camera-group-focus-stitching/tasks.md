@@ -1585,18 +1585,21 @@ memory_threshold_source, physical_memory_bytes}`
     - 执行记录：P86 使用 100 cases，逐例核对低物理内存上界优先、配置/自动校准/默认来源和截断值，
       并重复解析比较 `MemoryThreshold`。
 
-  - [ ]* 17.12 属性测试：内存超限中止且不残留
+  - [x]* 17.12 属性测试：内存超限中止且不残留
     - **Property 87: 内存超限中止且不残留**
     - **Validates: Requirements 14.3**
+    - 执行记录（2026-10-02）：`property_87_memory_overrun_removes_only_run_staging` 使用 100 cases，调用 `DegradationManager::publish_staged_output`，分别核对超限拒绝和正常发布路径均删除暂存文件。
 
-  - [ ]* 17.13 属性测试：取消后不残留且状态可追溯
+  - [x]* 17.13 属性测试：取消后不残留且状态可追溯
     - **Property 91: 取消后不残留且状态可追溯**
     - **Validates: Requirements 14.8**
+    - 执行记录（2026-10-02）：`property_91_cancelled_run_has_no_staging_residue` 使用 100 cases，调用 `DegradationManager` 的取消决策与发布函数，核对状态、暂存文件和最终文件。
 
-  - [ ]* 17.14 属性测试：Stack_Report schema 完整且与返回值一致
+  - [x]* 17.14 属性测试：Stack_Report schema 完整且与返回值一致
     - **Property 93: Stack_Report schema 完整且与返回值一致**
     - **Validates: Requirements 1.7, 2.9, 5.9, 6.10, 11.16**
     - 生成器 `arb_stack_report()`
+    - 执行记录（2026-10-02）：`property_93_stack_report_schema_matches_serialized_value` 使用 100 cases，实际序列化并反序列化 `StackReport`，核对顶层字段、T1 新增关系字段和 JSON 往返一致性。
 
   - [x]* 17.15 属性测试：Acceptance_Harness 判定与阈值一致
     - **Property 94: Acceptance_Harness 判定与阈值一致**
