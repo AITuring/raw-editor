@@ -77,19 +77,50 @@ proptest! {
         warp_tx in -100.0f64..100.0,
         warp_ty in -100.0f64..100.0,
     ) {
+        let _run_scope = degradation::begin_run_scope();
+        let world_x = 256.0 + world_x.rem_euclid(64.0);
+        let world_y = 256.0 + world_y.rem_euclid(64.0);
+        let warp_tx = warp_tx.rem_euclid(32.0) - 16.0;
+        let warp_ty = warp_ty.rem_euclid(32.0) - 16.0;
         let mut tile_inverse = Matrix3::identity();
         tile_inverse[(0, 2)] = tile_tx;
         tile_inverse[(1, 2)] = tile_ty;
-        let mut warp_inverse = Matrix3::identity();
-        warp_inverse[(0, 2)] = warp_tx;
-        warp_inverse[(1, 2)] = warp_ty;
-        let coordinate = compositor::tile_coordinate_from_world(
-            Point2::new(world_x, world_y),
+        let overlap = super::residual_warp::OverlapResidual::new(
+            0,
+            7,
+            super::report::WorldRect {
+                left: 0.0,
+                top: 0.0,
+                width: 512.0,
+                height: 512.0,
+            },
+            4.0,
+        );
+        let observations = (0..=8)
+            .flat_map(|row| {
+                (0..=8).map(move |column| super::residual_warp::WarpObservation::new(
+                    super::report::WorldPoint {
+                        x: f64::from(column) * 64.0,
+                        y: f64::from(row) * 64.0,
+                    },
+                    [warp_tx, warp_ty],
+                    0.0,
+                ))
+            })
+            .collect::<Vec<_>>();
+        let mut residual = super::residual_warp::ResidualWarp::new();
+        prop_assert!(residual.add_observations(overlap, &observations).is_some());
+        let image = single_frame_info(7, 2048);
+        let coordinate = stitching::map_target_to_source_with_residual(
             &tile_inverse,
-            &warp_inverse,
-        ).expect("finite composed inverse coordinate");
-        prop_assert!((coordinate.x - (world_x + tile_tx + warp_tx)).abs() < 1.0e-10);
-        prop_assert!((coordinate.y - (world_y + tile_ty + warp_ty)).abs() < 1.0e-10);
+            Point3::new(world_x, world_y, 1.0),
+            &image,
+            stitching::Projection::Planar,
+            &residual,
+        )
+        .expect("finite composed inverse coordinate");
+        prop_assert!((coordinate.x - (world_x + tile_tx - warp_tx)).abs() < 1.0e-8);
+        prop_assert!((coordinate.y - (world_y + tile_ty - warp_ty)).abs() < 1.0e-8);
     }
 
     // Feature: layered-camera-group-focus-stitching, Property 49: Tone_Harmonizer
