@@ -1537,6 +1537,7 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
 struct SeamContext<'a> {
     pano: &'a Rgb32FImage,
     pano_mask: &'a GrayImage,
+    base_image_id: usize,
     img_to_add_info: &'a ImageInfo,
     img_to_add: &'a Rgb32FImage,
     h_add: &'a Matrix3<f64>,
@@ -1727,6 +1728,7 @@ where
         let ctx = SeamContext {
             pano: &panorama,
             pano_mask: &panorama_mask,
+            base_image_id: base_img_info.id,
             img_to_add_info,
             img_to_add: &img_to_add,
             h_add,
@@ -2436,6 +2438,44 @@ where
                 offset_y,
             })
         };
+
+        // The default station compositor uses the same deterministic seam
+        // search as the progressive production path.  The search sees the
+        // current panorama and candidate before any pixels from this tile are
+        // written, so its overlap is exactly the doubly covered region.
+        let seam_selection =
+            if finishing == TileCompositorFinishing::LayeredVirtualTile && index > 0 {
+                let seam_context = SeamContext {
+                    pano: &panorama,
+                    pano_mask: &panorama_mask,
+                    base_image_id: images[0].id,
+                    img_to_add_info: image_info,
+                    img_to_add: &tile,
+                    h_add: homography,
+                    projection,
+                    offset_x,
+                    offset_y,
+                    out_width,
+                    out_height,
+                    exposure: &exposure,
+                };
+                find_adaptive_seam(&seam_context)
+                    .filter(|info| !info.coords.is_empty())
+                    .map(|info| {
+                        let dominant = match info.orientation {
+                            SeamOrientation::Vertical => info.dx > 0.0,
+                            SeamOrientation::Horizontal => info.dy > 0.0,
+                        };
+                        (
+                            info.orientation,
+                            info.coords,
+                            dominant,
+                            (info.min_x, info.max_x, info.min_y, info.max_y),
+                        )
+                    })
+            } else {
+                None
+            };
         // Sample the candidate at the bounded tone-analysis resolution. Only
         // canvas-like pixels contribute; brush strokes and seals cannot steer
         // the exposure field. A raised-cosine edge weight favours native tile
@@ -2581,12 +2621,39 @@ where
                             .clamp(1.0, 255.0) as u8;
                         let quality_slot = &mut quality_row[x as usize];
                         let candidate_owner = (index + 1).min(255) as u8;
-                        if !focus_tile_ownership_should_replace(
-                            *quality_slot,
-                            owner_row[x as usize],
-                            quality,
-                            candidate_owner,
-                        ) {
+                        let is_on_add = true;
+                        let is_on_pano = mask_row[x as usize] > 0;
+                        let seam_selects_candidate = seam_selection.as_ref().is_some_and(
+                            |(orientation, seam_coords, dominant, _)| {
+                                let seam_value = match orientation {
+                                    SeamOrientation::Vertical => {
+                                        seam_coords.get(y).copied().unwrap_or(x as i32)
+                                    }
+                                    SeamOrientation::Horizontal => {
+                                        seam_coords.get(x as usize).copied().unwrap_or(y as i32)
+                                    }
+                                };
+                                let candidate_on_dominant_side = match orientation {
+                                    SeamOrientation::Vertical => x as i32 >= seam_value,
+                                    SeamOrientation::Horizontal => y as i32 >= seam_value,
+                                };
+                                is_on_add && is_on_pano && candidate_on_dominant_side == *dominant
+                            },
+                        );
+                        let seam_applies = seam_selection
+                            .as_ref()
+                            .is_some_and(|_| is_on_add && is_on_pano);
+                        if seam_applies && !seam_selects_candidate {
+                            continue;
+                        }
+                        if !seam_selects_candidate
+                            && !focus_tile_ownership_should_replace(
+                                *quality_slot,
+                                owner_row[x as usize],
+                                quality,
+                                candidate_owner,
+                            )
+                        {
                             continue;
                         }
                         #[cfg(test)]
@@ -2610,7 +2677,7 @@ where
                         // only marginally better and disagrees strongly with the
                         // already selected sample, keep the existing owner and
                         // let the seam remain in a locally coherent region.
-                        if owner_row[x as usize] > 0 {
+                        if owner_row[x as usize] > 0 && !seam_selects_candidate {
                             let start = x as usize * 3;
                             let current = &row[start..start + 3];
                             let current_rgb = [current[0], current[1], current[2]];
@@ -10166,6 +10233,9 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
         min_ox, max_ox, min_oy, max_oy
     );
 
+    let overlap_width = max_ox.saturating_sub(min_ox).saturating_add(1) as usize;
+    let overlap_height = max_oy.saturating_sub(min_oy).saturating_add(1) as usize;
+
     let center_source = project_point(
         ctx.img_to_add_info,
         w_add as f64 / 2.0,
@@ -10182,6 +10252,44 @@ fn find_adaptive_seam(ctx: &SeamContext) -> Option<SeamInfo> {
 
     let dx = center_add_x - center_overlap_x;
     let dy = center_add_y - center_overlap_y;
+
+    if let Some((vertical, _)) =
+        super::stack_pipeline::compositor::narrow_overlap_centerline(overlap_width, overlap_height)
+    {
+        degradation::record_run_degradation(
+            degradation::COMPOSITION_NARROW_OVERLAP,
+            serde_json::json!({
+                "stage": "pairwise_seam",
+                "trigger": "overlap_below_32px",
+                "pair": [ctx.base_image_id, ctx.img_to_add_info.id],
+                "width": overlap_width,
+                "height": overlap_height,
+            }),
+        );
+        let (orientation, center, length) = if vertical {
+            (
+                SeamOrientation::Vertical,
+                ((min_ox + max_ox) / 2) as i32,
+                ctx.out_height as usize,
+            )
+        } else {
+            (
+                SeamOrientation::Horizontal,
+                ((min_oy + max_oy) / 2) as i32,
+                ctx.out_width as usize,
+            )
+        };
+        return Some(SeamInfo {
+            orientation,
+            coords: vec![center; length],
+            dx,
+            dy,
+            min_x: min_ox,
+            max_x: max_ox,
+            min_y: min_oy,
+            max_y: max_oy,
+        });
+    }
 
     if dx.abs() > dy.abs() {
         println!("    - Overlap is vertical. Finding vertical seam...");
@@ -10306,15 +10414,8 @@ fn find_pairwise_seam_dp(
     let Some(h_add_inv) = ctx.h_add.try_inverse() else {
         return Vec::new();
     };
-    let mut previous = vec![f64::INFINITY; cross_count];
-    let mut current = vec![f64::INFINITY; cross_count];
-    let mut predecessors = vec![i8::MAX; along_count * cross_count];
-    let mut last_active_index = None;
-    let mut last_active_costs = Vec::new();
-
+    let mut costs = vec![f64::INFINITY; along_count * cross_count];
     for along_index in 0..along_count {
-        current.fill(f64::INFINITY);
-        let has_previous_path = previous.iter().any(|cost| cost.is_finite());
         let along = coordinate(along_min, along_max, along_index);
         for cross_index in 0..cross_count {
             let cross = coordinate(cross_min, cross_max, cross_index);
@@ -10326,77 +10427,22 @@ fn find_pairwise_seam_dp(
                 continue;
             };
 
-            // Discourage paths that merely trace a warped image border. Such paths make
-            // rectangular exposure changes visible even when the geometry is correct.
-            let edge_distance = cross_index.min(cross_count - 1 - cross_index) as f64;
-            energy += (6.0 - edge_distance).max(0.0) * 0.01;
-
-            if !has_previous_path {
-                current[cross_index] = energy;
-                predecessors[along_index * cross_count + cross_index] = 2;
-                continue;
-            }
-            let first_neighbor = cross_index.saturating_sub(1);
-            let last_neighbor = (cross_index + 1).min(cross_count - 1);
-            let mut best_previous = f64::INFINITY;
-            let mut best_index = cross_index;
-            for (previous_index, &previous_cost) in previous
-                .iter()
-                .enumerate()
-                .take(last_neighbor + 1)
-                .skip(first_neighbor)
-            {
-                if previous_cost < best_previous {
-                    best_previous = previous_cost;
-                    best_index = previous_index;
-                }
-            }
-            if best_previous.is_finite() {
-                current[cross_index] = best_previous + energy;
-                predecessors[along_index * cross_count + cross_index] =
-                    (best_index as i32 - cross_index as i32) as i8;
-            }
-        }
-        std::mem::swap(&mut previous, &mut current);
-        if previous.iter().any(|cost| cost.is_finite()) {
-            last_active_index = Some(along_index);
-            last_active_costs.clone_from(&previous);
+            let boundary_distance = (cross
+                .saturating_sub(cross_min)
+                .min(cross_max.saturating_sub(cross))) as f64;
+            energy =
+                super::stack_pipeline::compositor::seam_candidate_cost(energy, boundary_distance);
+            costs[along_index * cross_count + cross_index] = energy;
         }
     }
 
-    let Some(last_active_index) = last_active_index else {
-        return Vec::new();
-    };
-    let Some((mut current_cross, _)) = last_active_costs
-        .iter()
-        .enumerate()
-        .filter(|(_, cost)| cost.is_finite())
-        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    let Some((sampled_path, selected_cost)) =
+        super::stack_pipeline::compositor::minimum_vertical_seam(&costs, cross_count, along_count)
     else {
         return Vec::new();
     };
-    let mut sampled_path = vec![0usize; along_count];
-    sampled_path[last_active_index] = current_cross;
-    let mut first_active_index = last_active_index;
-    for along_index in (1..=last_active_index).rev() {
-        let predecessor = predecessors[along_index * cross_count + current_cross];
-        if predecessor == 2 {
-            first_active_index = along_index;
-            break;
-        }
-        if predecessor == i8::MAX {
-            return Vec::new();
-        }
-        current_cross =
-            (current_cross as i32 + predecessor as i32).clamp(0, cross_count as i32 - 1) as usize;
-        sampled_path[along_index - 1] = current_cross;
-        first_active_index = along_index - 1;
-    }
-    for index in 0..first_active_index {
-        sampled_path[index] = sampled_path[first_active_index];
-    }
-    for index in (last_active_index + 1)..along_count {
-        sampled_path[index] = sampled_path[last_active_index];
+    if !selected_cost.is_finite() {
+        return Vec::new();
     }
 
     let sampled_cross: Vec<f64> = sampled_path
