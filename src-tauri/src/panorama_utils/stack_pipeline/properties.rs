@@ -60,6 +60,48 @@ fn reason_identifier_pattern() -> Regex {
     Regex::new(r"^[a-z0-9_]{1,64}$").expect("the reason identifier pattern must compile")
 }
 
+// Runtime evidence for Property 44.  The proptest below checks the composed
+// production coordinate map for 100 cases; this test enters the same layered
+// compositor and counts its full-resolution Virtual_Tile samples.  With one
+// station there is no ownership competition, so every covered final pixel must
+// be read exactly once.
+#[test]
+fn property_44_layered_compositor_samples_each_covered_pixel_once() {
+    let _run_scope = degradation::begin_run_scope();
+    let side = 96;
+    let info = single_frame_info(0, side);
+    let source = single_frame_source(side, 0x44_11, 1.0);
+    let homographies = HashMap::from([(info.id, Matrix3::identity())]);
+    let rendered = render_layered_ownership(&[info], &homographies, &[source])
+        .expect("single station must render through the production compositor");
+    let covered_pixels = rendered
+        .coverage
+        .covered()
+        .iter()
+        .filter(|&&covered| covered != 0)
+        .count();
+    let sampled_pixels = rendered.full_resolution_samples;
+    let final_pixels = rendered.image.width() as usize * rendered.image.height() as usize;
+    assert!(
+        sampled_pixels <= final_pixels,
+        "the production Tile_Compositor must resample each final pixel at most once"
+    );
+    assert!(
+        sampled_pixels >= covered_pixels,
+        "every covered final pixel must have a source sample"
+    );
+    assert_eq!(
+        rendered
+            .ownership
+            .owners()
+            .iter()
+            .filter(|&&owner| owner != stitching::NO_OWNER)
+            .count(),
+        covered_pixels,
+        "the sampling audit must cover the same pixels as the published ownership plane"
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig { cases: 100, ..ProptestConfig::default() })]
 
@@ -9228,6 +9270,7 @@ proptest! {
                 coverage: station_masks.coverage.clone(),
                 ownership: station_masks.ownership.clone(),
                 sampling_origin: (-offset_x, -offset_y),
+                full_resolution_samples: 0,
             };
             let (_, station_uncovered, station_fractional) = assert_source_correspondence(
                 &station_view,

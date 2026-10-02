@@ -20,6 +20,8 @@ use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{AppHandle, Emitter, Runtime};
 
 const PANORAMA_BLEND_BANDS: usize = 9;
@@ -2043,6 +2045,10 @@ pub(crate) struct LayeredOwnershipRender {
     pub(crate) coverage: CoverageMask,
     pub(crate) ownership: OwnershipMap,
     pub(crate) sampling_origin: (f64, f64),
+    /// Test-only evidence from the production full-resolution sampling loop.
+    /// This field is not present in release builds and cannot affect output.
+    #[cfg(test)]
+    pub(crate) full_resolution_samples: usize,
 }
 
 impl LayeredOwnershipRender {
@@ -2228,6 +2234,8 @@ where
             coverage: CoverageMask::from_gray(GrayImage::new(0, 0)),
             ownership: OwnershipMap::new(0, 0, Vec::new(), Vec::new())?,
             sampling_origin: (0.0, 0.0),
+            #[cfg(test)]
+            full_resolution_samples: 0,
         });
     }
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
@@ -2237,6 +2245,8 @@ where
             coverage: CoverageMask::from_gray(GrayImage::new(0, 0)),
             ownership: OwnershipMap::new(0, 0, Vec::new(), Vec::new())?,
             sampling_origin: (0.0, 0.0),
+            #[cfg(test)]
+            full_resolution_samples: 0,
         });
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
@@ -2267,6 +2277,8 @@ where
     // Source-level semantic plane for the exact same write decisions. The u16
     // identifier is not capped at the 8-bit tone-group key above.
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
+    #[cfg(test)]
+    let full_resolution_samples = AtomicUsize::new(0);
     let mut tone_tiles = Vec::with_capacity(images.len());
     let mut tone_tile_ids = Vec::with_capacity(images.len());
     // Station indices and accepted Station_Relations of this run, published by
@@ -2577,6 +2589,8 @@ where
                         ) {
                             continue;
                         }
+                        #[cfg(test)]
+                        full_resolution_samples.fetch_add(1, Ordering::Relaxed);
                         let mut color =
                             get_high_quality_interpolated_pixel(&tile, source.x, source.y);
                         if let Some(model) = photo_model {
@@ -2951,6 +2965,8 @@ where
         coverage: CoverageMask::from_gray(coverage_gray),
         ownership: OwnershipMap::new(crop_width, crop_height, cropped_owners, legend)?,
         sampling_origin: (crop_x as f64 - offset_x, crop_y as f64 - offset_y),
+        #[cfg(test)]
+        full_resolution_samples: full_resolution_samples.load(Ordering::Relaxed),
     })
 }
 
