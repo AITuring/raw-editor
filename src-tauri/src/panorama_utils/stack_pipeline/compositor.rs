@@ -351,6 +351,43 @@ mod tests {
         }
     }
 
+    #[test]
+    fn default_multi_station_selection_records_the_layered_path() {
+        let recorder = StackReportRecorder::isolated("default-layered-selection", None);
+        let selection = select_and_record_run_path(
+            Some(2),
+            StackCompositorChoice::resolve(None),
+            Some(&recorder),
+        );
+
+        assert_eq!(selection.selected_path, SelectedPath::LayeredVirtualTile);
+        assert!(selection.use_virtual_tiles);
+        assert_eq!(
+            recorder.snapshot().selected_path,
+            SelectedPath::LayeredVirtualTile
+        );
+    }
+
+    #[test]
+    fn explicit_legacy_selection_records_the_legacy_path_without_virtual_tiles() {
+        let recorder = StackReportRecorder::isolated("legacy-selection", None);
+        let selection = select_and_record_run_path(
+            Some(2),
+            StackCompositorChoice::LegacySingleLayerMosaic,
+            Some(&recorder),
+        );
+
+        assert_eq!(
+            selection.selected_path,
+            SelectedPath::LegacySingleLayerMosaic
+        );
+        assert!(!selection.use_virtual_tiles);
+        assert_eq!(
+            recorder.snapshot().selected_path,
+            SelectedPath::LegacySingleLayerMosaic
+        );
+    }
+
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig {
             cases: 100,

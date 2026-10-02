@@ -2160,13 +2160,26 @@ impl OwnershipCompositorSwitches {
     }
 }
 
+/// Resolve the finishing mode's switches at the production entry point.
+/// Keeping this decision in one function lets the layered-path test exercise
+/// the same branch used by the compositor, rather than reconstructing it in a
+/// test-only helper.
+fn ownership_compositor_switches(
+    finishing: TileCompositorFinishing,
+) -> OwnershipCompositorSwitches {
+    match finishing {
+        TileCompositorFinishing::LegacyOwnership => OwnershipCompositorSwitches::from_env(),
+        TileCompositorFinishing::LayeredVirtualTile => OwnershipCompositorSwitches::default(),
+    }
+}
+
 #[cfg(test)]
 mod compositor_switch_contract_tests {
     use super::*;
 
     #[test]
     fn default_ownership_switches_are_all_off_for_the_layered_path() {
-        let switches = OwnershipCompositorSwitches::default();
+        let switches = ownership_compositor_switches(TileCompositorFinishing::LayeredVirtualTile);
         assert!(!switches.tone_all_pixels);
         assert!(!switches.soft_owner_boundary);
         assert!(!switches.skip_exposure_gain);
@@ -2180,6 +2193,18 @@ mod compositor_switch_contract_tests {
                 .as_identifier(),
             "legacy_single_layer_mosaic"
         );
+    }
+
+    #[test]
+    fn layered_entry_uses_default_switches_while_legacy_entry_keeps_its_diagnostic_defaults() {
+        let layered = ownership_compositor_switches(TileCompositorFinishing::LayeredVirtualTile);
+        let legacy = ownership_compositor_switches(TileCompositorFinishing::LegacyOwnership);
+
+        assert_eq!(layered, OwnershipCompositorSwitches::default());
+        assert_eq!(legacy.legacy_final_sharpen_amount, 0.85);
+        assert!(!legacy.tone_all_pixels);
+        assert!(!legacy.soft_owner_boundary);
+        assert!(!legacy.skip_exposure_gain);
     }
 }
 
@@ -2227,10 +2252,7 @@ where
     }
     // Only the retired comparison path reads its diagnostic switches; the
     // default layered path has no environment precondition (任务 13.7).
-    let switches = match finishing {
-        TileCompositorFinishing::LegacyOwnership => OwnershipCompositorSwitches::from_env(),
-        TileCompositorFinishing::LayeredVirtualTile => OwnershipCompositorSwitches::default(),
-    };
+    let switches = ownership_compositor_switches(finishing);
     let mut panorama = Rgb32FImage::new(out_width, out_height);
     let mut panorama_mask = GrayImage::new(out_width, out_height);
     // An 8-bit interior-distance score is sufficient for deterministic tile
