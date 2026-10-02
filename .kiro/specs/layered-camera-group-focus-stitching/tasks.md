@@ -1112,6 +1112,7 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - 执行记录：已加 `MAX_OUTPUT_CANVAS_LONG_SIDE = 262_144` 与 `compositor::reject_oversized_canvas`，默认路径在分配画布前拒绝超限画布并记录 `canvas_long_side_exceeded`（实测宽高、长边、上限），`is_canvas_rejection` 使回退渲染器不再重试。分块合成、alpha 写出、位深/alpha 降级提示与预览派生仍未做，保持 [~]。
     - 执行记录（alpha 与降级提示）：`StitchOutcome.coverage` 把分层路径的输出 Coverage_Mask 带到导出；`canonicalize_image_stack_result_with_coverage` 生成 RGBA16（未覆盖 alpha=0、已覆盖 alpha=65535，颜色通道与无 alpha 规范化逐值相同），TIFF（含元数据流式写出，新增 RGBA16/RGBA8 写出）与 PNG 写出 alpha，JPEG 丢弃 alpha 通道但颜色不变；预览仍由 RGB 派生，门禁 JPEG 输出不变。新增命令 `image_stack_output_notices` 在写出前返回位深 <16 与透明度无法保留的提示（`output_bit_depth_downgraded` / `output_alpha_unsupported`），前端尚未调用；导出时写回 Stack_Report 的实际位深与 alpha 状态、1024px 分块断言仍未做，保持 [~]。
     - 执行记录（2026-09-30）：T3 另外验证同一透明结果的 TIFF16、PNG16、JPEG 实际读回元数据并原子写回 Stack_Report；失败保存保持报告字节不变。1024px 分块断言仍未做。
+    - 执行记录（2026-10-02）：新增生产入口测试，直接通过 `ownership_compositor_switches` 核对分层路径使用全关默认开关，并通过 `select_and_record_run_path` 核对默认多机位分层路径和显式旧单层路径的 `selected_path` 与 Virtual_Tile 标志。输出编码、组级色调和 Quality_Gate 的既有测试继续通过；分块断言仍未做，任务保持 [~]。
 
   - [x] 13.7 删除 ownership 合成器环境变量并把旧合成器迁到设置项
     - 删除 `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER`（其语义成为默认路径）
