@@ -961,9 +961,10 @@ texture_seed=9300639506941516608` 在 13d0af6b 与 c04687cf 隔离重放均通�
     - **Validates: Requirements 8.6**
     - 执行记录：新增 P43（100 cases）：逐单元比较全局/残差 P95，验证不劣化单元回退。
 
-  - [ ]* 11.11 属性测试：瓦片到世界只重采样一次
+  - [x]* 11.11 属性测试：瓦片到世界只重采样一次
     - **Property 44: 瓦片到世界只重采样一次**
     - **Validates: Requirements 8.7**
+    - 执行记录（2026-10-02）：P44（100 cases）改为调用生产 `stitching::map_target_to_source_with_residual`，用独立平移组合 oracle 核对全局逆变换与残差逆场只生成一个采样坐标；持有 run scope，过滤测试通过。
 
   - [x] 11.12 属性测试：无效节点外推范围有界
     - **Property 45: 无效节点外推范围有界**
