@@ -16185,7 +16185,13 @@ fn virtual_tile_prior_free_seed_fallback_conditions(
     model_fitted
         && failure_stage == "insufficient_polished_support"
         && fitted_inliers >= STATION_RELATION_MIN_INLIERS
-        && prior_free_inliers >= STATION_RELATION_MIN_INLIERS
+        // A covered-feature seed is only a repair proposal when it carries at
+        // least as much support as the model that the finest-plane polish
+        // already fitted.  A 24-inlier seed can otherwise move an entire
+        // station cluster on a repeated texture even when the polished model
+        // has hundreds of mutually consistent matches but fails only its
+        // spatial-support gate.
+        && prior_free_inliers >= fitted_inliers
 }
 
 fn virtual_tile_prior_free_seed_fallback_allowed(
@@ -22995,6 +23001,31 @@ mod alignment_tests {
         // matrix must report the same ratio as its normalised form.
         let unnormalised = Matrix3::identity() * 4.0;
         assert!((homography_scale_ratio(&unnormalised).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn prior_free_seed_fallback_requires_support_consistent_with_polish() {
+        assert!(virtual_tile_prior_free_seed_fallback_conditions(
+            true,
+            "insufficient_polished_support",
+            141,
+            141,
+        ));
+        assert!(virtual_tile_prior_free_seed_fallback_conditions(
+            true,
+            "insufficient_polished_support",
+            141,
+            579,
+        ));
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            true,
+            "insufficient_polished_support",
+            579,
+            141,
+        ));
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            true, "fitted", 141, 579,
+        ));
     }
 
     #[test]
