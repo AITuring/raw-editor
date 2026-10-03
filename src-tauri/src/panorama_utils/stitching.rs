@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use tauri::{AppHandle, Emitter, Runtime};
 
 const PANORAMA_BLEND_BANDS: usize = 9;
@@ -2049,6 +2049,10 @@ pub(crate) struct LayeredOwnershipRender {
     /// This field is not present in release builds and cannot affect output.
     #[cfg(test)]
     pub(crate) full_resolution_samples: usize,
+    /// Per-output-pixel sampling counts from the production loop. This is
+    /// test-only evidence for checking Property 44 without aggregate masking.
+    #[cfg(test)]
+    pub(crate) full_resolution_sample_counts: Vec<u16>,
 }
 
 impl LayeredOwnershipRender {
@@ -2236,6 +2240,8 @@ where
             sampling_origin: (0.0, 0.0),
             #[cfg(test)]
             full_resolution_samples: 0,
+            #[cfg(test)]
+            full_resolution_sample_counts: Vec::new(),
         });
     }
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
@@ -2247,6 +2253,8 @@ where
             sampling_origin: (0.0, 0.0),
             #[cfg(test)]
             full_resolution_samples: 0,
+            #[cfg(test)]
+            full_resolution_sample_counts: Vec::new(),
         });
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
@@ -2279,6 +2287,10 @@ where
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
     #[cfg(test)]
     let full_resolution_samples = AtomicUsize::new(0);
+    #[cfg(test)]
+    let full_resolution_sample_counts = (0..out_width as usize * out_height as usize)
+        .map(|_| AtomicU16::new(0))
+        .collect::<Vec<_>>();
     let mut tone_tiles = Vec::with_capacity(images.len());
     let mut tone_tile_ids = Vec::with_capacity(images.len());
     // Station indices and accepted Station_Relations of this run, published by
@@ -2589,6 +2601,9 @@ where
                         ) {
                             continue;
                         }
+                        #[cfg(test)]
+                        full_resolution_sample_counts[y as usize * out_width as usize + x as usize]
+                            .fetch_add(1, Ordering::Relaxed);
                         #[cfg(test)]
                         full_resolution_samples.fetch_add(1, Ordering::Relaxed);
                         let mut color =
@@ -2947,6 +2962,9 @@ where
         GrayImage::new(cropped.width(), cropped.height())
     };
     let mut cropped_owners = vec![NO_OWNER; cropped.width() as usize * cropped.height() as usize];
+    #[cfg(test)]
+    let mut cropped_sample_counts =
+        vec![0u16; cropped.width() as usize * cropped.height() as usize];
     if crop_x + cropped.width() <= out_width && crop_y + cropped.height() <= out_height {
         cropped_owners
             .par_chunks_mut(cropped.width() as usize)
@@ -2954,6 +2972,17 @@ where
             .for_each(|(y, row)| {
                 let source_start = (crop_y as usize + y) * out_width as usize + crop_x as usize;
                 row.copy_from_slice(&source_owner_ids[source_start..source_start + row.len()]);
+            });
+        #[cfg(test)]
+        cropped_sample_counts
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, count)| {
+                let x = index % cropped.width() as usize;
+                let y = index / cropped.width() as usize;
+                *count = full_resolution_sample_counts
+                    [(crop_y as usize + y) * out_width as usize + crop_x as usize + x]
+                    .load(Ordering::Relaxed);
             });
     }
     let legend = images
@@ -2967,6 +2996,8 @@ where
         sampling_origin: (crop_x as f64 - offset_x, crop_y as f64 - offset_y),
         #[cfg(test)]
         full_resolution_samples: full_resolution_samples.load(Ordering::Relaxed),
+        #[cfg(test)]
+        full_resolution_sample_counts: cropped_sample_counts,
     })
 }
 

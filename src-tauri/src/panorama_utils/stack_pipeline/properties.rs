@@ -82,6 +82,18 @@ fn property_44_layered_compositor_samples_each_covered_pixel_once() {
         .count();
     let sampled_pixels = rendered.full_resolution_samples;
     let final_pixels = rendered.image.width() as usize * rendered.image.height() as usize;
+    assert_eq!(
+        rendered.full_resolution_sample_counts.len(),
+        final_pixels,
+        "the sampling audit must have one counter for every final pixel"
+    );
+    assert!(
+        rendered
+            .full_resolution_sample_counts
+            .iter()
+            .all(|&count| count <= 1),
+        "the production Tile_Compositor must resample each final pixel at most once"
+    );
     assert!(
         sampled_pixels <= final_pixels,
         "the production Tile_Compositor must resample each final pixel at most once"
@@ -9271,6 +9283,7 @@ proptest! {
                 ownership: station_masks.ownership.clone(),
                 sampling_origin: (-offset_x, -offset_y),
                 full_resolution_samples: 0,
+                full_resolution_sample_counts: Vec::new(),
             };
             let (_, station_uncovered, station_fractional) = assert_source_correspondence(
                 &station_view,
