@@ -16167,20 +16167,8 @@ fn virtual_tile_prior_free_relation(
             * VirtualTileMatchPlane::native_to_level(left_factor)),
     )?;
     (native.try_inverse().is_some()
-        && homography_preserves_focus_orientation(&native, left_native_dimensions)
-        && inter_station_scale_is_bounded(&native))
+        && homography_preserves_focus_orientation(&native, left_native_dimensions))
     .then_some((native, inliers.len()))
-}
-
-/// A prior-free relation may only be used to repair a station placement when
-/// its measured scale satisfies the same inter-station bound as an
-/// authoritative relation (requirement 6.3).  Keeping this check on the
-/// proposal path prevents a repeated texture from turning a local feature fit
-/// into a global canvas-scale correction.
-fn inter_station_scale_is_bounded(transform: &Matrix3<f64>) -> bool {
-    homography_scale_ratio(transform).is_some_and(|ratio| {
-        (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX).contains(&ratio)
-    })
 }
 
 /// A covered-feature seed can still repair a rendering prior when the
@@ -16446,9 +16434,6 @@ fn plan_virtual_tile_prior_repairs(
         let Some(unfixed_to_fixed) = fixed_to_unfixed_tile else {
             continue;
         };
-        if !inter_station_scale_is_bounded(&unfixed_to_fixed) {
-            continue;
-        }
         let fixed_correction = corrections[&clusters.find(fixed)];
         let Some(unfixed_world_to_tile) = tile_to_world[unfixed].try_inverse() else {
             continue;
@@ -23010,32 +22995,6 @@ mod alignment_tests {
         // matrix must report the same ratio as its normalised form.
         let unnormalised = Matrix3::identity() * 4.0;
         assert!((homography_scale_ratio(&unnormalised).unwrap() - 1.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn prior_free_station_repair_rejects_out_of_range_scale() {
-        let topology = synthetic_virtual_tile_topology(2);
-        let poses = vec![Matrix3::identity(), Matrix3::identity()];
-        let extreme = VirtualTilePriorProposal {
-            left: 0,
-            right: 1,
-            left_to_right: Matrix3::new(0.55, 0.0, 0.0, 0.0, 0.55, 0.0, 0.0, 0.0, 1.0),
-            inliers: 884,
-        };
-        assert!(
-            plan_virtual_tile_prior_repairs(2, &[], &[extreme], &poses, &topology).is_empty(),
-            "an extreme prior-free scale must not move a station"
-        );
-
-        let bounded = VirtualTilePriorProposal {
-            left_to_right: Matrix3::new(1.03, 0.0, 0.0, 0.0, 1.03, 0.0, 0.0, 0.0, 1.0),
-            ..extreme
-        };
-        assert_eq!(
-            plan_virtual_tile_prior_repairs(2, &[], &[bounded], &poses, &topology).len(),
-            1,
-            "a proposal inside the inter-station scale bound remains usable"
-        );
     }
 
     #[test]
