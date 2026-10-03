@@ -16181,8 +16181,10 @@ fn virtual_tile_prior_free_seed_fallback_conditions(
     failure_stage: &str,
     fitted_inliers: usize,
     prior_free_inliers: usize,
+    bidirectional_match_count: usize,
+    hull_support: f64,
 ) -> bool {
-    model_fitted
+    let polished_support = model_fitted
         && failure_stage == "insufficient_polished_support"
         && fitted_inliers >= STATION_RELATION_MIN_INLIERS
         // A covered-feature seed is only a repair proposal when it carries at
@@ -16191,7 +16193,13 @@ fn virtual_tile_prior_free_seed_fallback_conditions(
         // station cluster on a repeated texture even when the polished model
         // has hundreds of mutually consistent matches but fails only its
         // spatial-support gate.
-        && prior_free_inliers >= fitted_inliers
+        && prior_free_inliers >= fitted_inliers;
+    let prefit_support = !model_fitted
+        && failure_stage == "residual_model_no_fit"
+        && prior_free_inliers >= STATION_RELATION_MIN_INLIERS
+        && bidirectional_match_count >= STATION_RELATION_MIN_INLIERS
+        && hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT;
+    polished_support || prefit_support
 }
 
 fn virtual_tile_prior_free_seed_fallback_allowed(
@@ -16202,6 +16210,8 @@ fn virtual_tile_prior_free_seed_fallback_allowed(
         &diagnostic.failure_stage,
         diagnostic.fitted_inliers,
         diagnostic.prior_free_inliers,
+        diagnostic.bidirectional_match_count,
+        diagnostic.hull_support,
     )
 }
 
@@ -23010,21 +23020,59 @@ mod alignment_tests {
             "insufficient_polished_support",
             141,
             141,
+            141,
+            0.20,
         ));
         assert!(virtual_tile_prior_free_seed_fallback_conditions(
             true,
             "insufficient_polished_support",
             141,
             579,
+            141,
+            0.20,
         ));
         assert!(!virtual_tile_prior_free_seed_fallback_conditions(
             true,
             "insufficient_polished_support",
             579,
             141,
+            141,
+            0.20,
         ));
         assert!(!virtual_tile_prior_free_seed_fallback_conditions(
-            true, "fitted", 141, 579,
+            true, "fitted", 141, 579, 141, 0.20,
+        ));
+        assert!(virtual_tile_prior_free_seed_fallback_conditions(
+            false,
+            "residual_model_no_fit",
+            0,
+            81,
+            4023,
+            0.371,
+        ));
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            false,
+            "residual_model_no_fit",
+            0,
+            23,
+            4023,
+            0.371,
+        ));
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            false,
+            "residual_model_no_fit",
+            0,
+            81,
+            23,
+            0.371,
+        ));
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+            false,
+            "residual_model_no_fit",
+            0,
+            81,
+            4023,
+            0.199,
         ));
     }
 

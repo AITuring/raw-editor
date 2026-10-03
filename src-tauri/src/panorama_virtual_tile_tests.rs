@@ -691,6 +691,8 @@ fn prior_free_seed_fallback_requires_a_fitted_polish_support_failure() {
         "insufficient_polished_support",
         STATION_RELATION_MIN_INLIERS,
         STATION_RELATION_MIN_INLIERS,
+        STATION_RELATION_MIN_INLIERS,
+        STATION_RELATION_MIN_SPATIAL_SUPPORT,
     ));
     for (model_fitted, stage, fitted, prior_free) in [
         (false, "insufficient_polished_support", 24, 24),
@@ -703,6 +705,8 @@ fn prior_free_seed_fallback_requires_a_fitted_polish_support_failure() {
             stage,
             fitted,
             prior_free,
+            STATION_RELATION_MIN_INLIERS,
+            STATION_RELATION_MIN_SPATIAL_SUPPORT,
         ));
     }
 }
