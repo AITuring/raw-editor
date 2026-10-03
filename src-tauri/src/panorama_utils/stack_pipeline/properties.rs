@@ -7,7 +7,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
@@ -48,12 +47,6 @@ use super::virtual_tile::{
     VirtualTileStore, test_access,
 };
 use super::{compositor, resources, tone};
-
-/// The production observation sinks are process-wide for compatibility with
-/// the existing stitching entry point.  Property helpers hold one run scope
-/// across reset, render, and snapshot so parallel proptest cases cannot
-/// interleave their evidence.
-static PROPERTY_RUN_SCOPE: Mutex<()> = Mutex::new(());
 
 /// The exact shape requirement 12.7 fixes for a machine readable failure reason.
 fn reason_identifier_pattern() -> Regex {
@@ -7665,9 +7658,6 @@ fn render_station_tile(
     homographies: &HashMap<usize, Matrix3<f64>>,
     sources: &[image::Rgb32FImage],
 ) -> Result<stitching::FocusStackTileRender, String> {
-    let _property_scope = PROPERTY_RUN_SCOPE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
@@ -8052,9 +8042,6 @@ fn render_failed_non_anchor_station(
     ),
     String,
 > {
-    let _property_scope = PROPERTY_RUN_SCOPE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
@@ -8439,9 +8426,6 @@ fn render_registration_boundary(
     ),
     String,
 > {
-    let _property_scope = PROPERTY_RUN_SCOPE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _run_scope = degradation::begin_run_scope();
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
