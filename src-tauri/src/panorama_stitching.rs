@@ -13161,7 +13161,7 @@ const VIRTUAL_TILE_GUIDED_MAX_SEARCH_RADIUS_PX: f64 = 96.0;
 const VIRTUAL_TILE_GUIDED_GRID_COLUMNS: usize = 6;
 const VIRTUAL_TILE_GUIDED_GRID_ROWS: usize = 6;
 const VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA: usize = 2;
-const VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS: usize = 11;
+const VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS: usize = 12;
 
 #[derive(Clone, Copy, Debug)]
 struct VirtualTileStructuralScore {
