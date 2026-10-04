@@ -13412,7 +13412,7 @@ fn virtual_tile_guided_search_radius(
     let count = instrument_count.max(1) as f64;
     let sampling_error = (predicted_overlap_area.max(1.0) / count).sqrt() / count.sqrt();
     let measured_geometry_error = 3.0 * FOCUS_MODEL_INLIER_THRESHOLD / analysis_scale;
-    let dimension_cap = 0.16
+    let dimension_cap = 0.08
         * f64::from(
             left.width
                 .min(left.height)
@@ -13945,7 +13945,7 @@ const VIRTUAL_TILE_DIRECT_PATCH_RADIUS: i32 = 6;
 const VIRTUAL_TILE_DIRECT_GRID_SPACING_PX: f64 = 24.0;
 const VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES: usize = 1_024;
 const VIRTUAL_TILE_DIRECT_MAX_GRID_AXIS: usize = 64;
-const VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX: f64 = 32.0;
+const VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX: f64 = 16.0;
 const VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX: f64 = 1.0;
 const VIRTUAL_TILE_DIRECT_PATCH_GATES: registration::PatchMatchGates =
     registration::PatchMatchGates {
@@ -13954,17 +13954,6 @@ const VIRTUAL_TILE_DIRECT_PATCH_GATES: registration::PatchMatchGates =
         min_source_variance: 2.0,
         min_target_variance: 1.0,
     };
-
-fn virtual_tile_direct_search_radius(
-    left: &ImageInfo,
-    right: &ImageInfo,
-    predicted_overlap_area: f64,
-    grid_probe_count: usize,
-) -> i32 {
-    virtual_tile_guided_search_radius(left, right, predicted_overlap_area, grid_probe_count)
-        .min(VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX)
-        .ceil() as i32
-}
 
 fn virtual_tile_direct_grid_points(bounds: (f64, f64, f64, f64)) -> Vec<Point2<f64>> {
     let (min_x, min_y, max_x, max_y) = bounds;
@@ -14869,12 +14858,14 @@ fn virtual_tile_direct_station_match_with_structure(
     if grid.len() < STATION_RELATION_MIN_INLIERS {
         return (None, diagnostic);
     }
-    let search_radius = virtual_tile_direct_search_radius(
+    let search_radius = virtual_tile_guided_search_radius(
         left_tile,
         right_tile,
         predicted_overlap_area,
         grid.len(),
-    );
+    )
+    .min(VIRTUAL_TILE_DIRECT_MAX_SEARCH_RADIUS_PX)
+    .ceil() as i32;
     diagnostic.search_radius_px = f64::from(search_radius);
 
     let mut by_cell = BTreeMap::<(usize, usize), Vec<(f64, Point2<f64>, Point2<f64>, f64)>>::new();
@@ -15572,6 +15563,19 @@ fn virtual_tile_relation_quality_plane(planes: &[VirtualTileMatchPlane]) -> (Gra
     )
 }
 
+/// A coarse pyramid failure may reflect the level's sparse residual model,
+/// while a finer level can still measure the same prior.  Keep this retry
+/// list deliberately narrow: a missing overlap or missing texture is not
+/// evidence that becomes stronger at a finer level.
+fn virtual_tile_coarse_failure_can_retry(failure_stage: &str) -> bool {
+    matches!(
+        failure_stage,
+        "residual_model_no_fit"
+            | "insufficient_matches_after_model_quota"
+            | "insufficient_fitted_hull_support"
+    )
+}
+
 /// Probe one pair coarse to fine around `seed_left_to_right` (native tile
 /// pixels). Every octave but the finest runs the bounded bidirectional probe
 /// (edge orientation read on the octave's σ = 1 structural plane) and re-seeds
@@ -15667,6 +15671,16 @@ fn virtual_tile_pyramid_station_match(
         diagnostic.measurement_factor = factor;
         diagnostic.seed = seed_kind.to_string();
         let Some(relation) = relation else {
+            // A later octave has a smaller residual in its own pixels and can
+            // recover a model that was under-supported at this coarse level.
+            // Keep the original seed until a measured relation is available;
+            // no prior is ever promoted to acceptance evidence.
+            if !single_level
+                && level + 1 < bounded_levels
+                && virtual_tile_coarse_failure_can_retry(&diagnostic.failure_stage)
+            {
+                continue;
+            }
             return (None, diagnostic);
         };
         let Some(native) = normalized_homography(&(to_native * relation.homography * from_native))
@@ -23762,6 +23776,28 @@ mod alignment_tests {
     }
 
     #[test]
+    fn coarse_pyramid_retry_only_accepts_measured_model_failures() {
+        for stage in [
+            "residual_model_no_fit",
+            "insufficient_matches_after_model_quota",
+            "insufficient_fitted_hull_support",
+        ] {
+            assert!(virtual_tile_coarse_failure_can_retry(stage));
+        }
+        for stage in [
+            "no_predicted_overlap",
+            "insufficient_grid_probes",
+            "insufficient_measurable_patches",
+            "insufficient_bidirectional_matches",
+            "insufficient_grid_coverage",
+            "fitted_orientation_mismatch",
+            "non_invertible_seed",
+        ] {
+            assert!(!virtual_tile_coarse_failure_can_retry(stage));
+        }
+    }
+
+    #[test]
     fn direct_grid_rejects_inverse_coordinate_direction() {
         let (tiles, coverages, mut initial, topology, actual) =
             nonzero_origin_virtual_tile_fixture();
@@ -23832,28 +23868,6 @@ mod alignment_tests {
         let relation = relation.expect("the fixture overlap is measurable");
         // The fit is stored untouched in the (left, right) key direction.
         assert!(relation.canonical_homography.is_none());
-    }
-
-    #[test]
-    fn virtual_tile_direct_search_radius_uses_the_expanded_bounded_cap() {
-        let mut tiles = synthetic_virtual_tiles(2);
-        for tile in &mut tiles {
-            tile.width = 400;
-            tile.height = 340;
-        }
-        assert_eq!(
-            virtual_tile_direct_search_radius(&tiles[0], &tiles[1], 1_000_000.0, 24),
-            32
-        );
-
-        for tile in &mut tiles {
-            tile.width = 100;
-            tile.height = 100;
-        }
-        assert_eq!(
-            virtual_tile_direct_search_radius(&tiles[0], &tiles[1], 1_000_000.0, 24),
-            16
-        );
     }
 
     #[test]
