@@ -16208,13 +16208,14 @@ fn virtual_tile_prior_free_seed_fallback_conditions(
     model_fitted
         && failure_stage == "insufficient_polished_support"
         && fitted_inliers >= STATION_RELATION_MIN_INLIERS
-        // A covered-feature seed is only a repair proposal when it carries at
-        // least as much support as the model that the finest-plane polish
-        // already fitted.  A 24-inlier seed can otherwise move an entire
-        // station cluster on a repeated texture even when the polished model
-        // has hundreds of mutually consistent matches but fails only its
-        // spatial-support gate.
-        && prior_free_inliers >= fitted_inliers
+        // The covered-feature seed is only a repair proposal when it has the
+        // same minimum support as an ordinary relation.  The polished model
+        // may have many more matches but still fail only its spatial-support
+        // gate because the rendering prior placed the station on the wrong
+        // side of the overlap.  The proposal remains non-authoritative: after
+        // moving the station, the regular bounded matcher must verify it
+        // before it can enter the pose solver.
+        && prior_free_inliers >= STATION_RELATION_MIN_INLIERS
 }
 
 fn virtual_tile_prior_free_seed_fallback_allowed(
@@ -16437,7 +16438,34 @@ fn plan_virtual_tile_prior_repairs(
             })
             .map(|(index, _)| index);
         let Some(index) = next else {
-            break;
+            // A prior-free proposal graph can contain a component that does
+            // not yet touch the largest authoritative cluster.  Seed its
+            // lexicographically strongest edge with the left cluster as a
+            // deterministic local anchor, then let the same correction logic
+            // propagate across that component.  The remeasurement pass below
+            // still has to verify every repaired station before any edge is
+            // authoritative; this anchor only makes disconnected proposals
+            // useful for finding a later bridge to the reference cluster.
+            let Some((_index, proposal)) = remaining
+                .iter()
+                .enumerate()
+                .filter(|(_, proposal)| {
+                    let left_root = clusters.find(proposal.left);
+                    let right_root = clusters.find(proposal.right);
+                    !corrections.contains_key(&left_root) && !corrections.contains_key(&right_root)
+                })
+                .max_by(|(_, left), (_, right)| {
+                    left.inliers.cmp(&right.inliers).then_with(|| {
+                        station_tree_edge_key(station_topology, right.left, right.right).cmp(
+                            &station_tree_edge_key(station_topology, left.left, left.right),
+                        )
+                    })
+                })
+            else {
+                break;
+            };
+            corrections.insert(clusters.find(proposal.left), Matrix3::identity());
+            continue;
         };
         let proposal = remaining.remove(index);
         let left_root = clusters.find(proposal.left);
@@ -23040,7 +23068,7 @@ mod alignment_tests {
             141,
             579,
         ));
-        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+        assert!(virtual_tile_prior_free_seed_fallback_conditions(
             true,
             "insufficient_polished_support",
             579,
