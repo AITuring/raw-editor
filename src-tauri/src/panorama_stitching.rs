@@ -15241,7 +15241,7 @@ const VIRTUAL_TILE_MIN_MATCH_WINDOW_NATIVE_PX: f64 = 48.0;
 const VIRTUAL_TILE_PYRAMID_MIN_LEVEL_LONG_SIDE: u32 = 384;
 /// Symmetric residual-model tolerance of the octaves coarser than the finest,
 /// in their own pixels.
-const VIRTUAL_TILE_PYRAMID_COARSE_INLIER_THRESHOLD_PX: f64 = 2.0;
+const VIRTUAL_TILE_PYRAMID_COARSE_INLIER_THRESHOLD_PX: f64 = 1.5;
 /// Covered-feature budget and support scales of the prior-free proposal,
 /// identical to the scalable source analysis path.
 const VIRTUAL_TILE_PRIOR_FREE_MAX_FEATURES: usize = 1_600;
