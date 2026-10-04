@@ -2602,7 +2602,7 @@ where
                             continue;
                         }
                         #[cfg(test)]
-                        full_resolution_sample_counts[y as usize * out_width as usize + x as usize]
+                        full_resolution_sample_counts[y * out_width as usize + x as usize]
                             .fetch_add(1, Ordering::Relaxed);
                         #[cfg(test)]
                         full_resolution_samples.fetch_add(1, Ordering::Relaxed);
