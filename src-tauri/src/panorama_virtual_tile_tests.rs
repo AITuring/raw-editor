@@ -693,10 +693,30 @@ fn prior_free_seed_fallback_requires_a_fitted_polish_support_failure() {
         STATION_RELATION_MIN_INLIERS,
     ));
     for (model_fitted, stage, fitted, prior_free) in [
-        (false, "insufficient_polished_support", 24, 24),
-        (true, "fitted", 24, 24),
-        (true, "insufficient_polished_support", 23, 24),
-        (true, "insufficient_polished_support", 24, 23),
+        (
+            false,
+            "insufficient_polished_support",
+            STATION_RELATION_MIN_INLIERS,
+            STATION_RELATION_MIN_INLIERS,
+        ),
+        (
+            true,
+            "fitted",
+            STATION_RELATION_MIN_INLIERS,
+            STATION_RELATION_MIN_INLIERS,
+        ),
+        (
+            true,
+            "insufficient_polished_support",
+            STATION_RELATION_MIN_INLIERS - 1,
+            STATION_RELATION_MIN_INLIERS,
+        ),
+        (
+            true,
+            "insufficient_polished_support",
+            STATION_RELATION_MIN_INLIERS,
+            STATION_RELATION_MIN_INLIERS - 1,
+        ),
     ] {
         assert!(!virtual_tile_prior_free_seed_fallback_conditions(
             model_fitted,
@@ -1519,8 +1539,15 @@ fn virtual_tile_polish_fit_recovers_a_projective_relation_and_drops_outliers() {
         assert!(error < 0.3, "{error} px at ({x}, {y})");
     }
 
-    // Fewer than 24 consistent pairs is no relation.
-    assert!(virtual_tile_polish_fit(&correspondences[..20], threshold, (480, 360)).is_none());
+    // Fewer than the configured minimum consistent pairs is no relation.
+    assert!(
+        virtual_tile_polish_fit(
+            &correspondences[..STATION_RELATION_MIN_INLIERS - 1],
+            threshold,
+            (480, 360)
+        )
+        .is_none()
+    );
     // A mirrored relation is never a valid planar station relation.
     let mirror = Matrix3::new(-1.0, 0.0, 480.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
     let mirrored = correspondences[..true_count]

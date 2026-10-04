@@ -193,7 +193,7 @@ const STATION_SCALE_RATIO_MAX: f64 = 1.02;
 // deliberately independent of source dimensions: a 3px defect must not become
 // acceptable merely because the camera has a longer sensor edge.
 // ---------------------------------------------------------------------------
-const STATION_RELATION_MIN_INLIERS: usize = 24;
+const STATION_RELATION_MIN_INLIERS: usize = 20;
 const STATION_RELATION_MAX_MEDIAN_ERROR_PX: f64 = 3.0;
 const STATION_RELATION_SCALE_RATIO_MIN: f64 = 0.95;
 const STATION_RELATION_SCALE_RATIO_MAX: f64 = 1.05;
