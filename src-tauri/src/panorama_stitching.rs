@@ -179,7 +179,7 @@ const STATION_MIN_INLIER_MATCHES: usize = 30;
 /// fewer than 120 samples, which is the measurable precondition.
 const STATION_MIN_OVERLAP_NCC: f64 = 0.60;
 /// Inlier spatial support inside the overlap (需求 1.1).
-const STATION_MIN_INLIER_SPATIAL_SUPPORT: f64 = 0.20;
+const STATION_MIN_INLIER_SPATIAL_SUPPORT: f64 = 0.18;
 /// Scale-ratio window of two sources of one Capture_Station (需求 1.1).
 ///
 /// 需求 6.3 applies `[0.95, 1.05]` to the *inter*-station relation using the
