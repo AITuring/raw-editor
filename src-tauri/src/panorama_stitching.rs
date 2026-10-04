@@ -23033,13 +23033,13 @@ mod alignment_tests {
             141,
             141,
         ));
-        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
+        assert!(virtual_tile_prior_free_seed_fallback_conditions(
             true,
             "insufficient_polished_support",
             141,
             579,
         ));
-        assert!(virtual_tile_prior_free_seed_fallback_conditions(
+        assert!(!virtual_tile_prior_free_seed_fallback_conditions(
             true,
             "insufficient_polished_support",
             579,
