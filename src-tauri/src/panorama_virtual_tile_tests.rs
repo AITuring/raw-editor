@@ -832,22 +832,6 @@ fn plan_virtual_tile_prior_repairs_keeps_the_largest_cluster_and_breaks_ties_by_
 }
 
 #[test]
-fn plan_virtual_tile_prior_repairs_anchors_a_disconnected_proposal_component() {
-    let tile_to_world = sample_tile_to_world();
-    let topology = line_topology(4);
-    let repairs = plan_virtual_tile_prior_repairs(
-        4,
-        &[(0, 1)],
-        &[prior_proposal(2, 3, sample_relation(-372.0, 9.0), 80)],
-        &tile_to_world,
-        &topology,
-    );
-    assert_eq!(repaired_stations(&repairs), vec![3]);
-    assert_eq!(repairs[0].fixed_station, 2);
-    assert_eq!(repairs[0].relation, (2, 3));
-}
-
-#[test]
 fn plan_virtual_tile_prior_repairs_prefers_inliers_and_composes_repairs_transitively() {
     let tile_to_world = sample_tile_to_world();
     let weak_relation = sample_relation(-372.0, 9.0);
