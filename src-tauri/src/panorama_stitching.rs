@@ -15675,11 +15675,19 @@ fn virtual_tile_pyramid_station_match(
             // recover a model that was under-supported at this coarse level.
             // Keep the original seed until a measured relation is available;
             // no prior is ever promoted to acceptance evidence.
-            if !single_level
-                && level + 1 < bounded_levels
-                && virtual_tile_coarse_failure_can_retry(&diagnostic.failure_stage)
-            {
-                continue;
+            if !single_level && virtual_tile_coarse_failure_can_retry(&diagnostic.failure_stage) {
+                if level + 1 < bounded_levels {
+                    continue;
+                }
+                // The last bounded octave has no finer bounded probe left.
+                // Its residual-model/support failure is still a recoverable
+                // measurement failure: the finest polish has independent
+                // patch, reverse-consistency, hull, scale, and orientation
+                // gates and must get the chance to verify the original prior.
+                // Do not return the coarse diagnostic here, because that
+                // would make the finest evidence unreachable for exactly the
+                // sparse, shifted overlaps this retry is meant to recover.
+                break;
             }
             return (None, diagnostic);
         };
