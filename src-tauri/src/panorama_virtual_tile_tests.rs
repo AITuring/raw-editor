@@ -2030,3 +2030,133 @@ fn virtual_tile_solver_measures_requirement_6_4_on_the_doubly_covered_overlap() 
         "{relations:?}"
     );
 }
+// ---------------------------------------------------------------------------
+// 9. final-polish fallback after a recoverable coarse failure
+// ---------------------------------------------------------------------------
+
+/// Build the two levels consumed by `virtual_tile_pyramid_station_match`
+/// directly.  The coarse target contains a smooth, non-affine sinusoidal warp
+/// that defeats a single bounded residual model while leaving every local
+/// patch measurable.  The finest planes carry the same texture under one
+/// known native translation, so the independent model-warped polish can
+/// verify it when the last coarse level gives up.
+fn final_polish_fallback_fixture(
+    sparse_finest_target: bool,
+) -> (VirtualTileMatchPyramid, Matrix3<f64>) {
+    let coarse_dimensions = (288u32, 288u32);
+    let finest_dimensions = (576u32, 576u32);
+    let native_dimensions = (2_304u32, 2_304u32);
+    let coarse_left = textured_plane(coarse_dimensions.0, coarse_dimensions.1);
+    let coarse_right = GrayImage::from_fn(coarse_dimensions.0, coarse_dimensions.1, |x, y| {
+        let phase = f64::from(y) * std::f64::consts::TAU / 96.0;
+        let dx = (4.0 * phase.sin()).round() as i32;
+        let source_x = (x as i32 - dx).clamp(0, coarse_dimensions.0 as i32 - 1) as u32;
+        *coarse_left.get_pixel(source_x, y)
+    });
+
+    // The known relation is left -> right = translate(+8, -4) in native
+    // pixels, i.e. (+2, -1) on the factor-4 finest planes.
+    let known_native = translation(8.0, -4.0);
+    let finest_left = textured_plane(finest_dimensions.0, finest_dimensions.1);
+    let finest_right = GrayImage::from_fn(finest_dimensions.0, finest_dimensions.1, |x, y| {
+        let source_x = (x as i32 - 2).clamp(0, finest_dimensions.0 as i32 - 1) as u32;
+        let source_y = (y as i32 + 1).clamp(0, finest_dimensions.1 as i32 - 1) as u32;
+        *finest_left.get_pixel(source_x, source_y)
+    });
+    let full = full_coverage(finest_dimensions.0, finest_dimensions.1);
+    let finest_target_coverage = if sparse_finest_target {
+        coverage_from_fn(finest_dimensions.0, finest_dimensions.1, |x, _| x < 40)
+    } else {
+        full.clone()
+    };
+
+    let mut pyramid = VirtualTileMatchPyramid::new(vec![8, 4], 2);
+    pyramid.native_dimensions = vec![native_dimensions; 2];
+    pyramid.levels[0] = vec![plane_info(0, coarse_left), plane_info(1, coarse_right)];
+    pyramid.coverages[0] = vec![
+        full_coverage(coarse_dimensions.0, coarse_dimensions.1),
+        full_coverage(coarse_dimensions.0, coarse_dimensions.1),
+    ];
+    pyramid.levels[1] = vec![plane_info(0, finest_left), plane_info(1, finest_right)];
+    pyramid.coverages[1] = vec![full, finest_target_coverage];
+    pyramid.quality_coverages = pyramid.coverages[1].clone();
+    (pyramid, known_native)
+}
+
+#[test]
+fn virtual_tile_pyramid_polishes_after_final_coarse_residual_failure() {
+    let (pyramid, known_native) = final_polish_fallback_fixture(false);
+    let initial = HashMap::from([(0usize, Matrix3::identity()), (1usize, Matrix3::identity())]);
+    let (_, coarse_diagnostic) = virtual_tile_direct_station_match_with_structure(
+        0,
+        1,
+        &pyramid.levels[0],
+        &pyramid.coverages[0],
+        &initial,
+        VIRTUAL_TILE_PYRAMID_COARSE_INLIER_THRESHOLD_PX,
+        None,
+    );
+    assert!(
+        matches!(
+            coarse_diagnostic.failure_stage.as_str(),
+            "residual_model_no_fit"
+                | "insufficient_matches_after_model_quota"
+                | "insufficient_fitted_hull_support"
+        ),
+        "fixture must exercise the recoverable final-coarse failure: {coarse_diagnostic:?}"
+    );
+    let (relation, diagnostic) = virtual_tile_pyramid_station_match(
+        0,
+        1,
+        &pyramid,
+        &Matrix3::identity(),
+        VIRTUAL_TILE_SEED_RENDERING_PRIOR,
+    );
+    let relation = relation.expect(&format!(
+        "the finest polish must recover the known transform: {diagnostic:?}"
+    ));
+    assert_eq!(diagnostic.failure_stage, "fitted", "{diagnostic:?}");
+    assert!(
+        diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS,
+        "{diagnostic:?}"
+    );
+    assert!(
+        diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT,
+        "{diagnostic:?}"
+    );
+    for (x, y) in [
+        (0.0, 0.0),
+        (1_152.0, 0.0),
+        (0.0, 1_152.0),
+        (1_152.0, 1_152.0),
+    ] {
+        let point = Point2::new(x, y);
+        let expected = transformed_point(&known_native, point).unwrap();
+        let measured = transformed_point(&relation.homography, point).unwrap();
+        assert!(
+            (expected - measured).norm() < 0.75,
+            "coarse fallback: {expected:?} vs {measured:?} at ({x}, {y})"
+        );
+    }
+}
+
+#[test]
+fn virtual_tile_pyramid_does_not_promote_insufficient_finest_evidence() {
+    let (pyramid, _) = final_polish_fallback_fixture(true);
+    let (relation, diagnostic) = virtual_tile_pyramid_station_match(
+        0,
+        1,
+        &pyramid,
+        &Matrix3::identity(),
+        VIRTUAL_TILE_SEED_RENDERING_PRIOR,
+    );
+    assert!(relation.is_none(), "{diagnostic:?}");
+    assert_ne!(diagnostic.failure_stage, "fitted", "{diagnostic:?}");
+    assert!(
+        diagnostic.measurable_patch_count < STATION_RELATION_MIN_INLIERS
+            || diagnostic.bidirectional_match_count < STATION_RELATION_MIN_INLIERS
+            || diagnostic.fitted_inliers < STATION_RELATION_MIN_INLIERS
+            || diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT,
+        "insufficient support must remain visible in the diagnostic: {diagnostic:?}"
+    );
+}
