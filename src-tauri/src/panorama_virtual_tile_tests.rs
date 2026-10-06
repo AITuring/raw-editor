@@ -793,8 +793,10 @@ fn provisional_authoritative_pairs_require_the_final_geometry_evidence() {
     );
 
     candidate.median_fitted_orientation_difference_degrees = None;
-    assert!(
-        virtual_tile_provisional_authoritative_pairs(&relations, &[candidate], &tiles).is_empty()
+    assert_eq!(
+        virtual_tile_provisional_authoritative_pairs(&relations, &[candidate], &tiles),
+        vec![(0, 1)],
+        "an unavailable optional orientation diagnostic is not a failed measurement"
     );
 }
 

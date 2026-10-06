@@ -16447,9 +16447,15 @@ fn virtual_tile_provisional_authoritative_candidate(
         && homography_scale_ratio(&relation.homography).is_some_and(|scale| {
             (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX).contains(&scale)
         })
+        // A missing fitted orientation means that this optional diagnostic
+        // was not measurable for the candidate.  It is not an orientation
+        // failure: the authoritative solver performs its own dense
+        // orientation check before accepting the relation.  Keep the
+        // provisional graph conservative on finite measurements while
+        // allowing unavailable diagnostics to remain unmeasured.
         && diagnostic
             .median_fitted_orientation_difference_degrees
-            .is_some_and(|orientation| {
+            .is_none_or(|orientation| {
                 orientation.is_finite()
                     && orientation
                         <= STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES
