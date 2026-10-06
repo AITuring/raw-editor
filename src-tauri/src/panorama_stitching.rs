@@ -15945,7 +15945,15 @@ fn virtual_tile_polish_correspondences(
             let mut back_window = Vec::with_capacity(((2 * back_reach + 1).pow(2)) as usize);
             for dy in -back_reach..=back_reach {
                 for dx in -back_reach..=back_reach {
-                    let (x, y) = (cx + ox + dx, cy + oy + dy);
+                    // The reverse template should land back at the original
+                    // source centre.  Searching around the forward match
+                    // (`cx + ox`) made the reverse offset equal to `-ox`,
+                    // although `back_search` is intentionally only two
+                    // pixels wide.  A valid forward correction of five
+                    // pixels was therefore rejected before fitting.  Keep
+                    // the reverse search in the source coordinate frame and
+                    // require its offset to return to that centre.
+                    let (x, y) = (cx + dx, cy + dy);
                     if x < 0 || y < 0 || !left_coverage.is_covered(x as u32, y as u32) {
                         return (true, None);
                     }
@@ -15957,7 +15965,7 @@ fn virtual_tile_polish_correspondences(
             else {
                 return (true, None);
             };
-            if f64::from(ox + bx).hypot(f64::from(oy + by)) > 1.0 {
+            if f64::from(bx).hypot(f64::from(by)) > 1.0 {
                 return (true, None);
             }
             // Separable parabolic sub-pixel peak on the forward score surface.
@@ -23780,6 +23788,71 @@ mod alignment_tests {
             virtual_tile_station_matches(&tiles, &coverages, &wrong_mapping, &topology).is_empty(),
             "swapping station origins must not be accepted as measured evidence"
         );
+    }
+
+    #[test]
+    fn polished_matcher_accepts_a_forward_shift_beyond_reverse_probe_radius() {
+        // A five-pixel forward residual is within the production polish pass
+        // (±8px), but outside the old reverse probe (±2px) when that probe was
+        // centred on the forward match.  The reverse check must use the source
+        // centre so it can verify the same correspondence without widening
+        // its independent radius.
+        let (width, height) = (420u32, 320u32);
+        let texture = |x: f64, y: f64| {
+            (127.0
+                + 55.0 * (x * 0.071 + y * 0.043).sin()
+                + 41.0 * (x * 0.029 - y * 0.109).cos()
+                + 23.0 * (x * 0.163 + y * 0.137).sin())
+            .clamp(0.0, 255.0)
+            .round() as u8
+        };
+        let left = GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([texture(f64::from(x), f64::from(y))])
+        });
+        let shift = 5.0;
+        let right = GrayImage::from_fn(width, height, |x, y| {
+            image::Luma([texture(f64::from(x) - shift, f64::from(y))])
+        });
+        let coverage = stitching::CoverageMask::from_bytes(
+            width,
+            height,
+            vec![u8::MAX; width as usize * height as usize],
+        )
+        .expect("the synthetic polish planes are fully covered");
+        let mut planes = synthetic_virtual_tiles(2);
+        let mut left_plane = planes.remove(0);
+        let mut right_plane = planes.remove(0);
+        left_plane.width = width;
+        left_plane.height = height;
+        left_plane.alignment_image = left;
+        right_plane.width = width;
+        right_plane.height = height;
+        right_plane.alignment_image = right;
+        let (_, mut diagnostic) = virtual_tile_direct_station_match(
+            0,
+            1,
+            &[],
+            &[],
+            &HashMap::new(),
+            STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+        );
+        let relation = virtual_tile_polished_station_match(
+            &left_plane,
+            &coverage,
+            &right_plane,
+            &coverage,
+            1,
+            &Matrix3::identity(),
+            ((width, height), (width, height)),
+            &mut diagnostic,
+        )
+        .expect("the production polish matcher must verify the five-pixel shift");
+        assert_eq!(diagnostic.failure_stage, "fitted");
+        assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
+        let measured = transformed_point(&relation.homography, Point2::new(210.0, 160.0))
+            .expect("fitted homography maps the source point");
+        assert!((measured.x - 215.0).abs() < 1.0);
+        assert!((measured.y - 160.0).abs() < 1.0);
     }
 
     #[test]
