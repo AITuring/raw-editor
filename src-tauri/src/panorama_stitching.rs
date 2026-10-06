@@ -8032,6 +8032,66 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         let mut repaired = BTreeSet::new();
                         for repair in &repairs {
                             let station = repair.station;
+                            // Evaluate the complete correction on copies before
+                            // mutating the rendering priors.  A prior-free fit
+                            // can be internally coherent while still implying
+                            // an implausible world jump or scale change; such a
+                            // proposal must never reach the renderer.
+                            let mut candidate_homographies = station_render_homographies.clone();
+                            let mut candidate_focus_warp = station_focus_warp.clone();
+                            if !apply_virtual_tile_prior_repair(
+                                group_slices[station],
+                                &repair.world_correction,
+                                &mut candidate_homographies,
+                                candidate_focus_warp.as_mut(),
+                            ) {
+                                println!(
+                                    "  - Virtual_Tile prior repair of station {station} rejected: a corrected source pose is not a valid planar pose"
+                                );
+                                continue;
+                            }
+                            let Some(candidate_geometry) =
+                                stitching::focus_stack_virtual_tile_geometry(
+                                    group_slices[station],
+                                    &candidate_homographies,
+                                    projection,
+                                    candidate_focus_warp.as_ref(),
+                                )
+                            else {
+                                println!(
+                                    "  - Virtual_Tile prior repair of station {station} rejected: corrected geometry is invalid"
+                                );
+                                continue;
+                            };
+                            let old_center = transformed_point(
+                                &station_tile_to_world[station],
+                                Point2::new(
+                                    f64::from(geometries[station].width) * 0.5,
+                                    f64::from(geometries[station].height) * 0.5,
+                                ),
+                            );
+                            let new_center = transformed_point(
+                                &candidate_geometry.tile_to_world,
+                                Point2::new(
+                                    f64::from(candidate_geometry.width) * 0.5,
+                                    f64::from(candidate_geometry.height) * 0.5,
+                                ),
+                            );
+                            let center_shift_px = old_center
+                                .zip(new_center)
+                                .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
+                            let correction_scale_ratio =
+                                homography_scale_ratio(&repair.world_correction)
+                                    .unwrap_or(f64::NAN);
+                            if !virtual_tile_prior_repair_is_bounded(
+                                center_shift_px,
+                                correction_scale_ratio,
+                            ) {
+                                println!(
+                                    "  - Virtual_Tile prior repair of station {station} rejected: correction is outside bounds (shift {center_shift_px:.1}px, scale {correction_scale_ratio:.4})"
+                                );
+                                continue;
+                            }
                             if !apply_virtual_tile_prior_repair(
                                 group_slices[station],
                                 &repair.world_correction,
@@ -8053,26 +8113,6 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     "Virtual tile station {station} has invalid bounds after its prior repair"
                                 ));
                             };
-                            let old_center = transformed_point(
-                                &station_tile_to_world[station],
-                                Point2::new(
-                                    f64::from(geometries[station].width) * 0.5,
-                                    f64::from(geometries[station].height) * 0.5,
-                                ),
-                            );
-                            let new_center = transformed_point(
-                                &geometry.tile_to_world,
-                                Point2::new(
-                                    f64::from(geometry.width) * 0.5,
-                                    f64::from(geometry.height) * 0.5,
-                                ),
-                            );
-                            let center_shift_px = old_center
-                                .zip(new_center)
-                                .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
-                            let correction_scale_ratio =
-                                homography_scale_ratio(&repair.world_correction)
-                                    .unwrap_or(f64::NAN);
                             println!(
                                 "  - Virtual_Tile prior repair: station {station} moved {center_shift_px:.1}px (scale {correction_scale_ratio:.4}) onto station {} via prior-free relation {}->{} ({} verified inliers); rendering it once more",
                                 repair.fixed_station,
@@ -16372,6 +16412,19 @@ struct VirtualTilePriorRepair {
     world_correction: Matrix3<f64>,
 }
 
+/// A rendering-prior repair may move a station only within the same bounded
+/// geometry envelope used by closure corrections and the station scale gate.
+/// Keep this decision pure so production and property tests share the exact
+/// finite-value and inclusive-boundary semantics.
+fn virtual_tile_prior_repair_is_bounded(center_shift_px: f64, correction_scale_ratio: f64) -> bool {
+    center_shift_px.is_finite()
+        && center_shift_px >= 0.0
+        && center_shift_px <= CLOSURE_MAX_CORNER_CORRECTION_PX
+        && correction_scale_ratio.is_finite()
+        && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+            .contains(&correction_scale_ratio)
+}
+
 /// Plan rendering-prior repairs from prior-free proposals.
 ///
 /// Stations joined by authoritative (prior-seeded) relations form clusters
@@ -23064,6 +23117,28 @@ mod alignment_tests {
         assert!(!virtual_tile_prior_free_seed_fallback_conditions(
             true, "fitted", 141, 579,
         ));
+    }
+
+    #[test]
+    fn prior_repair_bounds_use_finite_inclusive_shift_and_scale_limits() {
+        assert!(virtual_tile_prior_repair_is_bounded(
+            CLOSURE_MAX_CORNER_CORRECTION_PX,
+            STATION_RELATION_SCALE_RATIO_MIN,
+        ));
+        assert!(virtual_tile_prior_repair_is_bounded(
+            0.0,
+            STATION_RELATION_SCALE_RATIO_MAX,
+        ));
+        assert!(!virtual_tile_prior_repair_is_bounded(
+            CLOSURE_MAX_CORNER_CORRECTION_PX + 1.0,
+            1.0,
+        ));
+        assert!(!virtual_tile_prior_repair_is_bounded(
+            1.0,
+            STATION_RELATION_SCALE_RATIO_MIN - f64::EPSILON,
+        ));
+        assert!(!virtual_tile_prior_repair_is_bounded(f64::NAN, 1.0,));
+        assert!(!virtual_tile_prior_repair_is_bounded(1.0, f64::INFINITY,));
     }
 
     #[test]
