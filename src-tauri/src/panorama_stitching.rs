@@ -7960,9 +7960,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     // solver themselves.
                     let mut prior_repair_records = Vec::new();
                     if tile_infos.len() >= 2 {
-                        let mut authoritative_pairs =
-                            tile_relations.keys().copied().collect::<Vec<_>>();
-                        authoritative_pairs.sort_unstable();
+                        let authoritative_pairs = virtual_tile_provisional_authoritative_pairs(
+                            &tile_relations,
+                            &tile_relation_candidates,
+                            &tile_infos,
+                        );
                         let mut clusters = Dsu::new(tile_infos.len());
                         for &(left, right) in &authoritative_pairs {
                             clusters.union(left, right);
@@ -16423,6 +16425,56 @@ fn virtual_tile_prior_repair_is_bounded(center_shift_px: f64, correction_scale_r
         && correction_scale_ratio.is_finite()
         && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
             .contains(&correction_scale_ratio)
+}
+
+/// Keep only relation fits that are safe to use while planning a rendering
+/// prior repair. This is stricter than merely having a fitted Virtual_Tile
+/// model: a fit that already fails scale/orientation evidence must not merge
+/// provisional repair clusters first.
+fn virtual_tile_provisional_authoritative_candidate(
+    diagnostic: &stack_report::StationRelationCandidateRecord,
+    relation: &MatchInfo,
+    dimensions: (u32, u32),
+) -> bool {
+    diagnostic.model_fitted
+        && diagnostic.failure_stage == "fitted"
+        && diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS
+        && relation.inliers >= STATION_RELATION_MIN_INLIERS
+        && diagnostic.residual_magnitude_px.median.is_finite()
+        && diagnostic.residual_magnitude_px.median <= STATION_RELATION_MAX_MEDIAN_ERROR_PX
+        && diagnostic.hull_support.is_finite()
+        && diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT
+        && homography_scale_ratio(&relation.homography).is_some_and(|scale| {
+            (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX).contains(&scale)
+        })
+        && diagnostic
+            .median_fitted_orientation_difference_degrees
+            .is_some_and(|orientation| {
+                orientation.is_finite()
+                    && orientation
+                        <= STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES
+            })
+        && homography_preserves_focus_orientation(&relation.homography, dimensions)
+}
+
+fn virtual_tile_provisional_authoritative_pairs(
+    relations: &HashMap<(usize, usize), MatchInfo>,
+    candidates: &[stack_report::StationRelationCandidateRecord],
+    tiles: &[ImageInfo],
+) -> Vec<(usize, usize)> {
+    let mut pairs = relations
+        .iter()
+        .filter_map(|(&(left, right), relation)| {
+            let diagnostic = candidates
+                .iter()
+                .find(|candidate| (candidate.left, candidate.right) == (left, right))?;
+            let dimensions = tiles.get(left)?.dimensions();
+            virtual_tile_provisional_authoritative_candidate(diagnostic, relation, dimensions)
+                .then_some((left, right))
+        })
+        .collect::<Vec<_>>();
+    pairs.sort_unstable();
+    pairs
 }
 
 /// Plan rendering-prior repairs from prior-free proposals.

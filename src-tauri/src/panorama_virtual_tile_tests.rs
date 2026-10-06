@@ -771,6 +771,56 @@ fn plan_virtual_tile_prior_repairs_needs_proposals_and_two_clusters() {
 }
 
 #[test]
+fn provisional_authoritative_pairs_require_the_final_geometry_evidence() {
+    let mut candidate = sample_candidate_record();
+    candidate.median_fitted_orientation_difference_degrees = Some(1.0);
+    let points = (0..24)
+        .map(|index| {
+            let x = 4.0 + f64::from(index % 8) * 7.0;
+            let y = 4.0 + f64::from(index / 8) * 14.0;
+            (Point2::new(x, y), Point2::new(x, y))
+        })
+        .collect::<Vec<_>>();
+    let relation = measured_relation(Matrix3::identity(), points);
+    let tiles = vec![
+        plane_info(0, GrayImage::new(64, 64)),
+        plane_info(1, GrayImage::new(64, 64)),
+    ];
+    let relations = HashMap::from([((0, 1), relation)]);
+    assert_eq!(
+        virtual_tile_provisional_authoritative_pairs(&relations, &[candidate.clone()], &tiles),
+        vec![(0, 1)]
+    );
+
+    candidate.median_fitted_orientation_difference_degrees = None;
+    assert!(
+        virtual_tile_provisional_authoritative_pairs(&relations, &[candidate], &tiles).is_empty()
+    );
+}
+
+#[test]
+fn provisional_authoritative_pairs_reject_out_of_range_scale() {
+    let mut candidate = sample_candidate_record();
+    candidate.median_fitted_orientation_difference_degrees = Some(1.0);
+    let points = (0..24)
+        .map(|index| {
+            let x = 4.0 + f64::from(index % 8) * 7.0;
+            let y = 4.0 + f64::from(index / 8) * 14.0;
+            (Point2::new(x, y), Point2::new(1.25 * x, 1.25 * y))
+        })
+        .collect::<Vec<_>>();
+    let relation = measured_relation(uniform_scale(1.25), points);
+    let tiles = vec![
+        plane_info(0, GrayImage::new(64, 64)),
+        plane_info(1, GrayImage::new(64, 64)),
+    ];
+    let relations = HashMap::from([((0, 1), relation)]);
+    assert!(
+        virtual_tile_provisional_authoritative_pairs(&relations, &[candidate], &tiles).is_empty()
+    );
+}
+
+#[test]
 fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_proposal() {
     let tile_to_world = sample_tile_to_world();
     let topology = line_topology(4);
