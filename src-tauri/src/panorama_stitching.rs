@@ -7960,10 +7960,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     // solver themselves.
                     let mut prior_repair_records = Vec::new();
                     if tile_infos.len() >= 2 {
-                        let authoritative_pairs = virtual_tile_provisional_authoritative_pairs(
+                        let authoritative_pairs = virtual_tile_authoritative_pairs(
                             &tile_relations,
-                            &tile_relation_candidates,
                             &tile_infos,
+                            pyramid.solver_coverages(),
                         );
                         let mut clusters = Dsu::new(tile_infos.len());
                         for &(left, right) in &authoritative_pairs {
@@ -16433,55 +16433,124 @@ fn virtual_tile_prior_repair_is_bounded(center_shift_px: f64, correction_scale_r
             .contains(&correction_scale_ratio)
 }
 
-/// Keep only relation fits that are safe to use while planning a rendering
-/// prior repair. This is stricter than merely having a fitted Virtual_Tile
-/// model: a fit that already fails scale/orientation evidence must not merge
-/// provisional repair clusters first.
-fn virtual_tile_provisional_authoritative_candidate(
-    diagnostic: &stack_report::StationRelationCandidateRecord,
+/// Apply the exact pure Station_Relation gates to a Virtual_Tile match before
+/// it is allowed to merge rendering-prior repair clusters. This mirrors the
+/// measurements in `solve_station_poses_for_evidence_with_report` without
+/// recording a second report or running any degradation side effects.
+fn virtual_tile_relation_is_authoritative(
+    left: usize,
+    right: usize,
     relation: &MatchInfo,
-    dimensions: (u32, u32),
+    tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
 ) -> bool {
-    diagnostic.model_fitted
-        && diagnostic.failure_stage == "fitted"
-        && diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS
-        && relation.inliers >= STATION_RELATION_MIN_INLIERS
-        && diagnostic.residual_magnitude_px.median.is_finite()
-        && diagnostic.residual_magnitude_px.median <= STATION_RELATION_MAX_MEDIAN_ERROR_PX
-        && diagnostic.hull_support.is_finite()
-        && diagnostic.hull_support >= STATION_RELATION_MIN_SPATIAL_SUPPORT
-        && homography_scale_ratio(&relation.homography).is_some_and(|scale| {
-            (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX).contains(&scale)
-        })
-        // A missing fitted orientation means that this optional diagnostic
-        // was not measurable for the candidate.  It is not an orientation
-        // failure: the authoritative solver performs its own dense
-        // orientation check before accepting the relation.  Keep the
-        // provisional graph conservative on finite measurements while
-        // allowing unavailable diagnostics to remain unmeasured.
-        && diagnostic
-            .median_fitted_orientation_difference_degrees
-            .is_none_or(|orientation| {
-                orientation.is_finite()
-                    && orientation
-                        <= STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES
-            })
-        && homography_preserves_focus_orientation(&relation.homography, dimensions)
+    if left >= tiles.len()
+        || right >= tiles.len()
+        || left == right
+        || relation.sequence_bridge
+        || relation.points.len() < FOCUS_MODEL_MIN_INLIERS
+    {
+        return false;
+    }
+    let (quality_source, quality_target, quality_inverted) =
+        canonical_match_direction(tiles, left, right);
+    let quality_homography = match relation.canonical_homography {
+        Some(canonical) => canonical,
+        None if quality_inverted => match relation.homography.try_inverse() {
+            Some(inverse) => inverse,
+            None => return false,
+        },
+        None => relation.homography,
+    };
+    let quality_points = if quality_inverted {
+        relation
+            .points
+            .iter()
+            .map(|&(source, target)| (target, source))
+            .collect::<Vec<_>>()
+    } else {
+        relation.points.clone()
+    };
+    let source_dimensions = tiles[quality_source].dimensions();
+    let target_dimensions = tiles[quality_target].dimensions();
+    let error = median_symmetric_error(&quality_homography, &quality_points);
+    let precision = if error.is_finite() {
+        1.0 / (1.0 + error / STATION_RELATION_MAX_MEDIAN_ERROR_PX)
+    } else {
+        0.0
+    };
+    let spatial = panorama_spatial_support(&quality_points, source_dimensions, target_dimensions);
+    let overlap = panorama_transform_overlap_support(
+        &quality_homography,
+        source_dimensions,
+        target_dimensions,
+    );
+    let quality_coverages = coverages
+        .quality
+        .get(quality_source)
+        .zip(coverages.quality.get(quality_target));
+    let Some(dense_measurements) = focus_overlap_quality_measurements_on_coverage(
+        &tiles[quality_source],
+        &tiles[quality_target],
+        &quality_homography,
+        quality_coverages,
+    ) else {
+        return false;
+    };
+    let dense_quality = dense_measurements.legacy_tuple();
+    let dense_weight = 0.25
+        + dense_quality.0.max(0.0)
+        + 0.5 * dense_quality.1.max(0.0)
+        + 0.25 * dense_quality.2.max(0.0);
+    let quality = (relation.inliers.max(quality_points.len()) as f64).sqrt()
+        * precision
+        * (0.25 + 0.75 * spatial)
+        * (0.25 + 0.75 * overlap)
+        * dense_weight;
+    if !quality.is_finite() || quality <= 0.0 {
+        return false;
+    }
+    let edge_strength_ratio = if quality_inverted {
+        1.0 / dense_measurements.edge_strength_ratio
+    } else {
+        dense_measurements.edge_strength_ratio
+    };
+    let Some(overlap_measure) = coverages.overlap_measure(quality_source, quality_target) else {
+        return false;
+    };
+    let measurements = StationRelationMeasurements {
+        inliers: relation.inliers.max(quality_points.len()),
+        median_error_px: error,
+        scale_ratio: homography_scale_ratio(&quality_homography).unwrap_or(f64::INFINITY),
+        spatial_support: station_relation_spatial_support_with(
+            &quality_points,
+            &quality_homography,
+            source_dimensions,
+            target_dimensions,
+            overlap_measure,
+        ),
+        low_frequency_mean_relative_difference: dense_measurements
+            .low_frequency_mean_relative_difference,
+        edge_strength_ratio,
+        median_edge_orientation_difference_degrees: dense_measurements
+            .median_edge_orientation_difference_degrees,
+        preserves_convex_orientation: homography_preserves_focus_orientation(
+            &quality_homography,
+            source_dimensions,
+        ),
+    };
+    station_relation_rejection_reasons(&measurements).is_empty()
 }
 
-fn virtual_tile_provisional_authoritative_pairs(
+fn virtual_tile_authoritative_pairs(
     relations: &HashMap<(usize, usize), MatchInfo>,
-    candidates: &[stack_report::StationRelationCandidateRecord],
     tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
 ) -> Vec<(usize, usize)> {
     let mut pairs = relations
         .iter()
         .filter_map(|(&(left, right), relation)| {
-            let diagnostic = candidates
-                .iter()
-                .find(|candidate| (candidate.left, candidate.right) == (left, right))?;
-            let dimensions = tiles.get(left)?.dimensions();
-            virtual_tile_provisional_authoritative_candidate(diagnostic, relation, dimensions)
+            virtual_tile_relation_is_authoritative(left, right, relation, tiles, coverages)
                 .then_some((left, right))
         })
         .collect::<Vec<_>>();
