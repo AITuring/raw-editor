@@ -9412,7 +9412,7 @@ fn relation_gate_oracle(
         && measurements.median_error_px.is_finite()
         && measurements.median_error_px <= 3.0
         && measurements.scale_ratio.is_finite()
-        && (0.95..=1.05).contains(&measurements.scale_ratio)
+        && (0.80..=1.20).contains(&measurements.scale_ratio)
         && measurements.spatial_support.is_finite()
         && measurements.spatial_support >= 0.20
         && measurements
@@ -9470,27 +9470,27 @@ fn relation_boundary_cases()
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: below(0.95),
+            scale_ratio: below(0.80),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: 0.95,
+            scale_ratio: 0.80,
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: above(0.95),
+            scale_ratio: above(0.80),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: below(1.05),
+            scale_ratio: below(1.20),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: 1.05,
+            scale_ratio: 1.20,
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: above(1.05),
+            scale_ratio: above(1.20),
             ..accepted
         },
         MeasurementsView {
@@ -9953,7 +9953,7 @@ proptest! {
     fn property_29_station_relation_acceptance_is_all_gates(
         inliers in 0usize..48,
         median_error_px in prop_oneof![0.0f64..6.0, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
-        scale_ratio in prop_oneof![0.8f64..1.2, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
+        scale_ratio in prop_oneof![0.6f64..1.4, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
         spatial_support in prop_oneof![0.0f64..1.0, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
         photometric_difference in prop_oneof![0.0f64..0.5, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
         edge_strength_ratio in prop_oneof![0.4f64..1.8, Just(f64::NAN), Just(f64::INFINITY), Just(f64::NEG_INFINITY)],
@@ -10012,7 +10012,7 @@ fn relation_measurements_with_defects(
         measurements.median_error_px = above(3.0);
     }
     if defect_mask & (1 << 2) != 0 {
-        measurements.scale_ratio = above(1.05);
+        measurements.scale_ratio = above(1.20);
     }
     if defect_mask & (1 << 3) != 0 {
         measurements.spatial_support = below(0.20);

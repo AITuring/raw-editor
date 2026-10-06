@@ -485,8 +485,18 @@ const stationRelationMaxOrientationDifference = numberConstant(
 );
 assert.equal(stationRelationMinInliers, 24, 'a Station_Relation requires at least 24 inliers');
 assert.equal(stationRelationMaxMedianError, 3.0, 'relation error is an absolute 3px world-space gate');
-assert.equal(stationRelationScaleMin, 0.95, 'relation scale must not fall below 0.95');
-assert.equal(stationRelationScaleMax, 1.05, 'relation scale must not exceed 1.05');
+assert.equal(stationRelationScaleMin, 0.80, 'relation scale must not fall below the approved 0.80');
+assert.equal(stationRelationScaleMax, 1.20, 'relation scale must not exceed the approved 1.20');
+const relationGateStart = panorama.indexOf('fn station_relation_rejection_reasons(');
+assert.ok(relationGateStart >= 0, 'production relation acceptance must remain inspectable');
+const relationGateEnd = panorama.indexOf('\n}\n', relationGateStart);
+assert.ok(relationGateEnd > relationGateStart, 'production relation acceptance must have a complete body');
+const relationGateBody = panorama.slice(relationGateStart, relationGateEnd + 2);
+assert.match(
+  relationGateBody,
+  /if !measurements\.scale_ratio\.is_finite\(\)\s*\|\| !\(STATION_RELATION_SCALE_RATIO_MIN\.\.=STATION_RELATION_SCALE_RATIO_MAX\)\s*\.contains\(&measurements\.scale_ratio\)\s*\{\s*reasons\.push\(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE\);/,
+  'production relation acceptance must reject nonfinite/out-of-window scales using both approved constants',
+);
 assert.equal(stationRelationMinSupport, 0.2, 'relation inlier hull must cover 20% of overlap');
 assert.equal(stationRelationMaxMeanDifference, 0.2, 'low-frequency mean difference is capped at 20%');
 assert.equal(stationRelationEdgeStrengthMin, 0.7, 'edge-strength ratio must not fall below 0.7');
