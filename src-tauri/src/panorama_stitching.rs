@@ -16229,16 +16229,22 @@ fn virtual_tile_prior_free_relation(
     left_native_dimensions: (u32, u32),
 ) -> Option<(Matrix3<f64>, usize)> {
     let matches = processing::match_features(left_features, right_features);
-    let left_keypoints = left_features
+    let correspondences = matches
         .iter()
-        .map(|feature| feature.keypoint)
+        .map(|matched| {
+            let left = left_features[matched.index1].keypoint;
+            let right = right_features[matched.index2].keypoint;
+            (
+                Point2::new(f64::from(left.x), f64::from(left.y)),
+                Point2::new(f64::from(right.x), f64::from(right.y)),
+            )
+        })
         .collect::<Vec<_>>();
-    let right_keypoints = right_features
-        .iter()
-        .map(|feature| feature.keypoint)
-        .collect::<Vec<_>>();
-    let (homography, inliers) =
-        processing::find_homography_ransac(&matches, &left_keypoints, &right_keypoints)?;
+    let (homography, inliers) = processing::find_homography_ransac_points_stable_with_min_inliers(
+        &correspondences,
+        5.0,
+        STATION_RELATION_MIN_INLIERS,
+    )?;
     if inliers.len() < STATION_RELATION_MIN_INLIERS {
         return None;
     }

@@ -823,6 +823,71 @@ fn provisional_authoritative_pairs_reject_out_of_range_scale() {
 }
 
 #[test]
+fn prior_free_relation_uses_stable_ransac_for_large_projective_coordinates() {
+    let dimensions = (30_000, 30_000);
+    let expected = Matrix3::new(
+        1.018, 0.012, 73.0, -0.008, 0.997, -41.0, 1.5e-6, -1.2e-6, 1.0,
+    );
+    let points = (0..32)
+        .map(|index| {
+            let source = Point2::new(
+                10_000.0 + f64::from(index % 8) * 230.0,
+                20_000.0 + f64::from(index / 8) * 190.0,
+            );
+            let target = transformed_point(&expected, source).expect("finite target");
+            (source, target)
+        })
+        .collect::<Vec<_>>();
+    let mut all_points = points.clone();
+    all_points.extend((0..12).map(|index| {
+        (
+            Point2::new(10_100.0 + f64::from(index) * 120.0, 24_500.0),
+            Point2::new(
+                400.0 + f64::from(index) * 137.0,
+                600.0 + f64::from(index) * 29.0,
+            ),
+        )
+    }));
+    let descriptor_for = |index: usize| {
+        let mut descriptor = [0u8; BRIEF_DESCRIPTOR_SIZE / 8];
+        descriptor[index / 8] = 1u8 << (index % 8);
+        descriptor
+    };
+    let left_features = all_points
+        .iter()
+        .enumerate()
+        .map(|(index, &(source, _))| Feature {
+            keypoint: KeyPoint {
+                x: source.x as u32,
+                y: source.y as u32,
+            },
+            descriptor: descriptor_for(index),
+            support_scale: 1.0,
+        })
+        .collect::<Vec<_>>();
+    let right_features = all_points
+        .iter()
+        .enumerate()
+        .map(|(index, &(_, target))| Feature {
+            keypoint: KeyPoint {
+                x: target.x as u32,
+                y: target.y as u32,
+            },
+            descriptor: descriptor_for(index),
+            support_scale: 1.0,
+        })
+        .collect::<Vec<_>>();
+    let (relation, inliers) =
+        virtual_tile_prior_free_relation(1, &left_features, 1, &right_features, dimensions)
+            .expect("stable RANSAC recovers the large-coordinate projective relation");
+    assert_eq!(inliers, points.len());
+    let probe = Point2::new(11_234.0, 20_456.0);
+    let expected_probe = transformed_point(&expected, probe).expect("finite expected probe");
+    let actual_probe = transformed_point(&relation, probe).expect("finite fitted probe");
+    assert!((actual_probe - expected_probe).norm() < 2.0);
+}
+
+#[test]
 fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_proposal() {
     let tile_to_world = sample_tile_to_world();
     let topology = line_topology(4);
