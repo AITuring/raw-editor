@@ -101,6 +101,9 @@ pub const STATION_RELATION_HIGH_REPROJECTION_ERROR: &str =
     "station_relation_high_reprojection_error";
 /// Scale ratio outside `[0.95, 1.05]`.
 pub const STATION_RELATION_SCALE_OUT_OF_RANGE: &str = "station_relation_scale_out_of_range";
+/// The selected canonical homography is not invertible.
+pub const STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM: &str =
+    "station_relation_non_invertible_canonical_transform";
 /// Inlier spatial support below 20%.
 pub const STATION_RELATION_LOW_SPATIAL_SUPPORT: &str = "station_relation_low_spatial_support";
 /// Low frequency luminance mean relative difference above 20%.
@@ -435,6 +438,10 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     (STATION_RELATION_LOW_INLIERS, Severity::Degraded),
     (STATION_RELATION_HIGH_REPROJECTION_ERROR, Severity::Degraded),
     (STATION_RELATION_SCALE_OUT_OF_RANGE, Severity::Degraded),
+    (
+        STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM,
+        Severity::Degraded,
+    ),
     (STATION_RELATION_LOW_SPATIAL_SUPPORT, Severity::Degraded),
     (STATION_RELATION_PHOTOMETRIC_MISMATCH, Severity::Degraded),
     (STATION_RELATION_EDGE_STRENGTH_MISMATCH, Severity::Degraded),

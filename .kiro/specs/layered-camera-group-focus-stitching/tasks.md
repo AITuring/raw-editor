@@ -84,6 +84,31 @@
 - T4：测试 ledger 写入口在 `cfg(test)` 下要求全局 run scope；41 个违规测试均补 scope，P49/P51 等记录模式断言恢复为
   未过滤的 `entries().is_empty()`；串行全套测试三轮均 652 passed / 0 failed / 28 ignored。提交 `ef4c2f67`。
 
+## 本轮执行记录（2026-10-08，批准尺度 `[0.95,1.05]`）
+
+- 最终 Station Relation 尺度政策、独立 Property 29/30 oracle 与 prior-repair 复用边界已统一为闭区间
+  `[0.95,1.05]`；solver 与 authoritative-cluster 现在共用 typed canonical relation view。
+- canonical transform 不可逆时按最终 station pair 去重，稳定记录
+  `station_relation_non_invertible_canonical_transform` / `canonical_transform_non_invertible`，保持
+  fitted-but-rejected、`unmeasured=0`。VirtualTile connectivity 已改为报告原始 SourceRaw member，而非
+  `virtual://` 诊断路径。
+- 目录预检要求 source/report 为绝对、非嵌套路径，84 个输入均为可读、可哈希的普通非 symlink 文件；
+  report 选择只接受恰好一个 regular `stack-report-*.json`。
+- 最新有效验收证据：
+  `.agents/artifacts/approved-scale-and-84-acceptance-2026-10-08/20261008T084725Z/`。
+  HEAD 与 relevant diff hash 前后相同，唯一报告可解析，84/84 digest 不变，network requests 为 0。
+- 实际结论仍为未通过：28 station / 84 unique member 正确，378 candidates 中 accepted=8、
+  rejected=370、unmeasured=316；accepted graph 为 20 components。失败阶段为 fitted 32、
+  no_predicted_overlap 194、insufficient_measurable_patches 95、insufficient_polished_support 22、
+  insufficient_bidirectional_matches 20、insufficient_grid_coverage 7；最终 reason 为 scale 24、
+  edge orientation 2。未进入 fusion、composition、Quality Gate。
+- 24 个 fitted relation 的 canonical scale 在批准窗口外（含 0.7091、0.94645、1.06884、1.53428 等），
+  prior repair 也因现有位移/尺度包络越界而未应用；因此没有证据支持放宽批准门槛或猜测性生产修复。
+  下一步需要产品/拍摄侧确认真实相邻机位是否允许超过 5% 尺度变化，或新增能区分错误尺度拟合与真实焦距/
+  拍摄距离变化的独立像素测量。
+- 修复报告映射后常规回归为 674 passed / 0 failed / 28 ignored；最新 acceptance harness 按预期因
+  `geometry_disconnected` 以 101 退出，报告与命令日志均已保留。
+
 ## Tasks
 
 - [x] 1. 阶段 0：一致性清理与观测骨架（无行为变更）

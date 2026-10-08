@@ -771,16 +771,12 @@ fn plan_virtual_tile_prior_repairs_needs_proposals_and_two_clusters() {
 }
 
 #[test]
-fn authoritative_pairs_reuse_the_station_relation_gates_without_side_effects() {
+fn authoritative_pairs_reuse_canonical_relation_view_without_side_effects() {
     let dimensions = (96, 96);
     let gray = textured_plane(dimensions.0, dimensions.1);
-    let tiles = vec![plane_info(0, gray.clone()), plane_info(1, gray)];
-    let coverage = full_coverage(dimensions.0, dimensions.1);
-    let coverages = VirtualTileSolverCoverages {
-        quality: &[coverage.clone(), coverage.clone()],
-        overlap: &[coverage.clone(), coverage],
-        overlap_factor: 1,
-    };
+    let mut tiles = vec![plane_info(0, gray.clone()), plane_info(1, gray)];
+    tiles[0].filename = "virtual://z".to_string();
+    tiles[1].filename = "virtual://a".to_string();
     let points = (0..24)
         .map(|index| {
             let x = 8.0 + f64::from(index % 8) * 10.0;
@@ -788,29 +784,101 @@ fn authoritative_pairs_reuse_the_station_relation_gates_without_side_effects() {
             (Point2::new(x, y), Point2::new(x, y))
         })
         .collect::<Vec<_>>();
-    let relation = measured_relation(Matrix3::identity(), points);
-    let relations = HashMap::from([((0, 1), relation.clone())]);
-    assert_eq!(
-        virtual_tile_authoritative_pairs(&relations, &tiles, coverages),
-        vec![(0, 1)]
-    );
+    let candidate = sample_candidate_record();
 
-    let mut rejected = relation;
-    rejected.homography = uniform_scale(1.25);
-    let rejected_coverage = full_coverage(dimensions.0, dimensions.1);
-    let rejected_quality = vec![rejected_coverage.clone(), rejected_coverage.clone()];
-    let rejected_overlap = vec![rejected_coverage.clone(), rejected_coverage];
+    for (canonical_scale, expected) in [
+        (STATION_RELATION_SCALE_RATIO_MIN, true),
+        (STATION_RELATION_SCALE_RATIO_MAX, true),
+        (
+            f64::from_bits(STATION_RELATION_SCALE_RATIO_MIN.to_bits() - 1),
+            false,
+        ),
+        (
+            f64::from_bits(STATION_RELATION_SCALE_RATIO_MAX.to_bits() + 1),
+            false,
+        ),
+    ] {
+        let relation = measured_relation(uniform_scale(1.0 / canonical_scale), points.clone());
+        let authoritative = !virtual_tile_authoritative_pairs(
+            &HashMap::from([((0, 1), relation.clone())]),
+            &[candidate.clone()],
+            &tiles,
+        )
+        .is_empty();
+        let final_gate = station_relation_rejection_reasons(&StationRelationMeasurements {
+            inliers: STATION_RELATION_MIN_INLIERS,
+            median_error_px: 0.0,
+            scale_ratio: canonical_scale,
+            spatial_support: STATION_RELATION_MIN_SPATIAL_SUPPORT,
+            low_frequency_mean_relative_difference: 0.0,
+            edge_strength_ratio: 1.0,
+            median_edge_orientation_difference_degrees: 0.0,
+            preserves_convex_orientation: true,
+        })
+        .is_empty();
+        assert_eq!(authoritative, expected, "canonical scale {canonical_scale}");
+        assert_eq!(authoritative, final_gate);
+    }
+
+    let counterexample = measured_relation(uniform_scale(0.95), points);
     assert!(
         virtual_tile_authoritative_pairs(
-            &HashMap::from([((0, 1), rejected)]),
+            &HashMap::from([((0, 1), counterexample)]),
+            &[candidate],
             &tiles,
-            VirtualTileSolverCoverages {
-                quality: &rejected_quality,
-                overlap: &rejected_overlap,
-                overlap_factor: 1,
-            },
         )
-        .is_empty()
+        .is_empty(),
+        "key scale 0.95 has canonical inverse scale above 1.05"
+    );
+}
+
+#[test]
+fn virtual_tile_non_invertible_canonical_transform_is_summarized_once() {
+    let _run_scope = degradation::begin_run_scope();
+    let mut report = report::StationRelationsReport::default();
+    report.record_non_invertible_canonical_pair(0, 1);
+    report.record_non_invertible_canonical_pair(1, 0);
+    report.candidates = vec![sample_candidate_record()];
+    report.summarize_candidate_measurements();
+    assert_eq!(report.rejected_count, 1);
+    assert_eq!(report.unmeasured_count, 0);
+    assert_eq!(
+        report.rejected_by_reason[degradation::STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM],
+        1
+    );
+    assert_eq!(
+        report.rejected_by_failure_stage["canonical_transform_non_invertible"],
+        1
+    );
+    assert_eq!(
+        report.candidates[0].failure_stage,
+        "canonical_transform_non_invertible"
+    );
+    assert!(report.candidates[0].model_fitted);
+    assert!(
+        !report
+            .rejected_by_reason
+            .contains_key(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE)
+    );
+}
+
+#[test]
+fn virtual_tile_connectivity_reports_original_source_members() {
+    let stations = vec![
+        vec!["/raw/a.nef".to_string(), "/raw/b.nef".to_string()],
+        vec!["/raw/c.nef".to_string()],
+        vec!["/raw/d.nef".to_string(), "/raw/e.nef".to_string()],
+    ];
+    assert_eq!(
+        station_graph_components_from_members(&stations, &[(0, 1)]),
+        vec![
+            vec![
+                "/raw/a.nef".to_string(),
+                "/raw/b.nef".to_string(),
+                "/raw/c.nef".to_string(),
+            ],
+            vec!["/raw/d.nef".to_string(), "/raw/e.nef".to_string()],
+        ]
     );
 }
 

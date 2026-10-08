@@ -50,6 +50,41 @@
 不同拍摄位置的几何由多焦平面一致证据连接；全图和局部实像检查均无重影、虚焦块和可见接缝。
 任何参考匹配合成图都不算通过。
 
+## 批准尺度与 84 张验收（2026-10-08，未通过）
+
+最终 Station Relation 尺度闭区间已恢复为批准的 `[0.95,1.05]`，solver、authoritative-cluster 与
+prior-repair bound 共用相同 canonical transform 语义。最新有效 run 位于：
+
+```text
+.agents/artifacts/approved-scale-and-84-acceptance-2026-10-08/20261008T084725Z/
+```
+
+唯一 Stack Report 为
+`reports/stack-report-4d3752bd-8714-43c9-b4e7-46d89478c48b.json`，报告 SHA-256 为
+`dc13a47788b6eca432ea19936f382c310705594d242441a8dcba3369e57be9c6`。运行前后 HEAD 均为
+`e44c681be95446e08141bf25f2dc85af50a1ba6e`，relevant diff SHA-256 均为
+`8a35eb6faba806563944493d69f4e92c66f0a9faaefb6ab585f2da8ee2b6cd0e`；84 个 SourceRaw 的
+before/after SHA-256 全部相同，84 张均成功解码，network requests 为 0。
+
+实际结果：28 个 station 精确覆盖 84 个唯一 member，无 isolated/undecodable；378 个关系候选中
+8 accepted、370 rejected、316 unmeasured。accepted graph 仍为 20 个 component，但 connectivity
+报告现已正确列出全部 84 个原始 SourceRaw 路径。失败阶段为 `fitted=32`、
+`no_predicted_overlap=194`、`insufficient_measurable_patches=95`、
+`insufficient_polished_support=22`、`insufficient_bidirectional_matches=20`、
+`insufficient_grid_coverage=7`；最终拒绝原因是 `station_relation_scale_out_of_range=24` 与
+`station_relation_edge_orientation_mismatch=2`，prior repairs 为 0。
+
+管线在关系图不连通处停止，因此**未进入** fusion、composition、tone、residual warp 和
+Quality Gate；不能把默认的零值或 `not_run` 解释为通过。运行耗时 1,082,125 ms，peak RSS
+11,212,750,848 bytes，低于 25,769,803,776-byte 门槛，共 2,134 个 RSS sample。harness 因
+`geometry_disconnected` 以 101 退出并保留有效报告。
+
+报告中的 fitted 跨组件关系已有充足像素证据，但 24 个 canonical scale 确实超出批准窗口
+（观测包含 0.7091、0.94645、1.06884、1.53428 等），另有 2 个方向差异超门；prior repair
+同样因既有位移/尺度包络越界而被拒绝。本轮不放宽尺度、空间支持、方向、重投影或 Quality Gate。
+下一步需要确认真实相邻机位是否允许超过 5% 尺度变化，或先增加能区分错误尺度拟合与真实拍摄距离/
+焦距变化的独立测量，再决定产品需求。
+
 ## 验证命令
 
 本次代码变更通过：

@@ -485,8 +485,8 @@ const stationRelationMaxOrientationDifference = numberConstant(
 );
 assert.equal(stationRelationMinInliers, 24, 'a Station_Relation requires at least 24 inliers');
 assert.equal(stationRelationMaxMedianError, 3.0, 'relation error is an absolute 3px world-space gate');
-assert.equal(stationRelationScaleMin, 0.80, 'relation scale must not fall below the approved 0.80');
-assert.equal(stationRelationScaleMax, 1.20, 'relation scale must not exceed the approved 1.20');
+assert.equal(stationRelationScaleMin, 0.95, 'relation scale must not fall below approved Requirement 6.3');
+assert.equal(stationRelationScaleMax, 1.05, 'relation scale must not exceed approved Requirement 6.3');
 const relationGateStart = panorama.indexOf('fn station_relation_rejection_reasons(');
 assert.ok(relationGateStart >= 0, 'production relation acceptance must remain inspectable');
 const relationGateEnd = panorama.indexOf('\n}\n', relationGateStart);
@@ -1242,7 +1242,11 @@ for (const variable of [
   assert.doesNotMatch(body, /std::env::var/, 'the Tile_Compositor entry must not read std::env::var (任务 13.7)');
   assert.match(body, /ownership_compositor_switches\(finishing\)/, 'the entry must use the production switch resolver');
   const resolver = stitching.slice(stitching.indexOf('fn ownership_compositor_switches'));
-  assert.match(resolver, /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/, 'the resolver must keep layered defaults disabled');
+  assert.match(
+    resolver,
+    /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/,
+    'the resolver must keep layered defaults disabled',
+  );
 }
 // 任务 13.6 / 需求 10.11: the supported canvas limit is a named constant and a
 // rejection is never retried by the fallback renderer.
