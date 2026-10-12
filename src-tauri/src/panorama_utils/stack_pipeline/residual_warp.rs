@@ -820,13 +820,31 @@ pub(crate) fn verify_round_trip_match(
     backward_transform: &Matrix3<f64>,
     center: Point2<f64>,
 ) -> Option<RoundTripMatch> {
-    let forward_match = refine_warped_patch(source, target, forward_transform, center, 9, 7)?;
+    verify_round_trip_match_with_template(
+        source,
+        target,
+        forward_transform,
+        backward_transform,
+        center,
+        9,
+    )
+}
+
+pub(crate) fn verify_round_trip_match_with_template(
+    source: &GrayImage,
+    target: &GrayImage,
+    forward_transform: &Matrix3<f64>,
+    backward_transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    half: i32,
+) -> Option<RoundTripMatch> {
+    let forward_match = refine_warped_patch(source, target, forward_transform, center, half, 7)?;
     let backward_match = refine_warped_patch(
         target,
         source,
         backward_transform,
         forward_match.target,
-        9,
+        half,
         7,
     )?;
     let round_trip_error_px = (backward_match.target - center).norm();

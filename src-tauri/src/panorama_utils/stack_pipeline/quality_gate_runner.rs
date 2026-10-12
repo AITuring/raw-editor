@@ -29,6 +29,27 @@ pub(crate) struct QualitySource {
     pub path: String,
     pub geometry: SourceGeometry,
     pub dimensions: (u32, u32),
+    pub native_registration: Option<NativeReferenceMap>,
+}
+
+/// Replays the actual station-canvas inverse refinement before the RAW inverse.
+#[derive(Debug, Clone)]
+pub(crate) struct NativeReferenceMap {
+    pub world_to_station: Matrix3<f64>,
+    pub station_to_world: Matrix3<f64>,
+    pub refinement: crate::panorama_utils::stitching::FocusSourceRefinement,
+    pub station_origin: (f64, f64),
+}
+
+impl NativeReferenceMap {
+    fn corrected_station(&self, world: Point2<f64>) -> Option<Point2<f64>> {
+        let station = project(&self.world_to_station, world)?;
+        Some(self.refinement.inverse_canvas_point(station))
+    }
+
+    fn reference_world(&self, world: Point2<f64>) -> Option<Point2<f64>> {
+        project(&self.station_to_world, self.corrected_station(world)?)
+    }
 }
 
 /// Inputs retained by the compositor after the final image is assembled.
@@ -438,7 +459,9 @@ fn source_quad(source: &QualitySource) -> Option<[Point2<f64>; 4]> {
     ])
 }
 
-/// Bilinear source sampling through the complete output-to-source mapping.
+/// Source sampling through the complete output-to-source mapping, using the
+/// same Catmull-Rom kernel as rendering so reference noise is not artificially
+/// reduced by a different bilinear filter.
 /// This is the single allowed reference resample; output pixels are copied as
 /// is by [`output_roi`].
 fn source_roi(
@@ -446,6 +469,7 @@ fn source_roi(
     roi: &QualityRoi,
     geometry: &SourceGeometry,
     residual: &ResidualWarp,
+    native_registration: Option<&NativeReferenceMap>,
 ) -> Result<Rgb32FImage, &'static str> {
     let inverse = (geometry.tile_to_world * geometry.member_to_anchor)
         .try_inverse()
@@ -457,12 +481,33 @@ fn source_roi(
                 roi.world_origin.0 + f64::from(x),
                 roi.world_origin.1 + f64::from(y),
             );
-            let mapped = quality_gate::map_world_to_source_with_inverse(
-                world,
-                geometry.station_id,
-                residual,
-                &inverse,
-            )?;
+            let mapped = if let Some(native) = native_registration {
+                let unwarped = residual.warp_inverse(world, geometry.station_id);
+                if let Some(sampling) = native.refinement.source_sampling.as_ref() {
+                    let station = native
+                        .corrected_station(unwarped)
+                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+                    sampling
+                        .source_point(nalgebra::Point3::new(
+                            station.x + native.station_origin.0,
+                            station.y + native.station_origin.1,
+                            1.0,
+                        ))
+                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
+                } else {
+                    let corrected = native
+                        .reference_world(unwarped)
+                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+                    project(&inverse, corrected).ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
+                }
+            } else {
+                quality_gate::map_world_to_source_with_inverse(
+                    world,
+                    geometry.station_id,
+                    residual,
+                    &inverse,
+                )?
+            };
             let max_x = f64::from(source.width().saturating_sub(1));
             let max_y = f64::from(source.height().saturating_sub(1));
             if !mapped.x.is_finite()
@@ -474,23 +519,9 @@ fn source_roi(
             {
                 return Err(degradation::OWNER_SOURCE_UNDECODABLE);
             }
-            let sx = mapped.x;
-            let sy = mapped.y;
-            let x0 = sx.floor() as u32;
-            let y0 = sy.floor() as u32;
-            let x1 = (x0 + 1).min(source.width().saturating_sub(1));
-            let y1 = (y0 + 1).min(source.height().saturating_sub(1));
-            let tx = (sx - f64::from(x0)) as f32;
-            let ty = (sy - f64::from(y0)) as f32;
-            let a = *source.get_pixel(x0, y0);
-            let b = *source.get_pixel(x1, y0);
-            let c = *source.get_pixel(x0, y1);
-            let d = *source.get_pixel(x1, y1);
-            let pixel = Rgb(std::array::from_fn(|channel| {
-                let top = a[channel] * (1.0 - tx) + b[channel] * tx;
-                let bottom = c[channel] * (1.0 - tx) + d[channel] * tx;
-                top * (1.0 - ty) + bottom * ty
-            }));
+            let pixel = crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
+                source, mapped.x, mapped.y,
+            );
             result.put_pixel(x, y, pixel);
         }
     }
@@ -1238,7 +1269,13 @@ pub(crate) fn run_quality_gate(
             let roi_started = Instant::now();
             let where_ = world(roi);
             let output_roi = output_roi(input.output, roi);
-            let reference = source_roi(&source, roi, &source_info.geometry, input.residual);
+            let reference = source_roi(
+                &source,
+                roi,
+                &source_info.geometry,
+                input.residual,
+                source_info.native_registration.as_ref(),
+            );
             let (Some(output_roi), Ok(reference)) = (output_roi, reference) else {
                 timing.roi_sampling_seconds += roi_started.elapsed().as_secs_f64();
                 for criterion in [
@@ -1658,6 +1695,100 @@ mod tests {
     use super::*;
     use image::Luma;
 
+    #[test]
+    fn owner_reference_uses_the_rendering_kernel_for_fractional_fine_texture() {
+        let source = Rgb32FImage::from_fn(32, 32, |x, y| {
+            Rgb([if (x + y) % 2 == 0 { 0.15 } else { 0.85 }; 3])
+        });
+        let geometry = SourceGeometry {
+            member_to_anchor: Matrix3::identity(),
+            tile_to_world: Matrix3::new(1.0, 0.0, -0.37, 0.0, 1.0, 0.23, 0.0, 0.0, 1.0),
+            station_id: 0,
+        };
+        let roi = QualityRoi {
+            x: 0,
+            y: 0,
+            side: 4,
+            region_label: 1,
+            owner: 1,
+            world_origin: (10.0, 10.0),
+            boundary_clearance: 8.0,
+        };
+        let sampled = source_roi(&source, &roi, &geometry, &ResidualWarp::new(), None).unwrap();
+        for y in 0..4 {
+            for x in 0..4 {
+                let expected =
+                    crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
+                        &source,
+                        10.37 + f64::from(x),
+                        9.77 + f64::from(y),
+                    );
+                assert!((sampled.get_pixel(x, y)[0] - expected[0]).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn owner_reference_replays_foreground_native_field_and_translation_in_render_order() {
+        use crate::panorama_utils::{
+            mosaic::{Field, NativeResidualDisplacement},
+            stitching::{FocusForegroundMove, FocusSourceRefinement},
+        };
+        let source = Rgb32FImage::from_fn(128, 128, |x, y| {
+            Rgb([x as f32 / 128.0, y as f32 / 128.0, 0.25])
+        });
+        let station_to_world = Matrix3::new(1.0, 0.0, 100.0, 0.0, 1.0, 200.0, 0.0, 0.0, 1.0);
+        let mut field = Field::<2>::new(128, 128, 16.0);
+        field.values.fill([1.5, -0.5]);
+        let native = NativeReferenceMap {
+            world_to_station: station_to_world.try_inverse().unwrap(),
+            station_to_world,
+            station_origin: (0.0, 0.0),
+            refinement: FocusSourceRefinement {
+                translation: (3, -2),
+                displacement: Some(NativeResidualDisplacement::from_test_field(field)),
+                foreground_move: Some(FocusForegroundMove {
+                    delta: (4, 0),
+                    left: 0,
+                    top: 0,
+                    destinations: GrayImage::from_pixel(128, 128, Luma([255])),
+                }),
+                source_sampling: None,
+            },
+        };
+        let geometry = SourceGeometry {
+            member_to_anchor: Matrix3::identity(),
+            tile_to_world: station_to_world,
+            station_id: 0,
+        };
+        let roi = QualityRoi {
+            x: 0,
+            y: 0,
+            side: 4,
+            region_label: 1,
+            owner: 1,
+            world_origin: (112.0, 224.0),
+            boundary_clearance: 8.0,
+        };
+        let actual = source_roi(
+            &source,
+            &roi,
+            &geometry,
+            &ResidualWarp::new(),
+            Some(&native),
+        )
+        .unwrap();
+        for y in 0..4 {
+            for x in 0..4 {
+                let pixel = actual.get_pixel(x, y);
+                assert!((pixel[0] - (6.5 + x as f32) / 128.0).abs() < 1e-6);
+                assert!((pixel[1] - (25.5 + y as f32) / 128.0).abs() < 1e-6);
+            }
+        }
+        let wrong = source_roi(&source, &roi, &geometry, &ResidualWarp::new(), None).unwrap();
+        assert!((wrong.get_pixel(0, 0)[0] - actual.get_pixel(0, 0)[0]).abs() > 0.04);
+    }
+
     /// 需求 11.12 judges `shortfall > 0.05` on quantised planes; the
     /// quantisation must keep that boundary exact, and the cell definition
     /// must give no shortfall to the best owner or to a lone candidate.
@@ -1787,6 +1918,7 @@ mod tests {
                 station_id: 0,
             },
             dimensions: (1024, 1024),
+            native_registration: None,
         }];
         let input = QualityGateInput {
             output: &output,
@@ -1865,6 +1997,7 @@ mod tests {
                 station_id: 0,
             },
             dimensions: (1024, 1024),
+            native_registration: None,
         }];
         let input = QualityGateInput {
             output: &output,

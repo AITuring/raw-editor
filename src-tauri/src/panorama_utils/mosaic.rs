@@ -2572,6 +2572,7 @@ pub(crate) fn native_control_point_spacing_px(analysis_scale: f64) -> f64 {
 /// The refinement measures and corrects in the layer's analysis units; a caller
 /// that already holds the layer rendered on the canvas needs the same
 /// correction in canvas pixels, which is what [`Self::at`] returns.
+#[derive(Debug, Clone)]
 pub(crate) struct NativeResidualDisplacement {
     field: Field<2>,
     left: u32,
@@ -2580,6 +2581,16 @@ pub(crate) struct NativeResidualDisplacement {
 }
 
 impl NativeResidualDisplacement {
+    #[cfg(test)]
+    pub(crate) fn from_test_field(field: Field<2>) -> Self {
+        Self {
+            field,
+            left: 0,
+            top: 0,
+            scale: 1.0,
+        }
+    }
+
     /// Canvas-pixel offset to add to a canvas position before sampling the
     /// layer, i.e. exactly what [`LayerSampler::source_point`] adds.
     pub(crate) fn at(&self, canvas_x: f64, canvas_y: f64) -> [f64; 2] {

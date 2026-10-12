@@ -290,7 +290,7 @@ fn export_prepared_sources_from_env() {
     let mut sources = Vec::with_capacity(paths.len());
 
     for (id, filename) in paths.iter().enumerate() {
-        let prepared = load_prepared_stack_source(filename, &settings)
+        let prepared = load_prepared_stack_source(filename, &settings, None)
             .expect("load and process a reference RAW source");
         let (width, height) = prepared.image.dimensions();
         let (thumb_width, thumb_height) = thumbnail_dimensions(width, height);
@@ -343,7 +343,7 @@ fn export_full_reference_sources_from_env() {
         if output.exists() {
             continue;
         }
-        let prepared = load_prepared_stack_source(&source.filename, &AppSettings::default())
+        let prepared = load_prepared_stack_source(&source.filename, &AppSettings::default(), None)
             .expect("develop full RAW source");
         assert_eq!(prepared.image.dimensions(), (source.width, source.height));
         let canonical = crate::image_stack::canonicalize_image_stack_result(prepared.image);
@@ -425,7 +425,7 @@ fn render_reference_registered_stack_from_env() {
         .unwrap_or(1_644);
     let app = tauri::test::mock_app();
     let mut load_image = |info: &ImageInfo| -> Result<Rgb32FImage, String> {
-        let prepared = load_prepared_stack_source(&info.filename, &AppSettings::default())?;
+        let prepared = load_prepared_stack_source(&info.filename, &AppSettings::default(), None)?;
         let dynamic = if (scale - 1.0).abs() < f64::EPSILON {
             prepared.image
         } else {

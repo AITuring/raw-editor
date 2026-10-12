@@ -12285,6 +12285,7 @@ proptest! {
                     station_id: 0,
                 },
                 dimensions: (width, height),
+                native_registration: None,
             };
             let input = QualityGateInput {
                 output: &output,

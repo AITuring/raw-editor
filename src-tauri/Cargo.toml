@@ -19,6 +19,7 @@ tauri-plugin-dialog = "2.7.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 image = "0.25.10"
+include_dir = "0.7.4"
 moxcms = { version = "0.8.1", features = ["in_place"] }
 base64 = "0.22"
 tauri-plugin-fs = "2.5.1"
@@ -96,7 +97,6 @@ jni = "0.21"
 jni22 = { package = "jni", version = "0.22" }
 rustls-platform-verifier = "0.7"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-include_dir = "0.7.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

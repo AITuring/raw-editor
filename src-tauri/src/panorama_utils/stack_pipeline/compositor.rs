@@ -463,6 +463,7 @@ mod tests {
                 station_id: 0,
             },
             dimensions: (qg_width, qg_height),
+            native_registration: None,
         };
         let residual = residual_warp::ResidualWarp::new();
         let sources = [source];

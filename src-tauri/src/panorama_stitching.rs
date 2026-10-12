@@ -2193,9 +2193,74 @@ struct PreparedStackSource {
     focal_length_35mm: Option<f64>,
 }
 
+/// Photon exposure at the sensor, including the recorded ISO sensitivity.
+/// This is a camera metadata calibration, not a frame histogram adjustment.
+#[cfg(test)]
+fn stack_raw_exposure_value(metadata: &HashMap<String, String>) -> Option<f64> {
+    let number = |text: &str| {
+        let text = text.trim().trim_start_matches("f/").trim_end_matches(" s");
+        if let Some((a, b)) = text.split_once('/') {
+            Some(a.parse::<f64>().ok()? / b.parse::<f64>().ok()?)
+        } else {
+            text.parse::<f64>().ok()
+        }
+    };
+    let time = number(metadata.get("ExposureTime")?)?;
+    let aperture = number(metadata.get("FNumber")?)?;
+    let iso = number(
+        metadata
+            .get("ISOSpeedRatings")
+            .or_else(|| metadata.get("PhotographicSensitivity"))
+            .or_else(|| metadata.get("ISOSpeed"))?,
+    )?;
+    let exposure = time * iso / aperture.powi(2);
+    (time > 0.0 && aperture > 0.0 && iso > 0.0 && exposure.is_finite()).then_some(exposure)
+}
+
+fn stack_raw_exposure_from_bytes(bytes: &[u8]) -> Option<f64> {
+    let metadata = crate::exif_processing::read_raw_metadata(bytes)?;
+    let time = metadata.exif.exposure_time?;
+    let aperture = metadata.exif.fnumber?;
+    if time.d == 0 || aperture.d == 0 {
+        return None;
+    }
+    let iso = metadata
+        .exif
+        .iso_speed
+        .or_else(|| metadata.exif.iso_speed_ratings.map(|iso| iso as u32))?;
+    let time = f64::from(time.n) / f64::from(time.d);
+    let aperture = f64::from(aperture.n) / f64::from(aperture.d);
+    let exposure = time * f64::from(iso) / aperture.powi(2);
+    (time > 0.0 && aperture > 0.0 && iso > 0 && exposure.is_finite()).then_some(exposure)
+}
+
+fn stack_raw_exposure_reference(paths: &[String]) -> Option<f64> {
+    let mut exposures = Vec::with_capacity(paths.len());
+    let mut camera = None;
+    for path in paths {
+        if !is_raw_file(path) {
+            return None;
+        }
+        let bytes = read_file_mapped(Path::new(path)).ok()?;
+        let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
+        let identity = (
+            metadata.get("Make")?.clone(),
+            metadata.get("Model")?.clone(),
+        );
+        if camera.as_ref().is_some_and(|camera| camera != &identity) {
+            return None;
+        }
+        camera = Some(identity);
+        exposures.push(stack_raw_exposure_from_bytes(&bytes)?);
+    }
+    exposures.sort_by(f64::total_cmp);
+    exposures.get(exposures.len() / 2).copied()
+}
+
 fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
+    raw_exposure_reference: Option<f64>,
 ) -> Result<PreparedStackSource, String> {
     let file_data = read_file_mapped(Path::new(filename))
         .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
@@ -2205,7 +2270,60 @@ fn load_prepared_stack_source(
     )
     .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
     if is_raw_file(filename) {
+        let mut metadata = crate::exif_processing::read_exif_data_from_bytes(filename, &file_data);
+        // RAW metadata extraction otherwise copies the physical focal length
+        // into this field. Use the actual EXIF value to detect sensor crop mode.
+        if let Some(equivalent) = focal_length_35mm {
+            metadata.insert("FocalLengthIn35mmFilm".into(), equivalent.to_string());
+        } else {
+            metadata.remove("FocalLengthIn35mmFilm");
+        }
+        let calibration =
+            crate::lens_correction::stack_lens_calibration(&metadata, image.dimensions());
+        if let Some(reference) = raw_exposure_reference
+            && let Some(exposure) = stack_raw_exposure_from_bytes(&file_data)
+        {
+            let gain = (reference / exposure) as f32;
+            if gain.is_finite() && gain > 0.0 {
+                if image.as_rgb32f().is_none() {
+                    image = DynamicImage::ImageRgb32F(image.to_rgb32f());
+                }
+                image
+                    .as_mut_rgb32f()
+                    .unwrap()
+                    .as_mut()
+                    .par_iter_mut()
+                    .for_each(|channel| *channel = (*channel * gain).max(0.0));
+            }
+        }
+        if let Some(calibration) = calibration {
+            if image.as_rgb32f().is_none() {
+                image = DynamicImage::ImageRgb32F(image.to_rgb32f());
+            }
+            calibration.correct_linear_illumination(image.as_mut_rgb32f().unwrap());
+        }
         apply_cpu_default_raw_processing(&mut image);
+        if let Some(calibration) = calibration
+            && let Some(corrected) = {
+                // Developed RAW is already RGB32F. Borrow it so optical
+                // preparation does not retain another full 45MP RGB buffer.
+                let rgb = image
+                    .as_rgb32f()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_else(|| Cow::Owned(image.to_rgb32f()));
+                calibration.correct(&rgb)
+            }
+        {
+            println!(
+                "  - Calibrated stack lens geometry: {} ({}x{} -> {}x{})",
+                filename,
+                image.width(),
+                image.height(),
+                corrected.width(),
+                corrected.height()
+            );
+            image = DynamicImage::ImageRgb32F(corrected);
+        }
     }
     Ok(PreparedStackSource {
         image,
@@ -2255,7 +2373,19 @@ fn normalize_stack_raw_display_exposure(rgb: &mut Rgb32FImage) {
 /// Return the robust bright-end luma of a developed RAW frame without
 /// allocating a second image.  This is used only during focus-stack
 /// preparation to derive one shared display gain for the whole selection.
-fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
+/// Each frame already excludes the brightest 3% of pixels. Protect the
+/// brightest retained channel across the batch: a median frame white clips
+/// brighter scan regions and changes their RGB ratios before tone matching.
+fn shared_stack_raw_display_gain(highs: &[f32]) -> Option<f32> {
+    highs
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .max_by(f32::total_cmp)
+        .map(|high| (0.90 / high).clamp(1.0, 2.10))
+}
+
+fn raw_display_channel_percentile(image: &DynamicImage) -> Option<f32> {
     let rgb = image.as_rgb32f()?;
     let step = ((u64::from(rgb.width()) * u64::from(rgb.height()) / 24_000).max(1) as f64)
         .sqrt()
@@ -2265,7 +2395,7 @@ fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
     for y in (0..rgb.height()).step_by(step) {
         for x in (0..rgb.width()).step_by(step) {
             let pixel = rgb.get_pixel(x, y);
-            let luma = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+            let luma = pixel[0].max(pixel[1]).max(pixel[2]);
             if luma.is_finite() && luma > 0.02 {
                 samples.push(luma);
             }
@@ -2281,9 +2411,10 @@ fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
 fn prepare_focus_rescue_image(
     image: &ImageInfo,
     settings: &AppSettings,
+    raw_exposure_reference: Option<f64>,
     brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
 ) -> Result<ImageInfo, String> {
-    let prepared = load_prepared_stack_source(&image.filename, settings)?;
+    let prepared = load_prepared_stack_source(&image.filename, settings, raw_exposure_reference)?;
     let (width, height) = prepared.image.dimensions();
     let (new_width, new_height, scale_factor) =
         processing::calculate_downscale_dimensions_capped(width, height, 2_400);
@@ -2457,6 +2588,81 @@ fn focus_overlap_is_verified(
     normal || low_texture_boundary
 }
 
+/// Compare artwork structure rather than single-pixel silk texture. This is
+/// only a second check of a feature-supported shifted scan, never a source of
+/// synthetic correspondences or a replacement for station-relation gates.
+fn focus_source_structure_plane(info: &ImageInfo) -> ImageInfo {
+    let (width, height, scale_factor) = processing::calculate_downscale_dimensions_capped(
+        info.width,
+        info.height,
+        info.alignment_image
+            .width()
+            .max(info.alignment_image.height())
+            .min(600),
+    );
+    ImageInfo {
+        id: info.id,
+        filename: info.filename.clone(),
+        width: info.width,
+        height: info.height,
+        scale_factor,
+        alignment_image: imageproc::filter::gaussian_blur_f32(
+            &image::imageops::resize(
+                &info.alignment_image,
+                width,
+                height,
+                image::imageops::FilterType::Triangle,
+            ),
+            1.0,
+        ),
+        full_image: None,
+        focal_length_35mm: info.focal_length_35mm,
+        features: Vec::new(),
+        top_features: Vec::new(),
+        overview_reference: false,
+        foreground_range: None,
+        foreground_mask: None,
+        horizontal_edge_rows: Vec::new(),
+        vertical_edge_columns: Vec::new(),
+    }
+}
+
+fn shifted_focus_structure_is_verified(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    homography: &Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+    log_match: bool,
+) -> bool {
+    if !focus_compatible_focal_length(source, target)
+        || points.len() < 30
+        || !focus_stack_motion_is_shifted_mosaic(points, source.dimensions())
+        || !panorama_transform_is_stable(homography, source.dimensions())
+        || panorama_spatial_support(points, source.dimensions(), target.dimensions())
+            < FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT
+        || median_symmetric_error(homography, points) > 3.0
+    {
+        return false;
+    }
+    let quality = focus_overlap_quality(
+        &focus_source_structure_plane(source),
+        &focus_source_structure_plane(target),
+        homography,
+    );
+    let verified = quality.is_some_and(|(intensity, edge, orientation, samples)| {
+        intensity >= 0.65 && edge >= 0.30 && orientation >= 0.35 && samples >= 600
+    });
+    if log_match {
+        println!(
+            "  - Shifted focus structural validation: {:?} ({} distributed inliers, {})",
+            quality,
+            points.len(),
+            if verified { "verified" } else { "rejected" }
+        );
+    }
+    verified
+}
+
 fn canonical_match_direction(
     images: &[ImageInfo],
     first: usize,
@@ -2549,6 +2755,29 @@ fn homography_scale_ratio(transform: &Matrix3<f64>) -> Option<f64> {
     let (first, second) = homography_linear_singular_values(transform)?;
     let ratio = (first * second).sqrt();
     (ratio.is_finite() && ratio > 0.0).then_some(ratio)
+}
+
+/// Projective scale belongs to the measured overlap, not the coordinate
+/// origin's linear block. Recentring either tile must not change this gate.
+fn station_relation_overlap_scale(
+    transform: &Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+) -> Option<f64> {
+    if points.is_empty() {
+        return None;
+    }
+    let centre = points.iter().fold(Point2::origin(), |sum, point| {
+        Point2::new(sum.x + point.0.x, sum.y + point.0.y)
+    }) / points.len() as f64;
+    let denominator =
+        transform[(2, 0)] * centre.x + transform[(2, 1)] * centre.y + transform[(2, 2)];
+    let determinant = transform.determinant() / denominator.powi(3);
+    let scale = determinant.abs().sqrt();
+    (denominator.is_finite()
+        && denominator.abs() > f64::EPSILON
+        && scale.is_finite()
+        && scale > 0.0)
+        .then_some(scale)
 }
 
 /// Sample the valid station-tile rectangle and return its Local_Scale range.
@@ -3348,7 +3577,7 @@ fn match_image_pair(
         // graph edge and pull an otherwise coherent mosaic into a false overlap.
         return None;
     }
-    let homography = if alignment_mode == AlignmentMode::Position {
+    let mut homography = if alignment_mode == AlignmentMode::Position {
         estimate_translation(&inlier_points)
     } else if mixed_focal_fallback_used {
         // The fallback is already a scale-constrained similarity fit. Running
@@ -3373,6 +3602,58 @@ fn match_image_pair(
     } else {
         refined_homography
     };
+    // A shifted artwork scan can require perspective even when every frame
+    // uses the same lens. The low-DOF selector may favour a precise minority
+    // while rejecting the correctly registered full overlap. Keep the original
+    // feature/RANSAC fit as a candidate; only a distributed, independently
+    // image-verified fit may supersede that minority.
+    if blend_mode == BlendMode::FocusStack
+        && stable_four_point_solver
+        && !mixed_focal_pair
+        && !mixed_focal_fallback_used
+        && alignment_mode == AlignmentMode::Auto
+    {
+        let selected_indices =
+            symmetric_inlier_indices(&homography, &inlier_points, FOCUS_MODEL_INLIER_THRESHOLD);
+        let selected_points = selected_indices
+            .iter()
+            .map(|&index| inlier_points[index])
+            .collect::<Vec<_>>();
+        let selected_verified = focus_overlap_quality(source_image, target_image, &homography)
+            .is_some_and(|quality| {
+                focus_overlap_is_verified(
+                    quality,
+                    selected_points.len(),
+                    median_symmetric_error(&homography, &selected_points),
+                    allow_low_texture_boundary,
+                )
+            });
+        if !selected_verified {
+            if shifted_focus_structure_is_verified(
+                source_image,
+                target_image,
+                &homography,
+                &selected_points,
+                log_match,
+            ) {
+                // Keep the simpler model when its structure is independently
+                // supported; do not promote perspective solely for more points.
+            } else if shifted_focus_structure_is_verified(
+                source_image,
+                target_image,
+                &refined_homography,
+                &inlier_points,
+                log_match,
+            ) {
+                homography = refined_homography;
+                if log_match {
+                    println!(
+                        "  - Retaining structure-verified shifted focus projective fit instead of a low-DOF minority"
+                    );
+                }
+            }
+        }
+    }
     if blend_mode == BlendMode::FocusStack
         && !mixed_focal_fallback_used
         && !retain_model_inliers(
@@ -3406,7 +3687,16 @@ fn match_image_pair(
             median_error,
             allow_low_texture_boundary,
         )
-    });
+    }) || (blend_mode == BlendMode::FocusStack
+        && stable_four_point_solver
+        && !mixed_focal_pair
+        && shifted_focus_structure_is_verified(
+            source_image,
+            target_image,
+            &homography,
+            &inlier_points,
+            log_match,
+        ));
     if log_match
         && let Some((intensity_ncc, edge_ncc, edge_orientation, samples)) = focus_overlap_quality
     {
@@ -5814,6 +6104,9 @@ struct FocusOverlapQuality {
     low_frequency_mean_relative_difference: f64,
     edge_strength_ratio: f64,
     median_edge_orientation_difference_degrees: f64,
+    exposure_gain: f64,
+    exposure_normalized_difference: f64,
+    exposure_normalized_mean_relative_difference: f64,
 }
 
 impl FocusOverlapQuality {
@@ -5945,8 +6238,25 @@ fn focus_overlap_quality_measurements_on_coverage(
             else {
                 continue;
             };
-            let source_dx = source_dx_right - source_dx_left;
-            let source_dy = source_dy_down - source_dy_up;
+            // Gradients are covectors: compare them in the target pixel grid,
+            // not in the two independently rotated/scaled source grids. The
+            // patch matcher already applies this inverse-transpose Jacobian;
+            // the dense acceptance check must use the same convention.
+            let Some(gradient_transform) =
+                virtual_tile_local_jacobian(source_to_target, source_full)
+                    .and_then(|jacobian| jacobian.try_inverse())
+                    .map(|inverse| inverse.transpose())
+            else {
+                continue;
+            };
+            let source_gradient = gradient_transform
+                * nalgebra::Vector2::new(
+                    source_dx_right - source_dx_left,
+                    source_dy_down - source_dy_up,
+                )
+                * (target.scale_factor / source.scale_factor.max(f64::EPSILON));
+            let source_dx = source_gradient.x;
+            let source_dy = source_gradient.y;
             let target_dx = target_dx_right - target_dx_left;
             let target_dy = target_dy_down - target_dy_up;
             let source_edge = source_dx.hypot(source_dy);
@@ -5984,6 +6294,37 @@ fn focus_overlap_quality_measurements_on_coverage(
     // by the larger magnitude makes the comparison symmetric and bounded.
     let low_frequency_mean_relative_difference = (source_mean - target_mean).abs()
         / source_mean.abs().max(target_mean.abs()).max(f64::EPSILON);
+    // Estimate a scalar exposure gain on alternating overlap samples and
+    // validate it on the held-out samples. Unlike matching the two means,
+    // this residual cannot be made zero for arbitrary different images.
+    let mut exposure_ratios = source_values
+        .iter()
+        .zip(&target_values)
+        .enumerate()
+        .filter_map(|(index, (&source, &target))| {
+            (index % 2 == 0 && source > 8.0 && target > 8.0).then_some(target / source)
+        })
+        .collect::<Vec<_>>();
+    let exposure_gain = median_value(&mut exposure_ratios).unwrap_or(f64::NAN);
+    let mut exposure_residual = 0.0;
+    let mut exposure_magnitude = 0.0;
+    let mut predicted_sum = 0.0;
+    let mut held_out_target_sum = 0.0;
+    for (index, (&source, &target)) in source_values.iter().zip(&target_values).enumerate() {
+        if index % 2 == 1 {
+            let predicted = source * exposure_gain;
+            exposure_residual += (predicted - target).abs();
+            exposure_magnitude += predicted.abs().max(target.abs());
+            predicted_sum += predicted;
+            held_out_target_sum += target;
+        }
+    }
+    let exposure_normalized_difference = exposure_residual / exposure_magnitude.max(f64::EPSILON);
+    let exposure_normalized_mean_relative_difference = (predicted_sum - held_out_target_sum).abs()
+        / predicted_sum
+            .abs()
+            .max(held_out_target_sum.abs())
+            .max(f64::EPSILON);
     let source_edge_mean = source_edges.iter().sum::<f64>() / source_edges.len() as f64;
     let target_edge_mean = target_edges.iter().sum::<f64>() / target_edges.len() as f64;
     let edge_strength_ratio = if target_edge_mean > f64::EPSILON {
@@ -6003,7 +6344,43 @@ fn focus_overlap_quality_measurements_on_coverage(
         low_frequency_mean_relative_difference,
         edge_strength_ratio,
         median_edge_orientation_difference_degrees,
+        exposure_gain,
+        exposure_normalized_difference,
+        exposure_normalized_mean_relative_difference,
     })
+}
+
+/// Geometry is checked before the tone harmonizer runs. A confirmed structural
+/// overlap must therefore survive a moderate camera-exposure change. Keep the
+/// ordinary raw photometric gate unless correlation, held-out compensated
+/// pixels and compensated edge strength independently verify that change.
+fn virtual_tile_photometric_measurements(quality: FocusOverlapQuality) -> (f64, f64) {
+    let compensated_strength = quality.edge_strength_ratio * quality.exposure_gain;
+    let exposure_structure_verified = (quality.intensity_ncc >= 0.95
+        && quality.edge_ncc >= 0.65
+        && quality.exposure_normalized_difference <= 0.20)
+        || (quality.intensity_ncc >= 0.85
+            && quality.edge_ncc >= 0.45
+            && quality.exposure_normalized_difference <= 0.10);
+    if quality.low_frequency_mean_relative_difference
+        > STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE
+        && exposure_structure_verified
+        && (0.5..=2.0).contains(&quality.exposure_gain)
+        && quality.exposure_normalized_mean_relative_difference
+            <= STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE
+        && (STATION_RELATION_EDGE_STRENGTH_RATIO_MIN..=STATION_RELATION_EDGE_STRENGTH_RATIO_MAX)
+            .contains(&compensated_strength)
+    {
+        (
+            quality.exposure_normalized_mean_relative_difference,
+            compensated_strength,
+        )
+    } else {
+        (
+            quality.low_frequency_mean_relative_difference,
+            quality.edge_strength_ratio,
+        )
+    }
 }
 
 /// Legacy overlap score used by non-Station_Relation paths. Station relation
@@ -6635,6 +7012,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // gains.  Collect the inexpensive low-resolution percentile while the
     // preparation workers already have each developed frame in memory; the
     // rendering closure below applies one robust gain to every RAW.
+    let raw_exposure_reference = focus_stack
+        .then(|| stack_raw_exposure_reference(&image_paths))
+        .flatten();
+    if let Some(reference) = raw_exposure_reference {
+        println!("Shared RAW physical exposure reference: {reference:.6} (time × ISO / aperture²)");
+    }
     let raw_display_highs = Mutex::new(Vec::<f32>::new());
 
     let start_time = Instant::now();
@@ -6662,7 +7045,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
                 println!("  - Processing '{}'", filename);
-                let prepared_source = load_prepared_stack_source(filename, &settings)?;
+                let prepared_source =
+                    load_prepared_stack_source(filename, &settings, raw_exposure_reference)?;
                 if degradation::run_generation_changed_for(run_generation) {
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
@@ -6672,7 +7056,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     && is_raw_file(filename)
                     && std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
                         .is_none()
-                    && let Some(high) = raw_display_luma_percentile(&dynamic_image)
+                    && let Some(high) = raw_display_channel_percentile(&dynamic_image)
                 {
                     raw_display_highs.lock().unwrap().push(high);
                 }
@@ -6896,13 +7280,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         && std::env::var_os("RAW_EDITOR_STACK_RAW_FIXED_GAIN").is_none()
         && std::env::var_os("RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION").is_none()
     {
-        let mut highs = raw_display_highs.into_inner().unwrap_or_default();
-        highs.sort_unstable_by(f32::total_cmp);
-        highs
-            .get(highs.len() / 2)
-            .copied()
-            .filter(|high| high.is_finite() && *high > 0.0)
-            .map(|high| (0.90 / high).clamp(1.0, 2.10))
+        shared_stack_raw_display_gain(&raw_display_highs.into_inner().unwrap_or_default())
     } else {
         None
     };
@@ -7119,6 +7497,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         prepare_focus_rescue_image(
                             &image_data[source_index],
                             &settings,
+                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -7129,6 +7508,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         prepare_focus_rescue_image(
                             &image_data[target_index],
                             &settings,
+                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -7675,7 +8055,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 ))
             }
         } else {
-            load_prepared_stack_source(&image.filename, &settings)
+            load_prepared_stack_source(&image.filename, &settings, raw_exposure_reference)
                 .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
         }?;
         if is_raw_file(&image.filename) {
@@ -7817,15 +8197,45 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 } else {
                     focus_layer_warp.as_ref()
                 };
+                // Fuse in a station's own anchor grid. Baking uncertain global
+                // placement into these pixels made the subsequent station
+                // solve try to undo a distorted image through a bounded repair.
+                let anchor_frames = if compositor_choice
+                    == StackCompositorChoice::LayeredVirtualTile
+                    && projection == Projection::Planar
+                {
+                    Some(
+                        focus_anchor_render_frames(
+                            groups,
+                            &image_data,
+                            render_homographies,
+                            tile_focus_warp,
+                        )
+                        .ok_or("cannot establish camera-station anchor coordinates")?,
+                    )
+                } else {
+                    None
+                };
+                let anchor_layout = anchor_frames
+                    .as_ref()
+                    .map(|frames| frames.anchor_to_world.clone());
+                let mut station_render_homographies = anchor_frames.as_ref().map_or_else(
+                    || render_homographies.clone(),
+                    |frames| frames.homographies.clone(),
+                );
+                let mut station_focus_warp = anchor_frames.as_ref().map_or_else(
+                    || tile_focus_warp.cloned(),
+                    |frames| frames.focus_warp.clone(),
+                );
                 let geometries = if groups_complete {
                     group_slices
                         .iter()
                         .map(|group| {
                             stitching::focus_stack_virtual_tile_geometry(
                                 group,
-                                render_homographies,
+                                &station_render_homographies,
                                 projection,
-                                tile_focus_warp,
+                                station_focus_warp.as_ref(),
                             )
                         })
                         .collect::<Option<Vec<_>>>()
@@ -7870,7 +8280,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             .map(|image| image.id.to_string())
                             .collect::<Vec<_>>()
                             .join(",");
-                        tile_homographies.insert(tile_id, geometry.tile_to_world);
+                        let placement = anchor_layout
+                            .as_ref()
+                            .map_or(geometry.tile_to_world, |anchors| {
+                                anchors[group_index] * geometry.tile_to_world
+                            });
+                        tile_homographies.insert(tile_id, placement);
                         tile_group_indices.insert(tile_id, group_index);
                         tile_infos.push(ImageInfo {
                             id: tile_id,
@@ -7907,8 +8322,6 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     // Rendering priors may be repaired below, so every later
                     // render (including the compositor's) reads these owned
                     // copies rather than the source-stage poses.
-                    let mut station_render_homographies = render_homographies.clone();
-                    let mut station_focus_warp = tile_focus_warp.cloned();
                     let mut pyramid = VirtualTileMatchPyramid::new(
                         virtual_tile_pyramid_factors(
                             geometries
@@ -7953,10 +8366,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     // A station whose rendering prior is grossly wrong cannot be
                     // reached by any bounded probe. Only candidates that join
                     // two different prior-consistent clusters get a prior-free
-                    // covered-feature proposal; a proposal the coarse-to-fine
-                    // probe verifies may move the unfixed cluster's prior, whose
-                    // stations are then rendered once more and measured again
-                    // around the repaired prior. Proposals never enter the
+                    // covered-feature proposal. The bounded pixel probe fits
+                    // an independent relation before any solver admission.
+                    // Anchor-grid tiles can use that measured relation directly;
+                    // globally warped comparison tiles instead repair their
+                    // prior and render again. Feature proposals never enter the
                     // solver themselves.
                     let mut prior_repair_records = Vec::new();
                     if tile_infos.len() >= 2 {
@@ -7969,7 +8383,6 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         for &(left, right) in &authoritative_pairs {
                             clusters.union(left, right);
                         }
-                        let finest_factor = pyramid.factors.last().copied().unwrap_or(1);
                         let mut proposals = Vec::new();
                         for candidate in &station_topology.candidates {
                             let (left, right) = (candidate.left, candidate.right);
@@ -7980,9 +8393,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 continue;
                             }
                             let Some((seed, feature_inliers)) = virtual_tile_prior_free_relation(
-                                finest_factor,
+                                pyramid.feature_factors[left],
                                 &tile_infos[left].features,
-                                finest_factor,
+                                pyramid.feature_factors[right],
                                 &tile_infos[right].features,
                                 tile_infos[left].dimensions(),
                             ) else {
@@ -7998,13 +8411,33 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             diagnostic.prior_free_inliers = feature_inliers;
                             log_virtual_tile_candidate(&diagnostic, false);
                             if let Some(verified) = verified {
-                                proposals.push(VirtualTilePriorProposal {
-                                    left,
-                                    right,
-                                    left_to_right: verified.homography,
-                                    inliers: verified.inliers,
-                                });
-                            } else if virtual_tile_prior_free_seed_fallback_allowed(&diagnostic) {
+                                if anchor_layout.is_some() {
+                                    // The feature fit only seeded this bounded
+                                    // fused-pixel measurement. Anchor-grid
+                                    // pixels do not depend on placement priors,
+                                    // so its independently fitted relation can
+                                    // be checked directly without rewarping RAWs.
+                                    if virtual_tile_relation_is_authoritative(
+                                        left,
+                                        right,
+                                        &verified,
+                                        &tile_infos,
+                                        pyramid.solver_coverages(),
+                                    ) {
+                                        clusters.union(left, right);
+                                    }
+                                    tile_relations.insert((left, right), verified);
+                                } else {
+                                    proposals.push(VirtualTilePriorProposal {
+                                        left,
+                                        right,
+                                        left_to_right: verified.homography,
+                                        inliers: verified.inliers,
+                                    });
+                                }
+                            } else if anchor_layout.is_none()
+                                && virtual_tile_prior_free_seed_fallback_allowed(&diagnostic)
+                            {
                                 // Keep this relation out of the authoritative graph. It only
                                 // moves the unfixed cluster close enough for a fresh Virtual_Tile
                                 // render, after which the regular measurement pass verifies it.
@@ -8082,9 +8515,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             let center_shift_px = old_center
                                 .zip(new_center)
                                 .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
-                            let correction_scale_ratio =
-                                homography_scale_ratio(&repair.world_correction)
-                                    .unwrap_or(f64::NAN);
+                            let correction_scale_ratio = old_center
+                                .and_then(|center| {
+                                    virtual_tile_repair_local_scale_ratio(
+                                        &repair.world_correction,
+                                        center,
+                                    )
+                                })
+                                .unwrap_or(f64::NAN);
                             if !virtual_tile_prior_repair_is_bounded(
                                 center_shift_px,
                                 correction_scale_ratio,
@@ -8528,6 +8966,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                                 station_id: station,
                                             },
                                             dimensions: (source.width, source.height),
+                                            native_registration: station_masks
+                                                .get(station)
+                                                .and_then(Option::as_ref)
+                                                .and_then(|masks| {
+                                                    masks.source_refinements.get(&source.id)
+                                                })
+                                                .and_then(|refinement| {
+                                                    Some(quality_gate_runner::NativeReferenceMap {
+                                                        world_to_station: station_to_world
+                                                            .try_inverse()?,
+                                                        station_to_world,
+                                                        station_origin,
+                                                        refinement: refinement.clone(),
+                                                    })
+                                                }),
                                         });
                                         next_owner = next_owner.saturating_add(1);
                                     }
@@ -8920,37 +9373,40 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     {
         diagnostics_world_origin = Some(world_origin);
         let sources = quality_sources.take().unwrap_or_default();
-        let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
-            load_prepared_stack_source(&source.path, &settings).map(|prepared| {
-                let mut rendered = source_to_render_rgb32f(
-                    prepared.image,
-                    source.dimensions.0,
-                    source.dimensions.1,
-                );
-                if is_raw_file(&source.path) {
-                    if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                        .ok()
-                        .and_then(|value| value.parse::<f32>().ok())
-                        .filter(|value| value.is_finite() && *value > 0.0)
-                    {
+        let mut quality_loader =
+            |source: &quality_gate_runner::QualitySource| {
+                load_prepared_stack_source(&source.path, &settings, raw_exposure_reference).map(
+                    |prepared| {
+                        let mut rendered = source_to_render_rgb32f(
+                            prepared.image,
+                            source.dimensions.0,
+                            source.dimensions.1,
+                        );
+                        if is_raw_file(&source.path) {
+                            if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                                .ok()
+                                .and_then(|value| value.parse::<f32>().ok())
+                                .filter(|value| value.is_finite() && *value > 0.0)
+                            {
+                                rendered.as_mut().par_iter_mut().for_each(|channel| {
+                                    *channel = (*channel * gain).clamp(0.0, 1.0)
+                                });
+                            } else if let Some(gain) = shared_raw_display_gain {
+                                rendered.as_mut().par_iter_mut().for_each(|channel| {
+                                    *channel = (*channel * gain).clamp(0.0, 1.0)
+                                });
+                            } else if std::env::var_os(
+                                "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION",
+                            )
+                            .is_none()
+                            {
+                                normalize_stack_raw_display_exposure(&mut rendered);
+                            }
+                        }
                         rendered
-                            .as_mut()
-                            .par_iter_mut()
-                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-                    } else if let Some(gain) = shared_raw_display_gain {
-                        rendered
-                            .as_mut()
-                            .par_iter_mut()
-                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-                    } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
-                        .is_none()
-                    {
-                        normalize_stack_raw_display_exposure(&mut rendered);
-                    }
-                }
-                rendered
-            })
-        };
+                    },
+                )
+            };
         let residual = residual_warp::run_model_snapshot();
         let quality_input = quality_gate_runner::QualityGateInput {
             output: &panorama,
@@ -11942,9 +12398,9 @@ fn split_focus_local_component_by_motion(
 /// 1.9 / 1.4 / 1.10 ask the Stack_Report to carry.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct StationGroupingOutcome {
-    /// Capture_Stations of two or more members, in station order.
+    /// Capture_Stations in station order, including connected single-frame scans.
     pub components: Vec<Vec<usize>>,
-    /// 需求 1.6: sources that satisfy the 需求 1.1 evidence with no other source.
+    /// 需求 1.6: sources with neither same-pose nor verified scan-overlap evidence.
     pub isolated: Vec<usize>,
     /// 需求 1.4 / 1.10: every split position, in the order it was applied.
     pub splits: Vec<StationSplit>,
@@ -11954,7 +12410,8 @@ pub(crate) struct StationGroupingOutcome {
 ///
 /// Membership is a DSU over the accepted 需求 1.1 relations — a set operation,
 /// so it cannot see the insertion order — followed by the accumulated-motion
-/// split above.
+/// split above. A verified scan overlap marks a source as connected without
+/// unioning the camera poses: an unbracketed scan remains a single-frame station.
 fn focus_station_grouping(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -11967,6 +12424,41 @@ fn focus_station_grouping(
         }
         if focus_match_is_capture_station_link(images, source_index, target_index, match_info) {
             dsu.union(source_index, target_index);
+            linked[source_index] = true;
+            linked[target_index] = true;
+        } else if (!linked[source_index] || !linked[target_index])
+            && !match_info.coarse_bridge
+            && !match_info.sequence_bridge
+            && match_info.points.len() >= 30
+            && median_symmetric_error(&match_info.homography, &match_info.points) <= 3.0
+            && match_has_spatial_support(
+                &match_info.points,
+                images[source_index].dimensions(),
+                images[target_index].dimensions(),
+            )
+            && (focus_overlap_quality(
+                &images[source_index],
+                &images[target_index],
+                &match_info.homography,
+            )
+            .is_some_and(|quality| {
+                focus_overlap_is_verified(
+                    quality,
+                    match_info.points.len(),
+                    median_symmetric_error(&match_info.homography, &match_info.points),
+                    false,
+                )
+            }) || shifted_focus_structure_is_verified(
+                &images[source_index],
+                &images[target_index],
+                &match_info.homography,
+                &match_info.points,
+                false,
+            ))
+        {
+            // A verified spatial scan edge proves this source is connected,
+            // but does not prove the two frames share a camera pose. Preserve
+            // each as its own station when it has no focus-bracket partner.
             linked[source_index] = true;
             linked[target_index] = true;
         }
@@ -11998,7 +12490,7 @@ fn focus_station_grouping(
     let isolated = (0..images.len())
         .filter(|&image_index| !linked[image_index])
         .collect::<Vec<_>>();
-    components.retain(|component| component.len() >= 2);
+    components.retain(|component| component.iter().any(|&index| linked[index]));
     for component in &mut components {
         component.sort_by(|left, right| {
             natural_path_cmp(&images[*left].filename, &images[*right].filename)
@@ -12231,6 +12723,52 @@ struct FocusCaptureGroup {
     members: Vec<usize>,
     anchor: usize,
     local_to_anchor: HashMap<usize, Matrix3<f64>>,
+}
+
+struct FocusAnchorRenderFrames {
+    homographies: HashMap<usize, Matrix3<f64>>,
+    focus_warp: Option<FocusLayerWarp>,
+    anchor_to_world: Vec<Matrix3<f64>>,
+}
+
+fn focus_anchor_render_frames(
+    groups: &[FocusCaptureGroup],
+    sources: &[ImageInfo],
+    global: &HashMap<usize, Matrix3<f64>>,
+    warp: Option<&FocusLayerWarp>,
+) -> Option<FocusAnchorRenderFrames> {
+    let reference_anchor = sources.get(groups.first()?.anchor)?;
+    let world_to_reference = global.get(&reference_anchor.id)?.try_inverse()?;
+    let mut local = HashMap::new();
+    let mut local_warp = warp.cloned();
+    let mut placements = Vec::with_capacity(groups.len());
+    for group in groups {
+        let anchor = sources.get(group.anchor)?;
+        let anchor_global = global.get(&anchor.id)?;
+        let world_to_anchor = anchor_global.try_inverse()?;
+        placements.push(normalized_homography(
+            &(world_to_reference * anchor_global),
+        )?);
+        for &member in &group.members {
+            let source = sources.get(member)?;
+            local.insert(
+                source.id,
+                normalized_homography(&(world_to_anchor * global.get(&source.id)?))?,
+            );
+            if let Some(warp) = local_warp.as_mut() {
+                for band in &mut warp.bands {
+                    if let Some(pose) = band.homographies.get_mut(&source.id) {
+                        *pose = normalized_homography(&(world_to_anchor * *pose))?;
+                    }
+                }
+            }
+        }
+    }
+    Some(FocusAnchorRenderFrames {
+        homographies: local,
+        focus_warp: local_warp,
+        anchor_to_world: placements,
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -13318,6 +13856,20 @@ fn virtual_tile_gradient(image: &GrayImage, point: Point2<f64>) -> Option<nalgeb
         .iter()
         .all(|value| value.is_finite())
         .then_some(gradient)
+}
+
+/// A projective repair's scale belongs at the station, not at the unrelated
+/// world origin. Reading its normalized linear block made the bound depend on
+/// canvas translation and rejected a near-unit correction as a 1.5x jump.
+fn virtual_tile_repair_local_scale_ratio(
+    transform: &Matrix3<f64>,
+    center: Point2<f64>,
+) -> Option<f64> {
+    let ratio = virtual_tile_local_jacobian(transform, center)?
+        .determinant()
+        .abs()
+        .sqrt();
+    (ratio.is_finite() && ratio > 0.0).then_some(ratio)
 }
 
 fn axial_orientation_difference_degrees(
@@ -15265,11 +15817,13 @@ fn virtual_tile_direct_station_match_with_structure(
 //   can reach it. Covered-pixel FAST/BRIEF at analysis resolution found its
 //   true neighbour (253–260 RANSAC inliers) without any prior.
 //
-// The authoritative relation is therefore always a bounded probe around the
-// rendering prior, run coarse to fine on area-averaged planes. A prior-free
-// feature relation never becomes a Station_Relation: it only proposes a
-// repair of a whole cluster's rendering prior, after which the repaired
-// stations are rendered once more and measured again around the new prior.
+// The authoritative relation always comes from a bounded pixel probe, run
+// coarse to fine on area-averaged planes. A prior-free feature relation only
+// seeds that measurement; it never becomes a Station_Relation itself. The
+// default anchor-grid fusion keeps placement out of the pixels, so the
+// independently measured relation can go through the solver's gates directly.
+// Globally warped comparison tiles instead repair the whole cluster's prior,
+// render again, and measure around the repaired prior.
 // ---------------------------------------------------------------------------
 
 /// Stable seed identifiers of a Virtual_Tile relation measurement.
@@ -15490,6 +16044,10 @@ struct VirtualTileMatchPyramid {
     coverages: Vec<Vec<stitching::CoverageMask>>,
     /// Native tile dimensions per station.
     native_dimensions: Vec<(u32, u32)>,
+    /// Feature proposal grids are independent of the bounded probe grids.
+    feature_factors: Vec<u32>,
+    /// Native structural images for the final, one-native-pixel round trip.
+    native_refinement: Vec<Option<(GrayImage, stitching::CoverageMask)>>,
     /// Coverage_Mask of each station's relation-quality plane, in the pixels
     /// of the `alignment_image` [`install_virtual_tile_match_planes`] installs.
     quality_coverages: Vec<stitching::CoverageMask>,
@@ -15528,6 +16086,8 @@ impl VirtualTileMatchPyramid {
                 .map(|_| (0..station_count).map(|_| empty_coverage()).collect())
                 .collect(),
             native_dimensions: vec![(1, 1); station_count],
+            feature_factors: vec![1; station_count],
+            native_refinement: vec![None; station_count],
             quality_coverages: (0..station_count).map(|_| empty_coverage()).collect(),
         }
     }
@@ -15553,6 +16113,14 @@ impl VirtualTileMatchPyramid {
     ) -> Option<Vec<VirtualTileMatchPlane>> {
         let mut planes = Vec::with_capacity(self.factors.len());
         self.native_dimensions[station] = gray.dimensions();
+        self.native_refinement[station] = (gray.width().max(gray.height()) >= 4096
+            && self.factors.last().is_some_and(|factor| *factor > 1))
+        .then(|| {
+            (
+                imageproc::filter::gaussian_blur_f32(gray, 1.0),
+                coverage.clone(),
+            )
+        });
         for (level, &factor) in self.factors.iter().enumerate() {
             let plane = VirtualTileMatchPlane::from_native(gray, coverage, factor)?;
             self.levels[level][station] = virtual_tile_plane_image_info(tile, &plane);
@@ -15583,13 +16151,40 @@ const VIRTUAL_TILE_QUALITY_COVERAGE_RADIUS_PX: f64 = 4.0;
 /// planes — the level of a 40px-shifted wrong relation (38–46°), because single
 /// pixel gradients follow fine silk texture. Two octaves above the finest level
 /// and after a σ = 1 blur they read 4.6–5.9°, against 27–28° for the shifted
-/// relation. A single native level (small tiles) keeps its unfiltered plane.
-fn virtual_tile_relation_quality_plane(planes: &[VirtualTileMatchPlane]) -> (GrayImage, u32) {
+/// relation. A single matching level still needs a separate structural quality
+/// plane: the probe pyramid's minimum size must not switch verification back
+/// to fine silk texture. Keep at least 64 pixels on its shorter side so the
+/// dense grid, gradient taps and covered blur neighbourhood remain measurable.
+fn virtual_tile_relation_quality_plane(
+    planes: &[VirtualTileMatchPlane],
+    native: &GrayImage,
+    coverage: &stitching::CoverageMask,
+) -> (GrayImage, u32) {
     let Some(finest) = planes.last() else {
         return (GrayImage::new(1, 1), 1);
     };
     if planes.len() < 2 {
-        return (finest.gray.clone(), finest.factor);
+        // The probe's factor can be truncated to fit a small preview. It is
+        // not a structural scale: multiplying that factor by four gave only
+        // ~100 pixels across real previews and followed illumination gradients
+        // instead of artwork edges. Choose the quality grid from native pixels.
+        let wanted = native
+            .width()
+            .max(native.height())
+            .div_ceil(600)
+            .max(1)
+            .next_power_of_two()
+            .max(1 << VIRTUAL_TILE_RELATION_QUALITY_OCTAVES);
+        let factor = wanted.min((native.width().min(native.height()) / 64).max(1));
+        let structural = VirtualTileMatchPlane::from_native(native, coverage, factor)
+            .expect("a validated probe plane has valid grayscale and coverage dimensions");
+        return (
+            imageproc::filter::gaussian_blur_f32(
+                &structural.gray,
+                VIRTUAL_TILE_RELATION_QUALITY_BLUR_SIGMA,
+            ),
+            factor,
+        );
     }
     let wanted = finest
         .factor
@@ -15739,7 +16334,7 @@ fn virtual_tile_pyramid_station_match(
             return (None, diagnostic);
         };
         seed = native;
-        if single_level {
+        if single_level && factor == 1 {
             let points = relation
                 .points
                 .iter()
@@ -15777,7 +16372,117 @@ fn virtual_tile_pyramid_station_match(
         ),
         &mut diagnostic,
     );
+    let relation = relation.and_then(|relation| {
+        match (
+            &pyramid.native_refinement[left],
+            &pyramid.native_refinement[right],
+        ) {
+            (Some(left_native), Some(right_native)) => virtual_tile_native_station_polish(
+                left_native,
+                right_native,
+                &relation,
+                &mut diagnostic,
+            ),
+            _ => Some(relation),
+        }
+    });
     (relation, diagnostic)
+}
+
+/// Coarse pixels establish a search model. Final camera geometry is measured
+/// on native pixels: a one-level-pixel reverse check at factor four otherwise
+/// admits four-native-pixel errors and biases long projective tree chains.
+fn virtual_tile_native_station_polish(
+    left: &(GrayImage, stitching::CoverageMask),
+    right: &(GrayImage, stitching::CoverageMask),
+    seed: &MatchInfo,
+    diagnostic: &mut stack_report::StationRelationCandidateRecord,
+) -> Option<MatchInfo> {
+    let inverse = seed.homography.try_inverse()?;
+    let step = (seed.points.len() / 1000).max(1);
+    let supported = |mask: &stitching::CoverageMask, point: Point2<f64>| {
+        let (w, h) = mask.dimensions();
+        let radius = 40i32;
+        let (x, y) = (point.x.round() as i32, point.y.round() as i32);
+        x >= radius
+            && y >= radius
+            && x + radius < w as i32
+            && y + radius < h as i32
+            && (-radius..=radius).step_by(8).all(|dy| {
+                (-radius..=radius)
+                    .step_by(8)
+                    .all(|dx| mask.is_covered((x + dx) as u32, (y + dy) as u32))
+            })
+    };
+    let points = seed
+        .points
+        .par_iter()
+        .enumerate()
+        .filter(|(index, _)| index % step == 0)
+        .filter_map(|(_, &(source, target))| {
+            if !supported(&left.1, source) || !supported(&right.1, target) {
+                return None;
+            }
+            let measured = residual_warp::verify_round_trip_match_with_template(
+                &left.0,
+                &right.0,
+                &seed.homography,
+                &inverse,
+                source,
+                31,
+            )?;
+            supported(&right.1, measured.forward).then_some((source, measured.forward))
+        })
+        .collect::<Vec<_>>();
+    diagnostic.failure_stage = "insufficient_native_round_trip_matches".to_string();
+    diagnostic.bidirectional_match_count = points.len();
+    diagnostic.measurement_factor = 1;
+    if points.len() < STATION_RELATION_MIN_INLIERS {
+        return None;
+    }
+    let (homography, indices) = virtual_tile_polish_fit(
+        &points,
+        VIRTUAL_TILE_POLISH_INLIER_THRESHOLD_NATIVE_PX,
+        left.0.dimensions(),
+    )?;
+    let points = indices
+        .into_iter()
+        .map(|index| points[index])
+        .collect::<Vec<_>>();
+    diagnostic.fitted_inliers = points.len();
+    diagnostic.hull_support = station_relation_spatial_support_with(
+        &points,
+        &homography,
+        left.0.dimensions(),
+        right.0.dimensions(),
+        StationOverlapMeasure::Covered {
+            source: &left.1,
+            target: &right.1,
+            factor: 1,
+        },
+    );
+    diagnostic.residual_magnitude_px = residual_distribution(match homography.try_inverse() {
+        Some(inverse) => points
+            .iter()
+            .map(|(a, b)| symmetric_point_error(&homography, &inverse, *a, *b))
+            .collect(),
+        None => Vec::new(),
+    });
+    diagnostic.failure_stage = "insufficient_native_polished_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT
+        || median_symmetric_error(&homography, &points) > STATION_RELATION_MAX_MEDIAN_ERROR_PX
+    {
+        return None;
+    }
+    diagnostic.residual_model = "native_polished_projective".to_string();
+    diagnostic.failure_stage = "fitted".to_string();
+    Some(MatchInfo {
+        homography,
+        inliers: points.len(),
+        points,
+        canonical_homography: None,
+        ..seed.clone()
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -15898,6 +16603,11 @@ fn virtual_tile_polish_correspondences(
     counts: &mut VirtualTilePolishCounts,
 ) -> Vec<(Point2<f64>, Point2<f64>)> {
     let half = VIRTUAL_TILE_POLISH_TEMPLATE_HALF;
+    #[cfg(test)]
+    let half = std::env::var("RAW_EDITOR_TILE_REPLAY_TEMPLATE_HALF")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(half);
     let reach = half + search;
     let (min_x, min_y, max_x, max_y) = bounds;
     let mut centers = Vec::new();
@@ -16146,6 +16856,24 @@ fn virtual_tile_polished_station_match(
     }
     let (homography, inliers, correspondences) = fitted?;
     let native = normalized_homography(&(to_native * homography * from_native))?;
+    #[cfg(test)]
+    if let Some(path) = std::env::var_os("RAW_EDITOR_TILE_REPLAY_POINTS") {
+        let mut rows = String::from("x,y,dx,dy,inlier\n");
+        for (index, &(source, target)) in correspondences.iter().enumerate() {
+            let source = transformed_point(&to_native, source).unwrap();
+            let target = transformed_point(&to_native, target).unwrap();
+            let predicted = transformed_point(&native, source).unwrap();
+            rows.push_str(&format!(
+                "{},{},{},{},{}\n",
+                source.x,
+                source.y,
+                target.x - predicted.x,
+                target.y - predicted.y,
+                usize::from(inliers.contains(&index))
+            ));
+        }
+        std::fs::write(path, rows).unwrap();
+    }
     let points = inliers
         .iter()
         .filter_map(|&index| {
@@ -16219,7 +16947,7 @@ fn virtual_tile_prior_relation(
     normalized_homography(&(world_to_right * left_to_world))
 }
 
-/// Prior-free covered-feature relation between two finest planes, in native
+/// Prior-free covered-feature relation between two feature planes, in native
 /// tile pixels, with its RANSAC inlier count. It is a proposal only.
 fn virtual_tile_prior_free_relation(
     left_factor: u32,
@@ -16510,10 +17238,12 @@ fn virtual_tile_relation_is_authoritative(
     if !quality.is_finite() || quality <= 0.0 {
         return false;
     }
+    let (photometric_difference, measured_strength) =
+        virtual_tile_photometric_measurements(dense_measurements);
     let edge_strength_ratio = if quality_inverted {
-        1.0 / dense_measurements.edge_strength_ratio
+        1.0 / measured_strength
     } else {
-        dense_measurements.edge_strength_ratio
+        measured_strength
     };
     let Some(overlap_measure) = coverages.overlap_measure(quality_source, quality_target) else {
         return false;
@@ -16521,7 +17251,8 @@ fn virtual_tile_relation_is_authoritative(
     let measurements = StationRelationMeasurements {
         inliers: relation.inliers.max(quality_points.len()),
         median_error_px: error,
-        scale_ratio: homography_scale_ratio(&quality_homography).unwrap_or(f64::INFINITY),
+        scale_ratio: station_relation_overlap_scale(&quality_homography, &quality_points)
+            .unwrap_or(f64::INFINITY),
         spatial_support: station_relation_spatial_support_with(
             &quality_points,
             &quality_homography,
@@ -16529,8 +17260,7 @@ fn virtual_tile_relation_is_authoritative(
             target_dimensions,
             overlap_measure,
         ),
-        low_frequency_mean_relative_difference: dense_measurements
-            .low_frequency_mean_relative_difference,
+        low_frequency_mean_relative_difference: photometric_difference,
         edge_strength_ratio,
         median_edge_orientation_difference_degrees: dense_measurements
             .median_edge_orientation_difference_degrees,
@@ -16746,10 +17476,10 @@ where
 
 /// Install one station's probe planes. The tile keeps the structural
 /// relation-quality plane as its analysis image (`scale_factor` = that plane's
-/// factor, the source `ImageInfo` convention) and the finest plane's covered
-/// features. The features propose prior-free relations (keypoints in finest
-/// plane pixels) and give the relation solver its content-derived measurement
-/// direction; nothing reads them in analysis-image coordinates.
+/// factor, the source `ImageInfo` convention) and independent covered features.
+/// Small preview probe grids must not downsample feature descriptors twice.
+/// The feature factor is explicit; nothing reads keypoints in quality-plane
+/// coordinates or promotes a feature fit to solver evidence.
 fn install_virtual_tile_match_planes(
     tile: &mut ImageInfo,
     pyramid: &mut VirtualTileMatchPyramid,
@@ -16764,12 +17494,36 @@ fn install_virtual_tile_match_planes(
     let finest = planes
         .last()
         .expect("set_station returns at least one plane");
-    tile.features = virtual_tile_plane_features(finest, brief_pairs);
-    let (quality, factor) = virtual_tile_relation_quality_plane(&planes);
+    let feature_factor = finest
+        .factor
+        .min((gray.width().max(gray.height()) / 1200).max(1));
+    let feature_plane = VirtualTileMatchPlane::from_native(gray, coverage, feature_factor)
+        .ok_or_else(|| format!("Virtual tile station {station} has no feature proposal plane"))?;
+    tile.features = virtual_tile_plane_features(&feature_plane, brief_pairs);
+    pyramid.feature_factors[station] = feature_factor;
+    let (quality, factor) = virtual_tile_relation_quality_plane(&planes, gray, coverage);
+    #[cfg(test)]
+    if let Some(directory) = std::env::var_os("RAW_EDITOR_VIRTUAL_TILE_DIAGNOSTICS_DIR") {
+        let directory = PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        gray.save(directory.join(format!("station-{station:03}.gray.png")))
+            .map_err(|error| error.to_string())?;
+        quality
+            .save(directory.join(format!("station-{station:03}.quality.png")))
+            .map_err(|error| error.to_string())?;
+        let (w, h) = coverage.dimensions();
+        GrayImage::from_raw(w, h, coverage.covered().to_vec())
+            .ok_or("invalid diagnostic coverage")?
+            .save(directory.join(format!("station-{station:03}.coverage.png")))
+            .map_err(|error| error.to_string())?;
+    }
     let quality_coverage = planes
         .iter()
         .find(|plane| plane.factor == factor)
         .map(|plane| plane.coverage.clone())
+        .or_else(|| {
+            VirtualTileMatchPlane::from_native(gray, coverage, factor).map(|plane| plane.coverage)
+        })
         .ok_or_else(|| format!("Virtual tile station {station} has no relation-quality plane"))?;
     pyramid.quality_coverages[station] = quality_coverage;
     tile.scale_factor = f64::from(factor);
@@ -16977,8 +17731,8 @@ fn focus_capture_groups_with_grouping(
     locked_homographies: &HashMap<usize, Matrix3<f64>>,
 ) -> Option<(Vec<FocusCaptureGroup>, Vec<usize>, StationGroupingOutcome)> {
     // Direct local links already provide the strongest station membership
-    // evidence.  Keep those components intact and use solved world centres
-    // only to attach a weak/unmatched layer.  The previous implementation
+    // evidence. Keep those components intact; solved world centres may only
+    // select among attachments backed by same-pose evidence. The previous implementation
     // sorted each connected component by filename before splitting it; a
     // renamed or shuffled import therefore changed the station count even
     // though every geometric match was identical.
@@ -16988,8 +17742,8 @@ fn focus_capture_groups_with_grouping(
         .iter()
         .flat_map(|component| component.iter().copied())
         .collect::<HashSet<_>>();
-    // 需求 1.6: a source that satisfies the 需求 1.1 overlap evidence with no
-    // other source is isolated.  It joins no Capture_Station at all — not even
+    // 需求 1.6: a source with neither same-pose nor verified scan overlap is
+    // isolated. It joins no Capture_Station at all — not even
     // by its solved world centre, which is only as trustworthy as the pose the
     // missing evidence could not confirm — while every other source keeps the
     // grouping it would have had anyway.  A single member left over by the
@@ -17030,8 +17784,8 @@ fn focus_capture_groups_with_grouping(
         Some(Point2::new(x, y))
     };
 
-    // Absorb a singleton into the nearest established station only when its
-    // measured centre is within the same bracket-sized radius.  A coarse-only
+    // Absorb a singleton into the nearest established station only with
+    // same-pose evidence and a centre within the bracket-sized radius. A coarse-only
     // edge is an explicit boundary: it can suggest scan order, but cannot
     // make two focus layers compete for ownership.
     for singleton_index in (0..components.len())
@@ -17049,6 +17803,18 @@ fn focus_capture_groups_with_grouping(
                 || candidate.len() >= FOCUS_BRACKET_MAX_COMPONENT_SOURCES
                 || !focus_compatible_focal_length(&images[image_index], &images[candidate[0]])
             {
+                continue;
+            }
+            // A world-centre prior is not camera-pose evidence. In particular,
+            // a connected single-frame scan station must not be folded back
+            // into a neighbouring focus bracket just because their priors drift.
+            let same_pose_evidence = candidate.iter().any(|&member| {
+                let key = (image_index.min(member), image_index.max(member));
+                matches.get(&key).is_some_and(|edge| {
+                    focus_match_is_capture_station_link(images, key.0, key.1, edge)
+                })
+            });
+            if !same_pose_evidence {
                 continue;
             }
             let blocked = candidate.iter().any(|&member| {
@@ -18413,11 +19179,21 @@ fn solve_station_poses_for_evidence_with_report(
             * (0.25 + 0.75 * overlap)
             * dense_weight;
         if quality.is_finite() && quality > 0.0 {
-            let edge_strength_ratio = dense_measurements.map_or(f64::INFINITY, |measurements| {
-                if invert_dense_ratio {
-                    1.0 / measurements.edge_strength_ratio
+            let photometric = dense_measurements.map(|measurements| {
+                if coverages.is_some() {
+                    virtual_tile_photometric_measurements(measurements)
                 } else {
-                    measurements.edge_strength_ratio
+                    (
+                        measurements.low_frequency_mean_relative_difference,
+                        measurements.edge_strength_ratio,
+                    )
+                }
+            });
+            let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
+                if invert_dense_ratio {
+                    1.0 / strength
+                } else {
+                    strength
                 }
             });
             candidates
@@ -18429,8 +19205,12 @@ fn solve_station_poses_for_evidence_with_report(
                     independent_support: if consensus_coarse { 2 } else { 1 },
                     inlier_count: match_info.inliers.max(anchor_points.len()),
                     median_error_px: error,
-                    scale_ratio: homography_scale_ratio(&quality_homography)
-                        .unwrap_or(f64::INFINITY),
+                    scale_ratio: if coverages.is_some() {
+                        station_relation_overlap_scale(&quality_homography, &quality_points)
+                    } else {
+                        homography_scale_ratio(&quality_homography)
+                    }
+                    .unwrap_or(f64::INFINITY),
                     spatial_support: overlap_measure.map_or(0.0, |measure| {
                         station_relation_spatial_support_with(
                             &quality_points,
@@ -18440,10 +19220,8 @@ fn solve_station_poses_for_evidence_with_report(
                             measure,
                         )
                     }),
-                    low_frequency_mean_relative_difference: dense_measurements
-                        .map_or(f64::INFINITY, |measurements| {
-                            measurements.low_frequency_mean_relative_difference
-                        }),
+                    low_frequency_mean_relative_difference: photometric
+                        .map_or(f64::INFINITY, |(difference, _)| difference),
                     edge_strength_ratio,
                     median_edge_orientation_difference_degrees: dense_measurements
                         .map_or(f64::INFINITY, |measurements| {
@@ -22290,6 +23068,22 @@ mod alignment_tests {
     }
 
     #[test]
+    fn shared_raw_display_gain_preserves_bright_scan_channels() {
+        let mut highs = vec![0.3; 40];
+        highs.extend([0.8, 0.95]);
+        let gain = shared_stack_raw_display_gain(&highs).unwrap();
+        assert_eq!(gain, 1.0);
+        assert!(0.95 * gain < 1.0);
+        let warm =
+            DynamicImage::ImageRgb32F(Rgb32FImage::from_pixel(32, 32, image::Rgb([0.8, 0.4, 0.2])));
+        assert_eq!(raw_display_channel_percentile(&warm), Some(0.8));
+        let gain = shared_stack_raw_display_gain(&[raw_display_channel_percentile(&warm).unwrap()])
+            .unwrap();
+        assert!((gain - 1.125).abs() < 1e-6);
+        assert!(shared_stack_raw_display_gain(&[f32::NAN, -1.0]).is_none());
+    }
+
+    #[test]
     fn station_relation_contract_accepts_every_literal_boundary() {
         let measurements = StationRelationMeasurements {
             inliers: STATION_RELATION_MIN_INLIERS,
@@ -22342,7 +23136,7 @@ mod alignment_tests {
             ),
             (
                 StationRelationMeasurements {
-                    scale_ratio: 0.949_999,
+                    scale_ratio: STATION_RELATION_SCALE_RATIO_MIN - 0.000_001,
                     ..accepted
                 },
                 degradation::STATION_RELATION_SCALE_OUT_OF_RANGE,
@@ -22489,6 +23283,124 @@ mod alignment_tests {
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
         }
+    }
+
+    #[test]
+    fn shifted_focus_structure_requires_geometry_and_rejects_wrong_overlap() {
+        let mut source = test_image(0, "source.nef");
+        let mut target = test_image(1, "target.nef");
+        let texture = |x: i32, y: i32, seed: u32| {
+            let xf = x as f64;
+            let yf = y as f64;
+            let grain =
+                ((x as u32).wrapping_mul(73856093) ^ (y as u32).wrapping_mul(19349663) ^ seed)
+                    .wrapping_mul(83492791);
+            let value = 128.0
+                + 45.0 * (xf * 0.029 + yf * 0.013).sin()
+                + 35.0 * (xf * 0.017 - yf * 0.037).cos()
+                + 25.0 * (xf * 0.053 + yf * 0.041).sin()
+                + ((grain >> 24) as f64 - 128.0) * 0.30;
+            image::Luma([value.clamp(0.0, 255.0) as u8])
+        };
+        for image in [&mut source, &mut target] {
+            image.width = 4800;
+            image.height = 3200;
+            image.scale_factor = 4.0;
+        }
+        source.alignment_image =
+            GrayImage::from_fn(1200, 800, |x, y| texture(x as i32, y as i32, 7));
+        target.alignment_image =
+            GrayImage::from_fn(1200, 800, |x, y| texture(x as i32 - 160, y as i32 - 40, 91));
+        let transform = Matrix3::new(1.0, 0.0, 640.0, 0.0, 1.0, 160.0, 0.0, 0.0, 1.0);
+        let points = (0..6)
+            .flat_map(|row| {
+                (0..8).map(move |col| {
+                    let p = Point2::new(400.0 + col as f64 * 450.0, 400.0 + row as f64 * 450.0);
+                    (p, Point2::new(p.x + 640.0, p.y + 160.0))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(shifted_focus_structure_is_verified(
+            &source, &target, &transform, &points, true
+        ));
+        source.focal_length_35mm = Some(24.0);
+        target.focal_length_35mm = Some(50.0);
+        assert!(!shifted_focus_structure_is_verified(
+            &source, &target, &transform, &points, false
+        ));
+        target.focal_length_35mm = Some(24.0);
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &transform,
+            &points[..29],
+            false
+        ));
+        let wrong = Matrix3::new(1.0, 0.0, 960.0, 0.0, 1.0, 160.0, 0.0, 0.0, 1.0);
+        let wrong_points = points
+            .iter()
+            .map(|&(p, _)| (p, Point2::new(p.x + 960.0, p.y + 160.0)))
+            .collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &wrong,
+            &wrong_points,
+            true
+        ));
+        let concentrated = (0..48)
+            .map(|i| {
+                let p = Point2::new(1000.0 + (i % 8) as f64 * 5.0, 1000.0 + (i / 8) as f64 * 5.0);
+                (p, Point2::new(p.x + 640.0, p.y + 160.0))
+            })
+            .collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &transform,
+            &concentrated,
+            false
+        ));
+        let fixed_points = points.iter().map(|&(p, _)| (p, p)).collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &source,
+            &Matrix3::identity(),
+            &fixed_points,
+            false
+        ));
+        let scan_match = MatchInfo {
+            homography: transform,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: false,
+            points: points.clone(),
+            candidate_points: points.clone(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+            canonical_homography: None,
+        };
+        let matches = HashMap::from([((0, 1), scan_match)]);
+        let images = [source, target];
+        let grouped = focus_station_grouping(&images, &matches);
+        assert!(
+            grouped.isolated.is_empty(),
+            "a verified scan source is not an isolated source"
+        );
+        assert_eq!(
+            grouped.components,
+            [vec![0], vec![1]],
+            "scan positions must remain separate stations"
+        );
+        let misleading_priors = HashMap::from([(0, Matrix3::identity()), (1, Matrix3::identity())]);
+        let (groups, _) = focus_capture_groups(&images, &matches, &misleading_priors)
+            .expect("connected scan stations");
+        assert_eq!(
+            groups.len(),
+            2,
+            "coincident world priors cannot merge distinct scan positions"
+        );
     }
 
     #[test]
@@ -22874,6 +23786,28 @@ mod alignment_tests {
     }
 
     #[test]
+    fn raw_physical_exposure_normalisation_uses_camera_settings() {
+        let mut metadata = HashMap::from([
+            ("ExposureTime".into(), "1/3 s".into()),
+            ("FNumber".into(), "f/4".into()),
+            ("ISOSpeedRatings".into(), "1000".into()),
+        ]);
+        let reference = stack_raw_exposure_value(&metadata).unwrap();
+        assert!((reference - 1000.0 / 48.0).abs() < 1e-9);
+        metadata.insert("ExposureTime".into(), "1/4 s".into());
+        assert!(
+            (reference / stack_raw_exposure_value(&metadata).unwrap() - 4.0 / 3.0).abs() < 1e-9
+        );
+        metadata.insert("ExposureTime".into(), "0.625 s".into());
+        metadata.insert("FNumber".into(), "f/5".into());
+        assert_eq!(stack_raw_exposure_value(&metadata), Some(25.0));
+        metadata.insert("FNumber".into(), "f/0".into());
+        assert!(stack_raw_exposure_value(&metadata).is_none());
+        metadata.remove("ExposureTime");
+        assert!(stack_raw_exposure_value(&metadata).is_none());
+    }
+
+    #[test]
     fn station_projective_tree_closure_uses_loop_constraints() {
         let images = (0..3)
             .map(|index| focus_test_image(index, &format!("station-{index}.NEF")))
@@ -23225,6 +24159,45 @@ mod alignment_tests {
         // matrix must report the same ratio as its normalised form.
         let unnormalised = Matrix3::identity() * 4.0;
         assert!((homography_scale_ratio(&unnormalised).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn station_overlap_scale_is_independent_of_both_tile_origins() {
+        let pose = Matrix3::new(0.74, 0.01, 220.0, 0.0, 0.74, 80.0, -0.0002, 0.0, 1.0);
+        let points = [
+            (500.0, 300.0),
+            (740.0, 300.0),
+            (500.0, 540.0),
+            (740.0, 540.0),
+        ]
+        .into_iter()
+        .map(|(x, y)| {
+            let source = Point2::new(x, y);
+            (source, transformed_point(&pose, source).unwrap())
+        })
+        .collect::<Vec<_>>();
+        let scale = station_relation_overlap_scale(&pose, &points).unwrap();
+        assert!(scale > 0.9 && scale < 1.1, "{scale}");
+        assert!(homography_scale_ratio(&pose).unwrap() < STATION_RELATION_SCALE_RATIO_MIN);
+        let source_shift = Matrix3::new(1.0, 0.0, 1000.0, 0.0, 1.0, 300.0, 0.0, 0.0, 1.0);
+        let target_shift = Matrix3::new(1.0, 0.0, -500.0, 0.0, 1.0, 400.0, 0.0, 0.0, 1.0);
+        let shifted = target_shift * pose * source_shift.try_inverse().unwrap();
+        let shifted_points = points
+            .iter()
+            .map(|&(source, target)| {
+                (
+                    transformed_point(&source_shift, source).unwrap(),
+                    transformed_point(&target_shift, target).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            (station_relation_overlap_scale(&shifted, &shifted_points).unwrap() - scale).abs()
+                < 1e-10
+        );
+        let affine = Matrix3::new(1.03, 0.0, 120.0, 0.0, 1.03, -40.0, 0.0, 0.0, 1.0);
+        assert!((station_relation_overlap_scale(&affine, &points).unwrap() - 1.03).abs() < 1e-12);
+        assert!(station_relation_overlap_scale(&pose, &[]).is_none());
     }
 
     #[test]
@@ -24230,6 +25203,218 @@ mod alignment_tests {
     }
 
     #[test]
+    fn anchor_frame_fusion_is_independent_of_global_station_placement() {
+        let sources = (0..4)
+            .map(|id| test_image(id, &format!("{id}.nef")))
+            .collect::<Vec<_>>();
+        let groups = vec![
+            FocusCaptureGroup {
+                members: vec![0, 1],
+                anchor: 0,
+                local_to_anchor: HashMap::new(),
+            },
+            FocusCaptureGroup {
+                members: vec![2, 3],
+                anchor: 2,
+                local_to_anchor: HashMap::new(),
+            },
+        ];
+        let child = Matrix3::new(1.001, 0.0, 5.0, 0.0, 1.001, -3.0, 0.0, 0.0, 1.0);
+        let first = Matrix3::new(1.4, 0.2, 1000.0, 0.1, 1.2, 700.0, 0.0003, 0.0002, 1.0);
+        let second = Matrix3::new(0.8, -0.3, 3000.0, 0.2, 0.9, 200.0, -0.0001, 0.0003, 1.0);
+        let global = HashMap::from([
+            (0, first),
+            (1, first * child),
+            (2, second),
+            (3, second * child),
+        ]);
+        let local = focus_anchor_render_frames(&groups, &sources, &global, None).unwrap();
+        for (id, expected) in [
+            (0, Matrix3::identity()),
+            (1, child),
+            (2, Matrix3::identity()),
+            (3, child),
+        ] {
+            assert!((local.homographies[&id] - expected).norm() < 1e-8);
+        }
+        assert!((local.anchor_to_world[0] - Matrix3::identity()).norm() < 1e-8);
+        let mut moved = global.clone();
+        let movement = Matrix3::new(1.3, 0.1, -800.0, 0.0, 1.1, 600.0, 0.0002, 0.0, 1.0);
+        moved.insert(2, movement * second);
+        moved.insert(3, movement * second * child);
+        let other = focus_anchor_render_frames(&groups, &sources, &moved, None).unwrap();
+        assert!((other.homographies[&3] - local.homographies[&3]).norm() < 1e-8);
+        // Local source pixels and source provenance share the same composition.
+        let expected_world = first.try_inverse().unwrap() * moved[&3];
+        assert!(
+            (normalized_homography(&(other.anchor_to_world[1] * other.homographies[&3])).unwrap()
+                - normalized_homography(&expected_world).unwrap())
+            .norm()
+                < 1e-8
+        );
+    }
+
+    #[test]
+    fn projective_repair_scale_is_measured_at_the_station_center() {
+        let correction = Matrix3::new(1.5, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0005, 0.0, 1.0);
+        let center = Point2::new(600.0, 400.0);
+        assert!(!virtual_tile_prior_repair_is_bounded(
+            38.9,
+            homography_scale_ratio(&correction).unwrap()
+        ));
+        let scale = virtual_tile_repair_local_scale_ratio(&correction, center).unwrap();
+        assert!(virtual_tile_prior_repair_is_bounded(38.9, scale));
+        let translation = Matrix3::new(1.0, 0.0, 1000.0, 0.0, 1.0, 500.0, 0.0, 0.0, 1.0);
+        let relocated = translation * correction * translation.try_inverse().unwrap();
+        let relocated_center = transformed_point(&translation, center).unwrap();
+        assert!(
+            (virtual_tile_repair_local_scale_ratio(&relocated, relocated_center).unwrap() - scale)
+                .abs()
+                < 1e-8
+        );
+    }
+
+    #[test]
+    fn virtual_tile_exposure_compensation_requires_verified_structure_and_held_out_pixels() {
+        let mut tiles = synthetic_virtual_tiles(2);
+        let texture = |x: f64, y: f64| {
+            128.0 + 45.0 * (x * 0.075 + y * 0.035).sin() + 35.0 * (x * 0.027 - y * 0.081).cos()
+        };
+        for tile in &mut tiles {
+            tile.width = 500;
+            tile.height = 400;
+            tile.scale_factor = 1.0;
+        }
+        tiles[0].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            image::Luma([texture(x as f64, y as f64).round() as u8])
+        });
+        tiles[1].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            image::Luma([(0.7 * texture(x as f64, y as f64)).round() as u8])
+        });
+        let good =
+            focus_overlap_quality_measurements(&tiles[0], &tiles[1], &Matrix3::identity()).unwrap();
+        assert!(good.low_frequency_mean_relative_difference > 0.29);
+        let compensated = virtual_tile_photometric_measurements(good);
+        assert!(
+            compensated.0 < 0.01 && (compensated.1 - 1.0).abs() < 0.03,
+            "{good:?}"
+        );
+        let wrong = Matrix3::new(1.0, 0.0, 30.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let bad = focus_overlap_quality_measurements(&tiles[0], &tiles[1], &wrong).unwrap();
+        assert_eq!(
+            virtual_tile_photometric_measurements(bad).0,
+            bad.low_frequency_mean_relative_difference
+        );
+        assert!(virtual_tile_photometric_measurements(bad).0 > 0.2);
+        let excessive = FocusOverlapQuality {
+            exposure_gain: 3.0,
+            ..good
+        };
+        assert_eq!(
+            virtual_tile_photometric_measurements(excessive).0,
+            excessive.low_frequency_mean_relative_difference
+        );
+    }
+
+    #[test]
+    fn overlap_gradient_measurement_uses_the_registered_pixel_grid() {
+        let mut tiles = synthetic_virtual_tiles(2);
+        let angle = 0.35f64;
+        let level_transform = Matrix3::new(
+            angle.cos(),
+            -angle.sin(),
+            90.0,
+            angle.sin(),
+            angle.cos(),
+            -60.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let inverse = level_transform.try_inverse().unwrap();
+        let texture = |x: f64, y: f64| {
+            image::Luma([(128.0
+                + 45.0 * (x * 0.075 + y * 0.035).sin()
+                + 35.0 * (x * 0.027 - y * 0.081).cos()) as u8])
+        };
+        tiles[0].alignment_image = GrayImage::from_fn(500, 400, |x, y| texture(x as f64, y as f64));
+        tiles[1].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            let p = transformed_point(&inverse, Point2::new(x as f64, y as f64)).unwrap();
+            texture(p.x, p.y)
+        });
+        for (tile, factor) in tiles.iter_mut().zip([4.0, 6.0]) {
+            tile.width = (500.0 * factor) as u32;
+            tile.height = (400.0 * factor) as u32;
+            tile.scale_factor = factor;
+        }
+        let native = Matrix3::new(6.0, 0.0, 0.0, 0.0, 6.0, 0.0, 0.0, 0.0, 1.0)
+            * level_transform
+            * Matrix3::new(0.25, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 1.0);
+        let quality = focus_overlap_quality_measurements(&tiles[0], &tiles[1], &native).unwrap();
+        assert!(quality.intensity_ncc > 0.99, "{quality:?}");
+        // Quantized, independently sampled 8-bit gradients retain some
+        // rounding noise even though the continuous texture is identical.
+        assert!(quality.edge_ncc > 0.97, "{quality:?}");
+        assert!(
+            quality.median_edge_orientation_difference_degrees < 3.0,
+            "{quality:?}"
+        );
+        assert!(
+            (quality.edge_strength_ratio - 1.0).abs() < 0.03,
+            "{quality:?}"
+        );
+    }
+
+    #[test]
+    fn single_level_relation_quality_distinguishes_registered_and_shifted_structure() {
+        let (mut tiles, coverages, _, _, actual) = direct_projective_fixture();
+        let mut quality_coverages = Vec::new();
+        for (tile, coverage) in tiles.iter_mut().zip(&coverages) {
+            let plane =
+                VirtualTileMatchPlane::from_native(&tile.alignment_image, coverage, 1).unwrap();
+            let (quality, factor) =
+                virtual_tile_relation_quality_plane(&[plane], &tile.alignment_image, coverage);
+            assert_eq!(factor, 4);
+            quality_coverages.push(
+                VirtualTileMatchPlane::from_native(&tile.alignment_image, coverage, factor)
+                    .unwrap()
+                    .coverage,
+            );
+            tile.scale_factor *= f64::from(factor);
+            tile.alignment_image = quality;
+        }
+        let scale = Matrix3::new(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0);
+        let native = scale * actual * scale.try_inverse().unwrap();
+        let good = focus_overlap_quality_measurements_on_coverage(
+            &tiles[0],
+            &tiles[1],
+            &native,
+            Some((&quality_coverages[0], &quality_coverages[1])),
+        )
+        .unwrap();
+        let mut shifted = native;
+        shifted[(0, 2)] += 80.0;
+        let bad = focus_overlap_quality_measurements_on_coverage(
+            &tiles[0],
+            &tiles[1],
+            &shifted,
+            Some((&quality_coverages[0], &quality_coverages[1])),
+        )
+        .unwrap();
+        assert!(
+            good.median_edge_orientation_difference_degrees < 10.0,
+            "{:?}",
+            good.median_edge_orientation_difference_degrees
+        );
+        assert!(
+            bad.median_edge_orientation_difference_degrees > 10.0,
+            "{:?}",
+            bad.median_edge_orientation_difference_degrees
+        );
+        assert!(good.intensity_ncc > bad.intensity_ncc + 0.2);
+    }
+
+    #[test]
     fn direct_grid_structure_planes_only_carry_the_orientation_measurement() {
         let (tiles, coverages, initial, _, _) = direct_projective_fixture();
         let threshold = STATION_RELATION_MAX_MEDIAN_ERROR_PX;
@@ -25115,7 +26300,18 @@ mod alignment_tests {
         for image in &mut images {
             image.focal_length_35mm = Some(90.0);
         }
-        let station_transform = Matrix3::new(0.92, 0.01, 240.0, -0.01, 0.92, 20.0, 0.0, 0.0, 1.0);
+        let rejected_scale = STATION_RELATION_SCALE_RATIO_MIN - 0.01;
+        let station_transform = Matrix3::new(
+            rejected_scale,
+            0.01,
+            240.0,
+            -0.01,
+            rejected_scale,
+            20.0,
+            0.0,
+            0.0,
+            1.0,
+        );
         let mut consensus_bridge = observed_transform_match(station_transform, 24);
         consensus_bridge.coarse_bridge = true;
         consensus_bridge.top_candidate_points = consensus_bridge.points.clone();
@@ -26945,6 +28141,497 @@ mod acceptance_tests {
                 .map(|path| format!("\nfull: {}", path.display()))
                 .unwrap_or_default(),
         );
+    }
+
+    #[test]
+    #[ignore = "requires saved real Virtual_Tile grayscale and coverage planes"]
+    fn real_virtual_tile_pair_diagnostics_from_env() {
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
+        if let Ok(path) = std::env::var("RAW_EDITOR_TILE_REPLAY_MANIFEST") {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let sources = manifest
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|source| {
+                    let hex = source["sha256_before"].as_str().unwrap();
+                    let mut digest = [0u8; 32];
+                    for (index, byte) in digest.iter_mut().enumerate() {
+                        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).unwrap();
+                    }
+                    (source["path"].as_str().unwrap().to_string(), digest)
+                })
+                .collect::<Vec<_>>();
+            let key = virtual_tile::CacheKeyInputs::new(
+                crate::image_stack::STACK_PIPELINE_VERSION,
+                &sources,
+            );
+            let seed = determinism::derive_run_seed_from_cache_key(&key.digest());
+            determinism::set_run_random_seed(seed);
+            println!("TILE_REPLAY run seed={seed}");
+        }
+        let directory = PathBuf::from(
+            std::env::var_os("RAW_EDITOR_TILE_REPLAY_DIR").expect("saved tile directory"),
+        );
+        let count: usize = std::env::var("RAW_EDITOR_TILE_REPLAY_COUNT")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let brief_pairs = processing::generate_brief_pairs();
+        let mut tiles = Vec::new();
+        let mut native = Vec::new();
+        let mut masks = Vec::new();
+        let factors = std::env::var("RAW_EDITOR_TILE_REPLAY_FACTORS")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|factor| factor.parse().unwrap())
+                    .collect()
+            })
+            .unwrap_or_else(|_| vec![1]);
+        let mut pyramid = VirtualTileMatchPyramid::new(factors, count);
+        for station in 0..count {
+            let gray = image::open(directory.join(format!("station-{station:03}.gray.png")))
+                .unwrap()
+                .to_luma8();
+            let mask = image::open(directory.join(format!("station-{station:03}.coverage.png")))
+                .unwrap()
+                .to_luma8();
+            let coverage =
+                stitching::CoverageMask::from_bytes(mask.width(), mask.height(), mask.into_raw())
+                    .unwrap();
+            let mut tile = ImageInfo {
+                id: station,
+                filename: format!("station-{station:03}"),
+                width: gray.width(),
+                height: gray.height(),
+                alignment_image: gray.clone(),
+                full_image: None,
+                scale_factor: 1.0,
+                focal_length_35mm: None,
+                features: Vec::new(),
+                top_features: Vec::new(),
+                overview_reference: false,
+                foreground_range: None,
+                foreground_mask: None,
+                horizontal_edge_rows: Vec::new(),
+                vertical_edge_columns: Vec::new(),
+            };
+            install_virtual_tile_match_planes(
+                &mut tile,
+                &mut pyramid,
+                station,
+                &gray,
+                &coverage,
+                &brief_pairs,
+            )
+            .unwrap();
+            tiles.push(tile);
+            native.push(gray);
+            masks.push(coverage);
+        }
+        let native_sigma = std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_SIGMA")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let native_structure = native
+            .iter()
+            .map(|image| {
+                if native_sigma > 0.0 {
+                    imageproc::filter::gaussian_blur_f32(image, native_sigma)
+                } else {
+                    image.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let native_half = std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_HALF")
+            .ok()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(7);
+        let mut records = Vec::new();
+        let mut replay_matches = HashMap::new();
+        let selected_pairs = std::env::var("RAW_EDITOR_TILE_REPLAY_PAIRS")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|pair| {
+                        let (left, right) = pair.split_once(':').unwrap();
+                        (
+                            left.parse::<usize>().unwrap(),
+                            right.parse::<usize>().unwrap(),
+                        )
+                    })
+                    .collect::<BTreeSet<_>>()
+            });
+        if let Ok(sigma) = std::env::var("RAW_EDITOR_TILE_REPLAY_POLISH_BLUR") {
+            let sigma: f32 = sigma.parse().unwrap();
+            for plane in pyramid.levels.last_mut().unwrap() {
+                plane.alignment_image =
+                    imageproc::filter::gaussian_blur_f32(&plane.alignment_image, sigma);
+            }
+        }
+        let quality_factors: Vec<u32> = std::env::var("RAW_EDITOR_TILE_REPLAY_QUALITY_FACTORS")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|factor| factor.parse().unwrap())
+                    .collect()
+            })
+            .unwrap_or_else(|_| vec![1, 2, 4, 12]);
+        for left in 0..count {
+            for right in left + 1..count {
+                if selected_pairs
+                    .as_ref()
+                    .is_some_and(|pairs| !pairs.contains(&(left, right)))
+                {
+                    continue;
+                }
+                let Some((seed, feature_inliers)) = virtual_tile_prior_free_relation(
+                    pyramid.feature_factors[left],
+                    &tiles[left].features,
+                    pyramid.feature_factors[right],
+                    &tiles[right].features,
+                    tiles[left].dimensions(),
+                ) else {
+                    continue;
+                };
+                let (relation, mut diagnostic) =
+                    virtual_tile_pyramid_station_match(left, right, &pyramid, &seed, "saved_tiles");
+                let Some(mut relation) = relation else {
+                    println!(
+                        "TILE_NO_FIT {left}->{right} stage={} inliers={} support={:.4}",
+                        diagnostic.failure_stage,
+                        diagnostic.fitted_inliers,
+                        diagnostic.hull_support
+                    );
+                    continue;
+                };
+                if std::env::var_os("RAW_EDITOR_TILE_REPLAY_POLISH").is_some() {
+                    let Some(polished) = virtual_tile_polished_station_match(
+                        &pyramid.levels[0][left],
+                        &pyramid.coverages[0][left],
+                        &pyramid.levels[0][right],
+                        &pyramid.coverages[0][right],
+                        1,
+                        &relation.homography,
+                        (tiles[left].dimensions(), tiles[right].dimensions()),
+                        &mut diagnostic,
+                    ) else {
+                        continue;
+                    };
+                    relation = polished;
+                }
+                let native_verified_points =
+                    if std::env::var_os("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP").is_some() {
+                        let backward = relation.homography.try_inverse().unwrap();
+                        let step = (relation.points.len() / 400).max(1);
+                        relation
+                            .points
+                            .par_iter()
+                            .enumerate()
+                            .filter(|(index, _)| index % step == 0)
+                            .filter_map(|(_, &(center, _))| {
+                                let check = residual_warp::verify_round_trip_match_with_template(
+                                    &native_structure[left],
+                                    &native_structure[right],
+                                    &relation.homography,
+                                    &backward,
+                                    center,
+                                    native_half,
+                                )?;
+                                Some([
+                                    center.x,
+                                    center.y,
+                                    check.forward.x,
+                                    check.forward.y,
+                                    check.round_trip_error_px,
+                                ])
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        Vec::new()
+                    };
+                let authoritative = virtual_tile_relation_is_authoritative(
+                    left,
+                    right,
+                    &relation,
+                    &tiles,
+                    pyramid.solver_coverages(),
+                );
+                if authoritative {
+                    replay_matches.insert((left, right), relation.clone());
+                }
+                let (canonical_left, canonical_right, inverted) =
+                    canonical_match_direction(&tiles, left, right);
+                let canonical_pose = if inverted {
+                    relation.homography.try_inverse().unwrap()
+                } else {
+                    relation.homography
+                };
+                let canonical_quality = focus_overlap_quality_measurements_on_coverage(
+                    &tiles[canonical_left],
+                    &tiles[canonical_right],
+                    &canonical_pose,
+                    Some((
+                        &pyramid.quality_coverages[canonical_left],
+                        &pyramid.quality_coverages[canonical_right],
+                    )),
+                );
+                println!(
+                    "TILE_GATE {left}->{right} authoritative={authoritative} inverted={inverted} quality={canonical_quality:?}"
+                );
+                for &factor in &quality_factors {
+                    let lp =
+                        VirtualTileMatchPlane::from_native(&native[left], &masks[left], factor)
+                            .unwrap();
+                    let rp =
+                        VirtualTileMatchPlane::from_native(&native[right], &masks[right], factor)
+                            .unwrap();
+                    let mut l = virtual_tile_plane_image_info(&tiles[left], &lp);
+                    let mut r = virtual_tile_plane_image_info(&tiles[right], &rp);
+                    for (t, p) in [(&mut l, &lp), (&mut r, &rp)] {
+                        t.width = p.gray.width() * factor;
+                        t.height = p.gray.height() * factor;
+                        t.scale_factor = f64::from(factor);
+                        t.alignment_image = imageproc::filter::gaussian_blur_f32(&p.gray, 1.0);
+                    }
+                    let q = focus_overlap_quality_measurements_on_coverage(
+                        &l,
+                        &r,
+                        &relation.homography,
+                        Some((&lp.coverage, &rp.coverage)),
+                    );
+                    println!(
+                        "TILE_REPLAY {left}->{right} factor={factor} features={feature_inliers} fit={} error={:.3} quality={q:?}",
+                        relation.points.len(),
+                        median_symmetric_error(&relation.homography, &relation.points)
+                    );
+                    if let Some(q) = q {
+                        let (photometric, strength) = virtual_tile_photometric_measurements(q);
+                        records.push(serde_json::json!({"left":left,"right":right,"factor":factor,
+                            "inliers":relation.points.len(),"error":median_symmetric_error(&relation.homography,&relation.points),
+                            "scale":station_relation_overlap_scale(&relation.homography,&relation.points),
+                            "authoritative":authoritative,
+                            "orientation":q.median_edge_orientation_difference_degrees,"strength":strength,
+                            "photometric":photometric,"raw_photometric":q.low_frequency_mean_relative_difference,
+                            "exposure_gain":q.exposure_gain,"normalized_difference":q.exposure_normalized_difference,"intensity_ncc":q.intensity_ncc,
+                            "edge_ncc":q.edge_ncc,"homography":relation.homography.as_slice(),
+                            "points":relation.points.iter().map(|(a,b)| [a.x,a.y,b.x,b.y]).collect::<Vec<_>>(),
+                            "native_verified_points": native_verified_points, "diagnostic":diagnostic}));
+                    }
+                }
+            }
+        }
+        if let Ok(path) = std::env::var("RAW_EDITOR_TILE_REPLAY_INITIAL_POSES") {
+            let poses: Vec<Vec<Vec<f64>>> =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let initial = poses
+                .iter()
+                .enumerate()
+                .map(|(index, p)| {
+                    (
+                        index,
+                        Matrix3::new(
+                            p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2], p[2][0], p[2][1],
+                            p[2][2],
+                        ),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let groups = (0..tiles.len())
+                .map(|anchor| FocusCaptureGroup {
+                    anchor,
+                    members: vec![anchor],
+                    local_to_anchor: HashMap::from([(anchor, Matrix3::identity())]),
+                })
+                .collect::<Vec<_>>();
+            let topology = focus_station_topology(&tiles, &groups, &initial);
+            let mut closure = stack_report::ClosureReport::default();
+            let mut relations = stack_report::StationRelationsReport::default();
+            let solved = solve_virtual_tile_station_poses_with_report(
+                &tiles,
+                pyramid.solver_coverages(),
+                &replay_matches,
+                &initial,
+                &topology,
+                &mut closure,
+                &mut relations,
+            );
+            fs::write(directory.join("solver-replay.json"),serde_json::to_vec_pretty(&serde_json::json!({
+                "poses":solved.iter().map(|(id,h)| (id.to_string(),h.as_slice())).collect::<BTreeMap<_,_>>(),
+                "closure":closure,"station_relations":relations,
+            })).unwrap()).unwrap();
+        }
+        fs::write(
+            directory.join("replayed-relations.json"),
+            serde_json::to_vec_pretty(&records).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires RAW_EDITOR_FOCUS_STACK_PATHS and an external diagnostic directory"]
+    fn real_focus_pair_diagnostics_from_env() {
+        let paths = std::env::split_paths(
+            &std::env::var_os("RAW_EDITOR_FOCUS_STACK_PATHS").expect("source paths"),
+        )
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+        let output = PathBuf::from(
+            std::env::var_os("RAW_EDITOR_FOCUS_PAIR_DIAGNOSTICS_DIR")
+                .expect("diagnostic directory"),
+        );
+        fs::create_dir_all(&output).unwrap();
+        crate::sidecar_storage::initialize(&output.join("sidecars")).unwrap();
+        let brief_pairs = processing::generate_brief_pairs();
+        let settings = AppSettings::default();
+        let raw_exposure_reference = stack_raw_exposure_reference(&paths);
+        let mut images = Vec::new();
+        for (id, filename) in paths.iter().enumerate() {
+            let prepared =
+                load_prepared_stack_source(filename, &settings, raw_exposure_reference).unwrap();
+            let (width, height) = prepared.image.dimensions();
+            let (w, h, scale_factor) =
+                processing::calculate_downscale_dimensions_capped(width, height, 2400);
+            let alignment_image = prepared
+                .image
+                .resize_exact(w, h, image::imageops::FilterType::Triangle)
+                .to_luma8();
+            let foreground_range = detect_foreground_range(&alignment_image);
+            let features = find_alignment_features(
+                &alignment_image,
+                &brief_pairs,
+                1600,
+                true,
+                prepared.focal_length_35mm,
+            );
+            alignment_image
+                .save(output.join(format!(
+                    "{}.png",
+                    Path::new(filename).file_stem().unwrap().to_string_lossy()
+                )))
+                .unwrap();
+            images.push(ImageInfo {
+                id,
+                filename: filename.clone(),
+                width,
+                height,
+                scale_factor,
+                focal_length_35mm: prepared.focal_length_35mm,
+                features,
+                top_features: find_top_alignment_features(
+                    &alignment_image,
+                    &brief_pairs,
+                    foreground_range,
+                ),
+                foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
+                horizontal_edge_rows: horizontal_edge_row_candidates(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                vertical_edge_columns: detect_vertical_edge_columns(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                alignment_image,
+                foreground_range,
+                overview_reference: false,
+                full_image: None,
+            });
+        }
+        for i in 0..images.len() {
+            for j in i + 1..images.len() {
+                let (a, b, _) = canonical_match_direction(&images, i, j);
+                println!(
+                    "PROBE {} -> {}",
+                    Path::new(&images[a].filename)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy(),
+                    Path::new(&images[b].filename)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                );
+                let result = match_image_pair(
+                    &images[a],
+                    &images[b],
+                    Projection::Planar,
+                    BlendMode::FocusStack,
+                    AlignmentMode::Auto,
+                    true,
+                    true,
+                    false,
+                );
+                println!(
+                    "PROBE_RESULT {} {} {:?}",
+                    i,
+                    j,
+                    result.as_ref().map(|m| (
+                        m.inliers,
+                        median_symmetric_error(&m.homography, &m.points),
+                        m.homography
+                    ))
+                );
+                if result.is_none() {
+                    if let Some(m) = match_image_pair(
+                        &images[a],
+                        &images[b],
+                        Projection::Planar,
+                        BlendMode::Panorama,
+                        AlignmentMode::Auto,
+                        true,
+                        true,
+                        false,
+                    ) {
+                        println!(
+                            "PANORAMA_CANDIDATE {:?} quality={:?}",
+                            m.homography,
+                            focus_overlap_quality(&images[a], &images[b], &m.homography)
+                        );
+                        for factor in [1u32, 2, 4] {
+                            let structural = |info: &ImageInfo| ImageInfo {
+                                id: info.id,
+                                filename: info.filename.clone(),
+                                width: info.width,
+                                height: info.height,
+                                scale_factor: info.scale_factor * factor as f64,
+                                alignment_image: imageproc::filter::gaussian_blur_f32(
+                                    &image::imageops::resize(
+                                        &info.alignment_image,
+                                        info.alignment_image.width() / factor,
+                                        info.alignment_image.height() / factor,
+                                        image::imageops::FilterType::Triangle,
+                                    ),
+                                    1.0,
+                                ),
+                                full_image: None,
+                                focal_length_35mm: info.focal_length_35mm,
+                                features: Vec::new(),
+                                top_features: Vec::new(),
+                                overview_reference: false,
+                                foreground_range: None,
+                                foreground_mask: None,
+                                horizontal_edge_rows: Vec::new(),
+                                vertical_edge_columns: Vec::new(),
+                            };
+                            println!(
+                                "STRUCTURAL factor={} quality={:?}",
+                                factor,
+                                focus_overlap_quality(
+                                    &structural(&images[a]),
+                                    &structural(&images[b]),
+                                    &m.homography
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

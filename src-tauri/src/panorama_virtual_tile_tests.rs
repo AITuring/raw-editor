@@ -421,14 +421,19 @@ fn virtual_tile_relation_quality_plane_blurs_the_plane_two_octaves_above_the_fin
     let gray = textured_plane(512, 256);
     let coverage = full_coverage(512, 256);
 
-    let (empty, empty_factor) = virtual_tile_relation_quality_plane(&[]);
+    let (empty, empty_factor) = virtual_tile_relation_quality_plane(&[], &gray, &coverage);
     assert_eq!((empty.dimensions(), empty_factor), ((1, 1), 1));
 
     for factor in [1u32, 4] {
         let planes = planes_for(&[factor], &gray, &coverage);
-        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes);
-        assert_eq!(plane_factor, factor);
-        assert_eq!(plane, planes[0].gray, "a single level stays unfiltered");
+        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes, &gray, &coverage);
+        assert_eq!(plane_factor, 4);
+        let structural = VirtualTileMatchPlane::from_native(&gray, &coverage, 4).unwrap();
+        assert_eq!(
+            plane,
+            imageproc::filter::gaussian_blur_f32(&structural.gray, 1.0),
+            "a single matching level still verifies covered structure"
+        );
     }
 
     for (factors, expected) in [
@@ -439,7 +444,7 @@ fn virtual_tile_relation_quality_plane_blurs_the_plane_two_octaves_above_the_fin
         (vec![32, 16, 8, 4], 16),
     ] {
         let planes = planes_for(&factors, &gray, &coverage);
-        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes);
+        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes, &gray, &coverage);
         assert_eq!(plane_factor, expected, "factors {factors:?}");
         let source = planes
             .iter()
@@ -488,9 +493,11 @@ fn install_virtual_tile_match_planes_pairs_the_quality_plane_with_its_own_covera
         coverage_bits(&quality_level.coverage)
     );
     assert_eq!(pyramid.quality_coverages[0].dimensions(), (1, 1));
-    let finest = VirtualTileMatchPlane::from_native(&gray, &coverage, 4).unwrap();
+    let feature_plane =
+        VirtualTileMatchPlane::from_native(&gray, &coverage, pyramid.feature_factors[1]).unwrap();
     assert!(tile.features.iter().all(|feature| {
-        feature.keypoint.x < finest.gray.width() && feature.keypoint.y < finest.gray.height()
+        feature.keypoint.x < feature_plane.gray.width()
+            && feature.keypoint.y < feature_plane.gray.height()
     }));
 
     let mut single = VirtualTileMatchPyramid::new(vec![1], 1);
@@ -504,11 +511,19 @@ fn install_virtual_tile_match_planes_pairs_the_quality_plane_with_its_own_covera
         &brief_pairs,
     )
     .expect("installed");
-    assert_eq!(native_tile.scale_factor, 1.0);
-    assert_eq!(native_tile.alignment_image, gray);
+    let structural = VirtualTileMatchPlane::from_native(&gray, &coverage, 3).unwrap();
+    assert_eq!(native_tile.scale_factor, 3.0);
+    assert_eq!(
+        native_tile.alignment_image,
+        imageproc::filter::gaussian_blur_f32(&structural.gray, 1.0)
+    );
+    assert_eq!(
+        single.quality_coverages[0].dimensions(),
+        native_tile.alignment_image.dimensions()
+    );
     assert_eq!(
         coverage_bits(&single.quality_coverages[0]),
-        coverage_bits(&coverage)
+        coverage_bits(&structural.coverage)
     );
 
     let mut failing = VirtualTileMatchPyramid::new(vec![8, 4], 1);
