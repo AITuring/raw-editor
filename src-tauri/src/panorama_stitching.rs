@@ -9475,6 +9475,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 )
             };
         let residual = residual_warp::run_model_snapshot();
+        let accepted_station_relations = tone::run_topology_snapshot()
+            .map(|topology| {
+                topology
+                    .accepted
+                    .iter()
+                    .filter_map(|&(left_id, right_id)| {
+                        let left = topology.station_of(left_id)?;
+                        let right = topology.station_of(right_id)?;
+                        (left != right).then_some((left.min(right), left.max(right)))
+                    })
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let quality_input = quality_gate_runner::QualityGateInput {
             output: &panorama,
             coverage: &coverage,
@@ -9486,6 +9501,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             unresolved_pixel_count,
             world_origin,
             sources: &sources,
+            accepted_station_relations: &accepted_station_relations,
             residual: &residual,
             acceptance_render_scale: render_scale,
             final_sharpen_amount: stitching::layered_final_sharpen_amount() as f64,

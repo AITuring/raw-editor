@@ -22,6 +22,7 @@ const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
 const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
 const tone = read(`${stackPipelineDir}/tone.rs`);
 const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
+const qualityGateRunner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
 
 // Revised 2026-09-29 evidence policy: content-inapplicable observations are
 // kept separate from technical failures, and a criterion can be explicitly
@@ -134,6 +135,21 @@ for (const criterion of [
 }
 assert.match(qualityGate, /detect_lines\(/, 'MTF50 must use imageproc Hough');
 assert.match(qualityGate, /acutance_with_step\(/, 'gradient energy must reuse mosaic acutance');
+assert.match(
+  qualityGateRunner,
+  /fn gradient_energy_ratio\([\s\S]*?normalized_gradient_energy\(output, local_scale\)[\s\S]*?normalized_gradient_energy\(reference, local_scale\)/,
+  'output and the already aligned Source_RAW reference must use the same local scale',
+);
+assert.match(
+  qualityGateRunner,
+  /FIXED_CROSS_SECTION_RADIUS_PX: i32 = 2;/,
+  'boundary stroke sampling must retain the safe fixed cross-section radius',
+);
+assert.doesNotMatch(
+  qualityGateRunner,
+  /for offset in -16\.\.=16/,
+  'the rejected wide wrong-edge sampler must not return',
+);
 assert.match(qualityGate, /delta_e00_rgb\(/, 'Delta_E00 must use the canonical tone helper');
 assert.doesNotMatch(qualityGate, /std::env::var/, 'Quality_Gate must not read environment switches');
 
@@ -324,6 +340,21 @@ assert.match(
   panorama,
   /stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default focus-stack path must compose through the layered Virtual_Tile compositor (任务 13.1)',
+);
+assert.match(
+  stitching,
+  /build_station_seam_plans[\s\S]*?station_seam_world_gradient[\s\S]*?seam_candidate_cost_with_alignment/,
+  'the production seam adapter must combine final-world gradient alignment with the shared seam cost',
+);
+assert.match(
+  stitching,
+  /\(seam - current_seam\)\.abs\(\) > 32\.0[\s\S]*?desired_owner/,
+  'station seam application must rewrite only the validated 32px boundary strip',
+);
+assert.match(
+  stitching,
+  /layered_station_seam_avoids_a_lower_colour_cost_stroke_crossing/,
+  'boundary protection needs a regression where alignment defeats lower colour cost',
 );
 // 任务 13.3: the default path takes the covered union bounds and nothing else.
 // `crop_to_valid_rectangle` survives for the comparison paths only.

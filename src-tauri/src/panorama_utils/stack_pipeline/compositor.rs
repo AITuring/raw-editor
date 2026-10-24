@@ -193,17 +193,24 @@ pub(crate) fn is_canvas_rejection(error: &str) -> bool {
 /// Add the coverage-boundary term from the Tile_Compositor seam objective.
 /// Overlap disagreement and the boundary penalty share one cost unit, so a
 /// candidate inside the 16-pixel boundary band always pays at least 1.0.
-#[cfg(test)]
 pub(crate) fn seam_candidate_cost(overlap_disagreement: f64, boundary_distance: f64) -> f64 {
     overlap_disagreement.max(0.0)
         + f64::from((boundary_distance.is_finite() && boundary_distance < 16.0) as u8)
+}
+
+/// Add current-overlap edge alignment to the station seam objective.
+pub(crate) fn seam_candidate_cost_with_alignment(
+    overlap_disagreement: f64,
+    boundary_distance: f64,
+    edge_misalignment: f64,
+) -> f64 {
+    seam_candidate_cost(overlap_disagreement, boundary_distance) + edge_misalignment.max(0.0)
 }
 
 /// Find the deterministic minimum-cost vertical seam in a row-major overlap
 /// grid.  A path contains one column per row and may move at most one column
 /// between adjacent rows.  This pure solver is shared by the production seam
 /// adapter and Property 53's exhaustive oracle.
-#[cfg(test)]
 pub(crate) fn minimum_vertical_seam(
     costs: &[f64],
     width: usize,
@@ -478,6 +485,7 @@ mod tests {
             unresolved_pixel_count: 0,
             world_origin: (0.0, 0.0),
             sources: &sources,
+            accepted_station_relations: &[],
             residual: &residual,
             acceptance_render_scale: 1.0,
             final_sharpen_amount: 0.0,

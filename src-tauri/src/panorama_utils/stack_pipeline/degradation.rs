@@ -208,8 +208,12 @@ pub const SLANTED_EDGE_CONTRAST_INSUFFICIENT: &str = "slanted_edge_contrast_insu
 pub const SLANTED_EDGE_ANGLE_OUT_OF_RANGE: &str = "slanted_edge_angle_out_of_range";
 /// Boundary sampling found no edge on one or both sides.
 pub const BOUNDARY_LOW_CONTRAST: &str = "boundary_low_contrast";
+/// Multiple similarly strong edges prevent a unique cross-seam stroke pairing.
+pub const BOUNDARY_STROKE_NOT_UNIQUE: &str = "boundary_stroke_not_unique";
 /// Boundary edges were found but their orientations disagree.
 pub const BOUNDARY_ORIENTATION_MISMATCH: &str = "boundary_orientation_mismatch";
+/// A covered owner transition could not be tied to accepted station/source provenance.
+pub const BOUNDARY_PROVENANCE_UNAVAILABLE: &str = "boundary_provenance_unavailable";
 
 /// Severity of a degradation entry. `Rejected` means the run must not write a
 /// final result file; `Degraded` means the run continues with reduced evidence;
@@ -496,7 +500,9 @@ pub const UNMEASURABLE_REASONS: &[&str] = &[
     SLANTED_EDGE_CONTRAST_INSUFFICIENT,
     SLANTED_EDGE_ANGLE_OUT_OF_RANGE,
     BOUNDARY_LOW_CONTRAST,
+    BOUNDARY_STROKE_NOT_UNIQUE,
     BOUNDARY_ORIENTATION_MISMATCH,
+    BOUNDARY_PROVENANCE_UNAVAILABLE,
 ];
 
 /// Maximum identifier length allowed by requirement 12.7.

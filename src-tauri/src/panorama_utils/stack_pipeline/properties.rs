@@ -12700,6 +12700,7 @@ proptest! {
                 unresolved_pixel_count: 0,
                 world_origin: (0.0, 0.0),
                 sources: std::slice::from_ref(&source),
+                accepted_station_relations: &[],
                 residual: &residual,
                 acceptance_render_scale: 1.0,
                 final_sharpen_amount: 0.0,

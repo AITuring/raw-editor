@@ -72,6 +72,9 @@ pub(crate) struct QualityGateInput<'a> {
     pub unresolved_pixel_count: u64,
     pub world_origin: (f64, f64),
     pub sources: &'a [QualitySource],
+    /// Accepted Station_Relations as normalized station-index pairs. Boundary
+    /// evidence outside these real overlaps is not a production seam metric.
+    pub accepted_station_relations: &'a [(usize, usize)],
     pub residual: &'a ResidualWarp,
     pub acceptance_render_scale: f64,
     pub final_sharpen_amount: f64,
@@ -557,6 +560,7 @@ pub(crate) fn classify_unmeasurable_reason(reason: &str) -> UnmeasurableCategory
         | degradation::ROI_NOT_FLAT
         | degradation::BOUNDARY_NO_PAIRABLE_EDGE
         | degradation::BOUNDARY_LOW_CONTRAST
+        | degradation::BOUNDARY_STROKE_NOT_UNIQUE
         | degradation::BOUNDARY_ORIENTATION_MISMATCH => UnmeasurableCategory::ContentNotApplicable,
         _ => UnmeasurableCategory::Technical,
     }
@@ -564,6 +568,23 @@ pub(crate) fn classify_unmeasurable_reason(reason: &str) -> UnmeasurableCategory
 
 fn ratio(measured: f64, reference: f64, min: f64, max: f64) -> Option<(f64, bool)> {
     quality_gate::compare_ratio(measured, reference, min, max, false).map(|v| (v.value, v.passed))
+}
+
+fn gradient_energy_ratio(
+    output: &Rgb32FImage,
+    reference: &Rgb32FImage,
+    local_scale: f64,
+) -> Result<Option<(f64, bool)>, &'static str> {
+    let output_energy = quality_gate::normalized_gradient_energy(output, local_scale)?;
+    // `source_roi` has already resampled Source_RAW onto the output grid, so
+    // both sides share the same measured local scale.
+    let reference_energy = quality_gate::normalized_gradient_energy(reference, local_scale)?;
+    Ok(ratio(
+        output_energy,
+        reference_energy,
+        quality_gate::QUALITY_GRADIENT_RATIO_MIN,
+        f64::INFINITY,
+    ))
 }
 
 /// Keep the observation-only gate bounded on the full-resolution acceptance
@@ -824,128 +845,302 @@ fn effective_pixel_coverage_streaming(
     })
 }
 
-/// Return the two-sided subpixel edge displacement at one ownership boundary.
-/// `normal` is either horizontal `(1,0)` or vertical `(0,1)` and is derived
-/// directly from the neighbouring ownership pixels, so no full label image is
-/// needed.
-fn boundary_point_error(
+#[derive(Debug, Clone)]
+struct BoundaryEdge {
+    offset: f64,
+    strength: f64,
+    gradient: (f64, f64),
+    pixel: (u32, u32),
+}
+
+#[derive(Debug, Clone)]
+struct BoundaryPairEvidence {
+    world: (f64, f64),
+    error: f64,
+    strength: f64,
+    owner_path: String,
+}
+
+#[derive(Debug, Clone)]
+enum BoundaryCellObservation {
+    Measured(BoundaryPairEvidence),
+    Unmeasurable {
+        world: (f64, f64),
+        reason: &'static str,
+    },
+}
+
+fn boundary_edge_on_side(
     image: &Rgb32FImage,
-    x: u32,
-    y: u32,
+    coverage: &GrayImage,
+    ownership: &[u16],
+    seam: (f64, f64),
     normal: (f64, f64),
-) -> Result<f64, &'static str> {
+    side: f64,
+    distance: f64,
+    expected_owner: u16,
+) -> Result<BoundaryEdge, &'static str> {
+    const FIXED_CROSS_SECTION_RADIUS_PX: i32 = 2;
     let (width, height) = image.dimensions();
+    let tangent = (-normal.1, normal.0);
     let luminance = |pixel: Rgb<f32>| {
         0.2126 * f64::from(pixel[0]) + 0.7152 * f64::from(pixel[1]) + 0.0722 * f64::from(pixel[2])
     };
-    let mut sides = [(0.0f64, 0.0f64), (0.0f64, 0.0f64)];
-    for (side_index, side) in [-1.0f64, 1.0].into_iter().enumerate() {
-        let mut contrast_sum = 0.0;
-        let mut position_sum = 0.0;
-        let mut orientation_sum = 0.0;
-        for distance in 1..=16 {
-            let distance = f64::from(distance);
-            let sx = f64::from(x) + side * normal.0 * distance;
-            let sy = f64::from(y) + side * normal.1 * distance;
-            let ix = sx.round() as i32;
-            let iy = sy.round() as i32;
-            if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
-                continue;
-            }
-            let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
-                - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
-            let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
-                - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
-            let contrast = gx.hypot(gy) * 0.5;
-            if contrast < 0.15 {
-                continue;
-            }
-            contrast_sum += contrast;
-            position_sum += side * distance * contrast;
-            orientation_sum += gy.atan2(gx).to_degrees() * contrast;
+    let mut candidates = Vec::new();
+    for offset in -FIXED_CROSS_SECTION_RADIUS_PX..=FIXED_CROSS_SECTION_RADIUS_PX {
+        let offset = f64::from(offset);
+        let sx = seam.0 + side * normal.0 * distance + tangent.0 * offset;
+        let sy = seam.1 + side * normal.1 * distance + tangent.1 * offset;
+        let ix = sx.round() as i32;
+        let iy = sy.round() as i32;
+        if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
+            continue;
         }
-        if contrast_sum <= 0.0 {
-            return Err(degradation::BOUNDARY_LOW_CONTRAST);
+        let index = iy as usize * width as usize + ix as usize;
+        if coverage.as_raw().get(index).copied().unwrap_or(0) == 0
+            || ownership.get(index).copied() != Some(expected_owner)
+        {
+            continue;
         }
-        sides[side_index] = (position_sum / contrast_sum, orientation_sum / contrast_sum);
+        let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
+            - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
+        let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
+            - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
+        let strength = gx.hypot(gy) * 0.5;
+        if strength < 0.15 {
+            continue;
+        }
+        let tangent_alignment = (gx * tangent.0 + gy * tangent.1).abs() / gx.hypot(gy);
+        if tangent_alignment < 30.0f64.to_radians().cos() {
+            continue;
+        }
+        candidates.push(BoundaryEdge {
+            offset,
+            strength,
+            gradient: (gx, gy),
+            pixel: (ix as u32, iy as u32),
+        });
     }
-    let mut angle_error = (sides[0].1 - sides[1].1).abs() % 180.0;
-    if angle_error > 90.0 {
-        angle_error = 180.0 - angle_error;
+    candidates.sort_by(|left, right| {
+        right
+            .strength
+            .total_cmp(&left.strength)
+            .then_with(|| left.offset.total_cmp(&right.offset))
+    });
+    let Some(best) = candidates.first().cloned() else {
+        return Err(degradation::BOUNDARY_LOW_CONTRAST);
+    };
+    if candidates.iter().skip(1).any(|candidate| {
+        (candidate.offset - best.offset).abs() >= 3.0 && candidate.strength > best.strength * 0.8
+    }) {
+        return Err(degradation::BOUNDARY_STROKE_NOT_UNIQUE);
     }
+    Ok(best)
+}
+
+fn boundary_pair_error(
+    image: &Rgb32FImage,
+    coverage: &GrayImage,
+    ownership: &[u16],
+    seam: (f64, f64),
+    normal: (f64, f64),
+    left_owner: u16,
+    right_owner: u16,
+) -> Result<(BoundaryEdge, BoundaryEdge), &'static str> {
+    let distance = 4.0;
+    let left = boundary_edge_on_side(
+        image, coverage, ownership, seam, normal, -1.0, distance, left_owner,
+    )?;
+    let right = boundary_edge_on_side(
+        image,
+        coverage,
+        ownership,
+        seam,
+        normal,
+        1.0,
+        distance,
+        right_owner,
+    )?;
+    let left_length = left.gradient.0.hypot(left.gradient.1);
+    let right_length = right.gradient.0.hypot(right.gradient.1);
+    let cosine = (left.gradient.0 * right.gradient.0 + left.gradient.1 * right.gradient.1)
+        / (left_length * right_length);
+    let angle_error = cosine.clamp(-1.0, 1.0).acos().to_degrees();
     if angle_error > 10.0 {
-        Err(degradation::BOUNDARY_ORIENTATION_MISMATCH)
-    } else {
-        Ok((sides[0].0 + sides[1].0).abs())
+        return Err(degradation::BOUNDARY_ORIENTATION_MISMATCH);
+    }
+    Ok((left, right))
+}
+
+fn source_contains_world(
+    source: &QualitySource,
+    world: (f64, f64),
+    residual: &ResidualWarp,
+) -> bool {
+    quality_gate::map_world_to_source(Point2::new(world.0, world.1), &source.geometry, residual)
+        .ok()
+        .is_some_and(|point| {
+            point.x >= 0.0
+                && point.y >= 0.0
+                && point.x < f64::from(source.dimensions.0)
+                && point.y < f64::from(source.dimensions.1)
+        })
+}
+
+fn boundary_rejection_priority(reason: &str) -> u8 {
+    match reason {
+        degradation::BOUNDARY_PROVENANCE_UNAVAILABLE => 4,
+        degradation::BOUNDARY_ORIENTATION_MISMATCH => 3,
+        degradation::BOUNDARY_STROKE_NOT_UNIQUE => 2,
+        degradation::BOUNDARY_LOW_CONTRAST => 1,
+        _ => 0,
     }
 }
 
-/// Stream ownership transitions for large canvases. A fixed histogram keeps
-/// the P95 exact to 0.01px while retaining only a bounded diagnostic prefix.
+/// Measure only accepted inter-station hard seams. Each 64px world cell can
+/// contribute at most one independently detected two-sided stroke pair; this
+/// keeps the sample population spatially deterministic and prevents jagged
+/// one-pixel owner transitions from inflating the criterion.
 fn measure_large_boundaries(
     image: &Rgb32FImage,
     coverage: &GrayImage,
     ownership: &[u16],
     origin: (f64, f64),
+    sources: &[QualitySource],
+    accepted_station_relations: &[(usize, usize)],
+    residual: &ResidualWarp,
     criterion: &mut Criterion,
     unmeasurable: &mut Vec<UnmeasurableRecord>,
 ) {
+    const SPATIAL_DEDUP_PX: u32 = 64;
     let (width, height) = coverage.dimensions();
-    let unmeasurable_before = unmeasurable.len();
     let width_usize = width as usize;
-    let mut seen = BTreeMap::<(u16, u16), u32>::new();
-    let mut hist = [0u64; 301];
-    let mut measured = 0u64;
-    let mut max_error = 0.0f64;
-    let mut first_world = origin;
-    let mut first_path = String::new();
-    let mut visit = |x: u32, y: u32, normal: (f64, f64), left: u16, right: u16| {
-        if left == 0 || right == 0 || left == right {
+    let source_by_owner = sources
+        .iter()
+        .map(|source| (source.owner, source))
+        .collect::<BTreeMap<_, _>>();
+    let accepted = accepted_station_relations
+        .iter()
+        .filter_map(|&(left, right)| (left != right).then_some((left.min(right), left.max(right))))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut cells = BTreeMap::<(usize, usize, u32, u32), BoundaryCellObservation>::new();
+    let mut provenance_unavailable = false;
+    let mut visit = |x: u32, y: u32, normal: (f64, f64), left_owner: u16, right_owner: u16| {
+        if left_owner == 0 || right_owner == 0 || left_owner == right_owner {
             return;
         }
-        let pair = if left < right {
-            (left, right)
-        } else {
-            (right, left)
-        };
-        let counter = seen.entry(pair).or_default();
-        let sample = (*counter).is_multiple_of(256);
-        *counter = counter.saturating_add(1);
-        if !sample {
+        let (Some(left_source), Some(right_source)) = (
+            source_by_owner.get(&left_owner).copied(),
+            source_by_owner.get(&right_owner).copied(),
+        ) else {
+            provenance_unavailable = true;
             return;
-        }
-        let world = (origin.0 + f64::from(x), origin.1 + f64::from(y));
-        let error = match boundary_point_error(image, x, y, normal) {
-            Ok(error) => error,
-            Err(reason) => {
-                unmeasurable.push(UnmeasurableRecord {
-                    criterion: criterion.name.to_string(),
-                    world: WorldPoint {
-                        x: world.0,
-                        y: world.1,
-                    },
-                    reason: reason.to_string(),
-
-                    category: classify_unmeasurable_reason(reason),
-                });
-                criterion.miss(reason);
-                return;
-            }
         };
-        if measured == 0 {
-            first_world = world;
-            first_path = format!("owner:{}/owner:{}", pair.0, pair.1);
-        }
-        measured = measured.saturating_add(1);
-        max_error = max_error.max(error);
-        let bucket = (error.max(0.0) * 100.0).floor().min(300.0) as usize;
-        hist[bucket] = hist[bucket].saturating_add(1);
-        criterion.push(
-            world,
-            error,
-            &format!("owner:{}/owner:{}", pair.0, pair.1),
-            error <= quality_gate::QUALITY_BOUNDARY_MAX,
+        let station_pair = (
+            left_source
+                .geometry
+                .station_id
+                .min(right_source.geometry.station_id),
+            left_source
+                .geometry
+                .station_id
+                .max(right_source.geometry.station_id),
         );
+        if station_pair.0 == station_pair.1 || !accepted.contains(&station_pair) {
+            return;
+        }
+        let seam = (f64::from(x) + normal.0 * 0.5, f64::from(y) + normal.1 * 0.5);
+        let world = (origin.0 + seam.0, origin.1 + seam.1);
+        let seam_key = (
+            station_pair.0,
+            station_pair.1,
+            x / SPATIAL_DEDUP_PX,
+            y / SPATIAL_DEDUP_PX,
+        );
+        let (key, observation) = match boundary_pair_error(
+            image,
+            coverage,
+            ownership,
+            seam,
+            normal,
+            left_owner,
+            right_owner,
+        ) {
+            Ok((left_edge, right_edge)) => {
+                let left_world = (
+                    origin.0 + f64::from(left_edge.pixel.0),
+                    origin.1 + f64::from(left_edge.pixel.1),
+                );
+                let right_world = (
+                    origin.0 + f64::from(right_edge.pixel.0),
+                    origin.1 + f64::from(right_edge.pixel.1),
+                );
+                let stroke_key = (
+                    station_pair.0,
+                    station_pair.1,
+                    (left_edge.pixel.0 / 2 + right_edge.pixel.0 / 2) / SPATIAL_DEDUP_PX,
+                    (left_edge.pixel.1 / 2 + right_edge.pixel.1 / 2) / SPATIAL_DEDUP_PX,
+                );
+                if !source_contains_world(left_source, left_world, residual)
+                    || !source_contains_world(right_source, right_world, residual)
+                {
+                    (
+                        stroke_key,
+                        BoundaryCellObservation::Unmeasurable {
+                            world,
+                            reason: degradation::BOUNDARY_PROVENANCE_UNAVAILABLE,
+                        },
+                    )
+                } else {
+                    (
+                        stroke_key,
+                        BoundaryCellObservation::Measured(BoundaryPairEvidence {
+                            world,
+                            error: (left_edge.offset - right_edge.offset).abs(),
+                            strength: left_edge.strength.min(right_edge.strength),
+                            owner_path: format!(
+                                "station:{}/station:{};owner:{}/owner:{};samples:{:.1},{:.1}|{:.1},{:.1}",
+                                station_pair.0,
+                                station_pair.1,
+                                left_owner,
+                                right_owner,
+                                left_world.0,
+                                left_world.1,
+                                right_world.0,
+                                right_world.1,
+                            ),
+                        }),
+                    )
+                }
+            }
+            Err(reason) => (
+                seam_key,
+                BoundaryCellObservation::Unmeasurable { world, reason },
+            ),
+        };
+        match (cells.get(&key), &observation) {
+            (
+                Some(BoundaryCellObservation::Measured(current)),
+                BoundaryCellObservation::Measured(candidate),
+            ) if candidate.strength > current.strength => {
+                cells.insert(key, observation);
+            }
+            (Some(BoundaryCellObservation::Measured(_)), _) => {}
+            (
+                Some(BoundaryCellObservation::Unmeasurable {
+                    reason: current, ..
+                }),
+                BoundaryCellObservation::Unmeasurable {
+                    reason: candidate, ..
+                },
+            ) if boundary_rejection_priority(candidate) > boundary_rejection_priority(current) => {
+                cells.insert(key, observation);
+            }
+            (_, BoundaryCellObservation::Measured(_)) | (None, _) => {
+                cells.insert(key, observation);
+            }
+            _ => {}
+        }
     };
     for y in 0..height {
         for x in 0..width.saturating_sub(1) {
@@ -975,39 +1170,65 @@ fn measure_large_boundaries(
             }
         }
     }
-    if measured == 0 {
-        if unmeasurable.len() == unmeasurable_before {
-            criterion.miss(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
-            unmeasurable.push(UnmeasurableRecord {
-                criterion: criterion.name.to_string(),
-                world: WorldPoint {
-                    x: origin.0,
-                    y: origin.1,
-                },
-                reason: degradation::BOUNDARY_NO_PAIRABLE_EDGE.to_string(),
 
-                category: classify_unmeasurable_reason(degradation::BOUNDARY_NO_PAIRABLE_EDGE),
-            });
+    let mut errors = cells
+        .values()
+        .filter_map(|observation| match observation {
+            BoundaryCellObservation::Measured(evidence) => Some(evidence.error),
+            BoundaryCellObservation::Unmeasurable { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    errors.sort_by(f64::total_cmp);
+    let p95 = (!errors.is_empty()).then(|| {
+        errors[(errors.len() * 95)
+            .div_ceil(100)
+            .saturating_sub(1)
+            .min(errors.len() - 1)]
+    });
+    for observation in cells.into_values() {
+        match observation {
+            BoundaryCellObservation::Measured(evidence) => {
+                let p95_failed = p95.is_some_and(|value| {
+                    value > quality_gate::QUALITY_BOUNDARY_P95_MAX && evidence.error >= value
+                });
+                criterion.push(
+                    evidence.world,
+                    evidence.error,
+                    &evidence.owner_path,
+                    evidence.error <= quality_gate::QUALITY_BOUNDARY_MAX && !p95_failed,
+                );
+            }
+            BoundaryCellObservation::Unmeasurable { world, reason } => {
+                criterion.miss(reason);
+                unmeasurable.push(UnmeasurableRecord {
+                    criterion: criterion.name.to_string(),
+                    world: WorldPoint {
+                        x: world.0,
+                        y: world.1,
+                    },
+                    reason: reason.to_string(),
+                    category: classify_unmeasurable_reason(reason),
+                });
+            }
         }
-        return;
     }
-    let target = (measured * 95).div_ceil(100).max(1);
-    let mut cumulative = 0u64;
-    let mut p95 = 3.0;
-    for (index, count) in hist.iter().enumerate() {
-        cumulative = cumulative.saturating_add(*count);
-        if cumulative >= target {
-            p95 = index as f64 / 100.0;
-            break;
-        }
+    if criterion.observed_count == 0 && criterion.unmeasurable == 0 {
+        let reason = if provenance_unavailable {
+            degradation::BOUNDARY_PROVENANCE_UNAVAILABLE
+        } else {
+            degradation::BOUNDARY_NO_PAIRABLE_EDGE
+        };
+        criterion.miss(reason);
+        unmeasurable.push(UnmeasurableRecord {
+            criterion: criterion.name.to_string(),
+            world: WorldPoint {
+                x: origin.0,
+                y: origin.1,
+            },
+            reason: reason.to_string(),
+            category: classify_unmeasurable_reason(reason),
+        });
     }
-    criterion.push(
-        first_world,
-        p95,
-        &first_path,
-        p95 <= quality_gate::QUALITY_BOUNDARY_P95_MAX
-            && max_error <= quality_gate::QUALITY_BOUNDARY_MAX,
-    );
 }
 
 /// Build the owner-sharpness criterion from the exact planes retained by the
@@ -1376,28 +1597,19 @@ pub(crate) fn run_quality_gate(
                 }
                 timing.slanted_edge_mtf_seconds += mtf_started.elapsed().as_secs_f64();
                 let gradient_started = Instant::now();
-                match (
-                    quality_gate::normalized_gradient_energy(&output_roi, local),
-                    quality_gate::normalized_gradient_energy(&reference, 1.0),
-                ) {
-                    (Ok(a), Ok(b)) => {
-                        if let Some((value, pass)) = ratio(
-                            a,
-                            b,
-                            quality_gate::QUALITY_GRADIENT_RATIO_MIN,
-                            f64::INFINITY,
-                        ) {
-                            gradient.push(where_, value, &source_info.path, pass);
-                        } else {
-                            record_unmeasurable(
-                                &mut gradient,
-                                &mut unmeasurable,
-                                roi,
-                                "gradient_reference_zero",
-                            );
-                        }
+                match gradient_energy_ratio(&output_roi, &reference, local) {
+                    Ok(Some((value, pass))) => {
+                        gradient.push(where_, value, &source_info.path, pass);
                     }
-                    (Err(reason), _) | (_, Err(reason)) => {
+                    Ok(None) => {
+                        record_unmeasurable(
+                            &mut gradient,
+                            &mut unmeasurable,
+                            roi,
+                            "gradient_reference_zero",
+                        );
+                    }
+                    Err(reason) => {
                         record_unmeasurable(&mut gradient, &mut unmeasurable, roi, reason)
                     }
                 }
@@ -1555,6 +1767,9 @@ pub(crate) fn run_quality_gate(
             input.coverage,
             input.ownership,
             input.world_origin,
+            input.sources,
+            input.accepted_station_relations,
+            input.residual,
             &mut boundary,
             &mut unmeasurable,
         );
@@ -1931,6 +2146,7 @@ mod tests {
             unresolved_pixel_count: 0,
             world_origin: (0.0, 0.0),
             sources: &sources,
+            accepted_station_relations: &[],
             residual: &residual,
             acceptance_render_scale: f64::NAN,
             final_sharpen_amount: 0.0,
@@ -2010,6 +2226,7 @@ mod tests {
             unresolved_pixel_count: 0,
             world_origin: (0.0, 0.0),
             sources: &sources,
+            accepted_station_relations: &[],
             residual: &residual,
             acceptance_render_scale: 1.0,
             final_sharpen_amount: 0.0,
@@ -2077,30 +2294,234 @@ mod tests {
     }
 
     #[test]
-    fn a_flat_boundary_reports_one_reason_per_sample_without_an_extra_summary_miss() {
-        let output = Rgb32FImage::from_pixel(40, 512, Rgb([0.5; 3]));
-        let coverage = GrayImage::from_pixel(40, 512, Luma([255]));
-        let ownership = (0..40 * 512)
-            .map(|index| if index % 40 < 20 { 1 } else { 2 })
-            .collect::<Vec<_>>();
+    fn aligned_gradient_ratio_is_invariant_to_shared_local_scale() {
+        let output = Rgb32FImage::from_fn(16, 16, |x, y| {
+            let value = ((x * x + 3 * y + x * y) % 29) as f32 / 28.0;
+            Rgb([value, value * 0.9, value * 0.8])
+        });
+        let reference = Rgb32FImage::from_fn(16, 16, |x, y| {
+            let value = ((2 * x * x + y + x * y) % 31) as f32 / 30.0;
+            Rgb([value, value * 0.9, value * 0.8])
+        });
+        let ratio_at = |local_scale| {
+            let output_energy =
+                quality_gate::normalized_gradient_energy(&output, local_scale).unwrap();
+            let reference_energy =
+                quality_gate::normalized_gradient_energy(&reference, local_scale).unwrap();
+            ratio(
+                output_energy,
+                reference_energy,
+                quality_gate::QUALITY_GRADIENT_RATIO_MIN,
+                f64::INFINITY,
+            )
+            .unwrap()
+            .0
+        };
+        let unit = ratio_at(1.0);
+        for local_scale in [0.8, 1.125] {
+            assert!((ratio_at(local_scale) - unit).abs() <= 1.0e-12);
+        }
+    }
+
+    fn boundary_sources(width: u32, height: u32) -> [QualitySource; 2] {
+        [
+            QualitySource {
+                owner: 1,
+                path: "left.raw".to_string(),
+                geometry: SourceGeometry {
+                    member_to_anchor: Matrix3::identity(),
+                    tile_to_world: Matrix3::identity(),
+                    station_id: 0,
+                },
+                dimensions: (width, height),
+                native_registration: None,
+            },
+            QualitySource {
+                owner: 2,
+                path: "right.raw".to_string(),
+                geometry: SourceGeometry {
+                    member_to_anchor: Matrix3::identity(),
+                    tile_to_world: Matrix3::identity(),
+                    station_id: 1,
+                },
+                dimensions: (width, height),
+                native_registration: None,
+            },
+        ]
+    }
+
+    fn vertical_seam_owners(width: u32, height: u32, seam_x: u32) -> Vec<u16> {
+        (0..width * height)
+            .map(|index| if index % width < seam_x { 1 } else { 2 })
+            .collect()
+    }
+
+    fn crossing_stroke(
+        width: u32,
+        height: u32,
+        seam_x: u32,
+        left_y: u32,
+        right_y: u32,
+        invert_right: bool,
+    ) -> Rgb32FImage {
+        Rgb32FImage::from_fn(width, height, |x, y| {
+            let threshold = if x < seam_x { left_y } else { right_y };
+            let high = if x >= seam_x && invert_right {
+                y < threshold
+            } else {
+                y >= threshold
+            };
+            Rgb([if high { 0.9 } else { 0.1 }; 3])
+        })
+    }
+
+    fn boundary_report(
+        output: &Rgb32FImage,
+        coverage: &GrayImage,
+        ownership: &[u16],
+        sources: &[QualitySource],
+        accepted: &[(usize, usize)],
+    ) -> QualityGateCriterionRecord {
+        let residual = ResidualWarp::new();
         let mut criterion = Criterion::p95_with_max("boundary_stroke_alignment", 1.5, 3.0);
         let mut records = Vec::new();
         measure_large_boundaries(
-            &output,
-            &coverage,
-            &ownership,
-            (10.0, -30.0),
+            output,
+            coverage,
+            ownership,
+            (0.0, 0.0),
+            sources,
+            accepted,
+            &residual,
             &mut criterion,
             &mut records,
         );
-        assert_eq!(criterion.observed_count, 0);
-        assert_eq!(criterion.unmeasurable, 2, "512px boundary has two samples");
-        assert_eq!(
-            criterion.unmeasurable_reasons[degradation::BOUNDARY_LOW_CONTRAST],
-            2
+        criterion.finish(&mut records)
+    }
+
+    #[test]
+    fn accepted_seam_pairs_independently_detected_crossing_strokes() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 80, 82, false);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let report = boundary_report(
+            &output,
+            &coverage,
+            &ownership,
+            &boundary_sources(width, height),
+            &[(0, 1)],
         );
-        assert_eq!(records.len(), 2);
-        assert_eq!(records[0].world, WorldPoint { x: 29.0, y: -30.0 });
-        assert_eq!(records[1].world, WorldPoint { x: 29.0, y: 226.0 });
+        assert_eq!(report.measurable_count, 1);
+        assert_eq!(report.measured[0].measured, 2.0);
+        assert!(
+            report.measured[0]
+                .owner_path
+                .contains("station:0/station:1")
+        );
+        assert!(report.measured[0].owner_path.contains("samples:"));
+    }
+
+    #[test]
+    fn nearby_topology_transitions_do_not_duplicate_one_stroke() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 80, 80, false);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let sources = boundary_sources(width, height);
+        let first = boundary_report(&output, &coverage, &ownership, &sources, &[(0, 1)]);
+        let second = boundary_report(&output, &coverage, &ownership, &sources, &[(1, 0)]);
+        assert_eq!(first.measurable_count, 1);
+        assert_eq!(
+            first, second,
+            "relation order must not change deterministic evidence"
+        );
+    }
+
+    #[test]
+    fn sampling_is_restricted_to_accepted_cross_station_hard_seams() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 80, 80, false);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let sources = boundary_sources(width, height);
+        let report = boundary_report(&output, &coverage, &ownership, &sources, &[]);
+        assert_eq!(report.measurable_count, 0);
+        assert_eq!(
+            report.unmeasurable_reasons[degradation::BOUNDARY_NO_PAIRABLE_EDGE],
+            1
+        );
+    }
+
+    #[test]
+    fn opposite_polarity_strokes_are_rejected_as_wrong_correspondences() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 80, 80, true);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let report = boundary_report(
+            &output,
+            &coverage,
+            &ownership,
+            &boundary_sources(width, height),
+            &[(0, 1)],
+        );
+        assert_eq!(report.measurable_count, 0);
+        assert!(
+            report
+                .unmeasurable_reasons
+                .contains_key(degradation::BOUNDARY_ORIENTATION_MISMATCH)
+        );
+    }
+
+    #[test]
+    fn wider_wrong_edge_is_rejected_by_fixed_cross_section() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 70, 82, false);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let report = boundary_report(
+            &output,
+            &coverage,
+            &ownership,
+            &boundary_sources(width, height),
+            &[(0, 1)],
+        );
+        assert_eq!(report.measurable_count, 0);
+        assert!(
+            report
+                .unmeasurable_reasons
+                .contains_key(degradation::BOUNDARY_LOW_CONTRAST)
+        );
+    }
+
+    #[test]
+    fn coverage_and_source_provenance_are_required_for_pairability() {
+        let (width, height, seam_x) = (192, 192, 96);
+        let output = crossing_stroke(width, height, seam_x, 80, 80, false);
+        let ownership = vertical_seam_owners(width, height, seam_x);
+        let sources = boundary_sources(width, height);
+        let coverage = GrayImage::from_fn(width, height, |x, _| {
+            Luma([if x == seam_x - 1 || x == seam_x {
+                255
+            } else {
+                0
+            }])
+        });
+        let no_coverage = boundary_report(&output, &coverage, &ownership, &sources, &[(0, 1)]);
+        assert_eq!(no_coverage.measurable_count, 0);
+
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let mut invalid_sources = boundary_sources(width, height);
+        invalid_sources[1].geometry.tile_to_world[(0, 2)] = 1_000.0;
+        let no_provenance =
+            boundary_report(&output, &coverage, &ownership, &invalid_sources, &[(0, 1)]);
+        assert_eq!(no_provenance.measurable_count, 0);
+        assert!(
+            no_provenance
+                .unmeasurable_reasons
+                .contains_key(degradation::BOUNDARY_PROVENANCE_UNAVAILABLE)
+        );
+        assert_eq!(no_provenance.technical_unmeasurable_count, 1);
     }
 }
