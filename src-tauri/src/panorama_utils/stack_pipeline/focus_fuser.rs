@@ -99,14 +99,12 @@ pub(crate) fn normalized_sharpness(acutance: f64) -> f64 {
 
 /// Spacing between the 13×13 patch grid points of one Sharpness_Score probe.
 ///
-/// `max(1, round(32 / 13)) = 2` native pixels, which makes the window side
-/// `13 * 2 = 26` native pixels and the ±2 grid point gradient span 8 native
-/// pixels.  The window is measured in *native* pixels because the probe runs on
-/// the native-resolution composite and candidate, never on an analysis image.
+/// `32 / 13` native pixels. The sampler accepts fractional native
+/// coordinates, so rounding this to `2` (a 26px effective window) needlessly
+/// violated Requirement 3.2 and changed the evidence scale relative to the
+/// graph-cut data term.
 pub(crate) fn sharpness_sample_step_px() -> f64 {
-    (SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS))
-        .round()
-        .max(1.0)
+    (SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS)).max(1.0)
 }
 
 /// Side of the effective Sharpness_Score window in native pixels.
@@ -1769,13 +1767,15 @@ mod tests {
         }
     }
 
-    /// 需求 3.2: the window is about 32 native pixels on a side, built from the
-    /// unchanged 13×13 patch.
+    /// 需求 3.2: the window is exactly 32 native pixels on a side, built from
+    /// the unchanged 13×13 fractional-coordinate patch.
     #[test]
-    fn sharpness_window_spans_about_thirty_two_native_pixels() {
-        assert_eq!(sharpness_sample_step_px(), 2.0);
-        assert_eq!(sharpness_window_px(), 26.0);
-        assert!((sharpness_window_px() - SHARPNESS_SAMPLE_WINDOW_PX).abs() <= 6.0);
+    fn sharpness_window_spans_exactly_thirty_two_native_pixels() {
+        assert_eq!(sharpness_window_px(), SHARPNESS_SAMPLE_WINDOW_PX);
+        assert_eq!(
+            sharpness_sample_step_px(),
+            SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS)
+        );
     }
 
     /// 需求 3.1: cell side in `[8, 64]`, and at least 512 cells along the long

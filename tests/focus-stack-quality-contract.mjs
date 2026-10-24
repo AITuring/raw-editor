@@ -236,6 +236,11 @@ for (const [pattern, message] of [
 ]) {
   assert.match(focusFuser, pattern, message);
 }
+assert.match(
+  focusFuser,
+  /\(SHARPNESS_SAMPLE_WINDOW_PX \/ f64::from\(ACUTANCE_PATCH_POINTS\)\)\.max\(1\.0\)/,
+  'the production Sharpness_Score sampler must preserve the exact 32px fractional window',
+);
 // The penalty condition itself: both the veto and the "candidate is sharper"
 // clause must remain, otherwise a misregistered frame wins on acutance alone.
 assert.match(
