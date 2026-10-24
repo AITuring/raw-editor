@@ -598,10 +598,65 @@ pub(crate) struct ResidualModelStageRecord {
     pub rejection_reason: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationCorrespondenceRecord {
+    pub source: [f64; 2],
+    pub target: [f64; 2],
+    pub local_scale: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationHypothesisRecord {
+    pub model: String,
+    pub selected: bool,
+    pub inliers: usize,
+    pub median_error_px: f64,
+    pub scale_ratio: f64,
+    pub spatial_support: f64,
+    pub low_frequency_mean_relative_difference: f64,
+    pub edge_strength_ratio: f64,
+    pub median_edge_orientation_difference_degrees: f64,
+    pub preserves_convex_orientation: bool,
+    pub rejection_reasons: Vec<String>,
+    #[serde(default)]
+    pub canonical_source: usize,
+    #[serde(default)]
+    pub canonical_target: usize,
+    #[serde(default)]
+    pub source_to_target_transform: [f64; 9],
+    #[serde(default)]
+    pub correspondence_count: usize,
+    #[serde(default)]
+    pub correspondence_sample: Vec<StationRelationCorrespondenceRecord>,
+    #[serde(default)]
+    pub holdout_fit_count: usize,
+    #[serde(default)]
+    pub holdout_count: usize,
+    #[serde(default)]
+    pub holdout_median_error_px: Option<f64>,
+    #[serde(default)]
+    pub holdout_spatial_support: Option<f64>,
+    #[serde(default)]
+    pub holdout_transform: Option<[f64; 9]>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationTileGeometryRecord {
+    pub dimensions: [u32; 2],
+    #[serde(default)]
+    pub effective_bounds: Option<[u32; 4]>,
+    #[serde(default)]
+    pub tile_to_world: Option<[f64; 9]>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StationRelationCandidateRecord {
     pub left: usize,
     pub right: usize,
+    #[serde(default)]
+    pub left_tile: StationRelationTileGeometryRecord,
+    #[serde(default)]
+    pub right_tile: StationRelationTileGeometryRecord,
     /// Geometric overlap predicted by the rendering prior, in left-tile
     /// analysis pixels at `measurement_factor`, at the search-radius calculation.
     #[serde(default)]
@@ -659,6 +714,10 @@ pub(crate) struct StationRelationCandidateRecord {
     /// True when either station was re-rendered from repaired source poses.
     #[serde(default)]
     pub after_prior_repair: bool,
+    /// Bounded internal model outcomes. Pair-level accepted/rejected accounting
+    /// remains singular; these records explain why alternatives did not win.
+    #[serde(default)]
+    pub hypotheses: Vec<StationRelationHypothesisRecord>,
 }
 
 /// One Capture_Station whose rendering prior was repaired from a measured

@@ -8460,30 +8460,36 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 VIRTUAL_TILE_SEED_PRIOR_FREE,
                             );
                             diagnostic.prior_free_inliers = feature_inliers;
+                            let selection = select_virtual_tile_relation_hypothesis(
+                                &tile_infos,
+                                left,
+                                right,
+                                &verified,
+                                pyramid.solver_coverages(),
+                            );
+                            if let Some(selection) = selection.as_ref() {
+                                diagnostic.hypotheses = selection.outcomes.clone();
+                            }
+                            populate_station_relation_candidate_geometry(
+                                &mut diagnostic,
+                                &tile_infos,
+                                pyramid.solver_coverages(),
+                                &tile_homographies,
+                            );
                             log_virtual_tile_candidate(&diagnostic, false);
-                            if let Some(verified) = verified {
+                            if let Some(selection) = selection.filter(|selection| selection.passes) {
                                 if anchor_layout.is_some() {
-                                    // The feature fit only seeded this bounded
-                                    // fused-pixel measurement. Anchor-grid
-                                    // pixels do not depend on placement priors,
-                                    // so its independently fitted relation can
-                                    // be checked directly without rewarping RAWs.
-                                    if virtual_tile_relation_is_authoritative(
-                                        left,
-                                        right,
-                                        &verified,
-                                        &tile_infos,
-                                        pyramid.solver_coverages(),
-                                    ) {
-                                        clusters.union(left, right);
-                                    }
-                                    tile_relations.insert((left, right), verified);
+                                    clusters.union(left, right);
+                                    tile_relations
+                                        .entry((left, right))
+                                        .or_default()
+                                        .extend(verified);
                                 } else {
                                     proposals.push(VirtualTilePriorProposal {
                                         left,
                                         right,
-                                        left_to_right: verified.homography,
-                                        inliers: verified.inliers,
+                                        left_to_right: selection.relation.homography,
+                                        inliers: selection.relation.inliers,
                                     });
                                 }
                             } else if anchor_layout.is_none()
@@ -8504,6 +8510,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 diagnostic,
                             );
                         }
+                        let authoritative_pairs = virtual_tile_authoritative_pairs(
+                            &tile_relations,
+                            &tile_infos,
+                            pyramid.solver_coverages(),
+                        );
                         let station_tile_to_world = tile_infos
                             .iter()
                             .map(|tile| tile_homographies[&tile.id])
@@ -8693,7 +8704,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         let mut closure = stack_report::ClosureReport::default();
                         let mut station_relations = stack_report::StationRelationsReport::default();
                         if tile_infos.len() >= 2 {
-                            let solved = solve_virtual_tile_station_poses_with_report(
+                            let solved = solve_virtual_tile_station_hypotheses_with_report(
                                 &tile_infos,
                                 pyramid.solver_coverages(),
                                 &tile_relations,
@@ -8747,9 +8758,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         // Diagnostic comparison compositors retain their old
                         // image-space optimiser. Their authoritative source
                         // solve already ran before rendering.
-                        tile_homographies = optimize_focus_stack_global_homographies_with_reference(
+                        let selected_tile_relations = select_virtual_tile_relation_hypotheses(
                             &tile_infos,
                             &tile_relations,
+                            pyramid.solver_coverages(),
+                        );
+                        tile_homographies = optimize_focus_stack_global_homographies_with_reference(
+                            &tile_infos,
+                            &selected_tile_relations,
                             &tile_homographies,
                             0,
                         );
@@ -13210,6 +13226,86 @@ fn station_relation_spatial_support_with(
 }
 
 #[derive(Clone, Copy)]
+struct MeasuredStationRelationCandidate {
+    measurements: StationRelationMeasurements,
+    quality: f64,
+}
+
+/// Build the complete canonical Requirement 6 Station_Relation measurement.
+/// Both provisional Virtual_Tile clustering and the final solver consume this
+/// typed result and apply [`station_relation_rejection_reasons`] to it.
+#[allow(clippy::too_many_arguments)]
+fn measure_station_relation_candidate(
+    inliers: usize,
+    source_to_target: &Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    overlap_measure: Option<StationOverlapMeasure<'_>>,
+    dense_measurements: Option<FocusOverlapQuality>,
+    invert_edge_strength_ratio: bool,
+) -> Option<MeasuredStationRelationCandidate> {
+    let median_error_px = median_symmetric_error(source_to_target, points);
+    let precision = if median_error_px.is_finite() {
+        1.0 / (1.0 + median_error_px / STATION_RELATION_MAX_MEDIAN_ERROR_PX)
+    } else {
+        0.0
+    };
+    let spatial = panorama_spatial_support(points, source_dimensions, target_dimensions);
+    let overlap =
+        panorama_transform_overlap_support(source_to_target, source_dimensions, target_dimensions);
+    let dense_quality = dense_measurements.map(FocusOverlapQuality::legacy_tuple);
+    let dense_weight = dense_quality.map_or(1.0, |(intensity, edge, orientation, _)| {
+        0.25 + intensity.max(0.0) + 0.5 * edge.max(0.0) + 0.25 * orientation.max(0.0)
+    });
+    let quality = (inliers as f64).sqrt()
+        * precision
+        * (0.25 + 0.75 * spatial)
+        * (0.25 + 0.75 * overlap)
+        * dense_weight;
+    if !quality.is_finite() || quality <= 0.0 {
+        return None;
+    }
+    let edge_strength_ratio = dense_measurements.map_or(f64::INFINITY, |measurements| {
+        if invert_edge_strength_ratio {
+            1.0 / measurements.edge_strength_ratio
+        } else {
+            measurements.edge_strength_ratio
+        }
+    });
+    Some(MeasuredStationRelationCandidate {
+        measurements: StationRelationMeasurements {
+            inliers,
+            median_error_px,
+            scale_ratio: homography_scale_ratio(source_to_target).unwrap_or(f64::INFINITY),
+            spatial_support: overlap_measure.map_or(0.0, |measure| {
+                station_relation_spatial_support_with(
+                    points,
+                    source_to_target,
+                    source_dimensions,
+                    target_dimensions,
+                    measure,
+                )
+            }),
+            low_frequency_mean_relative_difference: dense_measurements
+                .map_or(f64::INFINITY, |measurements| {
+                    measurements.low_frequency_mean_relative_difference
+                }),
+            edge_strength_ratio,
+            median_edge_orientation_difference_degrees: dense_measurements
+                .map_or(f64::INFINITY, |measurements| {
+                    measurements.median_edge_orientation_difference_degrees
+                }),
+            preserves_convex_orientation: homography_preserves_focus_orientation(
+                source_to_target,
+                source_dimensions,
+            ),
+        },
+        quality,
+    })
+}
+
+#[derive(Clone, Copy)]
 struct FocusGroupEdgeCandidate {
     transform: Matrix3<f64>,
     quality: f64,
@@ -13819,7 +13915,7 @@ struct VirtualTileGuidedFeatureMatch {
 
 #[cfg(test)]
 struct VirtualTileStationMatchOutcome {
-    relations: HashMap<(usize, usize), MatchInfo>,
+    relations: VirtualTileRelationHypotheses,
     diagnostics: Vec<stack_report::StationRelationCandidateRecord>,
 }
 
@@ -14262,6 +14358,8 @@ fn virtual_tile_descriptor_guided_station_match(
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
         left,
         right,
+        left_tile: Default::default(),
+        right_tile: Default::default(),
         predicted_overlap_area_px: 0.0,
         model_fitted: false,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
@@ -14288,6 +14386,7 @@ fn virtual_tile_descriptor_guided_station_match(
         seed: VIRTUAL_TILE_SEED_RENDERING_PRIOR.to_string(),
         prior_free_inliers: 0,
         after_prior_repair: false,
+        hypotheses: Vec::new(),
     };
     let Some(left_tile) = tiles.get(left) else {
         return (None, diagnostic);
@@ -15429,6 +15528,8 @@ fn virtual_tile_direct_station_match_with_structure(
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
         left,
         right,
+        left_tile: Default::default(),
+        right_tile: Default::default(),
         predicted_overlap_area_px: 0.0,
         model_fitted: false,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
@@ -15455,6 +15556,7 @@ fn virtual_tile_direct_station_match_with_structure(
         seed: VIRTUAL_TILE_SEED_RENDERING_PRIOR.to_string(),
         prior_free_inliers: 0,
         after_prior_repair: false,
+        hypotheses: Vec::new(),
     };
     let (Some(left_tile), Some(right_tile), Some(left_coverage), Some(right_coverage)) = (
         tiles.get(left),
@@ -16258,7 +16360,16 @@ fn virtual_tile_relation_quality_plane(
 fn virtual_tile_coarse_failure_can_retry(failure_stage: &str) -> bool {
     matches!(
         failure_stage,
-        "residual_model_no_fit"
+        // At the coarsest octave a narrow, but valid, overlap can contain
+        // fewer than the final minimum number of grid probes.  That is a
+        // sampling-density failure of this octave, not evidence that the
+        // station pair is unrelated.  Retry at the next finer bounded octave
+        // and let the unchanged final polish/Station_Relation gates decide.
+        "insufficient_grid_probes"
+            | "insufficient_measurable_patches"
+            | "insufficient_bidirectional_matches"
+            | "insufficient_grid_coverage"
+            | "residual_model_no_fit"
             | "insufficient_matches_after_model_quota"
             | "insufficient_fitted_hull_support"
     )
@@ -16280,10 +16391,7 @@ fn virtual_tile_pyramid_station_match(
     pyramid: &VirtualTileMatchPyramid,
     seed_left_to_right: &Matrix3<f64>,
     seed_kind: &'static str,
-) -> (
-    Option<MatchInfo>,
-    stack_report::StationRelationCandidateRecord,
-) {
+) -> (Vec<MatchInfo>, stack_report::StationRelationCandidateRecord) {
     let empty_diagnostic = || {
         let (_, mut diagnostic) = virtual_tile_direct_station_match(
             left,
@@ -16302,7 +16410,7 @@ fn virtual_tile_pyramid_station_match(
         || left >= pyramid.native_dimensions.len()
         || right >= pyramid.native_dimensions.len()
     {
-        return (None, empty_diagnostic());
+        return (Vec::new(), empty_diagnostic());
     }
     let single_level = level_count == 1;
     let bounded_levels = if single_level { 1 } else { level_count - 1 };
@@ -16315,7 +16423,7 @@ fn virtual_tile_pyramid_station_match(
         let level_tiles = &pyramid.levels[level];
         let Some(level_seed_inverse) = (from_native * seed * to_native).try_inverse() else {
             diagnostic.failure_stage = "non_invertible_seed".to_string();
-            return (None, diagnostic);
+            return (Vec::new(), diagnostic);
         };
         let initial = HashMap::from([
             (level_tiles[left].id, Matrix3::identity()),
@@ -16377,12 +16485,12 @@ fn virtual_tile_pyramid_station_match(
                 // sparse, shifted overlaps this retry is meant to recover.
                 break;
             }
-            return (None, diagnostic);
+            return (Vec::new(), diagnostic);
         };
         let Some(native) = normalized_homography(&(to_native * relation.homography * from_native))
         else {
             diagnostic.failure_stage = "non_finite_native_relation".to_string();
-            return (None, diagnostic);
+            return (Vec::new(), diagnostic);
         };
         seed = native;
         if single_level && factor == 1 {
@@ -16395,14 +16503,14 @@ fn virtual_tile_pyramid_station_match(
                 })
                 .collect::<Vec<_>>();
             return (
-                Some(MatchInfo {
+                vec![MatchInfo {
                     homography: native,
                     inliers: points.len(),
                     points,
                     // Key-direction fit; see `MatchInfo::canonical_homography`.
                     canonical_homography: None,
                     ..relation
-                }),
+                }],
                 diagnostic,
             );
         }
@@ -16423,20 +16531,23 @@ fn virtual_tile_pyramid_station_match(
         ),
         &mut diagnostic,
     );
-    let relation = relation.and_then(|relation| {
-        match (
-            &pyramid.native_refinement[left],
-            &pyramid.native_refinement[right],
-        ) {
-            (Some(left_native), Some(right_native)) => virtual_tile_native_station_polish(
-                left_native,
-                right_native,
-                &relation,
-                &mut diagnostic,
-            ),
-            _ => Some(relation),
-        }
-    });
+    let relation = match (
+        &pyramid.native_refinement[left],
+        &pyramid.native_refinement[right],
+    ) {
+        (Some(left_native), Some(right_native)) => relation
+            .into_iter()
+            .filter_map(|relation| {
+                virtual_tile_native_station_polish(
+                    left_native,
+                    right_native,
+                    &relation,
+                    &mut diagnostic,
+                )
+            })
+            .collect(),
+        _ => relation,
+    };
     (relation, diagnostic)
 }
 
@@ -16843,8 +16954,80 @@ fn virtual_tile_polish_fit(
     .then_some((homography, inliers))
 }
 
-/// Polish a pyramid relation on the finest planes. Returns the relation in
-/// native tile pixels with every inlier; the diagnostic describes the polish.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum VirtualTilePolishModel {
+    Similarity,
+    Affine,
+    Projective,
+}
+
+impl VirtualTilePolishModel {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Similarity => "polished_similarity",
+            Self::Affine => "polished_affine",
+            Self::Projective => "polished_projective",
+        }
+    }
+
+    fn fit(
+        self,
+        correspondences: &[(Point2<f64>, Point2<f64>)],
+        threshold: f64,
+        left_dimensions: (u32, u32),
+    ) -> Option<(Matrix3<f64>, Vec<usize>)> {
+        if self == Self::Projective {
+            // Preserve the retained project's exact projective RANSAC/refit
+            // path. Multi-hypothesis polish adds lower-DOF competitors; it
+            // must not perturb the projective evidence that already passed.
+            return virtual_tile_polish_fit(correspondences, threshold, left_dimensions);
+        }
+        let fit = match self {
+            Self::Similarity => robust_transform_fit_with_threshold(
+                correspondences,
+                2,
+                0x504f_4c49_5348_5349,
+                threshold,
+                estimate_similarity,
+            ),
+            Self::Affine => robust_transform_fit_with_threshold(
+                correspondences,
+                3,
+                0x504f_4c49_5348_4146,
+                threshold,
+                estimate_affine,
+            ),
+            Self::Projective => unreachable!("handled above"),
+        }?;
+        let homography = normalized_homography(&fit.transform)?;
+        (fit.inlier_indices.len() >= STATION_RELATION_MIN_INLIERS
+            && homography.try_inverse().is_some()
+            && homography_preserves_focus_orientation(&homography, left_dimensions))
+        .then_some((homography, fit.inlier_indices))
+    }
+}
+
+#[derive(Clone)]
+struct VirtualTilePolishHypothesis {
+    model: VirtualTilePolishModel,
+    homography: Matrix3<f64>,
+    inliers: Vec<usize>,
+    correspondences: Vec<(Point2<f64>, Point2<f64>)>,
+}
+
+fn virtual_tile_hypotheses_are_equivalent(
+    left: &Matrix3<f64>,
+    right: &Matrix3<f64>,
+    dimensions: (u32, u32),
+) -> bool {
+    focus_transform_disagreement_px(left, right, dimensions)
+        .is_some_and(|difference| difference <= 1e-6)
+}
+
+/// Polish a pyramid relation on the finest planes. Every independently
+/// measurable similarity, affine, and projective model survives to the shared
+/// Station_Relation gate; this stage does not let one model's scale or hull
+/// result suppress another model before dense covered-overlap measurement.
 #[allow(clippy::too_many_arguments)]
 fn virtual_tile_polished_station_match(
     left_plane: &ImageInfo,
@@ -16855,124 +17038,197 @@ fn virtual_tile_polished_station_match(
     seed_native: &Matrix3<f64>,
     native_dimensions: ((u32, u32), (u32, u32)),
     diagnostic: &mut stack_report::StationRelationCandidateRecord,
-) -> Option<MatchInfo> {
+) -> Vec<MatchInfo> {
     let to_native = VirtualTileMatchPlane::level_to_native(factor);
     let from_native = VirtualTileMatchPlane::native_to_level(factor);
     let threshold = VIRTUAL_TILE_POLISH_INLIER_THRESHOLD_NATIVE_PX / f64::from(factor.max(1));
-    let mut relation = normalized_homography(&(from_native * seed_native * to_native))?;
-    let mut counts = VirtualTilePolishCounts::default();
-    let mut fitted = None;
-    // Preserve a model fitted by a preceding coarse level: a later polish
-    // failure is a measured candidate with an insufficient final refinement,
-    // not an unmeasured pair. The diagnostic already carries that flag.
-    diagnostic.residual_model = "polished_projective".to_string();
-    for search in VIRTUAL_TILE_POLISH_SEARCH_PASSES {
-        diagnostic.failure_stage = "no_predicted_overlap".to_string();
-        let bounds = virtual_tile_predicted_overlap_bounds(
-            &relation,
-            left_plane.dimensions(),
-            right_plane.dimensions(),
-        )?;
-        diagnostic.predicted_overlap_area_px = station_relation_overlap_area(
-            &relation,
-            left_plane.dimensions(),
-            right_plane.dimensions(),
-            true,
-        )
-        .unwrap_or(0.0);
-        let correspondences = virtual_tile_polish_correspondences(
-            &left_plane.alignment_image,
-            left_coverage,
-            &right_plane.alignment_image,
-            right_coverage,
-            &relation,
-            bounds,
-            search,
-            &mut counts,
-        );
-        diagnostic.grid_probe_count = counts.probes;
-        diagnostic.measurable_patch_count = counts.textured;
-        diagnostic.bidirectional_match_count = counts.matched;
-        diagnostic.search_radius_px = f64::from(search);
-        diagnostic.failure_stage = "insufficient_polished_matches".to_string();
-        if correspondences.len() < STATION_RELATION_MIN_INLIERS {
-            return None;
+    let Some(seed) = normalized_homography(&(from_native * seed_native * to_native)) else {
+        diagnostic.failure_stage = "non_invertible_seed".to_string();
+        return Vec::new();
+    };
+    let mut hypotheses = Vec::<VirtualTilePolishHypothesis>::new();
+    let mut representative_counts = VirtualTilePolishCounts::default();
+
+    for (pass_index, search) in VIRTUAL_TILE_POLISH_SEARCH_PASSES.into_iter().enumerate() {
+        let seeds = if pass_index == 0 {
+            vec![(None, seed)]
+        } else {
+            hypotheses
+                .iter()
+                .map(|hypothesis| (Some(hypothesis.model), hypothesis.homography))
+                .collect::<Vec<_>>()
+        };
+        if seeds.is_empty() {
+            break;
         }
-        diagnostic.failure_stage = "polished_fit_failed".to_string();
-        let (homography, inliers) =
-            virtual_tile_polish_fit(&correspondences, threshold, left_plane.dimensions())?;
-        diagnostic.model_fitted = true;
-        relation = homography;
-        fitted = Some((homography, inliers, correspondences));
-    }
-    let (homography, inliers, correspondences) = fitted?;
-    let native = normalized_homography(&(to_native * homography * from_native))?;
-    #[cfg(test)]
-    if let Some(path) = std::env::var_os("RAW_EDITOR_TILE_REPLAY_POINTS") {
-        let mut rows = String::from("x,y,dx,dy,inlier\n");
-        for (index, &(source, target)) in correspondences.iter().enumerate() {
-            let source = transformed_point(&to_native, source).unwrap();
-            let target = transformed_point(&to_native, target).unwrap();
-            let predicted = transformed_point(&native, source).unwrap();
-            rows.push_str(&format!(
-                "{},{},{},{},{}\n",
-                source.x,
-                source.y,
-                target.x - predicted.x,
-                target.y - predicted.y,
-                usize::from(inliers.contains(&index))
-            ));
+        let mut next = Vec::new();
+        for (restricted_model, relation) in seeds {
+            diagnostic.failure_stage = "no_predicted_overlap".to_string();
+            let Some(bounds) = virtual_tile_predicted_overlap_bounds(
+                &relation,
+                left_plane.dimensions(),
+                right_plane.dimensions(),
+            ) else {
+                continue;
+            };
+            diagnostic.predicted_overlap_area_px = diagnostic.predicted_overlap_area_px.max(
+                station_relation_overlap_area(
+                    &relation,
+                    left_plane.dimensions(),
+                    right_plane.dimensions(),
+                    true,
+                )
+                .unwrap_or(0.0),
+            );
+            let mut counts = VirtualTilePolishCounts::default();
+            let correspondences = virtual_tile_polish_correspondences(
+                &left_plane.alignment_image,
+                left_coverage,
+                &right_plane.alignment_image,
+                right_coverage,
+                &relation,
+                bounds,
+                search,
+                &mut counts,
+            );
+            if counts.matched > representative_counts.matched {
+                representative_counts = counts;
+            }
+            if correspondences.len() < STATION_RELATION_MIN_INLIERS {
+                continue;
+            }
+            for model in [
+                VirtualTilePolishModel::Similarity,
+                VirtualTilePolishModel::Affine,
+                VirtualTilePolishModel::Projective,
+            ] {
+                if restricted_model.is_some_and(|restricted| restricted != model) {
+                    continue;
+                }
+                let Some((homography, inliers)) =
+                    model.fit(&correspondences, threshold, left_plane.dimensions())
+                else {
+                    continue;
+                };
+                next.push(VirtualTilePolishHypothesis {
+                    model,
+                    homography,
+                    inliers,
+                    correspondences: correspondences.clone(),
+                });
+            }
         }
-        std::fs::write(path, rows).unwrap();
+        if pass_index == 0 {
+            hypotheses = next;
+        } else {
+            // A first-pass lower-DOF model can cover the complete overlap even
+            // when its own narrower second-pass search locks onto only one
+            // repeated-texture band. Keep both independently measured fits;
+            // the shared final gate, not polish iteration order, decides.
+            hypotheses.extend(next);
+        }
     }
-    let points = inliers
-        .iter()
-        .filter_map(|&index| {
-            let (source, target) = correspondences[index];
-            transformed_point(&to_native, source).zip(transformed_point(&to_native, target))
+
+    diagnostic.grid_probe_count = representative_counts.probes;
+    diagnostic.measurable_patch_count = representative_counts.textured;
+    diagnostic.bidirectional_match_count = representative_counts.matched;
+    diagnostic.search_radius_px =
+        f64::from(*VIRTUAL_TILE_POLISH_SEARCH_PASSES.last().unwrap_or(&0));
+    diagnostic.failure_stage = "polished_fit_failed".to_string();
+
+    let (left_native, right_native) = native_dimensions;
+    let mut measured = hypotheses
+        .into_iter()
+        .filter_map(|hypothesis| {
+            let native = normalized_homography(&(to_native * hypothesis.homography * from_native))?;
+            let points = hypothesis
+                .inliers
+                .iter()
+                .filter_map(|&index| {
+                    let (source, target) = hypothesis.correspondences[index];
+                    transformed_point(&to_native, source).zip(transformed_point(&to_native, target))
+                })
+                .collect::<Vec<_>>();
+            (points.len() >= STATION_RELATION_MIN_INLIERS).then_some((
+                hypothesis.model,
+                native,
+                points,
+            ))
         })
         .collect::<Vec<_>>();
-    let (left_native, right_native) = native_dimensions;
-    diagnostic.fitted_inliers = points.len();
-    diagnostic.max_residual_translation_consensus = 0;
+    measured.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut deduplicated = Vec::<(
+        VirtualTilePolishModel,
+        Matrix3<f64>,
+        Vec<(Point2<f64>, Point2<f64>)>,
+    )>::new();
+    for hypothesis in measured {
+        if deduplicated.iter().any(|existing| {
+            virtual_tile_hypotheses_are_equivalent(&existing.1, &hypothesis.1, left_native)
+        }) {
+            continue;
+        }
+        deduplicated.push(hypothesis);
+    }
+    if deduplicated.is_empty() {
+        return Vec::new();
+    }
+
+    let overlap = StationOverlapMeasure::Covered {
+        source: left_coverage,
+        target: right_coverage,
+        factor,
+    };
+    let representative = deduplicated
+        .iter()
+        .max_by(|left, right| {
+            left.2
+                .len()
+                .cmp(&right.2.len())
+                .then_with(|| right.0.cmp(&left.0))
+        })
+        .expect("a non-empty hypothesis set has a representative");
+    diagnostic.model_fitted = true;
+    diagnostic.residual_model = "polished_multi_hypothesis".to_string();
+    diagnostic.fitted_inliers = representative.2.len();
     diagnostic.hull_support = station_relation_spatial_support_with(
-        &points,
-        &native,
+        &representative.2,
+        &representative.1,
         left_native,
         right_native,
-        StationOverlapMeasure::Covered {
-            source: left_coverage,
-            target: right_coverage,
-            factor,
-        },
+        overlap,
     );
-    diagnostic.residual_magnitude_px = residual_distribution(match native.try_inverse() {
-        Some(inverse) => points
-            .iter()
-            .map(|(source, target)| symmetric_point_error(&native, &inverse, *source, *target))
-            .collect(),
-        None => Vec::new(),
-    });
-    diagnostic.failure_stage = "insufficient_polished_support".to_string();
-    if points.len() < STATION_RELATION_MIN_INLIERS
-        || diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT
-    {
-        return None;
-    }
+    diagnostic.residual_magnitude_px =
+        residual_distribution(match representative.1.try_inverse() {
+            Some(inverse) => representative
+                .2
+                .iter()
+                .map(|(source, target)| {
+                    symmetric_point_error(&representative.1, &inverse, *source, *target)
+                })
+                .collect(),
+            None => Vec::new(),
+        });
     diagnostic.failure_stage = "fitted".to_string();
-    Some(MatchInfo {
-        homography: native,
-        inliers: points.len(),
-        sequence_bridge: false,
-        coarse_bridge: false,
-        points,
-        candidate_points: Vec::new(),
-        top_candidate_points: Vec::new(),
-        dense_focus_points: Vec::new(),
-        foreground_feature_points: Vec::new(),
-        // Key-direction Virtual_Tile fit; see `MatchInfo::canonical_homography`.
-        canonical_homography: None,
-    })
+
+    deduplicated
+        .into_iter()
+        .map(|(model, homography, points)| {
+            let _model_name = model.name();
+            MatchInfo {
+                homography,
+                inliers: points.len(),
+                sequence_bridge: false,
+                coarse_bridge: false,
+                points,
+                candidate_points: Vec::new(),
+                top_candidate_points: Vec::new(),
+                dense_focus_points: Vec::new(),
+                foreground_feature_points: Vec::new(),
+                canonical_homography: None,
+            }
+        })
+        .collect()
 }
 
 fn normalized_homography(transform: &Matrix3<f64>) -> Option<Matrix3<f64>> {
@@ -17117,7 +17373,68 @@ fn log_virtual_tile_candidate(
     );
 }
 
-/// Authoritative relations: one bounded coarse-to-fine probe around the
+type VirtualTileRelationHypotheses = HashMap<(usize, usize), Vec<MatchInfo>>;
+
+fn station_relation_tile_geometry_record(
+    tile: &ImageInfo,
+    coverage: Option<&stitching::CoverageMask>,
+    factor: u32,
+    tile_to_world: Option<&Matrix3<f64>>,
+) -> stack_report::StationRelationTileGeometryRecord {
+    let factor = factor.max(1);
+    let effective_bounds = coverage
+        .and_then(stitching::CoverageMask::covered_bounds)
+        .map(|(x, y, width, height)| {
+            let native_x = x.saturating_mul(factor).min(tile.width);
+            let native_y = y.saturating_mul(factor).min(tile.height);
+            let native_right = x
+                .saturating_add(width)
+                .saturating_mul(factor)
+                .min(tile.width);
+            let native_bottom = y
+                .saturating_add(height)
+                .saturating_mul(factor)
+                .min(tile.height);
+            [
+                native_x,
+                native_y,
+                native_right.saturating_sub(native_x),
+                native_bottom.saturating_sub(native_y),
+            ]
+        });
+    stack_report::StationRelationTileGeometryRecord {
+        dimensions: [tile.width, tile.height],
+        effective_bounds,
+        tile_to_world: tile_to_world.map(matrix3_row_major),
+    }
+}
+
+fn populate_station_relation_candidate_geometry(
+    diagnostic: &mut stack_report::StationRelationCandidateRecord,
+    tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+    tile_to_world: &HashMap<usize, Matrix3<f64>>,
+) {
+    let factor = coverages.overlap_factor;
+    if let Some(tile) = tiles.get(diagnostic.left) {
+        diagnostic.left_tile = station_relation_tile_geometry_record(
+            tile,
+            coverages.overlap.get(diagnostic.left),
+            factor,
+            tile_to_world.get(&tile.id),
+        );
+    }
+    if let Some(tile) = tiles.get(diagnostic.right) {
+        diagnostic.right_tile = station_relation_tile_geometry_record(
+            tile,
+            coverages.overlap.get(diagnostic.right),
+            factor,
+            tile_to_world.get(&tile.id),
+        );
+    }
+}
+
+/// Authoritative relations: bounded coarse-to-fine hypotheses around the
 /// rendering prior for every topology candidate (or for `only` when given).
 /// Returns `(relations, diagnostics)`, diagnostics in candidate order.
 fn virtual_tile_measure_prior_relations(
@@ -17128,10 +17445,10 @@ fn virtual_tile_measure_prior_relations(
     only: Option<&BTreeSet<(usize, usize)>>,
     after_prior_repair: bool,
 ) -> (
-    HashMap<(usize, usize), MatchInfo>,
+    VirtualTileRelationHypotheses,
     Vec<stack_report::StationRelationCandidateRecord>,
 ) {
-    let mut relations = HashMap::new();
+    let mut relations = VirtualTileRelationHypotheses::new();
     let mut diagnostics = Vec::with_capacity(station_topology.candidates.len());
     for candidate in &station_topology.candidates {
         let (left, right) = (candidate.left, candidate.right);
@@ -17162,12 +17479,27 @@ fn virtual_tile_measure_prior_relations(
                     STATION_RELATION_MAX_MEDIAN_ERROR_PX,
                 );
                 diagnostic.failure_stage = "missing_initial_pose".to_string();
-                (None, diagnostic)
+                (Vec::new(), diagnostic)
             }
         };
         diagnostic.after_prior_repair = after_prior_repair;
-        log_virtual_tile_candidate(&diagnostic, relation.is_some());
-        if let Some(relation) = relation {
+        if let Some(selection) = select_virtual_tile_relation_hypothesis(
+            tiles,
+            left,
+            right,
+            &relation,
+            pyramid.solver_coverages(),
+        ) {
+            diagnostic.hypotheses = selection.outcomes;
+        }
+        populate_station_relation_candidate_geometry(
+            &mut diagnostic,
+            tiles,
+            pyramid.solver_coverages(),
+            tile_to_world,
+        );
+        log_virtual_tile_candidate(&diagnostic, !relation.is_empty());
+        if !relation.is_empty() {
             relations.insert((left, right), relation);
         }
         diagnostics.push(diagnostic);
@@ -17326,20 +17658,417 @@ fn virtual_tile_relation_is_authoritative(
     station_relation_rejection_reasons(&measurements).is_empty()
 }
 
+fn matrix3_row_major(transform: &Matrix3<f64>) -> [f64; 9] {
+    [
+        transform[(0, 0)],
+        transform[(0, 1)],
+        transform[(0, 2)],
+        transform[(1, 0)],
+        transform[(1, 1)],
+        transform[(1, 2)],
+        transform[(2, 0)],
+        transform[(2, 1)],
+        transform[(2, 2)],
+    ]
+}
+
+fn virtual_tile_hypothesis_model_rank(transform: &Matrix3<f64>) -> u8 {
+    let Some(transform) = normalized_homography(transform) else {
+        return u8::MAX;
+    };
+    if transform[(2, 0)].abs() > 1e-12 || transform[(2, 1)].abs() > 1e-12 {
+        return 2;
+    }
+    let first = nalgebra::Vector2::new(transform[(0, 0)], transform[(1, 0)]);
+    let second = nalgebra::Vector2::new(transform[(0, 1)], transform[(1, 1)]);
+    let scale = first.norm().max(second.norm()).max(f64::EPSILON);
+    if first.dot(&second).abs() <= 1e-10 * scale * scale
+        && (first.norm() - second.norm()).abs() <= 1e-10 * scale
+    {
+        0
+    } else {
+        1
+    }
+}
+
+fn virtual_tile_hypothesis_matrix_key(transform: &Matrix3<f64>) -> [u64; 9] {
+    let mut key = [0; 9];
+    for (slot, value) in key.iter_mut().zip(transform.iter()) {
+        *slot = value.to_bits();
+    }
+    key
+}
+
+#[derive(Clone)]
+struct MeasuredVirtualTileHypothesis {
+    relation: MatchInfo,
+    canonical_source: usize,
+    canonical_target: usize,
+    canonical_homography: Matrix3<f64>,
+    correspondence_count: usize,
+    correspondence_sample: Vec<stack_report::StationRelationCorrespondenceRecord>,
+    holdout_fit_count: usize,
+    holdout_count: usize,
+    holdout_median_error_px: Option<f64>,
+    holdout_spatial_support: Option<f64>,
+    holdout_transform: Option<Matrix3<f64>>,
+    measured: MeasuredStationRelationCandidate,
+    rejection_count: usize,
+    model_rank: u8,
+}
+
+#[derive(Clone)]
+struct VirtualTileHypothesisSelection {
+    relation: MatchInfo,
+    passes: bool,
+    outcomes: Vec<stack_report::StationRelationHypothesisRecord>,
+}
+
+#[allow(clippy::type_complexity)]
+fn virtual_tile_hypothesis_holdout(
+    model_rank: u8,
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    overlap_measure: Option<StationOverlapMeasure<'_>>,
+) -> (usize, usize, Option<f64>, Option<f64>, Option<Matrix3<f64>>) {
+    let cell = f64::from(source_dimensions.0.max(source_dimensions.1).max(1)) / 12.0;
+    let mut fit = Vec::new();
+    let mut holdout = Vec::new();
+    for &point in points {
+        let column = (point.0.x / cell).floor() as i64;
+        let row = (point.0.y / cell).floor() as i64;
+        if (column + row).rem_euclid(2) == 0 {
+            fit.push(point);
+        } else {
+            holdout.push(point);
+        }
+    }
+    let model = match model_rank {
+        0 => VirtualTilePolishModel::Similarity,
+        1 => VirtualTilePolishModel::Affine,
+        2 => VirtualTilePolishModel::Projective,
+        _ => return (fit.len(), holdout.len(), None, None, None),
+    };
+    let transform = model
+        .fit(
+            &fit,
+            VIRTUAL_TILE_POLISH_INLIER_THRESHOLD_NATIVE_PX,
+            source_dimensions,
+        )
+        .map(|(transform, _)| transform);
+    let median_error_px = transform
+        .as_ref()
+        .map(|transform| median_symmetric_error(transform, &holdout))
+        .filter(|error| error.is_finite());
+    let spatial_support = transform.as_ref().and_then(|transform| {
+        overlap_measure.map(|measure| {
+            station_relation_spatial_support_with(
+                &holdout,
+                transform,
+                source_dimensions,
+                target_dimensions,
+                measure,
+            )
+        })
+    });
+    (
+        fit.len(),
+        holdout.len(),
+        median_error_px,
+        spatial_support,
+        transform,
+    )
+}
+
+/// Measure, canonicalize, deduplicate, and rank one pair's independent model
+/// hypotheses. Fully passing hypotheses always outrank failing hypotheses;
+/// ties use the complete deterministic quality tuple and then intrinsic model
+/// complexity/matrix bits, never input order. Both provisional clustering and
+/// the final solver call this exact selector.
+fn select_virtual_tile_relation_hypothesis(
+    tiles: &[ImageInfo],
+    left: usize,
+    right: usize,
+    hypotheses: &[MatchInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+) -> Option<VirtualTileHypothesisSelection> {
+    let mut measured = Vec::<MeasuredVirtualTileHypothesis>::new();
+    for relation in hypotheses {
+        if left == right
+            || relation.sequence_bridge
+            || relation.points.len() < FOCUS_MODEL_MIN_INLIERS
+        {
+            continue;
+        }
+        let canonical = match canonical_relation_view(tiles, left, right, relation) {
+            Ok(view) => view,
+            Err(CanonicalRelationViewError::NonInvertible) => continue,
+            Err(CanonicalRelationViewError::IndexOutOfBounds {
+                left,
+                right,
+                image_count,
+            }) => {
+                panic!("canonical relation pair ({left}, {right}) is outside {image_count} tiles")
+            }
+        };
+        let points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if canonical.inverted {
+            Cow::Owned(
+                relation
+                    .points
+                    .iter()
+                    .map(|&(source, target)| (target, source))
+                    .collect(),
+            )
+        } else {
+            Cow::Borrowed(&relation.points)
+        };
+        let quality_coverages = coverages
+            .quality
+            .get(canonical.source_index)
+            .zip(coverages.quality.get(canonical.target_index));
+        let dense_measurements = focus_overlap_quality_measurements_on_coverage(
+            &tiles[canonical.source_index],
+            &tiles[canonical.target_index],
+            &canonical.homography,
+            quality_coverages,
+        );
+        let overlap_measure =
+            coverages.overlap_measure(canonical.source_index, canonical.target_index);
+        let Some(candidate) = measure_station_relation_candidate(
+            relation.inliers.max(points.len()),
+            &canonical.homography,
+            &points,
+            tiles[canonical.source_index].dimensions(),
+            tiles[canonical.target_index].dimensions(),
+            overlap_measure,
+            dense_measurements,
+            canonical.inverted,
+        ) else {
+            continue;
+        };
+        let correspondence_count = points.len();
+        let sample_count = correspondence_count.min(64);
+        let correspondence_sample = (0..sample_count)
+            .map(|sample| {
+                let index = if sample_count <= 1 {
+                    0
+                } else {
+                    sample * (correspondence_count - 1) / (sample_count - 1)
+                };
+                let (source, target) = points[index];
+                let local_scale = virtual_tile_local_jacobian(&canonical.homography, source)
+                    .map(|jacobian| jacobian.determinant().abs().sqrt());
+                stack_report::StationRelationCorrespondenceRecord {
+                    source: [source.x, source.y],
+                    target: [target.x, target.y],
+                    local_scale,
+                }
+            })
+            .collect();
+        let (
+            holdout_fit_count,
+            holdout_count,
+            holdout_median_error_px,
+            holdout_spatial_support,
+            holdout_transform,
+        ) = virtual_tile_hypothesis_holdout(
+            virtual_tile_hypothesis_model_rank(&canonical.homography),
+            &points,
+            tiles[canonical.source_index].dimensions(),
+            tiles[canonical.target_index].dimensions(),
+            overlap_measure,
+        );
+        measured.push(MeasuredVirtualTileHypothesis {
+            relation: relation.clone(),
+            canonical_source: canonical.source_index,
+            canonical_target: canonical.target_index,
+            canonical_homography: canonical.homography,
+            correspondence_count,
+            correspondence_sample,
+            holdout_fit_count,
+            holdout_count,
+            holdout_median_error_px,
+            holdout_spatial_support,
+            holdout_transform,
+            measured: candidate,
+            rejection_count: station_relation_rejection_reasons(&candidate.measurements).len(),
+            model_rank: virtual_tile_hypothesis_model_rank(&canonical.homography),
+        });
+    }
+    measured.sort_by(|left, right| {
+        left.rejection_count
+            .cmp(&right.rejection_count)
+            .then_with(|| right.measured.quality.total_cmp(&left.measured.quality))
+            .then_with(|| {
+                right
+                    .measured
+                    .measurements
+                    .spatial_support
+                    .total_cmp(&left.measured.measurements.spatial_support)
+            })
+            .then_with(|| {
+                right
+                    .measured
+                    .measurements
+                    .inliers
+                    .cmp(&left.measured.measurements.inliers)
+            })
+            .then_with(|| {
+                left.measured
+                    .measurements
+                    .median_error_px
+                    .total_cmp(&right.measured.measurements.median_error_px)
+            })
+            .then_with(|| left.model_rank.cmp(&right.model_rank))
+            .then_with(|| {
+                virtual_tile_hypothesis_matrix_key(&left.canonical_homography).cmp(
+                    &virtual_tile_hypothesis_matrix_key(&right.canonical_homography),
+                )
+            })
+    });
+    let mut deduplicated = Vec::<MeasuredVirtualTileHypothesis>::new();
+    for hypothesis in measured {
+        if deduplicated.iter().any(|existing| {
+            virtual_tile_hypotheses_are_equivalent(
+                &existing.canonical_homography,
+                &hypothesis.canonical_homography,
+                tiles[left].dimensions(),
+            )
+        }) {
+            continue;
+        }
+        deduplicated.push(hypothesis);
+    }
+    let outcomes = deduplicated
+        .iter()
+        .enumerate()
+        .map(|(index, hypothesis)| {
+            let measurements = hypothesis.measured.measurements;
+            stack_report::StationRelationHypothesisRecord {
+                model: match hypothesis.model_rank {
+                    0 => "similarity",
+                    1 => "affine",
+                    2 => "projective",
+                    _ => "unknown",
+                }
+                .to_string(),
+                selected: index == 0,
+                inliers: measurements.inliers,
+                median_error_px: measurements.median_error_px,
+                scale_ratio: measurements.scale_ratio,
+                spatial_support: measurements.spatial_support,
+                low_frequency_mean_relative_difference: measurements
+                    .low_frequency_mean_relative_difference,
+                edge_strength_ratio: measurements.edge_strength_ratio,
+                median_edge_orientation_difference_degrees: measurements
+                    .median_edge_orientation_difference_degrees,
+                preserves_convex_orientation: measurements.preserves_convex_orientation,
+                rejection_reasons: station_relation_rejection_reasons(&measurements)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                canonical_source: hypothesis.canonical_source,
+                canonical_target: hypothesis.canonical_target,
+                source_to_target_transform: matrix3_row_major(&hypothesis.canonical_homography),
+                correspondence_count: hypothesis.correspondence_count,
+                correspondence_sample: hypothesis.correspondence_sample.clone(),
+                holdout_fit_count: hypothesis.holdout_fit_count,
+                holdout_count: hypothesis.holdout_count,
+                holdout_median_error_px: hypothesis.holdout_median_error_px,
+                holdout_spatial_support: hypothesis.holdout_spatial_support,
+                holdout_transform: hypothesis.holdout_transform.as_ref().map(matrix3_row_major),
+            }
+        })
+        .collect::<Vec<_>>();
+    deduplicated
+        .first()
+        .map(|hypothesis| VirtualTileHypothesisSelection {
+            relation: hypothesis.relation.clone(),
+            passes: hypothesis.rejection_count == 0,
+            outcomes,
+        })
+}
+
+fn select_virtual_tile_relation_hypotheses(
+    tiles: &[ImageInfo],
+    relations: &VirtualTileRelationHypotheses,
+    coverages: VirtualTileSolverCoverages<'_>,
+) -> HashMap<(usize, usize), MatchInfo> {
+    let mut selected = HashMap::new();
+    let mut pairs = relations.iter().collect::<Vec<_>>();
+    pairs.sort_by_key(|(pair, _)| **pair);
+    for (&pair, hypotheses) in pairs {
+        if let Some(selection) =
+            select_virtual_tile_relation_hypothesis(tiles, pair.0, pair.1, hypotheses, coverages)
+        {
+            selected.insert(pair, selection.relation);
+        } else if let Some(relation) = hypotheses.first() {
+            // Preserve one singular measured hypothesis so the final solver can
+            // report the pair once as a canonical inversion failure.
+            selected.insert(pair, relation.clone());
+        }
+    }
+    selected
+}
+
+/// Apply the complete canonical Station_Relation measurement and rejection
+/// gate before a prior-seeded Virtual_Tile relation may merge repair clusters.
+/// This is intentionally side-effect free: final report counts remain owned by
+/// the solver, so provisional filtering cannot double-count a rejection.
+fn virtual_tile_provisional_authoritative_candidate(
+    tiles: &[ImageInfo],
+    left: usize,
+    right: usize,
+    hypotheses: &[MatchInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+) -> bool {
+    select_virtual_tile_relation_hypothesis(tiles, left, right, hypotheses, coverages)
+        .is_some_and(|selection| selection.passes)
+}
+
 fn virtual_tile_authoritative_pairs(
-    relations: &HashMap<(usize, usize), MatchInfo>,
+    relations: &VirtualTileRelationHypotheses,
     tiles: &[ImageInfo],
     coverages: VirtualTileSolverCoverages<'_>,
 ) -> Vec<(usize, usize)> {
     let mut pairs = relations
         .iter()
-        .filter_map(|(&(left, right), relation)| {
-            virtual_tile_relation_is_authoritative(left, right, relation, tiles, coverages)
-                .then_some((left, right))
+        .filter_map(|(&(left, right), hypotheses)| {
+            virtual_tile_provisional_authoritative_candidate(
+                tiles, left, right, hypotheses, coverages,
+            )
+            .then_some((left, right))
         })
         .collect::<Vec<_>>();
     pairs.sort_unstable();
     pairs
+}
+
+/// Topology pairs that remain eligible for an actual prior-free proposal after
+/// authoritative relations form their prior-consistent clusters.
+fn virtual_tile_prior_free_candidate_pairs(
+    station_count: usize,
+    authoritative_pairs: &[(usize, usize)],
+    station_topology: &topology::StationTopology,
+) -> Vec<(usize, usize)> {
+    let mut clusters = Dsu::new(station_count);
+    for &(left, right) in authoritative_pairs {
+        if left < station_count && right < station_count && left != right {
+            clusters.union(left, right);
+        }
+    }
+    station_topology
+        .candidates
+        .iter()
+        .filter_map(|candidate| {
+            let (left, right) = (candidate.left, candidate.right);
+            (left < station_count
+                && right < station_count
+                && clusters.find(left) != clusters.find(right))
+            .then_some((left, right))
+        })
+        .collect()
 }
 
 /// Plan rendering-prior repairs from prior-free proposals.
@@ -17457,7 +18186,16 @@ fn plan_virtual_tile_prior_repairs(
         ) else {
             continue;
         };
-        if correction.try_inverse().is_none() {
+        if correction.try_inverse().is_none()
+            || !virtual_tile_prior_repair_is_bounded(
+                0.0,
+                homography_scale_ratio(&correction).unwrap_or(f64::NAN),
+            )
+        {
+            // An inadmissible strongest proposal must not mark this cluster as
+            // repaired and suppress a weaker proposal that stays inside the
+            // unchanged repair envelope. The render-time check below still
+            // measures the actual centre shift before mutating source poses.
             continue;
         }
         corrections.insert(unfixed_root, correction);
@@ -17695,8 +18433,17 @@ fn virtual_tile_station_matches(
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     station_topology: &topology::StationTopology,
 ) -> HashMap<(usize, usize), MatchInfo> {
-    virtual_tile_station_match_outcome(tiles, coverages, initial_homographies, station_topology)
-        .relations
+    let outcome =
+        virtual_tile_station_match_outcome(tiles, coverages, initial_homographies, station_topology);
+    select_virtual_tile_relation_hypotheses(
+        tiles,
+        &outcome.relations,
+        VirtualTileSolverCoverages {
+            quality: coverages,
+            overlap: coverages,
+            overlap_factor: 1,
+        },
+    )
 }
 
 fn single_layer_station_evidence_discard(
@@ -18951,6 +19698,27 @@ impl<'a> VirtualTileSolverCoverages<'a> {
             factor: self.overlap_factor,
         })
     }
+}
+
+fn solve_virtual_tile_station_hypotheses_with_report(
+    tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+    hypotheses: &VirtualTileRelationHypotheses,
+    initial_homographies: &HashMap<usize, Matrix3<f64>>,
+    station_topology: &topology::StationTopology,
+    closure_report: &mut stack_report::ClosureReport,
+    station_relations_report: &mut stack_report::StationRelationsReport,
+) -> HashMap<usize, Matrix3<f64>> {
+    let selected = select_virtual_tile_relation_hypotheses(tiles, hypotheses, coverages);
+    solve_virtual_tile_station_poses_with_report(
+        tiles,
+        coverages,
+        &selected,
+        initial_homographies,
+        station_topology,
+        closure_report,
+        station_relations_report,
+    )
 }
 
 fn solve_virtual_tile_station_poses_with_report(
@@ -24998,6 +25766,7 @@ mod alignment_tests {
         let relation = outcome
             .relations
             .get(&(0, 1))
+            .and_then(|hypotheses| hypotheses.first())
             .expect("nonzero Virtual_Tile origins must remain in the same station frame");
         assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
         for point in [
@@ -25103,6 +25872,8 @@ mod alignment_tests {
             ((width, height), (width, height)),
             &mut diagnostic,
         )
+        .into_iter()
+        .next()
         .expect("the production polish matcher must verify the five-pixel shift");
         assert_eq!(diagnostic.failure_stage, "fitted");
         assert!(relation.inliers >= STATION_RELATION_MIN_INLIERS);
@@ -25170,6 +25941,7 @@ mod alignment_tests {
         let relation = outcome
             .relations
             .get(&(0, 1))
+            .and_then(|hypotheses| hypotheses.first())
             .expect("direct fused pixels must recover the projective overlap");
         let diagnostic = &outcome.diagnostics[0];
         assert!(diagnostic.grid_probe_count <= VIRTUAL_TILE_DIRECT_MAX_GRID_PROBES);
@@ -25771,6 +26543,7 @@ mod alignment_tests {
         let relation = outcome
             .relations
             .get(&(0, 1))
+            .and_then(|hypotheses| hypotheses.first())
             .expect("guided overlap must fit");
         let diagnostic = &outcome.diagnostics[0];
         assert_eq!(
@@ -25848,6 +26621,7 @@ mod alignment_tests {
         let relation = outcome
             .relations
             .get(&(0, 1))
+            .and_then(|hypotheses| hypotheses.first())
             .expect("direct grid pixels must not depend on descriptor concentration");
         let diagnostic = &outcome.diagnostics[0];
         assert!(diagnostic.grid_probe_count > tiles[0].features.len());
@@ -28376,7 +29150,7 @@ mod acceptance_tests {
                 };
                 let (relation, mut diagnostic) =
                     virtual_tile_pyramid_station_match(left, right, &pyramid, &seed, "saved_tiles");
-                let Some(mut relation) = relation else {
+                let Some(mut relation) = relation.into_iter().next() else {
                     println!(
                         "TILE_NO_FIT {left}->{right} stage={} inliers={} support={:.4}",
                         diagnostic.failure_stage,
@@ -28395,7 +29169,10 @@ mod acceptance_tests {
                         &relation.homography,
                         (tiles[left].dimensions(), tiles[right].dimensions()),
                         &mut diagnostic,
-                    ) else {
+                    )
+                    .into_iter()
+                    .next()
+                    else {
                         continue;
                     };
                     relation = polished;

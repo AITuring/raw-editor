@@ -389,7 +389,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /solve_virtual_tile_station_poses_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
+  /solve_virtual_tile_station_(?:hypotheses|poses)_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default path must publish authoritative fused-tile relations and poses before composition',
 );
 assert.match(
