@@ -195,8 +195,8 @@ const STATION_SCALE_RATIO_MAX: f64 = 1.02;
 // ---------------------------------------------------------------------------
 const STATION_RELATION_MIN_INLIERS: usize = 24;
 const STATION_RELATION_MAX_MEDIAN_ERROR_PX: f64 = 3.0;
-const STATION_RELATION_SCALE_RATIO_MIN: f64 = 0.80;
-const STATION_RELATION_SCALE_RATIO_MAX: f64 = 1.20;
+const STATION_RELATION_SCALE_RATIO_MIN: f64 = 0.95;
+const STATION_RELATION_SCALE_RATIO_MAX: f64 = 1.05;
 const STATION_RELATION_MIN_SPATIAL_SUPPORT: f64 = 0.20;
 const STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE: f64 = 0.20;
 const STATION_RELATION_EDGE_STRENGTH_RATIO_MIN: f64 = 0.70;
@@ -2683,6 +2683,57 @@ fn canonical_match_direction(
     } else {
         (second, first, true)
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CanonicalRelationView {
+    source_index: usize,
+    target_index: usize,
+    inverted: bool,
+    homography: Matrix3<f64>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CanonicalRelationViewError {
+    IndexOutOfBounds {
+        left: usize,
+        right: usize,
+        image_count: usize,
+    },
+    NonInvertible,
+}
+
+fn canonical_relation_view(
+    images: &[ImageInfo],
+    left: usize,
+    right: usize,
+    relation: &MatchInfo,
+) -> Result<CanonicalRelationView, CanonicalRelationViewError> {
+    if left >= images.len() || right >= images.len() {
+        return Err(CanonicalRelationViewError::IndexOutOfBounds {
+            left,
+            right,
+            image_count: images.len(),
+        });
+    }
+    let (source_index, target_index, inverted) = canonical_match_direction(images, left, right);
+    let homography = match relation.canonical_homography {
+        Some(canonical) => canonical,
+        None if inverted => relation
+            .homography
+            .try_inverse()
+            .ok_or(CanonicalRelationViewError::NonInvertible)?,
+        None => relation.homography,
+    };
+    if homography.try_inverse().is_none() {
+        return Err(CanonicalRelationViewError::NonInvertible);
+    }
+    Ok(CanonicalRelationView {
+        source_index,
+        target_index,
+        inverted,
+        homography,
+    })
 }
 
 /// Return a deterministic direction key from image content rather than its
@@ -17180,16 +17231,19 @@ fn virtual_tile_relation_is_authoritative(
     {
         return false;
     }
-    let (quality_source, quality_target, quality_inverted) =
-        canonical_match_direction(tiles, left, right);
-    let quality_homography = match relation.canonical_homography {
-        Some(canonical) => canonical,
-        None if quality_inverted => match relation.homography.try_inverse() {
-            Some(inverse) => inverse,
-            None => return false,
-        },
-        None => relation.homography,
+    let canonical = match canonical_relation_view(tiles, left, right, relation) {
+        Ok(view) => view,
+        Err(CanonicalRelationViewError::NonInvertible) => return false,
+        Err(CanonicalRelationViewError::IndexOutOfBounds {
+            left,
+            right,
+            image_count,
+        }) => panic!("canonical relation pair ({left}, {right}) is outside {image_count} tiles"),
     };
+    let quality_source = canonical.source_index;
+    let quality_target = canonical.target_index;
+    let quality_inverted = canonical.inverted;
+    let quality_homography = canonical.homography;
     let quality_points = if quality_inverted {
         relation
             .points
@@ -18728,19 +18782,18 @@ fn absolute_source_path(path: &str) -> String {
     absolute.to_string_lossy().into_owned()
 }
 
-fn station_graph_components(
-    images: &[ImageInfo],
-    groups: &[FocusCaptureGroup],
+fn station_graph_components_from_members(
+    station_members: &[Vec<String>],
     relation_pairs: &[(usize, usize)],
 ) -> Vec<Vec<String>> {
-    let mut connectivity = Dsu::new(groups.len());
+    let mut connectivity = Dsu::new(station_members.len());
     for &(left, right) in relation_pairs {
-        if left < groups.len() && right < groups.len() {
+        if left < station_members.len() && right < station_members.len() {
             connectivity.union(left, right);
         }
     }
     let mut stations_by_root = BTreeMap::<usize, Vec<usize>>::new();
-    for station_index in 0..groups.len() {
+    for station_index in 0..station_members.len() {
         let root = connectivity.find(station_index);
         stations_by_root
             .entry(root)
@@ -18752,13 +18805,30 @@ fn station_graph_components(
         .map(|station_indices| {
             let mut members = station_indices
                 .into_iter()
-                .flat_map(|station_index| groups[station_index].members.iter().copied())
-                .map(|image_index| absolute_source_path(&images[image_index].filename))
+                .flat_map(|station_index| station_members[station_index].iter().cloned())
                 .collect::<Vec<_>>();
             members.sort();
             members
         })
         .collect()
+}
+
+fn station_graph_components(
+    images: &[ImageInfo],
+    groups: &[FocusCaptureGroup],
+    relation_pairs: &[(usize, usize)],
+) -> Vec<Vec<String>> {
+    let station_members = groups
+        .iter()
+        .map(|group| {
+            group
+                .members
+                .iter()
+                .map(|&image_index| absolute_source_path(&images[image_index].filename))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    station_graph_components_from_members(&station_members, relation_pairs)
 }
 
 /// Populate the canonical connectivity report and return the exact rejected
@@ -19005,6 +19075,7 @@ fn solve_station_poses_for_evidence_with_report(
     // themselves must not depend on the hash seed (需求 14.6).  The map is one
     // entry per station pair, so an ordered container costs nothing here.
     let mut candidates = BTreeMap::<(usize, usize), Vec<FocusGroupEdgeCandidate>>::new();
+    let mut non_invertible_candidate_pairs = BTreeSet::<(usize, usize)>::new();
     for (&(source_index, target_index), match_info) in sorted_pairs(matches) {
         if source_index >= images.len()
             || target_index >= images.len()
@@ -19040,38 +19111,32 @@ fn solve_station_poses_for_evidence_with_report(
         {
             continue;
         }
-        // A `MatchInfo` is stored in the `(min index, max index)` orientation of
-        // its map key, so its direction follows the import positions of the two
-        // sources.  Both halves of what follows are direction sensitive:
-        //
-        //   * every quality measure — `focus_overlap_quality` warps the source
-        //     into the target and correlates there, `panorama_spatial_support`
-        //     weighs the source spread first — so scoring in the key direction
-        //     made a shuffled import award the same physical relation a
-        //     different quality and pick a different station edge, and
-        //   * the composed station relation, which is inverted once when the
-        //     source station outranks the target station.  Which of the two
-        //     sources ends up as `source_index` decides how many inversions the
-        //     measurement passes through, and an inversion is not lossless.
-        //
-        // Both therefore work from the content derived direction (需求 14.6).
-        let (quality_source, quality_target, quality_inverted) =
-            canonical_match_direction(images, source_index, target_index);
+        let canonical =
+            match canonical_relation_view(images, source_index, target_index, match_info) {
+                Ok(view) => view,
+                Err(CanonicalRelationViewError::NonInvertible) => {
+                    let source_group = group_for_image[source_index];
+                    let target_group = group_for_image[target_index];
+                    non_invertible_candidate_pairs.insert((
+                        source_group.min(target_group),
+                        source_group.max(target_group),
+                    ));
+                    continue;
+                }
+                Err(CanonicalRelationViewError::IndexOutOfBounds {
+                    left,
+                    right,
+                    image_count,
+                }) => panic!(
+                    "canonical relation pair ({left}, {right}) is outside {image_count} images"
+                ),
+            };
+        let quality_source = canonical.source_index;
+        let quality_target = canonical.target_index;
+        let quality_inverted = canonical.inverted;
+        let quality_homography = canonical.homography;
         let source_group = group_for_image[quality_source];
         let target_group = group_for_image[quality_target];
-        // `canonical_homography` is the untouched fit in exactly this direction.
-        // Falling back to inverting `homography` is only reached for relations
-        // that were never measured pairwise in a canonical direction.
-        let quality_homography = match match_info.canonical_homography {
-            Some(canonical) => canonical,
-            None if quality_inverted => {
-                let Some(inverse) = match_info.homography.try_inverse() else {
-                    continue;
-                };
-                inverse
-            }
-            None => match_info.homography,
-        };
         let quality_points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if quality_inverted {
             Cow::Owned(
                 match_info
@@ -19231,6 +19296,14 @@ fn solve_station_poses_for_evidence_with_report(
         }
     }
 
+    let final_non_invertible_pairs = non_invertible_candidate_pairs
+        .into_iter()
+        .filter(|pair| !candidates.contains_key(pair))
+        .collect::<BTreeSet<_>>();
+    for &(left, right) in &final_non_invertible_pairs {
+        station_relations_report.record_non_invertible_canonical_pair(left, right);
+    }
+
     // One station pair collects one candidate per accepted focus layer
     // relation, and the consensus search below reads that vector in order: it
     // accumulates `supporting_quality` along it and keeps the first candidate on
@@ -19256,7 +19329,10 @@ fn solve_station_poses_for_evidence_with_report(
     let consensus_threshold = STATION_RELATION_MAX_MEDIAN_ERROR_PX;
     let mut group_edges = Vec::<(f64, usize, usize, Matrix3<f64>, usize, f64)>::new();
     let mut station_relation_inlier_counts = BTreeMap::<(usize, usize), usize>::new();
-    let mut evaluated_candidate_pairs = HashSet::<(usize, usize)>::new();
+    let mut evaluated_candidate_pairs = final_non_invertible_pairs
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
     let mut consensus_pair_count = 0usize;
     for ((left_group, right_group), pair_candidates) in candidates {
         evaluated_candidate_pairs.insert((left_group, right_group));

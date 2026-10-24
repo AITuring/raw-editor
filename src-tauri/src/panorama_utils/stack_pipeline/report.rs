@@ -11,7 +11,7 @@
 //! This stage records the run metrics. Quality_Gate remains observation-only
 //! until the later rejection-path task enables blocking export.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -695,19 +695,50 @@ pub(crate) struct StationRelationsReport {
     /// Rejected candidates grouped by the matcher stage that stopped them.
     #[serde(default)]
     pub rejected_by_failure_stage: BTreeMap<String, u64>,
+    /// Final station pairs whose selected canonical transform was singular.
+    #[serde(skip)]
+    pub(crate) non_invertible_canonical_pairs: BTreeSet<(usize, usize)>,
     pub discarded_single_layer_evidence: Vec<DiscardedEvidenceRecord>,
     pub connectivity: ConnectivityReport,
 }
 
 impl StationRelationsReport {
+    pub(crate) fn record_non_invertible_canonical_pair(&mut self, left: usize, right: usize) {
+        let pair = (left.min(right), left.max(right));
+        if !self.non_invertible_canonical_pairs.insert(pair) {
+            return;
+        }
+        self.rejected_count += 1;
+        *self
+            .rejected_by_reason
+            .entry(degradation::STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM.to_string())
+            .or_default() += 1;
+        degradation::record_run_degradation(
+            degradation::STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM,
+            serde_json::json!({ "left": pair.0, "right": pair.1 }),
+        );
+    }
+
     /// Summarize the final candidate attempt independently of the measured
     /// Requirement 6 rejection reasons. A fitted model can still fail its
     /// support or orientation gate, or a later solver acceptance criterion.
     pub(crate) fn summarize_candidate_measurements(&mut self) {
         self.unmeasured_count = 0;
         self.rejected_by_failure_stage.clear();
-        for candidate in &self.candidates {
-            if !candidate.model_fitted {
+        let mut summarized_non_invertible = BTreeSet::new();
+        for candidate in &mut self.candidates {
+            let pair = (
+                candidate.left.min(candidate.right),
+                candidate.left.max(candidate.right),
+            );
+            let non_invertible = self.non_invertible_canonical_pairs.contains(&pair);
+            if non_invertible {
+                candidate.failure_stage = "canonical_transform_non_invertible".to_string();
+                candidate.model_fitted = true;
+                if !summarized_non_invertible.insert(pair) {
+                    continue;
+                }
+            } else if !candidate.model_fitted {
                 self.unmeasured_count += 1;
             }
             let accepted = self.accepted.iter().any(|relation| {
@@ -720,6 +751,15 @@ impl StationRelationsReport {
                     .entry(candidate.failure_stage.clone())
                     .or_default() += 1;
             }
+        }
+        for _ in self
+            .non_invertible_canonical_pairs
+            .difference(&summarized_non_invertible)
+        {
+            *self
+                .rejected_by_failure_stage
+                .entry("canonical_transform_non_invertible".to_string())
+                .or_default() += 1;
         }
     }
 }

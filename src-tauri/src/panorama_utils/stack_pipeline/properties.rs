@@ -685,6 +685,27 @@ fn stack_acceptance_failures(report: &StackReport) -> Vec<StackAcceptanceFailure
             "84".to_string(),
         );
     }
+    let station_indices = report
+        .grouping
+        .stations
+        .iter()
+        .map(|station| station.index)
+        .collect::<BTreeSet<_>>();
+    if report.grouping.station_count != 28
+        || report.grouping.stations.len() != 28
+        || station_indices != (0..28).collect()
+    {
+        add(
+            "acceptance_station_count",
+            format!(
+                "reported={}, records={}, unique_indices={}",
+                report.grouping.station_count,
+                report.grouping.stations.len(),
+                station_indices.len()
+            ),
+            "28 stations indexed 0..28".to_string(),
+        );
+    }
     if !report.grouping.isolated.is_empty() {
         add(
             "acceptance_isolated_sources",
@@ -692,11 +713,92 @@ fn stack_acceptance_failures(report: &StackReport) -> Vec<StackAcceptanceFailure
             "0".to_string(),
         );
     }
-    if report.station_relations.connectivity.components != 1 {
+    let undecoded_input_count = report
+        .input
+        .sources
+        .iter()
+        .filter(|source| !source.decoded)
+        .count();
+    if undecoded_input_count != 0 || !report.grouping.undecodable.is_empty() {
         add(
-            "acceptance_connectivity_components",
-            report.station_relations.connectivity.components.to_string(),
-            "1".to_string(),
+            "acceptance_undecodable_sources",
+            format!(
+                "input={}, grouping={}",
+                undecoded_input_count,
+                report.grouping.undecodable.len()
+            ),
+            "input=0, grouping=0".to_string(),
+        );
+    }
+
+    let mut relation_components = (0..28).collect::<Vec<_>>();
+    let mut relation_endpoints_valid = true;
+    for relation in &report.station_relations.accepted {
+        if relation.left >= 28 || relation.right >= 28 {
+            relation_endpoints_valid = false;
+            continue;
+        }
+        let from = relation_components[relation.right];
+        let to = relation_components[relation.left];
+        for component in &mut relation_components {
+            if *component == from {
+                *component = to;
+            }
+        }
+    }
+    let relation_component_count = relation_components
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .len();
+    if !relation_endpoints_valid || relation_component_count != 1 {
+        add(
+            "acceptance_relation_graph",
+            format!(
+                "endpoints_valid={relation_endpoints_valid}, components={relation_component_count}"
+            ),
+            "all endpoints in 0..28 and one component".to_string(),
+        );
+    }
+
+    let connectivity_members = report
+        .station_relations
+        .connectivity
+        .component_members
+        .first()
+        .map(|members| members.iter().map(String::as_str).collect::<BTreeSet<_>>());
+    if report.station_relations.connectivity.components != 1
+        || report
+            .station_relations
+            .connectivity
+            .component_members
+            .len()
+            != 1
+        || report
+            .station_relations
+            .connectivity
+            .component_member_counts
+            != [84]
+        || connectivity_members.as_ref() != Some(&sources)
+        || grouped != sources
+    {
+        add(
+            "acceptance_connectivity_membership",
+            format!(
+                "components={}, member_lists={}, counts={:?}, unique_members={}",
+                report.station_relations.connectivity.components,
+                report
+                    .station_relations
+                    .connectivity
+                    .component_members
+                    .len(),
+                report
+                    .station_relations
+                    .connectivity
+                    .component_member_counts,
+                connectivity_members.as_ref().map_or(0, BTreeSet::len)
+            ),
+            "one component containing all 84 grouped inputs".to_string(),
         );
     }
     if report.quality_gate.verdict != QualityGateVerdict::Pass {
@@ -749,6 +851,22 @@ fn stack_acceptance_failures(report: &StackReport) -> Vec<StackAcceptanceFailure
             "0".to_string(),
         );
     }
+    let fusion_indices = report
+        .fusion
+        .iter()
+        .map(|fusion| fusion.station_index)
+        .collect::<BTreeSet<_>>();
+    if report.fusion.len() != 28 || fusion_indices != (0..28).collect() {
+        add(
+            "acceptance_fusion_coverage",
+            format!(
+                "records={}, unique_indices={}",
+                report.fusion.len(),
+                fusion_indices.len()
+            ),
+            "28 stations indexed 0..28".to_string(),
+        );
+    }
     let non_graph_cut = report
         .fusion
         .iter()
@@ -799,23 +917,45 @@ fn stack_acceptance_baseline_report() -> StackReport {
             decoded: true,
         })
         .collect();
-    report.grouping.station_count = 1;
-    report.grouping.stations = vec![super::report::StationRecord {
-        index: 0,
-        members: paths,
-        ..super::report::StationRecord::default()
-    }];
-    report.station_relations.connectivity.components = 1;
+    report.grouping.station_count = 28;
+    report.grouping.stations = paths
+        .chunks_exact(3)
+        .enumerate()
+        .map(|(index, members)| super::report::StationRecord {
+            index,
+            members: members.to_vec(),
+            ..super::report::StationRecord::default()
+        })
+        .collect();
+    report.station_relations.accepted = (0..27)
+        .map(|left| super::report::AcceptedStationRelationRecord {
+            left,
+            right: left + 1,
+            evidence_kind: super::report::StationRelationEvidenceKind::VirtualTile,
+            inliers: 24,
+            spatial_support: 0.2,
+            scale_ratio: 1.0,
+            median_error_px: 1.0,
+            independent_support: 1,
+        })
+        .collect();
+    report.station_relations.connectivity = ConnectivityReport {
+        components: 1,
+        component_members: vec![paths.clone()],
+        component_member_counts: vec![84],
+    };
     report.composition.union_projected_pixels = 10_000;
     report.composition.opaque_pixels = 9_800;
     report.resources.memory_threshold_bytes = 100;
     report.resources.peak_rss_bytes = 100;
     report.resources.network_requests = 0;
-    report.fusion = vec![FusionReport {
-        station_index: 0,
-        solver_status: FusionSolverStatus::GraphCut,
-        ..FusionReport::default()
-    }];
+    report.fusion = (0..28)
+        .map(|station_index| FusionReport {
+            station_index,
+            solver_status: FusionSolverStatus::GraphCut,
+            ..FusionReport::default()
+        })
+        .collect();
     report.quality_gate.verdict = QualityGateVerdict::Pass;
     report.quality_gate.criteria = vec![QualityGateCriterionRecord {
         name: "baseline".to_string(),
@@ -828,8 +968,12 @@ fn stack_acceptance_baseline_report() -> StackReport {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AcceptanceViolationKind {
     SourceCount,
+    StationCount,
     Isolated,
-    Connectivity,
+    Undecodable,
+    RelationGraph,
+    ConnectivityMembership,
+    FusionCoverage,
     QualityVerdict,
     FailedCriterion,
     OpaqueRatio,
@@ -848,13 +992,29 @@ fn inject_acceptance_violation(
             report.input.source_count = 83;
             "acceptance_source_count"
         }
+        AcceptanceViolationKind::StationCount => {
+            report.grouping.station_count = 27;
+            "acceptance_station_count"
+        }
         AcceptanceViolationKind::Isolated => {
             report.grouping.isolated.push(Default::default());
             "acceptance_isolated_sources"
         }
-        AcceptanceViolationKind::Connectivity => {
+        AcceptanceViolationKind::Undecodable => {
+            report.grouping.undecodable.push(Default::default());
+            "acceptance_undecodable_sources"
+        }
+        AcceptanceViolationKind::RelationGraph => {
+            report.station_relations.accepted.pop();
+            "acceptance_relation_graph"
+        }
+        AcceptanceViolationKind::ConnectivityMembership => {
             report.station_relations.connectivity.components = 2;
-            "acceptance_connectivity_components"
+            "acceptance_connectivity_membership"
+        }
+        AcceptanceViolationKind::FusionCoverage => {
+            report.fusion.pop();
+            "acceptance_fusion_coverage"
         }
         AcceptanceViolationKind::QualityVerdict => {
             report.quality_gate.verdict = QualityGateVerdict::Fail;
@@ -895,14 +1055,23 @@ proptest! {
     // Feature: layered-camera-group-focus-stitching, Property 94: 门禁 verdict 是纯函数。
     #[test]
     fn property_94_stack_acceptance_verdict_is_pure(
-        violations in prop::collection::vec(any::<bool>(), 10),
+        violations in prop::collection::vec(any::<bool>(), 14),
     ) {
         let kinds = [
-            AcceptanceViolationKind::SourceCount, AcceptanceViolationKind::Isolated,
-            AcceptanceViolationKind::Connectivity, AcceptanceViolationKind::QualityVerdict,
-            AcceptanceViolationKind::FailedCriterion, AcceptanceViolationKind::OpaqueRatio,
-            AcceptanceViolationKind::PeakRss, AcceptanceViolationKind::Network,
-            AcceptanceViolationKind::Solver, AcceptanceViolationKind::SourceDigest,
+            AcceptanceViolationKind::SourceCount,
+            AcceptanceViolationKind::StationCount,
+            AcceptanceViolationKind::Isolated,
+            AcceptanceViolationKind::Undecodable,
+            AcceptanceViolationKind::RelationGraph,
+            AcceptanceViolationKind::ConnectivityMembership,
+            AcceptanceViolationKind::FusionCoverage,
+            AcceptanceViolationKind::QualityVerdict,
+            AcceptanceViolationKind::FailedCriterion,
+            AcceptanceViolationKind::OpaqueRatio,
+            AcceptanceViolationKind::PeakRss,
+            AcceptanceViolationKind::Network,
+            AcceptanceViolationKind::Solver,
+            AcceptanceViolationKind::SourceDigest,
         ];
         let mut report = stack_acceptance_baseline_report();
         prop_assert!(stack_acceptance_failures(&report).is_empty());
@@ -918,6 +1087,279 @@ proptest! {
 }
 
 #[test]
+fn acceptance_graph_membership_and_fusion_invariants_are_deterministic() {
+    let baseline = stack_acceptance_baseline_report();
+    assert!(stack_acceptance_failures(&baseline).is_empty());
+
+    let mut out_of_bounds = baseline.clone();
+    out_of_bounds.station_relations.accepted[0].left = 28;
+    assert_eq!(
+        stack_acceptance_failures(&out_of_bounds)
+            .iter()
+            .map(|failure| failure.identifier)
+            .collect::<Vec<_>>(),
+        ["acceptance_relation_graph"]
+    );
+
+    let mut duplicate_member = baseline.clone();
+    duplicate_member
+        .station_relations
+        .connectivity
+        .component_members[0][1] = duplicate_member
+        .station_relations
+        .connectivity
+        .component_members[0][0]
+        .clone();
+    assert_eq!(
+        stack_acceptance_failures(&duplicate_member)
+            .iter()
+            .map(|failure| failure.identifier)
+            .collect::<Vec<_>>(),
+        ["acceptance_connectivity_membership"]
+    );
+
+    for duplicate in [false, true] {
+        let mut fusion = baseline.clone();
+        if duplicate {
+            fusion.fusion[27].station_index = 26;
+        } else {
+            fusion.fusion.pop();
+        }
+        assert_eq!(
+            stack_acceptance_failures(&fusion)
+                .iter()
+                .map(|failure| failure.identifier)
+                .collect::<Vec<_>>(),
+            ["acceptance_fusion_coverage"]
+        );
+    }
+}
+
+#[test]
+fn acceptance_verdict_rejects_an_input_source_record_marked_undecoded() {
+    let mut report = stack_acceptance_baseline_report();
+    report.input.sources[17].decoded = false;
+    assert!(report.grouping.undecodable.is_empty());
+    assert_eq!(
+        stack_acceptance_failures(&report)
+            .iter()
+            .map(|failure| failure.identifier)
+            .collect::<Vec<_>>(),
+        ["acceptance_undecodable_sources"]
+    );
+}
+
+fn write_acceptance_source_fixture(source_dir: &Path) {
+    fs::create_dir_all(source_dir).expect("create acceptance source fixture");
+    for index in 3680..=3763 {
+        fs::write(source_dir.join(format!("DSC_{index}.NEF")), [index as u8])
+            .expect("write acceptance source fixture");
+    }
+}
+
+#[test]
+fn validate_acceptance_directories_rejects_invalid_paths_and_sources() {
+    let root = TempDir::new().expect("acceptance validation tempdir");
+    let source = root.path().join("source");
+    let report = root.path().join("report");
+    write_acceptance_source_fixture(&source);
+    assert!(validate_acceptance_directories(&source, &report).is_ok());
+    assert!(validate_acceptance_directories(Path::new("relative"), &report).is_err());
+    assert!(validate_acceptance_directories(&source, Path::new("relative")).is_err());
+    let nested_report = source.join("new/reports");
+    let before_nested_rejection = acceptance_source_snapshot(&source);
+    assert!(validate_acceptance_directories(&source, &nested_report).is_err());
+    assert_eq!(
+        acceptance_source_snapshot(&source),
+        before_nested_rejection,
+        "a rejected preflight must not change the source inventory"
+    );
+    assert!(!nested_report.exists());
+
+    let missing_root = TempDir::new().expect("missing source tempdir");
+    let missing_source = missing_root.path().join("source");
+    fs::create_dir_all(&missing_source).unwrap();
+    assert!(
+        validate_acceptance_directories(&missing_source, &missing_root.path().join("report"))
+            .is_err()
+    );
+
+    let directory_root = TempDir::new().expect("directory source tempdir");
+    let directory_source = directory_root.path().join("source");
+    write_acceptance_source_fixture(&directory_source);
+    let invalid = directory_source.join("DSC_3680.NEF");
+    fs::remove_file(&invalid).unwrap();
+    fs::create_dir(&invalid).unwrap();
+    assert!(
+        validate_acceptance_directories(&directory_source, &directory_root.path().join("report"))
+            .is_err()
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        let symlink_root = TempDir::new().expect("symlink source tempdir");
+        let symlink_source = symlink_root.path().join("source");
+        write_acceptance_source_fixture(&symlink_source);
+        let invalid = symlink_source.join("DSC_3680.NEF");
+        fs::remove_file(&invalid).unwrap();
+        symlink(symlink_source.join("DSC_3681.NEF"), &invalid).unwrap();
+        assert!(
+            validate_acceptance_directories(&symlink_source, &symlink_root.path().join("report"))
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn stack_report_selection_requires_one_matching_regular_file() {
+    let directory = TempDir::new().expect("report selection tempdir");
+    fs::write(directory.path().join("other.json"), b"{}").unwrap();
+    assert!(select_unique_stack_report(directory.path()).is_err());
+    let first = directory.path().join("stack-report-first.json");
+    fs::write(&first, b"{}").unwrap();
+    assert_eq!(select_unique_stack_report(directory.path()).unwrap(), first);
+    fs::write(directory.path().join("stack-report-second.json"), b"{}").unwrap();
+    assert!(select_unique_stack_report(directory.path()).is_err());
+}
+
+fn resolve_acceptance_path_without_writes(path: &Path) -> Result<PathBuf, String> {
+    let mut resolved = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => resolved.push(prefix.as_os_str()),
+            std::path::Component::RootDir => resolved.push(std::path::MAIN_SEPARATOR.to_string()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                resolved.pop();
+            }
+            std::path::Component::Normal(name) => {
+                let candidate = resolved.join(name);
+                match fs::symlink_metadata(&candidate) {
+                    Ok(_) => {
+                        resolved = candidate.canonicalize().map_err(|error| {
+                            format!("cannot canonicalize {}: {error}", candidate.display())
+                        })?;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        resolved = candidate;
+                    }
+                    Err(error) => {
+                        return Err(format!(
+                            "cannot inspect acceptance path {}: {error}",
+                            candidate.display()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+fn validate_acceptance_directories(
+    source_dir: &Path,
+    report_dir: &Path,
+) -> Result<(PathBuf, PathBuf, Vec<PathBuf>), String> {
+    if !source_dir.is_absolute() || !report_dir.is_absolute() {
+        return Err("acceptance source and report directories must be absolute paths".to_string());
+    }
+    let source_dir = source_dir.canonicalize().map_err(|error| {
+        format!(
+            "cannot canonicalize source {}: {error}",
+            source_dir.display()
+        )
+    })?;
+    if !source_dir.is_dir() {
+        return Err(format!(
+            "acceptance source is not a directory: {}",
+            source_dir.display()
+        ));
+    }
+    let report_dir = resolve_acceptance_path_without_writes(report_dir)?;
+    if source_dir == report_dir
+        || source_dir.starts_with(&report_dir)
+        || report_dir.starts_with(&source_dir)
+    {
+        return Err(
+            "acceptance source and report directories must be separate and non-nested".to_string(),
+        );
+    }
+    fs::create_dir_all(&report_dir).map_err(|error| {
+        format!(
+            "cannot create report directory {}: {error}",
+            report_dir.display()
+        )
+    })?;
+    let report_dir = report_dir.canonicalize().map_err(|error| {
+        format!(
+            "cannot canonicalize report {}: {error}",
+            report_dir.display()
+        )
+    })?;
+    if !report_dir.is_dir() {
+        return Err(format!(
+            "acceptance report is not a directory: {}",
+            report_dir.display()
+        ));
+    }
+
+    let mut paths = Vec::with_capacity(84);
+    for index in 3680..=3763 {
+        let path = source_dir.join(format!("DSC_{index}.NEF"));
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("cannot read metadata for {}: {error}", path.display()))?;
+        if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+            return Err(format!(
+                "acceptance source must be a regular non-symlink file: {}",
+                path.display()
+            ));
+        }
+        path.to_str()
+            .ok_or_else(|| format!("acceptance source path is not UTF-8: {}", path.display()))?;
+        fs::File::open(&path).map_err(|error| {
+            format!("cannot read acceptance source {}: {error}", path.display())
+        })?;
+        virtual_tile::source_file_sha256(&path).map_err(|error| {
+            format!("cannot hash acceptance source {}: {error}", path.display())
+        })?;
+        paths.push(path);
+    }
+    Ok((source_dir, report_dir, paths))
+}
+
+fn select_unique_stack_report(report_dir: &Path) -> Result<PathBuf, String> {
+    let mut reports = fs::read_dir(report_dir)
+        .map_err(|error| {
+            format!(
+                "cannot read report directory {}: {error}",
+                report_dir.display()
+            )
+        })?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_str()?;
+            let regular = fs::symlink_metadata(&path)
+                .ok()
+                .is_some_and(|metadata| metadata.file_type().is_file());
+            (regular && name.starts_with("stack-report-") && name.ends_with(".json"))
+                .then_some(path)
+        })
+        .collect::<Vec<_>>();
+    reports.sort();
+    match reports.as_slice() {
+        [report] => Ok(report.clone()),
+        _ => Err(format!(
+            "expected exactly one regular stack-report-*.json, found {}: {:?}",
+            reports.len(),
+            reports
+        )),
+    }
+}
+
+#[test]
 #[ignore = "acceptance harness requires the supplied real dataset"]
 fn stack_acceptance_harness() {
     let source_dir = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR")
@@ -926,36 +1368,8 @@ fn stack_acceptance_harness() {
     let report_dir = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR")
         .map(PathBuf::from)
         .expect("RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR is required");
-    let source_dir = source_dir
-        .canonicalize()
-        .expect("acceptance source directory must exist");
-    let report_for_check = if report_dir.exists() {
-        report_dir
-            .canonicalize()
-            .expect("acceptance report directory must be canonicalizable")
-    } else {
-        report_dir.clone()
-    };
-    assert!(
-        !report_for_check.starts_with(&source_dir),
-        "acceptance report directory must not be inside the source directory"
-    );
-    fs::create_dir_all(&report_dir).expect("acceptance report directory must be writable");
-    let mut paths = Vec::with_capacity(84);
-    let mut missing = Vec::new();
-    for index in 3680..=3763 {
-        let name = format!("DSC_{index}.NEF");
-        let path = source_dir.join(&name);
-        if path.is_file() {
-            paths.push(path);
-        } else {
-            missing.push(name);
-        }
-    }
-    assert!(
-        missing.is_empty(),
-        "missing acceptance sources: {missing:?}"
-    );
+    let (source_dir, report_dir, paths) = validate_acceptance_directories(&source_dir, &report_dir)
+        .unwrap_or_else(|error| panic!("acceptance directory validation failed: {error}"));
     let before = acceptance_source_snapshot(&source_dir);
     let source_strings = paths
         .iter()
@@ -982,20 +1396,8 @@ fn stack_acceptance_harness() {
         before, after,
         "acceptance source directory changed during run"
     );
-    let report_path = fs::read_dir(&report_dir)
-        .expect("acceptance report directory should be readable")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "json")
-        })
-        .max_by_key(|path| {
-            fs::metadata(path)
-                .and_then(|metadata| metadata.modified())
-                .ok()
-        })
-        .expect("acceptance pipeline should write a Stack_Report JSON");
+    let report_path = select_unique_stack_report(&report_dir)
+        .unwrap_or_else(|error| panic!("acceptance report selection failed: {error}"));
     let report: StackReport = serde_json::from_slice(
         &fs::read(&report_path).expect("acceptance report should be readable"),
     )
@@ -9412,7 +9814,7 @@ fn relation_gate_oracle(
         && measurements.median_error_px.is_finite()
         && measurements.median_error_px <= 3.0
         && measurements.scale_ratio.is_finite()
-        && (0.80..=1.20).contains(&measurements.scale_ratio)
+        && (0.95..=1.05).contains(&measurements.scale_ratio)
         && measurements.spatial_support.is_finite()
         && measurements.spatial_support >= 0.20
         && measurements
@@ -9470,27 +9872,27 @@ fn relation_boundary_cases()
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: below(0.80),
+            scale_ratio: below(0.95),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: 0.80,
+            scale_ratio: 0.95,
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: above(0.80),
+            scale_ratio: above(0.95),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: below(1.20),
+            scale_ratio: below(1.05),
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: 1.20,
+            scale_ratio: 1.05,
             ..accepted
         },
         MeasurementsView {
-            scale_ratio: above(1.20),
+            scale_ratio: above(1.05),
             ..accepted
         },
         MeasurementsView {
@@ -10012,7 +10414,7 @@ fn relation_measurements_with_defects(
         measurements.median_error_px = above(3.0);
     }
     if defect_mask & (1 << 2) != 0 {
-        measurements.scale_ratio = above(1.20);
+        measurements.scale_ratio = above(1.05);
     }
     if defect_mask & (1 << 3) != 0 {
         measurements.spatial_support = below(0.20);

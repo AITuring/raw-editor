@@ -809,7 +809,6 @@ fn authoritative_pairs_reuse_the_station_relation_gates_without_side_effects() {
         virtual_tile_authoritative_pairs(&relations, &tiles, coverages),
         vec![(0, 1)]
     );
-
     let mut rejected = relation;
     rejected.homography = uniform_scale(1.25);
     let rejected_coverage = full_coverage(dimensions.0, dimensions.1);
@@ -826,6 +825,56 @@ fn authoritative_pairs_reuse_the_station_relation_gates_without_side_effects() {
             },
         )
         .is_empty()
+    );
+}
+
+#[test]
+fn virtual_tile_non_invertible_canonical_transform_is_summarized_once() {
+    let _run_scope = degradation::begin_run_scope();
+    let mut report = report::StationRelationsReport::default();
+    report.record_non_invertible_canonical_pair(0, 1);
+    report.record_non_invertible_canonical_pair(1, 0);
+    report.candidates = vec![sample_candidate_record()];
+    report.summarize_candidate_measurements();
+    assert_eq!(report.rejected_count, 1);
+    assert_eq!(report.unmeasured_count, 0);
+    assert_eq!(
+        report.rejected_by_reason[degradation::STATION_RELATION_NON_INVERTIBLE_CANONICAL_TRANSFORM],
+        1
+    );
+    assert_eq!(
+        report.rejected_by_failure_stage["canonical_transform_non_invertible"],
+        1
+    );
+    assert_eq!(
+        report.candidates[0].failure_stage,
+        "canonical_transform_non_invertible"
+    );
+    assert!(report.candidates[0].model_fitted);
+    assert!(
+        !report
+            .rejected_by_reason
+            .contains_key(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE)
+    );
+}
+
+#[test]
+fn virtual_tile_connectivity_reports_original_source_members() {
+    let stations = vec![
+        vec!["/raw/a.nef".to_string(), "/raw/b.nef".to_string()],
+        vec!["/raw/c.nef".to_string()],
+        vec!["/raw/d.nef".to_string(), "/raw/e.nef".to_string()],
+    ];
+    assert_eq!(
+        station_graph_components_from_members(&stations, &[(0, 1)]),
+        vec![
+            vec![
+                "/raw/a.nef".to_string(),
+                "/raw/b.nef".to_string(),
+                "/raw/c.nef".to_string(),
+            ],
+            vec!["/raw/d.nef".to_string(), "/raw/e.nef".to_string()],
+        ]
     );
 }
 
