@@ -2415,7 +2415,20 @@ fn station_transition_first_on_low_side(
     }
 }
 
-fn apply_station_seam_plans<F>(
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct StationSeamApplyStats {
+    changed_pixels: usize,
+    visited_pixels: usize,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StationSeamTraversal {
+    Corridor,
+    #[cfg(test)]
+    LegacyFullOverlap,
+}
+
+fn apply_station_seam_plans_with_traversal<F>(
     plans: &[StationSeamPlan],
     panorama: &mut Rgb32FImage,
     owner_map: &mut GrayImage,
@@ -2426,12 +2439,13 @@ fn apply_station_seam_plans<F>(
     offset_x: f64,
     offset_y: f64,
     residual: &residual_warp::ResidualWarp,
+    traversal: StationSeamTraversal,
     load_image: &mut F,
-) -> Result<usize, String>
+) -> Result<StationSeamApplyStats, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
-    let mut changed_pixels = 0usize;
+    let mut stats = StationSeamApplyStats::default();
     for plan in plans {
         let Some(first_index) = plan.first_owner.checked_sub(1).map(usize::from) else {
             continue;
@@ -2510,45 +2524,46 @@ where
                 first_on_low_side,
             ));
         }
-        for y in plan.min_y..=plan.max_y {
-            for x in plan.min_x..=plan.max_x {
+        for along in plan.along_min..=plan.along_max {
+            let seam = station_seam_cross_at(plan, along);
+            let (current_seam, _has_full_res_transition, first_on_low_side) = current_seam_by_along
+                .get(along.saturating_sub(plan.along_min) as usize)
+                .copied()
+                .unwrap_or_else(|| {
+                    (
+                        station_current_cross_at(plan, along),
+                        false,
+                        plan.first_on_low_side,
+                    )
+                });
+            // A station seam is a local boundary refinement, not permission
+            // to relabel a disconnected owner island. Visit only the integer
+            // strip between old and new boundaries, never the full overlap.
+            if (seam - current_seam).abs() > 32.0 {
+                continue;
+            }
+            let corridor_min = seam.min(current_seam).floor().max(f64::from(cross_min)) as u32;
+            let corridor_max = seam.max(current_seam).ceil().min(f64::from(cross_max)) as u32;
+            let (visit_min, visit_max) = match traversal {
+                StationSeamTraversal::Corridor => (corridor_min, corridor_max),
+                #[cfg(test)]
+                StationSeamTraversal::LegacyFullOverlap => (cross_min, cross_max),
+            };
+            for cross in visit_min..=visit_max {
+                stats.visited_pixels += 1;
+                if cross < corridor_min || cross > corridor_max {
+                    continue;
+                }
+                let (x, y) = match plan.orientation {
+                    SeamOrientation::Vertical => (cross, along),
+                    SeamOrientation::Horizontal => (along, cross),
+                };
                 let index = y as usize * panorama.width() as usize + x as usize;
                 let current_owner = *source_owner_ids.get(index).unwrap_or(&NO_OWNER);
                 if current_owner != first_owner && current_owner != second_owner {
                     continue;
                 }
-                let along = match plan.orientation {
-                    SeamOrientation::Vertical => y,
-                    SeamOrientation::Horizontal => x,
-                };
-                let cross = match plan.orientation {
-                    SeamOrientation::Vertical => x,
-                    SeamOrientation::Horizontal => y,
-                } as f64;
-                let seam = station_seam_cross_at(plan, along);
-                let (current_seam, _has_full_res_transition, first_on_low_side) =
-                    current_seam_by_along
-                        .get(along.saturating_sub(plan.along_min) as usize)
-                        .copied()
-                        .unwrap_or_else(|| {
-                            (
-                                station_current_cross_at(plan, along),
-                                false,
-                                plan.first_on_low_side,
-                            )
-                        });
-                // A station seam is a local boundary refinement, not
-                // permission to relabel a disconnected owner island. Only
-                // rewrite the strip between old and new boundaries when the
-                // displacement is within the validated 32px limit.
-                if (seam - current_seam).abs() > 32.0 {
-                    continue;
-                }
-                let corridor_min = seam.min(current_seam).floor().max(f64::from(cross_min));
-                let corridor_max = seam.max(current_seam).ceil().min(f64::from(cross_max));
-                if f64::from(cross) < corridor_min || f64::from(cross) > corridor_max {
-                    continue;
-                }
+                let cross = f64::from(cross);
                 let first_side = if first_on_low_side {
                     cross <= seam
                 } else {
@@ -2588,17 +2603,81 @@ where
                     )
                 };
                 if let Some((pixel, _)) = sampled {
-                    let index = y as usize * panorama.width() as usize + x as usize;
                     let start = index * 3;
                     panorama.as_mut()[start..start + 3].copy_from_slice(&pixel.0);
                     source_owner_ids[index] = desired_owner;
                     owner_map.as_mut()[index] = desired_owner.min(u16::from(u8::MAX)) as u8;
-                    changed_pixels += 1;
+                    stats.changed_pixels += 1;
                 }
             }
         }
     }
-    Ok(changed_pixels)
+    Ok(stats)
+}
+
+fn apply_station_seam_plans<F>(
+    plans: &[StationSeamPlan],
+    panorama: &mut Rgb32FImage,
+    owner_map: &mut GrayImage,
+    source_owner_ids: &mut [u16],
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    offset_x: f64,
+    offset_y: f64,
+    residual: &residual_warp::ResidualWarp,
+    load_image: &mut F,
+) -> Result<StationSeamApplyStats, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    apply_station_seam_plans_with_traversal(
+        plans,
+        panorama,
+        owner_map,
+        source_owner_ids,
+        images,
+        global_homographies,
+        projection,
+        offset_x,
+        offset_y,
+        residual,
+        StationSeamTraversal::Corridor,
+        load_image,
+    )
+}
+
+#[cfg(test)]
+fn apply_station_seam_plans_legacy_full_scan<F>(
+    plans: &[StationSeamPlan],
+    panorama: &mut Rgb32FImage,
+    owner_map: &mut GrayImage,
+    source_owner_ids: &mut [u16],
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    offset_x: f64,
+    offset_y: f64,
+    residual: &residual_warp::ResidualWarp,
+    load_image: &mut F,
+) -> Result<StationSeamApplyStats, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    apply_station_seam_plans_with_traversal(
+        plans,
+        panorama,
+        owner_map,
+        source_owner_ids,
+        images,
+        global_homographies,
+        projection,
+        offset_x,
+        offset_y,
+        residual,
+        StationSeamTraversal::LegacyFullOverlap,
+        load_image,
+    )
 }
 
 pub fn progressive_seam_stitcher<R: Runtime, F>(
@@ -3743,7 +3822,7 @@ where
             println!(
                 "  - Station seam solver: plans={}, changed_owner_pixels={}",
                 plans.len(),
-                changed
+                changed.changed_pixels
             );
         }
     }
@@ -12195,7 +12274,7 @@ mod interpolation_tests {
             &mut reload,
         )
         .expect("apply station seam");
-        assert!(changed > 0);
+        assert!(changed.changed_pixels > 0);
         assert_eq!(
             coverage, coverage_before,
             "seam application changed coverage"
@@ -12212,6 +12291,141 @@ mod interpolation_tests {
                 );
             }
         }
+    }
+
+    fn seam_application_fixture(
+        width: u32,
+        height: u32,
+        orientation: SeamOrientation,
+        reversed: bool,
+        legacy: bool,
+    ) -> (Rgb32FImage, GrayImage, Vec<u16>, StationSeamApplyStats) {
+        let mut first = geometry_test_image(0, None);
+        let mut second = geometry_test_image(1, None);
+        first.width = width;
+        first.height = height;
+        second.width = width;
+        second.height = height;
+        let images = [&first, &second];
+        let homographies = HashMap::from([
+            (first.id, Matrix3::identity()),
+            (second.id, Matrix3::identity()),
+        ]);
+        let sources = [
+            Rgb32FImage::from_fn(width, height, |x, y| {
+                Rgb([0.2, x as f32 / width as f32, y as f32 / height as f32])
+            }),
+            Rgb32FImage::from_fn(width, height, |x, y| {
+                Rgb([0.8, y as f32 / height as f32, x as f32 / width as f32])
+            }),
+        ];
+        let (cross_max, along_max) = match orientation {
+            SeamOrientation::Vertical => (width - 1, height - 1),
+            SeamOrientation::Horizontal => (height - 1, width - 1),
+        };
+        let current = cross_max / 2;
+        let owner_at = |x: u32, y: u32| {
+            let cross = match orientation {
+                SeamOrientation::Vertical => x,
+                SeamOrientation::Horizontal => y,
+            };
+            if (cross < current) != reversed { 1 } else { 2 }
+        };
+        let mut owners = (0..height)
+            .flat_map(|y| (0..width).map(move |x| owner_at(x, y)))
+            .collect::<Vec<_>>();
+        // Non-pair provenance inside the corridor must remain untouched.
+        let hole = (height / 3 * width + width / 2 + 2) as usize;
+        owners[hole] = NO_OWNER;
+        let mut owner_map = GrayImage::from_raw(
+            width,
+            height,
+            owners.iter().map(|owner| (*owner).min(255) as u8).collect(),
+        )
+        .unwrap();
+        let mut panorama = Rgb32FImage::from_fn(width, height, |x, y| {
+            let owner = owners[(y * width + x) as usize];
+            if owner == NO_OWNER {
+                Rgb([0.0; 3])
+            } else {
+                *sources[usize::from(owner - 1)].get_pixel(x, y)
+            }
+        });
+        let plan = StationSeamPlan {
+            first_owner: 1,
+            second_owner: 2,
+            min_x: 0,
+            max_x: width - 1,
+            min_y: 0,
+            max_y: height - 1,
+            along_min: 0,
+            along_max,
+            orientation,
+            cross_samples: vec![f64::from(current + 7), f64::from(current + 11)],
+            current_cross_samples: vec![f64::from(current); 2],
+            first_on_low_side: !reversed,
+        };
+        let mut load = |image: &ImageInfo| Ok(sources[image.id].clone());
+        let residual = residual_warp::ResidualWarp::new();
+        let stats = if legacy {
+            apply_station_seam_plans_legacy_full_scan(
+                &[plan],
+                &mut panorama,
+                &mut owner_map,
+                &mut owners,
+                &images,
+                &homographies,
+                Projection::Planar,
+                0.0,
+                0.0,
+                &residual,
+                &mut load,
+            )
+        } else {
+            apply_station_seam_plans(
+                &[plan],
+                &mut panorama,
+                &mut owner_map,
+                &mut owners,
+                &images,
+                &homographies,
+                Projection::Planar,
+                0.0,
+                0.0,
+                &residual,
+                &mut load,
+            )
+        }
+        .unwrap();
+        (panorama, owner_map, owners, stats)
+    }
+
+    #[test]
+    fn local32_corridor_matches_legacy_full_scan_in_all_orientations() {
+        for (orientation, reversed) in [
+            (SeamOrientation::Vertical, false),
+            (SeamOrientation::Vertical, true),
+            (SeamOrientation::Horizontal, false),
+            (SeamOrientation::Horizontal, true),
+        ] {
+            let optimized = seam_application_fixture(96, 72, orientation, reversed, false);
+            let legacy = seam_application_fixture(96, 72, orientation, reversed, true);
+            assert_eq!(optimized.0, legacy.0);
+            assert_eq!(optimized.1, legacy.1);
+            assert_eq!(optimized.2, legacy.2);
+            assert_eq!(optimized.3.changed_pixels, legacy.3.changed_pixels);
+        }
+    }
+
+    #[test]
+    fn local32_corridor_visits_scale_with_seam_length_not_overlap_area() {
+        let (_, _, _, optimized) =
+            seam_application_fixture(2_048, 128, SeamOrientation::Vertical, false, false);
+        let (_, _, _, legacy) =
+            seam_application_fixture(2_048, 128, SeamOrientation::Vertical, false, true);
+        assert!(optimized.visited_pixels <= 128 * 33, "{optimized:?}");
+        assert_eq!(legacy.visited_pixels, 2_048 * 128);
+        assert!(legacy.visited_pixels > optimized.visited_pixels * 100);
     }
 
     #[test]
