@@ -1584,7 +1584,6 @@ struct StationSeamPlan {
     along_max: u32,
     orientation: SeamOrientation,
     cross_samples: Vec<f64>,
-    current_cross_samples: Vec<f64>,
     first_on_low_side: bool,
 }
 
@@ -1974,7 +1973,6 @@ where
                 along_max,
                 orientation,
                 cross_samples: vec![center, center],
-                current_cross_samples: Vec::new(),
                 first_on_low_side,
             });
             continue;
@@ -2180,12 +2178,10 @@ where
         // and seam objective intact, but restores pixel-level placement for a
         // stroke that is narrower than the analysis-grid step.
         let mut cross_samples = Vec::new();
-        let mut current_cross_samples = Vec::new();
         if path_is_valid {
             let refinement_radius = step.saturating_mul(2).max(2);
             let sample_count = finite_along_max.saturating_sub(finite_along_min) as usize + 1;
             cross_samples.reserve(sample_count);
-            current_cross_samples.reserve(sample_count);
             for along in finite_along_min..=finite_along_max {
                 let coarse_cross = station_seam_series_at(
                     &coarse_cross_samples,
@@ -2277,22 +2273,9 @@ where
                     }
                 }
                 cross_samples.push(f64::from(best.0));
-                current_cross_samples.push(
-                    current_seam
-                        .map(f64::from)
-                        .unwrap_or_else(|| f64::from(best.0)),
-                );
             }
         } else {
             cross_samples = coarse_cross_samples;
-            current_cross_samples = (finite_start..=finite_end)
-                .enumerate()
-                .map(|(offset, index)| {
-                    current_crosses[index]
-                        .map(f64::from)
-                        .unwrap_or(cross_samples[offset])
-                })
-                .collect::<Vec<_>>();
         }
         let plan = StationSeamPlan {
             first_owner: owner_pair.0 as u16,
@@ -2305,7 +2288,6 @@ where
             along_max: finite_along_max,
             orientation,
             cross_samples,
-            current_cross_samples,
             first_on_low_side,
         };
         if !path_is_valid {
@@ -2333,92 +2315,80 @@ fn station_seam_cross_at(plan: &StationSeamPlan, along: u32) -> f64 {
     station_seam_series_at(&plan.cross_samples, plan.along_min, plan.along_max, along)
 }
 
-fn station_current_cross_at(plan: &StationSeamPlan, along: u32) -> f64 {
-    if plan.current_cross_samples.is_empty() {
-        return station_seam_cross_at(plan, along);
-    }
-    station_seam_series_at(
-        &plan.current_cross_samples,
-        plan.along_min,
-        plan.along_max,
-        along,
-    )
-}
-
-/// Read the owner transition from the full-resolution ledger for one overlap
-/// row/column. A coarse seam row can contain several disconnected islands of
-/// the same two owners, so the sampled transition is not always the boundary
-/// that the final owner map actually contains. Select the real transition
-/// nearest the planned seam while retaining the existing locality prior.
+/// Read the nearest owner transition that can affect one overlap row/column.
+/// Production discovery is restricted to the exact ±32px application band;
+/// one preceding owner read is enough to detect a transition at its low edge.
 fn station_current_transition_nearest(
     plan: &StationSeamPlan,
     source_owner_ids: &[u16],
     out_width: u32,
     along: u32,
     target: f64,
-) -> Option<u32> {
+    maximum_displacement: Option<f64>,
+) -> (Option<(u32, bool)>, usize) {
+    if !target.is_finite() {
+        return (None, 0);
+    }
     let (cross_min, cross_max) = match plan.orientation {
         SeamOrientation::Vertical => (plan.min_x, plan.max_x),
         SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
     };
+    let (transition_min, transition_max) =
+        maximum_displacement.map_or((cross_min, cross_max), |maximum_displacement| {
+            (
+                (target - maximum_displacement)
+                    .ceil()
+                    .max(f64::from(cross_min)) as u32,
+                (target + maximum_displacement)
+                    .floor()
+                    .min(f64::from(cross_max)) as u32,
+            )
+        });
+    if transition_min > transition_max {
+        return (None, 0);
+    }
+    let scan_min = transition_min.saturating_sub(1).max(cross_min);
     let mut previous = None;
     let mut transitions = Vec::new();
-    for cross in cross_min..=cross_max {
+    let mut owner_reads = 0;
+    for cross in scan_min..=transition_max {
         let (x, y) = match plan.orientation {
             SeamOrientation::Vertical => (cross, along),
             SeamOrientation::Horizontal => (along, cross),
         };
         let index = y as usize * out_width as usize + x as usize;
         let owner = source_owner_ids.get(index).copied().unwrap_or(NO_OWNER);
-        if let Some(prior) = previous
+        owner_reads += 1;
+        if cross >= transition_min
+            && let Some(prior) = previous
             && owner != prior
             && [owner, prior].contains(&plan.first_owner)
             && [owner, prior].contains(&plan.second_owner)
         {
-            transitions.push(cross);
+            transitions.push((cross, prior == plan.first_owner));
         }
         previous = Some(owner);
     }
-    transitions
-        .into_iter()
-        .min_by_key(|cross| cross.abs_diff(target.round() as u32))
-}
-
-fn station_transition_first_on_low_side(
-    plan: &StationSeamPlan,
-    source_owner_ids: &[u16],
-    out_width: u32,
-    along: u32,
-    transition: u32,
-) -> Option<bool> {
-    let (cross_min, cross_max) = match plan.orientation {
-        SeamOrientation::Vertical => (plan.min_x, plan.max_x),
-        SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
-    };
-    if transition <= cross_min || transition > cross_max {
-        return None;
-    }
-    let owner_at = |cross: u32| {
-        let (x, y) = match plan.orientation {
-            SeamOrientation::Vertical => (cross, along),
-            SeamOrientation::Horizontal => (along, cross),
-        };
-        source_owner_ids
-            .get(y as usize * out_width as usize + x as usize)
-            .copied()
-            .unwrap_or(NO_OWNER)
-    };
-    match (owner_at(transition - 1), owner_at(transition)) {
-        (first, second) if first == plan.first_owner && second == plan.second_owner => Some(true),
-        (first, second) if first == plan.second_owner && second == plan.first_owner => Some(false),
-        _ => None,
-    }
+    (
+        transitions
+            .into_iter()
+            .min_by_key(|(cross, _)| cross.abs_diff(target.round() as u32)),
+        owner_reads,
+    )
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct StationSeamApplyStats {
     changed_pixels: usize,
-    visited_pixels: usize,
+    discovery_owner_reads: usize,
+    rewrite_visits: usize,
+}
+
+impl StationSeamApplyStats {
+    #[cfg(test)]
+    fn total_owner_reads(self) -> usize {
+        self.discovery_owner_reads + self.rewrite_visits
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2486,10 +2456,10 @@ where
             SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
         };
         // The current owner transition is a property of one overlap
-        // scanline/column, not of each pixel on that scanline.  Cache it once
-        // per along-coordinate; recomputing the full cross-section inside the
-        // pixel loop turns this local seam pass into an accidental quadratic
-        // walk over the overlap.
+        // scanline/column, not of each pixel on that scanline. Production
+        // discovery reads only transitions close enough to pass the exact
+        // 32px displacement gate; the legacy traversal remains a full-scan
+        // oracle for byte-equivalence tests.
         let mut current_seam_by_along = Vec::with_capacity(
             plan.along_max
                 .saturating_sub(plan.along_min)
@@ -2497,45 +2467,32 @@ where
         );
         for along in plan.along_min..=plan.along_max {
             let seam = station_seam_cross_at(plan, along);
-            let current_transition = station_current_transition_nearest(
+            let maximum_displacement = match traversal {
+                StationSeamTraversal::Corridor => Some(32.0),
+                #[cfg(test)]
+                StationSeamTraversal::LegacyFullOverlap => None,
+            };
+            let (current_transition, owner_reads) = station_current_transition_nearest(
                 plan,
                 source_owner_ids,
                 panorama.width(),
                 along,
                 seam,
+                maximum_displacement,
             );
-            let current_seam = current_transition
-                .map(f64::from)
-                .unwrap_or_else(|| station_current_cross_at(plan, along));
-            let first_on_low_side = current_transition
-                .and_then(|transition| {
-                    station_transition_first_on_low_side(
-                        plan,
-                        source_owner_ids,
-                        panorama.width(),
-                        along,
-                        transition,
-                    )
-                })
-                .unwrap_or(plan.first_on_low_side);
-            current_seam_by_along.push((
-                current_seam,
-                current_transition.is_some(),
-                first_on_low_side,
-            ));
+            stats.discovery_owner_reads += owner_reads;
+            current_seam_by_along.push(current_transition);
         }
         for along in plan.along_min..=plan.along_max {
             let seam = station_seam_cross_at(plan, along);
-            let (current_seam, _has_full_res_transition, first_on_low_side) = current_seam_by_along
+            let Some((current_transition, first_on_low_side)) = current_seam_by_along
                 .get(along.saturating_sub(plan.along_min) as usize)
                 .copied()
-                .unwrap_or_else(|| {
-                    (
-                        station_current_cross_at(plan, along),
-                        false,
-                        plan.first_on_low_side,
-                    )
-                });
+                .flatten()
+            else {
+                continue;
+            };
+            let current_seam = f64::from(current_transition);
             // A station seam is a local boundary refinement, not permission
             // to relabel a disconnected owner island. Visit only the integer
             // strip between old and new boundaries, never the full overlap.
@@ -2550,7 +2507,7 @@ where
                 StationSeamTraversal::LegacyFullOverlap => (cross_min, cross_max),
             };
             for cross in visit_min..=visit_max {
-                stats.visited_pixels += 1;
+                stats.rewrite_visits += 1;
                 if cross < corridor_min || cross > corridor_max {
                     continue;
                 }
@@ -12298,6 +12255,9 @@ mod interpolation_tests {
         height: u32,
         orientation: SeamOrientation,
         reversed: bool,
+        transitions: &[u32],
+        cross_samples: [f64; 2],
+        include_non_pair_hole: bool,
         legacy: bool,
     ) -> (Rgb32FImage, GrayImage, Vec<u16>, StationSeamApplyStats) {
         let mut first = geometry_test_image(0, None);
@@ -12323,20 +12283,34 @@ mod interpolation_tests {
             SeamOrientation::Vertical => (width - 1, height - 1),
             SeamOrientation::Horizontal => (height - 1, width - 1),
         };
-        let current = cross_max / 2;
+        assert!(transitions.iter().all(|&cross| cross <= cross_max));
         let owner_at = |x: u32, y: u32| {
             let cross = match orientation {
                 SeamOrientation::Vertical => x,
                 SeamOrientation::Horizontal => y,
             };
-            if (cross < current) != reversed { 1 } else { 2 }
+            let low_owner = if reversed { 2 } else { 1 };
+            let high_owner = if reversed { 1 } else { 2 };
+            if transitions
+                .iter()
+                .filter(|&&transition| cross >= transition)
+                .count()
+                % 2
+                == 0
+            {
+                low_owner
+            } else {
+                high_owner
+            }
         };
         let mut owners = (0..height)
             .flat_map(|y| (0..width).map(move |x| owner_at(x, y)))
             .collect::<Vec<_>>();
         // Non-pair provenance inside the corridor must remain untouched.
-        let hole = (height / 3 * width + width / 2 + 2) as usize;
-        owners[hole] = NO_OWNER;
+        if include_non_pair_hole {
+            let hole = (height / 3 * width + width / 2 + 2) as usize;
+            owners[hole] = NO_OWNER;
+        }
         let mut owner_map = GrayImage::from_raw(
             width,
             height,
@@ -12361,8 +12335,7 @@ mod interpolation_tests {
             along_min: 0,
             along_max,
             orientation,
-            cross_samples: vec![f64::from(current + 7), f64::from(current + 11)],
-            current_cross_samples: vec![f64::from(current); 2],
+            cross_samples: cross_samples.to_vec(),
             first_on_low_side: !reversed,
         };
         let mut load = |image: &ImageInfo| Ok(sources[image.id].clone());
@@ -12401,31 +12374,129 @@ mod interpolation_tests {
     }
 
     #[test]
-    fn local32_corridor_matches_legacy_full_scan_in_all_orientations() {
+    fn local32_corridor_matches_legacy_full_scan_for_transition_layouts() {
         for (orientation, reversed) in [
             (SeamOrientation::Vertical, false),
             (SeamOrientation::Vertical, true),
             (SeamOrientation::Horizontal, false),
             (SeamOrientation::Horizontal, true),
         ] {
-            let optimized = seam_application_fixture(96, 72, orientation, reversed, false);
-            let legacy = seam_application_fixture(96, 72, orientation, reversed, true);
-            assert_eq!(optimized.0, legacy.0);
-            assert_eq!(optimized.1, legacy.1);
-            assert_eq!(optimized.2, legacy.2);
-            assert_eq!(optimized.3.changed_pixels, legacy.3.changed_pixels);
+            let (width, height) = (96, 72);
+            let cross_max = match orientation {
+                SeamOrientation::Vertical => width - 1,
+                SeamOrientation::Horizontal => height - 1,
+            };
+            let center = cross_max / 2;
+            let cases = [
+                (
+                    "nearest transition inside 32",
+                    vec![center],
+                    [f64::from(center) + 7.25, f64::from(center) + 11.75],
+                    true,
+                    false,
+                ),
+                (
+                    "only transition outside 32",
+                    vec![2],
+                    [f64::from(cross_max - 2); 2],
+                    false,
+                    true,
+                ),
+                (
+                    "multiple transitions inside and outside",
+                    vec![2, center - 20, center + 5, cross_max - 2],
+                    [f64::from(center) + 12.4, f64::from(center) + 13.6],
+                    false,
+                    false,
+                ),
+                (
+                    "low endpoint and fractional rounding",
+                    vec![1, cross_max],
+                    [33.0, 33.49],
+                    false,
+                    false,
+                ),
+                (
+                    "high endpoint and fractional rounding",
+                    vec![1, cross_max],
+                    [f64::from(cross_max) - 32.49, f64::from(cross_max) - 32.0],
+                    false,
+                    false,
+                ),
+            ];
+            for (name, transitions, cross_samples, include_hole, expect_unchanged) in cases {
+                let optimized = seam_application_fixture(
+                    width,
+                    height,
+                    orientation,
+                    reversed,
+                    &transitions,
+                    cross_samples,
+                    include_hole,
+                    false,
+                );
+                let legacy = seam_application_fixture(
+                    width,
+                    height,
+                    orientation,
+                    reversed,
+                    &transitions,
+                    cross_samples,
+                    include_hole,
+                    true,
+                );
+                assert_eq!(optimized.0, legacy.0, "panorama: {name}");
+                assert_eq!(optimized.1, legacy.1, "owner map: {name}");
+                assert_eq!(optimized.2, legacy.2, "owner ledger: {name}");
+                assert_eq!(
+                    optimized.3.changed_pixels, legacy.3.changed_pixels,
+                    "changed count: {name}"
+                );
+                if expect_unchanged {
+                    assert_eq!(optimized.3.changed_pixels, 0, "{name}");
+                    assert_eq!(optimized.3.rewrite_visits, 0, "{name}");
+                }
+            }
         }
     }
 
     #[test]
-    fn local32_corridor_visits_scale_with_seam_length_not_overlap_area() {
-        let (_, _, _, optimized) =
-            seam_application_fixture(2_048, 128, SeamOrientation::Vertical, false, false);
-        let (_, _, _, legacy) =
-            seam_application_fixture(2_048, 128, SeamOrientation::Vertical, false, true);
-        assert!(optimized.visited_pixels <= 128 * 33, "{optimized:?}");
-        assert_eq!(legacy.visited_pixels, 2_048 * 128);
-        assert!(legacy.visited_pixels > optimized.visited_pixels * 100);
+    fn local32_total_owner_reads_scale_with_seam_length_not_cross_extent() {
+        for orientation in [SeamOrientation::Vertical, SeamOrientation::Horizontal] {
+            let run = |cross_extent: u32, legacy: bool| {
+                let (width, height) = match orientation {
+                    SeamOrientation::Vertical => (cross_extent, 128),
+                    SeamOrientation::Horizontal => (128, cross_extent),
+                };
+                let transition = cross_extent / 2;
+                seam_application_fixture(
+                    width,
+                    height,
+                    orientation,
+                    false,
+                    &[transition],
+                    [f64::from(transition) + 7.0, f64::from(transition) + 11.0],
+                    false,
+                    legacy,
+                )
+                .3
+            };
+            let narrow = run(256, false);
+            let wide = run(2_048, false);
+            let legacy = run(2_048, true);
+            let seam_length = 128;
+            let fixed_reads_per_along = 66 + 33;
+            assert_eq!(wide.total_owner_reads(), narrow.total_owner_reads());
+            assert!(
+                wide.total_owner_reads() <= seam_length * fixed_reads_per_along,
+                "{wide:?}"
+            );
+            assert!(wide.discovery_owner_reads <= seam_length * 66, "{wide:?}");
+            assert!(wide.rewrite_visits <= seam_length * 33, "{wide:?}");
+            assert_eq!(legacy.discovery_owner_reads, 2_048 * seam_length);
+            assert_eq!(legacy.rewrite_visits, 2_048 * seam_length);
+            assert!(legacy.total_owner_reads() > wide.total_owner_reads() * 30);
+        }
     }
 
     #[test]
