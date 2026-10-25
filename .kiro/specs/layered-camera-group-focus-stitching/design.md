@@ -1,6 +1,8 @@
 # Design Document
 
-## Overview
+## 已否决研究路径（2026-10-25）
+
+QG-aligned owner coherent-region Option B 与 shared-world spatial tone field 均未达到现有联合画质门槛，因此只保留为研究结论，不是待接线的 production 设计。Owner 求解继续使用现有通用规则并接受 `owner_sharpness_coverage >= 0.99` 的原始门槛；Tone_Harmonizer 保持 safe shared-world affine，在空间场无法同时满足 boundary 与 owner Source_RAW fidelity 时回退 identity。少于 16 个独立 observation 或 holdout P95 未改善的 station pose/Residual_Warp 也保持 identity，不进入 production。
 
 本设计把当前混在一条 mosaic 流程里的「机位内焦平面选择」与「机位间几何拼接」拆成两层，
 并且是**在现有代码上做增量改造**：现有的证据驱动分组、原生分辨率 patch refinement、
@@ -2653,11 +2655,9 @@ flowchart LR
 8% 调整为 16%；站位关系的内点、重投影误差、尺度、覆盖和结构判据保持不变。搜索仍受
 固定上限和瓦片尺寸共同约束，不转为无界搜索。
 
-
 2026-10-12 原尺寸镜头几何补充：`/Volumes/2023西安/152` 的 61 张 NEF 使用 Nikon Z 7_2、NIKKOR Z 24-120mm f/4 S、24mm。共同 RAW 加载入口此前只执行默认显色，没有应用镜头畸变标定；原尺寸 station 2→3 的匹配点存在随位置变化的残差，最终仅 579 点和 8.98% 空间支持。用自带 `mil-nikon.xml` 的真实 PTLens 标定做诊断对照后，5 个原先失败的连接全部通过原有几何/像素门槛，2→3 为 1,429 点、1.93px 中位误差。
 
 `StackLensCalibration` 只接受精确型号和相同传感器裁切、画幅比例、有效焦段及单调 rectilinear PTLens 标定，半径单位为原图短边一半，无艺术倍率。共同 `load_prepared_stack_source` 在 RAW 显色后执行一次 Catmull-Rom 光学校正，分析及重新加载的渲染参考使用同一结果。依据原片全部边界逆映射扩展画布；无物理样本的外角保持无覆盖黑值，由既有有效采样判据排除。此光学校正属于原片准备，Virtual_Tile→世界坐标仍只进行一次采样；完整输出质量必须重新与相同准备流程的 owner 参考验证。缓存管线版本提升为 `stack-2026.10.12.3`。该对照只证明候选修复，完整原尺寸复测仍在执行。
-
 
 线性 RAW 准备补充：仅在整批 RAW 的相机型号一致且曝光元数据完整时，用准确有理数
 `exposure_time × ISO / f_number²` 的中位数作为统一参考，在 gamma 前应用曝光增益。
@@ -2669,12 +2669,10 @@ flowchart LR
 要求往返误差不超过 1 个原生像素，再拟合单应性并复核原有内点与空间支持门槛。
 降采样关系只能提供搜索初值，不能把低分辨率往返精度当作原生配准精度。
 
-
 质量参考映射补充：`FocusStackTileMasks` 记录各 Source_RAW 实际应用的站内平移、原生局部场
 和前景移动。质量参考先逆前景移动，再取原生局部场、撤销站内平移并加回机位采样原点，
 最后调用与 `render_focus_layer` 共用的单应性/局部边带逆映射取得原片坐标。
 该记录只用于来源参考采样，不改变融合像素或允许的残差对齐上限；不保留额外全尺寸 RGB 副本。
-
 
 原生精修采样补充：先用投影层测量站内平移和局部场，最终候选像素将这些逆映射合并到原片
 坐标，直接采样准备后的 Source_RAW 一次；不再对已投影层做双线性二次变形。

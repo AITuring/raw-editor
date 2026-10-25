@@ -1,5 +1,15 @@
 # 连续画作参考验收记录（2026-09-18）
 
+## 2026-10-25 验证清理结论
+
+以下数字来自清理前保留的真实素材报告，只用于说明已验证行为和已知限制；清理分支不得把它们冒充为本分支的新实跑结果。
+
+- 84 张自动模式保持 Station Relation 尺度闭区间 `[0.95, 1.05]`。多假设 projective/affine/similarity polish 将结果从 8 条关系、20 个分量改善到 11 条关系、17 个分量，但 28 个机位仍不连通，因此在 fusion 前拒绝。
+- Langyuan-10 的 final-world station seam 使用 RGB、Coverage 边界和笔画梯度代价，并只改写旧/新边界之间不超过 32px 的条带。接缝指标改善，但 owner 与有效像素仍失败；production boundary evidence 仍不足，Residual_Warp 保持 identity。
+- Wenyuan-10 在严格尺度门槛下达到 3/3 Station Relation 和单一分量。对齐输出与 Source_RAW reference 共用实测 Local_Scale 后，gradient 从 32/256 失败修复为 256/256 通过；owner coverage 仍约 `0.745873`，safe tone 的最大边界 Delta-E00 仍约 `18.5046`。
+- QG-aligned owner region、owner smoothness/hard-terminal/probe-mean/content-region/replay 以及 spatial tone field 均未通过联合画质门槛，不进入 production。原始 owner `>=0.99` 要求不变；production tone 保持 shared-world affine，并在空间候选不可行时使用 identity fallback。
+- 基于不足 16 个独立 observation 或 holdout 未改善的 pose/Residual_Warp 变体不进入 production。边界采样只接受实际 accepted seam、Coverage 与 Source_RAW provenance，并使用固定 `±2px` cross-section；已否决的宽窗行为不保留。
+
 本文记录一次针对长幅平面画作的参考驱动验收，以及为该类输入保留在生产路径中的修复。
 参考文件只用于建立可信几何和诊断对照；生产拼接器不会把参考图像像素复制进结果。
 

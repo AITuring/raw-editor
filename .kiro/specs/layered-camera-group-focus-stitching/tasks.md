@@ -141,7 +141,13 @@
   已检查整图及六个裁切；画芯的大块溢出和色调块改善，框线局部错位与边界色差仍存在。
   11.3、13.2、15.8 和 17.5 保持未完成，不以导出测试通过冒充质量门禁通过。
 
-## Tasks
+## 验证清理记录（2026-10-25）
+
+- 保留批准的最终 Station Relation 闭区间 `[0.95,1.05]`、canonical relation view、完整共享 gate、奇异变换记账、写入前 acceptance preflight 与 decoded verdict。
+- 保留多假设 polish 与 fully gated prior-free promotion。最后一次清理前 84 张实测为 28 stations、11 accepted、17 components，仍在 fusion 前拒绝；清理分支未把该结果记为通过。
+- 保留 planner 在标记 cluster repaired 前过滤越界 proposal、精确 32px sharpness window、Langyuan local32 station seam、固定 `±2px` provenance-aware boundary sampler，以及 Wenyuan shared-Local_Scale gradient 修复。
+- Wenyuan 清理前实测为 3/3 relation、gradient 256/256；owner 约 `0.745873`、safe tone max Delta-E00 约 `18.5046` 仍是已知限制。Langyuan owner/effective-pixel 与 boundary evidence 仍未通过，Residual_Warp 保持 identity。
+- QG-aligned owner Option B 与 spatial tone 只作为否定性研究结论：前者引入边界回归或无法形成 8 个安全 region，后者与 owner Source_RAW fidelity 的可行区间不相交。它们不是 active requirement，也没有 production adapter。
 
 - [x] 1. 阶段 0：一致性清理与观测骨架（无行为变更）
 
