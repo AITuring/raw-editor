@@ -20,7 +20,7 @@ use crate::panorama_stitching::{FOCUS_FOREGROUND_LUMA_THRESHOLD, FocusLayerWarp,
 use image::{GrayImage, Rgb, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
@@ -1550,7 +1550,7 @@ struct SeamContext<'a> {
     exposure: &'a ExposureCompensation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum SeamOrientation {
     Vertical,
     Horizontal,
@@ -1567,11 +1567,24 @@ struct SeamInfo {
     max_y: u32,
 }
 
-/// A seam solved on an accepted Virtual_Tile overlap.  The path is sampled in
-/// output-world pixels, with one cross-axis coordinate per along-axis sample.
-/// Keeping the plan separate from the pixel rewrite lets the compositor solve
-/// every relation deterministically before it reloads only the two source
-/// tiles needed to apply the result.
+/// One exact source-backed rewrite retained while both relation endpoints are
+/// resident during planning. Samples are ordered by `(along, cross)` and are
+/// bounded to the strip between the current and solved seam.
+#[derive(Debug, Clone)]
+struct StationSeamSample {
+    x: u32,
+    y: u32,
+    expected_owner: u16,
+    replacement_owner: u16,
+    pixel: Rgb<f32>,
+    source_image_id: usize,
+    source_point: Point2<f64>,
+    covered: bool,
+}
+
+/// A seam solved on an accepted Virtual_Tile overlap. The path and its exact
+/// replacement samples are materialized while the endpoint tiles are loaded,
+/// so application never renders either endpoint again.
 #[derive(Debug, Clone)]
 struct StationSeamPlan {
     first_owner: u16,
@@ -1584,6 +1597,101 @@ struct StationSeamPlan {
     along_max: u32,
     orientation: SeamOrientation,
     cross_samples: Vec<f64>,
+    replacement_samples: Vec<StationSeamSample>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StationOwnerTransition {
+    cross: u32,
+    low_owner: u16,
+}
+
+/// Reusable index of every provenance-bearing hard owner transition. Building
+/// it reads the owner ledger exactly once; relation planning then visits only
+/// transitions for its owner pair, orientation, and requested scanline.
+#[derive(Debug, Default)]
+struct StationOwnerTransitionIndex {
+    by_scanline: BTreeMap<(u16, u16, SeamOrientation, u32), Vec<StationOwnerTransition>>,
+    owner_reads: usize,
+    indexed_transitions: usize,
+}
+
+impl StationOwnerTransitionIndex {
+    fn build(owners: &[u16], width: u32, height: u32) -> Self {
+        let mut index = Self::default();
+        let stride = width as usize;
+        for y in 0..height {
+            for x in 0..width {
+                let offset = y as usize * stride + x as usize;
+                let owner = owners.get(offset).copied().unwrap_or(NO_OWNER);
+                index.owner_reads += 1;
+                if owner == NO_OWNER {
+                    continue;
+                }
+                if x > 0 {
+                    let low_owner = owners.get(offset - 1).copied().unwrap_or(NO_OWNER);
+                    index.insert(SeamOrientation::Vertical, y, x, low_owner, owner);
+                }
+                if y > 0 {
+                    let low_owner = owners
+                        .get(offset.saturating_sub(stride))
+                        .copied()
+                        .unwrap_or(NO_OWNER);
+                    index.insert(SeamOrientation::Horizontal, x, y, low_owner, owner);
+                }
+            }
+        }
+        index
+    }
+
+    fn insert(
+        &mut self,
+        orientation: SeamOrientation,
+        along: u32,
+        cross: u32,
+        low_owner: u16,
+        high_owner: u16,
+    ) {
+        if low_owner == NO_OWNER || high_owner == NO_OWNER || low_owner == high_owner {
+            return;
+        }
+        let pair = (low_owner.min(high_owner), low_owner.max(high_owner));
+        self.by_scanline
+            .entry((pair.0, pair.1, orientation, along))
+            .or_default()
+            .push(StationOwnerTransition { cross, low_owner });
+        self.indexed_transitions += 1;
+    }
+
+    fn query(
+        &self,
+        first_owner: u16,
+        second_owner: u16,
+        orientation: SeamOrientation,
+        along: u32,
+        cross_min: u32,
+        cross_max: u32,
+    ) -> (&[StationOwnerTransition], usize) {
+        let pair = (first_owner.min(second_owner), first_owner.max(second_owner));
+        let transitions = self
+            .by_scanline
+            .get(&(pair.0, pair.1, orientation, along))
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let start = transitions.partition_point(|transition| transition.cross < cross_min);
+        let end = transitions.partition_point(|transition| transition.cross <= cross_max);
+        (&transitions[start..end], end.saturating_sub(start))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct StationSeamPlanningStats {
+    index_owner_reads: usize,
+    indexed_transitions: usize,
+    relation_query_visits: usize,
+    materialized_samples: usize,
+    endpoint_tile_loads: usize,
+    max_resident_endpoint_tiles: usize,
 }
 
 fn source_to_world_point(
@@ -1835,6 +1943,143 @@ fn station_seam_world_gradient(
     ))
 }
 
+fn nearest_station_transition(
+    transition_index: &StationOwnerTransitionIndex,
+    plan: &StationSeamPlan,
+    along: u32,
+    target: f64,
+    maximum_displacement: Option<f64>,
+) -> (Option<(u32, bool)>, usize) {
+    if !target.is_finite() {
+        return (None, 0);
+    }
+    let (cross_min, cross_max) = match plan.orientation {
+        SeamOrientation::Vertical => (plan.min_x, plan.max_x),
+        SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
+    };
+    let (query_min, query_max) =
+        maximum_displacement.map_or((cross_min, cross_max), |maximum_displacement| {
+            (
+                (target - maximum_displacement)
+                    .ceil()
+                    .max(f64::from(cross_min)) as u32,
+                (target + maximum_displacement)
+                    .floor()
+                    .min(f64::from(cross_max)) as u32,
+            )
+        });
+    if query_min > query_max {
+        return (None, 0);
+    }
+    let (transitions, visits) = transition_index.query(
+        plan.first_owner,
+        plan.second_owner,
+        plan.orientation,
+        along,
+        query_min,
+        query_max,
+    );
+    (
+        transitions
+            .iter()
+            .min_by_key(|transition| transition.cross.abs_diff(target.round() as u32))
+            .map(|transition| (transition.cross, transition.low_owner == plan.first_owner)),
+        visits,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn materialize_station_seam_samples(
+    plan: &mut StationSeamPlan,
+    transition_index: &StationOwnerTransitionIndex,
+    current_owners: &[u16],
+    out_width: u32,
+    first: &ImageInfo,
+    first_pixels: &Rgb32FImage,
+    first_inverse: &Matrix3<f64>,
+    second: &ImageInfo,
+    second_pixels: &Rgb32FImage,
+    second_inverse: &Matrix3<f64>,
+    projection: Projection,
+    residual: &residual_warp::ResidualWarp,
+    offset_x: f64,
+    offset_y: f64,
+) -> usize {
+    let (cross_min, cross_max) = match plan.orientation {
+        SeamOrientation::Vertical => (plan.min_x, plan.max_x),
+        SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
+    };
+    let mut query_visits = 0;
+    for along in plan.along_min..=plan.along_max {
+        let seam = station_seam_cross_at(plan, along);
+        let (transition, visits) =
+            nearest_station_transition(transition_index, plan, along, seam, Some(32.0));
+        query_visits += visits;
+        let Some((current_transition, first_on_low_side)) = transition else {
+            continue;
+        };
+        let current_seam = f64::from(current_transition);
+        if (seam - current_seam).abs() > 32.0 {
+            continue;
+        }
+        let corridor_min = seam.min(current_seam).floor().max(f64::from(cross_min)) as u32;
+        let corridor_max = seam.max(current_seam).ceil().min(f64::from(cross_max)) as u32;
+        for cross in corridor_min..=corridor_max {
+            let (x, y) = match plan.orientation {
+                SeamOrientation::Vertical => (cross, along),
+                SeamOrientation::Horizontal => (along, cross),
+            };
+            let offset = y as usize * out_width as usize + x as usize;
+            let expected_owner = current_owners.get(offset).copied().unwrap_or(NO_OWNER);
+            if expected_owner != plan.first_owner && expected_owner != plan.second_owner {
+                continue;
+            }
+            let first_side = if first_on_low_side {
+                f64::from(cross) <= seam
+            } else {
+                f64::from(cross) >= seam
+            };
+            let replacement_owner = if first_side {
+                plan.first_owner
+            } else {
+                plan.second_owner
+            };
+            if replacement_owner == expected_owner {
+                continue;
+            }
+            let (source_image, source_pixels, source_inverse) =
+                if replacement_owner == plan.first_owner {
+                    (first, first_pixels, first_inverse)
+                } else {
+                    (second, second_pixels, second_inverse)
+                };
+            if let Some((pixel, source_point)) = station_seam_sample(
+                source_image,
+                source_pixels,
+                source_inverse,
+                projection,
+                residual,
+                x,
+                y,
+                offset_x,
+                offset_y,
+            ) {
+                plan.replacement_samples.push(StationSeamSample {
+                    x,
+                    y,
+                    expected_owner,
+                    replacement_owner,
+                    pixel,
+                    source_image_id: source_image.id,
+                    source_point,
+                    covered: true,
+                });
+            }
+        }
+    }
+    query_visits
+}
+
 /// Solve one deterministic minimum-cost seam for each accepted station pair.
 /// This is intentionally an analysis-grid operation; applying the plan later
 /// resamples only pixels that actually change owner.
@@ -1850,13 +2095,20 @@ fn build_station_seam_plans<F>(
     residual: &residual_warp::ResidualWarp,
     current_owners: &[u16],
     load_image: &mut F,
-) -> Result<Vec<StationSeamPlan>, String>
+) -> Result<(Vec<StationSeamPlan>, StationSeamPlanningStats), String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
     const MAX_SEAM_GRID_DIMENSION: u32 = 768;
     const NARROW_OVERLAP_PX: u32 = 32;
     const EDGE_STRENGTH_WEIGHT: f64 = 2.0;
+    let transition_index =
+        StationOwnerTransitionIndex::build(current_owners, out_width, out_height);
+    let mut stats = StationSeamPlanningStats {
+        index_owner_reads: transition_index.owner_reads,
+        indexed_transitions: transition_index.indexed_transitions,
+        ..StationSeamPlanningStats::default()
+    };
     let mut relation_ids = accepted_relations
         .iter()
         .filter_map(|&(left, right)| (left != right).then_some((left.min(right), left.max(right))))
@@ -1910,7 +2162,10 @@ where
         };
 
         let left_pixels = load_image(left)?;
+        stats.endpoint_tile_loads += 1;
         let right_pixels = load_image(right)?;
+        stats.endpoint_tile_loads += 1;
+        stats.max_resident_endpoint_tiles = stats.max_resident_endpoint_tiles.max(2);
         let left_inverse = left_h.try_inverse().ok_or_else(|| {
             format!(
                 "Station seam pose for '{}' is not invertible",
@@ -1957,7 +2212,7 @@ where
                     "seam": "coverage_centerline",
                 }),
             );
-            plans.push(StationSeamPlan {
+            let mut plan = StationSeamPlan {
                 first_owner: owner_pair.0 as u16,
                 second_owner: owner_pair.1 as u16,
                 min_x,
@@ -1968,7 +2223,26 @@ where
                 along_max,
                 orientation,
                 cross_samples: vec![center, center],
-            });
+                replacement_samples: Vec::new(),
+            };
+            stats.relation_query_visits += materialize_station_seam_samples(
+                &mut plan,
+                &transition_index,
+                current_owners,
+                out_width,
+                left,
+                &left_pixels,
+                &left_inverse,
+                right,
+                &right_pixels,
+                &right_inverse,
+                projection,
+                residual,
+                offset_x,
+                offset_y,
+            );
+            stats.materialized_samples += plan.replacement_samples.len();
+            plans.push(plan);
             continue;
         }
 
@@ -1997,26 +2271,19 @@ where
         let mut previous_cross = None::<u32>;
         for along_index in 0..along_count {
             let along = coordinate(along_min, along_max, along_index);
-            let mut previous_owner = None;
-            let mut transitions = Vec::new();
-            for cross in cross_min..=cross_max {
-                let (x, y) = match orientation {
-                    SeamOrientation::Vertical => (cross, along),
-                    SeamOrientation::Horizontal => (along, cross),
-                };
-                let owner = current_owners
-                    .get(y as usize * out_width as usize + x as usize)
-                    .copied()
-                    .unwrap_or(NO_OWNER);
-                if let Some(prior) = previous_owner
-                    && owner != prior
-                    && [owner, prior].contains(&(owner_pair.0 as u16))
-                    && [owner, prior].contains(&(owner_pair.1 as u16))
-                {
-                    transitions.push(cross);
-                }
-                previous_owner = Some(owner);
-            }
+            let (indexed, visits) = transition_index.query(
+                owner_pair.0 as u16,
+                owner_pair.1 as u16,
+                orientation,
+                along,
+                cross_min,
+                cross_max,
+            );
+            stats.relation_query_visits += visits;
+            let transitions = indexed
+                .iter()
+                .map(|transition| transition.cross)
+                .collect::<Vec<_>>();
             let target = previous_cross.unwrap_or(cross_min + (cross_max - cross_min) / 2);
             let selected = transitions
                 .iter()
@@ -2271,7 +2538,7 @@ where
         } else {
             cross_samples = coarse_cross_samples;
         }
-        let plan = StationSeamPlan {
+        let mut plan = StationSeamPlan {
             first_owner: owner_pair.0 as u16,
             second_owner: owner_pair.1 as u16,
             min_x,
@@ -2282,13 +2549,31 @@ where
             along_max: finite_along_max,
             orientation,
             cross_samples,
+            replacement_samples: Vec::new(),
         };
         if !path_is_valid {
             continue;
         }
+        stats.relation_query_visits += materialize_station_seam_samples(
+            &mut plan,
+            &transition_index,
+            current_owners,
+            out_width,
+            left,
+            &left_pixels,
+            &left_inverse,
+            right,
+            &right_pixels,
+            &right_inverse,
+            projection,
+            residual,
+            offset_x,
+            offset_y,
+        );
+        stats.materialized_samples += plan.replacement_samples.len();
         plans.push(plan);
     }
-    Ok(plans)
+    Ok((plans, stats))
 }
 
 fn station_seam_series_at(samples: &[f64], along_min: u32, along_max: u32, along: u32) -> f64 {
@@ -2565,36 +2850,49 @@ where
     Ok(stats)
 }
 
-fn apply_station_seam_plans<F>(
+fn apply_station_seam_plans(
     plans: &[StationSeamPlan],
     panorama: &mut Rgb32FImage,
     owner_map: &mut GrayImage,
     source_owner_ids: &mut [u16],
-    images: &[&ImageInfo],
-    global_homographies: &HashMap<usize, Matrix3<f64>>,
-    projection: Projection,
-    offset_x: f64,
-    offset_y: f64,
-    residual: &residual_warp::ResidualWarp,
-    load_image: &mut F,
-) -> Result<StationSeamApplyStats, String>
-where
-    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
-{
-    apply_station_seam_plans_with_traversal(
-        plans,
-        panorama,
-        owner_map,
-        source_owner_ids,
-        images,
-        global_homographies,
-        projection,
-        offset_x,
-        offset_y,
-        residual,
-        StationSeamTraversal::Corridor,
-        load_image,
-    )
+) -> Result<StationSeamApplyStats, String> {
+    let mut stats = StationSeamApplyStats::default();
+    let width = panorama.width();
+    for plan in plans {
+        for sample in &plan.replacement_samples {
+            stats.rewrite_visits += 1;
+            if !sample.covered
+                || sample.replacement_owner != plan.first_owner
+                    && sample.replacement_owner != plan.second_owner
+            {
+                continue;
+            }
+            let index = sample.y as usize * width as usize + sample.x as usize;
+            if source_owner_ids.get(index).copied() != Some(sample.expected_owner) {
+                continue;
+            }
+            let Some(pixel_start) = index.checked_mul(3) else {
+                continue;
+            };
+            let Some(pixel_end) = pixel_start.checked_add(3) else {
+                continue;
+            };
+            let Some(pixel_target) = panorama.as_mut().get_mut(pixel_start..pixel_end) else {
+                continue;
+            };
+            let Some(owner_target) = source_owner_ids.get_mut(index) else {
+                continue;
+            };
+            let Some(map_target) = owner_map.as_mut().get_mut(index) else {
+                continue;
+            };
+            pixel_target.copy_from_slice(&sample.pixel.0);
+            *owner_target = sample.replacement_owner;
+            *map_target = sample.replacement_owner.min(u16::from(u8::MAX)) as u8;
+            stats.changed_pixels += 1;
+        }
+    }
+    Ok(stats)
 }
 
 #[cfg(test)]
@@ -3742,7 +4040,7 @@ where
     if finishing == TileCompositorFinishing::LayeredVirtualTile
         && !tone_topology.accepted.is_empty()
     {
-        let plans = build_station_seam_plans(
+        let (plans, planning) = build_station_seam_plans(
             images,
             global_homographies,
             projection,
@@ -3755,24 +4053,16 @@ where
             &source_owner_ids,
             load_image,
         )?;
-        let changed = apply_station_seam_plans(
-            &plans,
-            &mut panorama,
-            &mut owner_map,
-            &mut source_owner_ids,
-            images,
-            global_homographies,
-            projection,
-            offset_x,
-            offset_y,
-            &residual_model,
-            load_image,
-        )?;
+        let changed =
+            apply_station_seam_plans(&plans, &mut panorama, &mut owner_map, &mut source_owner_ids)?;
         if !plans.is_empty() {
             println!(
-                "  - Station seam solver: plans={}, changed_owner_pixels={}",
+                "  - Station seam solver: plans={}, changed_owner_pixels={}, index_owner_reads={}, transition_queries={}, endpoint_loads={}",
                 plans.len(),
-                changed.changed_pixels
+                changed.changed_pixels,
+                planning.index_owner_reads,
+                planning.relation_query_visits,
+                planning.endpoint_tile_loads,
             );
         }
     }
@@ -12074,7 +12364,7 @@ mod interpolation_tests {
         ]);
         let source = Rgb32FImage::from_pixel(64, 64, Rgb([0.5, 0.5, 0.5]));
         let mut load = |_: &ImageInfo| Ok(source.clone());
-        let plans = build_station_seam_plans(
+        let (plans, _planning) = build_station_seam_plans(
             &images,
             &homographies,
             Projection::Planar,
@@ -12117,7 +12407,7 @@ mod interpolation_tests {
             }
         });
         let mut load = |_: &ImageInfo| Ok(source.clone());
-        let plans = build_station_seam_plans(
+        let (plans, _planning) = build_station_seam_plans(
             &images,
             &homographies,
             Projection::Planar,
@@ -12173,7 +12463,7 @@ mod interpolation_tests {
         let owners = (0..64)
             .flat_map(|y| (0..96).map(move |_| if y <= 32 { 1 } else { 2 }))
             .collect::<Vec<_>>();
-        let plans = build_station_seam_plans(
+        let (plans, _planning) = build_station_seam_plans(
             &images,
             &homographies,
             Projection::Planar,
@@ -12208,21 +12498,9 @@ mod interpolation_tests {
             let owner = owners[(y * 96 + x) as usize];
             *sources[usize::from(owner - 1)].get_pixel(x, y)
         });
-        let mut reload = |image: &ImageInfo| Ok(sources[image.id].clone());
-        let changed = apply_station_seam_plans(
-            &plans,
-            &mut panorama,
-            &mut owner_map,
-            &mut source_owners,
-            &images,
-            &homographies,
-            Projection::Planar,
-            0.0,
-            0.0,
-            &residual_warp::ResidualWarp::new(),
-            &mut reload,
-        )
-        .expect("apply station seam");
+        let changed =
+            apply_station_seam_plans(&plans, &mut panorama, &mut owner_map, &mut source_owners)
+                .expect("apply station seam");
         assert!(changed.changed_pixels > 0);
         assert_eq!(
             coverage, coverage_before,
@@ -12317,7 +12595,7 @@ mod interpolation_tests {
                 *sources[usize::from(owner - 1)].get_pixel(x, y)
             }
         });
-        let plan = StationSeamPlan {
+        let mut plan = StationSeamPlan {
             first_owner: 1,
             second_owner: 2,
             min_x: 0,
@@ -12328,7 +12606,25 @@ mod interpolation_tests {
             along_max,
             orientation,
             cross_samples: cross_samples.to_vec(),
+            replacement_samples: Vec::new(),
         };
+        let transition_index = StationOwnerTransitionIndex::build(&owners, width, height);
+        materialize_station_seam_samples(
+            &mut plan,
+            &transition_index,
+            &owners,
+            width,
+            &first,
+            &sources[0],
+            &Matrix3::identity(),
+            &second,
+            &sources[1],
+            &Matrix3::identity(),
+            Projection::Planar,
+            &residual_warp::ResidualWarp::new(),
+            0.0,
+            0.0,
+        );
         let mut load = |image: &ImageInfo| Ok(sources[image.id].clone());
         let residual = residual_warp::ResidualWarp::new();
         let stats = if legacy {
@@ -12346,19 +12642,7 @@ mod interpolation_tests {
                 &mut load,
             )
         } else {
-            apply_station_seam_plans(
-                &[plan],
-                &mut panorama,
-                &mut owner_map,
-                &mut owners,
-                &images,
-                &homographies,
-                Projection::Planar,
-                0.0,
-                0.0,
-                &residual,
-                &mut load,
-            )
+            apply_station_seam_plans(&[plan], &mut panorama, &mut owner_map, &mut owners)
         }
         .unwrap();
         (panorama, owner_map, owners, stats)
