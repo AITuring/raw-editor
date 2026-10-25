@@ -12,7 +12,10 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 
 const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
 const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
+const stitchingInterpolationTests = read('src-tauri/src/panorama_utils/stitching_interpolation_tests.rs');
 const panorama = read('src-tauri/src/panorama_stitching.rs');
+const panoramaAlignmentTests = read('src-tauri/src/panorama_stitching_alignment_tests.rs');
+const panoramaTestSources = `${panorama}\n${panoramaAlignmentTests}`;
 const processing = read('src-tauri/src/panorama_utils/processing.rs');
 const stackPipelineDir = 'src-tauri/src/panorama_utils/stack_pipeline';
 const degradation = read(`${stackPipelineDir}/degradation.rs`);
@@ -352,7 +355,7 @@ assert.match(
   'station seam application must rewrite only the validated 32px boundary strip',
 );
 assert.match(
-  stitching,
+  stitchingInterpolationTests,
   /layered_station_seam_avoids_a_lower_colour_cost_stroke_crossing/,
   'boundary protection needs a regression where alignment defeats lower colour cost',
 );
@@ -404,12 +407,12 @@ assert.match(
   'each camera position must finish focus selection before the next position enters the mosaic',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /capture_groups_keep_long_focus_brackets/,
   'long automated focus brackets need a grouping regression',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /capture_groups_split_accumulated_scan_motion/,
   'capture grouping must reject accumulated camera motion',
 );
@@ -434,32 +437,32 @@ assert.match(
   'Virtual_Tile evidence must be explicit and must not fabricate Source_RAW consensus support',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /default_two_stage_flow_solves_ten_sources_as_three_fused_stations/,
   'a compact 10-frame / 3-station run needs a two-stage fused-evidence regression',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /single_virtual_tile_skips_station_relations_and_closure/,
   'a single Capture_Station must keep the inter-station solver and closure path idle',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /focus_station_geometry_guard_does_not_hide_broken_boundaries/,
   'same-position focus edges must not hide broken camera-position boundaries',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /focus_stack_geometry_uses_overlap_evidence_and_rendering_uses_capture_order/,
   'stack geometry must come from image overlap evidence',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /focus_alignment_does_not_trade_fit_precision_for_a_few_more_inliers/,
   'fit selection must protect precision over raw inlier count',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /focus_stack_stability_rejects_extrapolated_projective_warp/,
   'extrapolated projective warps need a regression test',
 );
@@ -498,7 +501,7 @@ assert.match(
   'station membership must expose its four measurements rather than only a boolean',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /capture_station_link_requires_all_four_pieces_of_evidence/,
   'each of the four station evidence gates needs a regression test',
 );
@@ -618,22 +621,22 @@ assert.match(
   'the production station report must populate measurement summaries from candidates',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /capture_sequence_weight_boost_never_reaches_station_membership/,
   'the capture-sequence weight boost must stay out of station membership',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /accumulated_motion_split_records_its_position_and_ratio/,
   'the accumulated-motion split position must be pinned by a regression test',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /oversized_station_is_split_until_every_member_count_fits/,
   'the 48-member ceiling needs a regression test',
 );
 assert.match(
-  panorama,
+  panoramaTestSources,
   /grouping_reports_an_isolated_source_without_moving_the_others/,
   'an isolated source must be reported without disturbing the rest of the grouping',
 );
@@ -928,7 +931,18 @@ assert.deepEqual(
   ['properties.rs', 'test_support.rs'],
   'the production hash-order guard must derive the standalone test-only modules from mod.rs',
 );
-const productionStackPipelineFiles = stackPipelineFiles.filter((file) => !testOnlyStackPipelineFiles.has(file));
+// `properties.rs` is a test-only facade whose thematic sections are included
+// into the same module scope. Those include files are source-only test fixtures,
+// so the production hash-order scan must exclude them together with the facade.
+const includedPropertyFiles = stackPipelineFiles.filter((file) => /^properties_[a-z_]+\.rs$/.test(file));
+assert.equal(
+  includedPropertyFiles.length,
+  8,
+  'the property suite must keep its eight thematic source sections discoverable',
+);
+const productionStackPipelineFiles = stackPipelineFiles.filter(
+  (file) => !testOnlyStackPipelineFiles.has(file) && !includedPropertyFiles.includes(file),
+);
 
 const hashIterationViolations = [];
 let inspectedHashBindings = 0;

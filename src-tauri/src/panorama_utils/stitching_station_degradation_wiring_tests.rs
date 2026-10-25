@@ -1,0 +1,212 @@
+use super::*;
+use crate::panorama_utils::stack_pipeline::degradation::INTRA_STATION_REGISTRATION_FAILED;
+use crate::panorama_utils::stack_pipeline::station_degradation::StationFusionMode;
+
+fn station_frame(id: usize) -> ImageInfo {
+    ImageInfo {
+        id,
+        filename: format!("/station/000{id}.nef"),
+        width: 6_000,
+        height: 4_000,
+        alignment_image: GrayImage::new(1, 1),
+        full_image: None,
+        scale_factor: 1.0,
+        focal_length_35mm: None,
+        overview_reference: false,
+        features: Vec::new(),
+        top_features: Vec::new(),
+        foreground_range: None,
+        foreground_mask: None,
+        horizontal_edge_rows: Vec::new(),
+        vertical_edge_columns: Vec::new(),
+    }
+}
+
+fn record(
+    path: &str,
+    status: IntraStationFrameStatus,
+    inliers: usize,
+    coverage: f64,
+    error_px: f64,
+) -> (String, IntraStationFrameRecord) {
+    (
+        path.to_string(),
+        IntraStationFrameRecord {
+            path: path.to_string(),
+            inliers,
+            inlier_area_coverage: coverage,
+            median_symmetric_error_px: error_px,
+            status,
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn a_station_with_no_registration_record_fuses_every_frame_in_order() {
+    // This is the no-change guarantee of the wiring: the default path does
+    // not run the native patch refinement, so it records nothing, so the
+    // plan is the full bracket and the render loop is exactly what it was.
+    let frames = (1..=4).map(station_frame).collect::<Vec<_>>();
+    let images = frames.iter().collect::<Vec<_>>();
+    let (members, rejections) = station_members_from_frame_records(&images, &HashMap::new());
+    assert!(rejections.is_empty());
+    assert_eq!(members[0].status, IntraStationFrameStatus::Anchor);
+    assert!(
+        members[1..]
+            .iter()
+            .all(|member| member.status == IntraStationFrameStatus::GlobalFallback),
+        "a frame placed by its global model alone is a global fallback, not a failure"
+    );
+    let plan = plan_station_fusion(&members);
+    assert_eq!(plan.mode, StationFusionMode::AllFrames);
+    assert_eq!(plan.fused, vec![0, 1, 2, 3]);
+    assert!(plan.excluded.is_empty());
+    assert!(station_plan_entries(0, &members, &plan).is_empty());
+}
+
+#[test]
+fn a_recorded_failure_beside_two_survivors_leaves_the_fusion_to_the_survivors() {
+    // 需求 12.2.
+    let frames = (1..=4).map(station_frame).collect::<Vec<_>>();
+    let images = frames.iter().collect::<Vec<_>>();
+    let recorded = HashMap::from([
+        record(
+            "/station/0002.nef",
+            IntraStationFrameStatus::Failed,
+            0,
+            0.05,
+            0.4,
+        ),
+        record(
+            "/station/0003.nef",
+            IntraStationFrameStatus::Local,
+            900,
+            0.80,
+            0.4,
+        ),
+    ]);
+    let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+    assert!(
+        rejections.is_empty(),
+        "no accepted inlier means no measured 需求 12.5 evidence to judge"
+    );
+    let plan = plan_station_fusion(&members);
+    assert_eq!(plan.mode, StationFusionMode::SuccessfulFramesOnly);
+    assert_eq!(
+        plan.fused,
+        vec![0, 2, 3],
+        "the excluded frame is never offered to the cut"
+    );
+    assert_eq!(
+        plan.excluded
+            .iter()
+            .map(|record| (record.path.as_str(), record.reason.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("/station/0002.nef", INTRA_STATION_REGISTRATION_FAILED)],
+        "需求 12.2 names the excluded Source_RAW by absolute path"
+    );
+    let entries = station_plan_entries(7, &members, &plan);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].0, INTRA_STATION_REGISTRATION_FAILED);
+    assert_eq!(entries[0].1["station_index"], serde_json::json!(7));
+    assert_eq!(entries[0].1["fused_frames"], serde_json::json!(3));
+}
+
+#[test]
+fn every_non_anchor_frame_failing_degrades_the_station_to_one_source() {
+    // 需求 12.1: the plan keeps one member, so the fusion is constructed with
+    // one frame and reports `SingleFrame`, and every covered pixel is copied
+    // from that Source_RAW.
+    let frames = (1..=3).map(station_frame).collect::<Vec<_>>();
+    let images = frames.iter().collect::<Vec<_>>();
+    let recorded = HashMap::from([
+        record(
+            "/station/0002.nef",
+            IntraStationFrameStatus::Failed,
+            0,
+            0.01,
+            9.0,
+        ),
+        record(
+            "/station/0003.nef",
+            IntraStationFrameStatus::Failed,
+            0,
+            0.02,
+            9.0,
+        ),
+    ]);
+    let (members, _) = station_members_from_frame_records(&images, &recorded);
+    let plan = plan_station_fusion(&members);
+    assert_eq!(plan.mode, StationFusionMode::SingleFrameDegraded);
+    assert_eq!(plan.fused, vec![0]);
+    assert_eq!(
+        plan.single_frame_path(&members).as_deref(),
+        Some("/station/0001.nef")
+    );
+    assert_eq!(plan.excluded.len(), 2);
+    assert_eq!(
+        focus_fuser::StationFusion::new(64, 64, plan.fused.len()).solver_status(),
+        crate::panorama_utils::stack_pipeline::report::FusionSolverStatus::SingleFrame,
+        "需求 12.1 / 3.10: one frame has nothing to cut against"
+    );
+}
+
+#[test]
+fn recorded_evidence_below_the_group_join_limits_rejects_the_frame() {
+    // 需求 12.5, on a 6000px anchor: support below 0.20, or a median
+    // symmetric error above 60px, keeps the Source_RAW out of the station.
+    let frames = (1..=3).map(station_frame).collect::<Vec<_>>();
+    let images = frames.iter().collect::<Vec<_>>();
+    let recorded = HashMap::from([
+        record(
+            "/station/0002.nef",
+            IntraStationFrameStatus::Local,
+            120,
+            0.1999,
+            0.5,
+        ),
+        record(
+            "/station/0003.nef",
+            IntraStationFrameStatus::Local,
+            900,
+            0.85,
+            60.1,
+        ),
+    ]);
+    let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+    assert_eq!(rejections.len(), 2);
+    assert!(rejections[0].support_below_minimum && !rejections[0].error_above_limit);
+    assert!(rejections[1].error_above_limit && !rejections[1].support_below_minimum);
+    assert!((rejections[1].symmetric_error_limit_px - 60.0).abs() < 1e-12);
+    assert!(
+        members[1..]
+            .iter()
+            .all(|member| member.status == IntraStationFrameStatus::Failed),
+        "a frame that joins no Capture_Station cannot be fused by this one"
+    );
+    // A frame exactly at both limits still joins, so the thresholds are not
+    // loosened in either direction.
+    let recorded = HashMap::from([
+        record(
+            "/station/0002.nef",
+            IntraStationFrameStatus::Local,
+            120,
+            0.20,
+            60.0,
+        ),
+        record(
+            "/station/0003.nef",
+            IntraStationFrameStatus::Local,
+            900,
+            0.85,
+            0.5,
+        ),
+    ]);
+    let (members, rejections) = station_members_from_frame_records(&images, &recorded);
+    assert!(rejections.is_empty());
+    assert_eq!(
+        plan_station_fusion(&members).mode,
+        StationFusionMode::AllFrames
+    );
+}
