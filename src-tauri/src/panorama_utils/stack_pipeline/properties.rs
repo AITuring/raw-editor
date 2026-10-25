@@ -6577,23 +6577,19 @@ proptest! {
         }
         prop_assert_eq!(quadrants.len(), 4, "one corner probe per quadrant");
 
-        // The window is 13 grid points at a whole-pixel step, and no other
-        // integer step lands closer to 需求 3.2's 32 native pixels.
+        // The window is exactly Requirement 3.2's 32 native pixels. Fractional
+        // source coordinates are intentional: rounding to a whole-pixel step
+        // made the effective window only 26px.
         let step = plan.step_px();
-        prop_assert!(step >= 1.0 && step == step.floor(), "the step is whole pixels: {step}");
+        prop_assert!(step >= 1.0 && step.is_finite(), "the step is usable: {step}");
+        prop_assert!(
+            (plan.window_px() - REQUIRED_SHARPNESS_WINDOW_PX).abs() < 1e-12,
+            "the Sharpness_Score window is {}px, not {REQUIRED_SHARPNESS_WINDOW_PX}px",
+            plan.window_px()
+        );
         prop_assert!(
             (plan.window_px() - f64::from(mosaic::ACUTANCE_PATCH_POINTS) * step).abs() < 1e-12
         );
-        for alternative in 1..=8 {
-            let candidate = f64::from(mosaic::ACUTANCE_PATCH_POINTS) * f64::from(alternative);
-            prop_assert!(
-                (plan.window_px() - REQUIRED_SHARPNESS_WINDOW_PX).abs()
-                    <= (candidate - REQUIRED_SHARPNESS_WINDOW_PX).abs(),
-                "a {}px window is further from 需求 3.2's {REQUIRED_SHARPNESS_WINDOW_PX}px than \
-                 a {candidate}px one would be",
-                plan.window_px()
-            );
-        }
 
         // 2. 逐元素相同的采样位置集合: the positions the production measurement asks
         //    each side for, in order.

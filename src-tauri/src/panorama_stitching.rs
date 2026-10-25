@@ -25905,8 +25905,12 @@ mod alignment_tests {
     }
 
     #[test]
-    fn coarse_pyramid_retry_only_accepts_measured_model_failures() {
+    fn coarse_pyramid_retry_accepts_finer_sampling_failures_without_relaxing_gates() {
         for stage in [
+            "insufficient_grid_probes",
+            "insufficient_measurable_patches",
+            "insufficient_bidirectional_matches",
+            "insufficient_grid_coverage",
             "residual_model_no_fit",
             "insufficient_matches_after_model_quota",
             "insufficient_fitted_hull_support",
@@ -25915,10 +25919,6 @@ mod alignment_tests {
         }
         for stage in [
             "no_predicted_overlap",
-            "insufficient_grid_probes",
-            "insufficient_measurable_patches",
-            "insufficient_bidirectional_matches",
-            "insufficient_grid_coverage",
             "fitted_orientation_mismatch",
             "non_invertible_seed",
         ] {
