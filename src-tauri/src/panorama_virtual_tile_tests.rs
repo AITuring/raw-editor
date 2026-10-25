@@ -955,13 +955,18 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let tile_to_world = sample_tile_to_world();
     let topology = line_topology(4);
     let authoritative = [(0, 1), (2, 3)];
-    let relation = sample_relation(-372.0, 9.0);
+    let expected_correction = translation(10.0, -4.0);
+    let relation_12 = tile_to_world[2].try_inverse().unwrap()
+        * expected_correction.try_inverse().unwrap()
+        * tile_to_world[1];
+    let relation_21 =
+        tile_to_world[1].try_inverse().unwrap() * expected_correction * tile_to_world[2];
 
     // The fixed station is the proposal's left: H(u→f) = (left→right)⁻¹.
     let repairs = plan_virtual_tile_prior_repairs(
         4,
         &authoritative,
-        &[prior_proposal(1, 2, relation, 50)],
+        &[prior_proposal(1, 2, relation_12, 50)],
         &tile_to_world,
         &topology,
     );
@@ -975,7 +980,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let correction = repairs[0].world_correction;
     assert_projectively_equal(
         &(correction * tile_to_world[2]),
-        &(tile_to_world[1] * relation.try_inverse().unwrap()),
+        &(tile_to_world[1] * relation_12.try_inverse().unwrap()),
         "left fixed",
     );
 
@@ -983,7 +988,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let repairs = plan_virtual_tile_prior_repairs(
         4,
         &authoritative,
-        &[prior_proposal(2, 1, relation, 50)],
+        &[prior_proposal(2, 1, relation_21, 50)],
         &tile_to_world,
         &topology,
     );
@@ -993,7 +998,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
         && repair.world_correction == repairs[0].world_correction));
     assert_projectively_equal(
         &(repairs[0].world_correction * tile_to_world[2]),
-        &(tile_to_world[1] * relation),
+        &(tile_to_world[1] * relation_21),
         "right fixed",
     );
 }
