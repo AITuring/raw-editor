@@ -1584,7 +1584,6 @@ struct StationSeamPlan {
     along_max: u32,
     orientation: SeamOrientation,
     cross_samples: Vec<f64>,
-    first_on_low_side: bool,
 }
 
 fn source_to_world_point(
@@ -1925,7 +1924,7 @@ where
             )
         })?;
 
-        let Some(first_center) = source_to_world_point(
+        let Some(_) = source_to_world_point(
             left,
             left_h,
             projection,
@@ -1934,7 +1933,7 @@ where
         ) else {
             continue;
         };
-        let Some(second_center) = source_to_world_point(
+        let Some(_) = source_to_world_point(
             right,
             right_h,
             projection,
@@ -1942,10 +1941,6 @@ where
             right.height as f64 * 0.5,
         ) else {
             continue;
-        };
-        let first_on_low_side = match orientation {
-            SeamOrientation::Vertical => first_center.x <= second_center.x,
-            SeamOrientation::Horizontal => first_center.y <= second_center.y,
         };
         let owner_pair = (left_index + 1, right_index + 1);
 
@@ -1973,7 +1968,6 @@ where
                 along_max,
                 orientation,
                 cross_samples: vec![center, center],
-                first_on_low_side,
             });
             continue;
         }
@@ -2288,7 +2282,6 @@ where
             along_max: finite_along_max,
             orientation,
             cross_samples,
-            first_on_low_side,
         };
         if !path_is_valid {
             continue;
@@ -12101,7 +12094,6 @@ mod interpolation_tests {
         assert_eq!(plan.min_x, 40);
         assert_eq!(plan.max_x, 64);
         assert_eq!(plan.cross_samples, vec![52.0, 52.0]);
-        assert!(plan.first_on_low_side);
     }
 
     #[test]
@@ -12336,7 +12328,6 @@ mod interpolation_tests {
             along_max,
             orientation,
             cross_samples: cross_samples.to_vec(),
-            first_on_low_side: !reversed,
         };
         let mut load = |image: &ImageInfo| Ok(sources[image.id].clone());
         let residual = residual_warp::ResidualWarp::new();
