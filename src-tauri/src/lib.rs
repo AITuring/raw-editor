@@ -34,6 +34,7 @@ mod mask_generation;
 mod multi_exposure;
 mod negative_conversion;
 mod panorama_stitching;
+mod panorama_types;
 mod panorama_utils;
 mod preset_converter;
 mod preview_protocol;

@@ -12,10 +12,14 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 
 const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
 const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
+const stitchingCompositorHelpers = read('src-tauri/src/panorama_utils/stitching_compositor_helpers.rs');
+const stitchingCompositorOptions = read('src-tauri/src/panorama_utils/stitching_compositor_options.rs');
 const stitchingInterpolationTests = read('src-tauri/src/panorama_utils/stitching_interpolation_tests.rs');
 const panorama = read('src-tauri/src/panorama_stitching.rs');
+const panoramaStationSolver = read('src-tauri/src/panorama_station_solver.rs');
+const panoramaQuality = `${panorama}\n${panoramaStationSolver}`;
 const panoramaAlignmentTests = read('src-tauri/src/panorama_stitching_alignment_tests.rs');
-const panoramaTestSources = `${panorama}\n${panoramaAlignmentTests}`;
+const panoramaTestSources = `${panorama}\n${panoramaStationSolver}\n${panoramaAlignmentTests}`;
 const processing = read('src-tauri/src/panorama_utils/processing.rs');
 const stackPipelineDir = 'src-tauri/src/panorama_utils/stack_pipeline';
 const degradation = read(`${stackPipelineDir}/degradation.rs`);
@@ -367,15 +371,15 @@ assert.match(
   'the default path must keep the union covered bounds and must not call crop_to_valid_rectangle (需求 10.2 / 10.3)',
 );
 assert.match(
-  stitching,
-  /pub\(super\) fn crop_to_valid_rectangle\(/,
+  stitchingCompositorHelpers,
+  /pub\(crate\) fn crop_to_valid_rectangle\(/,
   'crop_to_valid_rectangle must be retained for the comparison paths',
 );
 // 任务 13.4: the default final sharpen amount is 0, so the default path never
 // executes `sharpen_focus_tile_detail`. The variable stays as a diagnostic knob.
 assert.match(
-  stitching,
-  /fn layered_final_sharpen_amount\(\) -> f32 \{[\s\S]*?RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT[\s\S]*?unwrap_or\(0\.0\)/,
+  stitchingCompositorOptions,
+  /pub\(crate\) fn layered_final_sharpen_amount\(\) -> f32 \{[\s\S]*?RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT[\s\S]*?unwrap_or\(0\.0\)/,
   'the default final sharpen amount must be 0 (需求 11.6 / 11.7)',
 );
 assert.match(
@@ -474,14 +478,14 @@ assert.match(
 // membership decision may rest on. Pin every threshold at source level: a
 // relaxation here silently lets two camera positions share ownership cells,
 // which no pixel test downstream can distinguish from a focus bracket.
-const stationMinInliers = numberConstant(panorama, 'STATION_MIN_INLIER_MATCHES');
-const stationMinOverlapNcc = numberConstant(panorama, 'STATION_MIN_OVERLAP_NCC');
-const stationMinSpatialSupport = numberConstant(panorama, 'STATION_MIN_INLIER_SPATIAL_SUPPORT');
-const stationScaleRatioMin = numberConstant(panorama, 'STATION_SCALE_RATIO_MIN');
-const stationScaleRatioMax = numberConstant(panorama, 'STATION_SCALE_RATIO_MAX');
-const stationAccumulatedMotion = numberConstant(panorama, 'STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO');
-const stationScoreTieBreak = numberConstant(panorama, 'STATION_EVIDENCE_SCORE_TIE_BREAK');
-const stationMaxMembers = numberConstant(panorama, 'FOCUS_BRACKET_MAX_COMPONENT_SOURCES');
+const stationMinInliers = numberConstant(panoramaQuality, 'STATION_MIN_INLIER_MATCHES');
+const stationMinOverlapNcc = numberConstant(panoramaQuality, 'STATION_MIN_OVERLAP_NCC');
+const stationMinSpatialSupport = numberConstant(panoramaQuality, 'STATION_MIN_INLIER_SPATIAL_SUPPORT');
+const stationScaleRatioMin = numberConstant(panoramaQuality, 'STATION_SCALE_RATIO_MIN');
+const stationScaleRatioMax = numberConstant(panoramaQuality, 'STATION_SCALE_RATIO_MAX');
+const stationAccumulatedMotion = numberConstant(panoramaQuality, 'STATION_MAX_ACCUMULATED_CENTER_MOTION_RATIO');
+const stationScoreTieBreak = numberConstant(panoramaQuality, 'STATION_EVIDENCE_SCORE_TIE_BREAK');
+const stationMaxMembers = numberConstant(panoramaQuality, 'FOCUS_BRACKET_MAX_COMPONENT_SOURCES');
 assert.ok(stationMinInliers >= 30, 'station membership needs at least 30 verified inlier pairs');
 assert.ok(stationMinOverlapNcc >= 0.6, 'station membership needs an overlap correlation of at least 0.60');
 assert.ok(stationMinSpatialSupport >= 0.2, 'station membership needs at least 20% inlier spatial support');
@@ -491,12 +495,12 @@ assert.ok(stationAccumulatedMotion <= 0.02, 'accumulated centre motion must spli
 assert.ok(stationScoreTieBreak <= 0.001, 'an absolute-path tie-break is only allowed within 0.001 of score');
 assert.ok(stationMaxMembers <= 48, 'a Capture_Station must hold at most 48 sources');
 assert.match(
-  panorama,
+  panoramaQuality,
   /fn homography_scale_ratio\(/,
   'the scale-ratio criterion must be one reusable measurement shared by the intra- and inter-station thresholds',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /fn focus_station_link_evidence\(/,
   'station membership must expose its four measurements rather than only a boolean',
 );
@@ -507,17 +511,17 @@ assert.match(
 );
 
 // Station_Relation production acceptance (requirements 6.3-6.5, 6.8-6.10).
-const stationRelationMinInliers = numberConstant(panorama, 'STATION_RELATION_MIN_INLIERS');
-const stationRelationMaxMedianError = numberConstant(panorama, 'STATION_RELATION_MAX_MEDIAN_ERROR_PX');
-const stationRelationScaleMin = numberConstant(panorama, 'STATION_RELATION_SCALE_RATIO_MIN');
-const stationRelationScaleMax = numberConstant(panorama, 'STATION_RELATION_SCALE_RATIO_MAX');
-const stationRelationMinSupport = numberConstant(panorama, 'STATION_RELATION_MIN_SPATIAL_SUPPORT');
+const stationRelationMinInliers = numberConstant(panoramaQuality, 'STATION_RELATION_MIN_INLIERS');
+const stationRelationMaxMedianError = numberConstant(panoramaQuality, 'STATION_RELATION_MAX_MEDIAN_ERROR_PX');
+const stationRelationScaleMin = numberConstant(panoramaQuality, 'STATION_RELATION_SCALE_RATIO_MIN');
+const stationRelationScaleMax = numberConstant(panoramaQuality, 'STATION_RELATION_SCALE_RATIO_MAX');
+const stationRelationMinSupport = numberConstant(panoramaQuality, 'STATION_RELATION_MIN_SPATIAL_SUPPORT');
 const stationRelationMaxMeanDifference = numberConstant(
   panorama,
   'STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE',
 );
-const stationRelationEdgeStrengthMin = numberConstant(panorama, 'STATION_RELATION_EDGE_STRENGTH_RATIO_MIN');
-const stationRelationEdgeStrengthMax = numberConstant(panorama, 'STATION_RELATION_EDGE_STRENGTH_RATIO_MAX');
+const stationRelationEdgeStrengthMin = numberConstant(panoramaQuality, 'STATION_RELATION_EDGE_STRENGTH_RATIO_MIN');
+const stationRelationEdgeStrengthMax = numberConstant(panoramaQuality, 'STATION_RELATION_EDGE_STRENGTH_RATIO_MAX');
 const stationRelationMaxOrientationDifference = numberConstant(
   panorama,
   'STATION_RELATION_MAX_MEDIAN_EDGE_ORIENTATION_DIFFERENCE_DEGREES',
@@ -526,11 +530,11 @@ assert.equal(stationRelationMinInliers, 24, 'a Station_Relation requires at leas
 assert.equal(stationRelationMaxMedianError, 3.0, 'relation error is an absolute 3px world-space gate');
 assert.equal(stationRelationScaleMin, 0.95, 'relation scale must not fall below approved Requirement 6.3');
 assert.equal(stationRelationScaleMax, 1.05, 'relation scale must not exceed approved Requirement 6.3');
-const relationGateStart = panorama.indexOf('fn station_relation_rejection_reasons(');
+const relationGateStart = panoramaQuality.indexOf('fn station_relation_rejection_reasons(');
 assert.ok(relationGateStart >= 0, 'production relation acceptance must remain inspectable');
-const relationGateEnd = panorama.indexOf('\n}\n', relationGateStart);
+const relationGateEnd = panoramaQuality.indexOf('\n}\n', relationGateStart);
 assert.ok(relationGateEnd > relationGateStart, 'production relation acceptance must have a complete body');
-const relationGateBody = panorama.slice(relationGateStart, relationGateEnd + 2);
+const relationGateBody = panoramaQuality.slice(relationGateStart, relationGateEnd + 2);
 assert.match(
   relationGateBody,
   /if !measurements\.scale_ratio\.is_finite\(\)\s*\|\| !\(STATION_RELATION_SCALE_RATIO_MIN\.\.=STATION_RELATION_SCALE_RATIO_MAX\)\s*\.contains\(&measurements\.scale_ratio\)\s*\{\s*reasons\.push\(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE\);/,
@@ -547,61 +551,61 @@ assert.equal(
 );
 
 // Closure_Optimizer correction and convergence guards (requirements 7.4, 7.5).
-const closureResidualMedianLimit = numberConstant(panorama, 'CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX');
-const closureMaxCornerCorrection = numberConstant(panorama, 'CLOSURE_MAX_CORNER_CORRECTION_PX');
-const closureRelativeResidualDecrease = numberConstant(panorama, 'CLOSURE_RELATIVE_RESIDUAL_DECREASE');
-const closureMaxIterations = numberConstant(panorama, 'CLOSURE_MAX_ITERATIONS');
+const closureResidualMedianLimit = numberConstant(panoramaQuality, 'CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX');
+const closureMaxCornerCorrection = numberConstant(panoramaQuality, 'CLOSURE_MAX_CORNER_CORRECTION_PX');
+const closureRelativeResidualDecrease = numberConstant(panoramaQuality, 'CLOSURE_RELATIVE_RESIDUAL_DECREASE');
+const closureMaxIterations = numberConstant(panoramaQuality, 'CLOSURE_MAX_ITERATIONS');
 assert.equal(closureResidualMedianLimit, 2.0, 'closure residual acceptance stays expressed as 2 world pixels');
 assert.equal(closureMaxCornerCorrection, 256, 'station corner corrections may never exceed 256 world pixels');
 assert.equal(closureRelativeResidualDecrease, 0.0001, 'closure convergence requires less than 1e-4 relative decrease');
 assert.equal(closureMaxIterations, 100, 'closure optimization must stop after at most 100 iterations');
 assert.doesNotMatch(
-  panorama,
+  panoramaQuality,
   /FOCUS_GROUP_MAX_CENTER_CORRECTION_RATIO/,
   'the old center-based correction ratio must not remain in the station closure',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /fn maximum_station_corner_displacement\([\s\S]*?Point2::new\(0\.0, 0\.0\)[\s\S]*?Point2::new\(dimensions\.0 as f64, dimensions\.1 as f64\)/,
   'station correction limits must measure all four projected corners (需求 7.4)',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /closure_report\.iterations = iterations[\s\S]*?closure_report\.residual_median_px = median_residual[\s\S]*?closure_report\.residual_p95_px = residual_p95/,
   'closure convergence and residual diagnostics must reach Stack_Report (需求 7.5)',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /degradation::CLOSURE_CORRECTION_CLAMPED/,
   'a clamped station correction must emit closure_correction_clamped',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /fn solve_robust_closure_translations\([\s\S]*?closure_residual_weight\(magnitude\)[\s\S]*?CLOSURE_MAX_ITERATIONS/,
   'the closure solve must integrate the robust weight and bounded convergence loop',
 );
 assert.doesNotMatch(
-  panorama,
+  panoramaQuality,
   /if dx\.hypot\(dy\) > maximum_constraint/,
   'accepted Station_Relations must not be discarded before robust closure weighting (需求 7.2)',
 );
 assert.doesNotMatch(
-  panorama,
+  panoramaQuality,
   /for _ in 0\.\.8[\s\S]{0,3000}maximum_change < 0\.01/,
   'the station closure must not regress to fixed iterations and an absolute movement threshold',
 );
 assert.doesNotMatch(
-  panorama,
+  panoramaQuality,
   /FOCUS_GROUP_CONSENSUS_MAX_ERROR_RATIO/,
   'Station_Relation acceptance must not scale its pixel error gate by image dimensions',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /fn station_relation_rejection_reasons\(/,
   'each failed relation defect must map to a stable station_relation identifier',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /rejected_by_reason[\s\S]*\.entry\(reason\.to_string\(\)\)/,
   'rejected relation defects must be aggregated by stable reason',
 );
@@ -616,7 +620,7 @@ assert.match(
   'candidate diagnostics must retain the prior overlap and explicit model-fit evidence',
 );
 assert.match(
-  panorama,
+  panoramaQuality,
   /summarize_candidate_measurements\(\)/,
   'the production station report must populate measurement summaries from candidates',
 );
@@ -1291,7 +1295,9 @@ for (const variable of [
   const body = stitching.slice(entry, stitching.indexOf('\n}\n', entry));
   assert.doesNotMatch(body, /std::env::var/, 'the Tile_Compositor entry must not read std::env::var (任务 13.7)');
   assert.match(body, /ownership_compositor_switches\(finishing\)/, 'the entry must use the production switch resolver');
-  const resolver = stitching.slice(stitching.indexOf('fn ownership_compositor_switches'));
+  const resolver = stitchingCompositorOptions.slice(
+    stitchingCompositorOptions.indexOf('fn ownership_compositor_switches'),
+  );
   assert.match(
     resolver,
     /LayeredVirtualTile => OwnershipCompositorSwitches::default\(\)/,
