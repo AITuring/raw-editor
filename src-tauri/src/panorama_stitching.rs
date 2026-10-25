@@ -13264,7 +13264,6 @@ fn measure_station_relation_candidate(
     target_dimensions: (u32, u32),
     overlap_measure: Option<StationOverlapMeasure<'_>>,
     dense_measurements: Option<FocusOverlapQuality>,
-    invert_edge_strength_ratio: bool,
 ) -> Option<MeasuredStationRelationCandidate> {
     let median_error_px = median_symmetric_error(source_to_target, points);
     let precision = if median_error_px.is_finite() {
@@ -13299,13 +13298,7 @@ fn measure_station_relation_candidate(
             )
         }
     });
-    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
-        if invert_edge_strength_ratio {
-            1.0 / strength
-        } else {
-            strength
-        }
-    });
+    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| strength);
     Some(MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
             inliers,
@@ -17663,7 +17656,6 @@ fn virtual_tile_relation_is_authoritative(
         tiles[quality_target].dimensions(),
         overlap_measure,
         dense_measurements,
-        canonical.inverted,
     )
     .is_some_and(|candidate| station_relation_rejection_reasons(&candidate.measurements).is_empty())
 }
@@ -17853,7 +17845,6 @@ fn select_virtual_tile_relation_hypothesis(
             tiles[canonical.target_index].dimensions(),
             overlap_measure,
             dense_measurements,
-            canonical.inverted,
         ) else {
             continue;
         };
@@ -19968,17 +19959,13 @@ fn solve_station_poses_for_evidence_with_report(
         };
         let source_anchor_to_target_anchor =
             target_local * quality_homography * source_local_inverse;
-        let (key, transform, invert_dense_ratio) = if source_group < target_group {
-            (
-                (source_group, target_group),
-                source_anchor_to_target_anchor,
-                false,
-            )
+        let (key, transform) = if source_group < target_group {
+            ((source_group, target_group), source_anchor_to_target_anchor)
         } else {
             let Some(inverse) = source_anchor_to_target_anchor.try_inverse() else {
                 continue;
             };
-            ((target_group, source_group), inverse, true)
+            ((target_group, source_group), inverse)
         };
         // Acceptance evidence belongs to the immutable measured source pair,
         // not to whichever near-tied focus frames happen to become station
@@ -20020,7 +20007,6 @@ fn solve_station_poses_for_evidence_with_report(
             measurement_target_dimensions,
             overlap_measure,
             dense_measurements,
-            invert_dense_ratio,
         ) else {
             continue;
         };

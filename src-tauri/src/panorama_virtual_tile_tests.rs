@@ -1763,6 +1763,51 @@ fn projective_hypothesis_fixture(
     (tiles, coverages, relation, candidate_topology(2), initial)
 }
 
+fn canonical_edge_ratio_fixture(
+    source_span: u8,
+    target_span: u8,
+    swapped: bool,
+) -> (
+    Vec<ImageInfo>,
+    Vec<stitching::CoverageMask>,
+    MatchInfo,
+    topology::StationTopology,
+    HashMap<usize, Matrix3<f64>>,
+) {
+    let dimensions = (400, 300);
+    let contrast_plane = |span: u8| {
+        let low = ((255 - u16::from(span)) / 2) as u8;
+        let high = low + span;
+        GrayImage::from_fn(dimensions.0, dimensions.1, |x, y| {
+            let high_frequency = ((x / 7) + (y / 11) + ((x / 29) * (y / 31))) % 2 == 0;
+            image::Luma([if high_frequency { high } else { low }])
+        })
+    };
+    let mut source = plane_info(10, contrast_plane(source_span));
+    source.filename = "virtual://canonical-a".to_string();
+    let mut target = plane_info(20, contrast_plane(target_span));
+    target.filename = "virtual://canonical-z".to_string();
+    let tiles = if swapped {
+        vec![target, source]
+    } else {
+        vec![source, target]
+    };
+    let transform = Matrix3::identity();
+    let relation = measured_relation(
+        transform,
+        hypothesis_points(&transform, tiles[0].dimensions()),
+    );
+    let coverages = vec![
+        full_coverage(dimensions.0, dimensions.1),
+        full_coverage(dimensions.0, dimensions.1),
+    ];
+    let initial = tiles
+        .iter()
+        .map(|tile| (tile.id, Matrix3::identity()))
+        .collect();
+    (tiles, coverages, relation, candidate_topology(2), initial)
+}
+
 fn selector_and_solver_measurements(
     tiles: &[ImageInfo],
     coverages: &[stitching::CoverageMask],
@@ -1885,6 +1930,129 @@ fn selector_and_solver_share_exposure_compensated_photometric_verdict() {
 }
 
 #[test]
+fn canonical_edge_strength_ratio_is_import_order_invariant_at_asymmetric_gates() {
+    let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
+    for (source_span, target_span, expected_ratio, expected_pass) in [
+        (71, 100, 0.71, true),
+        (100, 71, 1.0 / 0.71, false),
+        (139, 100, 1.39, true),
+        (100, 139, 1.0 / 1.39, true),
+    ] {
+        let runs = [false, true].map(|swapped| {
+            let (tiles, coverages, relation, topology, initial) =
+                canonical_edge_ratio_fixture(source_span, target_span, swapped);
+            let solver_coverages = VirtualTileSolverCoverages {
+                quality: &coverages,
+                overlap: &coverages,
+                overlap_factor: 1,
+            };
+            let canonical = canonical_relation_view(&tiles, 0, 1, &relation).unwrap();
+            assert_eq!(canonical.inverted, swapped);
+            let points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if canonical.inverted {
+                Cow::Owned(
+                    relation
+                        .points
+                        .iter()
+                        .map(|&(source, target)| (target, source))
+                        .collect(),
+                )
+            } else {
+                Cow::Borrowed(&relation.points)
+            };
+            let dense = focus_overlap_quality_measurements_on_coverage(
+                &tiles[canonical.source_index],
+                &tiles[canonical.target_index],
+                &canonical.homography,
+                Some((
+                    &coverages[canonical.source_index],
+                    &coverages[canonical.target_index],
+                )),
+            )
+            .unwrap();
+            let canonical_photometric = virtual_tile_photometric_measurements(dense);
+            assert!(
+                (canonical_photometric.1 - expected_ratio).abs() < 1e-12,
+                "expected {expected_ratio}, measured {canonical_photometric:?}"
+            );
+            let direct = measure_station_relation_candidate(
+                relation.inliers,
+                &canonical.homography,
+                &points,
+                tiles[canonical.source_index].dimensions(),
+                tiles[canonical.target_index].dimensions(),
+                solver_coverages.overlap_measure(canonical.source_index, canonical.target_index),
+                Some(dense),
+            )
+            .unwrap();
+            assert!((direct.measurements.edge_strength_ratio - expected_ratio).abs() < 1e-12);
+            assert_eq!(
+                station_relation_rejection_reasons(&direct.measurements).is_empty(),
+                expected_pass
+            );
+
+            let hypotheses =
+                VirtualTileRelationHypotheses::from([((0, 1), vec![relation.clone()])]);
+            let authoritative =
+                virtual_tile_relation_is_authoritative(0, 1, &relation, &tiles, solver_coverages);
+            let provisional = virtual_tile_provisional_authoritative_candidate(
+                &tiles,
+                0,
+                1,
+                std::slice::from_ref(&relation),
+                solver_coverages,
+            );
+            assert_eq!(authoritative, expected_pass);
+            assert_eq!(provisional, expected_pass);
+            let authoritative_pairs =
+                virtual_tile_authoritative_pairs(&hypotheses, &tiles, solver_coverages);
+            let prior_free_pairs =
+                virtual_tile_prior_free_candidate_pairs(2, &authoritative_pairs, &topology);
+            assert_eq!(authoritative_pairs.is_empty(), !expected_pass);
+            assert_eq!(prior_free_pairs.is_empty(), expected_pass);
+
+            let (selection, solved, report) =
+                selector_and_solver_measurements(&tiles, &coverages, relation, &topology, &initial);
+            let selected = selection
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.selected)
+                .unwrap()
+                .clone();
+            assert_eq!(selection.passes, expected_pass);
+            assert!((selected.edge_strength_ratio - expected_ratio).abs() < 1e-12);
+            assert_eq!(solved.len() == 2, expected_pass);
+            if expected_pass {
+                assert_eq!(report.rejected_count, 0);
+                assert_eq!(report.accepted.len(), 1);
+            } else {
+                assert_eq!(selected.rejection_reasons.len(), 1);
+                assert_eq!(
+                    selected.rejection_reasons[0],
+                    degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH
+                );
+                assert_eq!(report.accepted.len(), 0);
+                assert_eq!(report.rejected_count, 1);
+                assert_eq!(report.rejected_by_reason.len(), 1);
+                assert_eq!(
+                    report.rejected_by_reason[degradation::STATION_RELATION_EDGE_STRENGTH_MISMATCH],
+                    1
+                );
+            }
+            (selection.relation.homography, selected, report)
+        });
+        assert_eq!(runs[0].0, runs[1].0, "selected hypothesis changed");
+        assert_eq!(runs[0].1.model, runs[1].1.model);
+        assert_eq!(
+            runs[0].1.source_to_target_transform,
+            runs[1].1.source_to_target_transform
+        );
+        assert_eq!(runs[0].1.rejection_reasons, runs[1].1.rejection_reasons);
+        assert_eq!(runs[0].2.rejected_count, runs[1].2.rejected_count);
+        assert_eq!(runs[0].2.rejected_by_reason, runs[1].2.rejected_by_reason);
+    }
+}
+
+#[test]
 fn multi_hypothesis_selector_keeps_compliant_model_when_projective_fails_scale() {
     let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
     let (tiles, coverages, topology) = hypothesis_fixture();
@@ -1917,7 +2085,6 @@ fn multi_hypothesis_selector_keeps_compliant_model_when_projective_fails_scale()
             &projective_canonical.homography,
             Some((&coverages[0], &coverages[1])),
         ),
-        false,
     )
     .unwrap();
     assert!(
