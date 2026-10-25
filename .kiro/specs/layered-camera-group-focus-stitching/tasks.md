@@ -148,6 +148,7 @@
 - 保留 planner 在标记 cluster repaired 前过滤越界 proposal、精确 32px sharpness window、Langyuan local32 station seam、固定 `±2px` provenance-aware boundary sampler，以及 Wenyuan shared-Local_Scale gradient 修复。
 - Wenyuan 清理前实测为 3/3 relation、gradient 256/256；owner 约 `0.745873`、safe tone max Delta-E00 约 `18.5046` 仍是已知限制。Langyuan owner/effective-pixel 与 boundary evidence 仍未通过，Residual_Warp 保持 identity。
 - QG-aligned owner Option B 与 spatial tone 只作为否定性研究结论：前者引入边界回归或无法形成 8 个安全 region，后者与 owner Source_RAW fidelity 的可行区间不相交。它们不是 active requirement，也没有 production adapter。
+- 清理分支保留较新的 remote-tracking base 后，Langyuan-10 实跑为 3 station / 0 accepted / 3 components；Wenyuan-10 两跑均为 3 station / 1 accepted / 2 components。三跑都是 10/10 decoded、digest 不变、network=0，但均在 fusion 前拒绝。历史 seam、Wenyuan 3/3 与 gradient 256/256 不能冒充 clean verification；当前 clean branch 因 base/migration 语义冲突仍未通过真实素材验收。
 
 - [x] 1. 阶段 0：一致性清理与观测骨架（无行为变更）
 

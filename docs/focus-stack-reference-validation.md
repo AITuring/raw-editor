@@ -10,6 +10,14 @@
 - QG-aligned owner region、owner smoothness/hard-terminal/probe-mean/content-region/replay 以及 spatial tone field 均未通过联合画质门槛，不进入 production。原始 owner `>=0.99` 要求不变；production tone 保持 shared-world affine，并在空间候选不可行时使用 identity fallback。
 - 基于不足 16 个独立 observation 或 holdout 未改善的 pose/Residual_Warp 变体不进入 production。边界采样只接受实际 accepted seam、Coverage 与 Source_RAW provenance，并使用固定 `±2px` cross-section；已否决的宽窗行为不保留。
 
+### 清理分支实跑结果
+
+清理分支保留较新的 remote-tracking base 后，真实素材结果没有复现上述脏树历史数字，因此当前不能发布：
+
+- Langyuan-10 解码 10/10、前后 digest 10/10 相同、network=0，但 3 个 station 的 3 条关系均因尺度门拒绝，形成 3 个分量并在 seam 前停止。报告 SHA-256 为 `68e389287497dae1f0b273348ad6b053f65b5bfaeb9d0fc8d6d5bc88187f6321`。
+- Wenyuan-10 连续两跑都解码 10/10、前后 digest 10/10 相同、network=0，且 grouping、accepted relation 与 candidate 记录逐项相同；两跑均为 3 station、1 条 accepted relation、2 个分量，另两条关系因尺度拒绝，未进入 Quality Gate。报告 SHA-256 分别为 `4c33a1eb5fca7d9a76edefa24b5b3adce03169f3fc6c3fd2a3b2674eeddae5fc` 与 `af3e9e995760d7899fc8aca6584842d461e28969a8ee6f9e42ff1f46418d419c`。
+- 一次隔离试验移除 remote-tracking base 的 anchor-grid/native refinement 后可以连通两套 10 张，但会撤销较新的基线行为，且 Wenyuan 新增 effective-pixel 失败；该试验已撤回，不能作为 production 修复或清理分支验证。
+
 本文记录一次针对长幅平面画作的参考驱动验收，以及为该类输入保留在生产路径中的修复。
 参考文件只用于建立可信几何和诊断对照；生产拼接器不会把参考图像像素复制进结果。
 
