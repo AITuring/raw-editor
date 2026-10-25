@@ -12446,6 +12446,8 @@ mod interpolation_tests {
                 if expect_unchanged {
                     assert_eq!(optimized.3.changed_pixels, 0, "{name}");
                     assert_eq!(optimized.3.rewrite_visits, 0, "{name}");
+                } else {
+                    assert!(optimized.3.changed_pixels > 0, "{name}");
                 }
             }
         }
