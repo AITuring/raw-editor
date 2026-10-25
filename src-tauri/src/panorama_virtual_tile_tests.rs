@@ -166,6 +166,13 @@ fn sample_tile_to_world() -> Vec<Matrix3<f64>> {
     ]
 }
 
+fn sample_station_world_centres(tile_to_world: &[Matrix3<f64>]) -> Vec<Point2<f64>> {
+    tile_to_world
+        .iter()
+        .map(|pose| transformed_point(pose, Point2::new(500.0, 400.0)).unwrap())
+        .collect()
+}
+
 fn sample_relation(dx: f64, dy: f64) -> Matrix3<f64> {
     Matrix3::new(
         0.998, 0.004, dx, 0.003, 1.001, dy, 0.000_002, -0.000_001, 1.0,
@@ -1138,6 +1145,99 @@ fn plan_virtual_tile_prior_repairs_ignores_invalid_proposals_and_skips_singular_
     );
 }
 
+#[test]
+fn prior_repair_preflight_falls_back_after_stronger_displacement_failure() {
+    let tile_to_world = vec![Matrix3::identity(), translation(400.0, 0.0)];
+    let centres = sample_station_world_centres(&tile_to_world);
+    let strong = prior_proposal(0, 1, Matrix3::identity(), 90);
+    let weak = prior_proposal(0, 1, translation(-380.0, 0.0), 50);
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        2,
+        &[],
+        &[weak, strong],
+        &tile_to_world,
+        &centres,
+        &line_topology(2),
+    );
+    assert_eq!(repaired_stations(&repairs), vec![1]);
+    assert_eq!(repairs[0].relation_inliers, 50);
+    assert_eq!(
+        virtual_tile_prior_repair_measurements(&repairs[0].world_correction, centres[1])
+            .unwrap()
+            .0,
+        20.0
+    );
+    assert_eq!(
+        plan_virtual_tile_prior_repairs_with_centres(
+            2,
+            &[],
+            &[strong, weak],
+            &tile_to_world,
+            &centres,
+            &line_topology(2),
+        ),
+        repairs,
+        "proposal order must not affect fallback or report order"
+    );
+}
+
+#[test]
+fn prior_repair_preflight_uses_member_centre_projective_scale() {
+    let tile_to_world = vec![Matrix3::identity(), Matrix3::identity()];
+    let centres = vec![Point2::new(0.0, 0.0), Point2::new(600.0, 400.0)];
+    let correction = Matrix3::new(1.5, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0005, 0.0, 1.0);
+    assert!(homography_scale_ratio(&correction).unwrap() > STATION_RELATION_SCALE_RATIO_MAX);
+    let (shift, scale) = virtual_tile_prior_repair_measurements(&correction, centres[1]).unwrap();
+    assert!(virtual_tile_prior_repair_is_bounded(shift, scale));
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        2,
+        &[],
+        &[prior_proposal(0, 1, correction.try_inverse().unwrap(), 70)],
+        &tile_to_world,
+        &centres,
+        &line_topology(2),
+    );
+    assert_eq!(repaired_stations(&repairs), vec![1]);
+    assert_projectively_equal(
+        &repairs[0].world_correction,
+        &correction,
+        "member-centre projective correction",
+    );
+}
+
+#[test]
+fn prior_repair_preflight_rejects_the_whole_cluster_when_one_member_fails() {
+    let tile_to_world = vec![Matrix3::identity(); 5];
+    let correction = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -0.0005, 0.0, 1.0);
+    let centres = vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(20.0, 100.0),
+        Point2::new(1_200.0, 100.0),
+        Point2::new(0.0, 0.0),
+        Point2::new(0.0, 0.0),
+    ];
+    assert!(virtual_tile_prior_repair_is_bounded_at_center(
+        &correction,
+        centres[1]
+    ));
+    assert!(!virtual_tile_prior_repair_is_bounded_at_center(
+        &correction,
+        centres[2]
+    ));
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        5,
+        &[(0, 3), (3, 4), (1, 2)],
+        &[prior_proposal(0, 1, correction.try_inverse().unwrap(), 80)],
+        &tile_to_world,
+        &centres,
+        &line_topology(5),
+    );
+    assert!(
+        repairs.is_empty(),
+        "no cluster member may be partially planned"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 6. bounded residual correction
 // ---------------------------------------------------------------------------
@@ -1590,6 +1690,193 @@ fn hypothesis_fixture() -> (
         ],
         candidate_topology(2),
     )
+}
+
+fn projective_hypothesis_fixture(
+    transform: Matrix3<f64>,
+    target_gain: f64,
+) -> (
+    Vec<ImageInfo>,
+    Vec<stitching::CoverageMask>,
+    MatchInfo,
+    topology::StationTopology,
+    HashMap<usize, Matrix3<f64>>,
+) {
+    let dimensions = (800u32, 600u32);
+    let texture = |x: f64, y: f64| {
+        (128.0
+            + 42.0 * (x * 0.051 + y * 0.037).sin()
+            + 31.0 * (x * 0.023 - y * 0.079).cos()
+            + 18.0 * (x * 0.131 + y * 0.097).sin())
+        .clamp(1.0, 254.0)
+    };
+    let inverse = transform.try_inverse().unwrap();
+    let left = GrayImage::from_fn(dimensions.0, dimensions.1, |x, y| {
+        image::Luma([texture(f64::from(x), f64::from(y)).round() as u8])
+    });
+    let right = GrayImage::from_fn(dimensions.0, dimensions.1, |x, y| {
+        let value = transformed_point(&inverse, Point2::new(f64::from(x), f64::from(y)))
+            .filter(|point| {
+                point.x >= 0.0
+                    && point.y >= 0.0
+                    && point.x < f64::from(dimensions.0)
+                    && point.y < f64::from(dimensions.1)
+            })
+            .map_or(0.0, |point| texture(point.x, point.y) * target_gain);
+        image::Luma([value.clamp(0.0, 255.0).round() as u8])
+    });
+    let mut tiles = vec![plane_info(0, left), plane_info(1, right)];
+    for tile in &mut tiles {
+        tile.width = dimensions.0;
+        tile.height = dimensions.1;
+    }
+    let target_coverage = coverage_from_fn(dimensions.0, dimensions.1, |x, y| {
+        transformed_point(&inverse, Point2::new(f64::from(x), f64::from(y))).is_some_and(|point| {
+            point.x >= 0.0
+                && point.y >= 0.0
+                && point.x < f64::from(dimensions.0)
+                && point.y < f64::from(dimensions.1)
+        })
+    });
+    let coverages = vec![full_coverage(dimensions.0, dimensions.1), target_coverage];
+    let points = (0..8)
+        .flat_map(|row| {
+            (0..8).map(move |column| {
+                Point2::new(
+                    200.0 + f64::from(column) * 400.0 / 7.0,
+                    80.0 + f64::from(row) * 440.0 / 7.0,
+                )
+            })
+        })
+        .map(|source| (source, transformed_point(&transform, source).unwrap()))
+        .collect();
+    let relation = measured_relation(transform, points);
+    let initial = HashMap::from([
+        (tiles[0].id, Matrix3::identity()),
+        (tiles[1].id, transform.try_inverse().unwrap()),
+    ]);
+    (tiles, coverages, relation, candidate_topology(2), initial)
+}
+
+fn selector_and_solver_measurements(
+    tiles: &[ImageInfo],
+    coverages: &[stitching::CoverageMask],
+    relation: MatchInfo,
+    topology: &topology::StationTopology,
+    initial: &HashMap<usize, Matrix3<f64>>,
+) -> (
+    VirtualTileHypothesisSelection,
+    HashMap<usize, Matrix3<f64>>,
+    report::StationRelationsReport,
+) {
+    let solver_coverages = VirtualTileSolverCoverages {
+        quality: coverages,
+        overlap: coverages,
+        overlap_factor: 1,
+    };
+    let selection = select_virtual_tile_relation_hypothesis(
+        tiles,
+        0,
+        1,
+        std::slice::from_ref(&relation),
+        solver_coverages,
+    )
+    .unwrap();
+    let hypotheses = VirtualTileRelationHypotheses::from([((0, 1), vec![relation])]);
+    let mut closure = report::ClosureReport::default();
+    let mut relation_report = report::StationRelationsReport::default();
+    let solved = solve_virtual_tile_station_hypotheses_with_report(
+        tiles,
+        solver_coverages,
+        &hypotheses,
+        initial,
+        topology,
+        &mut closure,
+        &mut relation_report,
+    );
+    (selection, solved, relation_report)
+}
+
+#[test]
+fn selector_and_solver_share_overlap_scale_when_origin_scale_disagrees() {
+    let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
+    for (transform, expected_pass) in [
+        (
+            Matrix3::new(0.9, 0.0, 0.0, 0.0, 0.9, 0.0, -0.00017, 0.0, 1.0),
+            true,
+        ),
+        (
+            Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -0.00016, 0.0, 1.0),
+            false,
+        ),
+    ] {
+        let (tiles, coverages, relation, topology, initial) =
+            projective_hypothesis_fixture(transform, 1.0);
+        let origin_scale = homography_scale_ratio(&transform).unwrap();
+        let overlap_scale = station_relation_overlap_scale(&transform, &relation.points).unwrap();
+        assert_ne!(
+            (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+                .contains(&origin_scale),
+            (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+                .contains(&overlap_scale),
+        );
+        let (selection, solved, report) =
+            selector_and_solver_measurements(&tiles, &coverages, relation, &topology, &initial);
+        let selected = selection
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.selected)
+            .unwrap();
+        assert_eq!(selection.passes, expected_pass);
+        assert_eq!(report.accepted.len() == 1, expected_pass);
+        assert_eq!(solved.len() == 2, expected_pass);
+        if expected_pass {
+            assert_eq!(report.accepted[0].scale_ratio, selected.scale_ratio);
+        } else {
+            assert!(
+                selected
+                    .rejection_reasons
+                    .iter()
+                    .any(|reason| reason == degradation::STATION_RELATION_SCALE_OUT_OF_RANGE)
+            );
+            assert_eq!(
+                report.rejected_by_reason[degradation::STATION_RELATION_SCALE_OUT_OF_RANGE],
+                1
+            );
+        }
+    }
+}
+
+#[test]
+fn selector_and_solver_share_exposure_compensated_photometric_verdict() {
+    let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
+    let transform = Matrix3::identity();
+    let (tiles, coverages, relation, topology, initial) =
+        projective_hypothesis_fixture(transform, 0.7);
+    let raw = focus_overlap_quality_measurements_on_coverage(
+        &tiles[0],
+        &tiles[1],
+        &transform,
+        Some((&coverages[0], &coverages[1])),
+    )
+    .unwrap();
+    assert!(raw.low_frequency_mean_relative_difference > 0.2);
+    assert!(virtual_tile_photometric_measurements(raw).0 <= 0.2);
+    let (selection, solved, report) =
+        selector_and_solver_measurements(&tiles, &coverages, relation, &topology, &initial);
+    let selected = selection
+        .outcomes
+        .iter()
+        .find(|outcome| outcome.selected)
+        .unwrap();
+    assert!(selection.passes, "{:?}", selected.rejection_reasons);
+    assert!(selected.low_frequency_mean_relative_difference <= 0.2);
+    assert_eq!(report.accepted.len(), 1);
+    assert_eq!(
+        report.accepted[0].scale_ratio, selected.scale_ratio,
+        "selector and solver must retain the same canonical measurement"
+    );
+    assert_eq!(solved.len(), 2);
 }
 
 #[test]

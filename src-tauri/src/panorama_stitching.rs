@@ -8520,143 +8520,147 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             .iter()
                             .map(|tile| tile_homographies[&tile.id])
                             .collect::<Vec<_>>();
-                        let repairs = plan_virtual_tile_prior_repairs(
+                        let station_world_centres = geometries
+                            .iter()
+                            .zip(&station_tile_to_world)
+                            .filter_map(|(geometry, tile_to_world)| {
+                                transformed_point(
+                                    tile_to_world,
+                                    Point2::new(
+                                        f64::from(geometry.width) * 0.5,
+                                        f64::from(geometry.height) * 0.5,
+                                    ),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let repairs = plan_virtual_tile_prior_repairs_with_centres(
                             tile_infos.len(),
                             &authoritative_pairs,
                             &proposals,
                             &station_tile_to_world,
+                            &station_world_centres,
                             station_topology,
                         );
                         let mut repaired = BTreeSet::new();
+                        let mut repair_clusters =
+                            BTreeMap::<usize, Vec<&VirtualTilePriorRepair>>::new();
                         for repair in &repairs {
-                            let station = repair.station;
-                            // Evaluate the complete correction on copies before
-                            // mutating the rendering priors.  A prior-free fit
-                            // can be internally coherent while still implying
-                            // an implausible world jump or scale change; such a
-                            // proposal must never reach the renderer.
+                            repair_clusters
+                                .entry(repair.cluster_root)
+                                .or_default()
+                                .push(repair);
+                        }
+                        for cluster_repairs in repair_clusters.values() {
+                            // Preflight every member on one copy. No rendering
+                            // prior is committed unless the entire cluster has
+                            // valid poses, geometry, centre shift and scale.
                             let mut candidate_homographies = station_render_homographies.clone();
                             let mut candidate_focus_warp = station_focus_warp.clone();
-                            if !apply_virtual_tile_prior_repair(
-                                group_slices[station],
-                                &repair.world_correction,
-                                &mut candidate_homographies,
-                                candidate_focus_warp.as_mut(),
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: a corrected source pose is not a valid planar pose"
-                                );
-                                continue;
-                            }
-                            let Some(candidate_geometry) =
-                                stitching::focus_stack_virtual_tile_geometry(
+                            let mut candidates = Vec::with_capacity(cluster_repairs.len());
+                            let mut rejected = None;
+                            for &repair in cluster_repairs {
+                                let station = repair.station;
+                                if !apply_virtual_tile_prior_repair(
                                     group_slices[station],
-                                    &candidate_homographies,
-                                    projection,
-                                    candidate_focus_warp.as_ref(),
-                                )
-                            else {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: corrected geometry is invalid"
-                                );
-                                continue;
-                            };
-                            let old_center = transformed_point(
-                                &station_tile_to_world[station],
-                                Point2::new(
-                                    f64::from(geometries[station].width) * 0.5,
-                                    f64::from(geometries[station].height) * 0.5,
-                                ),
-                            );
-                            let new_center = transformed_point(
-                                &candidate_geometry.tile_to_world,
-                                Point2::new(
-                                    f64::from(candidate_geometry.width) * 0.5,
-                                    f64::from(candidate_geometry.height) * 0.5,
-                                ),
-                            );
-                            let center_shift_px = old_center
-                                .zip(new_center)
-                                .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
-                            let correction_scale_ratio = old_center
-                                .and_then(|center| {
-                                    virtual_tile_repair_local_scale_ratio(
-                                        &repair.world_correction,
-                                        center,
+                                    &repair.world_correction,
+                                    &mut candidate_homographies,
+                                    candidate_focus_warp.as_mut(),
+                                ) {
+                                    rejected = Some((
+                                        station,
+                                        "a corrected source pose is not a valid planar pose",
+                                    ));
+                                    break;
+                                }
+                                let Some(candidate_geometry) =
+                                    stitching::focus_stack_virtual_tile_geometry(
+                                        group_slices[station],
+                                        &candidate_homographies,
+                                        projection,
+                                        candidate_focus_warp.as_ref(),
                                     )
-                                })
-                                .unwrap_or(f64::NAN);
-                            if !virtual_tile_prior_repair_is_bounded(
-                                center_shift_px,
-                                correction_scale_ratio,
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: correction is outside bounds (shift {center_shift_px:.1}px, scale {correction_scale_ratio:.4})"
-                                );
-                                continue;
-                            }
-                            if !apply_virtual_tile_prior_repair(
-                                group_slices[station],
-                                &repair.world_correction,
-                                &mut station_render_homographies,
-                                station_focus_warp.as_mut(),
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: a corrected source pose is not a valid planar pose"
-                                );
-                                continue;
-                            }
-                            let Some(geometry) = stitching::focus_stack_virtual_tile_geometry(
-                                group_slices[station],
-                                &station_render_homographies,
-                                projection,
-                                station_focus_warp.as_ref(),
-                            ) else {
-                                return Err(format!(
-                                    "Virtual tile station {station} has invalid bounds after its prior repair"
+                                else {
+                                    rejected = Some((station, "corrected geometry is invalid"));
+                                    break;
+                                };
+                                let Some((center_shift_px, correction_scale_ratio)) =
+                                    virtual_tile_prior_repair_measurements(
+                                        &repair.world_correction,
+                                        station_world_centres[station],
+                                    )
+                                else {
+                                    rejected =
+                                        Some((station, "correction measurements are invalid"));
+                                    break;
+                                };
+                                if !virtual_tile_prior_repair_is_bounded(
+                                    center_shift_px,
+                                    correction_scale_ratio,
+                                ) {
+                                    rejected = Some((station, "correction is outside bounds"));
+                                    break;
+                                }
+                                candidates.push((
+                                    repair,
+                                    candidate_geometry,
+                                    center_shift_px,
+                                    correction_scale_ratio,
                                 ));
-                            };
-                            println!(
-                                "  - Virtual_Tile prior repair: station {station} moved {center_shift_px:.1}px (scale {correction_scale_ratio:.4}) onto station {} via prior-free relation {}->{} ({} verified inliers); rendering it once more",
-                                repair.fixed_station,
-                                repair.relation.0,
-                                repair.relation.1,
-                                repair.relation_inliers,
-                            );
-                            geometries[station] = geometry;
-                            let tile = &mut tile_infos[station];
-                            tile.width = geometry.width;
-                            tile.height = geometry.height;
-                            tile_homographies.insert(tile.id, geometry.tile_to_world);
-                            let (gray, coverage) = render_virtual_tile_match_plane(
-                                group_slices[station],
-                                &station_render_homographies,
-                                projection,
-                                station_focus_warp.as_ref(),
-                                station,
-                                geometry,
-                                app_handle.clone(),
-                                progress_event,
-                                &mut load_render_image,
-                            )?;
-                            install_virtual_tile_match_planes(
-                                tile,
-                                &mut pyramid,
-                                station,
-                                &gray,
-                                &coverage,
-                                &brief_pairs,
-                            )?;
-                            repaired.insert(station);
-                            prior_repair_records.push(stack_report::StationPriorRepairRecord {
-                                station,
-                                fixed_station: repair.fixed_station,
-                                relation_left: repair.relation.0,
-                                relation_right: repair.relation.1,
-                                relation_inliers: repair.relation_inliers,
-                                center_shift_px,
-                                correction_scale_ratio,
-                            });
+                            }
+                            if let Some((station, reason)) = rejected {
+                                println!(
+                                    "  - Virtual_Tile prior repair cluster containing station {station} rejected atomically: {reason}"
+                                );
+                                continue;
+                            }
+                            station_render_homographies = candidate_homographies;
+                            station_focus_warp = candidate_focus_warp;
+                            for (repair, geometry, center_shift_px, correction_scale_ratio) in
+                                candidates
+                            {
+                                let station = repair.station;
+                                println!(
+                                    "  - Virtual_Tile prior repair: station {station} moved {center_shift_px:.1}px (scale {correction_scale_ratio:.4}) onto station {} via prior-free relation {}->{} ({} verified inliers); rendering it once more",
+                                    repair.fixed_station,
+                                    repair.relation.0,
+                                    repair.relation.1,
+                                    repair.relation_inliers,
+                                );
+                                geometries[station] = geometry;
+                                let tile = &mut tile_infos[station];
+                                tile.width = geometry.width;
+                                tile.height = geometry.height;
+                                tile_homographies.insert(tile.id, geometry.tile_to_world);
+                                let (gray, coverage) = render_virtual_tile_match_plane(
+                                    group_slices[station],
+                                    &station_render_homographies,
+                                    projection,
+                                    station_focus_warp.as_ref(),
+                                    station,
+                                    geometry,
+                                    app_handle.clone(),
+                                    progress_event,
+                                    &mut load_render_image,
+                                )?;
+                                install_virtual_tile_match_planes(
+                                    tile,
+                                    &mut pyramid,
+                                    station,
+                                    &gray,
+                                    &coverage,
+                                    &brief_pairs,
+                                )?;
+                                repaired.insert(station);
+                                prior_repair_records.push(stack_report::StationPriorRepairRecord {
+                                    station,
+                                    fixed_station: repair.fixed_station,
+                                    relation_left: repair.relation.0,
+                                    relation_right: repair.relation.1,
+                                    relation_inliers: repair.relation_inliers,
+                                    center_shift_px,
+                                    correction_scale_ratio,
+                                });
+                            }
                         }
                         if !repaired.is_empty() {
                             station_poses_replaced = true;
@@ -13283,18 +13287,35 @@ fn measure_station_relation_candidate(
     if !quality.is_finite() || quality <= 0.0 {
         return None;
     }
-    let edge_strength_ratio = dense_measurements.map_or(f64::INFINITY, |measurements| {
-        if invert_edge_strength_ratio {
-            1.0 / measurements.edge_strength_ratio
+    let virtual_tile_measurement =
+        matches!(overlap_measure, Some(StationOverlapMeasure::Covered { .. }));
+    let photometric = dense_measurements.map(|measurements| {
+        if virtual_tile_measurement {
+            virtual_tile_photometric_measurements(measurements)
         } else {
-            measurements.edge_strength_ratio
+            (
+                measurements.low_frequency_mean_relative_difference,
+                measurements.edge_strength_ratio,
+            )
+        }
+    });
+    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
+        if invert_edge_strength_ratio {
+            1.0 / strength
+        } else {
+            strength
         }
     });
     Some(MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
             inliers,
             median_error_px,
-            scale_ratio: homography_scale_ratio(source_to_target).unwrap_or(f64::INFINITY),
+            scale_ratio: if virtual_tile_measurement {
+                station_relation_overlap_scale(source_to_target, points)
+            } else {
+                homography_scale_ratio(source_to_target)
+            }
+            .unwrap_or(f64::INFINITY),
             spatial_support: overlap_measure.map_or(0.0, |measure| {
                 station_relation_spatial_support_with(
                     points,
@@ -13304,10 +13325,8 @@ fn measure_station_relation_candidate(
                     measure,
                 )
             }),
-            low_frequency_mean_relative_difference: dense_measurements
-                .map_or(f64::INFINITY, |measurements| {
-                    measurements.low_frequency_mean_relative_difference
-                }),
+            low_frequency_mean_relative_difference: photometric
+                .map_or(f64::INFINITY, |(difference, _)| difference),
             edge_strength_ratio,
             median_edge_orientation_difference_degrees: dense_measurements
                 .map_or(f64::INFINITY, |measurements| {
@@ -13334,6 +13353,7 @@ struct FocusGroupEdgeCandidate {
     low_frequency_mean_relative_difference: f64,
     edge_strength_ratio: f64,
     median_edge_orientation_difference_degrees: f64,
+    preserves_convex_orientation: bool,
 }
 
 /// Exact Closure_Optimizer M-estimator multiplier from requirement 7.3.
@@ -17542,6 +17562,7 @@ struct VirtualTilePriorProposal {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct VirtualTilePriorRepair {
     station: usize,
+    cluster_root: usize,
     fixed_station: usize,
     relation: (usize, usize),
     relation_inliers: usize,
@@ -17559,6 +17580,29 @@ fn virtual_tile_prior_repair_is_bounded(center_shift_px: f64, correction_scale_r
         && correction_scale_ratio.is_finite()
         && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
             .contains(&correction_scale_ratio)
+}
+
+fn virtual_tile_prior_repair_measurements(
+    correction: &Matrix3<f64>,
+    station_world_center: Point2<f64>,
+) -> Option<(f64, f64)> {
+    let corrected_center = transformed_point(correction, station_world_center)?;
+    let center_shift_px = (corrected_center - station_world_center).norm();
+    let correction_scale_ratio =
+        virtual_tile_repair_local_scale_ratio(correction, station_world_center)?;
+    (center_shift_px.is_finite() && correction_scale_ratio.is_finite())
+        .then_some((center_shift_px, correction_scale_ratio))
+}
+
+fn virtual_tile_prior_repair_is_bounded_at_center(
+    correction: &Matrix3<f64>,
+    station_world_center: Point2<f64>,
+) -> bool {
+    virtual_tile_prior_repair_measurements(correction, station_world_center).is_some_and(
+        |(center_shift_px, correction_scale_ratio)| {
+            virtual_tile_prior_repair_is_bounded(center_shift_px, correction_scale_ratio)
+        },
+    )
 }
 
 /// Apply the exact pure Station_Relation gates to a Virtual_Tile match before
@@ -17591,9 +17635,7 @@ fn virtual_tile_relation_is_authoritative(
     };
     let quality_source = canonical.source_index;
     let quality_target = canonical.target_index;
-    let quality_inverted = canonical.inverted;
-    let quality_homography = canonical.homography;
-    let quality_points = if quality_inverted {
+    let quality_points = if canonical.inverted {
         relation
             .points
             .iter()
@@ -17602,77 +17644,28 @@ fn virtual_tile_relation_is_authoritative(
     } else {
         relation.points.clone()
     };
-    let source_dimensions = tiles[quality_source].dimensions();
-    let target_dimensions = tiles[quality_target].dimensions();
-    let error = median_symmetric_error(&quality_homography, &quality_points);
-    let precision = if error.is_finite() {
-        1.0 / (1.0 + error / STATION_RELATION_MAX_MEDIAN_ERROR_PX)
-    } else {
-        0.0
-    };
-    let spatial = panorama_spatial_support(&quality_points, source_dimensions, target_dimensions);
-    let overlap = panorama_transform_overlap_support(
-        &quality_homography,
-        source_dimensions,
-        target_dimensions,
-    );
     let quality_coverages = coverages
         .quality
         .get(quality_source)
         .zip(coverages.quality.get(quality_target));
-    let Some(dense_measurements) = focus_overlap_quality_measurements_on_coverage(
+    let dense_measurements = focus_overlap_quality_measurements_on_coverage(
         &tiles[quality_source],
         &tiles[quality_target],
-        &quality_homography,
+        &canonical.homography,
         quality_coverages,
-    ) else {
-        return false;
-    };
-    let dense_quality = dense_measurements.legacy_tuple();
-    let dense_weight = 0.25
-        + dense_quality.0.max(0.0)
-        + 0.5 * dense_quality.1.max(0.0)
-        + 0.25 * dense_quality.2.max(0.0);
-    let quality = (relation.inliers.max(quality_points.len()) as f64).sqrt()
-        * precision
-        * (0.25 + 0.75 * spatial)
-        * (0.25 + 0.75 * overlap)
-        * dense_weight;
-    if !quality.is_finite() || quality <= 0.0 {
-        return false;
-    }
-    let (photometric_difference, measured_strength) =
-        virtual_tile_photometric_measurements(dense_measurements);
-    let edge_strength_ratio = if quality_inverted {
-        1.0 / measured_strength
-    } else {
-        measured_strength
-    };
-    let Some(overlap_measure) = coverages.overlap_measure(quality_source, quality_target) else {
-        return false;
-    };
-    let measurements = StationRelationMeasurements {
-        inliers: relation.inliers.max(quality_points.len()),
-        median_error_px: error,
-        scale_ratio: station_relation_overlap_scale(&quality_homography, &quality_points)
-            .unwrap_or(f64::INFINITY),
-        spatial_support: station_relation_spatial_support_with(
-            &quality_points,
-            &quality_homography,
-            source_dimensions,
-            target_dimensions,
-            overlap_measure,
-        ),
-        low_frequency_mean_relative_difference: photometric_difference,
-        edge_strength_ratio,
-        median_edge_orientation_difference_degrees: dense_measurements
-            .median_edge_orientation_difference_degrees,
-        preserves_convex_orientation: homography_preserves_focus_orientation(
-            &quality_homography,
-            source_dimensions,
-        ),
-    };
-    station_relation_rejection_reasons(&measurements).is_empty()
+    );
+    let overlap_measure = coverages.overlap_measure(quality_source, quality_target);
+    measure_station_relation_candidate(
+        relation.inliers.max(quality_points.len()),
+        &canonical.homography,
+        &quality_points,
+        tiles[quality_source].dimensions(),
+        tiles[quality_target].dimensions(),
+        overlap_measure,
+        dense_measurements,
+        canonical.inverted,
+    )
+    .is_some_and(|candidate| station_relation_rejection_reasons(&candidate.measurements).is_empty())
 }
 
 fn matrix3_row_major(transform: &Matrix3<f64>) -> [f64; 9] {
@@ -18097,14 +18090,18 @@ fn virtual_tile_prior_free_candidate_pairs(
 /// unfixed cluster so that the proposal's measured relation holds; a cluster is
 /// repaired at most once and a station therefore re-rendered at most once.
 /// Stations no proposal reaches keep their prior (and stay disconnected).
-fn plan_virtual_tile_prior_repairs(
+fn plan_virtual_tile_prior_repairs_with_centres(
     station_count: usize,
     authoritative_pairs: &[(usize, usize)],
     proposals: &[VirtualTilePriorProposal],
     tile_to_world: &[Matrix3<f64>],
+    station_world_centres: &[Point2<f64>],
     station_topology: &topology::StationTopology,
 ) -> Vec<VirtualTilePriorRepair> {
-    if station_count < 2 || tile_to_world.len() != station_count {
+    if station_count < 2
+        || tile_to_world.len() != station_count
+        || station_world_centres.len() != station_count
+    {
         return Vec::new();
     }
     let mut clusters = Dsu::new(station_count);
@@ -18204,21 +18201,22 @@ fn plan_virtual_tile_prior_repairs(
             continue;
         };
         if correction.try_inverse().is_none()
-            || !virtual_tile_prior_repair_is_bounded(
-                0.0,
-                homography_scale_ratio(&correction).unwrap_or(f64::NAN),
-            )
+            || members[&unfixed_root].iter().any(|&station| {
+                !virtual_tile_prior_repair_is_bounded_at_center(
+                    &correction,
+                    station_world_centres[station],
+                )
+            })
         {
-            // An inadmissible strongest proposal must not mark this cluster as
-            // repaired and suppress a weaker proposal that stays inside the
-            // unchanged repair envelope. The render-time check below still
-            // measures the actual centre shift before mutating source poses.
+            // Reject the proposal atomically before this cluster is marked as
+            // repaired, so a weaker bounded proposal remains eligible.
             continue;
         }
         corrections.insert(unfixed_root, correction);
         for &station in &members[&unfixed_root] {
             repairs.push(VirtualTilePriorRepair {
                 station,
+                cluster_root: unfixed_root,
                 fixed_station: fixed,
                 relation: (proposal.left, proposal.right),
                 relation_inliers: proposal.inliers,
@@ -18228,6 +18226,28 @@ fn plan_virtual_tile_prior_repairs(
     }
     repairs.sort_by_key(|repair| repair.station);
     repairs
+}
+
+#[cfg(test)]
+fn plan_virtual_tile_prior_repairs(
+    station_count: usize,
+    authoritative_pairs: &[(usize, usize)],
+    proposals: &[VirtualTilePriorProposal],
+    tile_to_world: &[Matrix3<f64>],
+    station_topology: &topology::StationTopology,
+) -> Vec<VirtualTilePriorRepair> {
+    let station_world_centres = tile_to_world
+        .iter()
+        .filter_map(|pose| transformed_point(pose, Point2::new(500.0, 400.0)))
+        .collect::<Vec<_>>();
+    plan_virtual_tile_prior_repairs_with_centres(
+        station_count,
+        authoritative_pairs,
+        proposals,
+        tile_to_world,
+        &station_world_centres,
+        station_topology,
+    )
 }
 
 /// Render one Capture_Station for station matching only and return its covered
@@ -19948,32 +19968,17 @@ fn solve_station_poses_for_evidence_with_report(
         };
         let source_anchor_to_target_anchor =
             target_local * quality_homography * source_local_inverse;
-        let anchor_points_in_measurement_direction = quality_points
-            .iter()
-            .filter_map(|&(source, target)| {
-                transformed_point(source_local, source).zip(transformed_point(target_local, target))
-            })
-            .collect::<Vec<_>>();
-        let (key, transform, anchor_points, invert_dense_ratio) = if source_group < target_group {
+        let (key, transform, invert_dense_ratio) = if source_group < target_group {
             (
                 (source_group, target_group),
                 source_anchor_to_target_anchor,
-                anchor_points_in_measurement_direction,
                 false,
             )
         } else {
             let Some(inverse) = source_anchor_to_target_anchor.try_inverse() else {
                 continue;
             };
-            (
-                (target_group, source_group),
-                inverse,
-                anchor_points_in_measurement_direction
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect(),
-                true,
-            )
+            ((target_group, source_group), inverse, true)
         };
         // Acceptance evidence belongs to the immutable measured source pair,
         // not to whichever near-tied focus frames happen to become station
@@ -19983,22 +19988,6 @@ fn solve_station_poses_for_evidence_with_report(
         // anchor transform and anchor points remain the pose-graph payload.
         let measurement_source_dimensions = images[quality_source].dimensions();
         let measurement_target_dimensions = images[quality_target].dimensions();
-        let error = median_symmetric_error(&quality_homography, &quality_points);
-        let precision = if error.is_finite() {
-            1.0 / (1.0 + error / STATION_RELATION_MAX_MEDIAN_ERROR_PX)
-        } else {
-            0.0
-        };
-        let spatial = panorama_spatial_support(
-            &quality_points,
-            measurement_source_dimensions,
-            measurement_target_dimensions,
-        );
-        let overlap = panorama_transform_overlap_support(
-            &quality_homography,
-            measurement_source_dimensions,
-            measurement_target_dimensions,
-        );
         // Virtual_Tile evidence is re-checked only where both tiles are
         // covered; a missing mask leaves the relation unmeasured (rejected).
         let quality_coverage_pair = match coverages {
@@ -20023,66 +20012,37 @@ fn solve_station_poses_for_evidence_with_report(
                 coverages,
             )
         });
-        let dense_quality = dense_measurements.map(FocusOverlapQuality::legacy_tuple);
-        let dense_weight = dense_quality.map_or(1.0, |(intensity, edge, orientation, _)| {
-            0.25 + intensity.max(0.0) + 0.5 * edge.max(0.0) + 0.25 * orientation.max(0.0)
-        });
-        let quality = (match_info.inliers.max(anchor_points.len()) as f64).sqrt()
-            * precision
-            * (0.25 + 0.75 * spatial)
-            * (0.25 + 0.75 * overlap)
-            * dense_weight;
-        if quality.is_finite() && quality > 0.0 {
-            let photometric = dense_measurements.map(|measurements| {
-                if coverages.is_some() {
-                    virtual_tile_photometric_measurements(measurements)
-                } else {
-                    (
-                        measurements.low_frequency_mean_relative_difference,
-                        measurements.edge_strength_ratio,
-                    )
-                }
+        let Some(measured) = measure_station_relation_candidate(
+            match_info.inliers.max(quality_points.len()),
+            &quality_homography,
+            &quality_points,
+            measurement_source_dimensions,
+            measurement_target_dimensions,
+            overlap_measure,
+            dense_measurements,
+            invert_dense_ratio,
+        ) else {
+            continue;
+        };
+        let measurements = measured.measurements;
+        candidates
+            .entry(key)
+            .or_default()
+            .push(FocusGroupEdgeCandidate {
+                transform,
+                quality: measured.quality,
+                independent_support: if consensus_coarse { 2 } else { 1 },
+                inlier_count: measurements.inliers,
+                median_error_px: measurements.median_error_px,
+                scale_ratio: measurements.scale_ratio,
+                spatial_support: measurements.spatial_support,
+                low_frequency_mean_relative_difference: measurements
+                    .low_frequency_mean_relative_difference,
+                edge_strength_ratio: measurements.edge_strength_ratio,
+                median_edge_orientation_difference_degrees: measurements
+                    .median_edge_orientation_difference_degrees,
+                preserves_convex_orientation: measurements.preserves_convex_orientation,
             });
-            let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
-                if invert_dense_ratio {
-                    1.0 / strength
-                } else {
-                    strength
-                }
-            });
-            candidates
-                .entry(key)
-                .or_default()
-                .push(FocusGroupEdgeCandidate {
-                    transform,
-                    quality,
-                    independent_support: if consensus_coarse { 2 } else { 1 },
-                    inlier_count: match_info.inliers.max(anchor_points.len()),
-                    median_error_px: error,
-                    scale_ratio: if coverages.is_some() {
-                        station_relation_overlap_scale(&quality_homography, &quality_points)
-                    } else {
-                        homography_scale_ratio(&quality_homography)
-                    }
-                    .unwrap_or(f64::INFINITY),
-                    spatial_support: overlap_measure.map_or(0.0, |measure| {
-                        station_relation_spatial_support_with(
-                            &quality_points,
-                            &quality_homography,
-                            measurement_source_dimensions,
-                            measurement_target_dimensions,
-                            measure,
-                        )
-                    }),
-                    low_frequency_mean_relative_difference: photometric
-                        .map_or(f64::INFINITY, |(difference, _)| difference),
-                    edge_strength_ratio,
-                    median_edge_orientation_difference_degrees: dense_measurements
-                        .map_or(f64::INFINITY, |measurements| {
-                            measurements.median_edge_orientation_difference_degrees
-                        }),
-                });
-        }
     }
 
     let final_non_invertible_pairs = non_invertible_candidate_pairs
@@ -20185,10 +20145,7 @@ fn solve_station_poses_for_evidence_with_report(
             edge_strength_ratio: candidate.edge_strength_ratio,
             median_edge_orientation_difference_degrees: candidate
                 .median_edge_orientation_difference_degrees,
-            preserves_convex_orientation: homography_preserves_focus_orientation(
-                &candidate.transform,
-                dimensions,
-            ),
+            preserves_convex_orientation: candidate.preserves_convex_orientation,
         };
         if !station_relation_is_accepted_with_report(
             left_group,
