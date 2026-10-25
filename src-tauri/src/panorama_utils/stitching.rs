@@ -2544,14 +2544,8 @@ where
                 if (seam - current_seam).abs() > 32.0 {
                     continue;
                 }
-                let corridor_min = seam
-                    .min(current_seam)
-                    .floor()
-                    .max(f64::from(cross_min));
-                let corridor_max = seam
-                    .max(current_seam)
-                    .ceil()
-                    .min(f64::from(cross_max));
+                let corridor_min = seam.min(current_seam).floor().max(f64::from(cross_min));
+                let corridor_max = seam.max(current_seam).ceil().min(f64::from(cross_max));
                 if f64::from(cross) < corridor_min || f64::from(cross) > corridor_max {
                     continue;
                 }
@@ -3716,7 +3710,8 @@ where
     // Re-solve accepted inter-station overlaps only after every covered pixel
     // has a hard source owner. The local32 application changes only the strip
     // between the old and new boundaries; coverage and provenance stay exact.
-    if finishing == TileCompositorFinishing::LayeredVirtualTile && !tone_topology.accepted.is_empty()
+    if finishing == TileCompositorFinishing::LayeredVirtualTile
+        && !tone_topology.accepted.is_empty()
     {
         let plans = build_station_seam_plans(
             images,
@@ -3747,7 +3742,8 @@ where
         if !plans.is_empty() {
             println!(
                 "  - Station seam solver: plans={}, changed_owner_pixels={}",
-                plans.len(), changed
+                plans.len(),
+                changed
             );
         }
     }

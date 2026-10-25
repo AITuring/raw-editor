@@ -8477,7 +8477,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 &tile_homographies,
                             );
                             log_virtual_tile_candidate(&diagnostic, false);
-                            if let Some(selection) = selection.filter(|selection| selection.passes) {
+                            if let Some(selection) = selection.filter(|selection| selection.passes)
+                            {
                                 if anchor_layout.is_some() {
                                     clusters.union(left, right);
                                     tile_relations
@@ -18449,8 +18450,12 @@ fn virtual_tile_station_matches(
     initial_homographies: &HashMap<usize, Matrix3<f64>>,
     station_topology: &topology::StationTopology,
 ) -> HashMap<(usize, usize), MatchInfo> {
-    let outcome =
-        virtual_tile_station_match_outcome(tiles, coverages, initial_homographies, station_topology);
+    let outcome = virtual_tile_station_match_outcome(
+        tiles,
+        coverages,
+        initial_homographies,
+        station_topology,
+    );
     select_virtual_tile_relation_hypotheses(
         tiles,
         &outcome.relations,
@@ -29187,8 +29192,7 @@ mod acceptance_tests {
                         &mut diagnostic,
                     )
                     .into_iter()
-                    .next()
-                    else {
+                    .next() else {
                         continue;
                     };
                     relation = polished;

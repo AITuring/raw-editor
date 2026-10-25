@@ -2600,9 +2600,9 @@ fn virtual_tile_pyramid_polishes_after_final_coarse_residual_failure() {
         &Matrix3::identity(),
         VIRTUAL_TILE_SEED_RENDERING_PRIOR,
     );
-    let relation = relation.into_iter().next().unwrap_or_else(|| panic!(
-        "the finest polish must recover the known transform: {diagnostic:?}"
-    ));
+    let relation = relation.into_iter().next().unwrap_or_else(|| {
+        panic!("the finest polish must recover the known transform: {diagnostic:?}")
+    });
     assert_eq!(diagnostic.failure_stage, "fitted", "{diagnostic:?}");
     assert!(
         diagnostic.fitted_inliers >= STATION_RELATION_MIN_INLIERS,
