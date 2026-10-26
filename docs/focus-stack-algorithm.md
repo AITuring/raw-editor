@@ -10,9 +10,9 @@
 参考驱动测试 harness、输出覆盖率和不应误读为生产结果的展示合成说明。
 
 当前代码边界和维护规则见
-[focus-stack-architecture.md](focus-stack-architecture.md)。2026-10-27 的拆分已经把顶层
-`panorama_*.rs` 生产组件压到 1000 行以内；`panorama_utils/stitching.rs`、`mosaic.rs` 和
-部分 `stack_pipeline` 生产模块仍在后续拆分计划中。
+[focus-stack-architecture.md](focus-stack-architecture.md)。2026-10-27 的提交 `d8219d63`
+已经把顶层 `panorama_*.rs`、`panorama_utils/stitching.rs`、`mosaic.rs` 和
+`stack_pipeline` 生产组件压到 1000 行以内；后续重点转为测试支持文件、边界契约和真实素材验收。
 
 ## 结论先说
 
@@ -215,7 +215,7 @@ RANSAC 和对称重投影误差筛选稳定模型。候选模型包括：
 | --- | --- |
 | `Photos-1-001/题跋`，混合焦段 | 9/9 张进入结果；输出约 `24040×21522`；有效矩形每个像素都有 source ownership |
 | `夜宴第三幕`，纯 85mm 子集 | 6/6 张进入结果；输出 `37617×12253`；所有像素都有来源 |
-| Rust library tests（2026-10-27，commit `222a4f6e`） | `716 passed, 0 failed, 30 ignored` |
+| Rust library tests（2026-10-27，commit `d8219d63`） | `716 passed, 0 failed, 30 ignored` |
 
 其中题跋“大/是/奇/事”及红印附近区域在最新混合焦段回归中做过高分辨率局部检查，
 未再观察到原先那种明显的双笔画矩形重影。这属于已验证样本的证据，不是对任意未来输入的
@@ -297,21 +297,22 @@ ownership 网格从 320 提高到 512 能减少大块接缝，但图割节点数
 
 ## 后续优先级
 
-当前首要工作分成两条线：先把剩余大文件继续拆成可维护组件，再用真实素材确认默认
+当前生产代码的职责拆分已经完成，下一阶段是收紧模块边界并用真实素材确认默认
 Virtual_Tile 路径的画质。详细任务拆解见
 [`tasks.md`](../.kiro/specs/layered-camera-group-focus-stitching/tasks.md) 的
 “2026-10-27 当前架构基线与未来计划”。
 
-1. 拆分 `panorama_utils/stitching.rs` 和 `mosaic.rs`，按 compositor、ownership/seam、
-   tone/color、sampling/refinement 和 diagnostics 分成每个不超过 1000 行的生产组件。
-2. 拆分 `stack_pipeline` 中的 `focus_fuser`、`quality_gate_runner`、`virtual_tile`、
-   `report`、`tone`、`quality_gate`、`intra_station` 等超长模块，并保持 facade/API 稳定。
+1. 新增模块边界契约，检查 facade 只负责入口/重导出、include 片段职责单一、生产文件不超过
+   1000 行，并将源码级质量契约同步到新增 fragment。
+2. 按 alignment、Virtual_Tile、ownership、registration/topology、acceptance、diagnostics
+   拆分超长测试支持文件，保留测试名称和过滤路径。
 3. 重新运行 Langyuan、Wenyuan 和 84 张 NEF 的真实验收，分别记录 connectivity、closure、
    tone、owner coverage、boundary 和 Quality_Gate 结论；管线连通或成功导出不能替代门禁通过。
 4. 在真实门禁失败原因稳定后，补齐 ROI/像素 provenance 诊断导出，再评估是否开启 Quality_Gate
    的阻止模式。
 5. 将当前高分辨率局部检查转成自动化图像质量门槛，覆盖重影、清晰度、接缝和边缘无源区域。
-6. 最后再处理轻微弯曲/非刚性模型和测试 fixture 拆分，避免在质量证据尚未稳定时扩大算法范围。
+6. 最后再处理轻微弯曲/非刚性模型和通用 `processing.rs` 的独立拆分，避免在质量证据尚未稳定时
+   扩大算法范围。
 
 ## 相关实现
 

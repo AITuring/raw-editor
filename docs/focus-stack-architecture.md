@@ -1,8 +1,9 @@
 # 焦点堆栈代码架构
 
 本文记录 2026-10-27 清理分支 `codex/layered-focus-modularize-2026-10-26` 的代码边界。
-本轮提交 `222a4f6e` 完成了焦点堆栈顶层 `panorama_*.rs` 生产组件的拆分；它不表示整个
-`src-tauri/src` 已经全部压到 1000 行以内。
+本轮提交 `d8219d63` 完成了焦点堆栈生产核心的职责拆分：顶层 `panorama_*.rs`、
+`panorama_utils/stitching.rs`、`mosaic.rs` 和 `stack_pipeline` 生产组件均已压到 1000 行以内。
+这不表示整个 `src-tauri/src` 或所有测试支持文件都已达到同一上限。
 
 ## 当前分层
 
@@ -28,28 +29,32 @@
 
 ## 行数边界
 
-本轮已经达到的范围是：顶层 `panorama*.rs` 生产文件全部不超过 1000 行，最大的文件为
-`panorama_focus_grouping.rs`（987 行），`panorama_stitching.rs` 为 973 行 facade。
-
-以下内容仍未达到 1000 行，应作为后续拆分任务，而不是在文档中宣称“全仓库已拆完”：
+本轮已经达到的范围是：焦点堆栈生产核心的 facade 和职责片段全部不超过 1000 行。
+当前代表性边界如下：
 
 | 文件 | 行数 | 后续拆分方向 |
 | --- | ---: | --- |
-| `panorama_utils/stitching.rs` | 9854 | compositor 入口、focus color/tone、ownership/seam、render adapter |
-| `panorama_utils/mosaic.rs` | 5663 | ownership、photometric、sampling/refinement、diagnostics |
-| `stack_pipeline/focus_fuser.rs` | 2640 | score、ownership graph、fallback/report |
-| `stack_pipeline/quality_gate_runner.rs` | 2576 | ROI sampling、criteria、verdict/report |
-| `stack_pipeline/virtual_tile.rs` | 2486 | cache store、lease、serialization、key/digest |
-| `stack_pipeline/report.rs` | 2416 | schema、recorder、serialization、output digest |
-| `stack_pipeline/tone.rs` | 2037 | samples、solve、field application、diagnostics |
-| `stack_pipeline/quality_gate.rs` | 1450 | thresholds、metrics、criterion types |
-| `stack_pipeline/intra_station.rs` | 1307 | analysis budget、control points、refinement |
-| `stack_pipeline/degradation.rs` | 1277 | degradation policy、fallback classification、report adapter |
-| `stack_pipeline/residual_warp.rs` | 1037 | residual field、identity/fallback、warp diagnostics |
+| `panorama_stitching.rs` | 973 | facade：稳定入口、常量和重导出 |
+| `panorama_utils/stitching.rs` | 813 | seam/focus/compositor sibling modules |
+| `panorama_utils/mosaic.rs` | 105 | storage、sampling、refinement、tone、ownership、compositor fragments |
+| `stack_pipeline/quality_gate_runner/criteria.inc.rs` | 983 | 当前最大生产片段，保持单一 criteria/ROI 责任 |
+| `panorama_utils/stitching_ownership_compositor.rs` | 947 | ownership compositor；后续只做行为演进 |
+| `panorama_utils/mosaic_compositor.inc.rs` | 943 | streaming compositor；后续只做行为演进 |
 
-测试支持文件也有超过 1000 行的情况（例如 alignment 4389 行、Virtual_Tile 3109 行、
-acceptance 1766 行）。它们不计入本轮生产组件门槛，但应在后续按主题拆成测试模块，保持
-每个测试文件能够独立定位失败原因。
+剩余超限内容主要是测试和通用范围，不阻塞本轮焦点堆栈生产结构：
+
+| 文件 | 行数 | 后续方向 |
+| --- | ---: | --- |
+| `panorama_stitching_alignment_tests.rs` | 4389 | 按 alignment、station、closure、render 拆测试文件 |
+| `panorama_virtual_tile_tests.rs` | 3109 | 按 cache、matching、prior、pyramid 拆测试文件 |
+| `stack_pipeline/properties_focus_ownership.rs` | 3197 | 按 ownership、fusion、provenance 拆属性测试 |
+| `stack_pipeline/properties_registration_topology.rs` | 2216 | 按 registration、topology、closure 拆属性测试 |
+| `stack_pipeline/test_support.rs` | 2135 | 按 report、geometry、image fixture 生成器拆分 |
+| `panorama_stitching_acceptance_tests.rs` | 1766 | 与真实 RAW Acceptance_Harness 分层整理 |
+| `panorama_utils/processing.rs` | 1216 | 通用图像 primitive，后续单独评估，不混入本轮堆栈拆分 |
+
+测试文件和通用 primitive 不应通过复制代码来“凑”到 1000 行以内；拆分时保留测试名称、
+过滤路径和公共 fixture 语义。
 
 ## 验证基线
 
@@ -58,11 +63,13 @@ acceptance 1766 行）。它们不计入本轮生产组件门槛，但应在后�
 - `cargo check --lib`；
 - `cargo test --lib --no-run`；
 - 完整 lib 测试：716 passed、0 failed、30 ignored；
-- alignment 定向测试：126 passed；
-- Virtual_Tile 定向测试：48 passed；
+- stack_pipeline 定向测试：298 passed、0 failed、1 ignored；
+- stitching 定向测试：223 passed、0 failed、13 ignored；
+- tone 定向测试：15 passed；Quality_Gate：19 passed；Intra_Station：17 passed；
+  Degradation：20 passed；Residual_Warp：4 passed；
 - `npm run focus-stack-quality:check`；
-- `npm run typecheck`；
-- `npm run build`。
+- `cargo fmt --check`；
+- `git diff --check`。
 
 这些结果证明拆分保持了当前行为和测试接口，但没有替代真实 RAW 数据的 Quality_Gate 验收。
 真实素材门禁仍需单独记录输入 digest、accepted relations、closure、tone、ownership 和最终

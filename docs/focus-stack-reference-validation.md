@@ -44,6 +44,10 @@
 - 当前模块边界与未拆分的大文件：[focus-stack-architecture.md](focus-stack-architecture.md)
 - 低纹理局部对比特征：[`panorama_utils/processing.rs`](../src-tauri/src/panorama_utils/processing.rs)
 
+2026-10-27 起，`stitching.rs`、`mosaic.rs` 和 `stack_pipeline` facade 只保留入口、共享类型与
+`include!` 片段编排；质量契约脚本会把对应 fragment 拼接后再做源码级断言，避免职责拆分误报为
+算法契约缺失。fragment 仍共享父模块作用域，新增实现应优先通过明确的 helper/type 接口传递数据。
+
 ## 参考驱动验收链路
 
 测试构建中的 `reference_acceptance` 模块从已处理的 RAW 生成缩略图，然后由三个脚本完成：
@@ -86,7 +90,7 @@ git diff --check
 ```
 
 上面的命令是本参考记录对应的历史局部验证，不代表当前分支的完整回归。2026-10-27
-清理分支 `222a4f6e` 最近一次完整 lib 回归为 716 passed、0 failed、30 ignored，另外
+清理分支 `d8219d63` 最近一次完整 lib 回归为 716 passed、0 failed、30 ignored，另外
 alignment 定向测试 126 passed、Virtual_Tile 定向测试 48 passed；真实 RAW Quality_Gate
 仍需按本文的素材和报告规则单独验收。
 

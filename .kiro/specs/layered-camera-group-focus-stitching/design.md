@@ -14,9 +14,9 @@ acutance 清晰度度量、`seam_cut::cut_grid` 图割、photometric 低频增�
 
 本设计的需求和历史行号保留作为验收依据；当前实现的物理模块边界已经拆出单独 facade。
 请以 [`docs/focus-stack-architecture.md`](../../../docs/focus-stack-architecture.md) 的模块树为准，
-不要根据旧的 `panorama_stitching.rs` 行号定位实现。最近一次结构拆分提交为 `222a4f6e`：
-顶层 `panorama*.rs` 生产文件均不超过 1000 行，但 `panorama_utils/stitching.rs`、`mosaic.rs`
-和多个 `stack_pipeline` 模块仍在后续拆分计划中。
+不要根据旧的 `panorama_stitching.rs` 行号定位实现。最近一次结构拆分提交为 `d8219d63`：
+顶层 `panorama*.rs`、`panorama_utils/stitching.rs`、`mosaic.rs` 和 `stack_pipeline` 生产组件
+均不超过 1000 行；超长测试支持文件仍按架构文档列入后续拆分计划。
 
 ### 两层架构与现有单层 mosaic 流程的关系
 
