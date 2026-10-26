@@ -72,3 +72,32 @@ pub(super) fn median_value(values: &mut [f64]) -> Option<f64> {
     values.sort_by(f64::total_cmp);
     Some(values[values.len() / 2])
 }
+
+pub(super) struct Dsu {
+    parent: Vec<usize>,
+}
+
+impl Dsu {
+    pub(super) fn new(n: usize) -> Self {
+        Dsu {
+            parent: (0..n).collect(),
+        }
+    }
+
+    pub(super) fn find(&mut self, i: usize) -> usize {
+        if self.parent[i] == i {
+            i
+        } else {
+            self.parent[i] = self.find(self.parent[i]);
+            self.parent[i]
+        }
+    }
+
+    pub(super) fn union(&mut self, i: usize, j: usize) {
+        let root_i = self.find(i);
+        let root_j = self.find(j);
+        if root_i != root_j {
+            self.parent[root_i] = root_j;
+        }
+    }
+}
