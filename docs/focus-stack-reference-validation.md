@@ -36,9 +36,13 @@
 
 实现位置：
 
-- 自动模型选择和参考验收 harness：[`src-tauri/src/panorama_stitching.rs`](../src-tauri/src/panorama_stitching.rs)
-- 流式所有权、色调场和 materialize：[`src-tauri/src/panorama_utils/mosaic.rs`](../src-tauri/src/panorama_utils/mosaic.rs)
-- 低纹理局部对比特征：[`src-tauri/src/panorama_utils/processing.rs`](../src-tauri/src/panorama_utils/processing.rs)
+- 顶层入口与执行阶段：[`panorama_stitching.rs`](../src-tauri/src/panorama_stitching.rs)、
+  [`panorama_execution.rs`](../src-tauri/src/panorama_execution.rs) 及其 phase fragments
+- 特征、分组、机位和 Virtual_Tile：`panorama_feature_*.rs`、`panorama_focus_*.rs`、
+  `panorama_station_*.rs`、`panorama_virtual_tile_*.rs`
+- 通用所有权、色调场和 materialize：[`panorama_utils/mosaic.rs`](../src-tauri/src/panorama_utils/mosaic.rs)
+- 当前模块边界与未拆分的大文件：[focus-stack-architecture.md](focus-stack-architecture.md)
+- 低纹理局部对比特征：[`panorama_utils/processing.rs`](../src-tauri/src/panorama_utils/processing.rs)
 
 ## 参考驱动验收链路
 
@@ -80,6 +84,11 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::mosaic -- 
 # 24 passed, 1 ignored
 git diff --check
 ```
+
+上面的命令是本参考记录对应的历史局部验证，不代表当前分支的完整回归。2026-10-27
+清理分支 `222a4f6e` 最近一次完整 lib 回归为 716 passed、0 failed、30 ignored，另外
+alignment 定向测试 126 passed、Virtual_Tile 定向测试 48 passed；真实 RAW Quality_Gate
+仍需按本文的素材和报告规则单独验收。
 
 参考渲染的长时间命令需要用户本地 RAW 和参考文件，不作为常规 CI 测试；其输出目录也已加入
 `.gitignore`。

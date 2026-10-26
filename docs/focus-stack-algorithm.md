@@ -9,6 +9,11 @@
 [focus-stack-reference-validation.md](focus-stack-reference-validation.md)，其中包含冻结素材、
 参考驱动测试 harness、输出覆盖率和不应误读为生产结果的展示合成说明。
 
+当前代码边界和维护规则见
+[focus-stack-architecture.md](focus-stack-architecture.md)。2026-10-27 的拆分已经把顶层
+`panorama_*.rs` 生产组件压到 1000 行以内；`panorama_utils/stitching.rs`、`mosaic.rs` 和
+部分 `stack_pipeline` 生产模块仍在后续拆分计划中。
+
 ## 结论先说
 
 在“同一画面、足够重叠、画面基本平面、每个位置至少有一张清晰照片”的前提下，
@@ -101,8 +106,10 @@ RANSAC 和对称重投影误差筛选稳定模型。候选模型包括：
 
 #### 位移、斜拍或混合焦段的 shifted mosaic
 
-当相机位置或焦段变化使画面成为“带焦点差异的平面拼接”时，使用
-`detail_preserving_mosaic`：
+当相机位置或焦段变化使画面成为“带焦点差异的平面拼接”时，默认使用
+`LayeredVirtualTile`：先把每个 Capture_Station 融合成 bounded-memory Virtual_Tile，再由
+机位 pose/closure 和 ownership compositor 合成。`detail_preserving_mosaic` 仍保留为
+`StreamingMosaic` 对照路径，不是默认入口。
 
 1. 先从直接匹配、焦距和画面中心运动识别同一拍摄位置的焦点包围组；
 2. 同组帧先在机位内完成全焦点选择，再按已求解的二维机位中心推断扫描顺序进入下一机位；文件名只在几何完全相同的候选中作为稳定 tie-break；
@@ -208,7 +215,7 @@ RANSAC 和对称重投影误差筛选稳定模型。候选模型包括：
 | --- | --- |
 | `Photos-1-001/题跋`，混合焦段 | 9/9 张进入结果；输出约 `24040×21522`；有效矩形每个像素都有 source ownership |
 | `夜宴第三幕`，纯 85mm 子集 | 6/6 张进入结果；输出 `37617×12253`；所有像素都有来源 |
-| Rust library tests | `198 passed, 0 failed, 19 ignored` |
+| Rust library tests（2026-10-27，commit `222a4f6e`） | `716 passed, 0 failed, 30 ignored` |
 
 其中题跋“大/是/奇/事”及红印附近区域在最新混合焦段回归中做过高分辨率局部检查，
 未再观察到原先那种明显的双笔画矩形重影。这属于已验证样本的证据，不是对任意未来输入的
@@ -290,18 +297,30 @@ ownership 网格从 320 提高到 512 能减少大块接缝，但图割节点数
 
 ## 后续优先级
 
-为了把当前“已验证可靠”继续推进到“可自动判定质量”，后续最值得做的是：
+当前首要工作分成两条线：先把剩余大文件继续拆成可维护组件，再用真实素材确认默认
+Virtual_Tile 路径的画质。详细任务拆解见
+[`tasks.md`](../.kiro/specs/layered-camera-group-focus-stitching/tasks.md) 的
+“2026-10-27 当前架构基线与未来计划”。
 
-1. 生成逐像素/逐块的对齐置信度、清晰度和 source ownership 诊断图；
-2. 增加笔画边缘重影检测，并把超过阈值的结果阻止导出；
-3. 对纸张轻微弯曲增加分块单应性或受约束的非刚性模型；
-4. 为边缘无源区域提供“严格裁切 / 透明输出 / 反射填充”三种明确策略；
-5. 扩大真实样本回归，覆盖完整 `夜宴第三幕`、不同光线和不同手机镜头组合；
-6. 将当前高分辨率局部检查转成自动化图像质量门槛，而不只依赖人工观察。
+1. 拆分 `panorama_utils/stitching.rs` 和 `mosaic.rs`，按 compositor、ownership/seam、
+   tone/color、sampling/refinement 和 diagnostics 分成每个不超过 1000 行的生产组件。
+2. 拆分 `stack_pipeline` 中的 `focus_fuser`、`quality_gate_runner`、`virtual_tile`、
+   `report`、`tone`、`quality_gate`、`intra_station` 等超长模块，并保持 facade/API 稳定。
+3. 重新运行 Langyuan、Wenyuan 和 84 张 NEF 的真实验收，分别记录 connectivity、closure、
+   tone、owner coverage、boundary 和 Quality_Gate 结论；管线连通或成功导出不能替代门禁通过。
+4. 在真实门禁失败原因稳定后，补齐 ROI/像素 provenance 诊断导出，再评估是否开启 Quality_Gate
+   的阻止模式。
+5. 将当前高分辨率局部检查转成自动化图像质量门槛，覆盖重影、清晰度、接缝和边缘无源区域。
+6. 最后再处理轻微弯曲/非刚性模型和测试 fixture 拆分，避免在质量证据尚未稳定时扩大算法范围。
 
 ## 相关实现
 
-- 主流程和焦点堆栈排序：[panorama_stitching.rs](../src-tauri/src/panorama_stitching.rs)
+- 顶层 facade 和稳定入口：[panorama_stitching.rs](../src-tauri/src/panorama_stitching.rs)
+- 执行阶段编排：[panorama_execution.rs](../src-tauri/src/panorama_execution.rs) 与
+  `panorama_execution_phase_*.inc.rs`
+- 特征/机位/Virtual_Tile 求解：`panorama_feature_*.rs`、`panorama_station_*.rs`、
+  `panorama_focus_pose_*.rs`、`panorama_virtual_tile_*.rs`
+- 完整模块边界：[focus-stack-architecture.md](focus-stack-architecture.md)
 - 位移/混合焦段 detail-preserving mosaic：[mosaic.rs](../src-tauri/src/panorama_utils/mosaic.rs)
 - ownership 图割与接缝代价：[seam_cut.rs](../src-tauri/src/panorama_utils/seam_cut.rs)
 - 普通焦点堆栈和 shifted mosaic 分流：[stitching.rs](../src-tauri/src/panorama_utils/stitching.rs)

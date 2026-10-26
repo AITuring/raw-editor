@@ -10,10 +10,19 @@ acutance 清晰度度量、`seam_cut::cut_grid` 图割、photometric 低频增�
 都保留并复用；新增的是显式的 Virtual_Tile 数据结构与缓存、Quality_Gate、Stack_Report、
 受约束残差形变模型，以及把现有的诊断开关改造成默认路径。
 
+## 当前实现映射（2026-10-27）
+
+本设计的需求和历史行号保留作为验收依据；当前实现的物理模块边界已经拆出单独 facade。
+请以 [`docs/focus-stack-architecture.md`](../../../docs/focus-stack-architecture.md) 的模块树为准，
+不要根据旧的 `panorama_stitching.rs` 行号定位实现。最近一次结构拆分提交为 `222a4f6e`：
+顶层 `panorama*.rs` 生产文件均不超过 1000 行，但 `panorama_utils/stitching.rs`、`mosaic.rs`
+和多个 `stack_pipeline` 模块仍在后续拆分计划中。
+
 ### 两层架构与现有单层 mosaic 流程的关系
 
-现有 `stitch_images_with_options` 在 `BlendMode::FocusStack` 下已经有一条虚拟瓦片路径
-（`panorama_stitching.rs` 约 6930–7150 行）：
+当前 `stitch_images_with_options` 在 `BlendMode::FocusStack` 下通过
+`panorama_execution_phase_virtual.inc.rs` 和 `panorama_execution_phase_virtual_render.inc.rs`
+执行虚拟瓦片路径：
 
 1. `solve_focus_capture_group_poses()` 已经把源图聚成 `FocusCaptureGroup`（= Capture_Station），
    并求解机位级位姿；
@@ -30,17 +39,20 @@ acutance 清晰度度量、`seam_cut::cut_grid` 图割、photometric 低频增�
 
 | 开关状态                                         | 实际走的瓦片合成器                                         |
 | ------------------------------------------------ | ---------------------------------------------------------- |
-| 两者都未设置（默认）                             | `stitching::progressive_seam_stitcher`                     |
-| `RAW_EDITOR_USE_STREAMING_VIRTUAL_TILE_MOSAIC`   | `mosaic::detail_preserving_mosaic`                         |
-| `RAW_EDITOR_USE_OWNERSHIP_VIRTUAL_TILE_STITCHER` | `stitching::focus_tile_ownership_stitcher`                 |
-| 上述任一失败                                     | 回退 `stitching::focus_stack_stitcher`（真正的旧单层路径） |
+| `stack_compositor` 未设置（默认）                 | `LayeredVirtualTile`：Virtual_Tile + station pose/closure + ownership compositor |
+| `stack_compositor=progressive_seam_tile`         | `ProgressiveSeamTile` 对照路径                              |
+| `stack_compositor=streaming_mosaic`              | `StreamingMosaic` / `mosaic::detail_preserving_mosaic` 对照路径 |
+| `stack_compositor=legacy_single_layer_mosaic`    | `LegacySingleLayerMosaic` / 旧单层路径                      |
 
-因此需求 15.2 的落地动作不是「把虚拟瓦片从开关后面搬出来」，而是：
-**把 ownership 语义的瓦片合成器定为默认，把 `progressive_seam_stitcher` 与
-`detail_preserving_mosaic` 降级为诊断开关**，并保留 `focus_stack_stitcher` 作为
-需求 15.3/15.10 的「旧单层 mosaic 对照路径」。
+因此需求 15.2 的当前落地是：**把 ownership 语义的 `LayeredVirtualTile` 合成器定为默认，
+把 `ProgressiveSeamTile`、`StreamingMosaic` 和 `LegacySingleLayerMosaic` 保留为设置驱动的
+对照路径**。默认路径在机位关系、closure 或覆盖证据不满足时拒绝发布，不静默把断裂输入交给旧
+单层路径。
 
 ### 本次调研发现的、直接对应 `docs/focus-stack-reference-validation.md` 四项失败的根因
+
+下表是促成默认路径迁移的历史根因记录；其中提到的 `progressive_seam_stitcher` 是当时的
+默认实现。当前默认值已经是 `LayeredVirtualTile`，表中的旧路径保留为对照与回归背景。
 
 | 文档记录的失败        | 调研定位的根因                                                                                                                                                                                                                                                 |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

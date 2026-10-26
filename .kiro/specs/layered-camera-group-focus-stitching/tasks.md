@@ -24,6 +24,64 @@
 - **Acceptance_Harness（需要阆苑女仙 84 张 NEF）**：`#[ignore]` 标记，手动触发。
 - **集成测试（1–3 个例子）**：时限类判据。
 
+> **实施现状说明（2026-10-27）**：本文件前面的需求与阶段表保留原始验收计划，
+> 其中 2026-09/10 的数字是历史快照，不能当作当前分支状态。当前物理模块边界已经
+> 与最初“所有新增类型都放入 `stack_pipeline/`”的计划不同；最新模块树见
+> [`docs/focus-stack-architecture.md`](../../../docs/focus-stack-architecture.md)。
+
+## 2026-10-27 当前架构基线与未来计划
+
+最新清理分支为 `codex/layered-focus-modularize-2026-10-26`，提交
+`222a4f6e`。本轮已经完成焦点堆栈顶层生产组件的职责拆分：
+
+- `panorama_stitching.rs` 保留为 973 行 facade，负责稳定入口、常量和模块重导出。
+- execution 已拆成入口、缓存、pipeline 和 prepare/matching/order/solver/composition/
+  focus/virtual/finalize 阶段；宏片段只用于共享阶段局部状态。
+- feature matching、focus grouping/pose、station solver、focus warp、Virtual_Tile solver
+  均按职责拆成 sibling modules，所有顶层 `panorama*.rs` 生产文件不超过 1000 行，最大
+  为 `panorama_focus_grouping.rs` 的 987 行。
+- 本轮不声称全仓库已经满足 1000 行上限。仍超限的生产模块包括：
+  `panorama_utils/stitching.rs`（9854）、`mosaic.rs`（5663）、`stack_pipeline/focus_fuser.rs`
+  （2640）、`quality_gate_runner.rs`（2576）、`virtual_tile.rs`（2486）、`report.rs`（2416）、
+  `tone.rs`（2037）、`quality_gate.rs`（1450）、`intra_station.rs`（1307）、`degradation.rs`（1277）、
+  `residual_warp.rs`（1037）。
+- 测试支持文件也暂未纳入本轮上限：`panorama_stitching_alignment_tests.rs` 4389 行、
+  `panorama_virtual_tile_tests.rs` 3109 行、`panorama_stitching_acceptance_tests.rs` 1766 行。
+
+最近一次验证基线（commit `222a4f6e`）：
+
+- `cargo check --lib`、`cargo test --lib --no-run` 通过；
+- 完整 lib 测试 716 passed、0 failed、30 ignored；
+- alignment 定向测试 126 passed，Virtual_Tile 定向测试 48 passed；
+- `npm run focus-stack-quality:check`、`npm run typecheck`、`npm run build` 通过；
+- `cargo fmt --check` 与 `git diff --check` 通过。
+
+这些是结构和行为回归证据，不能替代真实 RAW 的 Quality_Gate 验收。当前真实素材门禁仍需
+区分“成功解码/关系连通/导出完成”和“闭环、tone、owner、boundary、Quality_Gate 全部通过”。
+
+### 后续任务优先级
+
+- [ ] **P0：继续拆分通用拼接核心**。将 `panorama_utils/stitching.rs` 按 compositor 入口、
+  ownership/seam、focus color/tone、render adapter 拆分；将 `mosaic.rs` 按 ownership、
+  photometric、sampling/refinement、diagnostics 拆分。每个生产文件硬上限 1000 行，先保留
+  facade 和现有测试访问路径。
+- [ ] **P0：拆分 stack_pipeline 超长生产模块**。优先处理 `focus_fuser`、
+  `quality_gate_runner`、`virtual_tile`、`report`、`tone`，随后处理 `quality_gate`、
+  `intra_station`、`degradation`、`residual_warp`；每个职责模块单独 `cargo check` 和定向测试。
+- [ ] **P1：补模块边界契约**。新增源码级检查，验证 facade 只做入口/重导出、阶段依赖方向稳定、
+  生产模块不超过 1000 行，并把新文件清单同步到架构文档。
+- [ ] **P1：拆分测试支持文件**。按 alignment、Virtual_Tile、acceptance、diagnostics 拆分
+  超过 1000 行的测试文件，不改变测试名称和过滤路径。
+- [ ] **P2：重新跑真实素材验收**。使用 Langyuan、Wenyuan 和 84 张 NEF 记录 digest、station
+  connectivity、accepted relations、closure、tone、owner coverage、boundary 与 Quality_Gate；
+  当前历史记录中的失败和 `tone.degraded` 不能被本次结构拆分覆盖。
+- [ ] **P2：稳定真实失败原因后再收紧门禁**。优先解决机位关系/闭环、owner shortfall、tone
+  boundary 和 residual warp identity，再评估 Quality_Gate 从 record-only 切换为阻止式。
+- [ ] **P3：完善诊断与验收链路**。完成 ROI 诊断导出、逐像素 provenance、Acceptance_Harness
+  时限测试和结果复现记录；诊断输出必须与最终画布坐标系一致。
+- [ ] **P3：算法扩展**。真实门禁稳定后，再评估轻微弯曲的分块单应性/受约束非刚性模型，以及
+  严格裁切、透明输出和受限边缘填充三种输出策略。
+
 ## 进度概览（2026-09-30，基于 `56e169f5`）
 
 按子任务计：164 项中完成 145 项（88%），部分完成 8 项，未开始 11 项（其中 10 项是可选测试）。

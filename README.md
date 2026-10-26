@@ -324,7 +324,7 @@ WebP 仍接收一张完整 CPU 输入并保留 libwebp 的 YUVA picture，但不
 `npm run synthetic-raw-handoff:bench`、`npm run gpu-mask:check`、
 `cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、
 `cargo check --manifest-path src-tauri/Cargo.toml --lib --locked`、
-`cargo test --manifest-path src-tauri/Cargo.toml --lib --locked`（187 项默认执行的 Rust 单元/回归测试）和
+`cargo test --manifest-path src-tauri/Cargo.toml --lib --locked`（2026-10-27 清理分支最近一次完整回归为 716 passed、0 failed、30 ignored）和
 普通 Clippy。Clippy 1.97 的 `-D warnings` 严格门槛仍会报告现存的 batch geometry、panorama 与焦点堆栈
 告警，本次范围源代码没有新增 Clippy 告警，因此不把严格门槛记作通过。默认忽略十九项：六项需要本地
 授权或外部图像 fixture，十二项是手动大图/内存 benchmark，另一项需要本机 GPU；本轮已显式执行跨 tile 的
@@ -366,12 +366,13 @@ Metal 蒙版像素回归，几何阶段的 `borrowed`/`staged` 以及蒙版阶�
 
 #### 图像堆栈与拼接
 
+- 当前焦点堆栈默认走 `LayeredVirtualTile`：先按 Capture_Station 完成机位内焦点融合，再做 station pose/closure、Virtual_Tile ownership 合成、低频 tone 和 Stack_Report/Quality_Gate 记录。`progressive_seam_tile`、`streaming_mosaic` 与 `legacy_single_layer_mosaic` 只作为设置驱动的对照路径；机位关系或覆盖证据不足时拒绝发布，不静默拼接断裂场景。模块职责见 [`docs/focus-stack-architecture.md`](docs/focus-stack-architecture.md)。
 - 欢迎页提供统一“图像堆栈”入口，可一次选择 2–500 张受支持的 RAW 或位图；进入工作台后再选择景深堆栈或全景拼接，不在首页重复暴露工作流按钮。超过 30 张时自动使用低内存大批量路径，候选关系同时参考用户顺序、文件名自然顺序和紧凑视觉检索，并对水墨留白等低纹理画面补充低阈值特征检测，避免文件选择器乱序、焦段切换或角点过少造成整组断连。
 - 堆栈工作台使用无外层留白的全窗口布局，预览画布占据主要空间，工作流、对齐模型和源图层集中在右侧；源图层支持鼠标拖拽、键盘拖拽及上下按钮调整基准顺序。
 - 自动对齐优先在相似与仿射模型之间稳健选择；30 张以内继续使用双向 RANSAC、全分辨率局部相关搜索和亚像素峰值细化，超过 30 张则在自适应分辨率的多尺度灰度分析图上完成匹配，并用 35mm 等效焦段元数据补充尺度桥接，再按需逐张解码原图参与最终融合。大批量自动全景会根据平移、旋转、缩放和拟合误差选择证据充分的模型，避免误把重复纹理或微小误差累积到长链中；明确改变机位时仍可选择透视模型。
 - 支持自动、透视、圆柱、球面和仅位置对齐模型；自动结果不稳定时可以切换模型并重新对齐。
-- 同机位景深堆栈使用局部清晰度评分与多尺度频带融合；检测到明显取景、旋转或焦段变化时改用连续最优接缝，避免跨画面逐像素混合产生双影和模糊空洞。全景拼接对低频曝光与高频纹理分别融合，在平滑亮度过渡的同时保留边缘细节；无法建立连接的独立场景会明确提示，而不会静默生成错误的超大拼图。
-- 2026-09-18 起，长幅平面画作的流式拼接会要求自动透视模型具有跨画面的空间支持，避免重复笔画触发整幅错误投影；低纹理画面使用局部对比特征检测，拍摄组间色调只从同机位重叠估计，最终所有权接缝按像素级双线性羽化，避免宽幅灰带和分析网格方块。参考验收流程及限制见 [`docs/focus-stack-reference-validation.md`](docs/focus-stack-reference-validation.md)。
+- 同机位景深堆栈使用局部清晰度评分与多尺度频带融合；检测到明显取景、旋转或焦段变化时，默认路径先生成 Virtual_Tile，再按真实 station relation 和 closure 进入 ownership 合成，保护源图细节而不把错位笔画平均成双影。无法建立连接的独立场景会明确拒绝，而不会静默生成错误的超大拼图。
+- 长幅平面画作的路径要求自动透视模型具有跨画面的空间支持，避免重复笔画触发整幅错误投影；低纹理画面使用局部对比特征检测，拍摄组间色调只从同机位重叠估计，ownership 接缝保持硬源归属，比较路径才使用旧的连续 seam 行为。参考验收流程及限制见 [`docs/focus-stack-reference-validation.md`](docs/focus-stack-reference-validation.md)。
 - 合成结果使用缓存文件提供最高约一亿像素的高质量预览，支持滚轮缩放、拖拽平移、适合窗口、100% 查看和专注预览。全景原始画布超过 2.4 亿像素时，后端会按同一组全分辨率对齐变换进行内存安全渲染，并在预览角标显示缩放比例与完整画布估算，避免 32 GB 机器直接申请数十 GiB 浮点画布。预览与保存绑定同一个结果 ID，并共享规范的 16 位显示编码 sRGB 像素；导出的 TIFF 嵌入同一 sRGB ICC，避免浮点 TIFF 被查看器按线性 RGB 解释而造成显示差异，同时保留本地处理 sidecar 关联。
 
 #### 非 AI 局部编辑
