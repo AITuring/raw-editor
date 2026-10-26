@@ -10,8 +10,29 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
-const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
-const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
+const mosaic = [
+  read('src-tauri/src/panorama_utils/mosaic.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_storage.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_photometric.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_sampling.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_refinement_model.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_refinement_pass.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_refinement_runner.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_tone.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_ownership.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_compositor.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_tests_access.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_tests_ownership.inc.rs'),
+  read('src-tauri/src/panorama_utils/mosaic_tests_refinement.inc.rs'),
+].join('\n');
+const stitching = [
+  read('src-tauri/src/panorama_utils/stitching.rs'),
+  ...fs
+    .readdirSync(path.join(repoRoot, 'src-tauri/src/panorama_utils'))
+    .filter((name) => /^stitching_.*\.rs$/.test(name))
+    .sort()
+    .map((name) => read(`src-tauri/src/panorama_utils/${name}`)),
+].join('\n');
 const stitchingCompositorHelpers = read('src-tauri/src/panorama_utils/stitching_compositor_helpers.rs');
 const stitchingCompositorOptions = read('src-tauri/src/panorama_utils/stitching_compositor_options.rs');
 const stitchingInterpolationTests = read('src-tauri/src/panorama_utils/stitching_interpolation_tests.rs');
@@ -78,14 +99,65 @@ const panoramaAlignmentTests = read('src-tauri/src/panorama_stitching_alignment_
 const panoramaTestSources = `${panorama}\n${panoramaStationSolver}\n${panoramaAlignmentTests}`;
 const processing = read('src-tauri/src/panorama_utils/processing.rs');
 const stackPipelineDir = 'src-tauri/src/panorama_utils/stack_pipeline';
-const degradation = read(`${stackPipelineDir}/degradation.rs`);
-const stackReport = read(`${stackPipelineDir}/report.rs`);
+const joinModuleSources = (facade, fragments) =>
+  [read(`${stackPipelineDir}/${facade}.rs`), ...fragments.map((fragment) => read(`${stackPipelineDir}/${facade}/${fragment}`))].join('\n');
+const degradation = joinModuleSources('degradation', [
+  'constants.inc.rs',
+  'decision.inc.rs',
+  'reasons.inc.rs',
+  'ledger.inc.rs',
+  'runtime.inc.rs',
+]);
+// report.rs is a small facade now; keep source-level contract checks pointed at
+// the facade plus its responsibility-specific fragments so moving schema types
+// does not make the guard silently stop seeing them.
+const stackReport = [
+  read(`${stackPipelineDir}/report.rs`),
+  read(`${stackPipelineDir}/report/input_grouping_station.inc.rs`),
+  read(`${stackPipelineDir}/report/relations.inc.rs`),
+  read(`${stackPipelineDir}/report/geometry_tone_composition.inc.rs`),
+  read(`${stackPipelineDir}/report/quality.inc.rs`),
+  read(`${stackPipelineDir}/report/runtime.inc.rs`),
+].join('\n');
 const determinism = read(`${stackPipelineDir}/determinism.rs`);
-const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
+const virtualTile = joinModuleSources('virtual_tile', [
+  'key_meta.inc.rs',
+  'store_api.inc.rs',
+  'store.inc.rs',
+  'codec.inc.rs',
+]);
 const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
-const tone = read(`${stackPipelineDir}/tone.rs`);
-const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
-const qualityGateRunner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
+const tone = joinModuleSources('tone', [
+  'model.inc.rs',
+  'solver.inc.rs',
+  'render.inc.rs',
+  'diagnostics.inc.rs',
+]);
+const qualityGate = joinModuleSources('quality_gate', [
+  'roi.inc.rs',
+  'mtf.inc.rs',
+  'metrics.inc.rs',
+  'boundary.inc.rs',
+]);
+const qualityGateRunner = joinModuleSources('quality_gate_runner', [
+  'criteria.inc.rs',
+  'boundaries.inc.rs',
+  'owner_sharpness.inc.rs',
+  'runtime.inc.rs',
+]);
+const focusFuser = joinModuleSources('focus_fuser', [
+  'geometry.inc.rs',
+  'solver.inc.rs',
+  'evidence.inc.rs',
+  'observations.inc.rs',
+]);
+const residualWarp = joinModuleSources('residual_warp', [
+  'types.inc.rs',
+  'region.inc.rs',
+  'model.inc.rs',
+  'runtime.inc.rs',
+  'matching.inc.rs',
+]);
 
 // Revised 2026-09-29 evidence policy: content-inapplicable observations are
 // kept separate from technical failures, and a criterion can be explicitly
@@ -127,12 +199,12 @@ assert.match(
 );
 assert.match(stackReport, /pub verdict: QualityGateVerdict/, 'each criterion must carry its own verdict');
 assert.match(
-  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  qualityGateRunner,
   /fn criterion_verdict\([\s\S]*?QUALITY_MAX_UNMEASURABLE_RATIO[\s\S]*?NotApplicable/,
   'the four evidence rules must be implemented in one deterministic criterion function',
 );
 assert.match(
-  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  qualityGateRunner,
   /fn overall_verdict\([\s\S]*?QualityGateVerdict::Fail[\s\S]*?InsufficientEvidence/,
   'the overall gate verdict must give fail precedence over insufficient evidence',
 );
@@ -161,7 +233,7 @@ for (const [name, value] of [
 // second copy of the numbers, and the veto diagnostic must reuse the
 // Focus_Fuser's own constant.
 {
-  const runner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
+  const runner = qualityGateRunner;
   assert.match(
     runner,
     /quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX/,
@@ -178,7 +250,7 @@ for (const [name, value] of [
     'owner evidence thresholds must not be restated as literals',
   );
   assert.match(
-    read(`${stackPipelineDir}/focus_fuser.rs`),
+    focusFuser,
     /OWNERSHIP_DISAGREEMENT_VETO: f64 = 0\.2;/,
     'the Focus_Fuser veto stays at 0.2',
   );
@@ -240,7 +312,6 @@ for (const variable of [
 
 // Stage 5 residual geometry keeps its activation and three node gates explicit
 // so a threshold change cannot silently widen the local warp domain.
-const residualWarp = read(`${stackPipelineDir}/residual_warp.rs`);
 for (const [name, value] of [
   ['RESIDUAL_WARP_ENABLE_P95_PX', '3.0'],
   ['RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX', '32.0'],
@@ -281,7 +352,6 @@ assert.ok(mismatchPenalty >= 1, 'misregistered sharp candidates need a non-trivi
 // station tiles always report a single capture group and therefore never reach
 // mosaic::detail_preserving_mosaic. mosaic.rs keeps the primitives (and the
 // legacy reductions) for the comparison path.
-const focusFuser = read(`${stackPipelineDir}/focus_fuser.rs`);
 const sharpnessHalfScale = numberConstant(focusFuser, 'SHARPNESS_HALF_SCALE');
 const sharpnessWindowPx = numberConstant(focusFuser, 'SHARPNESS_SAMPLE_WINDOW_PX');
 const ownershipCellMin = numberConstant(focusFuser, 'OWNERSHIP_CELL_MIN_PX');
@@ -357,7 +427,7 @@ assert.match(
 );
 
 assert.match(
-  stitching,
+  mosaic,
   /detail_preserving_mosaic\(/,
   'shifted focus stacks must use detail-preserving ownership rather than simple overwrite',
 );
