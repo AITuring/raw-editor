@@ -458,7 +458,7 @@ pub(super) fn estimate_mixed_focal_coarse_registration(
 /// overlap at a denser grid and comparing both luminance and edge structure
 /// catches that failure before synthetic points can be promoted to a match.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct FocusOverlapQuality {
+pub(crate) struct FocusOverlapQuality {
     pub(super) intensity_ncc: f64,
     pub(super) edge_ncc: f64,
     pub(super) mean_edge_orientation_cosine: f64,

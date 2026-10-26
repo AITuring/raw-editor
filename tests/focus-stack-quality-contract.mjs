@@ -38,17 +38,40 @@ const panoramaVirtualTilePolish = read('src-tauri/src/panorama_virtual_tile_poli
 const panoramaVirtualTilePrior = read('src-tauri/src/panorama_virtual_tile_prior.rs');
 const panoramaVirtualTileRepairs = read('src-tauri/src/panorama_virtual_tile_repairs.rs');
 const panoramaFocusWarp = read('src-tauri/src/panorama_focus_warp.rs');
+const panoramaFocusWarpVertical = read('src-tauri/src/panorama_focus_warp_vertical.rs');
 const panoramaFocusWarpRender = read('src-tauri/src/panorama_focus_warp_render.rs');
 const panoramaSharedHelpers = read('src-tauri/src/panorama_shared_helpers.rs');
 const panoramaOverlapGeometry = read('src-tauri/src/panorama_overlap_geometry.rs');
 const panoramaSourcePreparation = read('src-tauri/src/panorama_source_preparation.rs');
 const panoramaFocusGrouping = read('src-tauri/src/panorama_focus_grouping.rs');
+const panoramaFocusGroupingRescue = read('src-tauri/src/panorama_focus_grouping_rescue.rs');
 const panoramaFocusPoseSolver = read('src-tauri/src/panorama_focus_pose_solver.rs');
+const panoramaFocusPoseGeometry = read('src-tauri/src/panorama_focus_pose_geometry.rs');
+const panoramaFocusStationGraph = read('src-tauri/src/panorama_focus_station_graph.rs');
+const panoramaFocusStationSolver = read('src-tauri/src/panorama_focus_station_solver.rs');
 const panoramaFocusOrder = read('src-tauri/src/panorama_focus_order.rs');
 const panoramaFocusGlobalOptimizer = read('src-tauri/src/panorama_focus_global_optimizer.rs');
 const panoramaExecution = read('src-tauri/src/panorama_execution.rs');
+const panoramaExecutionEntry = read('src-tauri/src/panorama_execution_entry.rs');
+const panoramaExecutionCache = read('src-tauri/src/panorama_execution_cache.rs');
+const panoramaExecutionPipeline = read('src-tauri/src/panorama_execution_pipeline.rs');
+const panoramaExecutionPhasePrepare = read('src-tauri/src/panorama_execution_phase_prepare.inc.rs');
+const panoramaExecutionPhaseMatching = read('src-tauri/src/panorama_execution_phase_matching.inc.rs');
+const panoramaExecutionPhaseOrderGeometry = read('src-tauri/src/panorama_execution_phase_order_geometry.inc.rs');
+const panoramaExecutionPhaseSolver = read('src-tauri/src/panorama_execution_phase_solver.inc.rs');
+const panoramaExecutionPhaseComposition = read('src-tauri/src/panorama_execution_phase_composition.inc.rs');
+const panoramaExecutionPhaseFocus = read('src-tauri/src/panorama_execution_phase_focus.inc.rs');
+const panoramaExecutionPhaseVirtual = read('src-tauri/src/panorama_execution_phase_virtual.inc.rs');
+const panoramaExecutionPhaseVirtualRender = read('src-tauri/src/panorama_execution_phase_virtual_render.inc.rs');
+const panoramaExecutionPhaseFinalize = read('src-tauri/src/panorama_execution_phase_finalize.inc.rs');
 const panoramaStationSolver = read('src-tauri/src/panorama_station_solver.rs');
-const panoramaModules = `${panoramaFacade}\n${panoramaFeatureMatching}\n${panoramaFeatureCandidates}\n${panoramaFeatureAlignmentFeatures}\n${panoramaFeaturePairMatching}\n${panoramaFeatureTransformFitting}\n${panoramaFeaturePatchRefinement}\n${panoramaOrchestration}\n${panoramaModes}\n${panoramaCaptureBridges}\n${panoramaGraphOrder}\n${panoramaVirtualTileSolver}\n${panoramaVirtualTileTypes}\n${panoramaVirtualTileFeatureGeometry}\n${panoramaVirtualTileGuidedMatch}\n${panoramaVirtualTileDirect}\n${panoramaVirtualTileResidual}\n${panoramaVirtualTileDirectStation}\n${panoramaVirtualTilePyramid}\n${panoramaVirtualTilePolish}\n${panoramaVirtualTilePrior}\n${panoramaVirtualTileRepairs}\n${panoramaFocusWarp}\n${panoramaFocusWarpRender}\n${panoramaSharedHelpers}\n${panoramaOverlapGeometry}\n${panoramaSourcePreparation}\n${panoramaFocusGrouping}\n${panoramaFocusPoseSolver}\n${panoramaFocusOrder}\n${panoramaFocusGlobalOptimizer}\n${panoramaExecution}`;
+const panoramaStationGrouping = read('src-tauri/src/panorama_station_grouping.rs');
+const panoramaStationRelation = read('src-tauri/src/panorama_station_relation.rs');
+const panoramaStationClosure = read('src-tauri/src/panorama_station_closure.rs');
+const panoramaModules = `${panoramaFacade}\n${panoramaFeatureMatching}\n${panoramaFeatureCandidates}\n${panoramaFeatureAlignmentFeatures}\n${panoramaFeaturePairMatching}\n${panoramaFeatureTransformFitting}\n${panoramaFeaturePatchRefinement}\n${panoramaOrchestration}\n${panoramaModes}\n${panoramaCaptureBridges}\n${panoramaGraphOrder}\n${panoramaVirtualTileSolver}\n${panoramaVirtualTileTypes}\n${panoramaVirtualTileFeatureGeometry}\n${panoramaVirtualTileGuidedMatch}\n${panoramaVirtualTileDirect}\n${panoramaVirtualTileResidual}\n${panoramaVirtualTileDirectStation}\n${panoramaVirtualTilePyramid}\n${panoramaVirtualTilePolish}\n${panoramaVirtualTilePrior}\n${panoramaVirtualTileRepairs}\n${panoramaFocusWarp}\n${panoramaFocusWarpVertical}\n${panoramaFocusWarpRender}\n${panoramaSharedHelpers}\n${panoramaOverlapGeometry}\n${panoramaSourcePreparation}\n${panoramaFocusGrouping}\n${panoramaFocusGroupingRescue}\n${panoramaFocusPoseSolver}\n${panoramaFocusPoseGeometry}\n${panoramaFocusStationGraph}\n${panoramaFocusStationSolver}\n${panoramaFocusOrder}\n${panoramaFocusGlobalOptimizer}\n${panoramaExecution}\n${panoramaExecutionEntry}\n${panoramaExecutionCache}\n${panoramaExecutionPipeline}\n${panoramaExecutionPhasePrepare}\n${panoramaExecutionPhaseMatching}\n${panoramaExecutionPhaseOrderGeometry}\n${panoramaExecutionPhaseSolver}\n${panoramaExecutionPhaseComposition}\n${panoramaExecutionPhaseFocus}\n${panoramaExecutionPhaseVirtual}\n${panoramaExecutionPhaseVirtualRender}\n${panoramaExecutionPhaseFinalize}
+${panoramaStationGrouping}
+${panoramaStationRelation}
+${panoramaStationClosure}`;
 const panorama = panoramaModules;
 const panoramaQuality = `${panoramaModules}\n${panoramaStationSolver}`;
 const panoramaAlignmentTests = read('src-tauri/src/panorama_stitching_alignment_tests.rs');
@@ -363,7 +386,7 @@ for (const variant of ['LayeredVirtualTile', 'ProgressiveSeamTile', 'StreamingMo
 }
 assert.match(
   panorama,
-  /StackCompositorChoice::resolve\(settings\.stack_compositor\.as_deref\(\)\)/,
+  /StackCompositorChoice::resolve\(\$?settings\.stack_compositor\.as_deref\(\)\)/,
   'the compositor must be chosen by a setting rather than an environment variable (需求 15.2)',
 );
 assert.match(
@@ -373,7 +396,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /select_and_record_run_path\(\s*station_count,\s*compositor_choice,\s*stack_report\.(?:as_ref\(\)|as_deref\(\)),?\s*\)/,
+  /select_and_record_run_path\(\s*\$?station_count,\s*\$?compositor_choice,\s*\$?stack_report\.(?:as_ref\(\)|as_deref\(\)),?\s*\)/,
   'production must use one boundary for compositor execution and Stack_Report path recording',
 );
 assert.match(
@@ -422,7 +445,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /report\.composition\.final_sharpen_amount = sharpen/,
+  /\$?report\.composition\.final_sharpen_amount = \$?sharpen/,
   'the resolved final sharpen amount must be reported (任务 13.4)',
 );
 assert.match(
@@ -465,7 +488,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /solve_virtual_tile_station_(?:hypotheses|poses)_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
+  /solve_virtual_tile_station_(?:hypotheses|poses)_with_report\([\s\S]*?\$?station_relations[\s\S]*?\$?tile_homographies = \$?solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default path must publish authoritative fused-tile relations and poses before composition',
 );
 assert.match(

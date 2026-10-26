@@ -49,6 +49,11 @@ pub(crate) use station_solver::*;
 mod focus_warp;
 pub(crate) use focus_warp::*;
 
+#[path = "panorama_focus_warp_vertical.rs"]
+mod focus_warp_vertical;
+#[allow(unused_imports)]
+use focus_warp_vertical::*;
+
 #[path = "panorama_focus_warp_render.rs"]
 mod focus_warp_render;
 #[allow(unused_imports)]
@@ -87,6 +92,11 @@ use source_preparation::*;
 mod focus_grouping;
 #[allow(unused_imports)]
 use focus_grouping::*;
+
+#[path = "panorama_focus_grouping_rescue.rs"]
+mod focus_grouping_rescue;
+#[allow(unused_imports)]
+use focus_grouping_rescue::*;
 
 #[path = "panorama_feature_matching.rs"]
 mod feature_matching;
