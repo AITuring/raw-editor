@@ -16,8 +16,12 @@ const stitchingCompositorHelpers = read('src-tauri/src/panorama_utils/stitching_
 const stitchingCompositorOptions = read('src-tauri/src/panorama_utils/stitching_compositor_options.rs');
 const stitchingInterpolationTests = read('src-tauri/src/panorama_utils/stitching_interpolation_tests.rs');
 const panorama = read('src-tauri/src/panorama_stitching.rs');
+const panoramaFeatureMatching = read('src-tauri/src/panorama_feature_matching.rs');
+const panoramaOrchestration = read('src-tauri/src/panorama_orchestration.rs');
+const panoramaVirtualTileSolver = read('src-tauri/src/panorama_virtual_tile_solver.rs');
 const panoramaStationSolver = read('src-tauri/src/panorama_station_solver.rs');
-const panoramaQuality = `${panorama}\n${panoramaStationSolver}`;
+const panoramaModules = `${panorama}\n${panoramaFeatureMatching}\n${panoramaOrchestration}\n${panoramaVirtualTileSolver}`;
+const panoramaQuality = `${panoramaModules}\n${panoramaStationSolver}`;
 const panoramaAlignmentTests = read('src-tauri/src/panorama_stitching_alignment_tests.rs');
 const panoramaTestSources = `${panorama}\n${panoramaStationSolver}\n${panoramaAlignmentTests}`;
 const processing = read('src-tauri/src/panorama_utils/processing.rs');
@@ -889,7 +893,7 @@ const withoutTestModule = (code) => code.split(/^#\[cfg\(test\)\]/m)[0];
 
 const determinismCode = withoutTestModule(stripRustComments(determinism));
 const processingCode = stripRustComments(processing);
-const panoramaCode = stripRustComments(panorama);
+const panoramaCode = stripRustComments(panoramaModules);
 
 // --- 1. no direct `for ... in` iteration over a hash container -------------
 // `HashMap`/`HashSet` iteration order is a function of the process wide hash
@@ -1093,7 +1097,7 @@ const NON_REPRODUCIBLE_SEED_INGREDIENTS = [
 const seedingSites = [
   ['determinism.rs', determinismCode],
   ['processing.rs', processingCode],
-  ['panorama_stitching.rs', panoramaCode],
+  ['panorama_stitching modules', panoramaCode],
 ].flatMap(([file, code]) =>
   callArguments(code, 'seed_from_u64').map((argument) => ({ file, argument: argument.replace(/\s+/g, ' ').trim() })),
 );
@@ -1125,7 +1129,7 @@ for (const { file, argument } of runSeedMixingSites) {
 for (const [file, code] of [
   ['determinism.rs', determinismCode],
   ['processing.rs', processingCode],
-  ['panorama_stitching.rs', panoramaCode],
+  ['panorama_stitching modules', panoramaCode],
 ]) {
   assert.doesNotMatch(code, /thread_rng|from_entropy/, `${file} must not create an entropy seeded generator anywhere`);
 }
