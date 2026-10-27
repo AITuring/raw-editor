@@ -31,8 +31,11 @@ stitching、compositor、test support 和 properties 已改为直接从 shared �
 Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixel-aligned facade 测试也继续通过。N1-2b 已把
 区域 geometry/focus helper 移到 `panorama_utils/render_geometry.rs` 和 `panorama_utils/focus_geometry.rs`：
 前者负责 transformed image/source bounds、focus output/render bounds，后者负责 mapped frame 与 shifted-mosaic
-判定；两个模块均低于 1000 行，`stitching.rs` 仅保留兼容重导出，未改变阈值、坐标含义或回退行为。下一步按
-报告 schema/recorder、feature/matching、station solver、compositor 的顺序推进；
+判定；两个模块均低于 1000 行，`stitching.rs` 仅保留兼容重导出，未改变阈值、坐标含义或回退行为。N1-3
+已把 report schema、recorder 和原子 I/O 拆到 `report_schema_core.rs`、`report_schema_solver.rs`、
+`report_schema_metrics.rs`、`report_document.rs`、`report_recorder.rs` 和 `report_io.rs`；各生产文件均低于
+1000 行，`report.rs` 只保留兼容重导出和测试，未改变 `Stack_Report` 字段、schema 版本或写盘语义。下一步按
+feature/matching、station solver、compositor 的顺序推进；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -67,6 +70,12 @@ source streaming，输出 `3388×1389`、预览 `1200×492`，日志位于
 同一 release 二进制的 1:1 回归也保持 45/45 source streaming，输出 `33895×13888`，并写出
 `/private/tmp/raw-editor-lanting-focus-geometry-full.tiff`（2.6 GiB）和同尺寸 app JPEG，预览位于
 `/private/tmp/raw-editor-lanting-focus-geometry-full.preview.jpg`；这确认本轮纯 helper 移动没有丢失完整成片能力。
+
+N1-3 report 拆分后的定向测试为 report `16 passed`、quality-gate `24 passed`；完整 release 库测试仍为
+`818 passed, 0 failed, 30 ignored`。兰亭当前 10% 回归仍为 45/45 source streaming，输出 `3388×1389`，
+并写出 `/private/tmp/raw-editor-lanting-report-split-10-stack-reports/stack-report-8ac825e8-46ba-4396-9d3f-1a45dc45131d.json`；
+预览 `/private/tmp/raw-editor-lanting-report-split-10.preview.jpg` 保持完整可读。质量门仍按现有报告语义记录，
+没有因为拆分把 `insufficient_evidence` 改写为通过。
 
 N0 的基准行为门已通过，可以开始 N1 的职责拆分；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。

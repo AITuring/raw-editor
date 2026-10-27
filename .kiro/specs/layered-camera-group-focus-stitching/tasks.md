@@ -134,6 +134,11 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   库测试通过，行为和诊断阈值未改变；随后用同一 release 二进制完成兰亭 1:1 写盘回归，输出
   `33895×13888`，成功写出 `/private/tmp/raw-editor-lanting-focus-geometry-full.tiff`、同尺寸 app JPEG
   和预览，45/45 source streaming 保持不变。
+- [x] N1-3 report schema/recorder 拆分：新增 `report_schema_core.rs`、`report_schema_solver.rs`、
+  `report_schema_metrics.rs`、`report_document.rs`、`report_recorder.rs` 和 `report_io.rs`；各生产文件均低于
+  1000 行，`report.rs` 保留兼容 facade、重导出和测试，未改变 `Stack_Report` schema 版本、字段、阈值或原子
+  写盘语义。report 定向测试 `16 passed`、quality-gate 定向测试 `24 passed`、完整 release 库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约通过；兰亭 10% 回归保持 45/45、`3388×1389`，报告成功写出。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
