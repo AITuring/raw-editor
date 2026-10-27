@@ -14,6 +14,11 @@
 邻域候选、受限视觉检索和大堆栈候选扩展；完整特征提取、几何验证和后续 solver 仍由入口编排。入口通过
 私有 facade import 保持原调用名，未改变候选阈值、排序规则或回退路径。
 
+N1-5 又新增 `panorama_focus_feature_prep.rs` 和 `panorama_match_contract.rs`。前者负责 bounded analysis
+image 的 focus 特征、foreground range/mask、top feature 和 foreground predicate；后者负责 canonical relation
+方向、空间支持、homography scale、station local scale 以及 adjacent same-focal pair 合同。两者分别为 279
+和 262 行，完整 `match_image_pair_with_seed` 仍留在入口，避免把匹配算法和合同迁移混在一次变更中。
+
 `src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
 顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
 几何和颜色 primitive。它们仍有跨职责实现，不能据此宣称已经完成模块化。
@@ -42,7 +47,7 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 feature/matching、station solver、compositor 的顺序推进。N1-4 已完成候选 pair 生成拆分：
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
 没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。下一步拆 focus feature preparation
-和匹配合同，随后再拆 station solver；
+和匹配合同，随后再拆匹配执行体和 station solver；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -91,6 +96,15 @@ N1-4 候选 pair 拆分后的定向测试为大堆栈邻域、自然文件名邻
 `/private/tmp/raw-editor-lanting-feature-pairs-10-stack-reports/stack-report-9716983f-75ac-4126-99a3-0697ac46a588.json`；
 预览 `/private/tmp/raw-editor-lanting-feature-pairs-10.preview.jpg` 可读。报告仍按现有语义记录
 `quality_gate=insufficient_evidence`，本次结构拆分未把它改写为通过。
+
+N1-5 focus feature preparation/匹配合同拆分后的定向保护包括 feature alignment `4`、foreground/canonical/
+scale 合同 `7`、guided overlap `2`、direct grid `9`、direct residual `3`、focus group `2`、polished matcher `1`
+和 prior-free fallback `1`，均通过；N1-4 候选与 provider/processing/registration 定向测试也保持通过。
+完整 release 库测试仍为 `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过。兰亭 acceptance
+保持 45/45 source streaming，输出 `3388×1389`、预览 `1200×492`，报告写入
+`/private/tmp/raw-editor-lanting-n15-stack-reports/stack-report-329977cb-d224-4c79-97e2-66f91d50d84b.json`；
+预览 `/private/tmp/raw-editor-lanting-n15-10.preview.jpg` 整图可读。质量门仍为
+`insufficient_evidence`，因为本轮只做职责迁移，没有虚构 ROI 证据或改变 rejection 原因。
 
 N0 的基准行为门已通过，可以开始 N1 的职责拆分；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。

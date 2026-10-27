@@ -145,8 +145,16 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   `feature_provider`/`processing`/`registration` 为 `6/5/3 passed`，完整 release 库测试
   `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 10% 回归保持 45/45、
   `3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-feature-pairs-10-stack-reports/`。
-- [ ] N1-5 focus feature preparation 与匹配合同拆分：先移动 focus 特征准备、mask/采样和匹配输入合同，保持
-  `panorama_feature_pairs.rs` 与新模块均不超过 1000 行，再进入 station solver。
+- [x] N1-5 focus feature preparation 与匹配合同拆分：新增 `panorama_focus_feature_prep.rs`（279 行）和
+  `panorama_match_contract.rs`（262 行），分别承载 bounded focus 特征、foreground range/mask、top feature、
+  foreground predicate，以及 canonical relation 方向、空间支持、homography/station scale 和 adjacent
+  same-focal pair 合同；完整 `match_image_pair_with_seed` 暂留 facade，避免职责迁移混入算法变化。feature/
+  contract、guided/direct/polished/prior-free、候选和底层 provider/processing/registration 定向测试均通过，
+  完整 release 库测试 `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 acceptance
+  保持 45/45、`3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-n15-stack-reports/`，
+  `quality_gate=insufficient_evidence` 语义未改变。
+- [ ] N1-6 匹配执行体拆分：将 `match_image_pair_with_seed` 按候选生成、几何验证、focus rescue 和结果组装拆成
+  单一职责模块，保持每个模块不超过 1000 行，再进入 station solver。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
