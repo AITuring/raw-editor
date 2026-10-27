@@ -10,14 +10,14 @@
 
 #![allow(dead_code)]
 
-use std::sync::Mutex;
+use std::{collections::BTreeMap, sync::Mutex};
 
 use image::GrayImage;
 use nalgebra::{Matrix3, Point2};
 use serde::{Deserialize, Serialize};
 
 use super::super::mosaic::Field;
-use super::super::registration::refine_warped_patch;
+use super::super::registration::{PatchMatchGates, probe_warped_patch};
 use super::degradation;
 use super::report::{
     RESIDUAL_WARP_NODE_STEP_PX, ResidualWarpReport, WarpRegionRecord, WorldPoint, WorldRect,
@@ -171,6 +171,78 @@ pub(crate) struct WarpRegion {
 }
 
 impl WarpRegion {
+    /// Accept a jointly estimated grid only where measured observations
+    /// support it. The caller must independently validate the resulting
+    /// compositor map after these support/boundary guards have been applied.
+    pub(crate) fn from_verified_grid(
+        overlap: OverlapResidual,
+        values: &[[f64; 2]],
+        measured: &[WarpObservation],
+    ) -> Option<Self> {
+        if measured.len() < RESIDUAL_WARP_MIN_VERIFIED_POINTS {
+            return None;
+        }
+        let mut region = Self::identity(overlap);
+        if values.len() != region.nodes.len()
+            || values.iter().any(|v| {
+                !v[0].is_finite()
+                    || !v[1].is_finite()
+                    || v[0].hypot(v[1]) > RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX
+            })
+        {
+            return None;
+        }
+        let mut support = vec![false; values.len()];
+        let mut round_trip_errors = vec![0.0f64; values.len()];
+        for observation in measured {
+            let point = &observation.world;
+            if !observation_is_valid(*observation) || !contains(&region.world, point.x, point.y) {
+                continue;
+            }
+            let x = ((point.x - region.world.left) / region.field.step).floor() as usize;
+            let y = ((point.y - region.world.top) / region.field.step).floor() as usize;
+            for dy in 0..=1 {
+                for dx in 0..=1 {
+                    if x + dx < region.field.width && y + dy < region.field.height {
+                        support[(y + dy) * region.field.width + x + dx] = true;
+                        let index = (y + dy) * region.field.width + x + dx;
+                        round_trip_errors[index] =
+                            round_trip_errors[index].max(observation.round_trip_error_px);
+                    }
+                }
+            }
+        }
+        if support.iter().filter(|&&valid| valid).count() < RESIDUAL_WARP_MIN_VERIFIED_POINTS {
+            return None;
+        }
+        let radius = RESIDUAL_WARP_EXTRAPOLATION_RADIUS_NODES as isize;
+        for index in 0..values.len() {
+            let (x, y) = (
+                (index % region.field.width) as isize,
+                (index / region.field.width) as isize,
+            );
+            let nearby = (-radius..=radius).any(|dy| {
+                (-radius..=radius).any(|dx| {
+                    let (nx, ny) = (x + dx, y + dy);
+                    dx * dx + dy * dy <= radius * radius
+                        && nx >= 0
+                        && ny >= 0
+                        && nx < region.field.width as isize
+                        && ny < region.field.height as isize
+                        && support[ny as usize * region.field.width + nx as usize]
+                })
+            });
+            region.nodes[index].valid = support[index];
+            region.nodes[index].round_trip_error_px = round_trip_errors[index];
+            region.nodes[index].displacement = if nearby { values[index] } else { [0.0; 2] };
+        }
+        region.enforce_all_neighbour_bound();
+        region.rebuild_field();
+        region.update_metrics();
+        (region.max_node_displacement_px <= RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX
+            && region.max_neighbour_delta_px <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX + 1e-8)
+            .then_some(region)
+    }
     /// Create an identity region.  The four-node floor is intentional: callers
     /// may populate a tiny overlap without changing field topology.
     pub(crate) fn identity(overlap: OverlapResidual) -> Self {
@@ -591,7 +663,10 @@ impl WarpRegion {
                             self.nodes[index].displacement,
                             self.nodes[other].displacement,
                         );
-                        if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX {
+                        // Projection onto the bound can round a few ulps
+                        // above 8. Re-projecting that same pair indefinitely
+                        // never changes the field and makes large grids stall.
+                        if delta <= RESIDUAL_WARP_MAX_NEIGHBOUR_DELTA_PX + 1e-10 {
                             continue;
                         }
                         let index_magnitude = self.nodes[index].displacement[0]
@@ -667,9 +742,14 @@ impl WarpRegion {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResidualWarp {
     pub regions: Vec<WarpRegion>,
+    pub(crate) line_layers: super::line_layers::LineLayers,
+    station_aliases: BTreeMap<usize, usize>,
 }
 
 impl ResidualWarp {
+    pub(crate) fn register_station_alias(&mut self, image_id: usize, station: usize) {
+        self.station_aliases.insert(image_id, station);
+    }
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -702,13 +782,14 @@ impl ResidualWarp {
     }
 
     pub(crate) fn identity(&self) -> bool {
-        self.regions.iter().all(|region| {
-            region
-                .field
-                .values
-                .iter()
-                .all(|value| value[0] == 0.0 && value[1] == 0.0)
-        })
+        self.line_layers.reports.is_empty()
+            && self.regions.iter().all(|region| {
+                region
+                    .field
+                    .values
+                    .iter()
+                    .all(|value| value[0] == 0.0 && value[1] == 0.0)
+            })
     }
 
     /// Apply the inverse residual map for one station in world coordinates.
@@ -721,16 +802,22 @@ impl ResidualWarp {
         world: Point2<f64>,
         station_id: usize,
     ) -> Point2<f64> {
+        let station_id = self
+            .station_aliases
+            .get(&station_id)
+            .copied()
+            .unwrap_or(station_id);
+        let world = self.line_layers.inverse(world, station_id);
         let Some(region) = self.regions.iter().find(|region| {
             region.right_station == station_id && contains(&region.world, world.x, world.y)
         }) else {
             return world;
         };
-        if self.identity() {
-            return world;
-        }
         let mut source = world;
-        for _ in 0..4 {
+        // The 32/8 grid and edge fade can approach a 0.625 contraction.
+        // Four steps are not subpixel-accurate there; sixteen bound the
+        // remaining inverse error below 0.02px even at maximum displacement.
+        for _ in 0..16 {
             let displacement = region.displacement_at(source.x, source.y);
             let next = Point2::new(world.x - displacement[0], world.y - displacement[1]);
             if (next - source).norm() < 1e-6 {
@@ -739,6 +826,41 @@ impl ResidualWarp {
             source = next;
         }
         source
+    }
+
+    pub(crate) fn forward_world_for_station(
+        &self,
+        source: Point2<f64>,
+        image_id: usize,
+    ) -> Point2<f64> {
+        let station = self
+            .station_aliases
+            .get(&image_id)
+            .copied()
+            .unwrap_or(image_id);
+        self.regions
+            .iter()
+            .find(|r| r.right_station == station && contains(&r.world, source.x, source.y))
+            .map_or(source, |r| {
+                let d = r.displacement_at(source.x, source.y);
+                Point2::new(source.x + d[0], source.y + d[1])
+            })
+    }
+    pub(crate) fn has_line_layer(&self, image_id: usize) -> bool {
+        let station = self
+            .station_aliases
+            .get(&image_id)
+            .copied()
+            .unwrap_or(image_id);
+        self.line_layers.has_station(station)
+    }
+    pub(crate) fn line_layer_affects(&self, world: Point2<f64>, image_id: usize) -> bool {
+        let station = self
+            .station_aliases
+            .get(&image_id)
+            .copied()
+            .unwrap_or(image_id);
+        self.line_layers.affects(world, station)
     }
 
     /// Short compositor-facing alias for the world-space inverse query.
@@ -783,6 +905,18 @@ pub(crate) fn record_run_model(model: &ResidualWarp) {
     *identity &= model.identity();
 }
 
+/// Replace the complete compositor model without duplicating its existing
+/// camera-field records when a separately validated depth layer is attached.
+pub(crate) fn replace_run_model(model: &ResidualWarp) {
+    *RUN_RESIDUAL_WARP_MODEL
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = Some(model.clone());
+    *RUN_RESIDUAL_WARP.lock().unwrap_or_else(|p| p.into_inner()) = model.report_records();
+    *RUN_RESIDUAL_WARP_IDENTITY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = model.identity();
+}
+
 /// Snapshot the run model for the compositor.  An empty snapshot is the
 /// compatibility path used until the panorama entry point supplies measured
 /// station P95s and observations.
@@ -804,6 +938,7 @@ pub(crate) fn run_records_snapshot() -> Vec<WarpRegionRecord> {
 pub(crate) fn run_report_snapshot() -> ResidualWarpReport {
     ResidualWarpReport {
         regions: run_records_snapshot(),
+        normal_layers: run_model_snapshot().line_layers.reports,
         identity: *RUN_RESIDUAL_WARP_IDENTITY
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()),
@@ -838,15 +973,38 @@ pub(crate) fn verify_round_trip_match_with_template(
     center: Point2<f64>,
     half: i32,
 ) -> Option<RoundTripMatch> {
-    let forward_match = refine_warped_patch(source, target, forward_transform, center, half, 7)?;
-    let backward_match = refine_warped_patch(
+    verify_round_trip_match_with_gates(
+        source,
+        target,
+        forward_transform,
+        backward_transform,
+        center,
+        half,
+        PatchMatchGates::LEGACY,
+    )
+}
+
+pub(crate) fn verify_round_trip_match_with_gates(
+    source: &GrayImage,
+    target: &GrayImage,
+    forward_transform: &Matrix3<f64>,
+    backward_transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    half: i32,
+    gates: PatchMatchGates,
+) -> Option<RoundTripMatch> {
+    let forward_match =
+        probe_warped_patch(source, target, forward_transform, center, half, 7, gates).matched?;
+    let backward_match = probe_warped_patch(
         target,
         source,
         backward_transform,
         forward_match.target,
         half,
         7,
-    )?;
+        gates,
+    )
+    .matched?;
     let round_trip_error_px = (backward_match.target - center).norm();
     (round_trip_error_px <= RESIDUAL_WARP_MAX_ROUND_TRIP_ERROR_PX).then_some(RoundTripMatch {
         forward: forward_match.target,
@@ -959,6 +1117,39 @@ mod tests {
         assert!(model.add_overlap(overlap(80.0, 80.0, 3.0)).is_none());
         assert_eq!(model.add_overlap(overlap(80.0, 80.0, 3.01)), Some(0));
         assert_eq!(model.regions[0].columns.min(model.regions[0].rows), 4);
+    }
+
+    #[test]
+    fn virtual_tile_alias_and_source_station_use_the_same_inverse_field() {
+        let world = WorldPoint { x: 356.0, y: 456.0 };
+        let observations = (0..8)
+            .flat_map(|row| {
+                (0..8).map(move |column| {
+                    WarpObservation::new(
+                        WorldPoint {
+                            x: 100.0 + column as f64 * 64.0,
+                            y: 200.0 + row as f64 * 64.0,
+                        },
+                        [4.0, -3.0],
+                        0.2,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut model = ResidualWarp::new();
+        model
+            .add_observations(overlap(448.0, 448.0, 10.0), &observations)
+            .unwrap();
+        model.register_station_alias(usize::MAX - 7, 7);
+        let warped = model.regions[0].warp_point(world);
+        let target = Point2::new(warped.x, warped.y);
+        let source = model.inverse_world_for_station(target, 7);
+        assert!((source - Point2::new(world.x, world.y)).norm() < 0.01);
+        assert_eq!(
+            source,
+            model.inverse_world_for_station(target, usize::MAX - 7)
+        );
+        assert_eq!(target, model.inverse_world_for_station(target, 6));
     }
 
     #[test]

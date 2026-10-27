@@ -432,6 +432,16 @@ pub(crate) fn local_scale_for_roi(
     residual: &residual_warp::ResidualWarp,
     acceptance_render_scale: f64,
 ) -> Result<LocalScaleMeasurement, &'static str> {
+    local_scale_with_mapper(roi, acceptance_render_scale, |world| {
+        map_world_to_source(world, geometry, residual)
+    })
+}
+
+pub(crate) fn local_scale_with_mapper(
+    roi: &QualityRoi,
+    acceptance_render_scale: f64,
+    map: impl Fn(Point2<f64>) -> Result<Point2<f64>, &'static str>,
+) -> Result<LocalScaleMeasurement, &'static str> {
     if roi.side == 0 || !acceptance_render_scale.is_finite() || acceptance_render_scale <= 0.0 {
         return Err(degradation::DIAGNOSTICS_ROI_INVALID);
     }
@@ -444,33 +454,17 @@ pub(crate) fn local_scale_for_roi(
                 roi.world_origin.0 + f64::from(x),
                 roi.world_origin.1 + f64::from(y),
             );
-            let xp = map_world_to_source(
-                center + nalgebra::Vector2::new(0.5, 0.0),
-                geometry,
-                residual,
-            )?;
-            let xm = map_world_to_source(
-                center - nalgebra::Vector2::new(0.5, 0.0),
-                geometry,
-                residual,
-            )?;
-            let yp = map_world_to_source(
-                center + nalgebra::Vector2::new(0.0, 0.5),
-                geometry,
-                residual,
-            )?;
-            let ym = map_world_to_source(
-                center - nalgebra::Vector2::new(0.0, 0.5),
-                geometry,
-                residual,
-            )?;
+            let xp = map(center + nalgebra::Vector2::new(0.5, 0.0))?;
+            let xm = map(center - nalgebra::Vector2::new(0.5, 0.0))?;
+            let yp = map(center + nalgebra::Vector2::new(0.0, 0.5))?;
+            let ym = map(center - nalgebra::Vector2::new(0.0, 0.5))?;
             let dx = xp - xm;
             let dy = yp - ym;
             let determinant = (dx.x * dy.y - dx.y * dy.x).abs();
             if !determinant.is_finite() || determinant <= 1e-12 {
                 return Err(degradation::OWNER_SOURCE_UNDECODABLE);
             }
-            scales.push(determinant.sqrt());
+            scales.push(1.0 / determinant.sqrt());
         }
     }
     scales.sort_by(f64::total_cmp);
@@ -1304,8 +1298,283 @@ fn luminance(pixel: image::Rgb<f32>) -> f64 {
     0.2126 * f64::from(pixel[0]) + 0.7152 * f64::from(pixel[1]) + 0.0722 * f64::from(pixel[2])
 }
 
+/// Fit the same oriented edge in the two 16px owner bands and compare its
+/// intercept at the seam. Contrast mass along the seam normal is not an edge
+/// position: it changes under illumination even for a continuous stroke.
+pub(crate) fn paired_boundary_edge_error(
+    image: &Rgb32FImage,
+    x: u32,
+    y: u32,
+    normal: (f64, f64),
+) -> Result<(f64, f64), &'static str> {
+    paired_boundary_edge_error_with_coverage(image, None, x, y, normal)
+}
+
+#[derive(Debug)]
+pub(crate) struct BoundaryEdgeFits {
+    pub(crate) left: (f64, f64),
+    pub(crate) right: (f64, f64),
+    pub(crate) crossing: f64,
+    pub(crate) angle: f64,
+}
+
+pub(crate) fn paired_boundary_edge_error_with_coverage(
+    image: &Rgb32FImage,
+    coverage: Option<&GrayImage>,
+    x: u32,
+    y: u32,
+    normal: (f64, f64),
+) -> Result<(f64, f64), &'static str> {
+    let fit = paired_boundary_edge_fits_with_coverage(image, coverage, x, y, normal)?;
+    // Both fitted contours must actually cross the sampled ownership seam.
+    // Nearly parallel arcs can otherwise extrapolate different circle/ring
+    // segments to a distant intersection and report a fictitious large jump.
+    if (fit.left.0 / fit.crossing).abs() > 16.0 || (fit.right.0 / fit.crossing).abs() > 16.0 {
+        return Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
+    }
+    Ok(((fit.left.0 - fit.right.0).abs(), fit.angle))
+}
+
+pub(crate) fn paired_boundary_edge_fits_with_coverage(
+    image: &Rgb32FImage,
+    coverage: Option<&GrayImage>,
+    x: u32,
+    y: u32,
+    normal: (f64, f64),
+) -> Result<BoundaryEdgeFits, &'static str> {
+    if coverage.is_some_and(|mask| mask.dimensions() != image.dimensions()) {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    #[derive(Clone, Copy)]
+    struct Edge {
+        d: f64,
+        px: f64,
+        py: f64,
+        angle: f64,
+        weight: f64,
+    }
+    let length = normal.0.hypot(normal.1);
+    if length < 1e-8 {
+        return Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
+    }
+    let normal = (normal.0 / length, normal.1 / length);
+    let tangent = (-normal.1, normal.0);
+    let (width, height) = image.dimensions();
+    let mut sides = [Vec::<Edge>::new(), Vec::<Edge>::new()];
+    for (side_index, side) in [-1.0, 1.0].into_iter().enumerate() {
+        for distance in 2..=16 {
+            for along in -16..=16 {
+                let px = side * distance as f64 * normal.0 + along as f64 * tangent.0;
+                let py = side * distance as f64 * normal.1 + along as f64 * tangent.1;
+                let ix = (x as f64 + px).round() as i32;
+                let iy = (y as f64 + py).round() as i32;
+                if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
+                    continue;
+                }
+                // A coverage/transparent transition is not a photographed
+                // stroke. Every gradient stencil must belong to source data;
+                // covered black pixels remain valid contrast evidence.
+                if coverage.is_some_and(|mask| {
+                    [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)]
+                        .iter()
+                        .any(|&(dx, dy)| mask.get_pixel((ix + dx) as u32, (iy + dy) as u32)[0] == 0)
+                }) {
+                    continue;
+                }
+                let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
+                    - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
+                let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
+                    - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
+                let weight = gx.hypot(gy) * 0.5;
+                if weight >= 0.15 {
+                    // The native Catmull–Rom footprint has radius two and
+                    // the gradient adds one pixel. A covered interpolation
+                    // halo next to transparency is still a support edge,
+                    // rather than a photographed stroke.
+                    if coverage.is_some_and(|mask| {
+                        (-3..=3).any(|dy| {
+                            (-3..=3).any(|dx| {
+                                let (sx, sy) = (ix + dx, iy + dy);
+                                sx < 0
+                                    || sy < 0
+                                    || sx >= width as i32
+                                    || sy >= height as i32
+                                    || mask.get_pixel(sx as u32, sy as u32)[0] == 0
+                            })
+                        })
+                    }) {
+                        continue;
+                    }
+                    sides[side_index].push(Edge {
+                        d: px * normal.0 + py * normal.1,
+                        px,
+                        py,
+                        angle: gy.atan2(gx),
+                        weight,
+                    });
+                }
+            }
+        }
+    }
+    if sides.iter().any(Vec::is_empty) {
+        return Err(degradation::BOUNDARY_LOW_CONTRAST);
+    }
+    let angle_difference = |a: f64, b: f64| (a - b).sin().atan2((a - b).cos()).abs();
+    let tolerance = 10.0f64.to_radians();
+    let mut best = (0.0, 0.0);
+    for bin in 0..72 {
+        let angle = bin as f64 * 5.0f64.to_radians();
+        let support = sides
+            .iter()
+            .map(|side| {
+                side.iter()
+                    .filter(|p| angle_difference(p.angle, angle) <= tolerance)
+                    .map(|p| p.weight)
+                    .sum::<f64>()
+            })
+            .fold(f64::INFINITY, f64::min);
+        if support > best.0 {
+            best = (support, angle);
+        }
+    }
+    if best.0 <= 0.0 {
+        return Err(degradation::BOUNDARY_ORIENTATION_MISMATCH);
+    }
+    let n = (best.1.cos(), best.1.sin());
+    // Select a contour supported in both owner bands before fitting it.
+    // Independent strongest peaks can select different concentric rings or
+    // parallel strokes when their contrast changes across the ownership seam.
+    // If no contour band is shared, retain independent peaks so an actually
+    // displaced isolated edge remains a measurable failure.
+    let mut shared_contour_support = false;
+    let shared_peak = sides
+        .iter()
+        .flatten()
+        .filter(|p| angle_difference(p.angle, best.1) <= tolerance)
+        .map(|p| (n.0 * p.px + n.1 * p.py).floor() as i32)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .map(|bin| {
+            let peak = bin as f64 + 0.5;
+            let samples = sides.each_ref().map(|side| {
+                let points = side
+                    .iter()
+                    .filter(|p| {
+                        angle_difference(p.angle, best.1) <= tolerance
+                            && (n.0 * p.px + n.1 * p.py - peak).abs() <= 2.5
+                    })
+                    .collect::<Vec<_>>();
+                let span = points
+                    .iter()
+                    .map(|p| p.d)
+                    .max_by(f64::total_cmp)
+                    .zip(points.iter().map(|p| p.d).min_by(f64::total_cmp))
+                    .map(|(max, min)| max - min)
+                    .unwrap_or(0.0);
+                (
+                    points.len(),
+                    if span < 4.0 {
+                        0.0
+                    } else {
+                        points.iter().map(|p| p.weight).sum::<f64>()
+                    },
+                )
+            });
+            shared_contour_support |= samples.iter().all(|sample| sample.0 >= 4);
+            (
+                samples[0].1.min(samples[1].1),
+                samples[0].1 + samples[1].1,
+                bin,
+            )
+        })
+        .filter(|value| value.0 > 0.0)
+        .max_by(|a, b| {
+            a.0.total_cmp(&b.0)
+                .then_with(|| a.1.total_cmp(&b.1))
+                .then_with(|| b.2.cmp(&a.2))
+        })
+        .map(|value| value.2 as f64 + 0.5);
+    if shared_peak.is_none() && shared_contour_support {
+        // A common curved/short contour cannot supply the original 4px
+        // fitting span. Do not replace it with a different dominant contour.
+        return Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
+    }
+    let fit = |edges: &[Edge]| -> Option<(f64, f64)> {
+        let selected = edges
+            .iter()
+            .filter(|p| angle_difference(p.angle, best.1) <= tolerance)
+            .collect::<Vec<_>>();
+        let mut bins = std::collections::BTreeMap::<i32, f64>::new();
+        for p in &selected {
+            *bins
+                .entry((n.0 * p.px + n.1 * p.py).floor() as i32)
+                .or_default() += p.weight;
+        }
+        let independent_peak = *bins
+            .iter()
+            .max_by(|a, b| a.1.total_cmp(b.1).then_with(|| b.0.cmp(a.0)))?
+            .0 as f64
+            + 0.5;
+        let peak = shared_peak.unwrap_or(independent_peak);
+        let points = selected
+            .into_iter()
+            .filter(|p| (n.0 * p.px + n.1 * p.py - peak).abs() <= 2.5)
+            .collect::<Vec<_>>();
+        let min = points.iter().map(|p| p.d).min_by(f64::total_cmp)?;
+        let max = points.iter().map(|p| p.d).max_by(f64::total_cmp)?;
+        if max - min < 4.0 {
+            return None;
+        }
+        let sum = points.iter().map(|p| p.weight).sum::<f64>();
+        let md = points.iter().map(|p| p.d * p.weight).sum::<f64>() / sum;
+        let mr = points
+            .iter()
+            .map(|p| (n.0 * p.px + n.1 * p.py) * p.weight)
+            .sum::<f64>()
+            / sum;
+        let variance = points
+            .iter()
+            .map(|p| p.weight * (p.d - md).powi(2))
+            .sum::<f64>();
+        if variance < 1e-8 {
+            return None;
+        }
+        let slope = points
+            .iter()
+            .map(|p| p.weight * (p.d - md) * (n.0 * p.px + n.1 * p.py - mr))
+            .sum::<f64>()
+            / variance;
+        Some((mr - slope * md, slope))
+    };
+    let left = fit(&sides[0]).ok_or(degradation::BOUNDARY_NO_PAIRABLE_EDGE)?;
+    let right = fit(&sides[1]).ok_or(degradation::BOUNDARY_NO_PAIRABLE_EDGE)?;
+    let crossing = n.0 * tangent.0 + n.1 * tangent.1;
+    if crossing.abs() < 1e-6 {
+        return Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
+    }
+    let angle = (left.1.atan() - right.1.atan()).abs().to_degrees();
+    if angle > 10.0 {
+        return Err(degradation::BOUNDARY_ORIENTATION_MISMATCH);
+    }
+    Ok(BoundaryEdgeFits {
+        left,
+        right,
+        crossing,
+        angle,
+    })
+}
+
 pub(crate) fn measure_boundary_strokes(
     image: &Rgb32FImage,
+    boundary: &[(u32, u32)],
+    world_origin: (f64, f64),
+) -> Result<BoundaryStrokeReport, &'static str> {
+    measure_boundary_strokes_with_coverage(image, None, boundary, world_origin)
+}
+
+pub(crate) fn measure_boundary_strokes_with_coverage(
+    image: &Rgb32FImage,
+    coverage: Option<&GrayImage>,
     boundary: &[(u32, u32)],
     world_origin: (f64, f64),
 ) -> Result<BoundaryStrokeReport, &'static str> {
@@ -1329,63 +1598,18 @@ pub(crate) fn measure_boundary_strokes(
             continue;
         }
         let normal = (-tangent.1 / length, tangent.0 / length);
-        let mut best_left = (0.0f64, 0.0f64, 0.0f64);
-        let mut best_right = (0.0f64, 0.0f64, 0.0f64);
-        for distance in 1..=16 {
-            let d = f64::from(distance);
-            for side in [-1.0, 1.0] {
-                let sx = f64::from(x) + side * normal.0 * d;
-                let sy = f64::from(y) + side * normal.1 * d;
-                let ix = sx.round() as i32;
-                let iy = sy.round() as i32;
-                if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
+        let (normal_error, angle_error) =
+            match paired_boundary_edge_error_with_coverage(image, coverage, x, y, normal) {
+                Ok(value) => value,
+                Err(reason) => {
+                    unpairable_count += 1;
+                    unmeasurable.push((
+                        (world_origin.0 + x as f64, world_origin.1 + y as f64),
+                        reason,
+                    ));
                     continue;
                 }
-                let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
-                    - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
-                let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
-                    - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
-                let contrast = gx.hypot(gy) * 0.5;
-                if contrast < 0.15 {
-                    continue;
-                }
-                let orientation = gy.atan2(gx).to_degrees();
-                if side < 0.0 {
-                    best_left.0 += contrast;
-                    best_left.1 += side * d * contrast;
-                    best_left.2 += orientation * contrast;
-                } else {
-                    best_right.0 += contrast;
-                    best_right.1 += side * d * contrast;
-                    best_right.2 += orientation * contrast;
-                }
-            }
-        }
-        if best_left.0 <= 0.0 || best_right.0 <= 0.0 {
-            unpairable_count += 1;
-            unmeasurable.push((
-                (world_origin.0 + f64::from(x), world_origin.1 + f64::from(y)),
-                degradation::BOUNDARY_LOW_CONTRAST,
-            ));
-            continue;
-        }
-        let left_angle = best_left.2 / best_left.0;
-        let right_angle = best_right.2 / best_right.0;
-        let mut angle_error = (left_angle - right_angle).abs() % 180.0;
-        if angle_error > 90.0 {
-            angle_error = 180.0 - angle_error;
-        }
-        if angle_error > 10.0 {
-            unpairable_count += 1;
-            unmeasurable.push((
-                (world_origin.0 + f64::from(x), world_origin.1 + f64::from(y)),
-                degradation::BOUNDARY_ORIENTATION_MISMATCH,
-            ));
-            continue;
-        }
-        let left_position = best_left.1 / best_left.0;
-        let right_position = best_right.1 / best_right.0;
-        let normal_error = (left_position + right_position).abs();
+            };
         measurements.push(BoundaryStrokeMeasurement {
             world: (world_origin.0 + f64::from(x), world_origin.1 + f64::from(y)),
             normal_error_px: normal_error,
@@ -1446,5 +1670,141 @@ mod gradient_tests {
             / plane.len() as f64;
         let actual = normalized_gradient_energy(&image, 1.0).unwrap();
         assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+    }
+}
+
+#[cfg(test)]
+mod boundary_edge_tests {
+    use super::*;
+    fn edge_image(shift: f64) -> Rgb32FImage {
+        Rgb32FImage::from_fn(128, 128, |x, y| {
+            let amplitude = 0.5 + 0.4 * ((x as f64 - 56.0) / 4.0).tanh();
+            let position = 64.35 + if x >= 64 { shift } else { 0.0 };
+            let value = 0.05 + amplitude * (0.5 + 0.5 * ((y as f64 - position) * 2.0).tanh());
+            image::Rgb([value as f32; 3])
+        })
+    }
+    #[test]
+    fn continuous_edge_keeps_its_position_when_contrast_changes() {
+        let image = edge_image(0.0);
+        let (error, _) = paired_boundary_edge_error(&image, 64, 64, (1.0, 0.0)).unwrap();
+        assert!(
+            error < 0.35,
+            "illumination was mistaken for edge displacement: {error}"
+        );
+    }
+    #[test]
+    fn common_contour_is_not_replaced_by_a_different_stronger_parallel_edge() {
+        let image = Rgb32FImage::from_fn(128, 128, |x, y| {
+            let (first, second) = if x < 64 { (0.4, 0.5) } else { (0.5, 0.4) };
+            let step = |position: f64| 0.5 + 0.5 * ((y as f64 - position) * 2.0).tanh();
+            image::Rgb([(0.05 + first * step(51.35) + second * step(64.35)) as f32; 3])
+        });
+        let (error, _) = paired_boundary_edge_error(&image, 64, 64, (1.0, 0.0)).unwrap();
+        assert!(
+            error < 0.35,
+            "different continuous contours were paired: {error}"
+        );
+    }
+
+    #[test]
+    fn isolated_fifteen_pixel_edge_jump_remains_a_measurable_failure() {
+        let (error, _) = paired_boundary_edge_error(&edge_image(15.0), 64, 64, (1.0, 0.0)).unwrap();
+        // This edge sits one pixel from the 16px band's end, so its
+        // truncated derivative footprint can bias the subpixel fit.
+        assert!(
+            (14.0..16.0).contains(&error),
+            "large jump was hidden: {error}"
+        );
+        assert!(error > QUALITY_BOUNDARY_MAX);
+    }
+    #[test]
+    fn one_unrelated_bright_pixel_cannot_hide_an_isolated_edge_jump() {
+        let mut image = edge_image(15.0);
+        image.put_pixel(78, 64, image::Rgb([1.0; 3]));
+        let (error, _) = paired_boundary_edge_error(&image, 64, 64, (1.0, 0.0)).unwrap();
+        assert!(
+            error > QUALITY_BOUNDARY_MAX,
+            "an unrelated glint hid the jump: {error}"
+        );
+    }
+    #[test]
+    fn covered_interpolation_halo_does_not_create_a_photographic_stroke() {
+        let image = Rgb32FImage::from_fn(128, 128, |_, y| {
+            image::Rgb([if y < 62 { 0.0 } else { 0.9 }; 3])
+        });
+        let halo = GrayImage::from_fn(128, 128, |_, y| image::Luma([if y < 60 { 0 } else { 255 }]));
+        assert!(
+            paired_boundary_edge_error_with_coverage(&image, Some(&halo), 64, 64, (1.0, 0.0))
+                .is_err()
+        );
+        let full_support =
+            GrayImage::from_fn(128, 128, |_, y| image::Luma([if y < 40 { 0 } else { 255 }]));
+        assert!(
+            paired_boundary_edge_error_with_coverage(
+                &image,
+                Some(&full_support),
+                64,
+                64,
+                (1.0, 0.0)
+            )
+            .unwrap()
+            .0 < 1e-6
+        );
+    }
+
+    #[test]
+    fn transparency_edges_are_not_strokes_but_covered_black_edges_are() {
+        let image = Rgb32FImage::from_fn(128, 128, |_, y| {
+            image::Rgb([if y < 64 { 0.0 } else { 0.9 }; 3])
+        });
+        let coverage =
+            GrayImage::from_fn(128, 128, |_, y| image::Luma([if y < 64 { 0 } else { 255 }]));
+        assert!(
+            paired_boundary_edge_error_with_coverage(&image, Some(&coverage), 64, 64, (1.0, 0.0))
+                .is_err()
+        );
+        let covered = GrayImage::from_pixel(128, 128, image::Luma([255]));
+        let (error, _) =
+            paired_boundary_edge_error_with_coverage(&image, Some(&covered), 64, 64, (1.0, 0.0))
+                .unwrap();
+        assert!(error < 1e-6);
+    }
+
+    #[test]
+    fn parallel_segments_outside_the_seam_window_are_not_a_crossing_pair() {
+        let image = Rgb32FImage::from_fn(128, 128, |x, y| {
+            let d = y as f64 - 64.0;
+            let edge = 64.0
+                + if y < 64 {
+                    25.0 + 2.0 * d
+                } else {
+                    -25.0 + 2.0 * d
+                };
+            image::Rgb([if x as f64 >= edge { 0.9 } else { 0.1 }; 3])
+        });
+        assert_eq!(
+            paired_boundary_edge_error(&image, 64, 64, (0.0, 1.0)),
+            Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE)
+        );
+    }
+
+    #[test]
+    fn different_parallel_edges_are_not_one_crossing_stroke() {
+        let image = Rgb32FImage::from_fn(128, 128, |_, y| {
+            image::Rgb([if y <= 20 || y >= 44 { 0.9 } else { 0.1 }; 3])
+        });
+        assert!(paired_boundary_edge_error(&image, 64, 32, (0.0, 1.0)).is_err());
+    }
+
+    #[test]
+    fn shifted_edge_is_still_rejected_at_the_original_threshold() {
+        let image = edge_image(3.0);
+        let (error, _) = paired_boundary_edge_error(&image, 64, 64, (1.0, 0.0)).unwrap();
+        assert!(
+            (error - 3.0).abs() < 0.35,
+            "wrong native edge displacement: {error}"
+        );
+        assert!(error > QUALITY_BOUNDARY_P95_MAX);
     }
 }

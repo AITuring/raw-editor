@@ -18,6 +18,44 @@ pub(crate) struct StackLensCalibration {
     vignetting: Option<[f64; 3]>,
 }
 
+/// Geometric support of a calibrated RAW canvas; black sensor pixels remain
+/// covered, while padding outside the original sensor footprint does not.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StackLensFootprint {
+    pub(crate) calibration: StackLensCalibration,
+    pub(crate) original: (u32, u32),
+    pub(crate) corrected: (u32, u32),
+}
+
+impl StackLensFootprint {
+    pub(crate) fn contains(self, x: f64, y: f64, rendered: (u32, u32)) -> bool {
+        if rendered.0 == 0 || rendered.1 == 0 {
+            return false;
+        }
+        let x = (x + 0.5) * f64::from(self.corrected.0) / f64::from(rendered.0) - 0.5;
+        let y = (y + 0.5) * f64::from(self.corrected.1) / f64::from(rendered.1) - 0.5;
+        let (cx, cy) = (
+            (f64::from(self.original.0) - 1.0) * 0.5,
+            (f64::from(self.original.1) - 1.0) * 0.5,
+        );
+        let dx = x - (f64::from(self.corrected.0) - 1.0) * 0.5;
+        let dy = y - (f64::from(self.corrected.1) - 1.0) * 0.5;
+        let radius = dx.hypot(dy) / (f64::from(self.original.0.min(self.original.1)) * 0.5);
+        let ratio = if radius < 1e-12 {
+            1.0
+        } else {
+            self.calibration.distorted_radius(radius) / radius
+        };
+        let (sx, sy) = (cx + dx * ratio, cy + dy * ratio);
+        sx.is_finite()
+            && sy.is_finite()
+            && sx >= 2.0
+            && sy >= 2.0
+            && sx < f64::from(self.original.0) - 2.0
+            && sy < f64::from(self.original.1) - 2.0
+    }
+}
+
 impl StackLensCalibration {
     /// PA lens shading is measured on the pristine, linear sensor image.
     /// Unlike distortion, its radius unit is half the original diagonal.
@@ -1071,6 +1109,43 @@ mod tests {
         .into_iter()
         .map(|(k, v)| (k.into(), v.into()))
         .collect()
+    }
+
+    #[test]
+    fn calibrated_footprint_excludes_padding_and_retains_real_black_pixels() {
+        let calibration = stack_lens_calibration(&stack_metadata(), (8256, 5504)).unwrap();
+        let white = image::Rgb32FImage::from_pixel(600, 400, image::Rgb([1.0; 3]));
+        let corrected = calibration.correct(&white).unwrap();
+        let footprint = StackLensFootprint {
+            calibration,
+            original: white.dimensions(),
+            corrected: corrected.dimensions(),
+        };
+        let mut supported = 0;
+        let mut padding = 0;
+        for y in 0..corrected.height() {
+            for x in 0..corrected.width() {
+                if footprint.contains(x as f64, y as f64, corrected.dimensions()) {
+                    supported += 1;
+                    assert!(corrected.get_pixel(x, y)[0] > 0.99);
+                } else if corrected.get_pixel(x, y)[0] == 0.0 {
+                    padding += 1;
+                }
+            }
+        }
+        assert!(supported > 600 * 350 && padding > 1000);
+        let black = image::Rgb32FImage::new(600, 400);
+        let corrected_black = calibration.correct(&black).unwrap();
+        assert_eq!(
+            corrected_black.get_pixel(corrected.width() / 2, corrected.height() / 2)[0],
+            0.0
+        );
+        assert!(footprint.contains(
+            (corrected.width() / 2) as f64,
+            (corrected.height() / 2) as f64,
+            corrected.dimensions()
+        ));
+        assert!(footprint.contains(150.0, 100.0, (300, 200)));
     }
 
     #[test]

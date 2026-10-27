@@ -28,6 +28,60 @@ pub(super) fn pairwise_weight(disagreement_a: f64, disagreement_b: f64) -> f64 {
 }
 
 impl Graph {
+    /// Same blocking-flow traversal with the unsaturated path prefix retained.
+    /// Restarting at the source after every augmentation repeatedly walks a
+    /// long prefix on native grids. Resume at its first saturated edge instead.
+    fn source_side_reusing_path(mut self, source: usize, sink: usize) -> Vec<bool> {
+        loop {
+            let mut levels = self.levels(source);
+            if levels[sink] < 0 {
+                return levels.into_iter().map(|level| level >= 0).collect();
+            }
+            let mut next = vec![0usize; self.edges.len()];
+            let mut path = Vec::<(usize, usize)>::new();
+            let mut u = source;
+            loop {
+                if u == sink {
+                    let flow = path
+                        .iter()
+                        .map(|&(node, edge)| self.edges[node][edge].capacity)
+                        .fold(f64::INFINITY, f64::min);
+                    for &(node, index) in &path {
+                        let edge = self.edges[node][index];
+                        self.edges[node][index].capacity -= flow;
+                        self.edges[edge.to][edge.reverse].capacity += flow;
+                    }
+                    let saturated = path
+                        .iter()
+                        .position(|&(node, index)| self.edges[node][index].capacity <= 1e-9)
+                        .unwrap();
+                    u = path[saturated].0;
+                    path.truncate(saturated);
+                    next[u] += 1;
+                    continue;
+                }
+                while next[u] < self.edges[u].len() {
+                    let edge = self.edges[u][next[u]];
+                    if edge.capacity > 1e-9 && levels[edge.to] == levels[u] + 1 {
+                        break;
+                    }
+                    next[u] += 1;
+                }
+                if next[u] == self.edges[u].len() {
+                    levels[u] = -1;
+                    let Some((parent, _)) = path.pop() else {
+                        break;
+                    };
+                    u = parent;
+                    next[u] += 1;
+                } else {
+                    path.push((u, next[u]));
+                    u = self.edges[u][next[u]].to;
+                }
+            }
+        }
+    }
+
     fn connect(&mut self, a: usize, b: usize, forward: f64, reverse: f64) {
         let ai = self.edges[a].len();
         let bi = self.edges[b].len();
@@ -197,6 +251,90 @@ pub(super) fn cut_grid_weighted(
         .collect()
 }
 
+/// Exact fixed-node elimination for the large native ownership revisit.
+/// Fixed/free edges become unary costs; fixed/fixed edges are constants.
+/// Removing constants preserves the minimum cut and its minimal source side.
+pub(super) fn cut_grid_weighted_compact_fixed(
+    width: usize,
+    height: usize,
+    preference: &[f64],
+    disagreement: &[f64],
+    fixed: &[i8],
+    edge_weights: &[(Option<f64>, Option<f64>)],
+) -> Vec<u8> {
+    let count = width * height;
+    assert_eq!(preference.len(), count);
+    assert_eq!(disagreement.len(), count);
+    assert_eq!(fixed.len(), count);
+    assert_eq!(edge_weights.len(), count);
+    let mut nodes = vec![None; count];
+    let mut free_count = 0;
+    for (i, &pin) in fixed.iter().enumerate() {
+        if pin == 0 {
+            nodes[i] = Some(free_count);
+            free_count += 1;
+        }
+    }
+    let mut unary = preference.to_vec();
+    for i in 0..count {
+        for (other, horizontal) in [
+            ((i % width + 1 < width).then_some(i + 1), true),
+            ((i / width + 1 < height).then_some(i + width), false),
+        ] {
+            let Some(other) = other else {
+                continue;
+            };
+            let weight = if horizontal {
+                edge_weights[i].0
+            } else {
+                edge_weights[i].1
+            }
+            .unwrap_or_else(|| pairwise_weight(disagreement[i], disagreement[other]));
+            match (nodes[i], nodes[other]) {
+                (Some(_), None) => unary[i] += weight * f64::from(fixed[other]),
+                (None, Some(_)) => unary[other] += weight * f64::from(fixed[i]),
+                _ => {}
+            }
+        }
+    }
+    let source = free_count;
+    let sink = free_count + 1;
+    let mut graph = Graph {
+        edges: (0..free_count + 2).map(|_| Vec::with_capacity(6)).collect(),
+    };
+    for i in 0..count {
+        let Some(node) = nodes[i] else {
+            continue;
+        };
+        graph.connect(source, node, unary[i].max(0.0), 0.0);
+        graph.connect(node, sink, (-unary[i]).max(0.0), 0.0);
+        for (other, horizontal) in [
+            ((i % width + 1 < width).then_some(i + 1), true),
+            ((i / width + 1 < height).then_some(i + width), false),
+        ] {
+            let Some(other) = other.and_then(|i| nodes[i].map(|node| (i, node))) else {
+                continue;
+            };
+            let weight = if horizontal {
+                edge_weights[i].0
+            } else {
+                edge_weights[i].1
+            }
+            .unwrap_or_else(|| pairwise_weight(disagreement[i], disagreement[other.0]));
+            if weight > 0.0 {
+                graph.connect(node, other.1, weight, weight);
+            }
+        }
+    }
+    let source_side = graph.source_side_reusing_path(source, sink);
+    (0..count)
+        .map(|i| match nodes[i] {
+            Some(node) => u8::from(source_side[node]) * 255,
+            None => u8::from(fixed[i] > 0) * 255,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +376,47 @@ mod tests {
             .fold(0usize, |mask, (i, &v)| mask | (usize::from(v > 0) << i));
         let optimal = (0..64).map(energy).fold(f64::INFINITY, f64::min);
         assert!((energy(selected) - optimal).abs() < 1e-9);
+        assert_eq!(
+            cut_grid_weighted_compact_fixed(
+                3,
+                2,
+                &preference,
+                &disagreement,
+                &fixed,
+                &[(None, None); 6]
+            ),
+            labels
+        );
+    }
+
+    #[test]
+    fn fixed_node_elimination_preserves_cut_labels_including_ties() {
+        let mut state = 17u64;
+        for case in 0..256 {
+            let mut draw = || {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                (state >> 32) as u32
+            };
+            let preference = (0..12)
+                .map(|_| {
+                    if case % 8 == 0 {
+                        0.0
+                    } else {
+                        (draw() % 9) as f64 - 4.0
+                    }
+                })
+                .collect::<Vec<_>>();
+            let fixed = (0..12).map(|_| (draw() % 3) as i8 - 1).collect::<Vec<_>>();
+            let edges = (0..12)
+                .map(|_| (Some((draw() % 5) as f64), Some((draw() % 5) as f64)))
+                .collect::<Vec<_>>();
+            let old = cut_grid_weighted(4, 3, &preference, &[0.0; 12], &fixed, &edges);
+            let compact =
+                cut_grid_weighted_compact_fixed(4, 3, &preference, &[0.0; 12], &fixed, &edges);
+            assert_eq!(
+                compact, old,
+                "fixed reduction changed optimum/tie at case {case}"
+            );
+        }
     }
 }

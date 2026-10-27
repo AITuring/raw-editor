@@ -42,7 +42,7 @@ const IMAGE_STACK_PIPELINE_VERSION: &str = "image-stack-2026.09.16.1";
 // (source paths, source SHA-256 set, pipeline version), so *any* change to a
 // grouping, registration, fusion, geometry, tone or composition stage must bump
 // it or a stale cache entry will be replayed.
-pub(crate) const STACK_PIPELINE_VERSION: &str = "stack-2026.10.12.3";
+pub(crate) const STACK_PIPELINE_VERSION: &str = "stack-2026.10.12.5";
 
 fn validate_image_stack_source_count(count: usize) -> Result<(), String> {
     if count < 2 {

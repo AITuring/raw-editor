@@ -25,6 +25,8 @@ pub(crate) mod diagnostics;
 pub(crate) mod focus_fuser;
 /// Intra_Station_Registrar: anchor selection and registration gates (需求 2.1–2.9).
 pub(crate) mod intra_station;
+pub(crate) mod joint_warp;
+pub(crate) mod line_layers;
 /// Quality_Gate pure ROI and image measurements (需求 15.1–15.6).
 pub(crate) mod quality_gate;
 pub(crate) mod quality_gate_runner;
@@ -38,6 +40,7 @@ pub(crate) mod resources;
 pub(crate) mod station_degradation;
 /// Tone_Harmonizer: robust low-frequency affine correction after ownership.
 pub(crate) mod tone;
+pub(crate) mod tone_local;
 /// Capture_Topology_Model: pose-free station row/column inference and
 /// ambiguity-forced candidate eligibility (需求 5.1, 5.2, 5.4, 5.7).
 pub(crate) mod topology;

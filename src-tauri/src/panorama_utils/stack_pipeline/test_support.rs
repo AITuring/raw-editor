@@ -897,6 +897,7 @@ impl SyntheticScan {
                 full_image: None,
                 scale_factor: 1.0,
                 focal_length_35mm: Some(75.0),
+                source_footprint: None,
                 overview_reference: false,
                 features: Vec::new(),
                 top_features: Vec::new(),
@@ -1651,6 +1652,7 @@ fn oversized_bracket(members: usize, largest_step_position: usize) -> OversizedB
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: Some(75.0),
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -1692,6 +1694,7 @@ fn oversized_bracket(members: usize, largest_step_position: usize) -> OversizedB
                 // carries no features, so `canonical_match_direction` measures
                 // `left -> right`: the canonical fit and the stored one agree.
                 canonical_homography: Some(left_to_right),
+                native_verified_points: Vec::new(),
                 homography: left_to_right,
                 inliers: points.len(),
                 sequence_bridge: false,

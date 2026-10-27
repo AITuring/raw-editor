@@ -53,6 +53,9 @@ const TONE_RELATION_HUBER_LOG: f64 = 0.025;
 static RUN_RECORDS: Mutex<Vec<ToneTileRecord>> = Mutex::new(Vec::new());
 static RUN_REPORT: Mutex<Option<ToneReport>> = Mutex::new(None);
 static RUN_TOPOLOGY: Mutex<Option<ToneStationTopology>> = Mutex::new(None);
+// Radiometric eligibility is fixed after native station validation, before
+// robust closure can assign an accepted geometric edge zero fitting weight.
+static RUN_NATIVE_PHOTOMETRIC_TOPOLOGY: Mutex<Option<ToneStationTopology>> = Mutex::new(None);
 
 /// The station context the owner compositor needs for tone evidence: each
 /// Virtual_Tile's station index and the run's accepted Station_Relations,
@@ -84,6 +87,22 @@ pub(crate) fn reset_run_topology() {
     *RUN_TOPOLOGY
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    *RUN_NATIVE_PHOTOMETRIC_TOPOLOGY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = None;
+}
+
+pub(crate) fn record_native_photometric_topology(topology: ToneStationTopology) {
+    *RUN_NATIVE_PHOTOMETRIC_TOPOLOGY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = Some(topology);
+}
+
+pub(crate) fn native_photometric_topology_snapshot() -> Option<ToneStationTopology> {
+    RUN_NATIVE_PHOTOMETRIC_TOPOLOGY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
 }
 
 pub(crate) fn record_run_topology(topology: ToneStationTopology) {
@@ -153,6 +172,8 @@ pub(crate) struct ToneTile {
     /// of `low`). A pair of tiles is compared through [`PairField`], built
     /// from these over the cells both cover.
     pub(crate) cell_mean: Rgb32FImage,
+    /// Original native quadrature samples retained for narrow contour seam costs.
+    pub(crate) native_detail: Option<Rgb32FImage>,
     pub(crate) cell_coverage: Vec<f32>,
 }
 
@@ -175,6 +196,62 @@ pub(crate) struct PairField {
 }
 
 impl PairField {
+    #[cfg(test)]
+    pub(crate) fn diagnostic_grid(&self) -> serde_json::Value {
+        let bounded_consensus = self
+            .first
+            .iter()
+            .zip(&self.second)
+            .map(|(&first, &second)| {
+                let target: [f32; 3] = std::array::from_fn(|c| (first[c] + second[c]) * 0.5);
+                let bounded = |original: [f32; 3]| {
+                    let valid = |strength: f32| {
+                        let corrected = std::array::from_fn(|c| {
+                            original[c] + (target[c] - original[c]) * strength
+                        });
+                        let ratio = linear_luma(corrected) / linear_luma(original).max(1e-8);
+                        (
+                            (0.96..=1.04).contains(&ratio)
+                                && delta_e00_rgb(original, corrected) <= 1.8,
+                            corrected,
+                        )
+                    };
+                    let (mut low, mut high) = (0.0f32, 1.0f32);
+                    for _ in 0..20 {
+                        let middle = (low + high) * 0.5;
+                        if valid(middle).0 {
+                            low = middle;
+                        } else {
+                            high = middle;
+                        }
+                    }
+                    valid(low).1
+                };
+                delta_e00_rgb(bounded(first), bounded(second))
+            })
+            .collect::<Vec<_>>();
+        serde_json::json!({
+            "origin": self.origin, "stride": self.stride,
+            "width": self.width, "height": self.height,
+            "first": self.first, "second": self.second, "sample": self.sample,
+            "delta_e00": self.first.iter().zip(&self.second)
+                .map(|(&first, &second)| delta_e00_rgb(first, second)).collect::<Vec<_>>(),
+            "bounded_consensus_delta_e00": bounded_consensus,
+            "diagnostic_only": true
+        })
+    }
+
+    /// Seam selection uses the same common-support low-frequency comparison
+    /// as the final tone boundary check, without changing either source.
+    pub(crate) fn seam_disagreement(&self, world_x: f64, world_y: f64) -> Option<f64> {
+        let (first, second) = self.at(world_x, world_y)?;
+        Some(
+            (delta_e00_rgb(first, second) / TONE_BOUNDARY_DELTA_E_THRESHOLD)
+                .powi(2)
+                .min(64.0),
+        )
+    }
+
     pub(crate) fn new(first: &ToneTile, second: &ToneTile) -> Option<Self> {
         let stride = first.world_stride.max(second.world_stride);
         if !stride.is_finite() || stride <= 0.0 {
@@ -196,8 +273,10 @@ impl PairField {
         let width = ((end.0 - origin.0) / stride).ceil() as usize;
         let height = ((end.1 - origin.1) / stride).ceil() as usize;
         let cell = |tile: &ToneTile, x: f64, y: f64| -> Option<([f32; 3], f32)> {
-            let cx = ((x - tile.world_origin.0) / tile.world_stride).floor();
-            let cy = ((y - tile.world_origin.1) / tile.world_stride).floor();
+            let cx =
+                (x - tile.world_origin.0 - (tile.world_stride - 1.0) * 0.5) / tile.world_stride;
+            let cy =
+                (y - tile.world_origin.1 - (tile.world_stride - 1.0) * 0.5) / tile.world_stride;
             if cx < 0.0
                 || cy < 0.0
                 || cx >= f64::from(tile.cell_mean.width())
@@ -205,11 +284,29 @@ impl PairField {
             {
                 return None;
             }
-            let (cx, cy) = (cx as u32, cy as u32);
-            let coverage = *tile
-                .cell_coverage
-                .get(cy as usize * tile.cell_mean.width() as usize + cx as usize)?;
-            Some((tile.cell_mean.get_pixel(cx, cy).0, coverage))
+            let (x0, y0) = (cx.floor() as u32, cy.floor() as u32);
+            let mut rgb = [0.0f64; 3];
+            let mut coverage = 1.0f32;
+            for (dy, wy) in [(0, 1.0 - cy.fract()), (1, cy.fract())] {
+                for (dx, wx) in [(0, 1.0 - cx.fract()), (1, cx.fract())] {
+                    let weight = wx * wy;
+                    if weight <= 1e-12 {
+                        continue;
+                    }
+                    let (px, py) = (x0 + dx, y0 + dy);
+                    if px >= tile.cell_mean.width() || py >= tile.cell_mean.height() {
+                        return None;
+                    }
+                    coverage = coverage.min(
+                        tile.cell_coverage
+                            [py as usize * tile.cell_mean.width() as usize + px as usize],
+                    );
+                    for c in 0..3 {
+                        rgb[c] += f64::from(tile.cell_mean.get_pixel(px, py)[c]) * weight;
+                    }
+                }
+            }
+            Some((rgb.map(|v| v as f32), coverage))
         };
         let mut weights = vec![[0.0f64; 1]; width * height];
         let mut first_sums = vec![[0.0f64; 3]; width * height];
@@ -266,7 +363,7 @@ impl PairField {
 
     /// Both fields at the cell holding a world position, where it is a
     /// doubly and entirely covered cell.
-    fn at(&self, world_x: f64, world_y: f64) -> Option<([f32; 3], [f32; 3])> {
+    pub(crate) fn at(&self, world_x: f64, world_y: f64) -> Option<([f32; 3], [f32; 3])> {
         let column = ((world_x - self.origin.0) / self.stride).floor();
         let row = ((world_y - self.origin.1) / self.stride).floor();
         if column < 0.0 || row < 0.0 || column >= self.width as f64 || row >= self.height as f64 {
@@ -292,6 +389,66 @@ impl PairField {
                 source: self.second[index],
             })
             .collect()
+    }
+
+    /// Robust evidence for a spatial illumination model. Compare RGB log
+    /// gains inside the same world window so a smooth vignetting field is not
+    /// mistaken for a global photometric outlier.
+    pub(crate) fn spatial_consistency(
+        &self,
+        window: f64,
+    ) -> (
+        std::collections::BTreeMap<(i64, i64), ToneConsistency>,
+        usize,
+    ) {
+        let mut groups = std::collections::BTreeMap::<(i64, i64), Vec<ToneSample>>::new();
+        for i in 0..self.sample.len() {
+            if !self.sample[i] {
+                continue;
+            }
+            let sample = ToneSample {
+                owner: self.first[i],
+                source: self.second[i],
+            };
+            let usable = |rgb: [f32; 3]| {
+                (TONE_MIN_SAMPLE_LUMINANCE..=TONE_MAX_SAMPLE_LUMINANCE)
+                    .contains(&(rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722))
+            };
+            if !usable(sample.owner) || !usable(sample.source) {
+                continue;
+            }
+            let x =
+                self.origin.0 + (i % self.width) as f64 * self.stride + (self.stride - 1.0) * 0.5;
+            let y =
+                self.origin.1 + (i / self.width) as f64 * self.stride + (self.stride - 1.0) * 0.5;
+            groups
+                .entry(((x / window).floor() as i64, (y / window).floor() as i64))
+                .or_default()
+                .push(sample);
+        }
+        let mut retained = 0;
+        let models = groups
+            .into_iter()
+            .filter_map(|(key, samples)| {
+                let model = ToneConsistency::new(&samples)?;
+                retained += samples.iter().filter(|s| model.accepts(s)).count();
+                Some((key, model))
+            })
+            .collect();
+        (models, retained)
+    }
+
+    pub(crate) fn spatial_window_key(&self, x: f64, y: f64, window: f64) -> Option<(i64, i64)> {
+        let column = ((x - self.origin.0) / self.stride).floor();
+        let row = ((y - self.origin.1) / self.stride).floor();
+        if column < 0.0 || row < 0.0 || column >= self.width as f64 || row >= self.height as f64 {
+            return None;
+        }
+        // The statistics are grouped by the native common-field cell centre,
+        // which need not share the global analysis lattice's alignment.
+        let cx = self.origin.0 + column * self.stride + (self.stride - 1.0) * 0.5;
+        let cy = self.origin.1 + row * self.stride + (self.stride - 1.0) * 0.5;
+        Some(((cx / window).floor() as i64, (cy / window).floor() as i64))
     }
 }
 
@@ -356,30 +513,52 @@ fn sample_log_gain(sample: &ToneSample) -> [f64; 3] {
 /// log-gain vector from the per-channel median exceeds three times the median
 /// distance, so the three channels always keep the same samples.
 pub(crate) fn consistent_samples(samples: &[ToneSample]) -> Vec<ToneSample> {
-    if samples.is_empty() {
+    let Some(consistency) = ToneConsistency::new(samples) else {
         return Vec::new();
-    }
-    let gains = samples.iter().map(sample_log_gain).collect::<Vec<_>>();
-    let medians: [f64; 3] =
-        std::array::from_fn(|channel| median_f64(gains.iter().map(|gain| gain[channel])));
-    let deviations = gains
-        .iter()
-        .map(|gain| {
-            (0..3)
-                .map(|channel| (gain[channel] - medians[channel]).powi(2))
-                .sum::<f64>()
-                .sqrt()
-        })
-        .collect::<Vec<_>>();
-    let mad = median_f64(deviations.iter().copied());
-    // An exact consensus (MAD 0) keeps the consensus up to rounding.
-    let threshold = (3.0 * mad).max(1e-6);
+    };
     samples
         .iter()
-        .zip(&deviations)
-        .filter(|(_, deviation)| **deviation <= threshold)
-        .map(|(sample, _)| *sample)
+        .filter(|sample| consistency.accepts(sample))
+        .copied()
         .collect()
+}
+
+pub(crate) struct ToneConsistency {
+    medians: [f64; 3],
+    threshold: f64,
+}
+
+impl ToneConsistency {
+    pub(crate) fn new(samples: &[ToneSample]) -> Option<Self> {
+        if samples.is_empty() {
+            return None;
+        }
+        let gains = samples.iter().map(sample_log_gain).collect::<Vec<_>>();
+        let medians: [f64; 3] =
+            std::array::from_fn(|channel| median_f64(gains.iter().map(|gain| gain[channel])));
+        let deviations = gains
+            .iter()
+            .map(|gain| {
+                (0..3)
+                    .map(|channel| (gain[channel] - medians[channel]).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+            })
+            .collect::<Vec<_>>();
+        let mad = median_f64(deviations.iter().copied());
+        // An exact consensus (MAD 0) keeps the consensus up to rounding.
+        let threshold = (3.0 * mad).max(1e-6);
+        Some(Self { medians, threshold })
+    }
+
+    pub(crate) fn accepts(&self, sample: &ToneSample) -> bool {
+        let gain = sample_log_gain(sample);
+        (0..3)
+            .map(|c| (gain[c] - self.medians[c]).powi(2))
+            .sum::<f64>()
+            .sqrt()
+            <= self.threshold
+    }
 }
 
 /// One accepted pair's multiplicative tone relation. `first` is the owner side
@@ -533,7 +712,7 @@ pub(crate) fn low_frequency_grid(image: &Rgb32FImage) -> Rgb32FImage {
 
 /// Separable Gaussian of a `width × height` grid of `N`-channel values with
 /// zero padding, so that a normalised convolution sees no value outside it.
-fn gaussian_cells<const N: usize>(
+pub(super) fn gaussian_cells<const N: usize>(
     values: &[[f64; N]],
     width: usize,
     height: usize,
@@ -569,6 +748,140 @@ fn gaussian_cells<const N: usize>(
         output
     };
     pass(&pass(values, true), false)
+}
+
+/// Integrate the renderer's native source sampler on the world analysis grid.
+/// The deterministic quadrature averages each 16px cell before the 64px blur;
+/// no fused raster or independently positioned source-grid cell is substituted.
+pub(crate) fn world_aligned_native_tone_tile<F>(
+    station_index: usize,
+    owner_id: u16,
+    bounds: (u32, u32, u32, u32),
+    sample: F,
+) -> ToneTile
+where
+    F: Fn(f64, f64) -> Option<[f32; 3]> + Sync,
+{
+    let (left, top, right, bottom) = bounds;
+    let stride = TONE_GRID_DIVISOR.max(1);
+    let width = (right.saturating_sub(left) + 1).div_ceil(stride).max(1);
+    let height = (bottom.saturating_sub(top) + 1).div_ceil(stride).max(1);
+    let cells = (0..height)
+        .into_par_iter()
+        .map(|row| {
+            (0..width)
+                .map(|column| {
+                    let mut sum = [0.0f64; 3];
+                    let mut covered = 0u32;
+                    let mut native = [[0.0f32; 3]; 16];
+                    for sy in 0..4 {
+                        for sx in 0..4 {
+                            let x = f64::from(left + column * stride)
+                                + (f64::from(sx) + 0.5) * f64::from(stride) / 4.0
+                                - 0.5;
+                            let y = f64::from(top + row * stride)
+                                + (f64::from(sy) + 0.5) * f64::from(stride) / 4.0
+                                - 0.5;
+                            if x > f64::from(right) || y > f64::from(bottom) {
+                                continue;
+                            }
+                            if let Some(rgb) = sample(x, y) {
+                                native[(sy * 4 + sx) as usize] = rgb;
+                                for c in 0..3 {
+                                    sum[c] += f64::from(rgb[c]);
+                                }
+                                covered += 1;
+                            }
+                        }
+                    }
+                    (sum, covered, native)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let weights = cells
+        .iter()
+        .map(|(_, covered, _)| [f64::from(*covered) / 16.0])
+        .collect::<Vec<_>>();
+    let sums = cells
+        .iter()
+        .map(|(sum, _, _)| sum.map(|v| v / 16.0))
+        .collect::<Vec<_>>();
+    let support = gaussian_cells(
+        &weights,
+        width as usize,
+        height as usize,
+        f64::from(TONE_LOW_FREQUENCY_SIGMA),
+    );
+    let blurred = gaussian_cells(
+        &sums,
+        width as usize,
+        height as usize,
+        f64::from(TONE_LOW_FREQUENCY_SIGMA),
+    );
+    let mut low = Rgb32FImage::new(width, height);
+    let mut cell_mean = Rgb32FImage::new(width, height);
+    let mut validity = GrayImage::new(width, height);
+    for (i, (sum, covered, _)) in cells.iter().enumerate() {
+        let (x, y) = (i as u32 % width, i as u32 / width);
+        if *covered > 0 {
+            cell_mean.put_pixel(x, y, Rgb(sum.map(|v| (v / f64::from(*covered)) as f32)));
+        }
+        if support[i][0] > 1e-9 {
+            low.put_pixel(x, y, Rgb(blurred[i].map(|v| (v / support[i][0]) as f32)));
+        }
+        if *covered > 0 {
+            validity.put_pixel(
+                x,
+                y,
+                Luma([if *covered == 16 {
+                    TONE_CELL_SAMPLE
+                } else {
+                    TONE_CELL_PARTIAL
+                }]),
+            );
+        }
+    }
+    let native_detail = Rgb32FImage::from_fn(width * 4, height * 4, |x, y| {
+        let cell = (y / 4 * width + x / 4) as usize;
+        Rgb(cells[cell].2[(y % 4 * 4 + x % 4) as usize])
+    });
+    ToneTile {
+        station_index,
+        owner_id,
+        low,
+        validity,
+        world_origin: (f64::from(left), f64::from(top)),
+        world_size: (f64::from(width * stride), f64::from(height * stride)),
+        world_stride: f64::from(stride),
+        cell_mean,
+        native_detail: Some(native_detail),
+        cell_coverage: weights.iter().map(|v| v[0] as f32).collect(),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn native_subcell_detail_keeps_a_shift_hidden_by_equal_cell_means() {
+    let make = |shift: f64| {
+        world_aligned_native_tone_tile(0, 1, (0, 0, 127, 127), |x, _| {
+            Some([0.4 + 0.2 * ((x + shift) * std::f64::consts::TAU / 16.0).sin() as f32; 3])
+        })
+    };
+    let mut a = make(0.0);
+    let mut b = make(4.0);
+    let native_a = sample_tile_detail_bilinear(&a, 65.5, 65.5).unwrap();
+    let native_b = sample_tile_detail_bilinear(&b, 65.5, 65.5).unwrap();
+    assert!((native_a[0] - native_b[0]).abs() > 0.05);
+    assert_eq!(a.cell_coverage, b.cell_coverage);
+    a.native_detail = None;
+    b.native_detail = None;
+    let coarse_a = sample_tile_detail_bilinear(&a, 65.5, 65.5).unwrap();
+    let coarse_b = sample_tile_detail_bilinear(&b, 65.5, 65.5).unwrap();
+    assert!((coarse_a[0] - coarse_b[0]).abs() < 1e-6);
 }
 
 /// Tone_Harmonizer field of one tile on a world-aligned analysis grid.
@@ -612,6 +925,7 @@ pub(crate) fn world_aligned_tone_tile(
         ),
         world_stride: stride,
         cell_mean,
+        native_detail: None,
         cell_coverage,
     };
     let (tile_width, tile_height) = tile.dimensions();
@@ -818,6 +1132,118 @@ impl ToneTransform {
     };
 }
 
+fn linear_luma(rgb: [f32; 3]) -> f64 {
+    let linear = rgb.map(|value| {
+        let value = f64::from(value).clamp(0.0, 1.0);
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    });
+    linear[0] * 0.2126729 + linear[1] * 0.7151522 + linear[2] * 0.0721750
+}
+
+/// Minimise one low-band affine coordinate's quadratic while retaining the
+/// existing gain and offset bounds. `alpha` is the increment above gain 1.
+/// Check every box edge as well as the unconstrained stationary point;
+/// independently clamping the two free coefficients is not this minimum.
+pub(super) fn bounded_low_frequency_affine_coordinate(
+    normal: [f64; 3],
+    rhs: [f64; 2],
+) -> (f64, f64) {
+    let [a, b, c] = normal;
+    let [x, y] = rhs;
+    if !normal.iter().chain(rhs.iter()).all(|v| v.is_finite())
+        || a <= 0.0
+        || c <= 0.0
+        || a * c < b * b
+    {
+        return (0.0, 0.0);
+    }
+    let lo = f64::from(TONE_MIN_GAIN) - 1.0;
+    let hi = f64::from(TONE_MAX_GAIN) - 1.0;
+    let bound = f64::from(TONE_MAX_ABS_OFFSET);
+    let cost = |alpha: f64, offset: f64| {
+        a * alpha * alpha + 2.0 * b * alpha * offset + c * offset * offset
+            - 2.0 * x * alpha
+            - 2.0 * y * offset
+    };
+    let mut best = (0.0, 0.0);
+    let mut minimum = cost(best.0, best.1);
+    let mut consider = |alpha: f64, offset: f64| {
+        if !(lo..=hi).contains(&alpha) || !(-bound..=bound).contains(&offset) {
+            return;
+        }
+        let value = cost(alpha, offset);
+        if value < minimum {
+            best = (alpha, offset);
+            minimum = value;
+        }
+    };
+    let determinant = a * c - b * b;
+    if determinant > 1e-15 {
+        consider((x * c - y * b) / determinant, (y * a - x * b) / determinant);
+    }
+    for alpha in [lo, hi] {
+        consider(alpha, ((y - b * alpha) / c).clamp(-bound, bound));
+    }
+    for offset in [-bound, bound] {
+        consider(((x - b * offset) / a).clamp(lo, hi), offset);
+    }
+    best
+}
+
+/// Keep calibrated source brightness and colour while applying the measured
+/// broad correction. One strength per station avoids introducing a new local
+/// edge. These rendering bounds are stricter than the unchanged export gates;
+/// the Quality_Gate still compares the final pixels with the original RAW.
+fn constrain_source_fidelity(tile: &ToneTile, transform: &mut ToneTransform) -> f64 {
+    let mut strength = 1.0f64;
+    for (low, validity) in tile.low.pixels().zip(tile.validity.pixels()) {
+        if validity[0] == 0 {
+            continue;
+        }
+        let original = low.0;
+        let luminance = linear_luma(original);
+        if luminance <= 1e-8 {
+            continue;
+        }
+        let delta = std::array::from_fn::<_, 3, _>(|channel| {
+            (transform.gain[channel] - 1.0) * original[channel] + transform.offset[channel]
+        });
+        let allowed = |factor: f64| {
+            let corrected =
+                std::array::from_fn(|channel| original[channel] + delta[channel] * factor as f32);
+            let ratio = linear_luma(corrected) / luminance;
+            (0.96..=1.04).contains(&ratio)
+                && corrected.iter().all(|&value| (0.0..=1.0).contains(&value))
+                && delta_e00_rgb(original, corrected) <= 1.8
+        };
+        if allowed(strength) {
+            continue;
+        }
+        let (mut low, mut high) = (0.0, strength);
+        for _ in 0..20 {
+            let middle = (low + high) * 0.5;
+            if allowed(middle) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        strength = low;
+    }
+    if strength < 1.0 {
+        for channel in 0..3 {
+            transform.gain[channel] = 1.0 + (transform.gain[channel] - 1.0) * strength as f32;
+            transform.offset[channel] *= strength as f32;
+        }
+        transform.clamped = true;
+    }
+    strength
+}
+
 /// Per-tile corrections from all relations at once (design: reuse the
 /// `photometric.rs` joint solve).
 ///
@@ -910,7 +1336,15 @@ pub(crate) fn harmonize_after_ownership(
     relations: &[(usize, usize)],
     world_origin: (f64, f64),
 ) -> ToneReport {
-    harmonize_after_ownership_with_evidence(panorama, owners, tiles, relations, world_origin, None)
+    harmonize_after_ownership_with_evidence(
+        panorama,
+        owners,
+        tiles,
+        relations,
+        world_origin,
+        None,
+        false,
+    )
 }
 
 /// Production-facing entry point used by the owner compositor. `width` is
@@ -925,6 +1359,18 @@ pub(crate) fn harmonize_tone_tiles(
     tiles: &[ToneTile],
     evidence: &GrayImage,
     relations: &[(usize, usize)],
+) -> ToneReport {
+    harmonize_tone_tiles_with_fidelity(panorama, owners, width, tiles, evidence, relations, false)
+}
+
+pub(crate) fn harmonize_tone_tiles_with_fidelity(
+    panorama: &mut Rgb32FImage,
+    owners: &[u16],
+    width: u32,
+    tiles: &[ToneTile],
+    evidence: &GrayImage,
+    relations: &[(usize, usize)],
+    source_fidelity: bool,
 ) -> ToneReport {
     if width != panorama.width() {
         let report = ToneReport {
@@ -941,6 +1387,7 @@ pub(crate) fn harmonize_tone_tiles(
         relations,
         (0.0, 0.0),
         Some(evidence),
+        source_fidelity,
     )
 }
 
@@ -951,6 +1398,7 @@ fn harmonize_after_ownership_with_evidence(
     relations: &[(usize, usize)],
     world_origin: (f64, f64),
     evidence: Option<&GrayImage>,
+    source_fidelity: bool,
 ) -> ToneReport {
     let mut report = ToneReport::default();
     if panorama.width() == 0 || panorama.height() == 0 || tiles.is_empty() {
@@ -964,6 +1412,7 @@ fn harmonize_after_ownership_with_evidence(
         record_run_report(report.clone());
         return report;
     }
+
     // One relation per accepted Station_Relation, measured on its doubly
     // covered overlap only (需求 9.1). Tiles that are merely placed next to
     // each other without an accepted relation contribute nothing.
@@ -1000,10 +1449,38 @@ fn harmonize_after_ownership_with_evidence(
     // One joint solve over every relation; each transform is bounded once, and
     // the pixels, the boundary re-check and the report read the same bounded
     // values while the report keeps the unbounded solution (需求 9.3, 9.9).
-    let transforms = solve_tone_transforms(tiles.len(), &solved_relations);
+    let mut transforms = solve_tone_transforms(tiles.len(), &solved_relations);
+    let local = (source_fidelity && world_origin == (0.0, 0.0))
+        .then(|| {
+            super::tone_local::fit_local_tone(
+                tiles,
+                relations,
+                owners,
+                panorama.width(),
+                panorama.height(),
+            )
+        })
+        .flatten();
+    report.geometry_active_relation_count = run_topology_snapshot()
+        .map(|t| t.accepted.len())
+        .unwrap_or(relations.len());
+    if let Some(model) = &local {
+        report.correction_model = "supported_spatial_affine".into();
+        report.native_fitting_relations = model
+            .fitted_relations
+            .iter()
+            .map(|&(a, b)| [tiles[a].station_index, tiles[b].station_index])
+            .collect();
+    }
+    let mut fidelity_strengths = vec![1.0; tiles.len()];
+    if source_fidelity && local.is_none() {
+        for (index, (tile, transform)) in tiles.iter().zip(&mut transforms).enumerate() {
+            fidelity_strengths[index] = constrain_source_fidelity(tile, transform);
+        }
+    }
     for (index, tile) in tiles.iter().enumerate() {
         let transform = &transforms[index];
-        if transform.clamped {
+        if local.is_none() && transform.clamped {
             degradation::record_run_degradation(
                 degradation::TONE_GAIN_CLAMPED,
                 serde_json::json!({
@@ -1016,7 +1493,7 @@ fn harmonize_after_ownership_with_evidence(
                 }),
             );
         }
-        report.tiles.push(ToneTileRecord {
+        let mut record = ToneTileRecord {
             station_index: tile.station_index,
             gain: transform.gain.map(f64::from),
             offset: transform.offset.map(f64::from),
@@ -1024,7 +1501,78 @@ fn harmonize_after_ownership_with_evidence(
             clamped: transform.clamped,
             solved_gain: transform.solved_gain.map(f64::from),
             solved_offset: transform.solved_offset.map(f64::from),
-        });
+            source_fidelity_strength: fidelity_strengths[index],
+            ..Default::default()
+        };
+        if let Some(model) = &local {
+            record.samples = model.retained_samples[index] as u64;
+            let values = model.parameters[index]
+                .iter()
+                .enumerate()
+                .map(|(cell, p)| {
+                    let x = (cell % model.width) as f64 * f64::from(model.stride)
+                        + (f64::from(model.stride) - 1.0) * 0.5;
+                    let y = (cell / model.width) as f64 * f64::from(model.stride)
+                        + (f64::from(model.stride) - 1.0) * 0.5;
+                    sample_tile_bilinear(tile, x, y).map_or([0.0; 6], |low| {
+                        super::tone_local::highlight_supported_parameters(*p, low)
+                    })
+                })
+                .collect::<Vec<_>>();
+            for c in 0..3 {
+                record.spatial_gain_min[c] = values
+                    .iter()
+                    .map(|p| 1.0 + f64::from(p[c]))
+                    .fold(f64::INFINITY, f64::min);
+                record.spatial_gain_max[c] = values
+                    .iter()
+                    .map(|p| 1.0 + f64::from(p[c]))
+                    .fold(f64::NEG_INFINITY, f64::max);
+                record.spatial_offset_min[c] = values
+                    .iter()
+                    .map(|p| f64::from(p[c + 3]))
+                    .fold(f64::INFINITY, f64::min);
+                record.spatial_offset_max[c] = values
+                    .iter()
+                    .map(|p| f64::from(p[c + 3]))
+                    .fold(f64::NEG_INFINITY, f64::max);
+                record.gain[c] = 1.0
+                    + values.iter().map(|p| f64::from(p[c])).sum::<f64>()
+                        / values.len().max(1) as f64;
+                record.offset[c] = values.iter().map(|p| f64::from(p[c + 3])).sum::<f64>()
+                    / values.len().max(1) as f64;
+            }
+            record.clamped = record
+                .spatial_gain_min
+                .iter()
+                .any(|v| *v <= f64::from(TONE_MIN_GAIN) + 1e-6)
+                || record
+                    .spatial_gain_max
+                    .iter()
+                    .any(|v| *v >= f64::from(TONE_MAX_GAIN) - 1e-6)
+                || record
+                    .spatial_offset_min
+                    .iter()
+                    .any(|v| *v <= -f64::from(TONE_MAX_ABS_OFFSET) + 1e-6)
+                || record
+                    .spatial_offset_max
+                    .iter()
+                    .any(|v| *v >= f64::from(TONE_MAX_ABS_OFFSET) - 1e-6);
+        } else {
+            record.spatial_gain_min = record.gain;
+            record.spatial_gain_max = record.gain;
+            record.spatial_offset_min = record.offset;
+            record.spatial_offset_max = record.offset;
+        }
+        if local.is_some() && record.clamped {
+            degradation::record_run_degradation(
+                degradation::TONE_GAIN_CLAMPED,
+                serde_json::json!({"stage":"supported_spatial_affine", "station_index":tile.station_index,
+                    "gain_min":record.spatial_gain_min,"gain_max":record.spatial_gain_max,
+                    "offset_min":record.spatial_offset_min,"offset_max":record.spatial_offset_max}),
+            );
+        }
+        report.tiles.push(record);
     }
 
     // A tile owns its own high-frequency residual. The owner's low field is
@@ -1062,7 +1610,7 @@ fn harmonize_after_ownership_with_evidence(
                 else {
                     continue;
                 };
-                if !corrects(tile_index) {
+                if local.is_none() && !corrects(tile_index) {
                     continue;
                 }
                 if let Some(evidence) = evidence
@@ -1080,16 +1628,29 @@ fn harmonize_after_ownership_with_evidence(
                     continue;
                 };
                 let transform = &transforms[tile_index];
+                let delta = if let Some(model) = &local {
+                    let corrected = model.corrected(
+                        tile_index,
+                        low,
+                        world_origin.0 + output_x as f64,
+                        world_origin.1 + output_y as f64,
+                    );
+                    std::array::from_fn(|c| corrected[c] - low[c])
+                } else {
+                    std::array::from_fn::<_, 3, _>(|c| {
+                        (transform.gain[c] - 1.0) * low[c] + transform.offset[c]
+                    })
+                };
                 for channel in 0..3 {
-                    pixel[channel] = (pixel[channel]
-                        + (transform.gain[channel] - 1.0) * low[channel]
-                        + transform.offset[channel])
-                        .clamp(0.0, 1.0);
+                    pixel[channel] = (pixel[channel] + delta[channel]).clamp(0.0, 1.0)
                 }
             }
         });
 
-    let correct = |tile_index: usize, low: [f32; 3]| -> [f32; 3] {
+    let correct = |tile_index: usize, low: [f32; 3], x: f64, y: f64| -> [f32; 3] {
+        if let Some(model) = &local {
+            return model.corrected(tile_index, low, x, y);
+        }
         let transform = &transforms[tile_index];
         std::array::from_fn(|channel| {
             transform.gain[channel] * low[channel] + transform.offset[channel]
@@ -1169,8 +1730,14 @@ fn harmonize_after_ownership_with_evidence(
                         ) else {
                             continue;
                         };
-                        let (first_low, second_low) =
-                            (correct(first, first_low), correct(second, second_low));
+                        let (wx, wy) = (
+                            world_origin.0 + f64::from(px),
+                            world_origin.1 + f64::from(py),
+                        );
+                        let (first_low, second_low) = (
+                            correct(first, first_low, wx, wy),
+                            correct(second, second_low, wx, wy),
+                        );
                         let entry = boundary_windows.entry(window).or_insert((
                             [0.0f64; 3],
                             [0.0f64; 3],
@@ -1242,12 +1809,74 @@ fn harmonize_after_ownership_with_evidence(
 /// The tile's field at a world position, bilinear between the analysis-cell
 /// centres the field was built at and renormalised over the neighbouring cells
 /// that carry a field (validity ≠ 0). `None` where no neighbour has one.
-fn sample_tile_bilinear(tile: &ToneTile, world_x: f64, world_y: f64) -> Option<[f32; 3]> {
+pub(crate) fn sample_tile_bilinear(
+    tile: &ToneTile,
+    world_x: f64,
+    world_y: f64,
+) -> Option<[f32; 3]> {
+    sample_tile_field_bilinear(tile, &tile.low, world_x, world_y)
+}
+
+pub(super) fn sample_tile_detail_bilinear(
+    tile: &ToneTile,
+    world_x: f64,
+    world_y: f64,
+) -> Option<[f32; 3]> {
+    let mean = if let Some(native) = tile.native_detail.as_ref() {
+        let stride = tile.world_stride / 4.0;
+        let u = (world_x - tile.world_origin.0 - (stride - 1.0) * 0.5) / stride;
+        let v = (world_y - tile.world_origin.1 - (stride - 1.0) * 0.5) / stride;
+        let (x, y) = (u.floor() as i64, v.floor() as i64);
+        let mut sum = [0.0f64; 3];
+        let mut mass = 0.0;
+        for dy in 0..=1 {
+            for dx in 0..=1 {
+                let (px, py) = (x + dx, y + dy);
+                if px < 0
+                    || py < 0
+                    || px >= native.width() as i64
+                    || py >= native.height() as i64
+                    || tile.validity.get_pixel(px as u32 / 4, py as u32 / 4)[0] != TONE_CELL_SAMPLE
+                {
+                    continue;
+                }
+                let w = (if dx == 0 {
+                    1.0 - (u - u.floor())
+                } else {
+                    u - u.floor()
+                }) * (if dy == 0 {
+                    1.0 - (v - v.floor())
+                } else {
+                    v - v.floor()
+                });
+                for c in 0..3 {
+                    sum[c] += w * f64::from(native.get_pixel(px as u32, py as u32)[c]);
+                }
+                mass += w;
+            }
+        }
+        if mass < 1.0 - 1e-6 {
+            return None;
+        }
+        sum.map(|v| (v / mass) as f32)
+    } else {
+        sample_tile_field_bilinear(tile, &tile.cell_mean, world_x, world_y)?
+    };
+    let low = sample_tile_bilinear(tile, world_x, world_y)?;
+    Some(std::array::from_fn(|c| mean[c] - low[c]))
+}
+
+fn sample_tile_field_bilinear(
+    tile: &ToneTile,
+    field: &Rgb32FImage,
+    world_x: f64,
+    world_y: f64,
+) -> Option<[f32; 3]> {
     let stride = tile.world_stride;
     if !stride.is_finite() || stride <= 0.0 {
         return None;
     }
-    let (width, height) = tile.low.dimensions();
+    let (width, height) = field.dimensions();
     let u = (world_x - tile.world_origin.0 - (stride - 1.0) * 0.5) / stride;
     let v = (world_y - tile.world_origin.1 - (stride - 1.0) * 0.5) / stride;
     let (u0, v0) = (u.floor(), v.floor());
@@ -1267,7 +1896,7 @@ fn sample_tile_bilinear(tile: &ToneTile, world_x: f64, world_y: f64) -> Option<[
                 continue;
             }
             let weight = weight_x * weight_y;
-            let value = tile.low.get_pixel(x, y).0;
+            let value = field.get_pixel(x, y).0;
             for channel in 0..3 {
                 sum[channel] += weight * f64::from(value[channel]);
             }
@@ -1431,7 +2060,101 @@ fn median(values: impl Iterator<Item = f32>) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn spatial_window_lookup_uses_the_measured_native_cell_alignment() {
+        let field = PairField {
+            origin: (113.0, 7.0),
+            stride: 16.0,
+            width: 2,
+            height: 2,
+            first: vec![[0.4; 3]; 4],
+            second: vec![[0.35; 3]; 4],
+            sample: vec![true; 4],
+        };
+        let key = field.spatial_window_key(128.0, 17.0, 128.0).unwrap();
+        assert_eq!(key, (0, 0));
+        assert_ne!(key, ((128.0f64 / 128.0).floor() as i64, 0));
+        let (models, _) = field.spatial_consistency(128.0);
+        let (a, b) = field.at(128.0, 17.0).unwrap();
+        assert!(models[&key].accepts(&ToneSample {
+            owner: a,
+            source: b
+        }));
+    }
+    #[test]
+    fn spatial_mad_rejects_corruption_without_rejecting_the_illumination_field() {
+        let mut first = (0..4096)
+            .map(|i| [0.4 * (0.8 + 0.4 * (i % 64) as f32 / 63.0); 3])
+            .collect::<Vec<_>>();
+        let bad = 32 * 64 + 32;
+        first[bad] = [0.9, 0.1, 0.7];
+        let field = PairField {
+            origin: (0.0, 0.0),
+            stride: 16.0,
+            width: 64,
+            height: 64,
+            first,
+            second: vec![[0.4; 3]; 4096],
+            sample: vec![true; 4096],
+        };
+        let (models, retained) = field.spatial_consistency(128.0);
+        assert!(retained >= TONE_MIN_SAMPLES);
+        assert!(!models[&(4, 4)].accepts(&ToneSample {
+            owner: field.first[bad],
+            source: field.second[bad]
+        }));
+        for i in [8 * 64 + 8, 8 * 64 + 56, 56 * 64 + 8, 56 * 64 + 56] {
+            assert!(
+                models[&((i % 64 / 8) as i64, (i / 64 / 8) as i64)].accepts(&ToneSample {
+                    owner: field.first[i],
+                    source: field.second[i]
+                })
+            );
+        }
+    }
     use super::*;
+
+    #[test]
+    fn affine_coordinate_refits_offset_when_gain_reaches_its_bound() {
+        let normal = [0.46, 1.0, 3.0];
+        let rhs = [normal[0] * 0.4 - 0.005, 0.4 - 0.015];
+        let fitted = bounded_low_frequency_affine_coordinate(normal, rhs);
+        assert!((fitted.0 - 0.25).abs() < 1e-12);
+        assert!((fitted.1 - f64::from(TONE_MAX_ABS_OFFSET)).abs() < 1e-12);
+        let unbounded_rhs = [normal[0] * 0.12 - 0.008, 0.12 - 0.024];
+        let fitted = bounded_low_frequency_affine_coordinate(normal, unbounded_rhs);
+        assert!((fitted.0 - 0.12).abs() < 1e-12);
+        assert!((fitted.1 + 0.008).abs() < 1e-12);
+    }
+
+    #[test]
+    fn affine_coordinate_agrees_with_an_independent_dense_feasible_oracle() {
+        for (normal, rhs) in [
+            ([0.46, 1.0, 3.0], [0.179, 0.385]),
+            ([0.46, 1.0, 3.0], [-0.15, -0.25]),
+            ([0.12, 0.1, 0.7], [0.01, -0.04]),
+        ] {
+            let cost = |alpha: f64, offset: f64| {
+                normal[0] * alpha * alpha
+                    + 2.0 * normal[1] * alpha * offset
+                    + normal[2] * offset * offset
+                    - 2.0 * rhs[0] * alpha
+                    - 2.0 * rhs[1] * offset
+            };
+            let fitted = bounded_low_frequency_affine_coordinate(normal, rhs);
+            let minimum = (0..=450)
+                .flat_map(|i| {
+                    (0..=400).map(move |j| cost(-0.2 + i as f64 * 0.001, -0.02 + j as f64 * 0.0001))
+                })
+                .min_by(f64::total_cmp)
+                .unwrap();
+            assert!(cost(fitted.0, fitted.1) <= minimum + 1e-8);
+        }
+        assert_eq!(
+            bounded_low_frequency_affine_coordinate([0.0; 3], [0.0; 2]),
+            (0.0, 0.0)
+        );
+    }
 
     #[test]
     fn fewer_than_1024_samples_keep_identity() {
@@ -1520,6 +2243,71 @@ mod tests {
         assert!((delta_e00_rgb(left, right) - delta_e00_rgb(right, left)).abs() < 1e-12);
     }
 
+    #[test]
+    fn source_fidelity_bounds_preserve_the_unchanged_reference_metrics() {
+        let low_at = |x: u32| {
+            let b = 0.3 + 0.03 * x as f32 / 127.0;
+            [b, b * 0.95, b * 0.9]
+        };
+        let source = Rgb32FImage::from_fn(128, 128, |x, y| {
+            let noise = ((x * 37 + y * 53) % 101) as f32 / 100.0 * 0.012 - 0.006;
+            Rgb(low_at(x).map(|value| value + noise))
+        });
+        let low = Rgb32FImage::from_fn(128, 128, |x, _| Rgb(low_at(x)));
+        let tile = ToneTile {
+            station_index: 0,
+            owner_id: 1,
+            cell_mean: low.clone(),
+            low,
+            validity: GrayImage::from_pixel(128, 128, Luma([255])),
+            world_origin: (0.0, 0.0),
+            world_size: (128.0, 128.0),
+            world_stride: 1.0,
+            native_detail: None,
+            cell_coverage: vec![1.0; 128 * 128],
+        };
+        let mut transform = ToneTransform {
+            gain: [1.2; 3],
+            offset: [0.01; 3],
+            solved_gain: [1.2; 3],
+            solved_offset: [0.01; 3],
+            clamped: false,
+            supported: true,
+        };
+        let render = |transform: &ToneTransform| {
+            Rgb32FImage::from_fn(128, 128, |x, y| {
+                let before = source.get_pixel(x, y).0;
+                let low = low_at(x);
+                Rgb(std::array::from_fn(|c| {
+                    before[c] + (transform.gain[c] - 1.0) * low[c] + transform.offset[c]
+                }))
+            })
+        };
+        let gradient =
+            super::super::quality_gate::normalized_gradient_energy(&source, 1.0).unwrap();
+        assert!(
+            super::super::quality_gate::normalized_gradient_energy(&render(&transform), 1.0)
+                .unwrap()
+                / gradient
+                < 0.95,
+            "unbounded tone must expose the real loss of local contrast"
+        );
+        let strength = constrain_source_fidelity(&tile, &mut transform);
+        assert!(strength > 0.0 && strength < 1.0);
+        let output = render(&transform);
+        assert!(
+            super::super::quality_gate::normalized_gradient_energy(&output, 1.0).unwrap()
+                / gradient
+                >= 0.95
+        );
+        let noise = super::super::quality_gate::noise_sigma_ratio(&output, &source).unwrap();
+        assert!((0.85..=1.15).contains(&noise), "{noise:?}");
+        assert!(
+            super::super::quality_gate::roi_low_frequency_delta_e00(&output, &source).unwrap()
+                <= 2.0
+        );
+    }
+
     fn textured(x: f64, y: f64) -> f32 {
         (0.45 + 0.12 * (x * 0.013 + y * 0.007).sin() + 0.08 * (x * 0.004 - y * 0.011).cos()) as f32
     }
@@ -1540,6 +2328,53 @@ mod tests {
                 Rgb([gain * textured(f64::from(x) + origin_x, f64::from(y)); 3])
             }
         })
+    }
+
+    #[test]
+    fn native_tone_fields_compare_the_same_world_window_across_grid_phases() {
+        let sample = |x: f64, y: f64| Some([0.12 + x as f32 * 0.0003 + y as f32 * 0.0002; 3]);
+        let first = world_aligned_native_tone_tile(0, 1, (0, 0, 511, 511), sample);
+        let second = world_aligned_native_tone_tile(1, 2, (7, 11, 518, 522), sample);
+        let pair = PairField::new(&first, &second).unwrap();
+        for y in (64..448).step_by(16) {
+            for x in (64..448).step_by(16) {
+                let (a, b) = pair.at(x as f64, y as f64).unwrap();
+                assert!(delta_e00_rgb(a, b) < 0.0001, "{x},{y}: {a:?}/{b:?}");
+            }
+        }
+        let dark = world_aligned_native_tone_tile(2, 3, (7, 11, 518, 522), |x, y| {
+            sample(x, y).map(|v| v.map(|c| c * 0.8))
+        });
+        let shifted = PairField::new(&first, &dark).unwrap();
+        let (a, b) = shifted.at(256.0, 256.0).unwrap();
+        assert!(
+            delta_e00_rgb(a, b) > 3.0,
+            "a real source tone step must remain visible"
+        );
+    }
+
+    #[test]
+    fn seam_cost_detects_low_frequency_tone_mismatch_without_altering_pixels() {
+        let image = Rgb32FImage::from_fn(512, 512, |x, y| {
+            let v = 0.1 + 0.05 * x as f32 / 511.0 + 0.02 * y as f32 / 511.0;
+            Rgb([v; 3])
+        });
+        let brighter = Rgb32FImage::from_fn(512, 512, |x, y| {
+            Rgb(image.get_pixel(x, y).0.map(|v| v + 0.08))
+        });
+        let make = |owner, image: &Rgb32FImage| {
+            world_aligned_tone_tile(owner as usize, owner, image, (0, 0, 511, 511), |x, y| {
+                Some((x, y))
+            })
+        };
+        let first = make(1, &image);
+        let same = make(2, &image);
+        let different = make(3, &brighter);
+        let same_field = PairField::new(&first, &same).unwrap();
+        let mismatch = PairField::new(&first, &different).unwrap();
+        assert!(same_field.seam_disagreement(256.0, 256.0).unwrap() < 1e-8);
+        assert!(mismatch.seam_disagreement(256.0, 256.0).unwrap() > 1.0);
+        assert_eq!(image.get_pixel(0, 0).0, [0.1; 3]);
     }
 
     #[test]

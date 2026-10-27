@@ -249,16 +249,29 @@ impl CellSamplingPlan {
         &self,
         origin_x: f64,
         origin_y: f64,
-        sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+        mut sample: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
     ) -> f64 {
         let half = self.cell_size_px * 0.5;
-        normalized_sharpness(cell_focus_with_step(
-            sample,
+        let mut incomplete = false;
+        let score = cell_focus_with_step(
+            |x, y| {
+                let pixel = sample(x, y);
+                incomplete |= pixel.is_none();
+                pixel
+            },
             origin_x + half,
             origin_y + half,
             self.cell_size_px,
             self.step_px,
-        ))
+        );
+        // All five probes share one native comparison window. Selecting the
+        // strongest surviving probe at a cropped sensor edge lets a partial
+        // frame replace a fully observed contour with an unrelated boundary.
+        if incomplete {
+            0.0
+        } else {
+            normalized_sharpness(score)
+        }
     }
 
     /// Normalised Sharpness_Score of a single probe, at the same window size the
@@ -294,6 +307,24 @@ pub(crate) fn cell_disagreement(
     }
     differences.sort_by(f64::total_cmp);
     median_of_sorted(&differences).clamp(0.0, 1.0)
+}
+
+/// Median photometric disagreement and the strongest supported local contour
+/// disagreement. The latter prices only ownership boundaries; it must not veto
+/// a sharper source through the median data term required by 3.3.
+pub(crate) fn cell_disagreement_with_seam_evidence(
+    candidate_at: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+    base_at: impl FnMut(f64, f64) -> Option<Rgb<f32>>,
+) -> (f64, f64) {
+    let mut differences = cell_low_pass_differences(candidate_at, base_at);
+    if differences.is_empty() {
+        return (1.0, 1.0);
+    }
+    differences.sort_by(f64::total_cmp);
+    (
+        median_of_sorted(&differences).clamp(0.0, 1.0),
+        differences.last().copied().unwrap().clamp(0.0, 1.0),
+    )
 }
 
 /// Median of an ascending slice.  An even count averages the two middle values,
@@ -1425,6 +1456,8 @@ pub(crate) struct CandidateCells {
     pub covered: Vec<bool>,
     /// Pixel inconsistency against the current composite (需求 3.3).
     pub disagreement: Vec<f64>,
+    /// Narrow contour evidence used only by the seam smoothness term.
+    pub seam_disagreement: Vec<f64>,
 }
 
 impl CandidateCells {
@@ -1433,6 +1466,7 @@ impl CandidateCells {
             sharpness: vec![0.0; cells],
             covered: vec![false; cells],
             disagreement: vec![0.0; cells],
+            seam_disagreement: vec![0.0; cells],
         }
     }
 }
@@ -1564,7 +1598,9 @@ impl StationFusion {
             self.observe(cell, cells.sharpness[cell]);
             // The smoothness term is a property of the cell, so a seam is
             // pushed away from every place any pair of sources disagreed.
-            self.disagreement[cell] = self.disagreement[cell].max(cells.disagreement[cell]);
+            self.disagreement[cell] = self.disagreement[cell]
+                .max(cells.disagreement[cell])
+                .max(cells.seam_disagreement.get(cell).copied().unwrap_or(0.0));
         }
         let mut grid = OwnershipCostGrid::new(
             self.geometry.columns as usize,
@@ -1574,28 +1610,44 @@ impl StationFusion {
         let mut base_owners = vec![NO_OWNER; count];
         for cell in 0..count {
             let owned = self.owners[cell] != NO_OWNER;
-            if owned {
+            let candidate = cells.covered.get(cell).copied().unwrap_or(false);
+            let penalty = if candidate {
+                mismatch_penalty(
+                    cells.disagreement[cell],
+                    cells.sharpness[cell],
+                    self.owner_sharpness[cell],
+                )
+            } else {
+                0.0
+            };
+            // Smoothness may choose among equivalent focused samples, but
+            // must not trade a measured detail loss for a cheaper seam. Use
+            // the same shortfall limit as the independent quality gate. A
+            // displaced sharper candidate remains vetoed, never forced into
+            // the output by this eligibility constraint.
+            let detail_floor = self.best[cell]
+                * (1.0 - f64::from(super::quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX));
+            let constrain_detail = candidate
+                && penalty == 0.0
+                && self.best[cell] >= TEXTURED_PIXEL_SHARPNESS_FLOOR
+                && (self.owner_sharpness[cell] >= detail_floor
+                    || cells.sharpness[cell] >= detail_floor);
+            let base_eligible =
+                owned && (!constrain_detail || self.owner_sharpness[cell] >= detail_floor);
+            let candidate_eligible =
+                candidate && (!constrain_detail || cells.sharpness[cell] >= detail_floor);
+            if base_eligible {
                 base_owners[cell] = owner_of(BASE_LABEL);
             }
             grid.set_cost(
                 cell,
                 BASE_LABEL,
-                owned.then(|| data_cost(self.owner_sharpness[cell], 0.0)),
+                base_eligible.then(|| data_cost(self.owner_sharpness[cell], 0.0)),
             );
-            let candidate = cells.covered.get(cell).copied().unwrap_or(false);
             grid.set_cost(
                 cell,
                 CANDIDATE_LABEL,
-                candidate.then(|| {
-                    data_cost(
-                        cells.sharpness[cell],
-                        mismatch_penalty(
-                            cells.disagreement[cell],
-                            cells.sharpness[cell],
-                            self.owner_sharpness[cell],
-                        ),
-                    )
-                }),
+                candidate_eligible.then(|| data_cost(cells.sharpness[cell], penalty)),
             );
             grid.set_disagreement(cell, self.disagreement[cell]);
         }
@@ -1882,6 +1934,17 @@ mod tests {
             flat(0.4),
         );
         assert!(disagreement < 0.2, "got {disagreement}");
+    }
+
+    #[test]
+    fn narrow_contour_prices_a_seam_without_vetoing_the_source() {
+        let (median, seam) = cell_disagreement_with_seam_evidence(
+            |x, y| Some(Rgb([if x < 0.2 && y < 0.2 { 0.9 } else { 0.4 }; 3])),
+            flat(0.4),
+        );
+        assert_eq!(median, 0.0);
+        assert!(seam > 0.1);
+        assert_eq!(mismatch_penalty(median, 0.8, 0.4), 0.0);
     }
 
     /// 需求 3.3: the penalty is at least 1.0 and only applies to a sharper but
@@ -2452,6 +2515,25 @@ mod tests {
         (fusion, base_sharpness, base_covered, candidate)
     }
 
+    #[test]
+    fn station_smoothness_cannot_erase_consistent_sparse_focused_detail() {
+        let mut fusion = StationFusion::new(64, 64, 2);
+        let count = fusion.geometry().cell_count();
+        fusion.seed(0, &vec![0.20; count], &vec![true; count]);
+        let mut candidate = CandidateCells::new(count);
+        for cell in 0..count {
+            candidate.covered[cell] = true;
+            candidate.sharpness[cell] = if cell % 7 == 0 { 0.24 } else { 0.18 };
+        }
+        fusion.fold(1, &candidate);
+        for (cell, evidence) in fusion.sharpness_evidence().cells.iter().enumerate() {
+            assert!(
+                evidence.owner_shortfall() <= 0.05 + f32::EPSILON,
+                "smoothness discarded focused detail at cell {cell}: {evidence:?}"
+            );
+        }
+    }
+
     /// 需求 3.6 / 3.11: every covered cell ends with exactly one owner, taken
     /// from the real candidate set — there is no blended or intermediate label.
     #[test]
@@ -2637,4 +2719,16 @@ mod tests {
         reset_run_records();
         assert!(run_records_snapshot().is_empty());
     }
+}
+#[test]
+fn cropped_native_probe_cannot_claim_comparable_focus() {
+    let plan = CellSamplingPlan::for_cell(16.0);
+    let texture = |x: f64, y: f64| Rgb([((x * 0.2).sin() * (y * 0.3).cos() * 0.2 + 0.4) as f32; 3]);
+    let complete = plan.measure(32.0, 32.0, |x, y| Some(texture(x, y)));
+    assert!(complete > 0.0);
+    // The centre and lower probes remain covered; an upper corner of
+    // the same required window leaves the sensor footprint.
+    let partial = plan.measure(32.0, 32.0, |x, y| (y >= 27.0).then(|| texture(x, y)));
+    assert_eq!(partial, 0.0);
+    assert_eq!(plan.measure(32.0, 32.0, |_, _| Some(Rgb([0.0; 3]))), 0.0);
 }

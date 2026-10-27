@@ -32,7 +32,7 @@ use super::residual_warp;
 use super::tone;
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
-pub(crate) const STACK_REPORT_SCHEMA: u32 = 2;
+pub(crate) const STACK_REPORT_SCHEMA: u32 = 3;
 
 /// 64 GiB Virtual_Tile cache budget (requirement 4.4).
 pub(crate) const VIRTUAL_TILE_CACHE_LIMIT_BYTES: u64 = 68_719_476_736;
@@ -775,6 +775,34 @@ pub(crate) struct ClosureReport {
     pub clamped_stations: usize,
     pub fallback_reason: Option<String>,
     pub offending_pair: Option<ClosureOffendingPairRecord>,
+    /// Final validated mapping; matrix-only runs retain their legacy label.
+    #[serde(default = "default_closure_geometry_model")]
+    pub geometry_model: String,
+    #[serde(default)]
+    pub global_before_residual_median_px: Option<f64>,
+    #[serde(default)]
+    pub global_before_residual_p95_px: Option<f64>,
+    #[serde(default)]
+    pub nonlinear_validation: Vec<ClosurePairValidationRecord>,
+    #[serde(default)]
+    pub rejected_nonlinear_constraints: Vec<ClosurePairValidationRecord>,
+    #[serde(default)]
+    pub nonlinear_initialization_constraints: usize,
+    #[serde(default)]
+    pub nonlinear_refit_passes: usize,
+}
+
+fn default_closure_geometry_model() -> String {
+    "homography".to_string()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ClosurePairValidationRecord {
+    pub left: usize,
+    pub right: usize,
+    pub count: usize,
+    pub median_px: f64,
+    pub p95_px: f64,
 }
 
 impl Default for ClosureReport {
@@ -792,6 +820,13 @@ impl Default for ClosureReport {
             clamped_stations: 0,
             fallback_reason: None,
             offending_pair: None,
+            geometry_model: default_closure_geometry_model(),
+            global_before_residual_median_px: None,
+            global_before_residual_p95_px: None,
+            nonlinear_validation: Vec::new(),
+            rejected_nonlinear_constraints: Vec::new(),
+            nonlinear_initialization_constraints: 0,
+            nonlinear_refit_passes: 0,
         }
     }
 }
@@ -830,6 +865,9 @@ impl Default for WarpRegionRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ResidualWarpReport {
     pub regions: Vec<WarpRegionRecord>,
+    /// Independently measured normal constraints for a separate depth layer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub normal_layers: Vec<super::line_layers::NormalAlignmentReport>,
     /// True while the model is the identity map everywhere (requirement 8.1).
     pub identity: bool,
 }
@@ -838,6 +876,7 @@ impl Default for ResidualWarpReport {
     fn default() -> Self {
         Self {
             regions: Vec::new(),
+            normal_layers: Vec::new(),
             identity: true,
         }
     }
@@ -865,8 +904,25 @@ pub(crate) struct ToneTileRecord {
     pub offset: [f64; 3],
     pub samples: u64,
     pub clamped: bool,
+    /// Unbounded station-wide baseline solve. For supported_spatial_affine,
+    /// the applied model is described by gain/offset and spatial ranges below.
     pub solved_gain: [f64; 3],
     pub solved_offset: [f64; 3],
+    /// Strength of the measured correction after source-fidelity bounds.
+    #[serde(default = "full_tone_strength")]
+    pub source_fidelity_strength: f64,
+    #[serde(default)]
+    pub spatial_gain_min: [f64; 3],
+    #[serde(default)]
+    pub spatial_gain_max: [f64; 3],
+    #[serde(default)]
+    pub spatial_offset_min: [f64; 3],
+    #[serde(default)]
+    pub spatial_offset_max: [f64; 3],
+}
+
+fn full_tone_strength() -> f64 {
+    1.0
 }
 
 impl Default for ToneTileRecord {
@@ -879,6 +935,11 @@ impl Default for ToneTileRecord {
             clamped: false,
             solved_gain: [1.0, 1.0, 1.0],
             solved_offset: [0.0, 0.0, 0.0],
+            source_fidelity_strength: 1.0,
+            spatial_gain_min: [1.0; 3],
+            spatial_gain_max: [1.0; 3],
+            spatial_offset_min: [0.0; 3],
+            spatial_offset_max: [0.0; 3],
         }
     }
 }
@@ -922,6 +983,14 @@ pub(crate) struct ToneReport {
     pub tiles: Vec<ToneTileRecord>,
     pub pairs_without_evidence: Vec<TonePairWithoutEvidenceRecord>,
     pub boundary_delta_e: ToneBoundaryReport,
+    #[serde(default)]
+    pub correction_model: String,
+    /// Native-validated radiometric fitting relations, distinct from the
+    /// closure optimizer's retained geometric constraints.
+    #[serde(default)]
+    pub native_fitting_relations: Vec<[usize; 2]>,
+    #[serde(default)]
+    pub geometry_active_relation_count: usize,
 }
 
 impl Default for ToneReport {
@@ -932,6 +1001,9 @@ impl Default for ToneReport {
             tiles: Vec::new(),
             pairs_without_evidence: Vec::new(),
             boundary_delta_e: ToneBoundaryReport::default(),
+            correction_model: "station_affine".into(),
+            native_fitting_relations: Vec::new(),
+            geometry_active_relation_count: 0,
         }
     }
 }

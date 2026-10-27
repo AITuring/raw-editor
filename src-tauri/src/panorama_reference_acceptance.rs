@@ -384,6 +384,7 @@ fn render_reference_registered_stack_from_env() {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),

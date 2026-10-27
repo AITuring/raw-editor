@@ -64,6 +64,7 @@ fn plane_info(id: usize, gray: GrayImage) -> ImageInfo {
         full_image: None,
         scale_factor: 1.0,
         focal_length_35mm: None,
+        source_footprint: None,
         overview_reference: false,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -1503,6 +1504,7 @@ fn measured_relation(
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     }
 }
 

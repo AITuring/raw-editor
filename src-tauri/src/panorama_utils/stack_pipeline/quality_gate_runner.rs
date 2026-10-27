@@ -6,7 +6,7 @@
 //! corresponding reference ROI, and records all nine criteria.  The caller can
 //! therefore use it in observation-only mode without changing export pixels.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use image::{GrayImage, ImageBuffer, Rgb, Rgb32FImage};
@@ -464,6 +464,62 @@ fn source_quad(source: &QualitySource) -> Option<[Point2<f64>; 4]> {
 /// reduced by a different bilinear filter.
 /// This is the single allowed reference resample; output pixels are copied as
 /// is by [`output_roi`].
+fn source_point_for_reference(
+    world: Point2<f64>,
+    geometry: &SourceGeometry,
+    residual: &ResidualWarp,
+    native_registration: Option<&NativeReferenceMap>,
+    inverse: &Matrix3<f64>,
+) -> Result<Point2<f64>, &'static str> {
+    if let Some(native) = native_registration {
+        let unwarped = residual.warp_inverse(world, geometry.station_id);
+        if let Some(sampling) = native.refinement.source_sampling.as_ref() {
+            let station = native
+                .corrected_station(unwarped)
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+            Ok(sampling
+                .source_point(nalgebra::Point3::new(
+                    station.x + native.station_origin.0,
+                    station.y + native.station_origin.1,
+                    1.0,
+                ))
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?)
+        } else {
+            let corrected = native
+                .reference_world(unwarped)
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+            project(inverse, corrected).ok_or(degradation::OWNER_SOURCE_UNDECODABLE)
+        }
+    } else {
+        quality_gate::map_world_to_source_with_inverse(
+            world,
+            geometry.station_id,
+            residual,
+            inverse,
+        )
+    }
+}
+
+pub(crate) fn measure_source_local_scale(
+    roi: &QualityRoi,
+    source: &QualitySource,
+    residual: &ResidualWarp,
+    render_scale: f64,
+) -> Result<quality_gate::LocalScaleMeasurement, &'static str> {
+    let inverse = (source.geometry.tile_to_world * source.geometry.member_to_anchor)
+        .try_inverse()
+        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+    quality_gate::local_scale_with_mapper(roi, render_scale, |world| {
+        source_point_for_reference(
+            world,
+            &source.geometry,
+            residual,
+            source.native_registration.as_ref(),
+            &inverse,
+        )
+    })
+}
+
 fn source_roi(
     source: &Rgb32FImage,
     roi: &QualityRoi,
@@ -481,33 +537,13 @@ fn source_roi(
                 roi.world_origin.0 + f64::from(x),
                 roi.world_origin.1 + f64::from(y),
             );
-            let mapped = if let Some(native) = native_registration {
-                let unwarped = residual.warp_inverse(world, geometry.station_id);
-                if let Some(sampling) = native.refinement.source_sampling.as_ref() {
-                    let station = native
-                        .corrected_station(unwarped)
-                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
-                    sampling
-                        .source_point(nalgebra::Point3::new(
-                            station.x + native.station_origin.0,
-                            station.y + native.station_origin.1,
-                            1.0,
-                        ))
-                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
-                } else {
-                    let corrected = native
-                        .reference_world(unwarped)
-                        .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
-                    project(&inverse, corrected).ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
-                }
-            } else {
-                quality_gate::map_world_to_source_with_inverse(
-                    world,
-                    geometry.station_id,
-                    residual,
-                    &inverse,
-                )?
-            };
+            let mapped = source_point_for_reference(
+                world,
+                geometry,
+                residual,
+                native_registration,
+                &inverse,
+            )?;
             let max_x = f64::from(source.width().saturating_sub(1));
             let max_y = f64::from(source.height().saturating_sub(1));
             if !mapped.x.is_finite()
@@ -645,13 +681,39 @@ fn select_sparse_rois(
                     world_origin: (origin.0 + f64::from(x), origin.1 + f64::from(y)),
                     boundary_clearance: f64::from(side),
                 });
-                if result.len() == quality_gate::QUALITY_ROI_MAX_COUNT {
-                    return result;
-                }
             }
         }
     }
-    result
+    if result.len() <= quality_gate::QUALITY_ROI_MAX_COUNT {
+        return result;
+    }
+    // Scan the whole canvas before capping. Returning the first 256 lattice
+    // candidates only measures the upper part of a native panorama. Keep one
+    // eligible candidate per source owner, then spread the remaining samples
+    // over the complete deterministic lattice.
+    let mut first_per_owner = BTreeMap::new();
+    for (index, roi) in result.iter().enumerate() {
+        first_per_owner.entry(roi.owner).or_insert(index);
+    }
+    let mut selected = first_per_owner.into_values().collect::<BTreeSet<_>>();
+    if selected.len() > quality_gate::QUALITY_ROI_MAX_COUNT {
+        return Vec::new();
+    }
+    let remaining = quality_gate::QUALITY_ROI_MAX_COUNT.saturating_sub(selected.len());
+    for slot in 0..remaining {
+        selected.insert(slot * (result.len() - 1) / remaining.saturating_sub(1).max(1));
+    }
+    for index in 0..result.len() {
+        if selected.len() >= quality_gate::QUALITY_ROI_MAX_COUNT {
+            break;
+        }
+        selected.insert(index);
+    }
+    selected
+        .into_iter()
+        .take(quality_gate::QUALITY_ROI_MAX_COUNT)
+        .map(|index| result[index].clone())
+        .collect()
 }
 
 fn confidence_coverage_stats(
@@ -830,54 +892,13 @@ fn effective_pixel_coverage_streaming(
 /// needed.
 fn boundary_point_error(
     image: &Rgb32FImage,
+    coverage: &GrayImage,
     x: u32,
     y: u32,
     normal: (f64, f64),
 ) -> Result<f64, &'static str> {
-    let (width, height) = image.dimensions();
-    let luminance = |pixel: Rgb<f32>| {
-        0.2126 * f64::from(pixel[0]) + 0.7152 * f64::from(pixel[1]) + 0.0722 * f64::from(pixel[2])
-    };
-    let mut sides = [(0.0f64, 0.0f64), (0.0f64, 0.0f64)];
-    for (side_index, side) in [-1.0f64, 1.0].into_iter().enumerate() {
-        let mut contrast_sum = 0.0;
-        let mut position_sum = 0.0;
-        let mut orientation_sum = 0.0;
-        for distance in 1..=16 {
-            let distance = f64::from(distance);
-            let sx = f64::from(x) + side * normal.0 * distance;
-            let sy = f64::from(y) + side * normal.1 * distance;
-            let ix = sx.round() as i32;
-            let iy = sy.round() as i32;
-            if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
-                continue;
-            }
-            let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
-                - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
-            let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
-                - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
-            let contrast = gx.hypot(gy) * 0.5;
-            if contrast < 0.15 {
-                continue;
-            }
-            contrast_sum += contrast;
-            position_sum += side * distance * contrast;
-            orientation_sum += gy.atan2(gx).to_degrees() * contrast;
-        }
-        if contrast_sum <= 0.0 {
-            return Err(degradation::BOUNDARY_LOW_CONTRAST);
-        }
-        sides[side_index] = (position_sum / contrast_sum, orientation_sum / contrast_sum);
-    }
-    let mut angle_error = (sides[0].1 - sides[1].1).abs() % 180.0;
-    if angle_error > 90.0 {
-        angle_error = 180.0 - angle_error;
-    }
-    if angle_error > 10.0 {
-        Err(degradation::BOUNDARY_ORIENTATION_MISMATCH)
-    } else {
-        Ok((sides[0].0 + sides[1].0).abs())
-    }
+    quality_gate::paired_boundary_edge_error_with_coverage(image, Some(coverage), x, y, normal)
+        .map(|value| value.0)
 }
 
 /// Stream ownership transitions for large canvases. A fixed histogram keeps
@@ -909,13 +930,15 @@ fn measure_large_boundaries(
             (right, left)
         };
         let counter = seen.entry(pair).or_default();
-        let sample = (*counter).is_multiple_of(256);
+        // Sample each pair more densely so narrow ink crossings on a long,
+        // mostly flat boundary are represented in the native edge evidence.
+        let sample = (*counter).is_multiple_of(64);
         *counter = counter.saturating_add(1);
         if !sample {
             return;
         }
         let world = (origin.0 + f64::from(x), origin.1 + f64::from(y));
-        let error = match boundary_point_error(image, x, y, normal) {
+        let error = match boundary_point_error(image, coverage, x, y, normal) {
             Ok(error) => error,
             Err(reason) => {
                 unmeasurable.push(UnmeasurableRecord {
@@ -1317,9 +1340,9 @@ pub(crate) fn run_quality_gate(
                 });
             }
             let scale_started = Instant::now();
-            let scale = quality_gate::local_scale_for_roi(
+            let scale = measure_source_local_scale(
                 roi,
-                &source_info.geometry,
+                source_info,
                 input.residual,
                 input.acceptance_render_scale,
             );
@@ -1351,7 +1374,11 @@ pub(crate) fn run_quality_gate(
                 let mtf_started = Instant::now();
                 match (
                     quality_gate::slanted_edge_mtf50(&output_roi, local),
-                    quality_gate::slanted_edge_mtf50(&reference, 1.0),
+                    // source_roi has already sampled the original onto this
+                    // same world lattice. Both measurements therefore use
+                    // the same native-to-world pixel scale; treating this
+                    // reference as an unwarped native crop normalises twice.
+                    quality_gate::slanted_edge_mtf50(&reference, local),
                 ) {
                     (Ok(a), Ok(b)) => {
                         if let Some((value, pass)) = ratio(
@@ -1378,7 +1405,7 @@ pub(crate) fn run_quality_gate(
                 let gradient_started = Instant::now();
                 match (
                     quality_gate::normalized_gradient_energy(&output_roi, local),
-                    quality_gate::normalized_gradient_energy(&reference, 1.0),
+                    quality_gate::normalized_gradient_energy(&reference, local),
                 ) {
                     (Ok(a), Ok(b)) => {
                         if let Some((value, pass)) = ratio(
@@ -1387,6 +1414,10 @@ pub(crate) fn run_quality_gate(
                             quality_gate::QUALITY_GRADIENT_RATIO_MIN,
                             f64::INFINITY,
                         ) {
+                            #[cfg(test)]
+                            crate::panorama_stitching::acceptance_tests::capture_native_gradient_roi(
+                                where_, &source_info.path, value, local, &output_roi, &reference,
+                            );
                             gradient.push(where_, value, &source_info.path, pass);
                         } else {
                             record_unmeasurable(
@@ -1494,8 +1525,9 @@ pub(crate) fn run_quality_gate(
                 else {
                     continue;
                 };
-                match quality_gate::measure_boundary_strokes(
+                match quality_gate::measure_boundary_strokes_with_coverage(
                     input.output,
+                    Some(input.coverage),
                     &path,
                     input.world_origin,
                 ) {
@@ -1973,6 +2005,81 @@ mod tests {
     }
 
     #[test]
+    fn world_resampled_reference_uses_the_same_scale_and_still_detects_blur() {
+        let _scope = degradation::begin_run_scope();
+        let source = Rgb32FImage::from_fn(1024, 1024, |x, y| {
+            let value = 0.42 + 0.12 * (x as f32 * 0.27).sin() + 0.08 * (y as f32 * 0.19).cos();
+            Rgb([value; 3])
+        });
+        let scale = 1.2;
+        let exact = Rgb32FImage::from_fn(1024, 1024, |x, y| {
+            crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
+                &source,
+                f64::from(x) / scale,
+                f64::from(y) / scale,
+            )
+        });
+        let blurred = image::imageops::blur(&exact, 3.0);
+        let coverage = GrayImage::from_pixel(1024, 1024, Luma([255]));
+        let ownership = vec![1; 1024 * 1024];
+        let confidence = vec![0.8; 1024 * 1024];
+        let textured = vec![255; 1024 * 1024];
+        let residual = ResidualWarp::new();
+        let sources = [QualitySource {
+            owner: 1,
+            path: "world-grid.raw".to_string(),
+            geometry: SourceGeometry {
+                member_to_anchor: Matrix3::identity(),
+                tile_to_world: Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0),
+                station_id: 0,
+            },
+            dimensions: source.dimensions(),
+            native_registration: None,
+        }];
+        for (output, expect_pass) in [(&exact, true), (&blurred, false)] {
+            let input = QualityGateInput {
+                output,
+                coverage: &coverage,
+                ownership: &ownership,
+                confidence: &confidence,
+                textured: Some(&textured),
+                owner_shortfall: None,
+                owner_disagreement: None,
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                sources: &sources,
+                residual: &residual,
+                acceptance_render_scale: 1.0,
+                final_sharpen_amount: 0.0,
+            };
+            let report = run_quality_gate(&input, &mut |_| Ok(source.clone()));
+            let gradient = report
+                .criteria
+                .iter()
+                .find(|criterion| criterion.name == "gradient_energy_normalized")
+                .unwrap();
+            assert!(gradient.measurable_count >= 8);
+            if expect_pass {
+                assert!(
+                    gradient.failed.is_empty(),
+                    "identical world samples lost detail"
+                );
+                assert!(
+                    gradient
+                        .measured
+                        .iter()
+                        .all(|m| (m.measured - 1.0).abs() < 1e-6)
+                );
+            } else {
+                assert!(
+                    !gradient.failed.is_empty(),
+                    "actual blur must still fail the unchanged gate"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn quality_gate_record_mode_preserves_output_and_records_all_criteria() {
         // The gate is observation-only at this boundary: it may return a
         // conclusion and diagnostics, but it cannot rewrite the composed
@@ -2094,13 +2201,37 @@ mod tests {
             &mut records,
         );
         assert_eq!(criterion.observed_count, 0);
-        assert_eq!(criterion.unmeasurable, 2, "512px boundary has two samples");
+        assert_eq!(
+            criterion.unmeasurable, 8,
+            "512px boundary has eight 64px samples"
+        );
         assert_eq!(
             criterion.unmeasurable_reasons[degradation::BOUNDARY_LOW_CONTRAST],
-            2
+            8
         );
-        assert_eq!(records.len(), 2);
+        assert_eq!(records.len(), 8);
         assert_eq!(records[0].world, WorldPoint { x: 29.0, y: -30.0 });
-        assert_eq!(records[1].world, WorldPoint { x: 29.0, y: 226.0 });
+        assert_eq!(records[1].world, WorldPoint { x: 29.0, y: 34.0 });
+    }
+
+    #[test]
+    fn sparse_roi_cap_covers_the_full_canvas_and_late_source_owners() {
+        let (width, height) = (4096, 12288);
+        let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+        let ownership = (0..height)
+            .flat_map(|y| std::iter::repeat_n(if y < height / 2 { 1 } else { 2 }, width as usize))
+            .collect::<Vec<_>>();
+        let selected = select_sparse_rois(&coverage, &ownership, (10.0, -30.0));
+        assert_eq!(selected.len(), quality_gate::QUALITY_ROI_MAX_COUNT);
+        assert_eq!(
+            selected.iter().map(|r| r.owner).collect::<BTreeSet<_>>(),
+            BTreeSet::from([1, 2])
+        );
+        assert!(selected.iter().map(|r| r.y).max().unwrap() >= height - 1024);
+        assert!(selected.iter().map(|r| r.x).max().unwrap() >= width - 1024);
+        assert_eq!(
+            selected,
+            select_sparse_rois(&coverage, &ownership, (10.0, -30.0))
+        );
     }
 }
