@@ -10,6 +10,10 @@
 机位求解、focus-stack 执行流程、取消、缓存和最终输出发布。当前仍是超大 facade 与实现混合文件，N1
 完成前不把其中的实验入口视为稳定 API。
 
+候选 pair 枚举已移到 `src-tauri/src/panorama_feature_pairs.rs`。该模块只负责输入顺序/自然文件名排序、
+邻域候选、受限视觉检索和大堆栈候选扩展；完整特征提取、几何验证和后续 solver 仍由入口编排。入口通过
+私有 facade import 保持原调用名，未改变候选阈值、排序规则或回退路径。
+
 `src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
 顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
 几何和颜色 primitive。它们仍有跨职责实现，不能据此宣称已经完成模块化。
@@ -35,7 +39,10 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 已把 report schema、recorder 和原子 I/O 拆到 `report_schema_core.rs`、`report_schema_solver.rs`、
 `report_schema_metrics.rs`、`report_document.rs`、`report_recorder.rs` 和 `report_io.rs`；各生产文件均低于
 1000 行，`report.rs` 只保留兼容重导出和测试，未改变 `Stack_Report` 字段、schema 版本或写盘语义。下一步按
-feature/matching、station solver、compositor 的顺序推进；
+feature/matching、station solver、compositor 的顺序推进。N1-4 已完成候选 pair 生成拆分：
+`panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
+没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。下一步拆 focus feature preparation
+和匹配合同，随后再拆 station solver；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -76,6 +83,14 @@ N1-3 report 拆分后的定向测试为 report `16 passed`、quality-gate `24 pa
 并写出 `/private/tmp/raw-editor-lanting-report-split-10-stack-reports/stack-report-8ac825e8-46ba-4396-9d3f-1a45dc45131d.json`；
 预览 `/private/tmp/raw-editor-lanting-report-split-10.preview.jpg` 保持完整可读。质量门仍按现有报告语义记录，
 没有因为拆分把 `insufficient_evidence` 改写为通过。
+
+N1-4 候选 pair 拆分后的定向测试为大堆栈邻域、自然文件名邻域、focus/panorama 中等规模候选和自然排序
+共 `5 passed`；底层 `feature_provider`、`processing`、`registration` 测试分别为 `6`、`5`、`3 passed`。
+完整 release 库测试仍为 `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过。兰亭 10% 保护
+回归保持 45/45 输入、source streaming、输出 `3388×1389`、预览 `1200×492`，并写出报告
+`/private/tmp/raw-editor-lanting-feature-pairs-10-stack-reports/stack-report-9716983f-75ac-4126-99a3-0697ac46a588.json`；
+预览 `/private/tmp/raw-editor-lanting-feature-pairs-10.preview.jpg` 可读。报告仍按现有语义记录
+`quality_gate=insufficient_evidence`，本次结构拆分未把它改写为通过。
 
 N0 的基准行为门已通过，可以开始 N1 的职责拆分；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。

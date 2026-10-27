@@ -139,6 +139,14 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   1000 行，`report.rs` 保留兼容 facade、重导出和测试，未改变 `Stack_Report` schema 版本、字段、阈值或原子
   写盘语义。report 定向测试 `16 passed`、quality-gate 定向测试 `24 passed`、完整 release 库测试
   `818 passed, 0 failed, 30 ignored`，数据集契约通过；兰亭 10% 回归保持 45/45、`3388×1389`，报告成功写出。
+- [x] N1-4 候选 pair 生成拆分：新增 `panorama_feature_pairs.rs`（239 行），承载输入/自然文件名排序、邻域
+  候选、focus/panorama 候选策略、受限视觉检索和大堆栈候选扩展；`panorama_stitching.rs` 只保留 facade import
+  和后续编排调用，未改变阈值、排序、回退或报告语义。候选定向测试 `5 passed`，底层
+  `feature_provider`/`processing`/`registration` 为 `6/5/3 passed`，完整 release 库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 10% 回归保持 45/45、
+  `3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-feature-pairs-10-stack-reports/`。
+- [ ] N1-5 focus feature preparation 与匹配合同拆分：先移动 focus 特征准备、mask/采样和匹配输入合同，保持
+  `panorama_feature_pairs.rs` 与新模块均不超过 1000 行，再进入 station solver。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
