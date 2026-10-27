@@ -28,11 +28,36 @@ use super::degradation::{self, DegradationLedger, RunResult};
 /// independent 2048 ceiling.
 use super::focus_fuser;
 use super::intra_station::{self, INTRA_STATION_ANALYSIS_LONG_SIDE};
+use super::proxy::{ProxyBudget, ProxyImage};
+
+/// Report-level identity for the feature provider boundary.  The native
+/// provider is always available; optional Python providers must reduce to this
+/// compact record before their keypoints or descriptors reach Rust geometry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct FeatureProviderReport {
+    pub requested: String,
+    pub selected: String,
+    pub provider_version: String,
+    pub fallback_reason: Option<String>,
+    pub explicit_copy_bytes: u64,
+}
+
+impl Default for FeatureProviderReport {
+    fn default() -> Self {
+        Self {
+            requested: "rust_fast_brief".to_string(),
+            selected: "rust_fast_brief".to_string(),
+            provider_version: "native".to_string(),
+            fallback_reason: None,
+            explicit_copy_bytes: 0,
+        }
+    }
+}
 use super::residual_warp;
 use super::tone;
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
-pub(crate) const STACK_REPORT_SCHEMA: u32 = 2;
+pub(crate) const STACK_REPORT_SCHEMA: u32 = 3;
 
 /// 64 GiB Virtual_Tile cache budget (requirement 4.4).
 pub(crate) const VIRTUAL_TILE_CACHE_LIMIT_BYTES: u64 = 68_719_476_736;
@@ -191,6 +216,17 @@ pub(crate) struct InputReport {
     pub source_count: usize,
     pub max_sources: usize,
     pub sources: Vec<SourceRecord>,
+    /// The shared proxy budget and per-source coordinate metadata used by
+    /// feature, geometry and seam analysis (requirements 16.1–16.2).
+    #[serde(default)]
+    pub proxy_budget: Option<ProxyBudget>,
+    #[serde(default)]
+    pub proxy_images: Vec<ProxyImage>,
+    /// Provider identity and optional Python fallback evidence (requirements
+    /// 17.1–17.2).  This stays nested so the established Stack_Report
+    /// top-level schema remains unchanged.
+    #[serde(default)]
+    pub feature_provider: FeatureProviderReport,
 }
 
 // ---------------------------------------------------------------------------
@@ -598,10 +634,285 @@ pub(crate) struct ResidualModelStageRecord {
     pub rejection_reason: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationCorrespondenceRecord {
+    pub source: [f64; 2],
+    pub target: [f64; 2],
+    pub local_scale: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationHypothesisRecord {
+    pub model: String,
+    pub selected: bool,
+    pub inliers: usize,
+    pub median_error_px: f64,
+    pub scale_ratio: f64,
+    pub spatial_support: f64,
+    pub low_frequency_mean_relative_difference: f64,
+    pub edge_strength_ratio: f64,
+    pub median_edge_orientation_difference_degrees: f64,
+    pub preserves_convex_orientation: bool,
+    pub rejection_reasons: Vec<String>,
+    /// Content-derived canonical direction used by every final gate.
+    #[serde(default)]
+    pub canonical_source: usize,
+    #[serde(default)]
+    pub canonical_target: usize,
+    /// Row-major canonical source-to-target homography in native tile pixels.
+    #[serde(default)]
+    pub source_to_target_transform: [f64; 9],
+    /// Number of measured correspondences behind this hypothesis.
+    #[serde(default)]
+    pub correspondence_count: usize,
+    /// At most 64 evenly spaced measured correspondences and their analytic
+    /// Local_Scale. This is diagnostic only and never participates in ranking.
+    #[serde(default)]
+    pub correspondence_sample: Vec<StationRelationCorrespondenceRecord>,
+    /// Independent deterministic checkerboard refit and held-out evaluation.
+    /// These diagnostics never participate in hypothesis selection.
+    #[serde(default)]
+    pub holdout_fit_count: usize,
+    #[serde(default)]
+    pub holdout_count: usize,
+    #[serde(default)]
+    pub holdout_median_error_px: Option<f64>,
+    #[serde(default)]
+    pub holdout_spatial_support: Option<f64>,
+    #[serde(default)]
+    pub holdout_transform: Option<[f64; 9]>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationGlobalProposalRecord {
+    pub rank: usize,
+    pub score: f64,
+    pub overlap_samples: usize,
+    pub left_factor: u32,
+    pub right_factor: u32,
+    pub translation_x_px: f64,
+    pub translation_y_px: f64,
+    pub scale: f64,
+    pub rotation_degrees: f64,
+}
+
+/// One proposal from the per-RAW luminance/gradient correlation oracle.
+/// Scores and proposal counts are diagnostic only and never contribute to
+/// independent support.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawCorrelationProposalRecord {
+    pub rank: usize,
+    pub score: f64,
+    pub second_peak_margin: f64,
+    pub overlap_samples: usize,
+    pub left_factor: u32,
+    pub right_factor: u32,
+    pub translation_x_px: f64,
+    pub translation_y_px: f64,
+    pub scale: f64,
+    pub rotation_degrees: f64,
+    pub guided_match_count: usize,
+    pub stable_ransac_inliers: usize,
+    pub full_resolution_validated: bool,
+    pub validation_stage: String,
+    pub match_source: String,
+    pub match_target: String,
+    pub source_to_target_transform: [f64; 9],
+}
+
+/// One independently fitted Source_RAW layer pair, canonicalized into the two
+/// stations' anchor coordinate systems. A layer pair contributes at most one
+/// observation regardless of how many patches, proposals, or inliers it contains.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawLayerModelRecord {
+    pub left_source: String,
+    pub right_source: String,
+    /// Descriptor counts after extraction for the station-left and station-right RAWs.
+    #[serde(default)]
+    pub left_descriptor_count: usize,
+    #[serde(default)]
+    pub right_descriptor_count: usize,
+    /// True when the stable matcher's deterministic source direction is station-right to station-left.
+    #[serde(default)]
+    pub match_direction_reversed: bool,
+    /// Source descriptors for which nearest and second-nearest descriptors were retrieved.
+    #[serde(default)]
+    pub descriptor_retrieval_count: usize,
+    /// Retrieved descriptors surviving the stable matcher's ratio test, before mutual filtering.
+    #[serde(default)]
+    pub ratio_filter_count: usize,
+    /// Correspondences surviving both ratio and reverse-best mutual filtering.
+    #[serde(default)]
+    pub mutual_filter_count: usize,
+    #[serde(default)]
+    pub ransac_model_fitted: bool,
+    #[serde(default)]
+    pub ransac_inliers: usize,
+    #[serde(default)]
+    pub ransac_anchor_transform: Option<[f64; 9]>,
+    #[serde(default)]
+    pub canonical_conversion_succeeded: bool,
+    #[serde(default)]
+    pub full_resolution_validated: bool,
+    #[serde(default)]
+    pub failure_stage: String,
+    /// `stable_matcher` today; a future independently proven proposal seed must remain explicit.
+    #[serde(default)]
+    pub model_provenance: String,
+    /// Diagnostic-only proposal provenance. Neither this flag nor its score contributes support.
+    #[serde(default)]
+    pub proposal_seeded: bool,
+    #[serde(default)]
+    pub proposal_score: Option<f64>,
+    #[serde(default)]
+    pub proposal_candidate_count: usize,
+    #[serde(default)]
+    pub proposal_match_count: usize,
+    #[serde(default)]
+    pub proposal_ransac_inliers: usize,
+    /// Complete deterministic attrition for every correlation peak considered
+    /// for this RAW pair.
+    #[serde(default)]
+    pub correlation_proposals: Vec<SourceRawCorrelationProposalRecord>,
+    pub model_fitted: bool,
+    pub inliers: usize,
+    pub median_error_px: f64,
+    pub scale_ratio: f64,
+    pub spatial_support: f64,
+    pub anchor_transform: [f64; 9],
+    pub consensus_cluster: Option<usize>,
+}
+
+/// A transform cluster supported by different Source_RAW observations on both
+/// sides. Scheme-B peaks and repeated patches are not observations here.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawConsensusClusterRecord {
+    pub cluster: usize,
+    pub observation_count: usize,
+    pub independent_support: usize,
+    pub supporting_layer_pairs: Vec<[String; 2]>,
+    pub median_disagreement_px: f64,
+    pub scale_ratio: f64,
+    pub spatial_support_potential: f64,
+    pub scale_compliant: bool,
+    pub spatially_broad: bool,
+    pub anchor_transform: [f64; 9],
+}
+
+/// One direct-localization point measured in a checkerboard hold-out cell.
+/// `target` is never generated by applying the fitted model to `source`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawDirectPointRecord {
+    pub cell: [usize; 2],
+    pub source: [f64; 2],
+    pub target: [f64; 2],
+    pub reverse_source: [f64; 2],
+    pub correlation: f64,
+    pub peak_margin: f64,
+    pub round_trip_error_px: f64,
+}
+
+/// One deterministic checkerboard fit/hold-out fold of F-Direct.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawDirectFoldRecord {
+    pub fold: usize,
+    pub seed_rank: usize,
+    #[serde(default)]
+    pub reverse_seed_rank: usize,
+    #[serde(default)]
+    pub seed_pair_coarse_closure_px: f64,
+    pub seed_provenance: String,
+    pub pyramid_factors: Vec<u32>,
+    pub iterations: usize,
+    pub fit_cell_count: usize,
+    pub holdout_cell_count: usize,
+    pub fit_loss: f64,
+    pub holdout_loss: f64,
+    pub gain: f64,
+    pub bias: f64,
+    pub model: String,
+    pub raw_transform: [f64; 9],
+    pub reverse_raw_transform: [f64; 9],
+    pub bidirectional_closure_px: f64,
+    pub points: Vec<SourceRawDirectPointRecord>,
+}
+
+/// One independently measured RAW×RAW F-Direct observation.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawDirectObservationRecord {
+    pub left_source: String,
+    pub right_source: String,
+    pub folds: Vec<SourceRawDirectFoldRecord>,
+    pub model: String,
+    pub holdout_points: usize,
+    pub median_error_px: f64,
+    pub scale_ratio: f64,
+    pub spatial_support: f64,
+    pub preserves_convex_orientation: bool,
+    pub fold_disagreement_px: f64,
+    pub bidirectional_closure_px: f64,
+    pub anchor_transform: [f64; 9],
+    pub rejection_reasons: Vec<String>,
+}
+
+/// A canonical F-Direct cluster whose support is a bipartite matching of RAW
+/// IDs. Repeated folds, seeds, or either-side RAW IDs cannot inflate support.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawDirectConsensusRecord {
+    pub cluster: usize,
+    pub observation_count: usize,
+    pub independent_support: usize,
+    pub supporting_layer_pairs: Vec<[String; 2]>,
+    pub canonical_disagreement_px: f64,
+    pub anchor_transform: [f64; 9],
+    pub station_inliers: usize,
+    pub station_median_error_px: f64,
+    pub station_scale_ratio: f64,
+    pub station_spatial_support: f64,
+    pub station_preserves_convex_orientation: bool,
+    pub station_bidirectional_closure_px: f64,
+    pub station_rejection_reasons: Vec<String>,
+}
+
+/// Read-only F-Direct diagnostics for one station pair.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawDirectPairDiagnosticRecord {
+    pub left: usize,
+    pub right: usize,
+    pub observations: Vec<SourceRawDirectObservationRecord>,
+    pub consensus_clusters: Vec<SourceRawDirectConsensusRecord>,
+    pub elapsed_ms: u64,
+    pub peak_working_set_bytes: u64,
+}
+
+/// Read-only experiment-C diagnostics for one station pair.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceRawPairDiagnosticRecord {
+    pub left: usize,
+    pub right: usize,
+    pub layer_models: Vec<SourceRawLayerModelRecord>,
+    pub consensus_clusters: Vec<SourceRawConsensusClusterRecord>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationRelationTileGeometryRecord {
+    pub dimensions: [u32; 2],
+    /// Native-pixel bounds of the finest relation Coverage_Mask.
+    pub effective_bounds: Option<[u32; 4]>,
+    /// Row-major native-tile to rendering-world transform. For the current
+    /// renderer this records the pixel-aligned crop-origin translation.
+    pub tile_to_world: Option<[f64; 9]>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StationRelationCandidateRecord {
     pub left: usize,
     pub right: usize,
+    /// Native/effective coordinate geometry used by scale and hull checks.
+    #[serde(default)]
+    pub left_tile: StationRelationTileGeometryRecord,
+    #[serde(default)]
+    pub right_tile: StationRelationTileGeometryRecord,
     /// Geometric overlap predicted by the rendering prior, in left-tile
     /// analysis pixels at `measurement_factor`, at the search-radius calculation.
     #[serde(default)]
@@ -656,9 +967,17 @@ pub(crate) struct StationRelationCandidateRecord {
     /// RANSAC inliers of the prior-free covered-feature relation, 0 when unused.
     #[serde(default)]
     pub prior_free_inliers: usize,
+    /// Coverage-aware ultra-coarse search peaks. These are proposal diagnostics
+    /// only; acceptance always belongs to the shared Station_Relation gates.
+    #[serde(default)]
+    pub global_proposals: Vec<StationRelationGlobalProposalRecord>,
     /// True when either station was re-rendered from repaired source poses.
     #[serde(default)]
     pub after_prior_repair: bool,
+    /// Bounded internal model outcomes. Pair-level accepted/rejected accounting
+    /// remains singular; these records explain why alternatives did not win.
+    #[serde(default)]
+    pub hypotheses: Vec<StationRelationHypothesisRecord>,
 }
 
 /// One Capture_Station whose rendering prior was repaired from a measured
@@ -683,6 +1002,14 @@ pub(crate) struct StationRelationsReport {
     pub accepted: Vec<AcceptedStationRelationRecord>,
     /// One record for every topology candidate, including no-fit rejections.
     pub candidates: Vec<StationRelationCandidateRecord>,
+    /// Read-only Source_RAW layer-pair evidence collected by experiments C-E.
+    /// These records do not enter the relation graph or rendering-prior repair.
+    #[serde(default)]
+    pub source_raw_pair_diagnostics: Vec<SourceRawPairDiagnosticRecord>,
+    /// Read-only F-Direct evidence. It remains test-only until the F2 gate has
+    /// passed and never enters `tile_relations` or prior repair here.
+    #[serde(default)]
+    pub source_raw_direct_diagnostics: Vec<SourceRawDirectPairDiagnosticRecord>,
     /// Rendering-prior repairs applied before the authoritative measurement.
     #[serde(default)]
     pub prior_repairs: Vec<StationPriorRepairRecord>,
@@ -1105,6 +1432,14 @@ pub(crate) struct QualityGateCriterionRecord {
     pub disagreement_veto_count: u64,
     #[serde(default)]
     pub unresolved_pixel_count: u64,
+    /// Exact numerator/denominator used by the whole-image effective-pixel
+    /// criterion.  Keeping these with the criterion lets the terminal
+    /// composition report reuse the same scan without a second full-canvas
+    /// traversal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_output_pixels: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_projected_pixels: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1913,6 +2248,14 @@ mod tests {
             value["input"]["sources"],
             Value::Array(Vec::new()),
             "an empty source list must still be present"
+        );
+        assert_eq!(
+            value["input"]["feature_provider"]["selected"],
+            Value::from("rust_fast_brief")
+        );
+        assert_eq!(
+            value["input"]["feature_provider"]["explicit_copy_bytes"],
+            Value::from(0)
         );
         assert_eq!(value["grouping"]["station_count"], Value::from(0));
         assert_eq!(value["closure"]["status"], Value::from("not_run"));

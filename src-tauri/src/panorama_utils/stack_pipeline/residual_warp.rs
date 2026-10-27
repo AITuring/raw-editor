@@ -289,13 +289,8 @@ impl WarpRegion {
         let cell_columns = region.columns.saturating_sub(1) as usize;
         let cell_rows = region.rows.saturating_sub(1) as usize;
         let mut global_cell_samples = vec![Vec::new(); cell_columns * cell_rows];
-        let mut residual_cell_samples = vec![Vec::new(); cell_columns * cell_rows];
         for observation in &accepted {
-            if !observation.global_error_px.is_finite()
-                || !observation.residual_error_px.is_finite()
-                || cell_columns == 0
-                || cell_rows == 0
-            {
+            if !observation.global_error_px.is_finite() || cell_columns == 0 || cell_rows == 0 {
                 continue;
             }
             let Some(index) = region.nearest_node(observation.world) else {
@@ -305,13 +300,8 @@ impl WarpRegion {
             let row = (index / region.field.width).min(cell_rows - 1);
             let cell = row * cell_columns + column;
             global_cell_samples[cell].push(observation.global_error_px);
-            residual_cell_samples[cell].push(observation.residual_error_px);
         }
         let global_cell_error = global_cell_samples
-            .iter_mut()
-            .map(|samples| percentile95(samples))
-            .collect::<Vec<_>>();
-        let residual_cell_error = residual_cell_samples
             .iter_mut()
             .map(|samples| percentile95(samples))
             .collect::<Vec<_>>();
@@ -346,7 +336,52 @@ impl WarpRegion {
         }
         region.extrapolate_invalid_nodes();
         region.rebuild_field();
+        // A producer may know the global correspondence error but not the
+        // residual error until the bounded field has been built. Derive that
+        // value from the same observation: the residual is the difference
+        // between its measured displacement and the displacement actually
+        // returned by the constrained field (including edge fade). Explicit
+        // finite evidence remains authoritative; legacy callers that provide
+        // neither error keep their previous unmeasurable-cell behaviour.
+        let mut residual_cell_samples = vec![Vec::new(); cell_columns * cell_rows];
+        if cell_columns > 0 && cell_rows > 0 {
+            for observation in &accepted {
+                let residual_error = if observation.residual_error_px.is_finite() {
+                    observation.residual_error_px
+                } else if observation.global_error_px.is_finite()
+                    && observation
+                        .displacement
+                        .iter()
+                        .all(|value| value.is_finite())
+                {
+                    let applied = region.displacement_at(observation.world.x, observation.world.y);
+                    [
+                        observation.displacement[0] - applied[0],
+                        observation.displacement[1] - applied[1],
+                    ]
+                    .into_iter()
+                    .map(|value| value * value)
+                    .sum::<f64>()
+                    .sqrt()
+                } else {
+                    continue;
+                };
+                if !residual_error.is_finite() {
+                    continue;
+                }
+                let Some(index) = region.nearest_node(observation.world) else {
+                    continue;
+                };
+                let column = (index % region.field.width).min(cell_columns - 1);
+                let row = (index / region.field.width).min(cell_rows - 1);
+                residual_cell_samples[row * cell_columns + column].push(residual_error);
+            }
+        }
         region.update_metrics();
+        let residual_cell_error = residual_cell_samples
+            .iter_mut()
+            .map(|samples| percentile95(samples))
+            .collect::<Vec<_>>();
         region.revert_cells(&global_cell_error, &residual_cell_error);
         region
     }
@@ -964,6 +999,31 @@ mod tests {
         assert_eq!(region.displacement_at(100.0, 300.0), [0.0, 0.0]);
         let centre = region.displacement_at(196.0, 296.0);
         assert!(centre[0].is_finite() && centre[1].is_finite());
+    }
+
+    #[test]
+    fn missing_residual_error_is_derived_after_field_constraints() {
+        let _run_scope = degradation::begin_run_scope();
+        let overlap = overlap(192.0, 192.0, 4.0);
+        let observations = (0..4)
+            .flat_map(|row| {
+                (0..4).map(move |column| {
+                    WarpObservation::with_errors(
+                        WorldPoint {
+                            x: 100.0 + column as f64 * 64.0,
+                            y: 200.0 + row as f64 * 64.0,
+                        },
+                        [4.0, 0.0],
+                        0.1,
+                        4.0,
+                        f64::NAN,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let region = WarpRegion::from_observations(overlap, &observations);
+        assert!(!region.insufficient_evidence);
+        assert!(region.reverted_cells > 0);
     }
 
     #[test]

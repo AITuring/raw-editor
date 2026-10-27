@@ -45,6 +45,33 @@ bench/out/
 # Local panorama/focus-stack render outputs
 output/
 
+# Raw acceptance diagnostics stay local; commit only lightweight summaries.
+.agents/artifacts/**/command.log
+.agents/artifacts/**/reports/stack-report-*.json
+.agents/artifacts/**/pair-reports*/
+.agents/artifacts/**/score-noise-*.json
+.agents/artifacts/**/owner-quality-oracle-*.json
+.agents/artifacts/**/gradient-source-oracle.json
+.agents/artifacts/**/final-owner-roi-constraints.json
+.agents/artifacts/**/output.*
+.agents/artifacts/wenyuan-tone-2026-10-21/
+.agents/artifacts/wenyuan-tone-owner-fidelity-2026-10-23/
+.agents/artifacts/langyuan-station-seam-2026-10-15/
+.agents/artifacts/langyuan-option-e-ab-2026-10-15/
+.agents/artifacts/langyuan-option-e-stroke-2026-10-15/
+
+# Local agent bookkeeping and auxiliary worktrees are not source deliverables.
+.agents/backups/
+.agents/reviews/
+.agents/tasks/
+.agents/artifacts/**/oracle/
+.agents/artifacts/**/*.png
+.agents/pipeline/**/01-*.md
+.agents/pipeline/**/02-*.md
+.agents/pipeline/**/03-*.md
+.agents/pipeline/**/design-review.json
+.worktrees/
+
 # User-supplied, local-only RAW acceptance fixtures. Their hashes and permissions
 # are tracked in tests/acceptance/raw-manifest.json; the binaries are not redistributable.
 src/assets/test/

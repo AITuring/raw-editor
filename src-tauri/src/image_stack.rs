@@ -819,10 +819,15 @@ fn write_image_stack_output_for_run(
         output_path,
     )? {
         OutputPublication::Published(_) => Ok(()),
-        OutputPublication::Rejected => Err(
-            "The image-stack result was rejected; the diagnostic preview and Stack_Report were retained."
-                .to_string(),
-        ),
+        OutputPublication::Rejected => {
+            let detail = degradation_ledger
+                .quality_gate_rejection_detail()
+                .map(|detail| format!(" Quality_Gate: {detail}."))
+                .unwrap_or_default();
+            Err(format!(
+                "The image-stack result was rejected; the diagnostic preview and Stack_Report were retained.{detail}"
+            ))
+        }
         OutputPublication::Cancelled => Err(
             "The image-stack export was cancelled; the diagnostic preview and Stack_Report were retained."
                 .to_string(),
@@ -1171,13 +1176,19 @@ pub async fn process_image_stack(
                     let message = match outcome_decision {
                         OutcomeDecision::Cancelled => {
                             "Image-stack processing was cancelled; diagnostic output was retained."
+                                .to_string()
                         }
                         OutcomeDecision::Rejected => {
-                            "The image-stack result was rejected; diagnostic output was retained."
+                            let detail = degradation_ledger
+                                .quality_gate_rejection_detail()
+                                .map(|detail| format!(" Quality_Gate: {detail}."))
+                                .unwrap_or_default();
+                            format!(
+                                "The image-stack result was rejected; diagnostic output was retained.{detail}"
+                            )
                         }
                         OutcomeDecision::Success | OutcomeDecision::Degraded => unreachable!(),
-                    }
-                    .to_string();
+                    };
                     let _ = app_handle.emit(
                         "image-stack-error",
                         serde_json::json!({

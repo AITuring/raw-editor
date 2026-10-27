@@ -905,6 +905,29 @@ Local_Scale(p) = sqrt(|det J|)
 - Virtual_Tile 缓存命中路径（需求 4.5）若不恢复单元级证据，该判据按技术性不可测处理，不得
   静默跳过。
 
+#### QG-aligned Owner coherent regions（需求 11.18，2026-10-24 用户批准 Option B）
+
+Owner 求解器可以复用 Quality_Gate **已公开且固定**的候选格点公式，但不能消费 Quality_Gate 的输出：
+
+1. 在当前 final canvas 局部坐标中枚举 `roi_x, roi_y ∈ {0, 256, 512, ...}`；只保留完整
+   `512×512` ROI 及其四边外 `16px` ring，因此 owner footprint 是 `544×544`，左上角为
+   `(roi_x − 16, roi_y − 16)`。不再为并不存在的任意 ROI phase 追加 255px，旧 799px span 只保留为
+   历史 test-only 对照。
+2. origin 只由当前 Coverage、每个真实 Source_RAW 的 source coverage 和当前低频 content-connected
+   component 产生。每个 544px footprint 在 exact final-pixel / station-cell sparse runs 上重新验证；
+   中心点、角点或 coarse cell 只能提出候选，不能证明候选有效。
+3. exact run key 包含 station/source provenance、station ownership cell、production `f32` sharpness bits、
+   quantized shortfall/disagreement、data/pairwise contribution、Coverage 与 seam membership。Source_RAW
+   sample coordinate 对每个 final pixel 单独保留。候选标签仍是一像素一个真实 Source_RAW，不混合、
+   feather、fill 或改变 Textured_Pixel 分母。
+4. reduced B&B 要求至少 8 个互不重叠的实际 544px footprints，同时优化 exact owner numerator、data、
+   coherence 与 seam cost；资源不足、不可行或 post-validation 失败时确定性回退到当前 owner。
+5. 防 gaming 边界：模块不得引用 `select_sparse_rois`、Quality_Gate 已选 ROI、旧报告/verdict、fixture
+   identity/name、保留坐标或硬编码 owner。solver 报告中的 selected regions 不是验收证据。输出完成后，
+   Quality_Gate 必须按需求 11.1 独立重新枚举和抽样，并按全部原阈值判定。
+6. source/order/world translation 与 1/2/8/16 threads 必须产生相同 labels、regions 与报告；测试同时断言
+   格点满足 `(footprint_origin + 16) mod 256 = 0`、side=544，以及上一条禁止依赖。
+
 #### 不可测量与证据不足（需求 11.13/11.14）
 
 - 不可测量项既不计通过也不计失败，记录判据名称、世界坐标位置、原因标识符与原因类别：

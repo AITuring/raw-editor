@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "rootEnvironment": "RAW_EDITOR_FOCUS_STACK_DATA_ROOT",
+  "defaultRoot": "/Users/dp/Downloads/书画拼图",
+  "datasets": [
+    {
+      "id": "lanting",
+      "label": "兰亭",
+      "directory": "兰亭",
+      "sourceExtensions": [".jpg", ".jpeg"],
+      "excludePatterns": ["*_FocusStack*.jpg", "褚摹兰亭-比较满意版.jpg"],
+      "expectedSourceCount": 45,
+      "sourceBytes": 553287579,
+      "sourceAggregateSha256": "3d4c7d49e5caee948bb59dc55ab64bf92b5965f2cdebd88dc3b158af88b9f167",
+      "baseline": true,
+      "referenceOutput": "DSC08854_FocusStack.jpg",
+      "referenceAliases": ["DSC08854_FocusStack1.jpg"],
+      "referenceBytes": 150622610,
+      "referenceSha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+      "referenceDimensions": { "width": 31065, "height": 11007 }
+    },
+    {
+      "id": "langyuan",
+      "label": "阆苑女仙",
+      "directory": "阆苑女仙",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 84,
+      "sourceBytes": 5011254251,
+      "sourceAggregateSha256": "e0ba1b71572ec365f8e753e5c6d2bf0d7a77d5031748fc543923ba000838f4cd",
+      "baseline": false,
+      "referenceOutput": "DSC_3762_FocusStack.jpg"
+    },
+    {
+      "id": "wenyuan",
+      "label": "文苑图",
+      "directory": "文苑图",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 126,
+      "sourceBytes": 6985740554,
+      "sourceAggregateSha256": "eb76658a20b23be187e1e195e3331141765b6f776f82d9e168bd3a07ab8bd722",
+      "baseline": false
+    },
+    {
+      "id": "zhang-haohao-2",
+      "label": "张好好2",
+      "directory": "张好好2",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 244,
+      "sourceBytes": 13630222757,
+      "sourceAggregateSha256": "d8d4be063ee9c9eeac439d2f752503279fefb16e15ff5fdd9636ae41387ca872",
+      "baseline": false
+    },
+    {
+      "id": "sleeping",
+      "label": "睡觉",
+      "directory": "睡觉",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 45,
+      "sourceBytes": 2560845422,
+      "sourceAggregateSha256": "459477eb2eeabfe410665d8aef98a554035f8201d179e64b47ddf30ebc17f39f",
+      "baseline": false
+    },
+    {
+      "id": "fengying-main",
+      "label": "枫鹰雉鸡",
+      "directory": "枫鹰雉鸡",
+      "sourceExtensions": [".arw"],
+      "excludePatterns": [],
+      "expectedSourceCount": 63,
+      "baseline": false
+    },
+    {
+      "id": "fengying-head",
+      "label": "枫鹰雉鸡 / toubu",
+      "directory": "枫鹰雉鸡/toubu",
+      "sourceExtensions": [".arw"],
+      "excludePatterns": [],
+      "expectedSourceCount": 17,
+      "baseline": false
+    },
+    {
+      "id": "fengying-bottom",
+      "label": "枫鹰雉鸡 / 枫鹰底部",
+      "directory": "枫鹰雉鸡/枫鹰底部",
+      "sourceExtensions": [".arw", ".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 24,
+      "baseline": false
+    }
+  ]
+}

@@ -27,6 +27,7 @@
     "export-dialog:check": "node tests/export-dialog-contract.mjs",
     "image-stack-preview:check": "node tests/image-stack-preview-contract.mjs",
     "focus-stack-quality:check": "node tests/focus-stack-quality-contract.mjs",
+    "focus-stack-datasets:check": "node tests/focus-stack-datasets-contract.mjs",
     "local-only:check": "node tests/local-only-boundary.mjs",
     "preview-transport:check": "node tests/preview-transport-boundary.mjs",
     "preview-resolution:check": "node tests/preview-resolution.mjs",
@@ -54,7 +55,8 @@
     "i18n:language-check": "node src/i18n/check-language-resolution.mjs",
     "i18n:runtime-check": "node src/i18n/check-runtime.mjs",
     "i18n:lint": "i18next-cli lint",
-    "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_acceptance_harness -- --exact --ignored --nocapture"
+    "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_acceptance_harness -- --exact --ignored --nocapture",
+    "stack-pair-evidence:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_station_pair_evidence_harness -- --exact --ignored --nocapture"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

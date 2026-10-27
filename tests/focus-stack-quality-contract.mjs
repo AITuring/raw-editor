@@ -22,6 +22,8 @@ const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
 const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
 const tone = read(`${stackPipelineDir}/tone.rs`);
 const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
+const qualityGateRunner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
+const testSupport = read(`${stackPipelineDir}/test_support.rs`);
 
 // Revised 2026-09-29 evidence policy: content-inapplicable observations are
 // kept separate from technical failures, and a criterion can be explicitly
@@ -134,8 +136,34 @@ for (const criterion of [
 }
 assert.match(qualityGate, /detect_lines\(/, 'MTF50 must use imageproc Hough');
 assert.match(qualityGate, /acutance_with_step\(/, 'gradient energy must reuse mosaic acutance');
+assert.match(
+  qualityGateRunner,
+  /fn gradient_energy_ratio\([\s\S]*?normalized_gradient_energy\(output, local_scale\)[\s\S]*?normalized_gradient_energy\(reference, local_scale\)/,
+  'output and the already aligned Source_RAW reference must use the same local scale',
+);
 assert.match(qualityGate, /delta_e00_rgb\(/, 'Delta_E00 must use the canonical tone helper');
 assert.doesNotMatch(qualityGate, /std::env::var/, 'Quality_Gate must not read environment switches');
+assert.match(
+  qualityGateRunner,
+  /FIXED_CROSS_SECTION_RADIUS_PX: i32 = 2;/,
+  'boundary stroke sampling must retain the safe fixed cross-section radius',
+);
+assert.doesNotMatch(
+  qualityGateRunner,
+  /for offset in -16\.\.=16/,
+  'the rejected wide wrong-edge sampler must not return',
+);
+for (const [name, value] of [
+  ['STROKE_MATCH_CONTRAST_MIN', '0.15'],
+  ['STROKE_MATCH_UNIQUENESS_RATIO_MAX', '0.80'],
+  ['STROKE_MATCH_CLOSURE_MAX_PX', '1.0'],
+]) {
+  assert.match(
+    stitching,
+    new RegExp(`const ${name}: f64 = ${value.replace('.', '\\.')};`),
+    `${name} must remain explicit in the test-only station correspondence diagnostic`,
+  );
+}
 
 // Stage 5 photometric defaults are part of the quality contract.  Keep these
 // source-level assertions dependency-free so changing an exposure bound cannot
@@ -147,6 +175,41 @@ assert.match(photometric, /max_sample_value:\s*0\.98/);
 assert.match(photometric, /max_abs_log_gain:\s*1\.25_f64\.ln\(\)/);
 assert.match(photometric, /allow_linear:\s*false/);
 assert.doesNotMatch(tone, /std::env::var/, 'Tone_Harmonizer must not read environment switches');
+assert.match(
+  tone,
+  /const TONE_SPATIAL_FIELD_ENABLED: bool = false;/,
+  'the rejected spatial field must remain disabled in production',
+);
+assert.match(
+  tone,
+  /#\[cfg\(test\)\][\s\S]{0,120}pub\(crate\) struct ToneOwnerOracleSnapshot/,
+  'owner Source_RAW oracle state must remain test-only',
+);
+assert.match(
+  testSupport,
+  /tone_owner_fidelity_dir[\s\S]{0,160}RAW_EDITOR_TONE_OWNER_FIDELITY_DIR/,
+  'the owner-fidelity destination must be isolated in cfg(test) support',
+);
+assert.match(
+  qualityGateRunner,
+  /write_tone_owner_fidelity_oracle\(input, &rois, load_source\)/,
+  'owner fidelity must consume current-run Quality Gate ROIs directly',
+);
+assert.match(
+  qualityGateRunner,
+  /collect_tone_owner_evidence[\s\S]*?source_roi_with_native\([\s\S]*?source_info\.native_warp\.as_ref\(\)/,
+  'owner fidelity must reuse the production inverse mapping and source sampler',
+);
+assert.match(
+  qualityGateRunner,
+  /owner_holdout_disjoint_from_fit/,
+  'owner holdout reports must expose fit disjointness',
+);
+assert.match(
+  qualityGateRunner,
+  /previous_quality_gate_results_read": false/,
+  'owner fidelity must explicitly prohibit previous-run ROI evidence',
+);
 for (const variable of [
   'RAW_EDITOR_ENABLE_GLOBAL_PHOTOMETRIC',
   'RAW_EDITOR_ENABLE_SPATIAL_TILE_EXPOSURE_GAIN',
@@ -251,6 +314,231 @@ assert.match(
 assert.ok(
   !/detail_preserving_mosaic\(/.test(focusFuser),
   'the Focus_Fuser must reuse the decision primitives without the mosaic cell-wise local warp',
+);
+assert.match(
+  focusFuser,
+  /#\[cfg\(test\)\][\s\S]{0,200}RAW_EDITOR_FOCUS_DATA_TERM_ONLY[\s\S]{0,200}#\[cfg\(not\(test\)\)\]/,
+  'the data-term-only owner counterfactual must remain test-only and unavailable in production',
+);
+assert.match(
+  stitching,
+  /#\[cfg\(test\)\][\s\S]{0,120}const SCORE_NOISE_PHASE_OFFSETS/,
+  'registration-aligned score-noise phase counterfactuals must remain test-only',
+);
+assert.match(
+  stitching,
+  /RAW_EDITOR_FOCUS_SCORE_NOISE_DIAGNOSTICS_DIR/,
+  'the focused acceptance harness must expose score-noise artifacts',
+);
+assert.match(
+  stitching,
+  /production_window_px:\s*self\.plan\.window_px\(\)/,
+  'score-noise diagnostics must report the unchanged production sampling window',
+);
+assert.match(
+  stitching,
+  /winner_horizontal_run_cells[\s\S]*?winner_connected_region_cells[\s\S]*?production_owner_horizontal_run_cells/,
+  'score-noise diagnostics must distinguish sharpness-winner coherence from production-owner coherence',
+);
+assert.match(
+  stitching,
+  /attribution:\s*ScoreNoiseAttributionCounts[\s\S]*?signals:\s*ScoreNoiseAttributionCounts/,
+  'causal attribution must remain distinct from overlapping score-noise signals',
+);
+const ownerOracle = read('src-tauri/src/panorama_utils/owner_quality_oracle.rs');
+const finalWorldOwnerOracle = read('src-tauri/src/panorama_utils/final_world_owner_oracle.rs');
+assert.match(
+  stitching,
+  /#\[cfg\(test\)\]\s*#\[path = "owner_quality_oracle\.rs"\]/,
+  'the constrained owner-quality oracle must remain test-only',
+);
+assert.match(
+  ownerOracle,
+  /roi_options_overlap\([\s\S]*?selected_options_are_distinct/,
+  'overlapping ROI candidates must not count as distinct oracle evidence',
+);
+assert.match(
+  ownerOracle,
+  /relaxation_lower_bound[\s\S]*?safely_conservative_coverage_upper_bound/,
+  'oracle feasibility claims must retain an independent conservative bound',
+);
+assert.match(
+  ownerOracle,
+  /relaxation_upper_bound_never_understates_bruteforce_optimum/,
+  'the relaxation bound must remain checked against brute force',
+);
+assert.doesNotMatch(
+  ownerOracle,
+  /DSC_\d+|阆苑|Langyuan/i,
+  'oracle selection must not hardcode fixture names or ROI positions',
+);
+assert.match(
+  panorama,
+  /#\[cfg\(test\)\][\s\S]{0,160}RAW_EDITOR_FOCUS_FINAL_ROI_MAPPING_DIR/,
+  'final-coordinate ROI mapping must remain test-only',
+);
+assert.match(
+  focusFuser,
+  /#\[cfg\(test\)\][\s\S]{0,120}forced_owners/,
+  'oracle labeling replay must remain absent from production builds',
+);
+assert.match(
+  stitching,
+  /#\[cfg\(test\)\]\s*#\[path = "final_world_owner_oracle\.rs"\]/,
+  'the final-world Source_RAW optimizer must remain test-only until a real dataset passes Phase 1',
+);
+assert.doesNotMatch(
+  finalWorldOwnerOracle,
+  /select_sparse_rois|QualityGateReport|DSC_\d+|阆苑|文苑|Langyuan|Wenyuan|previous[_ -]quality/i,
+  'final-world candidates must not consume Quality-Gate lists, prior reports, or fixture identity',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /fn source_component_map[\s\S]*?VecDeque[\s\S]*?sample\.flat/,
+  'final-world coherent regions must originate in current source masks and content components',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /fn protected_span_px[\s\S]*?evidence_span_px[\s\S]*?sampling_phase_px/,
+  'region support must include the formal ROI ring and every sampling phase',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /compose_station_cells[\s\S]*?selected_by_compositor[\s\S]*?production_station/,
+  'station overlap must be composed in the final-world domain before source optimization',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /sample\.station != input\.cells\[index\]\.production_station[\s\S]*?sample\.seam_cost > current\.seam_cost/,
+  'a source region may not cross a worse accepted RGB\/stroke station boundary',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /fn relaxation_lower_bound\([\s\S]*?fn reduced_exact\([\s\S]*?fn visit\(/,
+  'final-world feasibility needs reduced branch-and-bound plus an independent relaxation bound',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /struct ExactRun[\s\S]*?source_samples:[\s\S]*?fn aggregate_exact_runs/,
+  'final-world evidence must retain exact per-pixel provenance in sparse runs',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /fn exact_run_stats[\s\S]*?production_shortfall[\s\S]*?candidate\.shortfall/,
+  'current and arbitrary labels must use the same quantized owner-shortfall evidence',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /fn solve_exact_regions[\s\S]*?REDUCED_OPTION_LIMIT:\s*usize = 512[\s\S]*?exact_regions_overlap[\s\S]*?fn visit\(/,
+  'generic content proposals must be revalidated and solved with exact run costs',
+);
+assert.match(
+  stitching,
+  /aggregate_exact_runs[\s\S]*?exact_run_stats[\s\S]*?exact owner prediction\/replay mismatch/,
+  'the test adapter must require zero-pixel disagreement between prediction and replay',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /qg_aligned_region_grid[\s\S]*?evidence_span_px\(\)[\s\S]*?origin_start[\s\S]*?phase_cells - margin_cells/,
+  'approved owner candidates must use 544px evidence footprints aligned to the fixed 256px QG grid',
+);
+assert.match(
+  finalWorldOwnerOracle,
+  /Every admissible labeling must pay[\s\S]*?outside those regions to zero[\s\S]*?safe global coverage upper bound/,
+  'the exact Pareto bound must remain optimistic rather than exclude a feasible owner labeling',
+);
+assert.doesNotMatch(
+  stitching,
+  /RAW_EDITOR_FOCUS_FINAL_WORLD_OWNER[^\n]{0,120}(select_sparse_rois|QualityGateReport|DSC_\d+)/i,
+  'the owner solver must not consume selected Quality-Gate ROIs, reports, or fixture names',
+);
+assert.match(
+  stitching,
+  /boundary_change_pixels[\s\S]*?on_region_boundary[\s\S]*?evaluation\.boundary_change_pixels != 0/,
+  'QG-aligned owner regions must reject any new outer source boundary rather than game ROI cardinality',
+);
+for (const property of [
+  'candidate_origins_come_only_from_coverage_and_content_components',
+  'source_order_permutation_world_translation_and_thread_counts_are_deterministic',
+  'disconnected_overlap_and_fake_regions_cannot_satisfy_cardinality',
+  'labels_always_retain_one_real_source_and_exact_coordinates',
+  'final_station_overlap_composition_uses_selected_station_but_keeps_all_candidates',
+  'accepted_seam_cost_rejects_a_sharper_region_that_worsens_strokes',
+  'small_grid_optimum_and_relaxation_bound_match_independent_bruteforce',
+  'feasible_and_impossible_sharpness_cases_are_reported_without_overstatement',
+  'exact_runs_aggregate_to_bruteforce_owner_metric_for_current_and_arbitrary_labels',
+  'exact_runs_split_at_station_transform_coverage_and_quantization_boundaries',
+  'exact_runs_preserve_source_provenance_station_seam_and_order_determinism',
+  'exact_region_relaxation_never_understates_bruteforce_coverage_bound',
+  'approved_qg_aligned_regions_use_544px_footprints_on_the_fixed_256px_grid',
+]) {
+  assert.ok(finalWorldOwnerOracle.includes(`fn ${property}`), `missing final-world oracle proof: ${property}`);
+}
+
+assert.match(
+  focusFuser,
+  /CONTENT_OWNER_REGION_SPAN_PX[\s\S]*?QUALITY_ROI_SIDE[\s\S]*?QUALITY_ROI_MARGIN[\s\S]*?QUALITY_ROI_SIDE \/ 2/,
+  'content regions must protect the exact ROI/ring plus every 256px lattice phase',
+);
+assert.match(
+  focusFuser,
+  /fn content_region_candidates\([\s\S]*?fully_covered[\s\S]*?flat[\s\S]*?component_sizes/,
+  'diagnostic ownership candidates must come from exact source masks and flat connected components',
+);
+assert.match(
+  focusFuser,
+  /fn select_content_regions\([\s\S]*?REDUCED_OPTION_LIMIT[\s\S]*?fn visit\(/,
+  'diagnostic content ownership must use deterministic reduced branch-and-bound',
+);
+assert.match(
+  focusFuser,
+  /#\[cfg\(test\)\]\s*pub\(crate\) const CONTENT_OWNER_REGION_TARGET/,
+  'failed content-region production behavior must remain test-only',
+);
+assert.match(
+  focusFuser,
+  /regions_overlap\([\s\S]*?select_content_regions/,
+  'overlapping content regions must not satisfy diagnostic cardinality',
+);
+assert.match(
+  focusFuser,
+  /fn coherent_decisive_cells\([\s\S]*?MINIMUM_COHERENT_CELLS:\s*usize = 4[\s\S]*?OWNER_SHARPNESS_SHORTFALL_MAX[\s\S]*?mismatch_penalty/,
+  'non-flat ownership overrides must require a connected region, the unchanged shortfall limit, and no mismatch veto',
+);
+assert.match(
+  focusFuser,
+  /fn coherent_base_cells\([\s\S]*?MINIMUM_COHERENT_CELLS:\s*usize = 4[\s\S]*?OWNER_SHARPNESS_SHORTFALL_MAX/,
+  'graph cut must not coherently replace an already sharper real owner with a materially softer source',
+);
+assert.doesNotMatch(
+  focusFuser,
+  /select_sparse_rois|RAW_EDITOR_FOCUS_OWNER_QUALITY_LABEL_DIR|DSC_\d+|阆苑|Langyuan/i,
+  'production ownership optimization must not read Quality Gate lists, replay labels, or fixture identities',
+);
+assert.doesNotMatch(
+  stitching,
+  /#\[cfg\(test\)\][\s\S]{0,80}fn station_seam_edge_misalignment/,
+  'retained boundary alignment evidence must be compiled into the production compositor',
+);
+assert.match(
+  stitching,
+  /build_station_seam_plans[\s\S]*?station_seam_world_gradient[\s\S]*?seam_candidate_cost_with_alignment/,
+  'the production seam adapter must combine final-world gradient alignment with the shared seam cost',
+);
+assert.match(
+  stitching,
+  /current_seam_penalty[\s\S]*?32\.0[\s\S]*?desired_owner/,
+  'station seam application must stay local to the existing hard ownership boundary',
+);
+assert.match(
+  stitching,
+  /current_seam_penalty[\s\S]*?32\.0[\s\S]*?desired_owner/,
+  'station seam application must stay local to the existing hard ownership boundary',
+);
+assert.match(
+  stitching,
+  /station_boundary_term_rejects_a_cheaper_misaligned_stroke_seam/,
+  'boundary protection needs a regression where alignment defeats a lower colour cost',
 );
 
 assert.match(mosaic, /fn acutance\s*\(/, 'source ownership must measure native-resolution acutance');
@@ -389,7 +677,7 @@ assert.match(
 );
 assert.match(
   panorama,
-  /solve_virtual_tile_station_poses_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
+  /solve_virtual_tile_station_(?:hypotheses|poses)_with_report\([\s\S]*?station_relations[\s\S]*?tile_homographies = solved;[\s\S]*?stitching::layered_virtual_tile_compositor(?:_with_ownership)?\(/,
   'the default path must publish authoritative fused-tile relations and poses before composition',
 );
 assert.match(
@@ -487,6 +775,73 @@ assert.equal(stationRelationMinInliers, 24, 'a Station_Relation requires at leas
 assert.equal(stationRelationMaxMedianError, 3.0, 'relation error is an absolute 3px world-space gate');
 assert.equal(stationRelationScaleMin, 0.95, 'relation scale must not fall below approved Requirement 6.3');
 assert.equal(stationRelationScaleMax, 1.05, 'relation scale must not exceed approved Requirement 6.3');
+
+// Prior-free global coverage proposals may search for a basin in production,
+// but they are not relation evidence until the shared Station_Relation selector
+// accepts the measured hypothesis.
+const productionRelationStart = panorama.indexOf('let (mut tile_relations, mut tile_relation_candidates) =');
+const productionRelationEnd = panorama.indexOf('let station_tile_to_world = tile_infos', productionRelationStart + 1);
+assert.ok(
+  productionRelationStart >= 0 && productionRelationEnd > productionRelationStart,
+  'production relation orchestration must remain inspectable',
+);
+const productionRelationOrchestration = panorama.slice(productionRelationStart, productionRelationEnd);
+const globalProposalStart = productionRelationOrchestration.indexOf('if !feature_relation_passed {');
+assert.ok(globalProposalStart >= 0, 'global coverage fallback must run only after the prior-free feature seed fails');
+const globalProposalBlock = productionRelationOrchestration.slice(globalProposalStart);
+assert.match(
+  globalProposalBlock,
+  /virtual_tile_global_similarity_proposals/,
+  'global coverage proposals must remain available as bounded prior-free search seeds',
+);
+assert.match(
+  globalProposalBlock,
+  /VIRTUAL_TILE_SEED_GLOBAL_COVERAGE/,
+  'global coverage proposals must be tagged as proposal-only evidence',
+);
+const globalGate = globalProposalBlock.indexOf('selection.filter(|selection| selection.passes)');
+const globalRelationInsert = globalProposalBlock.search(/tile_relations\s*\.entry\(\(left, right\)\)/);
+assert.ok(
+  globalGate >= 0 && globalRelationInsert > globalGate,
+  'global proposals must enter the authoritative graph only after the full selector passes',
+);
+assert.match(
+  globalProposalBlock,
+  /selection\.filter\(\|selection\| selection\.passes\)[\s\S]*?tile_relations\s*\.entry\(\(left, right\)\)[\s\S]*?proposals\.push\(/,
+  'global proposals must be inserted only as measured hypotheses after the selector gate',
+);
+
+// Independently measured Source_RAW relations may provide a better search
+// basin for a displaced station pair, but they follow the same evidence path
+// as the global fallback: the measured Virtual_Tile hypothesis must pass the
+// shared selector before it can enter the authoritative graph.
+const sourceProposalStart = productionRelationOrchestration.indexOf('let source_seeds =');
+const sourceProposalEnd = productionRelationOrchestration.indexOf(
+  '// A prior-free feature or source-pair seed can still',
+  sourceProposalStart,
+);
+assert.ok(
+  sourceProposalStart >= 0 && sourceProposalEnd > sourceProposalStart,
+  'source-pair search seeds must remain inspectable in production orchestration',
+);
+const sourceProposalBlock = productionRelationOrchestration.slice(sourceProposalStart, sourceProposalEnd);
+assert.match(
+  sourceProposalBlock,
+  /virtual_tile_source_match_proposals/,
+  'independent Source_RAW relations must be available as bounded station-search seeds',
+);
+assert.match(
+  sourceProposalBlock,
+  /VIRTUAL_TILE_SEED_SOURCE_MATCH/,
+  'source-pair seeds must be tagged as proposal-only evidence',
+);
+const sourceGate = sourceProposalBlock.indexOf('selection.filter(|selection| selection.passes)');
+const sourceRelationInsert = sourceProposalBlock.search(/tile_relations\s*\.entry\(\(left, right\)\)/);
+assert.ok(
+  sourceGate >= 0 && sourceRelationInsert > sourceGate,
+  'source-pair proposals must enter the authoritative graph only after the full selector passes',
+);
+
 const relationGateStart = panorama.indexOf('fn station_relation_rejection_reasons(');
 assert.ok(relationGateStart >= 0, 'production relation acceptance must remain inspectable');
 const relationGateEnd = panorama.indexOf('\n}\n', relationGateStart);

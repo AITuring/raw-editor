@@ -193,17 +193,31 @@ pub(crate) fn is_canvas_rejection(error: &str) -> bool {
 /// Add the coverage-boundary term from the Tile_Compositor seam objective.
 /// Overlap disagreement and the boundary penalty share one cost unit, so a
 /// candidate inside the 16-pixel boundary band always pays at least 1.0.
-#[cfg(test)]
+///
+/// The function is intentionally pure so the production seam adapter and the
+/// exhaustive property oracle use exactly the same cost contract.
 pub(crate) fn seam_candidate_cost(overlap_disagreement: f64, boundary_distance: f64) -> f64 {
     overlap_disagreement.max(0.0)
         + f64::from((boundary_distance.is_finite() && boundary_distance < 16.0) as u8)
+}
+
+/// Add current-overlap edge alignment to the station seam objective. The
+/// alignment value is content-derived and non-negative; an aligned edge keeps
+/// the existing cost exactly, while a seam through a missing or differently
+/// oriented stroke is more expensive even when its colour disagreement is
+/// deceptively small.
+pub(crate) fn seam_candidate_cost_with_alignment(
+    overlap_disagreement: f64,
+    boundary_distance: f64,
+    edge_misalignment: f64,
+) -> f64 {
+    seam_candidate_cost(overlap_disagreement, boundary_distance) + edge_misalignment.max(0.0)
 }
 
 /// Find the deterministic minimum-cost vertical seam in a row-major overlap
 /// grid.  A path contains one column per row and may move at most one column
 /// between adjacent rows.  This pure solver is shared by the production seam
 /// adapter and Property 53's exhaustive oracle.
-#[cfg(test)]
 pub(crate) fn minimum_vertical_seam(
     costs: &[f64],
     width: usize,
@@ -251,7 +265,6 @@ pub(crate) fn minimum_vertical_seam(
 /// seam is its geometric centre line.  The boolean identifies a vertical
 /// line; the returned coordinates are one cross-axis coordinate per along-axis
 /// row/column and are deterministic for even widths/heights.
-#[cfg(test)]
 pub(crate) fn narrow_overlap_centerline(width: usize, height: usize) -> Option<(bool, Vec<usize>)> {
     if width == 0 || height == 0 || width.max(height) >= 32 {
         return None;
@@ -463,6 +476,7 @@ mod tests {
                 station_id: 0,
             },
             dimensions: (qg_width, qg_height),
+            native_warp: None,
         };
         let residual = residual_warp::ResidualWarp::new();
         let sources = [source];
@@ -477,6 +491,7 @@ mod tests {
             unresolved_pixel_count: 0,
             world_origin: (0.0, 0.0),
             sources: &sources,
+            accepted_station_relations: &[],
             residual: &residual,
             acceptance_render_scale: 1.0,
             final_sharpen_amount: 0.0,
@@ -552,7 +567,7 @@ mod tests {
     #[test]
     fn layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile() {
         let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
-        use crate::panorama_stitching::ImageInfo;
+        use crate::panorama_utils::shared::ImageInfo;
         use crate::panorama_utils::stitching;
         // An 8 px tile placed at 40,000× spans 320,000 world pixels.
         let info = ImageInfo {

@@ -35,6 +35,40 @@ Regular CI covers:
 Large local acceptance runs may use `RAW_EDITOR_ACCEPTANCE_DIR` as a read-only fixture root. Tests must
 write generated output to a temporary directory, never beside source photographs.
 
+The focus-stack image sets under `/Users/dp/Downloads/书画拼图` are catalogued in
+[`focus-stack-datasets.json`](focus-stack-datasets.json). `兰亭` is the mandatory visual baseline: its
+45 source JPEGs exclude all derived `FocusStack` and Photoshop comparison files, and its existing
+`DSC08854_FocusStack.jpg` must keep its recorded dimensions, byte size, and SHA-256. The other folders
+are staged in increasing cost order for local replay; derived Photoshop files are reference material and
+are never treated as production inputs.
+
+Run the fast local dataset contract after every code change:
+
+```sh
+RAW_EDITOR_FOCUS_STACK_DATA_ROOT="/Users/dp/Downloads/书画拼图" \
+  npm run focus-stack-datasets:check -- --require-data
+```
+
+Add `--hash-inputs` when a stage changes source preparation, caching, decoding, or coordinate handling;
+this verifies the frozen aggregate digest for the catalogued source sets. The contract never writes beside
+the source images and never replaces the 兰亭 reference output.
+
+For any production behavior change, run the mandatory 兰亭 protection regression. It writes only to
+`/private/tmp`; the reference JPEG is read-only. Do not add `--exact` to the Rust filter because the test is
+nested under `panorama_stitching::acceptance_tests`.
+
+```sh
+LANTING_PATHS=$(find "/Users/dp/Downloads/书画拼图/兰亭" -maxdepth 1 -type f \
+  -iname 'DSC*.jpg' ! -iname '*FocusStack*' -print | sort | paste -sd: -)
+RAW_EDITOR_FOCUS_STACK_PATHS="$LANTING_PATHS" \
+RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG="/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg" \
+RAW_EDITOR_STACK_ACCEPTANCE_OUTPUT="/private/tmp/raw-editor-lanting-baseline.tiff" \
+RAW_EDITOR_STACK_REPORT_DIR="/private/tmp/raw-editor-lanting-stack-reports" \
+RAW_EDITOR_STACK_ACCEPTANCE_CROPS=1 CARGO_NET_OFFLINE=true \
+cargo test --release --manifest-path src-tauri/Cargo.toml --lib \
+  real_focus_stack_fixture_from_env -- --ignored --nocapture --test-threads=1
+```
+
 Run the real-RAW acceptance test explicitly:
 
 ```sh

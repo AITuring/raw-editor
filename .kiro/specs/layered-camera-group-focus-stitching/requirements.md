@@ -527,6 +527,20 @@
     测量项数量、不可测量测量项数量和最终判定结论。
 17. WHEN 同一组 Source_RAW 与同一组参数被重复运行，THE Quality_Gate SHALL 选取世界坐标与顺序完全
     相同的 ROI 集合，并输出相同的判定结论。
+18. WHEN Owner 求解需要建立可供 Quality_Gate 独立复核的 coherent regions，THE Owner 求解器 MAY 使用
+    **当前运行**中 Requirement 11.1 的固定确定性 ROI 网格生成或约束候选：ROI 边长保持 512 个原生像素、
+    stride 保持 256 个原生像素，并要求 ROI 四边外 16 个原生像素 ring 与 ROI 全部由同一个真实
+    Source_RAW 覆盖和拥有。候选必须仅从当前 Coverage_Mask、Source_RAW coverage、当前低频内容证据与该
+    固定网格产生；不得读取 Quality_Gate 已选 ROI 列表、上一轮 Quality_Gate 结果、旧 Stack_Report、
+    fixture identity/name，亦不得硬编码世界坐标或 owner。该许可取消的是候选对所有未知采样相位额外保留
+    255px 的要求，不改变 512px ROI、16px ring、256px stride、至少 8 个实际可测量项、单一 Source_RAW
+    provenance、`owner_sharpness_coverage >= 0.99` 或任何其它 Quality_Gate 阈值。Quality_Gate SHALL 在
+    owner 求解后按第 1–17 条重新独立生成 ROI 并 post-validate；Owner 求解候选不能直接计作通过证据。
+
+    说明（2026-10-24 用户批准的最小产品调整，Option B）：逐 final-pixel exact X1 已证明要求任意相位
+    799px protection 时 Wenyuan 的乐观 owner coverage 上界只有 `0.9867200611`。固定 QG 网格本身已是
+    Requirement 11.1 的确定性公开规则，允许 owner 求解器对齐该网格不会改变最终测量或阈值；上述来源
+    限制和独立 post-validation 防止通过读取 verdict、fixture 坐标或保留名单来 gaming Quality_Gate。
 
 ### Requirement 12: 失败与退化处理
 
@@ -653,3 +667,58 @@
     记录所选路径的稳定机器可读标识符。
 12. IF 第 5、第 6 或第 7 条中任一判据未满足，THEN THE Acceptance_Harness SHALL 把该次运行判定为失败，
     保留已产出的 Stack_Report，并在 Stack_Report 中记录未满足判据的稳定机器可读标识符、实测值和阈值。
+
+### Requirement 16: 双流数据、分块合成与金字塔输出
+
+**User Story:** 作为摄影师，我希望 50MP RAW 在有限内存下完成分析与输出，同时保留全分辨率像素、
+坐标、透明区域和可追溯性。
+
+#### Acceptance Criteria
+
+1. THE Stack_Pipeline SHALL 由 Rust 只读解码 Source_RAW，使用项目统一的 RAW、白平衡、线性 RGB32F
+   与 `color_encoding` 契约；每个 ProxyImage SHALL 记录源 SHA-256、尺寸、x/y 缩放、坐标系 ID 和
+   色彩编码到 Stack_Report，且 proxy↔full 坐标往返误差不超过 0.25 个全分辨率像素。
+2. THE Stack_Pipeline SHALL 为特征、几何、接缝和可选焦点对照生成统一 ProxyImage，默认长边不超过
+   2000 像素并允许按输入规模和内存门槛调整；不得以固定 4 倍缩放替代实际 x/y 比例，代理版本和
+   resize 参数 SHALL 参与缓存键和重复运行判定。
+3. THE FullRes_TileSource SHALL 按默认 4096×4096（可配置）目标 Tile 读取 Source_RAW，且只加载
+   与目标 Tile、变换范围和滤波 halo 相交的源块；Tile_Compositor 的输出 SHALL 与等价 whole-frame
+   参考在像素、Ownership_Map、Coverage_Mask、透明区域和输出 SHA 上一致。
+4. WHERE 双方 Coverage 有效且重叠宽度足够，THE Tile_Compositor SHALL 使用确定性的 GraphCut
+   max-flow/min-cut 接缝求解，代价至少包含 RGB 不一致、梯度/结构差异和 Coverage 边界惩罚；窄
+   重叠、超时或证据不足时 SHALL 使用记录了原因的中线/DP fallback。多波段过渡仅可作用于机位间
+   接缝，并 SHALL 保持机位内硬 ownership、高频 Source_RAW provenance 与 Coverage 语义。
+5. THE Stack_Pipeline SHALL 支持 BigTIFF、TileWidth/TileLength、SubIFD 或等价 overview，主图输出
+   SHALL 使用不少于 16-bit sRGB、嵌入 ICC，并按用户选择保留 alpha；实际位深、alpha、overview、
+   ICC 和结果标识 SHALL 写入 Stack_Report。
+6. THE Stack_Pipeline SHALL 先写同目录暂存文件并 fsync，再原子发布最终大图；取消、内存超限、编码
+   失败或 Quality_Gate 拒绝时不得残留部分 BigTIFF、overview 或最终结果文件，并 SHALL 保留
+   Stack_Report 与已允许的诊断产物。
+7. WHEN Tile 输出、缓存命中状态或线程数改变，THE Stack_Pipeline SHALL 保持输出尺寸、位深、
+   Ownership_Map、Coverage_Mask 和逐字节结果不变，并将 Tile 级资源、取消和失败信息写入报告。
+
+### Requirement 17: 可选 FeatureProvider 与 Python 运行时
+
+**User Story:** 作为算法开发者，我希望快速比较 SIFT/SuperPoint、ECC 和现有 Rust 算法，同时不让
+Python 运行时成为桌面产品的必要依赖。
+
+#### Acceptance Criteria
+
+1. THE Stack_Pipeline SHALL 定义稳定的 `FeatureProvider` 接口；Rust FAST/BRIEF provider SHALL 是
+   默认生产实现，可选 OpenCV SIFT/SuperPoint provider 仅接收代理图或代理特征，返回带坐标系、
+   尺度、描述子、匹配和置信度的紧凑 schema，不得逐像素调用 Python 或传递全分辨率数组。
+2. THE Stack_Pipeline SHALL 由 Rust 执行特征结果的有限值、数量、坐标范围、排序、RANSAC、单应性
+   验证、全局 BA 及尺度/方向/凸性门禁；Python provider 不能绕过这些校验。
+3. PyO3/maturin SHALL 只作为可选扩展或 sidecar，固定 Python、NumPy、OpenCV ABI/版本和打包清单。
+   Python 未安装、ABI 不兼容、启动失败、OpenCV 不可用、运行异常或取消时，系统 SHALL 记录稳定
+   的降级原因并回退 Rust provider；无 Python 时生产流程 SHALL 仍可完成。
+4. THE Stack_Pipeline SHALL 限制 OpenCV 线程与 Rayon worker 的总预算，记录跨语言显式拷贝字节数、
+   provider 版本、耗时、峰值 RSS 和降级状态；keypoint/descriptors/matches、随机种子、浮点归约
+   和输出 SHA SHALL 在 1/2/8/16 线程下保持可复现。
+5. WHERE 需要比较焦点算法，THE Stack_Pipeline SHALL 提供可选的代理分辨率 ECC Sim(2) 初始化、
+   Laplacian/EOL winner map 和 5 层 FocusPyramid 对照；对照结果必须继续通过原生 refinement、
+   Coverage、硬 ownership 和 Quality_Gate。低频加权或跨 owner 频带混合变为默认生产语义前，必须
+   先修订 Requirement 3.6、9.2、11.6 及其验收判据。
+6. THE Acceptance_Harness SHALL 在固定 proxy fixture 上比较 Rust 与可选 Python provider 的匹配
+   成功率、BA 重投影误差、接缝 P95、ΔE00、owner coverage、峰值 RSS、耗时和输出 SHA；未达到
+   明确收益时 SHALL 保持 Rust provider 为默认路径。

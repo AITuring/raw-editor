@@ -208,8 +208,12 @@ pub const SLANTED_EDGE_CONTRAST_INSUFFICIENT: &str = "slanted_edge_contrast_insu
 pub const SLANTED_EDGE_ANGLE_OUT_OF_RANGE: &str = "slanted_edge_angle_out_of_range";
 /// Boundary sampling found no edge on one or both sides.
 pub const BOUNDARY_LOW_CONTRAST: &str = "boundary_low_contrast";
+/// Multiple similarly strong edges prevent a unique cross-seam stroke pairing.
+pub const BOUNDARY_STROKE_NOT_UNIQUE: &str = "boundary_stroke_not_unique";
 /// Boundary edges were found but their orientations disagree.
 pub const BOUNDARY_ORIENTATION_MISMATCH: &str = "boundary_orientation_mismatch";
+/// A covered owner transition could not be tied to accepted station/source provenance.
+pub const BOUNDARY_PROVENANCE_UNAVAILABLE: &str = "boundary_provenance_unavailable";
 
 /// Severity of a degradation entry. `Rejected` means the run must not write a
 /// final result file; `Degraded` means the run continues with reduced evidence;
@@ -496,7 +500,9 @@ pub const UNMEASURABLE_REASONS: &[&str] = &[
     SLANTED_EDGE_CONTRAST_INSUFFICIENT,
     SLANTED_EDGE_ANGLE_OUT_OF_RANGE,
     BOUNDARY_LOW_CONTRAST,
+    BOUNDARY_STROKE_NOT_UNIQUE,
     BOUNDARY_ORIENTATION_MISMATCH,
+    BOUNDARY_PROVENANCE_UNAVAILABLE,
 ];
 
 /// Maximum identifier length allowed by requirement 12.7.
@@ -621,6 +627,80 @@ impl DegradationLedger {
         } else {
             RunResult::Success
         }
+    }
+
+    /// Return the compact, human-readable Quality_Gate failure context that
+    /// callers can attach to a rejected export error.  The machine-readable
+    /// copy remains in Stack_Report; this summary keeps the caller message
+    /// actionable by naming every failed criterion and its recorded ROI world
+    /// coordinates without dumping the complete report.
+    pub(crate) fn quality_gate_rejection_detail(&self) -> Option<String> {
+        let mut sections = Vec::new();
+        for entry in self.entries.iter().filter(|entry| {
+            matches!(
+                entry.reason,
+                QUALITY_GATE_CRITERION_FAILED | QUALITY_GATE_INSUFFICIENT_EVIDENCE
+            )
+        }) {
+            let Some(criteria) = entry.detail.get("criteria").and_then(Value::as_array) else {
+                continue;
+            };
+            for criterion in criteria {
+                let Some(name) = criterion.get("name").and_then(Value::as_str) else {
+                    continue;
+                };
+                let verdict = criterion
+                    .get("verdict")
+                    .and_then(Value::as_str)
+                    .unwrap_or("failed");
+                let mut locations = Vec::new();
+                if let Some(failed) = criterion.get("failed").and_then(Value::as_array) {
+                    for item in failed {
+                        let Some(world) = item.get("world") else {
+                            continue;
+                        };
+                        let (Some(x), Some(y)) = (
+                            world.get("x").and_then(Value::as_f64),
+                            world.get("y").and_then(Value::as_f64),
+                        ) else {
+                            continue;
+                        };
+                        locations.push(format!("({x:.2},{y:.2})"));
+                    }
+                }
+                if locations.is_empty()
+                    && let Some(unmeasurable) =
+                        entry.detail.get("unmeasurable").and_then(Value::as_array)
+                {
+                    for item in unmeasurable
+                        .iter()
+                        .filter(|item| item.get("criterion").and_then(Value::as_str) == Some(name))
+                    {
+                        let Some(world) = item.get("world") else {
+                            continue;
+                        };
+                        let (Some(x), Some(y)) = (
+                            world.get("x").and_then(Value::as_f64),
+                            world.get("y").and_then(Value::as_f64),
+                        ) else {
+                            continue;
+                        };
+                        locations.push(format!("({x:.2},{y:.2})"));
+                    }
+                }
+                if locations.is_empty() {
+                    sections.push(format!(
+                        "{name} [{verdict}; ROI world coordinates unavailable]"
+                    ));
+                } else {
+                    sections.push(format!(
+                        "{name} [{verdict}; ROI world coordinates: {}]",
+                        locations.join(", ")
+                    ));
+                }
+            }
+        }
+        (!sections.is_empty()).then(|| sections.join("; "))
     }
 
     pub fn clear(&mut self) {
@@ -818,6 +898,31 @@ mod tests {
             seen.len(),
             FAILURE_REASONS.len() + UNMEASURABLE_REASONS.len()
         );
+    }
+
+    #[test]
+    fn quality_gate_rejection_detail_lists_failed_criteria_and_world_coordinates() {
+        let mut ledger = DegradationLedger::new();
+        ledger.record(
+            QUALITY_GATE_CRITERION_FAILED,
+            json!({
+                "criteria": [{
+                    "name": "owner_sharpness_coverage",
+                    "verdict": "fail",
+                    "failed": [{
+                        "world": {"x": 1171.5, "y": 6923.0},
+                        "measured": 2.0,
+                        "owner_path": "5/8"
+                    }]
+                }]
+            }),
+        );
+
+        let detail = ledger
+            .quality_gate_rejection_detail()
+            .expect("Quality_Gate failure should be actionable");
+        assert!(detail.contains("owner_sharpness_coverage"));
+        assert!(detail.contains("(1171.50,6923.00)"));
     }
 
     #[test]

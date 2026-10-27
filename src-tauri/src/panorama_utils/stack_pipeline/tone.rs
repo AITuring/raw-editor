@@ -45,6 +45,17 @@ pub(crate) const TONE_CELL_PARTIAL: u8 = 128;
 /// Huber scale floor of its residual (the values of `photometric.rs`).
 const TONE_RELATION_SCATTER_SCALE: f64 = 0.04;
 const TONE_RELATION_HUBER_LOG: f64 = 0.025;
+/// The spatial residual experiment passed its overlap holdout but regressed
+/// independent output-to-source ROI Delta-E on Wenyuan, so it must not enter
+/// the production correction path.
+const TONE_SPATIAL_FIELD_ENABLED: bool = false;
+
+#[cfg(test)]
+pub(crate) const fn production_spatial_field_enabled() -> bool {
+    TONE_SPATIAL_FIELD_ENABLED
+}
+/// Fixed deterministic iterations used only while evaluating that experiment.
+const TONE_SPATIAL_ITERATIONS: usize = 4;
 
 // Tone solving is reached from the compositor's free functions, which do not
 // carry a mutable Stack_Report reference.  Keep the same run-scoped sink used
@@ -66,6 +77,19 @@ pub(crate) struct ToneStationTopology {
     pub(crate) stations: Vec<(usize, usize)>,
     /// Accepted Station_Relations as `ImageInfo::id` pairs.
     pub(crate) accepted: Vec<(usize, usize)>,
+    /// Locally measured, gate-passing adjacent station pairs that were
+    /// removed by the global closure graph. These pairs are eligible for the
+    /// ownership seam solver only; they are deliberately excluded from tone
+    /// evidence and from the authoritative pose graph.
+    pub(crate) seam_candidates: Vec<(usize, usize)>,
+    /// Locally fitted source-to-target transforms for adjacent station pairs.
+    /// This includes `seam_candidates` and may include accepted pairs whose
+    /// seam-only refinement was explicitly requested by the compositor. The
+    /// transforms never become tone evidence or pose-graph constraints.
+    /// Matrices are stored as row-major IEEE-754 bits so this run-scoped
+    /// topology remains deterministic and can keep its `Eq` contract without
+    /// putting raw `f64` values in the public snapshot.
+    pub(crate) seam_candidate_transforms: Vec<(usize, usize, [u64; 9])>,
 }
 
 impl ToneStationTopology {
@@ -384,6 +408,7 @@ pub(crate) fn consistent_samples(samples: &[ToneSample]) -> Vec<ToneSample> {
 
 /// One accepted pair's multiplicative tone relation. `first` is the owner side
 /// and `second` the source side of every retained sample.
+#[derive(Clone)]
 struct ToneRelation {
     first: usize,
     second: usize,
@@ -793,6 +818,11 @@ pub(crate) fn delta_e00_rgb(left: [f32; 3], right: [f32; 3]) -> f64 {
     ciede2000(rgb_to_lab(left), rgb_to_lab(right))
 }
 
+#[cfg(test)]
+pub(crate) fn diagnostic_lab_rgb(rgb: [f32; 3]) -> [f64; 3] {
+    rgb_to_lab(rgb)
+}
+
 #[derive(Clone, Copy)]
 struct ToneTransform {
     /// Applied (bounded) correction `corrected = gain · value + offset`.
@@ -816,6 +846,628 @@ impl ToneTransform {
         clamped: false,
         supported: false,
     };
+}
+
+#[derive(Clone)]
+struct ToneSpatialField {
+    log_gain: Rgb32FImage,
+    validity: GrayImage,
+    world_origin: (f64, f64),
+    world_stride: f64,
+}
+
+#[derive(Clone, Copy, Default)]
+struct ToneHoldoutGate {
+    samples: usize,
+    before_median: f64,
+    before_p95: f64,
+    after_median: f64,
+    after_p95: f64,
+    applied: bool,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+struct ToneOracleBoundaryWindow {
+    key: (usize, usize, u32, u32),
+    baseline_first_sum: [f64; 3],
+    baseline_second_sum: [f64; 3],
+    field_first_delta_sum: [f64; 3],
+    field_second_delta_sum: [f64; 3],
+    samples: u64,
+}
+
+/// Test-only current-run state consumed by the Quality Gate owner-RAW oracle.
+/// It contains no fixture coordinates or previous-run report data.
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct ToneOwnerOracleSnapshot {
+    baseline: Rgb32FImage,
+    owners: Vec<u16>,
+    tiles: Vec<ToneTile>,
+    relations: Vec<ToneRelation>,
+    transforms: Vec<ToneTransform>,
+    fields: Vec<ToneSpatialField>,
+    fit_cells: std::collections::BTreeSet<(i64, i64)>,
+    overlap_cells: std::collections::BTreeSet<(i64, i64)>,
+    boundaries: Vec<ToneOracleBoundaryWindow>,
+    world_origin: (f64, f64),
+}
+
+#[cfg(test)]
+static TONE_OWNER_ORACLE_SNAPSHOT: Mutex<Option<ToneOwnerOracleSnapshot>> = Mutex::new(None);
+
+#[cfg(test)]
+impl ToneOwnerOracleSnapshot {
+    fn shared_cell(&self, world_x: f64, world_y: f64) -> Option<(i64, i64)> {
+        let field = self.fields.first()?;
+        if !field.world_stride.is_finite() || field.world_stride <= 0.0 {
+            return None;
+        }
+        Some((
+            ((world_x - field.world_origin.0) / field.world_stride).floor() as i64,
+            ((world_y - field.world_origin.1) / field.world_stride).floor() as i64,
+        ))
+    }
+
+    pub(crate) fn is_fit_cell(&self, world_x: f64, world_y: f64) -> bool {
+        self.shared_cell(world_x, world_y)
+            .is_some_and(|cell| self.fit_cells.contains(&cell))
+    }
+
+    pub(crate) fn overlap_participation(&self, world_x: f64, world_y: f64) -> bool {
+        self.shared_cell(world_x, world_y)
+            .is_some_and(|cell| self.overlap_cells.contains(&cell))
+    }
+
+    pub(crate) fn baseline(&self) -> &Rgb32FImage {
+        &self.baseline
+    }
+
+    pub(crate) fn owner_at_world(&self, world_x: f64, world_y: f64) -> Option<u16> {
+        let x = (world_x - self.world_origin.0).round();
+        let y = (world_y - self.world_origin.1).round();
+        if x < 0.0
+            || y < 0.0
+            || x >= f64::from(self.baseline.width())
+            || y >= f64::from(self.baseline.height())
+        {
+            return None;
+        }
+        self.owners
+            .get(y as usize * self.baseline.width() as usize + x as usize)
+            .copied()
+    }
+
+    pub(crate) fn field_sample(
+        &self,
+        owner: u16,
+        world_x: f64,
+        world_y: f64,
+    ) -> Option<([f32; 3], [f32; 3], [f32; 3], [f32; 3], usize)> {
+        let tile_index = self.tiles.iter().position(|tile| tile.owner_id == owner)?;
+        let low = sample_tile_bilinear(&self.tiles[tile_index], world_x, world_y)?;
+        let local_gain = sample_spatial_gain(&self.fields[tile_index], world_x, world_y)?;
+        let transform = self.transforms[tile_index];
+        Some((
+            low,
+            local_gain,
+            transform.gain,
+            transform.offset,
+            tile_index,
+        ))
+    }
+
+    pub(crate) fn candidate_pixel(
+        &self,
+        owner: u16,
+        world_x: f64,
+        world_y: f64,
+        baseline: [f32; 3],
+        relaxation: f64,
+    ) -> [f32; 3] {
+        let Some((low, local_gain, gain, _, _)) = self.field_sample(owner, world_x, world_y) else {
+            return baseline;
+        };
+        std::array::from_fn(|channel| {
+            (f64::from(baseline[channel])
+                + relaxation
+                    * f64::from(gain[channel] * (local_gain[channel] - 1.0) * low[channel]))
+            .clamp(0.0, 1.0) as f32
+        })
+    }
+
+    pub(crate) fn boundary_max(&self, relaxation: f64) -> f64 {
+        self.boundaries
+            .iter()
+            .filter(|window| window.samples > 0)
+            .map(|window| {
+                let mean = |baseline: [f64; 3], delta: [f64; 3]| {
+                    std::array::from_fn(|channel| {
+                        ((baseline[channel] + relaxation * delta[channel]) / window.samples as f64)
+                            as f32
+                    })
+                };
+                delta_e00_rgb(
+                    mean(window.baseline_first_sum, window.field_first_delta_sum),
+                    mean(window.baseline_second_sum, window.field_second_delta_sum),
+                )
+            })
+            .fold(0.0, f64::max)
+    }
+
+    pub(crate) fn boundary_window_count(&self) -> usize {
+        self.boundaries.len()
+    }
+
+    pub(crate) fn fit_cell_count(&self) -> usize {
+        self.fit_cells.len()
+    }
+
+    pub(crate) fn field_constraint_stats(&self) -> (f64, f64, f64) {
+        let mut minimum_gain = f64::INFINITY;
+        let mut maximum_gain = f64::NEG_INFINITY;
+        let mut maximum_neighbour_log_delta = 0.0f64;
+        for field in &self.fields {
+            let (width, height) = field.log_gain.dimensions();
+            for y in 0..height {
+                for x in 0..width {
+                    if field.validity.get_pixel(x, y)[0] == 0 {
+                        continue;
+                    }
+                    let value = field.log_gain.get_pixel(x, y).0;
+                    for channel in 0..3 {
+                        let gain = f64::from(value[channel]).exp();
+                        minimum_gain = minimum_gain.min(gain);
+                        maximum_gain = maximum_gain.max(gain);
+                    }
+                    for (nx, ny) in [(x + 1, y), (x, y + 1)] {
+                        if nx >= width || ny >= height || field.validity.get_pixel(nx, ny)[0] == 0 {
+                            continue;
+                        }
+                        let neighbour = field.log_gain.get_pixel(nx, ny).0;
+                        for channel in 0..3 {
+                            maximum_neighbour_log_delta = maximum_neighbour_log_delta
+                                .max(f64::from(value[channel] - neighbour[channel]).abs());
+                        }
+                    }
+                }
+            }
+        }
+        if !minimum_gain.is_finite() {
+            minimum_gain = 1.0;
+            maximum_gain = 1.0;
+        }
+        (minimum_gain, maximum_gain, maximum_neighbour_log_delta)
+    }
+
+    pub(crate) fn checkerboard_holdout(&self, relaxation: f64) -> (usize, f64, f64) {
+        let mut values = Vec::new();
+        for relation in &self.relations {
+            let Some(field) =
+                PairField::new(&self.tiles[relation.first], &self.tiles[relation.second])
+            else {
+                continue;
+            };
+            for index in 0..field.sample.len() {
+                let column = index % field.width;
+                let row = index / field.width;
+                if !field.sample[index] {
+                    continue;
+                }
+                let world_x =
+                    field.origin.0 + column as f64 * field.stride + (field.stride - 1.0) * 0.5;
+                let world_y =
+                    field.origin.1 + row as f64 * field.stride + (field.stride - 1.0) * 0.5;
+                let Some(cell) = self.shared_cell(world_x, world_y) else {
+                    continue;
+                };
+                if (cell.0 + cell.1).rem_euclid(2) == 0 {
+                    continue;
+                }
+                let corrected = |tile: usize, pixel: [f32; 3]| {
+                    let transform = self.transforms[tile];
+                    let local = sample_spatial_gain(&self.fields[tile], world_x, world_y)
+                        .unwrap_or([1.0; 3]);
+                    std::array::from_fn(|channel| {
+                        let baseline =
+                            transform.gain[channel] * pixel[channel] + transform.offset[channel];
+                        baseline
+                            + relaxation as f32
+                                * transform.gain[channel]
+                                * (local[channel] - 1.0)
+                                * pixel[channel]
+                    })
+                };
+                values.push(delta_e00_rgb(
+                    corrected(relation.first, field.first[index]),
+                    corrected(relation.second, field.second[index]),
+                ));
+            }
+        }
+        let count = values.len();
+        let median = percentile(&mut values.clone(), 0.5);
+        let p95 = percentile(&mut values, 0.95);
+        (count, median, p95)
+    }
+
+    pub(crate) fn cycle_residual_max(&self) -> f64 {
+        self.relations
+            .iter()
+            .flat_map(|relation| {
+                (0..3).map(move |channel| {
+                    (f64::from(self.transforms[relation.first].gain[channel]).ln()
+                        - f64::from(self.transforms[relation.second].gain[channel]).ln()
+                        + relation.log_gain[channel])
+                        .abs()
+                })
+            })
+            .fold(0.0, f64::max)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn take_tone_owner_oracle_snapshot() -> Option<ToneOwnerOracleSnapshot> {
+    TONE_OWNER_ORACLE_SNAPSHOT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take()
+}
+
+#[cfg(test)]
+fn tone_oracle_cell_sets(
+    tiles: &[ToneTile],
+    relations: &[ToneRelation],
+    fields: &[ToneSpatialField],
+) -> (
+    std::collections::BTreeSet<(i64, i64)>,
+    std::collections::BTreeSet<(i64, i64)>,
+) {
+    let mut fit = std::collections::BTreeSet::new();
+    let mut overlap = std::collections::BTreeSet::new();
+    let Some(shared) = fields.first() else {
+        return (fit, overlap);
+    };
+    for relation in relations {
+        let Some(field) = PairField::new(&tiles[relation.first], &tiles[relation.second]) else {
+            continue;
+        };
+        for index in 0..field.sample.len() {
+            if !field.sample[index] {
+                continue;
+            }
+            let column = index % field.width;
+            let row = index / field.width;
+            let world_x =
+                field.origin.0 + column as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let world_y = field.origin.1 + row as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let cell = (
+                ((world_x - shared.world_origin.0) / shared.world_stride).floor() as i64,
+                ((world_y - shared.world_origin.1) / shared.world_stride).floor() as i64,
+            );
+            overlap.insert(cell);
+            if (cell.0 + cell.1).rem_euclid(2) == 0 {
+                fit.insert(cell);
+            }
+        }
+    }
+    (fit, overlap)
+}
+
+fn spatial_cell(
+    world_origin: (f64, f64),
+    world_stride: f64,
+    width: u32,
+    height: u32,
+    world_x: f64,
+    world_y: f64,
+) -> Option<usize> {
+    let x = ((world_x - world_origin.0) / world_stride).floor();
+    let y = ((world_y - world_origin.1) / world_stride).floor();
+    if x < 0.0 || y < 0.0 || x >= f64::from(width) || y >= f64::from(height) {
+        return None;
+    }
+    Some(y as usize * width as usize + x as usize)
+}
+
+fn build_spatial_fields(
+    tiles: &[ToneTile],
+    relations: &[ToneRelation],
+    transforms: &[ToneTransform],
+    prior: Option<&[ToneSpatialField]>,
+    checkerboard_train_only: bool,
+) -> Vec<ToneSpatialField> {
+    let world_stride = tiles
+        .iter()
+        .map(|tile| tile.world_stride)
+        .fold(0.0f64, f64::max);
+    let world_origin = (
+        tiles
+            .iter()
+            .map(|tile| tile.world_origin.0)
+            .fold(f64::INFINITY, f64::min),
+        tiles
+            .iter()
+            .map(|tile| tile.world_origin.1)
+            .fold(f64::INFINITY, f64::min),
+    );
+    let world_end = (
+        tiles
+            .iter()
+            .map(|tile| tile.world_origin.0 + tile.world_size.0)
+            .fold(f64::NEG_INFINITY, f64::max),
+        tiles
+            .iter()
+            .map(|tile| tile.world_origin.1 + tile.world_size.1)
+            .fold(f64::NEG_INFINITY, f64::max),
+    );
+    let width = ((world_end.0 - world_origin.0) / world_stride).ceil() as u32;
+    let height = ((world_end.1 - world_origin.1) / world_stride).ceil() as u32;
+    let field_len = width as usize * height as usize;
+    let mut sums = vec![vec![[0.0f64; 3]; field_len]; tiles.len()];
+    let mut degrees = vec![vec![0u32; field_len]; tiles.len()];
+    for relation in relations {
+        let Some(field) = PairField::new(&tiles[relation.first], &tiles[relation.second]) else {
+            continue;
+        };
+        let mut edge_sums = [
+            vec![[0.0f64; 3]; sums[relation.first].len()],
+            vec![[0.0f64; 3]; sums[relation.second].len()],
+        ];
+        let mut edge_counts = [
+            vec![0u32; sums[relation.first].len()],
+            vec![0u32; sums[relation.second].len()],
+        ];
+        for index in 0..field.sample.len() {
+            if !field.sample[index] {
+                continue;
+            }
+            let column = index % field.width;
+            let row = index / field.width;
+            let world_x =
+                field.origin.0 + column as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let world_y = field.origin.1 + row as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let Some(cell) =
+                spatial_cell(world_origin, world_stride, width, height, world_x, world_y)
+            else {
+                continue;
+            };
+            if checkerboard_train_only
+                && ((cell % width as usize) + (cell / width as usize)) % 2 != 0
+            {
+                continue;
+            }
+            let first = field.first[index];
+            let second = field.second[index];
+            let corrected = |tile: usize, pixel: [f32; 3]| {
+                let local = prior
+                    .and_then(|fields| sample_spatial_gain(&fields[tile], world_x, world_y))
+                    .unwrap_or([1.0; 3]);
+                std::array::from_fn::<f32, 3, _>(|channel| {
+                    transforms[tile].gain[channel] * local[channel] * pixel[channel]
+                        + transforms[tile].offset[channel]
+                })
+            };
+            let first = corrected(relation.first, first);
+            let second = corrected(relation.second, second);
+            let error = std::array::from_fn::<f64, 3, _>(|channel| {
+                log_channel(first[channel]) - log_channel(second[channel])
+            });
+            for (side, sign) in [(0usize, -0.5), (1usize, 0.5)] {
+                let Some(cell) =
+                    spatial_cell(world_origin, world_stride, width, height, world_x, world_y)
+                else {
+                    continue;
+                };
+                for channel in 0..3 {
+                    edge_sums[side][cell][channel] += sign * error[channel];
+                }
+                edge_counts[side][cell] += 1;
+            }
+        }
+        // A transformed pair grid need not share cell origins with either
+        // tile. Average all pair samples landing in one tile cell before
+        // counting the accepted relation as one graph edge; otherwise a
+        // half-cell crop offset incorrectly changes the graph degree.
+        for (side, tile_index) in [(0usize, relation.first), (1usize, relation.second)] {
+            for cell in 0..edge_counts[side].len() {
+                let count = edge_counts[side][cell];
+                if count == 0 {
+                    continue;
+                }
+                for channel in 0..3 {
+                    sums[tile_index][cell][channel] +=
+                        edge_sums[side][cell][channel] / f64::from(count);
+                }
+                degrees[tile_index][cell] += 1;
+            }
+        }
+    }
+    tiles
+        .iter()
+        .enumerate()
+        .map(|(tile_index, _tile)| {
+            let grid_width = width as usize;
+            let grid_height = height as usize;
+            let mut weights = vec![[0.0f64; 1]; field_len];
+            let mut values = vec![[0.0f64; 3]; field_len];
+            for index in 0..values.len() {
+                let degree = degrees[tile_index][index];
+                if degree == 0 {
+                    continue;
+                }
+                // For one edge, split the correction equally between its two
+                // stations. For a complete local graph this is the exact
+                // zero-mean least-squares solution; it also remains bounded
+                // and deterministic for a sparse accepted graph.
+                let graph_factor = 2.0 / (f64::from(degree) + 1.0);
+                values[index] = sums[tile_index][index].map(|value| value * graph_factor);
+                weights[index] = [1.0];
+            }
+            let sigma = f64::from(TONE_LOW_FREQUENCY_SIGMA);
+            let support = gaussian_cells(&weights, grid_width, grid_height, sigma);
+            let blurred = gaussian_cells(&values, grid_width, grid_height, sigma);
+            let mut log_gain = Rgb32FImage::new(width, height);
+            let mut validity = GrayImage::new(width, height);
+            for index in 0..support.len() {
+                if support[index][0] <= 1e-9 {
+                    continue;
+                }
+                let x = index as u32 % width;
+                let y = index as u32 / width;
+                let value = std::array::from_fn::<f32, 3, _>(|channel| {
+                    let previous = prior
+                        .map(|fields| {
+                            f64::from(fields[tile_index].log_gain.get_pixel(x, y)[channel])
+                        })
+                        .unwrap_or(0.0);
+                    let candidate = previous + blurred[index][channel] / support[index][0];
+                    let minimum =
+                        f64::from(TONE_MIN_GAIN / transforms[tile_index].gain[channel]).ln();
+                    let maximum =
+                        f64::from(TONE_MAX_GAIN / transforms[tile_index].gain[channel]).ln();
+                    candidate.clamp(minimum, maximum) as f32
+                });
+                log_gain.put_pixel(x, y, Rgb(value));
+                validity.put_pixel(x, y, Luma([255]));
+            }
+            ToneSpatialField {
+                log_gain,
+                validity,
+                world_origin,
+                world_stride,
+            }
+        })
+        .collect()
+}
+
+fn build_spatial_field_iterations(
+    tiles: &[ToneTile],
+    relations: &[ToneRelation],
+    transforms: &[ToneTransform],
+    checkerboard_train_only: bool,
+) -> Vec<ToneSpatialField> {
+    let mut fields = None;
+    for _ in 0..TONE_SPATIAL_ITERATIONS {
+        fields = Some(build_spatial_fields(
+            tiles,
+            relations,
+            transforms,
+            fields.as_deref(),
+            checkerboard_train_only,
+        ));
+    }
+    fields.unwrap_or_default()
+}
+
+fn sample_spatial_gain(field: &ToneSpatialField, world_x: f64, world_y: f64) -> Option<[f32; 3]> {
+    let (width, height) = field.log_gain.dimensions();
+    let u =
+        (world_x - field.world_origin.0 - (field.world_stride - 1.0) * 0.5) / field.world_stride;
+    let v =
+        (world_y - field.world_origin.1 - (field.world_stride - 1.0) * 0.5) / field.world_stride;
+    let (u0, v0) = (u.floor(), v.floor());
+    let mut sum = [0.0f64; 3];
+    let mut total = 0.0f64;
+    for (dy, weight_y) in [(0.0, 1.0 - (v - v0)), (1.0, v - v0)] {
+        for (dx, weight_x) in [(0.0, 1.0 - (u - u0)), (1.0, u - u0)] {
+            let (x, y) = (u0 + dx, v0 + dy);
+            if x < 0.0 || y < 0.0 || x >= f64::from(width) || y >= f64::from(height) {
+                continue;
+            }
+            let (x, y) = (x as u32, y as u32);
+            if field.validity.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            let weight = weight_x * weight_y;
+            let value = field.log_gain.get_pixel(x, y).0;
+            for channel in 0..3 {
+                sum[channel] += weight * f64::from(value[channel]);
+            }
+            total += weight;
+        }
+    }
+    (total > 1e-9).then(|| sum.map(|value| (value / total).exp() as f32))
+}
+
+fn percentile(values: &mut [f64], quantile: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_unstable_by(f64::total_cmp);
+    values[((values.len() - 1) as f64 * quantile).round() as usize]
+}
+
+fn spatial_holdout_gate(
+    tiles: &[ToneTile],
+    relations: &[ToneRelation],
+    transforms: &[ToneTransform],
+    fields: &[ToneSpatialField],
+) -> ToneHoldoutGate {
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    let Some(shared) = fields.first() else {
+        return ToneHoldoutGate::default();
+    };
+    for relation in relations {
+        let Some(field) = PairField::new(&tiles[relation.first], &tiles[relation.second]) else {
+            continue;
+        };
+        for index in 0..field.sample.len() {
+            let column = index % field.width;
+            let row = index / field.width;
+            if !field.sample[index] {
+                continue;
+            }
+            let world_x =
+                field.origin.0 + column as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let world_y = field.origin.1 + row as f64 * field.stride + (field.stride - 1.0) * 0.5;
+            let global_column =
+                ((world_x - shared.world_origin.0) / shared.world_stride).floor() as i64;
+            let global_row =
+                ((world_y - shared.world_origin.1) / shared.world_stride).floor() as i64;
+            if (global_column + global_row).rem_euclid(2) == 0 {
+                continue;
+            }
+            let corrected = |tile: usize, pixel: [f32; 3], local: [f32; 3]| {
+                std::array::from_fn::<f32, 3, _>(|channel| {
+                    transforms[tile].gain[channel] * local[channel] * pixel[channel]
+                        + transforms[tile].offset[channel]
+                })
+            };
+            let first_global = corrected(relation.first, field.first[index], [1.0; 3]);
+            let second_global = corrected(relation.second, field.second[index], [1.0; 3]);
+            let Some(first_local) = sample_spatial_gain(&fields[relation.first], world_x, world_y)
+            else {
+                continue;
+            };
+            let Some(second_local) =
+                sample_spatial_gain(&fields[relation.second], world_x, world_y)
+            else {
+                continue;
+            };
+            before.push(delta_e00_rgb(first_global, second_global));
+            after.push(delta_e00_rgb(
+                corrected(relation.first, field.first[index], first_local),
+                corrected(relation.second, field.second[index], second_local),
+            ));
+        }
+    }
+    let samples = before.len();
+    let before_median = percentile(&mut before.clone(), 0.5);
+    let before_p95 = percentile(&mut before, 0.95);
+    let after_median = percentile(&mut after.clone(), 0.5);
+    let after_p95 = percentile(&mut after, 0.95);
+    ToneHoldoutGate {
+        samples,
+        before_median,
+        before_p95,
+        after_median,
+        after_p95,
+        applied: samples >= TONE_MIN_SAMPLES
+            && after_median < before_median
+            && after_p95 < before_p95,
+    }
 }
 
 /// Per-tile corrections from all relations at once (design: reuse the
@@ -964,6 +1616,17 @@ fn harmonize_after_ownership_with_evidence(
         record_run_report(report.clone());
         return report;
     }
+    #[cfg(test)]
+    let diagnostic_before = super::test_support::tone_diagnostics_dir().map(|_| panorama.clone());
+    #[cfg(test)]
+    let owner_oracle_enabled = super::test_support::tone_owner_fidelity_dir().is_some();
+    #[cfg(test)]
+    {
+        *TONE_OWNER_ORACLE_SNAPSHOT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
     // One relation per accepted Station_Relation, measured on its doubly
     // covered overlap only (需求 9.1). Tiles that are merely placed next to
     // each other without an accepted relation contribute nothing.
@@ -997,10 +1660,35 @@ fn harmonize_after_ownership_with_evidence(
         solved_relations.push(ToneRelation::new(first, second, retained));
     }
 
+    let mut tile_of_owner =
+        vec![None; tiles.iter().map(|tile| tile.owner_id).max().unwrap_or(0) as usize + 1];
+    for (index, tile) in tiles.iter().enumerate() {
+        tile_of_owner[tile.owner_id as usize].get_or_insert(index);
+    }
     // One joint solve over every relation; each transform is bounded once, and
     // the pixels, the boundary re-check and the report read the same bounded
     // values while the report keeps the unbounded solution (需求 9.3, 9.9).
     let transforms = solve_tone_transforms(tiles.len(), &solved_relations);
+    let (spatial_fields, holdout_gate) = if TONE_SPATIAL_FIELD_ENABLED {
+        let holdout_fields =
+            build_spatial_field_iterations(tiles, &solved_relations, &transforms, true);
+        let holdout_gate =
+            spatial_holdout_gate(tiles, &solved_relations, &transforms, &holdout_fields);
+        let spatial_fields = holdout_gate
+            .applied
+            .then(|| build_spatial_field_iterations(tiles, &solved_relations, &transforms, false));
+        (spatial_fields, holdout_gate)
+    } else {
+        (None, ToneHoldoutGate::default())
+    };
+    #[cfg(test)]
+    let owner_oracle_fields = owner_oracle_enabled
+        .then(|| build_spatial_field_iterations(tiles, &solved_relations, &transforms, true));
+    #[cfg(test)]
+    let (owner_oracle_fit_cells, owner_oracle_overlap_cells) = owner_oracle_fields
+        .as_deref()
+        .map(|fields| tone_oracle_cell_sets(tiles, &solved_relations, fields))
+        .unwrap_or_default();
     for (index, tile) in tiles.iter().enumerate() {
         let transform = &transforms[index];
         if transform.clamped {
@@ -1034,11 +1722,6 @@ fn harmonize_after_ownership_with_evidence(
     // of their owner keep their exact value.
     let output_width = panorama.width();
     let output_height = panorama.height();
-    let mut tile_of_owner =
-        vec![None; tiles.iter().map(|tile| tile.owner_id).max().unwrap_or(0) as usize + 1];
-    for (index, tile) in tiles.iter().enumerate() {
-        tile_of_owner[tile.owner_id as usize].get_or_insert(index);
-    }
     let corrects = |tile_index: usize| {
         let transform = &transforms[tile_index];
         transform.supported
@@ -1080,27 +1763,48 @@ fn harmonize_after_ownership_with_evidence(
                     continue;
                 };
                 let transform = &transforms[tile_index];
+                let local_gain = spatial_fields
+                    .as_ref()
+                    .and_then(|fields| {
+                        sample_spatial_gain(
+                            &fields[tile_index],
+                            world_origin.0 + output_x as f64,
+                            world_origin.1 + output_y as f64,
+                        )
+                    })
+                    .unwrap_or([1.0; 3]);
                 for channel in 0..3 {
                     pixel[channel] = (pixel[channel]
-                        + (transform.gain[channel] - 1.0) * low[channel]
+                        + (transform.gain[channel] * local_gain[channel] - 1.0) * low[channel]
                         + transform.offset[channel])
                         .clamp(0.0, 1.0);
                 }
             }
         });
 
-    let correct = |tile_index: usize, low: [f32; 3]| -> [f32; 3] {
+    let correct = |tile_index: usize, low: [f32; 3], world_x: f64, world_y: f64| -> [f32; 3] {
         let transform = &transforms[tile_index];
+        let local_gain = spatial_fields
+            .as_ref()
+            .and_then(|fields| sample_spatial_gain(&fields[tile_index], world_x, world_y))
+            .unwrap_or([1.0; 3]);
         std::array::from_fn(|channel| {
-            transform.gain[channel] * low[channel] + transform.offset[channel]
+            transform.gain[channel] * local_gain[channel] * low[channel] + transform.offset[channel]
         })
     };
     // Tile pair and boundary window → corrected low sums of both tiles. Each
     // adjacent pair is read through its common-support fields, so a band next
     // to either tile's coverage edge compares the same content window.
     let mut pair_fields = std::collections::BTreeMap::<(usize, usize), Option<PairField>>::new();
-    let mut boundary_windows =
-        std::collections::BTreeMap::<(usize, usize, u32, u32), ([f64; 3], [f64; 3], u64)>::new();
+    let mut boundary_windows = std::collections::BTreeMap::<
+        (usize, usize, u32, u32),
+        ([f64; 3], [f64; 3], [f64; 3], [f64; 3], u64),
+    >::new();
+    #[cfg(test)]
+    let mut diagnostic_windows = Vec::new();
+    #[cfg(test)]
+    let mut owner_oracle_boundaries =
+        std::collections::BTreeMap::<(usize, usize, u32, u32), ToneOracleBoundaryWindow>::new();
     for y in 0..output_height {
         for x in 0..output_width {
             let index = y as usize * output_width as usize + x as usize;
@@ -1169,36 +1873,105 @@ fn harmonize_after_ownership_with_evidence(
                         ) else {
                             continue;
                         };
-                        let (first_low, second_low) =
-                            (correct(first, first_low), correct(second, second_low));
                         let entry = boundary_windows.entry(window).or_insert((
+                            [0.0f64; 3],
+                            [0.0f64; 3],
                             [0.0f64; 3],
                             [0.0f64; 3],
                             0u64,
                         ));
+                        let world_x = world_origin.0 + f64::from(px);
+                        let world_y = world_origin.1 + f64::from(py);
+                        let first_post = correct(first, first_low, world_x, world_y);
+                        let second_post = correct(second, second_low, world_x, world_y);
                         for channel in 0..3 {
                             entry.0[channel] += f64::from(first_low[channel]);
                             entry.1[channel] += f64::from(second_low[channel]);
+                            entry.2[channel] += f64::from(first_post[channel]);
+                            entry.3[channel] += f64::from(second_post[channel]);
                         }
-                        entry.2 += 1;
+                        entry.4 += 1;
+                        #[cfg(test)]
+                        if let Some(fields) = owner_oracle_fields.as_deref() {
+                            let oracle = owner_oracle_boundaries.entry(window).or_insert(
+                                ToneOracleBoundaryWindow {
+                                    key: window,
+                                    baseline_first_sum: [0.0; 3],
+                                    baseline_second_sum: [0.0; 3],
+                                    field_first_delta_sum: [0.0; 3],
+                                    field_second_delta_sum: [0.0; 3],
+                                    samples: 0,
+                                },
+                            );
+                            let candidate = |tile: usize, low: [f32; 3]| {
+                                let transform = transforms[tile];
+                                let local = sample_spatial_gain(&fields[tile], world_x, world_y)
+                                    .unwrap_or([1.0; 3]);
+                                let baseline = std::array::from_fn::<f32, 3, _>(|channel| {
+                                    transform.gain[channel] * low[channel]
+                                        + transform.offset[channel]
+                                });
+                                let delta = std::array::from_fn::<f32, 3, _>(|channel| {
+                                    transform.gain[channel] * (local[channel] - 1.0) * low[channel]
+                                });
+                                (baseline, delta)
+                            };
+                            let (first_baseline, first_delta) = candidate(first, first_low);
+                            let (second_baseline, second_delta) = candidate(second, second_low);
+                            for channel in 0..3 {
+                                oracle.baseline_first_sum[channel] +=
+                                    f64::from(first_baseline[channel]);
+                                oracle.baseline_second_sum[channel] +=
+                                    f64::from(second_baseline[channel]);
+                                oracle.field_first_delta_sum[channel] +=
+                                    f64::from(first_delta[channel]);
+                                oracle.field_second_delta_sum[channel] +=
+                                    f64::from(second_delta[channel]);
+                            }
+                            oracle.samples += 1;
+                        }
                     }
                 }
             }
         }
     }
-    for ((first, second, window_x, window_y), (first_sum, second_sum, count)) in boundary_windows {
+    for (
+        (first, second, window_x, window_y),
+        (first_pre_sum, second_pre_sum, first_sum, second_sum, count),
+    ) in boundary_windows
+    {
         let mean = |sum: [f64; 3]| sum.map(|channel| (channel / count as f64) as f32);
-        let delta = delta_e00_rgb(mean(first_sum), mean(second_sum));
-        report.boundary_delta_e.max = report.boundary_delta_e.max.max(delta);
-        if delta <= TONE_BOUNDARY_DELTA_E_THRESHOLD {
-            continue;
-        }
+        let first_pre = mean(first_pre_sum);
+        let second_pre = mean(second_pre_sum);
+        let first_post = mean(first_sum);
+        let second_post = mean(second_sum);
+        let delta = delta_e00_rgb(first_post, second_post);
         let world = super::report::WorldRect {
             left: world_origin.0 + f64::from(window_x * TONE_BOUNDARY_WINDOW_PX),
             top: world_origin.1 + f64::from(window_y * TONE_BOUNDARY_WINDOW_PX),
             width: f64::from(TONE_BOUNDARY_WINDOW_PX),
             height: f64::from(TONE_BOUNDARY_WINDOW_PX),
         };
+        #[cfg(test)]
+        if diagnostic_before.is_some() {
+            diagnostic_windows.push(serde_json::json!({
+                "stations": [tiles[first].station_index, tiles[second].station_index],
+                "owner_ids": [tiles[first].owner_id, tiles[second].owner_id],
+                "world": world,
+                "samples": count,
+                "distance_to_seam_px": { "minimum": 0, "maximum": TONE_BOUNDARY_BAND_PX - 1 },
+                "coverage": { "required": "full_bilateral_cell", "minimum": 1.0 },
+                "confidence": 1.0,
+                "texture_rejection": { "enabled": false, "rejected": 0 },
+                "pre": tone_distribution_pair(first_pre, second_pre),
+                "post": tone_distribution_pair(first_post, second_post),
+                "delta_e00": delta,
+            }));
+        }
+        report.boundary_delta_e.max = report.boundary_delta_e.max.max(delta);
+        if delta <= TONE_BOUNDARY_DELTA_E_THRESHOLD {
+            continue;
+        }
         if report.boundary_delta_e.violations.len() < 4096 {
             report
                 .boundary_delta_e
@@ -1232,11 +2005,280 @@ fn harmonize_after_ownership_with_evidence(
     } else {
         ToneStatus::Degraded
     };
+    #[cfg(test)]
+    if let Some(fields) = owner_oracle_fields {
+        let snapshot = ToneOwnerOracleSnapshot {
+            baseline: panorama.clone(),
+            owners: owners.to_vec(),
+            tiles: tiles.to_vec(),
+            relations: solved_relations.clone(),
+            transforms: transforms.clone(),
+            fields,
+            fit_cells: owner_oracle_fit_cells,
+            overlap_cells: owner_oracle_overlap_cells,
+            boundaries: owner_oracle_boundaries.into_values().collect(),
+            world_origin,
+        };
+        *TONE_OWNER_ORACLE_SNAPSHOT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(snapshot);
+    }
+    #[cfg(test)]
+    if let Some(before) = diagnostic_before.as_ref() {
+        write_tone_diagnostics(
+            before,
+            panorama,
+            tiles,
+            &solved_relations,
+            &transforms,
+            spatial_fields.as_deref(),
+            holdout_gate,
+            world_origin,
+            &diagnostic_windows,
+            &report,
+        );
+    }
     for tile in &report.tiles {
         record_run_record(*tile);
     }
     record_run_report(report.clone());
     report
+}
+
+#[cfg(test)]
+fn tone_distribution_pair(first: [f32; 3], second: [f32; 3]) -> serde_json::Value {
+    let linear = |rgb: [f32; 3]| rgb.map(crate::color_management::srgb_to_linear_channel);
+    serde_json::json!({
+        "display_srgb_mean": [first, second],
+        "linear_srgb_mean": [linear(first), linear(second)],
+        "lab_mean": [rgb_to_lab(first), rgb_to_lab(second)],
+        "channel_ratio": std::array::from_fn::<f64, 3, _>(|channel| {
+            f64::from(first[channel]) / f64::from(second[channel]).max(1.0 / 65_535.0)
+        }),
+        "delta_e00": delta_e00_rgb(first, second),
+    })
+}
+
+#[cfg(test)]
+fn write_tone_diagnostics(
+    before: &Rgb32FImage,
+    after: &Rgb32FImage,
+    tiles: &[ToneTile],
+    relations: &[ToneRelation],
+    transforms: &[ToneTransform],
+    spatial_fields: Option<&[ToneSpatialField]>,
+    holdout_gate: ToneHoldoutGate,
+    world_origin: (f64, f64),
+    windows: &[serde_json::Value],
+    report: &ToneReport,
+) {
+    let Some(directory) = super::test_support::tone_diagnostics_dir() else {
+        return;
+    };
+    if let Err(error) = std::fs::create_dir_all(&directory) {
+        eprintln!("cannot create tone diagnostics directory: {error}");
+        return;
+    }
+    let relation_records = relations
+        .iter()
+        .map(|relation| {
+            let first = &tiles[relation.first];
+            let second = &tiles[relation.second];
+            let residual = std::array::from_fn::<f64, 3, _>(|channel| {
+                f64::from(transforms[relation.first].gain[channel]).ln()
+                    - f64::from(transforms[relation.second].gain[channel]).ln()
+                    + relation.log_gain[channel]
+            });
+            let corrected_mean = |tile: usize, owner_side: bool| {
+                let transform = &transforms[tile];
+                let samples = &relation.samples;
+                std::array::from_fn::<f32, 3, _>(|channel| {
+                    samples
+                        .iter()
+                        .map(|sample| {
+                            let value = if owner_side {
+                                sample.owner[channel]
+                            } else {
+                                sample.source[channel]
+                            };
+                            f64::from(transform.gain[channel] * value + transform.offset[channel])
+                        })
+                        .sum::<f64>() as f32
+                        / samples.len().max(1) as f32
+                })
+            };
+            let first_pre = std::array::from_fn::<f32, 3, _>(|channel| {
+                relation.samples.iter().map(|sample| sample.owner[channel]).sum::<f32>()
+                    / relation.samples.len().max(1) as f32
+            });
+            let second_pre = std::array::from_fn::<f32, 3, _>(|channel| {
+                relation.samples.iter().map(|sample| sample.source[channel]).sum::<f32>()
+                    / relation.samples.len().max(1) as f32
+            });
+            let representative = relation
+                .samples
+                .iter()
+                .take(16)
+                .map(|sample| serde_json::json!({ "first": sample.owner, "second": sample.source }))
+                .collect::<Vec<_>>();
+            serde_json::json!({
+                "tile_indices": [relation.first, relation.second],
+                "stations": [first.station_index, second.station_index],
+                "owner_ids": [first.owner_id, second.owner_id],
+                "overlap_world": {
+                    "left": first.world_origin.0.max(second.world_origin.0),
+                    "top": first.world_origin.1.max(second.world_origin.1),
+                    "right": (first.world_origin.0 + first.world_size.0).min(second.world_origin.0 + second.world_size.0),
+                    "bottom": (first.world_origin.1 + first.world_size.1).min(second.world_origin.1 + second.world_size.1),
+                },
+                "pair_samples": {
+                    "retained": relation.samples.len(),
+                    "minimum": TONE_MIN_SAMPLES,
+                    "texture_rejection_enabled": false,
+                },
+                "log_gain": relation.log_gain,
+                "scatter": relation.scatter,
+                "weight": relation.weight(),
+                "solver_log_residual": residual,
+                "pre": tone_distribution_pair(first_pre, second_pre),
+                "post": tone_distribution_pair(
+                    corrected_mean(relation.first, true),
+                    corrected_mean(relation.second, false),
+                ),
+                "representative_low_frequency_samples": representative,
+                "holdout": { "enabled": false },
+            })
+        })
+        .collect::<Vec<_>>();
+    let tile_records = tiles
+        .iter()
+        .zip(transforms)
+        .map(|(tile, transform)| {
+            serde_json::json!({
+                "station": tile.station_index,
+                "owner_id": tile.owner_id,
+                "world_origin": tile.world_origin,
+                "world_size": tile.world_size,
+                "world_stride": tile.world_stride,
+                "field_dimensions": tile.low.dimensions(),
+                "gain": transform.gain,
+                "bias": transform.offset,
+                "solved_gain": transform.solved_gain,
+                "solved_bias": transform.solved_offset,
+                "supported": transform.supported,
+                "clamped": transform.clamped,
+            })
+        })
+        .collect::<Vec<_>>();
+    let cycle_consistency = if relations.len() == 3 {
+        let relation_gain = |first: usize, second: usize, channel: usize| {
+            relations.iter().find_map(|relation| {
+                if relation.first == first && relation.second == second {
+                    Some(relation.log_gain[channel])
+                } else if relation.first == second && relation.second == first {
+                    Some(-relation.log_gain[channel])
+                } else {
+                    None
+                }
+            })
+        };
+        (0..3)
+            .map(|channel| {
+                relation_gain(0, 1, channel).unwrap_or(0.0)
+                    + relation_gain(1, 2, channel).unwrap_or(0.0)
+                    + relation_gain(2, 0, channel).unwrap_or(0.0)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let payload = serde_json::json!({
+        "schema": 1,
+        "color_encoding": "display_srgb_with_explicit_linear_and_lab_diagnostics",
+        "canvas": { "width": after.width(), "height": after.height(), "world_origin": world_origin },
+        "graph": {
+            "reference": "zero_mean_log_gain_per_connected_component",
+            "relations": relations.len(),
+            "cycle_log_residual": cycle_consistency,
+            "deterministic_relation_order": true,
+        },
+        "tiles": tile_records,
+        "relations": relation_records,
+        "boundary_windows": windows,
+        "summary": {
+            "status": report.status,
+            "maximum_delta_e00": report.boundary_delta_e.max,
+            "threshold": report.boundary_delta_e.threshold,
+            "window_count": windows.len(),
+            "violations": report.boundary_delta_e.violations.len(),
+            "spatial_field_enabled": spatial_fields.is_some(),
+            "spatial_iterations": TONE_SPATIAL_ITERATIONS,
+            "held_out_improvement_gate": {
+                "samples": holdout_gate.samples,
+                "before_median_delta_e00": holdout_gate.before_median,
+                "before_p95_delta_e00": holdout_gate.before_p95,
+                "after_median_delta_e00": holdout_gate.after_median,
+                "after_p95_delta_e00": holdout_gate.after_p95,
+                "applied": holdout_gate.applied,
+            },
+        },
+    });
+    if let Ok(bytes) = serde_json::to_vec_pretty(&payload) {
+        if let Err(error) = std::fs::write(directory.join("tone-final-world.json"), bytes) {
+            eprintln!("cannot write tone diagnostics: {error}");
+        }
+    }
+
+    let maximum = windows.iter().max_by(|left, right| {
+        left["delta_e00"]
+            .as_f64()
+            .unwrap_or(0.0)
+            .total_cmp(&right["delta_e00"].as_f64().unwrap_or(0.0))
+    });
+    if let Some(maximum) = maximum {
+        let world = &maximum["world"];
+        let left = world["left"].as_f64().unwrap_or(world_origin.0);
+        let top = world["top"].as_f64().unwrap_or(world_origin.1);
+        let x = (left - world_origin.0).max(0.0) as u32;
+        let y = (top - world_origin.1).max(0.0) as u32;
+        let crop_left = x.saturating_sub(TONE_BOUNDARY_WINDOW_PX);
+        let crop_top = y.saturating_sub(TONE_BOUNDARY_WINDOW_PX);
+        let crop_width = (TONE_BOUNDARY_WINDOW_PX * 3).min(after.width() - crop_left);
+        let crop_height = (TONE_BOUNDARY_WINDOW_PX * 3).min(after.height() - crop_top);
+        for (name, image) in [("pre", before), ("post", after)] {
+            let crop =
+                image::imageops::crop_imm(image, crop_left, crop_top, crop_width, crop_height)
+                    .to_image();
+            let encoded = image::DynamicImage::ImageRgb32F(crop).to_rgb16();
+            if let Err(error) = encoded.save(directory.join(format!("tone-max-{name}.png"))) {
+                eprintln!("cannot write tone crop: {error}");
+            }
+        }
+    }
+
+    let heat_width = after.width().div_ceil(TONE_BOUNDARY_WINDOW_PX);
+    let heat_height = after.height().div_ceil(TONE_BOUNDARY_WINDOW_PX);
+    let mut heat = image::RgbImage::new(heat_width, heat_height);
+    for window in windows {
+        let world = &window["world"];
+        let x = ((world["left"].as_f64().unwrap_or(world_origin.0) - world_origin.0)
+            / f64::from(TONE_BOUNDARY_WINDOW_PX)) as u32;
+        let y = ((world["top"].as_f64().unwrap_or(world_origin.1) - world_origin.1)
+            / f64::from(TONE_BOUNDARY_WINDOW_PX)) as u32;
+        if x >= heat_width || y >= heat_height {
+            continue;
+        }
+        let value = (window["delta_e00"].as_f64().unwrap_or(0.0) / 20.0).clamp(0.0, 1.0);
+        let old = heat.get_pixel(x, y).0;
+        heat.put_pixel(
+            x,
+            y,
+            image::Rgb([old[0].max((255.0 * value) as u8), old[1], old[2]]),
+        );
+    }
+    if let Err(error) = heat.save(directory.join("tone-boundary-heatmap.png")) {
+        eprintln!("cannot write tone heatmap: {error}");
+    }
 }
 
 /// The tile's field at a world position, bilinear between the analysis-cell
@@ -2015,6 +3057,137 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn harmonization_is_deterministic_across_station_order_and_thread_count() {
+        fn run(
+            order: [usize; 3],
+            threads: usize,
+        ) -> (Rgb32FImage, Vec<ToneTileRecord>, ToneStatus, f64) {
+            let _run_scope = degradation::begin_run_scope();
+            let (width, height) = (1_536u32, 640u32);
+            let origins = [0u32, 256, 512];
+            let exposures = [1.0f32, 0.9, 1.1];
+            let sources = origins
+                .iter()
+                .zip(exposures)
+                .map(|(&origin, exposure)| {
+                    shifted_tile(1_024, height, f64::from(origin), exposure, 0..0)
+                })
+                .collect::<Vec<_>>();
+            let canonical_tiles = (0..3)
+                .map(|station| {
+                    let origin = origins[station];
+                    world_aligned_tone_tile(
+                        station,
+                        station as u16 + 1,
+                        &sources[station],
+                        (origin, 0, origin + 1_023, height - 1),
+                        |x, y| Some((x - f64::from(origin), y)),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let owners = (0..height)
+                .flat_map(|_| {
+                    (0..width).map(|x| {
+                        if x < 512 {
+                            1u16
+                        } else if x < 1_024 {
+                            2
+                        } else {
+                            3
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut panorama = Rgb32FImage::from_fn(width, height, |x, y| {
+                let station = owners[(y * width + x) as usize] as usize - 1;
+                *sources[station].get_pixel(x - origins[station], y)
+            });
+            let tiles = order
+                .iter()
+                .map(|&station| canonical_tiles[station].clone())
+                .collect::<Vec<_>>();
+            let mut position = [0usize; 3];
+            for (index, station) in order.into_iter().enumerate() {
+                position[station] = index;
+            }
+            let relations = [(0usize, 2usize), (1, 2), (0, 1)]
+                .map(|(left, right)| (position[left], position[right]));
+            let evidence = GrayImage::from_pixel(width, height, Luma([255]));
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let report = pool.install(|| {
+                harmonize_tone_tiles(&mut panorama, &owners, width, &tiles, &evidence, &relations)
+            });
+            let mut tile_records = report.tiles;
+            tile_records.sort_by_key(|tile| tile.station_index);
+            (
+                panorama,
+                tile_records,
+                report.status,
+                report.boundary_delta_e.max,
+            )
+        }
+
+        let single_thread = run([0, 1, 2], 1);
+        let reordered_parallel = run([2, 0, 1], 4);
+        assert_eq!(single_thread, reordered_parallel);
+    }
+
+    #[test]
+    fn owner_oracle_checkerboard_is_globally_disjoint_and_thread_deterministic() {
+        fn build(threads: usize) -> (Vec<Vec<f32>>, std::collections::BTreeSet<(i64, i64)>) {
+            let width = 1_536u32;
+            let height = 640u32;
+            let left = shifted_tile(1_024, height, 0.0, 1.0, 0..0);
+            let right = shifted_tile(1_024, height, 512.0, 0.9, 0..0);
+            let tiles = vec![
+                world_aligned_tone_tile(0, 1, &left, (0, 0, 1_023, height - 1), |x, y| {
+                    Some((x, y))
+                }),
+                world_aligned_tone_tile(1, 2, &right, (512, 0, width - 1, height - 1), |x, y| {
+                    Some((x - 512.0, y))
+                }),
+            ];
+            let pair = PairField::new(&tiles[0], &tiles[1]).unwrap();
+            let relation = ToneRelation::new(0, 1, consistent_samples(&pair.samples()));
+            let transforms = solve_tone_transforms(2, std::slice::from_ref(&relation));
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let fields = pool.install(|| {
+                build_spatial_field_iterations(
+                    &tiles,
+                    std::slice::from_ref(&relation),
+                    &transforms,
+                    true,
+                )
+            });
+            let (fit, overlap) =
+                tone_oracle_cell_sets(&tiles, std::slice::from_ref(&relation), &fields);
+            assert!(!fit.is_empty());
+            assert!(fit.is_subset(&overlap));
+            assert!(
+                overlap
+                    .iter()
+                    .filter(|cell| !fit.contains(cell))
+                    .all(|cell| (cell.0 + cell.1).rem_euclid(2) != 0)
+            );
+            (
+                fields
+                    .iter()
+                    .map(|field| field.log_gain.as_raw().clone())
+                    .collect(),
+                fit,
+            )
+        }
+
+        assert_eq!(build(1), build(4));
     }
 
     #[test]

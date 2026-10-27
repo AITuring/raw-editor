@@ -1,4 +1,4 @@
-use crate::panorama_stitching::{BRIEF_DESCRIPTOR_SIZE, Descriptor, Feature, KeyPoint, Match};
+use crate::panorama_utils::shared::{BRIEF_DESCRIPTOR_SIZE, Descriptor, Feature, KeyPoint, Match};
 use image::{GrayImage, ImageBuffer, Luma};
 use imageproc::corners::{Corner, corners_fast9};
 use imageproc::filter::gaussian_blur_f32;
@@ -543,6 +543,89 @@ pub fn match_features_with_ratio(
             }
         })
         .collect()
+}
+
+/// Diagnostic mirror of [`match_features_with_ratio`] that exposes exact
+/// descriptor attrition without changing the production matcher. Retrieval is
+/// counted once a source descriptor has both a nearest and second-nearest
+/// target; ratio survivors are counted before the reverse-best mutual gate.
+pub(crate) struct DescriptorMatchAttrition {
+    pub(crate) retrieval_count: usize,
+    pub(crate) ratio_filter_count: usize,
+    pub(crate) mutual_matches: Vec<Match>,
+}
+
+pub(crate) fn match_features_with_ratio_attrition(
+    features1: &[Feature],
+    features2: &[Feature],
+    ratio_threshold: f32,
+) -> DescriptorMatchAttrition {
+    if features1.is_empty() || features2.len() < 2 {
+        return DescriptorMatchAttrition {
+            retrieval_count: 0,
+            ratio_filter_count: 0,
+            mutual_matches: Vec::new(),
+        };
+    }
+    let distances = features1
+        .par_iter()
+        .map(|feature1| {
+            features2
+                .iter()
+                .map(|feature2| hamming_distance(&feature1.descriptor, &feature2.descriptor) as u16)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let best_for_first = distances
+        .par_iter()
+        .map(|row| {
+            let mut best_dist = u32::MAX;
+            let mut second_best_dist = u32::MAX;
+            let mut best_index = 0usize;
+            for (index, &distance) in row.iter().enumerate() {
+                let distance = u32::from(distance);
+                if distance < best_dist {
+                    second_best_dist = best_dist;
+                    best_dist = distance;
+                    best_index = index;
+                } else if distance < second_best_dist {
+                    second_best_dist = distance;
+                }
+            }
+            (best_index, best_dist, second_best_dist)
+        })
+        .collect::<Vec<_>>();
+    let best_for_second = (0..features2.len())
+        .into_par_iter()
+        .map(|second_index| {
+            distances
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, row)| row[second_index])
+                .map_or(0, |(first_index, _)| first_index)
+        })
+        .collect::<Vec<_>>();
+    let ratio_filter_count = best_for_first
+        .iter()
+        .filter(|(_, best, second)| {
+            *second > 0 && (*best as f32 / *second as f32) < ratio_threshold
+        })
+        .count();
+    let mutual_matches = best_for_first
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index1, (index2, best, second))| {
+            (second > 0
+                && (best as f32 / second as f32) < ratio_threshold
+                && best_for_second[index2] == index1)
+                .then_some(Match { index1, index2 })
+        })
+        .collect();
+    DescriptorMatchAttrition {
+        retrieval_count: features1.len(),
+        ratio_filter_count,
+        mutual_matches,
+    }
 }
 
 /// Match only descriptor levels whose support sizes are compatible with the

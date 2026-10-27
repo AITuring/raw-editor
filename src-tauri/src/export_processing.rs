@@ -40,7 +40,7 @@ use tempfile::NamedTempFile;
 use tiff::Directory as TiffDirectory;
 #[cfg(not(target_os = "android"))]
 use tiff::encoder::{
-    DirectoryEncoder as TiffDirectoryEncoder, TiffEncoder as StreamingTiffEncoder,
+    DirectoryEncoder as TiffDirectoryEncoder, TiffEncoder as StreamingTiffEncoder, TiffKindBig,
     TiffKindStandard, TiffValue, colortype::ColorType as TiffColorType, colortype::RGB8,
     colortype::RGB16, colortype::RGBA8, colortype::RGBA16,
 };
@@ -2023,6 +2023,74 @@ where
     }
 }
 
+/// Stream RGB rows into a BigTIFF without materialising the canvas.
+///
+/// The ordinary streaming TIFF writer above is intentionally kept for small
+/// exports, but its 32-bit strip offsets cannot address a multi-gigabyte
+/// native artwork.  Native tiled mosaic callers can use this narrow RGB8
+/// boundary after rendering one row (or one bounded strip) at a time.  Rows
+/// are supplied as RGBA because that is the common compositor/export
+/// contract; alpha is discarded at the file boundary.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_streaming_bigtiff_rgb8<F>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    render_rows: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn FnMut(&[u8]) -> Result<(), String>) -> Result<(), String>,
+{
+    const ROWS_PER_STRIP: u32 = 64;
+
+    let mut encoder = StreamingTiffEncoder::<_, TiffKindBig>::new_big(output)
+        .map_err(|error| format!("Failed to start streaming BigTIFF encoder: {error}"))?;
+    let mut image = encoder
+        .new_image::<RGB8>(width, height)
+        .map_err(|error| format!("Failed to configure streaming BigTIFF image: {error}"))?;
+    image
+        .rows_per_strip(ROWS_PER_STRIP.min(height).max(1))
+        .map_err(|error| format!("Failed to configure BigTIFF strips: {error}"))?;
+
+    let strip_capacity = (width as usize)
+        .checked_mul(3)
+        .and_then(|samples_per_row| samples_per_row.checked_mul(ROWS_PER_STRIP as usize))
+        .ok_or_else(|| format!("BigTIFF width {width} exceeds the strip size limit"))?;
+    let mut strip = Vec::<u8>::with_capacity(strip_capacity);
+    let mut written_rows = 0_u32;
+    {
+        let mut sink = |rgba_row: &[u8]| -> Result<(), String> {
+            validate_streamed_rgba_row(rgba_row, width, height, written_rows)?;
+            for pixel in rgba_row.chunks_exact(4) {
+                strip.extend_from_slice(&pixel[..3]);
+            }
+            written_rows += 1;
+
+            let expected_samples = image.next_strip_sample_count() as usize;
+            if strip.len() == expected_samples {
+                image
+                    .write_strip(&strip)
+                    .map_err(|error| format!("Failed to write BigTIFF strip: {error}"))?;
+                strip.clear();
+            } else if strip.len() > expected_samples {
+                return Err(format!(
+                    "Streaming BigTIFF strip exceeded its expected {expected_samples} samples"
+                ));
+            }
+            Ok(())
+        };
+        render_rows(&mut sink)?;
+    }
+    if written_rows != height || !strip.is_empty() || image.next_strip_sample_count() != 0 {
+        return Err(format!(
+            "Streaming BigTIFF received {written_rows} complete rows; expected {height}"
+        ));
+    }
+    image
+        .finish()
+        .map_err(|error| format!("Failed to finish streaming BigTIFF: {error}"))
+}
+
 #[cfg(not(target_os = "android"))]
 fn encode_streaming_tiff_typed<C, F>(
     output: &mut fs::File,
@@ -2177,6 +2245,16 @@ pub(crate) fn encode_rgb16_tiff_with_metadata(
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
+    if should_use_bigtiff(width, height, 3, 2) {
+        return encode_rgb16_bigtiff_with_metadata(
+            output,
+            width,
+            height,
+            rgb16,
+            embed_color_profile,
+            export_metadata,
+        );
+    }
     encode_rgb_tiff_with_metadata::<RGB16>(
         output,
         width,
@@ -2196,6 +2274,16 @@ pub(crate) fn encode_rgb8_tiff_with_metadata(
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
+    if should_use_bigtiff(width, height, 3, 1) {
+        return encode_rgb8_bigtiff_with_metadata(
+            output,
+            width,
+            height,
+            rgb8,
+            embed_color_profile,
+            export_metadata,
+        );
+    }
     encode_rgb_tiff_with_metadata::<RGB8>(
         output,
         width,
@@ -2217,6 +2305,16 @@ pub(crate) fn encode_rgba16_tiff_with_metadata(
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
+    if should_use_bigtiff(width, height, 4, 2) {
+        return encode_rgba16_bigtiff_with_metadata(
+            output,
+            width,
+            height,
+            rgba16,
+            embed_color_profile,
+            export_metadata,
+        );
+    }
     encode_rgb_tiff_with_metadata::<RGBA16>(
         output,
         width,
@@ -2237,6 +2335,16 @@ pub(crate) fn encode_rgba8_tiff_with_metadata(
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
+    if should_use_bigtiff(width, height, 4, 1) {
+        return encode_rgba8_bigtiff_with_metadata(
+            output,
+            width,
+            height,
+            rgba8,
+            embed_color_profile,
+            export_metadata,
+        );
+    }
     encode_rgb_tiff_with_metadata::<RGBA8>(
         output,
         width,
@@ -2245,6 +2353,122 @@ pub(crate) fn encode_rgba8_tiff_with_metadata(
         embed_color_profile,
         export_metadata,
     )
+}
+
+/// Standard TIFF stores strip/tile offsets in 32-bit fields. Keep the normal
+/// encoder for ordinary exports, but switch to BigTIFF before the uncompressed
+/// sample payload could approach that limit. The outer image-stack publisher
+/// still writes beside the destination, syncs, validates and atomically
+/// renames the completed file.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn should_use_bigtiff(
+    width: u32,
+    height: u32,
+    samples_per_pixel: usize,
+    bytes_per_sample: usize,
+) -> bool {
+    const STANDARD_TIFF_OFFSET_BUDGET: u64 = (u32::MAX as u64) - (64 * 1024 * 1024);
+    let payload = u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|pixels| pixels.checked_mul(samples_per_pixel as u64))
+        .and_then(|samples| samples.checked_mul(bytes_per_sample as u64));
+    payload.is_none_or(|bytes| bytes > STANDARD_TIFF_OFFSET_BUDGET)
+}
+
+/// 16-bit RGB BigTIFF writer. This intentionally exposes the same narrow API
+/// as the standard TIFF writer so callers cannot accidentally pass a full
+/// DynamicImage through a second conversion path.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgb16_bigtiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgb16: &[u16],
+    embed_color_profile: bool,
+    _export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_bigtiff_with_metadata::<RGB16>(output, width, height, rgb16, embed_color_profile)
+}
+
+/// 8-bit RGB BigTIFF writer for explicitly downgraded exports whose pixel
+/// count itself exceeds the standard TIFF offset budget.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgb8_bigtiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgb8: &[u8],
+    embed_color_profile: bool,
+    _export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_bigtiff_with_metadata::<RGB8>(output, width, height, rgb8, embed_color_profile)
+}
+
+/// 16-bit RGBA BigTIFF writer. Alpha is written as an unassociated fourth
+/// sample, preserving the Coverage_Mask semantics of the standard path.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgba16_bigtiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgba16: &[u16],
+    embed_color_profile: bool,
+    _export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_bigtiff_with_metadata::<RGBA16>(output, width, height, rgba16, embed_color_profile)
+}
+
+/// 8-bit RGBA BigTIFF writer preserving the Coverage_Mask alpha channel.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn encode_rgba8_bigtiff_with_metadata(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    rgba8: &[u8],
+    embed_color_profile: bool,
+    _export_metadata: Option<&ExifMetadata>,
+) -> Result<(), String> {
+    encode_bigtiff_with_metadata::<RGBA8>(output, width, height, rgba8, embed_color_profile)
+}
+
+#[cfg(not(target_os = "android"))]
+fn encode_bigtiff_with_metadata<C>(
+    output: &mut fs::File,
+    width: u32,
+    height: u32,
+    data: &[C::Inner],
+    embed_color_profile: bool,
+) -> Result<(), String>
+where
+    C: TiffColorType,
+    [C::Inner]: TiffValue,
+{
+    let samples_per_pixel = C::BITS_PER_SAMPLE.len();
+    let expected_samples = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(samples_per_pixel))
+        .ok_or_else(|| "The BigTIFF dimensions exceed the addressable sample count".to_string())?;
+    if data.len() != expected_samples {
+        return Err(format!(
+            "BigTIFF received {} samples; expected {expected_samples}",
+            data.len()
+        ));
+    }
+
+    let mut encoder = StreamingTiffEncoder::<_, TiffKindBig>::new_big(output)
+        .map_err(|error| format!("Failed to start BigTIFF encoder: {error}"))?;
+    let mut image = encoder
+        .new_image::<C>(width, height)
+        .map_err(|error| format!("Failed to configure BigTIFF image: {error}"))?;
+    if embed_color_profile {
+        image
+            .encoder()
+            .write_tag(TiffTag::IccProfile, srgb_v4_profile())
+            .map_err(|error| format!("Failed to attach BigTIFF ICC profile: {error}"))?;
+    }
+    image
+        .write_data(data)
+        .map_err(|error| format!("Failed to encode BigTIFF pixels: {error}"))
 }
 
 #[cfg(not(target_os = "android"))]
@@ -4788,6 +5012,7 @@ pub async fn estimate_export_sizes(
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
     use std::io::{Cursor, Read, Seek, SeekFrom};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -4801,6 +5026,7 @@ mod tests {
     use little_exif::filetype::FileExtension;
     use little_exif::metadata::Metadata;
     use little_exif::rational::uR64;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -4812,6 +5038,58 @@ mod tests {
                 ((x * 11 + y * 7) % 256) as u8,
             ])
         }))
+    }
+
+    #[test]
+    fn bigtiff_budget_switches_before_standard_offset_limit() {
+        assert!(!should_use_bigtiff(8_000, 6_000, 3, 2));
+        assert!(should_use_bigtiff(1_000_000, 1_000_000, 3, 2));
+        assert!(should_use_bigtiff(700_000, 700_000, 4, 2));
+    }
+
+    #[test]
+    fn bigtiff_encoder_writes_a_decodable_16_bit_rgb_image() {
+        let directory = tempdir().expect("temporary BigTIFF directory");
+        let path = directory.path().join("sample.bigtiff");
+        let mut output = File::create(&path).expect("create BigTIFF");
+        encode_rgb16_bigtiff_with_metadata(
+            &mut output,
+            2,
+            2,
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            true,
+            None,
+        )
+        .expect("encode BigTIFF");
+        drop(output);
+
+        let bytes = std::fs::read(&path).expect("read BigTIFF");
+        assert!(
+            bytes.get(2..4) == Some(&[43, 0][..]) || bytes.get(2..4) == Some(&[0, 43][..]),
+            "expected TIFF version 43 (BigTIFF), header={:?}",
+            bytes.get(..16)
+        );
+        let decoder = TiffDecoder::new(Cursor::new(bytes)).expect("decode BigTIFF");
+        assert_eq!(decoder.dimensions(), (2, 2));
+    }
+
+    #[test]
+    fn streaming_bigtiff_encoder_writes_rgba_rows_as_rgb8() {
+        let directory = tempdir().expect("temporary BigTIFF directory");
+        let path = directory.path().join("streamed.bigtiff");
+        let mut output = File::create(&path).expect("create streamed BigTIFF");
+        encode_streaming_bigtiff_rgb8(&mut output, 2, 2, |sink| {
+            sink(&[10, 20, 30, 255, 40, 50, 60, 255])?;
+            sink(&[70, 80, 90, 255, 100, 110, 120, 255])?;
+            Ok(())
+        })
+        .expect("stream BigTIFF");
+        drop(output);
+
+        let bytes = std::fs::read(&path).expect("read streamed BigTIFF");
+        assert_eq!(bytes.get(2..4), Some(&[43, 0][..]));
+        let decoder = TiffDecoder::new(Cursor::new(bytes)).expect("decode streamed BigTIFF");
+        assert_eq!(decoder.dimensions(), (2, 2));
     }
 
     #[test]

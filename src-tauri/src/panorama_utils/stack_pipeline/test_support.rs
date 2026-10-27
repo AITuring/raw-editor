@@ -23,8 +23,8 @@ use nalgebra::{Matrix3, Point2, Point3};
 use proptest::prelude::*;
 use serde_json::{Value, json};
 
-use crate::panorama_stitching::{ImageInfo, MatchInfo};
 use crate::panorama_utils::registration;
+use crate::panorama_utils::shared::{ImageInfo, MatchInfo};
 use crate::panorama_utils::stitching::{
     ColorEncoding, ConfidenceMap, CoverageMask, OwnershipMap, SourceProvenance, VirtualTile,
 };
@@ -51,6 +51,16 @@ pub const QUALITY_GATE_CRITERION_NAMES: &[&str] = &[
     "boundary_stroke_alignment",
     "owner_sharpness_coverage",
 ];
+
+/// Test-only destination for optional Tone_Harmonizer diagnostics.
+pub fn tone_diagnostics_dir() -> Option<PathBuf> {
+    std::env::var_os("RAW_EDITOR_TONE_DIAGNOSTICS_DIR").map(PathBuf::from)
+}
+
+/// Test-only destination for current-run owner Source_RAW fidelity evidence.
+pub fn tone_owner_fidelity_dir() -> Option<PathBuf> {
+    std::env::var_os("RAW_EDITOR_TONE_OWNER_FIDELITY_DIR").map(PathBuf::from)
+}
 
 /// A failure reason identifier together with the severity the design matrix
 /// declares for it.
@@ -173,6 +183,7 @@ fn arb_input_report() -> impl Strategy<Value = InputReport> {
             source_count,
             max_sources: 500,
             sources,
+            ..InputReport::default()
         }
     })
 }

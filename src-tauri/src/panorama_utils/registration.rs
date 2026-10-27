@@ -6,6 +6,25 @@
 use image::GrayImage;
 use nalgebra::{Matrix3, Point2, Point3};
 
+/// Test-only A/B switch for the native patch-refinement stages.
+///
+/// Production builds deliberately ignore the environment variable so an
+/// externally supplied process setting cannot weaken alignment or station
+/// relation evidence. Tests compiled in this crate with `cfg(test)` can set
+/// `RAW_EDITOR_STACK_DISABLE_NATIVE_PATCH_REFINEMENT` to isolate the cheaper
+/// geometric path when diagnosing a fixture.
+#[inline]
+pub(crate) fn native_patch_refinement_disabled_for_tests() -> bool {
+    #[cfg(test)]
+    {
+        std::env::var_os("RAW_EDITOR_STACK_DISABLE_NATIVE_PATCH_REFINEMENT").is_some()
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
 pub(crate) fn sample_gray(image: &GrayImage, x: f64, y: f64) -> Option<f64> {
     if !x.is_finite()
         || !y.is_finite()
@@ -257,6 +276,14 @@ fn probe_inner(
 mod tests {
     use super::*;
     use image::Luma;
+
+    #[test]
+    fn native_patch_refinement_switch_matches_test_environment() {
+        assert_eq!(
+            native_patch_refinement_disabled_for_tests(),
+            std::env::var_os("RAW_EDITOR_STACK_DISABLE_NATIVE_PATCH_REFINEMENT").is_some()
+        );
+    }
 
     fn texture(x: f64, y: f64) -> f64 {
         115.0

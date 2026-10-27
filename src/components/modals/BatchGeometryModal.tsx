@@ -1120,15 +1120,17 @@ export default function BatchGeometryModal({ isOpen, onClose }: BatchGeometryMod
                     )}
                   </ul>
                 ) : sourcePaths.length === 0 ? (
-                  <button
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border-color bg-bg-primary/30 px-4 py-5 text-xs text-text-secondary transition-colors hover:border-accent/60 hover:bg-card-active hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    disabled={isProcessing}
-                    onClick={handlePickImages}
-                    type="button"
-                  >
-                    <ImagePlus aria-hidden="true" size={17} />
-                    {t('modals.batchGeometry.selectImages')}
-                  </button>
+                  <div className="mt-3 rounded-lg border border-dashed border-border-color bg-bg-primary/30 transition-colors hover:border-accent/60 hover:bg-card-active">
+                    <button
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-transparent px-4 py-5 text-xs text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      disabled={isProcessing}
+                      onClick={handlePickImages}
+                      type="button"
+                    >
+                      <ImagePlus aria-hidden="true" size={17} />
+                      {t('modals.batchGeometry.selectImages')}
+                    </button>
+                  </div>
                 ) : null}
               </section>
 

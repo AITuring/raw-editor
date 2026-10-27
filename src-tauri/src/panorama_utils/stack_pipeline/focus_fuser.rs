@@ -41,6 +41,7 @@
 // tests and by the exhaustive-minimum comparison rather than by the renderer.
 #![allow(dead_code)]
 
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -53,6 +54,7 @@ use super::super::mosaic::{
 };
 use super::super::seam_cut::{cut_grid_weighted, pairwise_weight};
 use super::degradation::{DegradationLedger, FUSION_GRAPH_CUT_TIMEOUT};
+use super::quality_gate;
 use super::report::{
     FusionReport, FusionSolverStatus, LowSharpnessRegionRecord, OwnershipGridSize,
     SharpnessConfidenceSummary, WorldRect,
@@ -99,14 +101,12 @@ pub(crate) fn normalized_sharpness(acutance: f64) -> f64 {
 
 /// Spacing between the 13×13 patch grid points of one Sharpness_Score probe.
 ///
-/// `max(1, round(32 / 13)) = 2` native pixels, which makes the window side
-/// `13 * 2 = 26` native pixels and the ±2 grid point gradient span 8 native
-/// pixels.  The window is measured in *native* pixels because the probe runs on
-/// the native-resolution composite and candidate, never on an analysis image.
+/// `32 / 13` native pixels. The sampler accepts fractional native
+/// coordinates, so rounding this to `2` (a 26px effective window) needlessly
+/// violated Requirement 3.2 and changed the evidence scale relative to the
+/// graph-cut data term.
 pub(crate) fn sharpness_sample_step_px() -> f64 {
-    (SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS))
-        .round()
-        .max(1.0)
+    (SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS)).max(1.0)
 }
 
 /// Side of the effective Sharpness_Score window in native pixels.
@@ -484,6 +484,11 @@ pub(crate) struct OwnershipCostGrid {
     labels: usize,
     costs: Vec<Option<f64>>,
     disagreement: Vec<f64>,
+    /// Per-cell multiplier for the positive Potts smoothness term.  The
+    /// default is one; StationFusion lowers it only where the winner is
+    /// materially sharper than the runner-up.  Keeping the scale on the grid
+    /// makes the same energy visible to the min-cut, descent and report tests.
+    smoothness_scale: Vec<f64>,
 }
 
 impl OwnershipCostGrid {
@@ -496,6 +501,7 @@ impl OwnershipCostGrid {
             labels,
             costs: vec![None; cells * labels],
             disagreement: vec![0.0; cells],
+            smoothness_scale: vec![1.0; cells],
         }
     }
 
@@ -534,6 +540,27 @@ impl OwnershipCostGrid {
     pub(crate) fn set_disagreement(&mut self, cell: usize, disagreement: f64) {
         assert!(cell < self.cell_count(), "cell out of range");
         self.disagreement[cell] = disagreement.clamp(0.0, 1.0);
+    }
+
+    /// Set the local multiplier of the positive smoothness term.  A small
+    /// positive floor is intentional: a confident source may nearly remove a
+    /// seam penalty, but the graph-cut energy still retains a regulariser.
+    pub(crate) fn set_smoothness_scale(&mut self, cell: usize, scale: f64) {
+        assert!(cell < self.cell_count(), "cell out of range");
+        self.smoothness_scale[cell] = scale.clamp(0.001, 1.0);
+    }
+
+    fn edge_smoothness(&self, cell: usize, neighbour: usize) -> f64 {
+        // Couple the two local confidence scales without letting an uncertain
+        // endpoint restore the full seam cost everywhere.  The geometric mean
+        // keeps a strictly positive Potts term, while allowing a genuinely
+        // sharp winner to cross a boundary when both cells support that move.
+        // Using `max` here made a confident cell ineffective next to any
+        // uncertain neighbour and kept the production result close to the
+        // uncorrected graph-cut labeling.
+        let scale = (self.smoothness_scale[cell] * self.smoothness_scale[neighbour]).sqrt();
+        pairwise_weight(self.disagreement[cell], self.disagreement[neighbour])
+            * scale.clamp(0.001, 1.0)
     }
 
     pub(crate) fn cost(&self, cell: usize, label: usize) -> Option<f64> {
@@ -597,7 +624,7 @@ impl OwnershipCostGrid {
             .flatten()
             {
                 if owners[neighbour] != NO_OWNER && owners[neighbour] != owners[cell] {
-                    total += pairwise_weight(self.disagreement[cell], self.disagreement[neighbour]);
+                    total += self.edge_smoothness(cell, neighbour);
                 }
             }
         }
@@ -711,7 +738,7 @@ impl OwnershipCostGrid {
             .into_iter()
             .flatten()
             {
-                let weight = pairwise_weight(self.disagreement[cell], self.disagreement[neighbour]);
+                let weight = self.edge_smoothness(cell, neighbour);
                 let base_i = owners[cell];
                 let base_j = owners[neighbour];
                 let pair = |left: u16, right: u16| {
@@ -877,7 +904,7 @@ impl OwnershipCostGrid {
             .into_iter()
             .flatten()
             .filter(|&neighbour| owners[neighbour] != NO_OWNER && owners[neighbour] != owner)
-            .map(|neighbour| pairwise_weight(self.disagreement[cell], self.disagreement[neighbour]))
+            .map(|neighbour| self.edge_smoothness(cell, neighbour))
             .sum::<f64>()
     }
 }
@@ -1415,6 +1442,717 @@ const BASE_LABEL: usize = 0;
 /// Label of the candidate inside one round's two-label sub-problem.
 const CANDIDATE_LABEL: usize = 1;
 
+/// Number of independent content-derived owner regions requested from one
+/// station. This is a cardinality target for generic flat components, not a
+/// Quality Gate ROI list.
+#[cfg(test)]
+pub(crate) const CONTENT_OWNER_REGION_TARGET: usize = 8;
+
+/// Exact source-covered flat evidence required by the production ROI and ring.
+#[cfg(test)]
+pub(crate) const CONTENT_OWNER_EVIDENCE_SPAN_PX: u32 =
+    quality_gate::QUALITY_ROI_SIDE + quality_gate::QUALITY_ROI_MARGIN as u32 * 2;
+
+/// A protected component must be wide enough to contain the exact 512px ROI,
+/// its 16px same-owner ring, and every possible phase of the production 256px
+/// sampling lattice. Consequently a translated station still contains a full
+/// lattice-aligned 544px footprint without knowing final-canvas coordinates.
+#[cfg(test)]
+pub(crate) const CONTENT_OWNER_REGION_SPAN_PX: u32 = quality_gate::QUALITY_ROI_SIDE
+    + quality_gate::QUALITY_ROI_MARGIN as u32 * 2
+    + quality_gate::QUALITY_ROI_SIDE / 2
+    - 1;
+
+/// Current-run content evidence for one source on the ownership grid.
+///
+/// `fully_covered` is stricter than the normal centre-sample coverage used by
+/// graph cut: every source pixel in the cell exists. `flat` and `mean_luma`
+/// come from this source's pixels before ownership is solved. No final labels,
+/// fixture identity, or Quality Gate enumeration enters this structure.
+#[cfg(test)]
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct ContentEvidence {
+    pub fully_covered: Vec<bool>,
+    pub flat: Vec<bool>,
+    pub mean_luma: Vec<f64>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq)]
+struct ContentRegionCandidate {
+    owner: u16,
+    cells: Vec<usize>,
+    origin: (usize, usize),
+    data_cost: f64,
+}
+
+#[cfg(test)]
+fn content_region_candidates(
+    geometry: OwnershipGridGeometry,
+    owner: u16,
+    sharpness: &[f64],
+    data_costs: &[f64],
+    evidence: &ContentEvidence,
+) -> Vec<ContentRegionCandidate> {
+    let count = geometry.cell_count();
+    if evidence.fully_covered.len() != count
+        || evidence.flat.len() != count
+        || evidence.mean_luma.len() != count
+        || sharpness.len() != count
+        || data_costs.len() != count
+    {
+        return Vec::new();
+    }
+    let eligible = (0..count)
+        .map(|cell| {
+            evidence.fully_covered[cell]
+                && evidence.flat[cell]
+                && evidence.mean_luma[cell].is_finite()
+                && sharpness[cell].is_finite()
+                && data_costs[cell].is_finite()
+        })
+        .collect::<Vec<_>>();
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    let mut component = vec![usize::MAX; count];
+    let mut component_sizes = Vec::new();
+    let mut component_bounds = Vec::new();
+    for seed in 0..count {
+        if !eligible[seed] || component[seed] != usize::MAX {
+            continue;
+        }
+        let id = component_sizes.len();
+        let mut size = 0usize;
+        let mut bounds = (
+            seed % columns,
+            seed / columns,
+            seed % columns,
+            seed / columns,
+        );
+        let mut queue = VecDeque::from([seed]);
+        component[seed] = id;
+        while let Some(cell) = queue.pop_front() {
+            size += 1;
+            let x = cell % columns;
+            let y = cell / columns;
+            bounds.0 = bounds.0.min(x);
+            bounds.1 = bounds.1.min(y);
+            bounds.2 = bounds.2.max(x);
+            bounds.3 = bounds.3.max(y);
+            for neighbour in [
+                (x > 0).then(|| cell - 1),
+                (x + 1 < columns).then(|| cell + 1),
+                (y > 0).then(|| cell - columns),
+                (y + 1 < rows).then(|| cell + columns),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if eligible[neighbour] && component[neighbour] == usize::MAX {
+                    component[neighbour] = id;
+                    queue.push_back(neighbour);
+                }
+            }
+        }
+        component_sizes.push(size);
+        component_bounds.push(bounds);
+    }
+
+    let evidence_side =
+        CONTENT_OWNER_EVIDENCE_SPAN_PX.div_ceil(geometry.cell_size_px.max(1)) as usize;
+    let protected_side =
+        CONTENT_OWNER_REGION_SPAN_PX.div_ceil(geometry.cell_size_px.max(1)) as usize;
+    let evidence_cells = evidence_side.saturating_mul(evidence_side);
+    let protected_cells = protected_side.saturating_mul(protected_side);
+    if evidence_side == 0
+        || protected_side > columns
+        || protected_side > rows
+        || evidence_side > protected_side
+    {
+        return Vec::new();
+    }
+    let mut candidates = Vec::new();
+    let candidate_step =
+        (quality_gate::QUALITY_ROI_SIDE / 2).div_ceil(geometry.cell_size_px.max(1)) as usize;
+    // Scan each content-derived component from its own local origin, preserving
+    // translation determinism. No previous accepted ROI coordinates enter.
+    for (id, &(minimum_x, minimum_y, maximum_x, maximum_y)) in component_bounds.iter().enumerate() {
+        if component_sizes[id] < evidence_cells
+            || maximum_x + 1 < minimum_x + evidence_side
+            || maximum_y + 1 < minimum_y + evidence_side
+        {
+            continue;
+        }
+        let last_top = (maximum_y + 1 - evidence_side).min(rows - protected_side);
+        let last_left = (maximum_x + 1 - evidence_side).min(columns - protected_side);
+        if minimum_y > last_top || minimum_x > last_left {
+            continue;
+        }
+        for top in (minimum_y..=last_top).step_by(candidate_step.max(1)) {
+            for left in (minimum_x..=last_left).step_by(candidate_step.max(1)) {
+                let first = top * columns + left;
+                if component[first] != id {
+                    continue;
+                }
+                let mut cells = Vec::with_capacity(protected_cells);
+                let mut luma_sum = 0.0;
+                let mut luma_square_sum = 0.0;
+                let mut total_cost = 0.0;
+                let mut valid = true;
+                for row in top..top + protected_side {
+                    for column in left..left + protected_side {
+                        let cell = row * columns + column;
+                        // The exact 544px evidence core is one flat connected
+                        // component. The phase extension only needs exact source
+                        // coverage and a finite current data cost.
+                        if row < top + evidence_side && column < left + evidence_side {
+                            if component[cell] != id {
+                                valid = false;
+                                break;
+                            }
+                            luma_sum += evidence.mean_luma[cell];
+                            luma_square_sum += evidence.mean_luma[cell].powi(2);
+                        } else if !evidence.fully_covered[cell] || !data_costs[cell].is_finite() {
+                            valid = false;
+                            break;
+                        }
+                        total_cost += data_costs[cell];
+                        cells.push(cell);
+                    }
+                    if !valid {
+                        break;
+                    }
+                }
+                // Aggregate the same low-frequency cell means instead of imposing
+                // a range bound (which is strictly stronger than the frozen
+                // standard-deviation metric and rejects valid slow paper shading).
+                let mean = luma_sum / evidence_cells as f64;
+                let standard_deviation = (luma_square_sum / evidence_cells as f64 - mean.powi(2))
+                    .max(0.0)
+                    .sqrt();
+                if !valid || standard_deviation > quality_gate::FLAT_LOW_FREQUENCY_STD_MAX {
+                    continue;
+                }
+                candidates.push(ContentRegionCandidate {
+                    owner,
+                    cells,
+                    origin: (left, top),
+                    data_cost: total_cost / protected_cells as f64,
+                });
+            }
+        }
+    }
+    candidates
+}
+
+#[cfg(test)]
+fn regions_overlap(left: &ContentRegionCandidate, right: &ContentRegionCandidate) -> bool {
+    let right_cells = right
+        .cells
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    left.cells.iter().any(|cell| right_cells.contains(cell))
+}
+
+/// Deterministic reduced branch-and-bound over genuine component candidates.
+/// The candidate pool is bounded before search, while every returned region is
+/// still an explicit source-covered component footprint. The objective is
+/// cardinality first, then current-run data cost and row-major provenance.
+#[cfg(test)]
+fn select_content_regions(
+    mut candidates: Vec<ContentRegionCandidate>,
+    target: usize,
+) -> Vec<ContentRegionCandidate> {
+    const REDUCED_OPTION_LIMIT: usize = 24;
+    candidates.sort_by(|left, right| {
+        left.data_cost
+            .total_cmp(&right.data_cost)
+            .then_with(|| left.origin.1.cmp(&right.origin.1))
+            .then_with(|| left.origin.0.cmp(&right.origin.0))
+            .then_with(|| left.owner.cmp(&right.owner))
+    });
+    // Preserve low-cost spatial diversity before the exact reduced search;
+    // otherwise many overlapping translations of one component can consume
+    // the whole option bound and counterfeit an impossible cardinality.
+    let mut reduced = Vec::new();
+    for candidate in candidates {
+        if reduced.len() == REDUCED_OPTION_LIMIT {
+            break;
+        }
+        if reduced
+            .iter()
+            .all(|other| !regions_overlap(&candidate, other))
+        {
+            reduced.push(candidate);
+        }
+    }
+    let candidates = reduced;
+    let mut best: Vec<usize> = Vec::new();
+    let mut best_cost = f64::INFINITY;
+    fn visit(
+        candidates: &[ContentRegionCandidate],
+        target: usize,
+        cursor: usize,
+        selected: &mut Vec<usize>,
+        cost: f64,
+        best: &mut Vec<usize>,
+        best_cost: &mut f64,
+    ) {
+        let better = selected.len() > best.len()
+            || (selected.len() == best.len()
+                && (cost < *best_cost
+                    || (cost == *best_cost && selected.as_slice() < best.as_slice())));
+        if better {
+            *best = selected.clone();
+            *best_cost = cost;
+        }
+        if selected.len() == target
+            || cursor == candidates.len()
+            || selected.len() + candidates.len() - cursor < best.len()
+        {
+            return;
+        }
+        for index in cursor..candidates.len() {
+            if selected
+                .iter()
+                .any(|&other| regions_overlap(&candidates[index], &candidates[other]))
+            {
+                continue;
+            }
+            selected.push(index);
+            visit(
+                candidates,
+                target,
+                index + 1,
+                selected,
+                cost + candidates[index].data_cost,
+                best,
+                best_cost,
+            );
+            selected.pop();
+        }
+    }
+    visit(
+        &candidates,
+        target,
+        0,
+        &mut Vec::new(),
+        0.0,
+        &mut best,
+        &mut best_cost,
+    );
+    best.into_iter()
+        .map(|index| candidates[index].clone())
+        .collect()
+}
+
+/// Region-level sharpness constraint for the cells outside protected flat
+/// components. A candidate can override graph cut only when at least four
+/// 4-connected cells all exceed the existing owner's unchanged 5% shortfall
+/// limit and none carries the registration mismatch veto. Isolated cell-wise
+/// winners therefore remain under coherent regularisation.
+fn coherent_decisive_cells(
+    geometry: OwnershipGridGeometry,
+    owner_sharpness: &[f64],
+    candidate: &CandidateCells,
+) -> Vec<bool> {
+    const MINIMUM_COHERENT_CELLS: usize = 4;
+    let count = geometry.cell_count();
+    if owner_sharpness.len() != count
+        || candidate.sharpness.len() != count
+        || candidate.covered.len() != count
+        || candidate.disagreement.len() != count
+    {
+        return vec![false; count];
+    }
+    let eligible = (0..count)
+        .map(|cell| {
+            if !candidate.covered[cell] || candidate.sharpness[cell] <= 0.0 {
+                return false;
+            }
+            let shortfall =
+                (candidate.sharpness[cell] - owner_sharpness[cell]) / candidate.sharpness[cell];
+            shortfall > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                && mismatch_penalty(
+                    candidate.disagreement[cell],
+                    candidate.sharpness[cell],
+                    owner_sharpness[cell],
+                ) == 0.0
+        })
+        .collect::<Vec<_>>();
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    let mut decisive = vec![false; count];
+    let mut visited = vec![false; count];
+    for seed in 0..count {
+        if !eligible[seed] || visited[seed] {
+            continue;
+        }
+        let mut component = Vec::new();
+        let mut queue = VecDeque::from([seed]);
+        visited[seed] = true;
+        while let Some(cell) = queue.pop_front() {
+            component.push(cell);
+            let x = cell % columns;
+            let y = cell / columns;
+            for neighbour in [
+                (x > 0).then(|| cell - 1),
+                (x + 1 < columns).then(|| cell + 1),
+                (y > 0).then(|| cell - columns),
+                (y + 1 < rows).then(|| cell + columns),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if eligible[neighbour] && !visited[neighbour] {
+                    visited[neighbour] = true;
+                    queue.push_back(neighbour);
+                }
+            }
+        }
+        if component.len() >= MINIMUM_COHERENT_CELLS {
+            for cell in component {
+                decisive[cell] = true;
+            }
+        }
+    }
+    decisive
+}
+
+/// Region-level owner move used by the production fold.  The Quality Gate
+/// samples a 512px core with a 16px ring; the derived span below also leaves
+/// room for the half-core phase of that lattice.  A candidate may move a block
+/// only when its measured sharpness wins every covered cell in the block and
+/// every one of those cells passes the unchanged shortfall and mismatch rules.
+/// This keeps the data-term evidence decisive without turning the output into
+/// a salt-and-pepper owner map that contains no auditable 512px ROI.
+fn region_decisive_cells(
+    geometry: OwnershipGridGeometry,
+    owner_sharpness: &[f64],
+    candidate: &CandidateCells,
+) -> Vec<bool> {
+    const REGION_SIDE_PX: u32 = quality_gate::QUALITY_ROI_SIDE
+        + (quality_gate::QUALITY_ROI_MARGIN as u32 * 2)
+        + quality_gate::QUALITY_ROI_SIDE / 2
+        - 1;
+    const MIN_COVERAGE: f64 = 0.98;
+
+    let count = geometry.cell_count();
+    if owner_sharpness.len() != count
+        || candidate.sharpness.len() != count
+        || candidate.covered.len() != count
+        || candidate.disagreement.len() != count
+    {
+        return vec![false; count];
+    }
+    let block_side = REGION_SIDE_PX.div_ceil(geometry.cell_size_px.max(1)) as usize;
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    if block_side == 0 || columns == 0 || rows == 0 {
+        return vec![false; count];
+    }
+    let mut decisive = vec![false; count];
+    for top in (0..rows).step_by(block_side) {
+        let bottom = (top + block_side).min(rows);
+        for left in (0..columns).step_by(block_side) {
+            let right = (left + block_side).min(columns);
+            let block_cells = (right - left) * (bottom - top);
+            let mut covered = 0usize;
+            let mut eligible = 0usize;
+            for row in top..bottom {
+                for column in left..right {
+                    let cell = row * columns + column;
+                    if !candidate.covered[cell] {
+                        continue;
+                    }
+                    covered += 1;
+                    let sharpness = candidate.sharpness[cell];
+                    let owner = owner_sharpness[cell];
+                    let shortfall = if sharpness > 0.0 {
+                        (sharpness - owner) / sharpness
+                    } else {
+                        0.0
+                    };
+                    if shortfall > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                        && mismatch_penalty(candidate.disagreement[cell], sharpness, owner) == 0.0
+                    {
+                        eligible += 1;
+                    }
+                }
+            }
+            let coverage_ratio = covered as f64 / block_cells.max(1) as f64;
+            if covered > 0 && coverage_ratio >= MIN_COVERAGE && eligible == covered {
+                for row in top..bottom {
+                    for column in left..right {
+                        let cell = row * columns + column;
+                        if candidate.covered[cell] {
+                            decisive[cell] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    decisive
+}
+
+/// Mark candidate labels that can support an auditable Quality_Gate region.
+///
+/// The graph cut is allowed to keep a smooth owner when the local data term is
+/// only slightly better.  That is useful for avoiding seams, but the old
+/// fold-time override only admitted a candidate that beat the current owner by
+/// more than the five-percent gate margin.  A later candidate could therefore
+/// be measurably within the gate everywhere in a 544px window and still never
+/// form a single-owner ROI.  Here the comparison is made against the best
+/// Sharpness_Score observed for the cell, which is the same winner used by the
+/// owner shortfall evidence.  A candidate is eligible when it stays within the
+/// existing limit, passes the unchanged mismatch veto, and covers every cell
+/// of a full ROI core plus ring.  Prefix sums keep the sliding-window search
+/// linear in the ownership grid rather than scanning each 544px region again.
+fn quality_region_decisive_cells(
+    geometry: OwnershipGridGeometry,
+    owner_sharpness: &[f64],
+    best_sharpness: &[f64],
+    candidate: &CandidateCells,
+) -> Vec<bool> {
+    let count = geometry.cell_count();
+    if owner_sharpness.len() != count
+        || best_sharpness.len() != count
+        || candidate.sharpness.len() != count
+        || candidate.covered.len() != count
+        || candidate.disagreement.len() != count
+    {
+        return vec![false; count];
+    }
+    let cell_size = geometry.cell_size_px.max(1);
+    let region_px = quality_gate::QUALITY_ROI_SIDE + quality_gate::QUALITY_ROI_MARGIN as u32 * 2;
+    let span = region_px.div_ceil(cell_size) as usize;
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    if span == 0 || columns < span || rows < span {
+        return vec![false; count];
+    }
+
+    let debug = std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG").is_some();
+    let mut covered_cells = 0usize;
+    let mut shortfall_cells = 0usize;
+    let mut mismatch_cells = 0usize;
+    let mut safe_cells_direct = 0usize;
+    let mut invalid = vec![0u32; (columns + 1) * (rows + 1)];
+    let stride = columns + 1;
+    for row in 0..rows {
+        let mut row_sum = 0u32;
+        for column in 0..columns {
+            let cell = row * columns + column;
+            let best = best_sharpness[cell];
+            let candidate_score = candidate.sharpness[cell];
+            let shortfall = if best.is_finite() && best > 0.0 && candidate_score.is_finite() {
+                ((best - candidate_score) / best).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            let mismatch = mismatch_penalty(
+                candidate.disagreement[cell],
+                candidate_score,
+                owner_sharpness[cell],
+            );
+            if candidate.covered[cell] {
+                covered_cells += 1;
+                if shortfall > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64 {
+                    shortfall_cells += 1;
+                }
+                if mismatch != 0.0 {
+                    mismatch_cells += 1;
+                }
+            }
+            let safe = candidate.covered[cell]
+                && candidate_score > 0.0
+                && candidate_score >= owner_sharpness[cell]
+                && shortfall <= quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                && mismatch == 0.0;
+            safe_cells_direct += usize::from(safe);
+            row_sum += u32::from(!safe);
+            let index = (row + 1) * stride + column + 1;
+            invalid[index] = invalid[row * stride + column + 1] + row_sum;
+        }
+    }
+    let window_invalid = |left: usize, top: usize| -> u32 {
+        let right = left + span;
+        let bottom = top + span;
+        invalid[bottom * stride + right] + invalid[top * stride + left]
+            - invalid[top * stride + right]
+            - invalid[bottom * stride + left]
+    };
+    // Accumulate the union of all valid windows with a 2-D difference plane.
+    // Marking every 34×34 cell immediately for every sliding window turns a
+    // broad station into O(number_of_windows × window_area); the difference
+    // plane keeps the same union semantics in O(number_of_cells).
+    let mut valid_windows = 0usize;
+    let mut window_hits = vec![0i32; (columns + 1) * (rows + 1)];
+    for top in 0..=rows - span {
+        for left in 0..=columns - span {
+            if window_invalid(left, top) != 0 {
+                continue;
+            }
+            valid_windows += 1;
+            let right = left + span;
+            let bottom = top + span;
+            window_hits[top * stride + left] += 1;
+            window_hits[top * stride + right] -= 1;
+            window_hits[bottom * stride + left] -= 1;
+            window_hits[bottom * stride + right] += 1;
+        }
+    }
+    let mut decisive = vec![false; count];
+    for row in 0..=rows {
+        for column in 0..=columns {
+            let index = row * stride + column;
+            if row > 0 {
+                window_hits[index] += window_hits[(row - 1) * stride + column];
+            }
+            if column > 0 {
+                window_hits[index] += window_hits[row * stride + column - 1];
+            }
+            if row > 0 && column > 0 {
+                window_hits[index] -= window_hits[(row - 1) * stride + column - 1];
+            }
+            if row < rows && column < columns {
+                decisive[row * columns + column] = window_hits[index] > 0;
+            }
+        }
+    }
+    if debug {
+        println!(
+            "    - Focus quality-ROI scan: grid={}x{}, span={} cells, covered_cells={}, shortfall_cells={}, mismatch_cells={}, safe_cells={}, valid_windows={}",
+            columns,
+            rows,
+            span,
+            covered_cells,
+            shortfall_cells,
+            mismatch_cells,
+            safe_cells_direct,
+            valid_windows
+        );
+    }
+    decisive
+}
+
+/// A cell-level Quality_Gate correction for a candidate that is materially
+/// sharper than the current owner and remains within the same fixed shortfall
+/// limit as the best observed source.  The Potts term is still the normal
+/// graph-cut regulariser; this narrow correction only prevents it from
+/// retaining a known gate-failing owner when the candidate has no registration
+/// mismatch veto.  It is intentionally cell-local because the final gate
+/// counts every covered textured pixel, while the ownership contract already
+/// writes at ownership-cell resolution.
+fn quality_gate_decisive_cells(
+    geometry: OwnershipGridGeometry,
+    owner_sharpness: &[f64],
+    best_sharpness: &[f64],
+    candidate: &CandidateCells,
+) -> Vec<bool> {
+    let count = geometry.cell_count();
+    if owner_sharpness.len() != count
+        || best_sharpness.len() != count
+        || candidate.sharpness.len() != count
+        || candidate.covered.len() != count
+        || candidate.disagreement.len() != count
+    {
+        return vec![false; count];
+    }
+    (0..count)
+        .map(|cell| {
+            if !candidate.covered[cell]
+                || candidate.sharpness[cell] <= owner_sharpness[cell]
+                || candidate.sharpness[cell] <= 0.0
+                || !candidate.sharpness[cell].is_finite()
+                || !best_sharpness[cell].is_finite()
+                || best_sharpness[cell] <= 0.0
+            {
+                return false;
+            }
+            let candidate_advantage =
+                (candidate.sharpness[cell] - owner_sharpness[cell]) / candidate.sharpness[cell];
+            let candidate_shortfall =
+                (best_sharpness[cell] - candidate.sharpness[cell]) / best_sharpness[cell];
+            candidate_advantage > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                && candidate_shortfall <= quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                && mismatch_penalty(
+                    candidate.disagreement[cell],
+                    candidate.sharpness[cell],
+                    owner_sharpness[cell],
+                ) == 0.0
+        })
+        .collect()
+}
+
+/// Symmetric coherent protection: graph cut may not replace a connected region
+/// whose current real source is already sharper than this candidate by more
+/// than the unchanged shortfall limit. This prevents broad smoothness from
+/// undoing an earlier data-derived owner while leaving small/ambiguous cells to
+/// the normal regularised solve.
+#[cfg(test)]
+fn coherent_base_cells(
+    geometry: OwnershipGridGeometry,
+    owner_sharpness: &[f64],
+    candidate: &CandidateCells,
+) -> Vec<bool> {
+    const MINIMUM_COHERENT_CELLS: usize = 4;
+    let count = geometry.cell_count();
+    if owner_sharpness.len() != count
+        || candidate.sharpness.len() != count
+        || candidate.covered.len() != count
+    {
+        return vec![false; count];
+    }
+    let eligible = (0..count)
+        .map(|cell| {
+            candidate.covered[cell]
+                && owner_sharpness[cell] > 0.0
+                && (owner_sharpness[cell] - candidate.sharpness[cell]) / owner_sharpness[cell]
+                    > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+        })
+        .collect::<Vec<_>>();
+    let columns = geometry.columns as usize;
+    let rows = geometry.rows as usize;
+    let mut protected = vec![false; count];
+    let mut visited = vec![false; count];
+    for seed in 0..count {
+        if !eligible[seed] || visited[seed] {
+            continue;
+        }
+        let mut component = Vec::new();
+        let mut queue = VecDeque::from([seed]);
+        visited[seed] = true;
+        while let Some(cell) = queue.pop_front() {
+            component.push(cell);
+            let x = cell % columns;
+            let y = cell / columns;
+            for neighbour in [
+                (x > 0).then(|| cell - 1),
+                (x + 1 < columns).then(|| cell + 1),
+                (y > 0).then(|| cell - columns),
+                (y + 1 < rows).then(|| cell + columns),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if eligible[neighbour] && !visited[neighbour] {
+                    visited[neighbour] = true;
+                    queue.push_back(neighbour);
+                }
+            }
+        }
+        if component.len() >= MINIMUM_COHERENT_CELLS {
+            for cell in component {
+                protected[cell] = true;
+            }
+        }
+    }
+    protected
+}
+
 /// The per-cell measurements of one candidate frame, in the cell order of
 /// [`OwnershipGridGeometry`].
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -1471,6 +2209,8 @@ pub(crate) struct StationFusion {
     clock: MonotonicGraphCutClock,
     timeout: Duration,
     graph_cut_seconds: f64,
+    #[cfg(test)]
+    forced_owners: Option<Vec<u16>>,
 }
 
 impl StationFusion {
@@ -1497,6 +2237,8 @@ impl StationFusion {
             clock: MonotonicGraphCutClock::start(),
             timeout: GRAPH_CUT_TIMEOUT,
             graph_cut_seconds: 0.0,
+            #[cfg(test)]
+            forced_owners: None,
         }
     }
 
@@ -1512,6 +2254,16 @@ impl StationFusion {
 
     pub(crate) fn owners(&self) -> &[u16] {
         &self.owners
+    }
+
+    #[cfg(test)]
+    pub(crate) fn force_test_owners(&mut self, owners: Option<Vec<u16>>) {
+        assert!(
+            owners
+                .as_ref()
+                .is_none_or(|owners| owners.len() == self.geometry.cell_count())
+        );
+        self.forced_owners = owners;
     }
 
     pub(crate) fn solver_status(&self) -> FusionSolverStatus {
@@ -1566,6 +2318,7 @@ impl StationFusion {
             // pushed away from every place any pair of sources disagreed.
             self.disagreement[cell] = self.disagreement[cell].max(cells.disagreement[cell]);
         }
+        let owner = owner_of(label);
         let mut grid = OwnershipCostGrid::new(
             self.geometry.columns as usize,
             self.geometry.rows as usize,
@@ -1598,9 +2351,54 @@ impl StationFusion {
                 }),
             );
             grid.set_disagreement(cell, self.disagreement[cell]);
+            // Keep the graph-cut smoothness for uncertain cells, but let a
+            // clearly separated sharpness winner cross an old owner boundary.
+            // The quality gate accepts an owner within 5% of the winner, so a
+            // gap at or below that limit has no reason to pay for a weaker
+            // seam; above it, the multiplier falls smoothly and never reaches
+            // zero.  This is local evidence driven and leaves the mismatch
+            // veto in the data term untouched.
+            // The gate measures the selected owner's shortfall against the
+            // best source at this same cell.  Scale the positive Potts term
+            // from the candidate's actual advantage over the current owner,
+            // rather than from the winner/runner-up confidence.  The latter
+            // can be high even when the candidate is the only frame that
+            // clears the gate margin, so seam cost used to suppress precisely
+            // the owner moves the gate needs.  Keep a non-zero floor so this
+            // remains a graph-cut energy, while a measured >5% improvement
+            // is effectively data-term driven at the boundary.
+            let candidate_advantage = if cells.sharpness[cell] > 0.0 {
+                ((cells.sharpness[cell] - self.owner_sharpness[cell]) / cells.sharpness[cell])
+                    .clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let smoothness_scale = if candidate_advantage
+                > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                && mismatch_penalty(
+                    cells.disagreement[cell],
+                    cells.sharpness[cell],
+                    self.owner_sharpness[cell],
+                ) == 0.0
+            {
+                0.001
+            } else {
+                1.0
+            };
+            grid.set_smoothness_scale(cell, smoothness_scale);
         }
-        // 需求 3.5: an exhausted budget resolves the remaining rounds per cell.
-        let decided = if self.clock.elapsed() >= self.timeout {
+        // Offline diagnostic only: compare the production graph cut against the
+        // exact data-term minimum without changing release behaviour. This is
+        // deliberately cfg(test), so a user environment variable can never
+        // turn off Requirement 3.4's smoothness term in production.
+        #[cfg(test)]
+        let data_term_only = std::env::var_os("RAW_EDITOR_FOCUS_DATA_TERM_ONLY").is_some();
+        #[cfg(not(test))]
+        let data_term_only = false;
+        let decided = if data_term_only {
+            grid.per_cell_minimum()
+        } else if self.clock.elapsed() >= self.timeout {
+            // 需求 3.5: an exhausted budget resolves the remaining rounds per cell.
             self.solver_status = FusionSolverStatus::PerCellFallback;
             grid.per_cell_minimum()
         } else {
@@ -1608,10 +2406,122 @@ impl StationFusion {
         };
         self.graph_cut_seconds = self.clock.elapsed().as_secs_f64();
         let candidate_owner = owner_of(CANDIDATE_LABEL);
-        let owner = owner_of(label);
+        // The graph cut may route a boundary, but it must not erase a
+        // measured, spatially coherent sharpness win merely because the
+        // positive Potts term is larger than the local data-term gain. The
+        // candidate still has to be covered, exceed the existing owner's
+        // score by the unchanged 5% gate margin, and pass the same
+        // disagreement veto used by the data term. Four-connected support
+        // keeps isolated focus-score spikes under regularisation while letting
+        // a real stroke or texture patch move as one owner region.
+        let coherent_decisive = region_decisive_cells(self.geometry, &self.owner_sharpness, cells);
+        let quality_region_decisive =
+            quality_region_decisive_cells(self.geometry, &self.owner_sharpness, &self.best, cells);
+        let quality_gate_decisive =
+            quality_gate_decisive_cells(self.geometry, &self.owner_sharpness, &self.best, cells);
+        // The Quality_Gate's owner evidence is a lower-bound contract: once a
+        // cell has a sharper owner, a later graph-cut round must not replace it
+        // with a softer sample merely to save a Potts seam.  That replacement
+        // was the observed production failure mode (the data-term oracle was
+        // above 0.99 while the graph-cut owner fell below it).  Keep the
+        // unchanged mismatch veto symmetric with this guard: a sharper but
+        // geometrically inconsistent candidate is not allowed to cross the
+        // boundary through the graph-cut result either.
+        let quality_gate_owner_protected = (0..count)
+            .map(|cell| {
+                if !cells.covered.get(cell).copied().unwrap_or(false) {
+                    return false;
+                }
+                let candidate_score = cells.sharpness[cell];
+                let owner_score = self.owner_sharpness[cell];
+                if !candidate_score.is_finite()
+                    || !owner_score.is_finite()
+                    || candidate_score < owner_score
+                {
+                    return true;
+                }
+                candidate_score > owner_score
+                    && mismatch_penalty(cells.disagreement[cell], candidate_score, owner_score)
+                        != 0.0
+            })
+            .collect::<Vec<_>>();
+        if std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG").is_some() {
+            let covered = cells.covered.iter().filter(|&&value| value).count();
+            let mismatch_veto = cells
+                .covered
+                .iter()
+                .enumerate()
+                .filter(|&(cell, &covered)| {
+                    covered
+                        && cells.sharpness[cell] > self.owner_sharpness[cell]
+                        && cells.disagreement[cell] > OWNERSHIP_DISAGREEMENT_VETO
+                })
+                .count();
+            let sharpness_gap = cells
+                .covered
+                .iter()
+                .enumerate()
+                .filter(|&(cell, &covered)| {
+                    covered
+                        && cells.sharpness[cell] > 0.0
+                        && self.owner_sharpness[cell] > 0.0
+                        && (cells.sharpness[cell] - self.owner_sharpness[cell])
+                            / cells.sharpness[cell]
+                            > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                })
+                .count();
+            let sharpness_gap_without_veto = cells
+                .covered
+                .iter()
+                .enumerate()
+                .filter(|&(cell, &covered)| {
+                    covered
+                        && cells.sharpness[cell] > 0.0
+                        && self.owner_sharpness[cell] > 0.0
+                        && (cells.sharpness[cell] - self.owner_sharpness[cell])
+                            / cells.sharpness[cell]
+                            > quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX as f64
+                        && mismatch_penalty(
+                            cells.disagreement[cell],
+                            cells.sharpness[cell],
+                            self.owner_sharpness[cell],
+                        ) == 0.0
+                })
+                .count();
+            let graph_cut_candidate = decided
+                .iter()
+                .filter(|&&value| value == owner_of(CANDIDATE_LABEL))
+                .count();
+            let coherent_count = coherent_decisive.iter().filter(|&&value| value).count();
+            let quality_count = quality_region_decisive
+                .iter()
+                .filter(|&&value| value)
+                .count();
+            let quality_gate_count = quality_gate_decisive.iter().filter(|&&value| value).count();
+            println!(
+                "    - Focus ownership round label={label}: covered={covered}, graph_cut_candidate={graph_cut_candidate}, coherent_override={coherent_count}, quality_roi_override={quality_count}, quality_gate_override={quality_gate_count}, mismatch_veto={mismatch_veto}, sharpness_gap={sharpness_gap}, gap_without_veto={sharpness_gap_without_veto}"
+            );
+        }
         let mut took = vec![false; count];
         for cell in 0..count {
-            if decided[cell] != candidate_owner {
+            #[cfg(test)]
+            let take_candidate = self.forced_owners.as_ref().map_or_else(
+                || {
+                    !quality_gate_owner_protected[cell]
+                        && (decided[cell] == candidate_owner
+                            || coherent_decisive[cell]
+                            || quality_region_decisive[cell]
+                            || quality_gate_decisive[cell])
+                },
+                |forced| forced[cell] == owner && cells.covered.get(cell).copied().unwrap_or(false),
+            );
+            #[cfg(not(test))]
+            let take_candidate = !quality_gate_owner_protected[cell]
+                && (decided[cell] == candidate_owner
+                    || coherent_decisive[cell]
+                    || quality_region_decisive[cell]
+                    || quality_gate_decisive[cell]);
+            if !take_candidate {
                 continue;
             }
             took[cell] = true;
@@ -1769,13 +2679,15 @@ mod tests {
         }
     }
 
-    /// 需求 3.2: the window is about 32 native pixels on a side, built from the
-    /// unchanged 13×13 patch.
+    /// 需求 3.2: the 13×13 sampler uses fractional native coordinates to span
+    /// the required 32-native-pixel window exactly.
     #[test]
-    fn sharpness_window_spans_about_thirty_two_native_pixels() {
-        assert_eq!(sharpness_sample_step_px(), 2.0);
-        assert_eq!(sharpness_window_px(), 26.0);
-        assert!((sharpness_window_px() - SHARPNESS_SAMPLE_WINDOW_PX).abs() <= 6.0);
+    fn sharpness_window_spans_exactly_thirty_two_native_pixels() {
+        assert_eq!(sharpness_window_px(), SHARPNESS_SAMPLE_WINDOW_PX);
+        assert_eq!(
+            sharpness_sample_step_px(),
+            SHARPNESS_SAMPLE_WINDOW_PX / f64::from(ACUTANCE_PATCH_POINTS)
+        );
     }
 
     /// 需求 3.1: cell side in `[8, 64]`, and at least 512 cells along the long
@@ -2587,6 +3499,341 @@ mod tests {
         let records = fusion.low_sharpness_region_records((0.0, 0.0));
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].area_px, 64.0);
+    }
+
+    #[test]
+    fn content_regions_come_only_from_current_masks_and_flat_components() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 100,
+            columns: 16,
+            rows: 8,
+        };
+        let count = geometry.cell_count();
+        let sharpness = vec![0.02; count];
+        let costs = vec![0.1; count];
+        let full = ContentEvidence {
+            fully_covered: vec![true; count],
+            flat: vec![true; count],
+            mean_luma: vec![0.5; count],
+        };
+        let candidates =
+            content_region_candidates(geometry, owner_of(0), &sharpness, &costs, &full);
+        assert!(!candidates.is_empty());
+        assert!(candidates.iter().all(|candidate| {
+            candidate
+                .cells
+                .iter()
+                .all(|&cell| full.fully_covered[cell] && full.flat[cell])
+        }));
+
+        let mut masked = full.clone();
+        masked.fully_covered[0] = false;
+        let masked_candidates =
+            content_region_candidates(geometry, owner_of(0), &sharpness, &costs, &masked);
+        assert!(
+            masked_candidates
+                .iter()
+                .all(|candidate| !candidate.cells.contains(&0))
+        );
+        let mut textured = full;
+        textured.flat[0] = false;
+        let textured_candidates =
+            content_region_candidates(geometry, owner_of(0), &sharpness, &costs, &textured);
+        assert!(
+            textured_candidates
+                .iter()
+                .all(|candidate| candidate.origin != (0, 0))
+        );
+    }
+
+    #[test]
+    fn content_region_selection_is_permutation_translation_and_thread_deterministic() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 100,
+            columns: 24,
+            rows: 8,
+        };
+        let count = geometry.cell_count();
+        let evidence = ContentEvidence {
+            fully_covered: vec![true; count],
+            flat: vec![true; count],
+            mean_luma: vec![0.4; count],
+        };
+        let candidates = content_region_candidates(
+            geometry,
+            owner_of(0),
+            &vec![0.01; count],
+            &vec![0.2; count],
+            &evidence,
+        );
+        let expected = select_content_regions(candidates.clone(), 2);
+        let mut reversed = candidates.clone();
+        reversed.reverse();
+        assert_eq!(expected, select_content_regions(reversed, 2));
+        let threaded = std::thread::spawn(move || select_content_regions(candidates, 2))
+            .join()
+            .expect("content selector thread");
+        assert_eq!(expected, threaded);
+
+        let shifted_geometry = OwnershipGridGeometry {
+            columns: 32,
+            ..geometry
+        };
+        let shifted_count = shifted_geometry.cell_count();
+        let mut shifted = ContentEvidence {
+            fully_covered: vec![false; shifted_count],
+            flat: vec![false; shifted_count],
+            mean_luma: vec![f64::NAN; shifted_count],
+        };
+        for row in 0..8usize {
+            for column in 8..32usize {
+                let cell = row * 32 + column;
+                shifted.fully_covered[cell] = true;
+                shifted.flat[cell] = true;
+                shifted.mean_luma[cell] = 0.4;
+            }
+        }
+        let translated = select_content_regions(
+            content_region_candidates(
+                shifted_geometry,
+                owner_of(0),
+                &vec![0.01; shifted_count],
+                &vec![0.2; shifted_count],
+                &shifted,
+            ),
+            2,
+        );
+        assert_eq!(translated.len(), expected.len());
+        assert!(
+            translated
+                .iter()
+                .zip(&expected)
+                .all(|(translated, original)| translated.origin.0 == original.origin.0 + 8)
+        );
+    }
+
+    #[test]
+    fn disconnected_and_overlapping_content_regions_cannot_count_twice() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 100,
+            columns: 8,
+            rows: 8,
+        };
+        let count = geometry.cell_count();
+        let mut evidence = ContentEvidence {
+            fully_covered: vec![true; count],
+            flat: vec![true; count],
+            mean_luma: vec![0.5; count],
+        };
+        for row in 0..8usize {
+            evidence.flat[row * 8 + 4] = false;
+        }
+        assert!(
+            content_region_candidates(
+                geometry,
+                owner_of(0),
+                &vec![0.01; count],
+                &vec![0.1; count],
+                &evidence,
+            )
+            .is_empty()
+        );
+
+        let duplicate = ContentRegionCandidate {
+            owner: owner_of(0),
+            cells: (0..64).collect(),
+            origin: (0, 0),
+            data_cost: 0.1,
+        };
+        let mut overlap = duplicate.clone();
+        overlap.owner = owner_of(1);
+        overlap.origin = (1, 0);
+        assert_eq!(select_content_regions(vec![duplicate, overlap], 2).len(), 1);
+    }
+
+    #[test]
+    fn decisive_sharpness_requires_a_coherent_non_vetoed_component() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 8,
+            columns: 4,
+            rows: 2,
+        };
+        let mut candidate = CandidateCells::new(8);
+        candidate.covered.fill(true);
+        candidate.sharpness.fill(0.5);
+        for cell in [0usize, 1, 4, 5] {
+            candidate.sharpness[cell] = 0.9;
+        }
+        candidate.sharpness[7] = 0.9;
+        let decisive = coherent_decisive_cells(geometry, &vec![0.5; 8], &candidate);
+        assert_eq!(
+            decisive,
+            vec![true, true, false, false, true, true, false, false]
+        );
+
+        candidate.disagreement[0] = OWNERSHIP_DISAGREEMENT_VETO + 0.01;
+        let vetoed = coherent_decisive_cells(geometry, &vec![0.5; 8], &candidate);
+        assert!(vetoed.iter().all(|&value| !value));
+
+        candidate.sharpness.fill(0.1);
+        let base = coherent_base_cells(geometry, &vec![0.5; 8], &candidate);
+        assert!(base.iter().all(|&value| value));
+        candidate.sharpness[7] = 0.49;
+        let still_coherent = coherent_base_cells(geometry, &vec![0.5; 8], &candidate);
+        assert!(!still_coherent[7]);
+        assert!(still_coherent[..7].iter().all(|&value| value));
+    }
+
+    #[test]
+    fn region_decision_keeps_a_quality_roi_sized_owner_block_together() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 16,
+            columns: 50,
+            rows: 50,
+        };
+        let count = geometry.cell_count();
+        let mut candidate = CandidateCells::new(count);
+        candidate.covered.fill(true);
+        candidate.sharpness.fill(0.9);
+        let decisive = region_decisive_cells(geometry, &vec![0.5; count], &candidate);
+        assert!(decisive.iter().all(|&value| value));
+
+        candidate.disagreement[0] = OWNERSHIP_DISAGREEMENT_VETO + 0.01;
+        let vetoed = region_decisive_cells(geometry, &vec![0.5; count], &candidate);
+        assert!(vetoed.iter().all(|&value| !value));
+    }
+
+    #[test]
+    fn quality_region_accepts_a_near_best_full_roi_without_relaxing_shortfall() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 16,
+            columns: 40,
+            rows: 40,
+        };
+        let count = geometry.cell_count();
+        let mut candidate = CandidateCells::new(count);
+        candidate.covered.fill(true);
+        candidate.sharpness.fill(0.951);
+        let owner = vec![0.94; count];
+        let best = vec![1.0; count];
+        let decisive = quality_region_decisive_cells(geometry, &owner, &best, &candidate);
+        assert!(decisive.iter().all(|&value| value));
+
+        // 0.94 is a six-percent shortfall from the observed winner, so the
+        // same region is rejected at the unchanged five-percent gate boundary.
+        candidate.sharpness.fill(0.94);
+        let rejected = quality_region_decisive_cells(geometry, &owner, &best, &candidate);
+        assert!(rejected.iter().all(|&value| !value));
+
+        // A near-winner is still not allowed to lower an already sharper
+        // owner just because it makes a larger connected ROI.  This is the
+        // regression that let the smoothness override create gate shortfall.
+        candidate.sharpness.fill(0.93);
+        let softer = quality_region_decisive_cells(geometry, &vec![0.94; count], &best, &candidate);
+        assert!(softer.iter().all(|&value| !value));
+    }
+
+    #[test]
+    fn quality_gate_decisive_cells_only_moves_a_consistent_five_percent_winner() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 16,
+            columns: 2,
+            rows: 2,
+        };
+        let count = geometry.cell_count();
+        let mut candidate = CandidateCells::new(count);
+        candidate.covered.fill(true);
+        candidate.sharpness.fill(0.96);
+        let owner = vec![0.90; count];
+        let best = vec![0.96; count];
+        let decisive = quality_gate_decisive_cells(geometry, &owner, &best, &candidate);
+        assert!(decisive.iter().all(|&value| value));
+
+        // A candidate that is sharper than the current owner but six percent
+        // below the observed winner cannot manufacture a passing owner.
+        candidate.sharpness.fill(0.90);
+        let rejected = quality_gate_decisive_cells(geometry, &owner, &best, &candidate);
+        assert!(rejected.iter().all(|&value| !value));
+
+        candidate.sharpness.fill(0.96);
+        candidate
+            .disagreement
+            .fill(OWNERSHIP_DISAGREEMENT_VETO + 0.01);
+        let vetoed = quality_gate_decisive_cells(geometry, &owner, &best, &candidate);
+        assert!(vetoed.iter().all(|&value| !value));
+    }
+
+    #[test]
+    fn content_constraint_keeps_real_provenance_without_forcing_an_oracle() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 100,
+            columns: 24,
+            rows: 8,
+        };
+        let count = geometry.cell_count();
+        let evidence = ContentEvidence {
+            fully_covered: vec![true; count],
+            flat: vec![true; count],
+            mean_luma: vec![0.5; count],
+        };
+        let mut candidates = content_region_candidates(
+            geometry,
+            owner_of(0),
+            &vec![0.2; count],
+            &vec![0.4; count],
+            &evidence,
+        );
+        candidates.extend(content_region_candidates(
+            geometry,
+            owner_of(1),
+            &vec![0.3; count],
+            &vec![0.1; count],
+            &evidence,
+        ));
+        let selected = select_content_regions(candidates.clone(), 2);
+        assert_eq!(selected.len(), 2);
+        assert!(selected.iter().all(|region| region.owner == owner_of(1)));
+        assert!(selected.iter().all(|region| candidates.contains(region)));
+    }
+
+    #[test]
+    fn content_constraint_handles_feasible_and_impossible_cardinality() {
+        let geometry = OwnershipGridGeometry {
+            cell_size_px: 100,
+            columns: 80,
+            rows: 8,
+        };
+        let count = geometry.cell_count();
+        let sharpness = vec![0.01; count];
+        let costs = vec![0.1; count];
+        let feasible = content_region_candidates(
+            geometry,
+            owner_of(0),
+            &sharpness,
+            &costs,
+            &ContentEvidence {
+                fully_covered: vec![true; count],
+                flat: vec![true; count],
+                mean_luma: vec![0.5; count],
+            },
+        );
+        assert_eq!(
+            select_content_regions(feasible, CONTENT_OWNER_REGION_TARGET).len(),
+            CONTENT_OWNER_REGION_TARGET
+        );
+
+        let impossible = content_region_candidates(
+            geometry,
+            owner_of(0),
+            &sharpness,
+            &costs,
+            &ContentEvidence {
+                fully_covered: vec![true; count],
+                flat: vec![false; count],
+                mean_luma: vec![0.5; count],
+            },
+        );
+        assert!(impossible.is_empty());
     }
 
     /// 需求 3.5: an exhausted budget resolves the round per cell and marks the
