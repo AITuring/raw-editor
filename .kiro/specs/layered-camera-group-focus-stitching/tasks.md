@@ -6,8 +6,8 @@
 分支状态不再作为任务状态，也不作为验收依据。历史报告可以留在 Git 历史和 `.agents/` 归档中，但不能
 直接勾选本文件中的任务。
 
-当前基线是工作区 `codex/zhang-haohao-focus-stack` 的实际代码和未提交修改。未提交修改必须先经过
-本文件的 N0 分流和验证，不能因为它已经存在于工作区就视为已完成或自动进入生产路径。
+当前基线是 `v1` 分支的实际代码和本次 N1-6 提交前的工作区修改。未提交修改必须先经过本文件的 N0 分流
+和验证，不能因为它已经存在于工作区就视为已完成或自动进入生产路径。
 
 `.worktrees/layered-focus-cleanup` 的模块化分支不是当前基线；其中的行数和完成状态不能直接写入本文件，
 只有经过 N0 的逐项迁移、编译和回归后才能合并进来。
@@ -32,8 +32,8 @@
 - 测试与属性支持：`panorama_stitching_*_tests.rs`、`panorama_virtual_tile_tests.rs`、
   `stack_pipeline/{properties,test_support}.rs`。
 
-当前工作区这些文件仍有超过 1000 行的生产或测试实现。N1/N2 必须重新测量实际文件，而不是引用其他
-分支的行数结论。
+当前工作区仍有超过 1000 行的历史生产或测试实现；本轮新增的 N1-6 生产组件均已低于 1000 行。N1/N2
+继续按实际文件重新测量，不引用其他分支的行数结论；测试支持和属性测试的拆分留在 N2。
 
 ### 未提交修改的分流对象
 
@@ -153,14 +153,24 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   完整 release 库测试 `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 acceptance
   保持 45/45、`3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-n15-stack-reports/`，
   `quality_gate=insufficient_evidence` 语义未改变。
-- [ ] N1-6 匹配执行体拆分：将 `match_image_pair_with_seed` 按候选生成、几何验证、focus rescue 和结果组装拆成
-  单一职责模块，保持每个模块不超过 1000 行，再进入 station solver。
+- [x] N1-6 匹配执行体拆分：将 `match_image_pair_with_seed` 按候选生成、几何验证、focus rescue 和结果组装拆成
+  单一职责模块：`panorama_match_candidates.rs`（97 行）、`panorama_match_geometry.rs`（584 行）、
+  `panorama_match_focus_rescue.rs`（270 行）和 `panorama_match_result.rs`（28 行）。入口保留原有
+  `match_image_pair` 合同与阶段顺序，未改变阈值、坐标、回退或报告语义；新增模块均低于 1000 行。
+  focus/mixed-focal/canonical/direct-grid/direct-residual/polished/prior-free 定向测试、N1-4 底层定向测试、
+  `cargo check --lib`、fmt/diff 检查和 `npm run focus-stack-quality:check` 均通过；release 全量库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过。兰亭 acceptance 保持 45/45 source
+  streaming，输出 `3388×1389`、预览 `1200×492`，
+  报告写入 `/private/tmp/raw-editor-lanting-n16-stack-reports/`，`quality_gate=insufficient_evidence` 保持原语义。
+- [ ] N1-7 station solver/topology/closure 拆分：把 station pose、关系图、闭环验证和诊断组装分成单一职责模块；
+  先保持 canonical relation gate 和现有 `match_image_pair` 输出合同，再进入 compositor。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
-- [ ] 所有生产文件不超过 1000 行；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
-- [ ] 新建并维护 `docs/focus-stack-architecture.md`，只描述当前实际模块树和依赖方向，不复制其他 worktree
-  的完成数字。
+- [ ] 所有目标生产文件不超过 1000 行；N1-6 新增模块已经满足，剩余历史大文件和测试支持文件按 N1-7/N2
+  继续拆分；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
+- [x] 更新并维护 `docs/focus-stack-architecture.md`，记录当前 N1-6 模块树、阶段边界、验证命令和实际回归
+  证据；不复制其他 worktree 的完成数字。
 - [ ] 每完成一个职责层，运行该层定向测试并记录迁移前后输出等价性。
 
 **N1 通过条件**：生产模块树可由架构文档生成；入口、缓存、solver、compositor 和 output 的边界清晰；

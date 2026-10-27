@@ -4,6 +4,9 @@
 `.kiro/specs/layered-camera-group-focus-stitching/tasks.md` 的 N0–N9 为准；未接入生产的研究模块不算作
 当前架构的一部分。
 
+本文按 `v1` 分支 2026-10-28 的 N1-6 代码基线修订。新增匹配模块的行数以当前工作区为准；历史记录中的
+行号和临时报告路径只用于追溯，不能作为当前模块定位或验收依据。
+
 ## 当前入口
 
 `src-tauri/src/panorama_stitching.rs` 是 Rust 堆栈入口，负责输入预检、源图准备、特征匹配、全局关系、
@@ -17,7 +20,14 @@
 N1-5 又新增 `panorama_focus_feature_prep.rs` 和 `panorama_match_contract.rs`。前者负责 bounded analysis
 image 的 focus 特征、foreground range/mask、top feature 和 foreground predicate；后者负责 canonical relation
 方向、空间支持、homography scale、station local scale 以及 adjacent same-focal pair 合同。两者分别为 279
-和 262 行，完整 `match_image_pair_with_seed` 仍留在入口，避免把匹配算法和合同迁移混在一次变更中。
+和 262 行。
+
+N1-6 将 `match_image_pair_with_seed` 的匹配执行体拆成四个阶段模块：
+`panorama_match_candidates.rs`（候选生成与 seeded/coarse 候选，97 行）、
+`panorama_match_geometry.rs`（投影、背景过滤、RANSAC、模型选择和 inlier 验证，584 行）、
+`panorama_match_focus_rescue.rs`（mixed-focal、focus overlap 和 adjacent focus-layer rescue，270 行）以及
+`panorama_match_result.rs`（统一 `MatchInfo` 结果组装，28 行）。入口只保留候选阶段调用、几何阶段调用、
+focus rescue 分支和最终结果编排；阈值、坐标、回退顺序、日志语义与 `match_image_pair` 调用合同保持不变。
 
 `src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
 顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
@@ -43,11 +53,12 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 判定；两个模块均低于 1000 行，`stitching.rs` 仅保留兼容重导出，未改变阈值、坐标含义或回退行为。N1-3
 已把 report schema、recorder 和原子 I/O 拆到 `report_schema_core.rs`、`report_schema_solver.rs`、
 `report_schema_metrics.rs`、`report_document.rs`、`report_recorder.rs` 和 `report_io.rs`；各生产文件均低于
-1000 行，`report.rs` 只保留兼容重导出和测试，未改变 `Stack_Report` 字段、schema 版本或写盘语义。下一步按
-feature/matching、station solver、compositor 的顺序推进。N1-4 已完成候选 pair 生成拆分：
+1000 行，`report.rs` 只保留兼容重导出和测试，未改变 `Stack_Report` 字段、schema 版本或写盘语义。N1-4 已
+完成候选 pair 生成拆分：
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
-没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。下一步拆 focus feature preparation
-和匹配合同，随后再拆匹配执行体和 station solver；
+没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。N1-5 已拆 focus feature preparation
+和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装，下一步进入 station solver、topology 和
+closure 的职责拆分；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -57,8 +68,8 @@ feature/matching、station solver、compositor 的顺序推进。N1-4 已完成�
 5. virtual-tile store、tile source、BigTIFF/output adapter。
 6. 顶层 prepare、执行流程、取消、缓存和最终发布。
 
-每一步只移动代码和收敛依赖，不改算法阈值、坐标含义、回退行为或输出格式。拆分后的生产文件和测试
-支持文件都必须不超过 1000 行；facade 只保留稳定入口、阶段编排、常量和重导出。
+每一步只移动代码和收敛依赖，不改算法阈值、坐标含义、回退行为或输出格式。本轮新增的生产拆分模块均不
+超过 1000 行；测试支持文件的进一步拆分列入 N2。最终 facade 只保留稳定入口、阶段编排、常量和重导出。
 
 ## 验收边界
 
@@ -106,5 +117,17 @@ scale 合同 `7`、guided overlap `2`、direct grid `9`、direct residual `3`、
 预览 `/private/tmp/raw-editor-lanting-n15-10.preview.jpg` 整图可读。质量门仍为
 `insufficient_evidence`，因为本轮只做职责迁移，没有虚构 ROI 证据或改变 rejection 原因。
 
-N0 的基准行为门已通过，可以开始 N1 的职责拆分；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
+N1-6 匹配执行体拆分后的定向保护测试全部通过：focus alignment `4`、mixed-focal `2`、adjacent same-focal
+missing-EXIF `1`、guided overlap `2`、direct grid `9`、direct residual `3`、focus group `2`、polished matcher
+`1`、prior-free fallback `1`、canonical direction `1`、canonical relation `1`、mirrored orientation `1`；
+N1-4 的候选、feature provider、processing、registration 定向测试也全部通过。`cargo check --lib`、fmt、diff
+和 `npm run focus-stack-quality:check` 均通过；release 全量库测试为 `818 passed, 0 failed, 30 ignored`，数据集
+契约（含输入 hash）通过。
+兰亭回归保持 45/45 输入，source streaming 输出 `3388×1389`、预览 `1200×492`，报告位于
+`/private/tmp/raw-editor-lanting-n16-stack-reports/stack-report-b7c06bf3-5907-48e3-95b0-69bf521d5d1f.json`，
+预览位于 `/private/tmp/raw-editor-lanting-n16-10.preview.jpg`；整图及 top-center、top/bottom left/right
+裁片可读。报告仍记录 `selected_path=legacy_single_layer_mosaic` 和
+`quality_gate=insufficient_evidence`，这表示回归保护通过而非 Quality Gate 已通过。
+
+N0 的基准行为门已通过，N1 当前推进到 N1-6；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。
