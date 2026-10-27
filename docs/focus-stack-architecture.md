@@ -41,6 +41,26 @@ focus rescue 分支和最终结果编排；阈值、坐标、回退顺序、日�
 compositor、tone、residual warp、intra-station 和 test support 等模块。N0/N1 阶段只确认依赖方向和生产
 入口，不自动接入未验证的 provider、oracle 或研究 solver。
 
+`src-tauri/src/psd_loader.rs` 独立负责 PSD header、8/16-bit RGB/RGBA 像素解码、尺寸限制、取消检查和
+错误分类；`image_loader.rs` 只按扩展名选择该解码器，避免把 Photoshop 格式判断和 zune-psd 细节继续
+堆入通用图像入口。
+
+### PSD 导入边界
+
+PSD 当前按“一文件一张合成源图”导入：`src-tauri/src/psd_loader.rs` 使用 `zune-psd` 解码 PSD 的 composite image，转换为现有
+`DynamicImage`/RGB 流程后再进入堆栈。不会把 PSD 内部图层展开成第二阶段的焦点帧，也不会改变 source
+manifest、station 或 focus-layer 语义。首期支持 RGB/RGBA 的 8/16-bit PSD；CMYK、Lab、PSB、调整层和
+智能对象等超出当前解码器能力的文件必须返回可诊断错误。透明度沿用普通非 RAW 导入的现有合成策略。
+
+`/Users/dp/Downloads/书画拼图/马远` 登记为 PSD 回归集（14 张 PSD，单张约 8334×5528，16-bit RGBA），
+用于验证批量导入、拼接和处处清晰输出。
+
+2026-10-28 的回归已验证 14/14 PSD 成功解码，匹配形成 13/13 连续邻接边，10% 受控输出为
+`1397×1173`，报告确认每个输出像素都有 source ownership。该运行没有参考 ROI，Quality Gate 保持
+`insufficient_evidence`；这表示证据不足，不表示 PSD 成片失败。兰亭 45 张同日 1:1 回归仍让 45/45
+源进入 compositor 并生成 `33895×13888` 成片，但现有已知画布尺寸差异仍使它与参考 Photoshop JPEG
+无法字节一致；本次 PSD 导入没有改变这条既有边界。
+
 ## N1 拆分顺序
 
 当前已完成 N1-1 的共享合同迁移：`shared.rs` 约 100 行，facade 保留旧路径，processing、mosaic、

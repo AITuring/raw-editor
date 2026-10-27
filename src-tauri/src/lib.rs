@@ -37,6 +37,7 @@ mod panorama_stitching;
 mod panorama_utils;
 mod preset_converter;
 mod preview_protocol;
+mod psd_loader;
 mod raw_processing;
 mod render_strategy;
 mod sidecar_storage;

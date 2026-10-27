@@ -75,8 +75,8 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
   行为没有回退，不把本次 preview-only 运行标记为 Quality Gate 或正式输出通过。
 - 当前恢复保住了“45 张完整且处处清晰”的行为门，但输出画布尚未与参考 Photoshop 成片 `31065×11007` 对齐；
   Stack_Report 的 `output.written=false` 是因为验收测试在报告生成后另行写出 TIFF/app JPEG，不能据此判断测试文件未写出。
-- 数据契约覆盖 8 个数据集并通过：兰亭 45、阆苑女仙 84、文苑图 126、张好好2 244、睡觉 45、枫鹰雉鸡
-  63，以及头部 17、底部 24。
+- 数据契约覆盖 9 个数据集并通过：兰亭 45、马远 PSD 14、阆苑女仙 84、文苑图 126、张好好2 244、睡觉
+  45、枫鹰雉鸡 63，以及头部 17、底部 24。
 - Rust 完整 release 库测试在 N1-2b 后为 `818 passed, 0 failed, 30 ignored`。两个属性测试的回归根因是已有 station anchor
   被重新按清晰度排序；现在已改为“已有记录锚点优先、无记录时才按清晰度选锚点”，属性测试和完整套件均通过。
 - Langyuan/Wenyuan 的 owner、effective-pixel、boundary、tone 和 residual evidence 仍不能视为通过；不能用兰亭
@@ -90,9 +90,9 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
 
 - [ ] 保存当前 `git status`、tracked diff、untracked 清单和忽略规则摘要；不 reset、stash、clean 或覆盖
   工作区已有代码。
-- [x] 建立 `tests/acceptance/focus-stack-datasets.json` 和 `focus-stack-datasets:check`；登记兰亭、阆苑女仙、
-  文苑图、张好好2、睡觉、枫鹰雉鸡及其头部/底部输入，排除派生图；兰亭 45 张输入的参考成片路径、
-  SHA-256、尺寸和文件大小已冻结。
+- [x] 建立 `tests/acceptance/focus-stack-datasets.json` 和 `focus-stack-datasets:check`；登记兰亭、马远 PSD、
+  阆苑女仙、文苑图、张好好2、睡觉、枫鹰雉鸡及其头部/底部输入，排除派生图；兰亭 45 张输入的参考
+  成片路径、SHA-256、尺寸和文件大小已冻结。
 - [x] 恢复兰亭 45 张完整成片行为：45/45 输入进入 streaming compositor，1:1 回归成功写出 TIFF/app JPEG，
   整图与左中右裁片保持清晰；参考成片未覆盖。输出尺寸/裁切对齐仍作为后续独立门禁。
 - [ ] 为每个修改建立 `keep`、`adapt`、`test-only`、`exclude` 四类登记，注明生产入口、测试入口和证据。
@@ -198,6 +198,10 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   focus-stack-datasets:check -- --require-data --hash-inputs` 校验数量、输入 digest 和参考文件。
 - [ ] 在 manifest 基础上固定 Langyuan-10、Wenyuan-10 和 84 张 NEF 的解码状态、network=0、输出目录和
   运行参数；不把旧临时路径或旧报告 hash 写入任务状态。
+- [x] PSD 导入按“一文件一张合成源图”完成解码、目录扫描和文件选择器接线；用马远 14 张 PSD 做批量
+  回归，确认不展开图层且输出可进入现有拼接流程。当前回归为 14/14 decoded、13/13 连续邻接边，
+  10% 输出 `1397×1173`，每个输出像素均有 source ownership；Quality Gate 因无参考 ROI 保持
+  `insufficient_evidence`。
 - [ ] 每个职责层完成后先运行上述数据契约检查；涉及成片行为时，必须用兰亭 45 张真实输入运行
   `real_focus_stack_fixture_from_env`，将输出和 `RAW_EDITOR_STACK_REPORT_DIR` 都写入 `/private/tmp`，并
   检查 45/45 输入、整图与左中右清晰度裁剪、Coverage/Ownership 证据和参考成片对照；禁止覆盖
