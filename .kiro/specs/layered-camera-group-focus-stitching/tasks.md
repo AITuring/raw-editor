@@ -68,12 +68,16 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
 - 真实素材回归统一用 `RAW_EDITOR_FOCUS_STACK_DATA_ROOT=/Users/dp/Downloads/书画拼图 npm run
   focus-stack-regression -- --dataset <id>`；产物写入 `/private/tmp/raw-editor-regression`，基线（计数、尺寸、
   preview/裁片 digest、配准清晰度摘要）记录在 `tests/acceptance/focus-stack-regression-baselines.json`。
-- 合并后的 `v1`（`8fa99498`）改变了兰亭路径：45 张形成 44 个 station、1 个连通分量，不再触发 singleton
-  source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`，45/45 进入拼接顺序，closure
-  `converged`，tone `degraded`（最大边界 ΔE00 1.676 > 1.5），Quality Gate `insufficient_evidence`，harness 的
-  layered native acceptance 在写出产物后拒绝该报告；单次约 25 分钟。配准参考成片后内容 tile 清晰度比值中位数
-  0.993、P05 0.827，裁片笔画清晰。该路径的 1:1 成片能力尚未确认：1:1 尝试约 95 分钟只完成 258 个 Virtual_Tile
-  relation 候选（10% 共 946 个），峰值 footprint 9.3 GB，因系统 swap 接近耗尽而中止；不能把 legacy 1:1 结论套用到 `v1`。
+- 合并后的 `v1`（`8fa99498`）曾把兰亭改走 `layered_virtual_tile`：45 张形成 44 个 station（43 个单帧加 1 对近
+  重复帧）、1 个连通分量，不再满足“全部单帧”的 source-scan fallback。10% 回归输出 `2975×1283`、约 25 分钟，tone
+  `degraded`（最大边界 ΔE00 1.676 > 1.5）、Quality Gate `insufficient_evidence`，layered native acceptance 拒绝该
+  报告；1:1 尝试约 95 分钟只完成 258/946 个 Virtual_Tile relation 候选，峰值 footprint 9.3 GB，被中止。
+- `2a722f3d` 把 fallback 扩展到 singleton-dominated station 集合（至少 9/10 的 station 为单帧），兰亭回到
+  `legacy_single_layer_mosaic`：10% 回归 45/45 streaming、`3381×1386`、193 s；1:1 回归 45/45 streaming、
+  `33821×13852`、每个输出像素都有 source ownership，拼接 319 s 并写出 TIFF/app JPEG。配准参考成片后 1:1 内容 tile
+  清晰度比值中位数 1.111、P05 0.857，左/中/右 1.132/1.097/1.108，低对比 tile 0.1%；100% 裁片笔画和印章纹理清晰。
+  Langyuan-10（station 4/3/3）与 Wenyuan-10（2/4/4）仍走 layered 路径，日志除耗时外与修复前一致（10% 渲染下仍因
+  station 图断连而拒绝，属既有限制）；马远 PSD 10% 输出逐字节不变。
 - 以下兰亭条目是合并前（`20c085c3` 及更早）legacy 路径的历史基线。
 - 兰亭 45 张基准已恢复到 45/45 输入完整参与渲染。N1-2a 后的 1:1 回归输出 `33895×13888`，成功写出
   `/private/tmp/raw-editor-lanting-coordinates-full.tiff` 和同尺寸 app JPEG，预览 `1600×656`；日志包含 45 条
@@ -106,6 +110,8 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   成片路径、SHA-256、尺寸和文件大小已冻结。
 - [x] 恢复兰亭 45 张完整成片行为：45/45 输入进入 streaming compositor，1:1 回归成功写出 TIFF/app JPEG，
   整图与左中右裁片保持清晰；参考成片未覆盖。输出尺寸/裁切对齐仍作为后续独立门禁。
+- [x] `v1` 合并后重新确认兰亭行为门：singleton-dominated scan 回到 legacy compositor（`2a722f3d`），10% 与 1:1
+  回归及 baseline 见“当前验收基线”。
 - [ ] 为每个修改建立 `keep`、`adapt`、`test-only`、`exclude` 四类登记，注明生产入口、测试入口和证据。
 - [ ] 清理源码树中的 raw/preview/命令报告引用；历史 artifact 只保留在本地归档，不进入生产提交。
 - [ ] 在不改变行为的前提下完成 `cargo fmt --check`、`cargo check --lib`、定向 Rust 测试、Node 契约、

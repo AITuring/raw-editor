@@ -140,8 +140,8 @@ test-only 模块 `panorama_acceptance_metrics.rs` 只测量成片：用 FAST/BRI
 参考像素或变换。digest 一致即证明职责迁移未改变成片；digest 变化时按 baseline 的清晰度下限判定，并仍需
 人工查看 preview 和裁片。基线只保存计数、尺寸、digest 和指标摘要，不保存日志、报告、预览或临时路径。
 
-2026-10-28 合并后的 `v1`（`8fa99498`）改变了兰亭的执行路径：恢复连通性后 45 张形成 44 个 station、1 个连通
-分量，不再触发 singleton source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`（旧
+2026-10-28 合并后的 `v1`（`8fa99498`）曾改变兰亭的执行路径：恢复连通性后 45 张形成 44 个 station（43 个单帧加
+1 对近重复帧）、1 个连通分量，不再满足“全部单帧”的 source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`（旧
 legacy 基线为 `3388×1389`），45/45 进入拼接顺序，closure `converged`，tone `degraded`（最大边界
 ΔE00 1.676 > 1.5），Quality Gate `insufficient_evidence`，因此 harness 的 layered native acceptance 在写出产物后
 拒绝该报告；本机单次耗时约 25 分钟（旧 legacy 路径约 2.5 分钟）。与参考成片配准后（1,429 个 inlier）内容
@@ -149,6 +149,14 @@ tile 清晰度比值中位数 0.993、P05 0.827，左/中/右中位数 0.964/0.9
 裁片笔画清晰、色调比旧 legacy 输出均匀。旧 legacy 基线在同一测量下为中位数 1.097、P05 0.809。该路径的 1:1
 成片能力尚未确认：同日的 1:1 尝试运行约 95 分钟后只完成 258 个 Virtual_Tile relation 候选（10% 运行共记录 946 个），
 进程峰值 footprint 9.3 GB，系统 swap 接近耗尽后被中止；旧 legacy 1:1 回归约 14 分钟完成。
+
+`2a722f3d` 用 `capture_groups_form_singleton_scan`（`panorama_capture_groups.rs`）把 fallback 扩展到至少 9/10 的
+station 为单帧的集合，兰亭因此回到 `legacy_single_layer_mosaic`。10% 回归 45/45 streaming、输出 `3381×1386`、
+193 s，配准清晰度中位数 1.066、P05 0.846；1:1 回归 45/45 streaming、输出 `33821×13852`、每个像素都有 source
+ownership，拼接 319 s 并写出 TIFF/app JPEG，配准清晰度中位数 1.111、P05 0.857、左/中/右 1.132/1.097/1.108，
+100% 裁片笔画和印章纹理清晰。多帧 station 网格不受影响：Langyuan-10（4/3/3）和 Wenyuan-10（2/4/4）仍走 layered
+路径，日志除耗时外与修复前一致；马远 PSD 输出逐字节不变。两组 10 张 NEF 在 10% 渲染下仍因 station 图断连而被
+拒绝，这是缩小渲染的既有限制，验收需要 1:1。
 
 以下各段记录合并前（`20c085c3` 及更早）的 legacy 基线，供追溯。当时已恢复兰亭 45/45 输入的完整渲染：N1-2a
 后的 1:1 回归把 45 张都写入 streaming compositor，成片覆盖范围为

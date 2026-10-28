@@ -8,81 +8,164 @@
       "previewEdge": 1200,
       "previewOnly": true,
       "output": {
-        "width": 2975,
-        "height": 1283
+        "width": 3381,
+        "height": 1386
       },
       "inputs": 45,
       "orderedInputs": 45,
-      "streamedSources": null,
-      "ownershipVerified": false,
-      "selectedPath": "layered_virtual_tile",
+      "streamedSources": 45,
+      "ownershipVerified": true,
+      "selectedPath": "legacy_single_layer_mosaic",
       "stationCount": 44,
       "qualityGate": "insufficient_evidence",
-      "toneStatus": "degraded",
-      "nativeAcceptance": "rejected: native output did not pass the complete quality gate",
+      "toneStatus": "not_run",
+      "nativeAcceptance": "passed-or-not-applicable",
       "digests": {
-        "preview": "e75e8bd9e3d7cf3029881721c4db3e13f534ace1dab0ffeae65428a6667d1936",
+        "preview": "7d348aae65d2316b385e3c8d586d1b540843f36d2b3feab12949b9c7a8310787",
         "crops": {
-          "top-left": "09a14073ac74edc797ceb9e56e8ba7ad0080a578e2e5de12aef22d98d1e0c1b7",
-          "top-center": "70534e7316b0b5ef47be89249aa29e074ea4140b4014abd611206979084e07fd",
-          "top-right": "0e1b3722aa10f5f80678925014dc6d602cfce46a28c802a1b173a198c9e07c7a",
-          "bottom-left": "a1147575bf3c9c3e70d2f44e6b985ba8b07252a9d48b0c155f0801c95e0ddbd2",
-          "bottom-center": "7d15bd857f1f99f83b189bfdc3fedec28273ee6cca1ac5370453641b7573ae0b",
-          "bottom-right": "171702b0c52388eb91b470986f5f00e4b2ed050d8bc34130908928dd1f51880a"
+          "top-left": "91a9de27f12e1b56ecd43329adfd360e3c0c8d2765d08b205ac357955f6c8983",
+          "top-center": "a0efe60efb326563f5abbd5e0e276f1b53adcdf87d3efa9bcc1922b17b2e931f",
+          "top-right": "024f89b282247c3399883584c42fb8a02f8dc86c32af64a98354a0608fd4e45b",
+          "bottom-left": "5726523d3635a59f48117d7e05376069ae9e1b7435cd57cb66e64823fb210331",
+          "bottom-center": "3c5181016b6ac5c62fdd3530f5c6bb7a6a25736176ed0d1f55a207c9b7452362",
+          "bottom-right": "16c154752854a037f8f3e8034708f2195405b53541de1d9831a86a4c6615de57"
         },
         "appJpeg": null
       },
       "metrics": {
         "self": {
-          "contentTiles": 590,
-          "sharpnessMedian": 0.2036947229304287,
-          "sharpnessP10": 0.05103511851625374,
+          "contentTiles": 800,
+          "sharpnessMedian": 0.19041520843294904,
+          "sharpnessP10": 0.038344916461675434,
           "thirds": [
             {
               "band": "left",
-              "sharpnessMedian": 0.20236582304643938
+              "sharpnessMedian": 0.17719533442250807
             },
             {
               "band": "center",
-              "sharpnessMedian": 0.18350315405061204
+              "sharpnessMedian": 0.18943728157553877
             },
             {
               "band": "right",
-              "sharpnessMedian": 0.2283939469988532
+              "sharpnessMedian": 0.20365623092646054
             }
           ]
         },
         "reference": {
           "file": "DSC08854_FocusStack.jpg",
-          "inliers": 1429,
-          "localScale": 11.106364522588384,
-          "contentTiles": 544,
-          "ratioMedian": 0.9926488178421377,
-          "ratioP05": 0.8269564607988026,
-          "ratioP10": 0.8882706782801968,
-          "softTileFraction": 0.02389705882352941,
-          "lowContrastFraction": 0,
+          "inliers": 408,
+          "localScale": 9.987708228097656,
+          "contentTiles": 649,
+          "ratioMedian": 1.0655629337377037,
+          "ratioP05": 0.8458021122318835,
+          "ratioP10": 0.9134585755835541,
+          "softTileFraction": 0.01694915254237288,
+          "lowContrastFraction": 0.02773497688751926,
           "thirds": [
             {
               "band": "left",
-              "ratioMedian": 0.9636824870683545,
-              "ratioP10": 0.8913870350960703
+              "ratioMedian": 1.0639577913272247,
+              "ratioP10": 0.8928489165744409
             },
             {
               "band": "center",
-              "ratioMedian": 0.9780507775594353,
-              "ratioP10": 0.8330048386509822
+              "ratioMedian": 1.0651376282272318,
+              "ratioP10": 0.9134585755835541
             },
             {
               "band": "right",
-              "ratioMedian": 1.0334321037138392,
-              "ratioP10": 0.9352015858562286
+              "ratioMedian": 1.0713684025829289,
+              "ratioP10": 0.9469285148396975
             }
           ]
         }
       },
       "recordedAt": "2026-10-28",
-      "commit": "8fa99498"
+      "commit": "2a722f3d"
+    },
+    {
+      "dataset": "lanting",
+      "subset": null,
+      "scale": 1,
+      "previewEdge": 1200,
+      "previewOnly": false,
+      "output": {
+        "width": 33821,
+        "height": 13852
+      },
+      "inputs": 45,
+      "orderedInputs": 45,
+      "streamedSources": 45,
+      "ownershipVerified": true,
+      "selectedPath": "legacy_single_layer_mosaic",
+      "stationCount": 44,
+      "qualityGate": "insufficient_evidence",
+      "toneStatus": "not_run",
+      "nativeAcceptance": "passed-or-not-applicable",
+      "digests": {
+        "preview": "5159bc04e07710fd7d96b6c554a243077a0b99a9001235f925f344c1a1c2c670",
+        "crops": {
+          "top-left": "95bbf87b5aacf6fb276122753ec44555926e9d1a8a1222b8186a96441bd34b91",
+          "top-center": "287ed3e3eded7630075572c5c84beace435598e6c1e3ba6901678c5c4403eceb",
+          "top-right": "5138a48c79c304774d927397143ee44d373468a4ec210aff2959cdc6f3d0cae1",
+          "bottom-left": "c3b481e2ebb957bc98bb6e50dcbe5ab642800c243d01284e5ba95dd4c30b1048",
+          "bottom-center": "d8eea62577f720e1482ef4244a36c7eae0439692b978540e7458c1254431724b",
+          "bottom-right": "66eeacd21a44403417e036c6fc78695d74b09f42c7adb40c8893ad2c5c4ecfc5"
+        },
+        "appJpeg": "517d319e66c8a7b0a73306249d6b7a639a57c8dbd1a79b24e050a4b8535e37d3"
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 1102,
+          "sharpnessMedian": 0.17067507776966187,
+          "sharpnessP10": 0.03674901815543032,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.17482506692511007
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.16669996361041414
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.1751922596032684
+            }
+          ]
+        },
+        "reference": {
+          "file": "DSC08854_FocusStack.jpg",
+          "inliers": 381,
+          "localScale": 0.9990093698912639,
+          "contentTiles": 937,
+          "ratioMedian": 1.110673164133306,
+          "ratioP05": 0.8571062965784398,
+          "ratioP10": 0.9159311748092455,
+          "softTileFraction": 0.012806830309498399,
+          "lowContrastFraction": 0.0010672358591248667,
+          "thirds": [
+            {
+              "band": "left",
+              "ratioMedian": 1.1316114879094623,
+              "ratioP10": 0.9462101980900965
+            },
+            {
+              "band": "center",
+              "ratioMedian": 1.0969155006889737,
+              "ratioP10": 0.8837775013931692
+            },
+            {
+              "band": "right",
+              "ratioMedian": 1.1081081156350197,
+              "ratioP10": 0.9556363044280002
+            }
+          ]
+        }
+      },
+      "recordedAt": "2026-10-28",
+      "commit": "2a722f3d"
     },
     {
       "dataset": "mayuan-psd",
