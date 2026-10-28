@@ -1468,6 +1468,7 @@ struct LayerSampler<'a> {
     source: &'a Rgb32FImage,
     source_divisor: f64,
     inverse: Matrix3<f64>,
+    native_mapping: Option<&'a (dyn Fn(Point3<f64>) -> Option<Point2<f64>> + Sync)>,
     projection: Projection,
     offset: (f64, f64),
     left: u32,
@@ -1484,8 +1485,13 @@ impl LayerSampler<'_> {
             self.top as f64 + y + delta[1] * self.scale - self.offset.1,
             1.0,
         );
-        let source = map_target_to_source(&self.inverse, target, self.info, self.projection)?;
-        if source.x < 0.0
+        let source = if let Some(mapping) = self.native_mapping {
+            mapping(target)?
+        } else {
+            map_target_to_source(&self.inverse, target, self.info, self.projection)?
+        };
+        if !self.info.source_is_supported(source)
+            || source.x < 0.0
             || source.y < 0.0
             || source.x >= self.info.width as f64
             || source.y >= self.info.height as f64
@@ -2939,6 +2945,73 @@ fn measure_native_control_point(
 /// serially in row-major order, so the accepted set is exactly what a fully
 /// serial walk accepts and is still a deterministic function of the
 /// photographs.
+/// Keep one observation per control cell, but let a cell whose centre misses
+/// a small high-contrast object sample that object within its own cell. Every
+/// relocated patch still passes the ordinary correlation/round-trip gates.
+fn contrasted_native_control_location(
+    base: &NativeRefineBase<'_>,
+    sampler: &LayerSampler<'_>,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> (u32, u32) {
+    let gx = sampler.left as f64 + x as f64 * sampler.scale;
+    let gy = sampler.top as f64 + y as f64 * sampler.scale;
+    if !base.covered(gx as u32, gy as u32)
+        || sampler
+            .sample(x as f64 * sampler.scale, y as f64 * sampler.scale)
+            .is_none()
+    {
+        return (x, y);
+    }
+    let contrast = |cx: u32, cy: u32| {
+        let cx = sampler.left as f64 + cx as f64 * sampler.scale;
+        let cy = sampler.top as f64 + cy as f64 * sampler.scale;
+        let mut maximum = 0.0f64;
+        let (mut xx, mut xy, mut yy) = (0.0f64, 0.0f64, 0.0f64);
+        for dy in [-16.0, -8.0, 0.0, 8.0, 16.0] {
+            for dx in [-16.0, -8.0, 0.0, 8.0, 16.0] {
+                let (px, py) = (cx + dx, cy + dy);
+                if let (Some(l), Some(r), Some(t), Some(b)) = (
+                    base.masked(px - 1.0, py),
+                    base.masked(px + 1.0, py),
+                    base.masked(px, py - 1.0),
+                    base.masked(px, py + 1.0),
+                ) {
+                    let gx = f64::from(luma(r) - luma(l)) * 0.5;
+                    let gy = f64::from(luma(b) - luma(t)) * 0.5;
+                    maximum = maximum.max(gx.hypot(gy));
+                    xx += gx * gx;
+                    xy += gx * gy;
+                    yy += gy * gy;
+                }
+            }
+        }
+        let corner = ((xx + yy - ((xx - yy).powi(2) + 4.0 * xy * xy).sqrt()) * 0.5).max(0.0);
+        (maximum, corner)
+    };
+    let mut best = (contrast(x, y).1, x, y);
+    let quarter = NATIVE_REFINE_STEP as i32 / 4;
+    for dy in [-quarter, 0, quarter] {
+        for dx in [-quarter, 0, quarter] {
+            let (px, py) = (x as i32 + dx, y as i32 + dy);
+            if px < 20
+                || py < 20
+                || px >= width.saturating_sub(20) as i32
+                || py >= height.saturating_sub(20) as i32
+            {
+                continue;
+            }
+            let value = contrast(px as u32, py as u32);
+            if value.0 >= 0.15 && value.1 > best.0 * 1.25 + 1e-8 {
+                best = (value.1, px as u32, py as u32);
+            }
+        }
+    }
+    (best.1, best.2)
+}
+
 fn collect_native_observations(
     base: &NativeRefineBase<'_>,
     sampler: &LayerSampler<'_>,
@@ -2971,22 +3044,48 @@ fn collect_native_observations(
             columns
                 .iter()
                 .map(|&x| {
-                    measure_native_control_point(
+                    let (px, py) = if mode.anchor_long_side().is_some() && spacing <= 1.0 {
+                        contrasted_native_control_location(base, sampler, x, y, width, height)
+                    } else {
+                        (x, y)
+                    };
+                    let mut point = measure_native_control_point(
                         base,
                         sampler,
-                        x,
-                        y,
+                        px,
+                        py,
                         spacing,
                         mode,
                         match_radius,
                         search_samples,
-                    )
+                    );
+                    let mut position = (px, py);
+                    if position != (x, y) && point.accepted.is_none() {
+                        point = measure_native_control_point(
+                            base,
+                            sampler,
+                            x,
+                            y,
+                            spacing,
+                            mode,
+                            match_radius,
+                            search_samples,
+                        );
+                        position = (x, y);
+                    }
+                    // Coverage remains the original cell-centre quadrature;
+                    // moving the matching patch cannot enlarge spatial support.
+                    point.covered = base.covered(
+                        (sampler.left as f64 + x as f64 * sampler.scale) as u32,
+                        (sampler.top as f64 + y as f64 * sampler.scale) as u32,
+                    );
+                    (position, point)
                 })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     for (grid_row, row) in measured.iter().enumerate() {
-        for (grid_column, measurement) in row.iter().enumerate() {
+        for (grid_column, (position, measurement)) in row.iter().enumerate() {
             if measurement.covered {
                 pass.valid_cells += 1;
             }
@@ -3015,7 +3114,7 @@ fn collect_native_observations(
             pass.global_errors.push(global_error_px);
             pass.local_errors.push(local_error_px);
             pass.observations.push((
-                Point2::new(columns[grid_column] as f64, rows[grid_row] as f64),
+                Point2::new(position.0 as f64, position.1 as f64),
                 d,
                 correlation,
             ));
@@ -3361,6 +3460,16 @@ pub(crate) struct NativeResidualDisplacement {
 }
 
 impl NativeResidualDisplacement {
+    #[cfg(test)]
+    pub(crate) fn from_test_field(field: Field<2>) -> Self {
+        Self {
+            field,
+            left: 0,
+            top: 0,
+            scale: 1.0,
+        }
+    }
+
     /// Canvas-pixel offset to add to a canvas position before sampling the
     /// layer, i.e. exactly what [`LayerSampler::source_point`] adds.
     pub(crate) fn at(&self, canvas_x: f64, canvas_y: f64) -> [f64; 2] {
@@ -3422,6 +3531,38 @@ pub(crate) fn register_station_frame_native(
     anchor_long_side: u32,
     into_anchor: Matrix3<f64>,
 ) -> Option<StationFrameRegistration> {
+    register_station_frame_native_with_mapping(
+        base,
+        base_mask,
+        info,
+        source,
+        transform,
+        projection,
+        offset,
+        layer,
+        anchor_long_side,
+        into_anchor,
+        None,
+    )
+}
+
+/// Measure the residual of the exact inverse map that final RAW sampling uses.
+/// Depth-band geometry must already be present in the observations; otherwise
+/// applying the fitted residual on top of that geometry corrects it twice.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn register_station_frame_native_with_mapping(
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    info: &ImageInfo,
+    source: &Rgb32FImage,
+    transform: &Matrix3<f64>,
+    projection: Projection,
+    offset: (f64, f64),
+    layer: (u32, u32, u32, u32),
+    anchor_long_side: u32,
+    into_anchor: Matrix3<f64>,
+    native_mapping: Option<&(dyn Fn(Point3<f64>) -> Option<Point2<f64>> + Sync)>,
+) -> Option<StationFrameRegistration> {
     let inverse = transform.try_inverse()?;
     let (left, right, top, bottom) = layer;
     if right <= left || bottom <= top {
@@ -3440,6 +3581,7 @@ pub(crate) fn register_station_frame_native(
         source,
         source_divisor: 1.0,
         inverse,
+        native_mapping,
         projection,
         offset,
         left,
@@ -4252,6 +4394,7 @@ where
             source: &source,
             source_divisor,
             inverse,
+            native_mapping: None,
             projection,
             offset: (offset_x, offset_y),
             left,
@@ -4585,6 +4728,7 @@ where
             source: &source,
             source_divisor,
             inverse,
+            native_mapping: None,
             projection,
             offset: (offset_x, offset_y),
             left,
@@ -5282,6 +5426,7 @@ pub(crate) mod intra_station_test_access {
             source: layer,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -5402,6 +5547,7 @@ pub(crate) mod intra_station_test_access {
             source: layer,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -5455,6 +5601,7 @@ pub(crate) mod intra_station_test_access {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: Some(75.0),
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -5469,6 +5616,47 @@ pub(crate) mod intra_station_test_access {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_control_cell_can_find_a_corner_missed_by_the_regular_probe_phase() {
+        let image = Rgb32FImage::from_fn(128, 128, |x, y| {
+            Rgb([if x >= 56 && y >= 56 { 0.9 } else { 0.1 }; 3])
+        });
+        let mask = GrayImage::from_pixel(128, 128, Luma([255]));
+        let info = image_info(0, &image);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &image,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            native_mapping: None,
+            projection: Projection::Planar,
+            offset: (0.0, 0.0),
+            left: 0,
+            top: 0,
+            scale: 1.0,
+            residual: Field::new(128, 128, 48.0),
+        };
+        let base = NativeRefineBase {
+            image: &image,
+            mask: &mask,
+            left: 0,
+            top: 0,
+        };
+        assert_eq!(
+            contrasted_native_control_location(&base, &sampler, 52, 52, 128, 128),
+            (56, 56)
+        );
+        let uncovered = GrayImage::new(128, 128);
+        let base = NativeRefineBase {
+            mask: &uncovered,
+            ..base
+        };
+        assert_eq!(
+            contrasted_native_control_location(&base, &sampler, 52, 52, 128, 128),
+            (52, 52)
+        );
+    }
 
     #[test]
     fn only_near_black_pixels_in_the_lower_left_capture_border_are_rejected() {
@@ -5991,6 +6179,7 @@ mod tests {
             source: &source,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6135,6 +6324,7 @@ mod tests {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -6214,6 +6404,7 @@ mod tests {
             source: &shifted,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6343,6 +6534,7 @@ mod tests {
                 source,
                 source_divisor: 1.0,
                 inverse: Matrix3::identity(),
+                native_mapping: None,
                 projection: Projection::Planar,
                 offset: (0.0, 0.0),
                 left: 0,
@@ -6391,6 +6583,42 @@ mod tests {
     }
 
     #[test]
+    fn native_registration_observes_the_final_depth_band_inverse() {
+        let source = Rgb32FImage::new(128, 128);
+        let info = image_info(1, &source);
+        let mapping = |target: Point3<f64>| Some(Point2::new(target.x + 7.0, target.y - 3.0));
+        let mut residual = Field::new(64, 64, 16.0);
+        residual.values.fill([1.0, 2.0]);
+        let sampler = LayerSampler {
+            info: &info,
+            source: &source,
+            source_divisor: 1.0,
+            inverse: Matrix3::identity(),
+            native_mapping: Some(&mapping),
+            projection: Projection::Planar,
+            offset: (4.0, 5.0),
+            left: 10,
+            top: 20,
+            scale: 2.0,
+            residual,
+        };
+        // Canvas residual precedes the same depth map as final rendering:
+        // (10+30+2-4, 20+40+4-5) then (+7,-3).
+        assert_eq!(
+            sampler.source_point(30.0, 40.0),
+            Some(Point2::new(45.0, 56.0))
+        );
+        let global = LayerSampler {
+            native_mapping: None,
+            ..sampler
+        };
+        assert_eq!(
+            global.source_point(30.0, 40.0),
+            Some(Point2::new(38.0, 59.0))
+        );
+    }
+
+    #[test]
     fn sensor_noise_cannot_hide_a_sharper_faint_colour_stroke() {
         let (sharp, noisy_blur) = noisy_colour_stroke_pair();
         let info = image_info(1, &sharp);
@@ -6399,6 +6627,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6433,6 +6662,7 @@ mod tests {
             source: &noisy_blur,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6473,6 +6703,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6573,6 +6804,7 @@ mod tests {
             source: &source,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6610,6 +6842,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6649,6 +6882,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6685,6 +6919,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6698,6 +6933,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::new(1.0, 0.0, 4.0, 0.0, 1.0, -3.0, 0.0, 0.0, 1.0),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6734,6 +6970,7 @@ mod tests {
             source: &source,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6758,6 +6995,7 @@ mod tests {
             source: &source,
             source_divisor: 1.0,
             inverse: Matrix3::new(1.0, 0.0, 64.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,
@@ -6789,6 +7027,7 @@ mod tests {
             source: &sharp,
             source_divisor: 1.0,
             inverse: Matrix3::identity(),
+            native_mapping: None,
             projection: Projection::Planar,
             offset: (0.0, 0.0),
             left: 0,

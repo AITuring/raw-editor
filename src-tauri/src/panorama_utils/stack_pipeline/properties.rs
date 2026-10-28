@@ -211,6 +211,7 @@ proptest! {
             world_size: (f64::from(width), f64::from(height)),
             world_stride: 1.0,
             cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb([value; 3])),
+            native_detail: None,
             cell_coverage: vec![1.0; (width * height) as usize],
         };
         let tiles = [
@@ -275,6 +276,7 @@ proptest! {
                 world_size: (f64::from(side), f64::from(side)),
                 world_stride: 1.0,
                 cell_mean: image::Rgb32FImage::from_pixel(side, side, image::Rgb(pixel)),
+                native_detail: None,
                 cell_coverage: coverage,
             }
         };
@@ -367,6 +369,7 @@ proptest! {
             world_size: (f64::from(width), f64::from(height)),
             world_stride: 1.0,
             cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb(value)),
+            native_detail: None,
             cell_coverage: vec![1.0; (width * height) as usize],
         };
         let tiles = [tile(0, 1, left), tile(1, 2, right)];
@@ -439,6 +442,7 @@ proptest! {
             world_size: (f64::from(width), f64::from(height)),
             world_stride: 1.0,
             cell_mean: image::Rgb32FImage::from_pixel(width, height, image::Rgb([scale; 3])),
+            native_detail: None,
             cell_coverage: vec![1.0; (width * height) as usize],
         };
         let tiles = [tile(0, 1, 0.35), tile(1, 2, 0.55)];
@@ -2509,6 +2513,7 @@ fn fit_synthetic_matches(
                 // canonical direction and kept there, while `homography` is
                 // rotated into the `(min index, max index)` key orientation.
                 canonical_homography: Some(homography),
+                native_verified_points: Vec::new(),
                 homography: stored_homography,
                 inliers: stored_points.len(),
                 sequence_bridge: false,
@@ -5054,6 +5059,7 @@ fn match_info_with(
 ) -> MatchInfo {
     MatchInfo {
         canonical_homography: Some(homography),
+        native_verified_points: Vec::new(),
         homography,
         inliers: points.len(),
         sequence_bridge: false,
@@ -5157,6 +5163,16 @@ proptest! {
         // 2. The station partition is the transitive closure of those decisions.
         let grouping = grouping_test_access::station_grouping(&images, &matches);
         let link_components = accepted_link_components(&images, &matches);
+        let mut scan_linked=BTreeSet::new();
+        for key in sorted_keys(&matches) {
+            let record=&matches[&key];
+            if grouping_test_access::has_verified_scan_overlap(&images,key.0,key.1,record) {
+                prop_assert!(!record.coarse_bridge && !record.sequence_bridge);
+                prop_assert!(record.points.len()>=30);
+                scan_linked.insert(key.0);scan_linked.insert(key.1);
+            }
+        }
+        let scan_singletons=link_components.iter().filter(|component|component.len()==1 && component.iter().any(|id|scan_linked.contains(id))).count();
         let linked = link_components
             .iter()
             .filter(|component| component.len() >= 2)
@@ -5208,19 +5224,21 @@ proptest! {
                 .sum::<usize>();
         prop_assert_eq!(
             stations_from_components,
-            linked + grouping.splits.len(),
+            linked + grouping.splits.len() + scan_singletons,
             "each accepted-link component must become exactly one Capture_Station per recorded \
              split (components {}, splits {:?})",
             linked,
             grouping.splits
         );
         // 需求 1.6 seen from this side: a source with no accepted relation at all
-        // is in no component of size two and in no station.
+        // is in no component of size two; a verified spatial scan overlap
+        // independently preserves a source as a single-member station.
         let unlinked = (0..images.len())
             .filter(|index| {
                 !link_components
                     .iter()
                     .any(|component| component.len() >= 2 && component.contains(index))
+                    && !scan_linked.contains(index)
             })
             .collect::<Vec<_>>();
         prop_assert_eq!(
@@ -8598,6 +8616,7 @@ fn single_frame_info(id: usize, side: u32) -> ImageInfo {
         full_image: None,
         scale_factor: 1.0,
         focal_length_35mm: Some(75.0),
+        source_footprint: None,
         overview_reference: false,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -8981,6 +9000,7 @@ fn degraded_station_info(
         full_image: None,
         scale_factor: 1.0,
         focal_length_35mm: Some(75.0),
+        source_footprint: None,
         overview_reference: false,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -12530,6 +12550,38 @@ proptest! {
 }
 
 // Stage 7 pairing and effective-coverage properties (15.10, 15.12).
+#[test]
+fn native_to_output_scale_distinguishes_downsampling_from_magnification() {
+    let roi = QualityRoi {
+        x: 0,
+        y: 0,
+        side: QUALITY_ROI_SIDE,
+        region_label: 1,
+        owner: 1,
+        world_origin: (128.0, 128.0),
+        boundary_clearance: 64.0,
+    };
+    for scale in [0.5, 0.9, 1.0, 2.0] {
+        let geometry = SourceGeometry {
+            member_to_anchor: nalgebra::Matrix3::identity(),
+            tile_to_world: nalgebra::Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0),
+            station_id: 1,
+        };
+        let measured = local_scale_for_roi(
+            &roi,
+            &geometry,
+            &super::residual_warp::ResidualWarp::new(),
+            1.0,
+        )
+        .unwrap();
+        assert!((measured.median - scale).abs() < 1e-10);
+        assert_eq!(
+            measured.fraction_at_least_095,
+            if scale >= 0.95 { 1.0 } else { 0.0 }
+        );
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 100,
@@ -12750,17 +12802,12 @@ proptest! {
                 owners[(y * width + x) as usize] = 2;
             }
         }
-        // Put equal-width strokes on both sides of the top ownership edge.
-        // The measurement samples ±16 px from the boundary, so the paired
-        // edges are deliberately symmetric around y=32.
-        for y in 0..=20 {
-            for x in 0..width {
-                image.put_pixel(x, y, image::Rgb([level; 3]));
-            }
-        }
-        for y in 44..height {
-            for x in 0..width {
-                image.put_pixel(x, y, image::Rgb([level; 3]));
+        // A single vertical stroke crosses the horizontal owner boundary.
+        // Two parallel edges on opposite sides are different edges and must
+        // not be paired merely because their contrast centroids are symmetric.
+        for y in 0..height {
+            for x in 48..width {
+                image.put_pixel(x,y,image::Rgb([level;3]));
             }
         }
         let coverage = image::GrayImage::from_pixel(width, height, image::Luma([255]));
@@ -13249,6 +13296,7 @@ proptest! {
                 },
                 dimensions: (width, height),
                 native_warp: None,
+                native_registration: None,
             };
             let input = QualityGateInput {
                 output: &output,

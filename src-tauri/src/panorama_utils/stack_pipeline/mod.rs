@@ -30,6 +30,8 @@ pub(crate) mod diagnostics;
 pub(crate) mod focus_fuser;
 /// Intra_Station_Registrar: anchor selection and registration gates (需求 2.1–2.9).
 pub(crate) mod intra_station;
+pub(crate) mod joint_warp;
+pub(crate) mod line_layers;
 /// Full-resolution source and shared proxy coordinate/budget contract
 /// (requirements 16.1–16.2; task 21.1–21.2).
 pub(crate) mod proxy;
@@ -51,6 +53,7 @@ pub(crate) mod station_seam;
 pub(crate) mod tile_source;
 /// Tone_Harmonizer: robust low-frequency affine correction after ownership.
 pub(crate) mod tone;
+pub(crate) mod tone_local;
 /// Capture_Topology_Model: pose-free station row/column inference and
 /// ambiguity-forced candidate eligibility (需求 5.1, 5.2, 5.4, 5.7).
 pub(crate) mod topology;

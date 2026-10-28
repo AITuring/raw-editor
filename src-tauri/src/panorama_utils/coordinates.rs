@@ -172,6 +172,7 @@ mod tests {
 
     fn image_info(id: usize, width: u32, height: u32) -> ImageInfo {
         ImageInfo {
+            source_footprint: None,
             id,
             filename: format!("/test/{id}.jpg"),
             width,

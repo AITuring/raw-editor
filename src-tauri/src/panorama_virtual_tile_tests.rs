@@ -64,6 +64,7 @@ fn plane_info(id: usize, gray: GrayImage) -> ImageInfo {
         full_image: None,
         scale_factor: 1.0,
         focal_length_35mm: None,
+        source_footprint: None,
         overview_reference: false,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -363,6 +364,7 @@ fn source_raw_layer_models_use_verified_local_to_anchor_coordinates() {
         matches.insert(
             (left, right),
             MatchInfo {
+                native_verified_points: Vec::new(),
                 homography: raw_transform,
                 inliers: points.len(),
                 sequence_bridge: false,
@@ -544,6 +546,7 @@ fn source_raw_validated_match_canonical_inversion_swaps_points_once() {
         (Point2::new(20.0, 12.0), Point2::new(51.4, 5.24)),
     ];
     let relation = MatchInfo {
+        native_verified_points: Vec::new(),
         homography: transform,
         inliers: points.len(),
         sequence_bridge: false,
@@ -1215,6 +1218,7 @@ fn source_pairwise_seed_is_composed_in_station_tile_coordinates() {
     let matches = HashMap::from([(
         (7usize, 11usize),
         MatchInfo {
+            native_verified_points: Vec::new(),
             homography: source_to_target,
             inliers: points.len(),
             sequence_bridge: false,
@@ -1265,6 +1269,7 @@ fn source_pairwise_seed_scales_full_resolution_match_into_render_coordinates() {
     let matches = HashMap::from([(
         (7usize, 11usize),
         MatchInfo {
+            native_verified_points: Vec::new(),
             homography: source_to_target,
             inliers: points.len(),
             sequence_bridge: false,
@@ -1326,6 +1331,7 @@ fn source_pairwise_seed_requires_consensus_for_coarse_bridge() {
     let source_to_target = translation(23.0, -11.0) * uniform_scale(1.01);
     let points = hypothesis_points(&source_to_target, (100, 80));
     let mut match_info = MatchInfo {
+        native_verified_points: Vec::new(),
         homography: source_to_target,
         inliers: points.len(),
         sequence_bridge: false,
@@ -1742,14 +1748,19 @@ fn virtual_tile_relation_quality_plane_blurs_the_plane_two_octaves_above_the_fin
     let gray = textured_plane(512, 256);
     let coverage = full_coverage(512, 256);
 
-    let (empty, empty_factor) = virtual_tile_relation_quality_plane(&[]);
+    let (empty, empty_factor) = virtual_tile_relation_quality_plane(&[], &gray, &coverage);
     assert_eq!((empty.dimensions(), empty_factor), ((1, 1), 1));
 
     for factor in [1u32, 4] {
         let planes = planes_for(&[factor], &gray, &coverage);
-        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes);
-        assert_eq!(plane_factor, factor);
-        assert_eq!(plane, planes[0].gray, "a single level stays unfiltered");
+        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes, &gray, &coverage);
+        assert_eq!(plane_factor, 4);
+        let structural = VirtualTileMatchPlane::from_native(&gray, &coverage, 4).unwrap();
+        assert_eq!(
+            plane,
+            imageproc::filter::gaussian_blur_f32(&structural.gray, 1.0),
+            "a single matching level still verifies covered structure"
+        );
     }
 
     for (factors, expected) in [
@@ -1760,7 +1771,7 @@ fn virtual_tile_relation_quality_plane_blurs_the_plane_two_octaves_above_the_fin
         (vec![32, 16, 8, 4], 16),
     ] {
         let planes = planes_for(&factors, &gray, &coverage);
-        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes);
+        let (plane, plane_factor) = virtual_tile_relation_quality_plane(&planes, &gray, &coverage);
         assert_eq!(plane_factor, expected, "factors {factors:?}");
         let source = planes
             .iter()
@@ -1809,9 +1820,11 @@ fn install_virtual_tile_match_planes_pairs_the_quality_plane_with_its_own_covera
         coverage_bits(&quality_level.coverage)
     );
     assert_eq!(pyramid.quality_coverages[0].dimensions(), (1, 1));
-    let finest = VirtualTileMatchPlane::from_native(&gray, &coverage, 4).unwrap();
+    let feature_plane =
+        VirtualTileMatchPlane::from_native(&gray, &coverage, pyramid.feature_factors[1]).unwrap();
     assert!(tile.features.iter().all(|feature| {
-        feature.keypoint.x < finest.gray.width() && feature.keypoint.y < finest.gray.height()
+        feature.keypoint.x < feature_plane.gray.width()
+            && feature.keypoint.y < feature_plane.gray.height()
     }));
 
     let mut single = VirtualTileMatchPyramid::new(vec![1], 1);
@@ -1825,11 +1838,19 @@ fn install_virtual_tile_match_planes_pairs_the_quality_plane_with_its_own_covera
         &brief_pairs,
     )
     .expect("installed");
-    assert_eq!(native_tile.scale_factor, 1.0);
-    assert_eq!(native_tile.alignment_image, gray);
+    let structural = VirtualTileMatchPlane::from_native(&gray, &coverage, 3).unwrap();
+    assert_eq!(native_tile.scale_factor, 3.0);
+    assert_eq!(
+        native_tile.alignment_image,
+        imageproc::filter::gaussian_blur_f32(&structural.gray, 1.0)
+    );
+    assert_eq!(
+        single.quality_coverages[0].dimensions(),
+        native_tile.alignment_image.dimensions()
+    );
     assert_eq!(
         coverage_bits(&single.quality_coverages[0]),
-        coverage_bits(&coverage)
+        coverage_bits(&structural.coverage)
     );
 
     let mut failing = VirtualTileMatchPyramid::new(vec![8, 4], 1);
@@ -3052,6 +3073,7 @@ fn measured_relation(
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     }
 }
 
