@@ -11,7 +11,20 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
 const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
-const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
+// stitching.rs is a facade over the panorama_utils/stitching/ child modules.
+// Keep the source contract reading the facade plus every child module, so the
+// checks follow the implementation instead of a historical single-file layout.
+const stitchingDir = 'src-tauri/src/panorama_utils/stitching';
+const stitching = [
+  read('src-tauri/src/panorama_utils/stitching.rs'),
+  ...(fs.existsSync(path.join(repoRoot, stitchingDir))
+    ? fs
+        .readdirSync(path.join(repoRoot, stitchingDir))
+        .filter((file) => file.endsWith('.rs'))
+        .sort()
+        .map((file) => read(`${stitchingDir}/${file}`))
+    : []),
+].join('\n');
 // Matching contracts are split out of the panorama facade by N1-5/N1-6, and
 // the station relation gate, closure, topology, pose and solver stages by N1-7,
 // and Capture_Station grouping and capture groups by N1-8.
@@ -662,7 +675,7 @@ assert.match(
 );
 assert.match(
   stitching,
-  /pub\(super\) fn crop_to_valid_rectangle\(/,
+  /pub\((?:super|in crate::panorama_utils)\) fn crop_to_valid_rectangle\(/,
   'crop_to_valid_rectangle must be retained for the comparison paths',
 );
 // 任务 13.4: the default final sharpen amount is 0, so the default path never
