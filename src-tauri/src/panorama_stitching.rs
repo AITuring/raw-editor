@@ -6905,6 +6905,39 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 &mut load_render_image,
             )
         }
+        // A PSD set is a planar mosaic of already-fused stations. Average
+        // nothing across overlaps: refine the poses natively, pick the tile
+        // that delivers the most output-pixel detail per region and blend
+        // only the low-frequency band across seams.
+        BlendMode::Panorama if psd_source_scan && projection == Projection::Planar => {
+            println!("Warping and blending PSD scan tiles with sharpness-aware ownership...");
+            let mut load_scan_source = |image: &ImageInfo| {
+                ensure_focus_memory_available(rss_sampler.as_ref())?;
+                let prepared =
+                    load_prepared_stack_source(&image.filename, &settings, raw_exposure_reference)?;
+                let valid = crate::panorama_utils::scan_mosaic::opaque_source_mask(
+                    &prepared.image,
+                    image.width,
+                    image.height,
+                );
+                let rgb = source_to_render_rgb32f(prepared.image, image.width, image.height);
+                Ok(crate::panorama_utils::scan_mosaic::ScanSource { rgb, valid })
+            };
+            crate::panorama_utils::scan_mosaic::planar_scan_mosaic(
+                &render_images_info,
+                render_homographies,
+                app_handle.clone(),
+                progress_event,
+                &mut load_scan_source,
+            )
+            .map(|composed| {
+                // The refined poses and the detail-preserving output grid
+                // define the delivered canvas.
+                station_poses_replaced = true;
+                output_coverage = Some(composed.coverage);
+                composed.image
+            })
+        }
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
             &render_images_info,
             render_homographies,
@@ -30792,17 +30825,31 @@ pub(crate) mod acceptance_tests {
                     "/private/tmp/raw-editor-focus-stack-{alignment_name}.tiff"
                 ))
             });
-        let canonical = crate::image_stack::canonicalize_image_stack_result(stitched_image);
+        // Production writes the Coverage_Mask as alpha; the harness keeps the
+        // historical opaque RGB form unless a run asks for the same alpha.
+        let canonical = if std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_COVERAGE_ALPHA").is_some()
+        {
+            crate::image_stack::canonicalize_image_stack_result_with_coverage(
+                stitched_image,
+                stitched_coverage.as_ref(),
+            )
+        } else {
+            crate::image_stack::canonicalize_image_stack_result(stitched_image)
+        };
         let preview_only = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_ONLY").is_some();
         let preview_edge = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_EDGE")
             .ok()
             .and_then(|value| value.parse::<u32>().ok())
             .filter(|&value| value >= 256)
             .unwrap_or(1800);
-        let preview = canonical.resize(
-            preview_edge,
-            preview_edge,
-            image::imageops::FilterType::Lanczos3,
+        let preview = DynamicImage::ImageRgb8(
+            canonical
+                .resize(
+                    preview_edge,
+                    preview_edge,
+                    image::imageops::FilterType::Lanczos3,
+                )
+                .to_rgb8(),
         );
         let preview_path = output_path.with_extension("preview.jpg");
         preview
@@ -30828,13 +30875,16 @@ pub(crate) mod acceptance_tests {
                     height.saturating_sub(crop_height),
                 ),
             ] {
-                let crop = canonical
-                    .crop_imm(x, y, crop_width.min(width - x), crop_height.min(height - y))
-                    .resize(
-                        preview_edge,
-                        preview_edge,
-                        image::imageops::FilterType::Lanczos3,
-                    );
+                let crop = DynamicImage::ImageRgb8(
+                    canonical
+                        .crop_imm(x, y, crop_width.min(width - x), crop_height.min(height - y))
+                        .resize(
+                            preview_edge,
+                            preview_edge,
+                            image::imageops::FilterType::Lanczos3,
+                        )
+                        .to_rgb8(),
+                );
                 crop.save_with_format(
                     output_path.with_file_name(format!(
                         "{}.{}.jpg",

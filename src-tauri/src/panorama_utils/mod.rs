@@ -5,6 +5,7 @@ pub(crate) mod photometric;
 pub mod processing;
 pub(crate) mod registration;
 pub(crate) mod render_geometry;
+pub(crate) mod scan_mosaic;
 mod seam_cut;
 pub(crate) mod shared;
 pub(crate) mod stack_pipeline;

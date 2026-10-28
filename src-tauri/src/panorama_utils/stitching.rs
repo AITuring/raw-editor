@@ -7694,7 +7694,7 @@ struct SeamBandBlend<'a> {
     exposure: &'a ExposureCompensation,
 }
 
-fn flat_scan_paper_median(image: &Rgb32FImage) -> Option<f32> {
+pub(crate) fn flat_scan_paper_median(image: &Rgb32FImage) -> Option<f32> {
     let pixels = image.as_raw();
     let step = (pixels.len() / 3 / 4096).max(1);
     let mut samples = Vec::new();
@@ -7708,7 +7708,7 @@ fn flat_scan_paper_median(image: &Rgb32FImage) -> Option<f32> {
     median_f32(&mut samples)
 }
 
-fn apply_photometric_model_to_image(
+pub(crate) fn apply_photometric_model_to_image(
     image: &mut Rgb32FImage,
     model: &PhotometricModel,
     absolute_gain: f32,
