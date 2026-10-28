@@ -174,8 +174,8 @@
       "previewEdge": 1200,
       "previewOnly": true,
       "output": {
-        "width": 1318,
-        "height": 1116
+        "width": 1554,
+        "height": 1300
       },
       "inputs": 14,
       "orderedInputs": 14,
@@ -187,41 +187,41 @@
       "toneStatus": null,
       "nativeAcceptance": "passed-or-not-applicable",
       "digests": {
-        "preview": "dad3cac0ceeb3e8232815a0ee92cda749f68c9396022c99517e76f9e29037dc2",
+        "preview": "fc27979d16a0daafe8dd8138f2a52741f1663d271c56e1ac202c0c534d3b5d18",
         "crops": {
-          "top-left": "d5df9e6f8cc20e22b444bcbef458d508ab50eb997586e50260cc0d21240ccc33",
-          "top-center": "825c32a4bd44ec5d0f85c6e9ecf01162680803941a05197b8193dd01e897bebe",
-          "top-right": "0c83fe5352a2dbd86c34e9939a3be44e0f4a7a3dde6b1f92d29d3360bf60122d",
-          "bottom-left": "0704a1e7a7b1a250de3c937e28a780852f06dab10ea2b044fa453205bfaa5195",
-          "bottom-center": "bbaf3a244b15ad8cb296fb69978f8e91c5c7091d619b0d8bf714688db4fde3ba",
-          "bottom-right": "3272a6b80b4d5a1d97d2f17d8df13ea310fe23bf12b460748b34e7d88ae8aad6"
+          "top-left": "641df71eef9caf3edfce43221e8d77d660e41f0a1735a80d6efecc30d3266d76",
+          "top-center": "a4844a24cc71ec6084833fc0520c64aa980efa06335a8f73ae8aeb959a460a4d",
+          "top-right": "ca18e77a09ee694c56fe0bbff12b95fb069a1c0836546b12e2a9c8ee8d38f69e",
+          "bottom-left": "b4abff3dbe2931b75280219f942f20e83bd3821569904d83412b6b1acb74adf9",
+          "bottom-center": "ddc43eebdacd8b7fd8fca22d6f0e95a6647643b9dc5f5a627526a15d4f95f527",
+          "bottom-right": "1ba0cc82b5a5d3cc87a425fe1a74e19ec47bf25837bf5f4473c6aaedd56daf4c"
         },
         "appJpeg": null
       },
       "metrics": {
         "self": {
-          "contentTiles": 156,
-          "sharpnessMedian": 0.1246206903752297,
-          "sharpnessP10": 0.029287006573480146,
+          "contentTiles": 165,
+          "sharpnessMedian": 0.07495413797699652,
+          "sharpnessP10": 0.021296435134902918,
           "thirds": [
             {
               "band": "left",
-              "sharpnessMedian": 0.11512298508962338
+              "sharpnessMedian": 0.06331305476654149
             },
             {
               "band": "center",
-              "sharpnessMedian": 0.22348130522377027
+              "sharpnessMedian": 0.1246464454966618
             },
             {
               "band": "right",
-              "sharpnessMedian": 0.04862314178425127
+              "sharpnessMedian": 0.03428431869368687
             }
           ]
         },
         "reference": null
       },
       "recordedAt": "2026-10-28",
-      "commit": "8fa99498"
+      "commit": "36895af9"
     }
   ]
 }
