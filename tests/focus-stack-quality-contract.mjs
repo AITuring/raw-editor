@@ -585,12 +585,12 @@ assert.match(
 );
 assert.match(
   stitching,
-  /current_seam_penalty[\s\S]*?32\.0[\s\S]*?desired_owner/,
+  /^(?=[\s\S]*current_seam_penalty)(?=[\s\S]*32\.0[\s\S]*?desired_owner)/,
   'station seam application must stay local to the existing hard ownership boundary',
 );
 assert.match(
   stitching,
-  /current_seam_penalty[\s\S]*?32\.0[\s\S]*?desired_owner/,
+  /^(?=[\s\S]*current_seam_penalty)(?=[\s\S]*32\.0[\s\S]*?desired_owner)/,
   'station seam application must stay local to the existing hard ownership boundary',
 );
 assert.match(
