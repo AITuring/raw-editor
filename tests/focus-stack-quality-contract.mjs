@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isTestOnlyRustChild, readRustModule, rustChildModuleFiles } from './support/rust-source.mjs';
 
 // This is a cheap, dependency-free guard for the image-quality path.  The
 // real-image acceptance test is intentionally opt-in (the fixtures are large),
@@ -9,22 +10,14 @@ import { fileURLToPath } from 'node:url';
 // back into a coarse overwrite/average blend.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+// A Rust module split into `name.rs` plus a `name/` directory of child modules
+// is read as one source, so the checks follow the implementation rather than a
+// single-file layout.
+const readModule = (relativePath) => readRustModule(repoRoot, relativePath);
 
-const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
+const mosaic = readModule('src-tauri/src/panorama_utils/mosaic.rs');
 // stitching.rs is a facade over the panorama_utils/stitching/ child modules.
-// Keep the source contract reading the facade plus every child module, so the
-// checks follow the implementation instead of a historical single-file layout.
-const stitchingDir = 'src-tauri/src/panorama_utils/stitching';
-const stitching = [
-  read('src-tauri/src/panorama_utils/stitching.rs'),
-  ...(fs.existsSync(path.join(repoRoot, stitchingDir))
-    ? fs
-        .readdirSync(path.join(repoRoot, stitchingDir))
-        .filter((file) => file.endsWith('.rs'))
-        .sort()
-        .map((file) => read(`${stitchingDir}/${file}`))
-    : []),
-].join('\n');
+const stitching = readModule('src-tauri/src/panorama_utils/stitching.rs');
 // Matching contracts are split out of the panorama facade by N1-5/N1-6, and
 // the station relation gate, closure, topology, pose and solver stages by N1-7,
 // and Capture_Station grouping and capture groups by N1-8.
@@ -51,11 +44,11 @@ const panorama = [
   'panorama_station_grouping.rs',
   'panorama_capture_groups.rs',
 ]
-  .map((file) => read(`src-tauri/src/${file}`))
+  .map((file) => readModule(`src-tauri/src/${file}`))
   .join('\n');
-const processing = read('src-tauri/src/panorama_utils/processing.rs');
+const processing = readModule('src-tauri/src/panorama_utils/processing.rs');
 const stackPipelineDir = 'src-tauri/src/panorama_utils/stack_pipeline';
-const degradation = read(`${stackPipelineDir}/degradation.rs`);
+const degradation = readModule(`${stackPipelineDir}/degradation.rs`);
 // `report.rs` is now a compatibility facade.  Keep the source contract
 // checking the complete report implementation after N1-3 moved the schema,
 // recorder and atomic I/O into focused siblings.
@@ -68,15 +61,15 @@ const stackReport = [
   'report_schema_metrics.rs',
   'report_schema_solver.rs',
 ]
-  .map((file) => read(`${stackPipelineDir}/${file}`))
+  .map((file) => readModule(`${stackPipelineDir}/${file}`))
   .join('\n');
-const determinism = read(`${stackPipelineDir}/determinism.rs`);
-const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
-const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
-const tone = read(`${stackPipelineDir}/tone.rs`);
-const qualityGate = read(`${stackPipelineDir}/quality_gate.rs`);
-const qualityGateRunner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
-const testSupport = read(`${stackPipelineDir}/test_support.rs`);
+const determinism = readModule(`${stackPipelineDir}/determinism.rs`);
+const virtualTile = readModule(`${stackPipelineDir}/virtual_tile.rs`);
+const photometric = readModule('src-tauri/src/panorama_utils/photometric.rs');
+const tone = readModule(`${stackPipelineDir}/tone.rs`);
+const qualityGate = readModule(`${stackPipelineDir}/quality_gate.rs`);
+const qualityGateRunner = readModule(`${stackPipelineDir}/quality_gate_runner.rs`);
+const testSupport = readModule(`${stackPipelineDir}/test_support.rs`);
 
 // Revised 2026-09-29 evidence policy: content-inapplicable observations are
 // kept separate from technical failures, and a criterion can be explicitly
@@ -118,12 +111,12 @@ assert.match(
 );
 assert.match(stackReport, /pub verdict: QualityGateVerdict/, 'each criterion must carry its own verdict');
 assert.match(
-  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  readModule(`${stackPipelineDir}/quality_gate_runner.rs`),
   /fn criterion_verdict\([\s\S]*?QUALITY_MAX_UNMEASURABLE_RATIO[\s\S]*?NotApplicable/,
   'the four evidence rules must be implemented in one deterministic criterion function',
 );
 assert.match(
-  read(`${stackPipelineDir}/quality_gate_runner.rs`),
+  readModule(`${stackPipelineDir}/quality_gate_runner.rs`),
   /fn overall_verdict\([\s\S]*?QualityGateVerdict::Fail[\s\S]*?InsufficientEvidence/,
   'the overall gate verdict must give fail precedence over insufficient evidence',
 );
@@ -152,7 +145,7 @@ for (const [name, value] of [
 // second copy of the numbers, and the veto diagnostic must reuse the
 // Focus_Fuser's own constant.
 {
-  const runner = read(`${stackPipelineDir}/quality_gate_runner.rs`);
+  const runner = readModule(`${stackPipelineDir}/quality_gate_runner.rs`);
   assert.match(
     runner,
     /quality_gate::OWNER_SHARPNESS_SHORTFALL_MAX/,
@@ -169,7 +162,7 @@ for (const [name, value] of [
     'owner evidence thresholds must not be restated as literals',
   );
   assert.match(
-    read(`${stackPipelineDir}/focus_fuser.rs`),
+    readModule(`${stackPipelineDir}/focus_fuser.rs`),
     /OWNERSHIP_DISAGREEMENT_VETO: f64 = 0\.2;/,
     'the Focus_Fuser veto stays at 0.2',
   );
@@ -282,7 +275,7 @@ for (const variable of [
 
 // Stage 5 residual geometry keeps its activation and three node gates explicit
 // so a threshold change cannot silently widen the local warp domain.
-const residualWarp = read(`${stackPipelineDir}/residual_warp.rs`);
+const residualWarp = readModule(`${stackPipelineDir}/residual_warp.rs`);
 for (const [name, value] of [
   ['RESIDUAL_WARP_ENABLE_P95_PX', '3.0'],
   ['RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX', '32.0'],
@@ -323,7 +316,7 @@ assert.ok(mismatchPenalty >= 1, 'misregistered sharp candidates need a non-trivi
 // station tiles always report a single capture group and therefore never reach
 // mosaic::detail_preserving_mosaic. mosaic.rs keeps the primitives (and the
 // legacy reductions) for the comparison path.
-const focusFuser = read(`${stackPipelineDir}/focus_fuser.rs`);
+const focusFuser = readModule(`${stackPipelineDir}/focus_fuser.rs`);
 const sharpnessHalfScale = numberConstant(focusFuser, 'SHARPNESS_HALF_SCALE');
 const sharpnessWindowPx = numberConstant(focusFuser, 'SHARPNESS_SAMPLE_WINDOW_PX');
 const ownershipCellMin = numberConstant(focusFuser, 'OWNERSHIP_CELL_MIN_PX');
@@ -403,8 +396,8 @@ assert.match(
   /attribution:\s*ScoreNoiseAttributionCounts[\s\S]*?signals:\s*ScoreNoiseAttributionCounts/,
   'causal attribution must remain distinct from overlapping score-noise signals',
 );
-const ownerOracle = read('src-tauri/src/panorama_utils/owner_quality_oracle.rs');
-const finalWorldOwnerOracle = read('src-tauri/src/panorama_utils/final_world_owner_oracle.rs');
+const ownerOracle = readModule('src-tauri/src/panorama_utils/owner_quality_oracle.rs');
+const finalWorldOwnerOracle = readModule('src-tauri/src/panorama_utils/final_world_owner_oracle.rs');
 assert.match(
   stitching,
   /#\[cfg\(test\)\]\s*#\[path = "owner_quality_oracle\.rs"\]/,
@@ -633,7 +626,7 @@ assert.match(stitching, /FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND/, 'seam colour cor
 // the composed canvas untouched: the union covered bounds and no second-pass
 // sharpen. Both are source-level invariants because no cheap pixel test can
 // tell a cropped/sharpened delivery from an honest one.
-const compositorChoice = read(`${stackPipelineDir}/compositor.rs`);
+const compositorChoice = readModule(`${stackPipelineDir}/compositor.rs`);
 assert.match(
   compositorChoice,
   /#\[default\]\s*\n\s*LayeredVirtualTile/,
@@ -1255,7 +1248,16 @@ const stripRustComments = (source) => {
 // allowed to do what the shipped code may not: the determinism unit tests build
 // fixed size `rayon` pools (`num_threads(..)`) precisely to prove the result
 // does not move with the thread count.
-const withoutTestModule = (code) => code.split(/^#\[cfg\(test\)\]/m)[0];
+// Test-only imports and out-of-line module declarations carry no code; drop
+// them first so the `#[cfg(test)]` imports of a split module do not hide the
+// production code that follows them.
+const withoutTestModule = (code) =>
+  code
+    .replace(
+      /^#\[cfg\(test\)\]\s*\n(?:#\[[^\n]*\]\s*\n)*(?:pub(?:\([^)]*\))?\s+)?(?:use\s[^;]*;|mod\s+[a-z_][a-z0-9_]*\s*;)/gm,
+      '',
+    )
+    .split(/^#\[cfg\(test\)\]/m)[0];
 
 const determinismCode = withoutTestModule(stripRustComments(determinism));
 const processingCode = stripRustComments(processing);
@@ -1305,7 +1307,15 @@ assert.deepEqual(
   ['properties.rs', 'test_support.rs'],
   'the production hash-order guard must derive the standalone test-only modules from mod.rs',
 );
-const productionStackPipelineFiles = stackPipelineFiles.filter((file) => !testOnlyStackPipelineFiles.has(file));
+const productionStackPipelineFiles = [
+  ...stackPipelineFiles.filter((file) => !testOnlyStackPipelineFiles.has(file)),
+  // Split modules keep their children in `<module>/`; scan the production ones too.
+  ...stackPipelineFiles
+    .filter((file) => !testOnlyStackPipelineFiles.has(file))
+    .flatMap((file) => rustChildModuleFiles(repoRoot, `${stackPipelineDir}/${file}`))
+    .filter((child) => !isTestOnlyRustChild(repoRoot, child))
+    .map((child) => child.slice(stackPipelineDir.length + 1)),
+];
 
 const hashIterationViolations = [];
 let inspectedHashBindings = 0;

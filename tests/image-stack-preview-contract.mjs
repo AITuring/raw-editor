@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { readRustModule } from './support/rust-source.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const previewSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx'), 'utf8');
@@ -27,8 +28,8 @@ const screenTransformSource = fs.readFileSync(
 const appSource = fs.readFileSync(path.join(repoRoot, 'src/App.tsx'), 'utf8');
 const contextMenuSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useAppContextMenus.ts'), 'utf8');
 const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
-const rustStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
-const rustStitchingSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/panorama_stitching.rs'), 'utf8');
+const rustStackSource = readRustModule(repoRoot, 'src-tauri/src/image_stack.rs');
+const rustStitchingSource = readRustModule(repoRoot, 'src-tauri/src/panorama_stitching.rs');
 const productivityActionsSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useProductivityActions.ts'), 'utf8');
 const listenerSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useTauriListeners.ts'), 'utf8');
 
