@@ -36047,7 +36047,14 @@ pub(crate) mod acceptance_tests {
             PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
         )
         .expect("test sidecar storage should initialize once");
-        let result = stitch_images_with_options(
+        let input_paths = paths.clone();
+        let StitchOutcome {
+            image: stitched_image,
+            coverage: stitched_coverage,
+            ordered_paths: stitched_order,
+            stack_report_path,
+            ..
+        } = stitch_images_with_options(
             paths,
             app.handle().clone(),
             alignment_mode,
@@ -36063,7 +36070,7 @@ pub(crate) mod acceptance_tests {
                     "/private/tmp/raw-editor-focus-stack-{alignment_name}.tiff"
                 ))
             });
-        let canonical = crate::image_stack::canonicalize_image_stack_result(result.image);
+        let canonical = crate::image_stack::canonicalize_image_stack_result(stitched_image);
         let preview_only = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_ONLY").is_some();
         let preview_edge = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_EDGE")
             .ok()
@@ -36130,6 +36137,36 @@ pub(crate) mod acceptance_tests {
                 .expect("full-resolution application JPEG should be writable");
         }
 
+        // Regression metrics (tests/focus-stack-regression.mjs): input order
+        // completeness, tile sharpness and, with a reference rendering, the
+        // registered per-tile sharpness ratio. Measurement only.
+        if let Some(metrics_path) =
+            std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_METRICS").map(PathBuf::from)
+        {
+            let reference = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_METRICS_REFERENCE")
+                .map(PathBuf::from);
+            let analysis_long_side = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_METRICS_LONG_SIDE")
+                .ok()
+                .and_then(|value| value.parse::<u32>().ok());
+            let metrics = super::acceptance_metrics::write_acceptance_metrics(
+                &super::acceptance_metrics::AcceptanceMetricsRequest {
+                    image: &canonical,
+                    coverage: stitched_coverage.as_ref(),
+                    input_paths: &input_paths,
+                    ordered_paths: &stitched_order,
+                    reference: reference.as_deref(),
+                    analysis_long_side,
+                },
+                &metrics_path,
+            )
+            .expect("acceptance metrics should be measurable and writable");
+            println!(
+                "acceptance metrics: {} (reference ratio median {:?})",
+                metrics_path.display(),
+                metrics["reference"]["ratio"]["median"]
+            );
+        }
+
         if !preview_only
             && let Some(reference_path) =
                 std::env::var_os("RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG").map(PathBuf::from)
@@ -36162,7 +36199,7 @@ pub(crate) mod acceptance_tests {
         // Save diagnostics first, but successful file writes cannot establish
         // acceptance. In particular, a degraded tone report must fail the run
         // even when all nine independent quality criteria passed.
-        if let Some(path) = result.stack_report_path {
+        if let Some(path) = stack_report_path {
             let report: stack_report::StackReport = serde_json::from_slice(
                 &fs::read(&path).expect("native acceptance report should be readable"),
             )
@@ -36305,6 +36342,10 @@ pub(crate) mod acceptance_tests {
 #[cfg(test)]
 #[path = "panorama_reference_acceptance.rs"]
 mod reference_acceptance;
+
+#[cfg(test)]
+#[path = "panorama_acceptance_metrics.rs"]
+mod acceptance_metrics;
 
 #[cfg(test)]
 #[path = "panorama_virtual_tile_tests.rs"]

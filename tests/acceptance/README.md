@@ -53,17 +53,43 @@ Add `--hash-inputs` when a stage changes source preparation, caching, decoding, 
 this verifies the frozen aggregate digest for the catalogued source sets. The contract never writes beside
 the source images and never replaces the 兰亭 reference output.
 
-For any production behavior change, run the mandatory 兰亭 protection regression. It writes only to
-`/private/tmp`; the reference JPEG is read-only. Do not add `--exact` to the Rust filter because the test is
-nested under `panorama_stitching::acceptance_tests`.
+For any production behavior change, run the mandatory 兰亭 protection regression with the dataset runner.
+It writes only to `/private/tmp/raw-editor-regression` (override with `--out-dir`); the reference JPEG is
+read-only and its manifest digest is re-checked before and after the run.
+
+```sh
+RAW_EDITOR_FOCUS_STACK_DATA_ROOT="/Users/dp/Downloads/书画拼图" \
+  npm run focus-stack-regression -- --dataset lanting --label <stage>
+```
+
+The runner executes the ignored `real_focus_stack_fixture_from_env` harness (default 10% render,
+preview-only; `--scale 1` writes the full TIFF/app JPEG) and fails when an input is missing from the
+stitching order or from the streaming compositor, when per-pixel source ownership verification
+disappears, or when the reference file changes. It compares the preview and six crop digests with
+[`focus-stack-regression-baselines.json`](focus-stack-regression-baselines.json): an identical digest
+proves a refactor kept the output. When the output changed, the registered sharpness floors apply: the
+harness registers the output onto the reference rendering with FAST/BRIEF + RANSAC and compares the
+contrast-normalised gradient energy (`mean |∇I|² / var I`) of every content tile, overall and per
+left/center/right third, against the recorded baseline. A changed output that passes the floors still
+needs a visual check of the preview and crops. Other datasets run the same way (`--dataset mayuan-psd`,
+`--subset langyuan-10`, `--limit 10`); datasets without a reference report only output-side sharpness.
+`--binary <test executable>` runs a prebuilt `cargo test --release --no-run` binary, and
+`--update-baseline` or `--record-summary <run>.summary.json` records a verified run; the baseline keeps
+only counts, digests and metric summaries.
+
+The equivalent manual command is below. Do not add `--exact` to the Rust filter because the test is
+nested under `panorama_stitching::acceptance_tests`. `RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG` requests a
+byte-for-byte comparison with the Photoshop file; the canvas differs from Photoshop's, so leave it unset
+for protection runs.
 
 ```sh
 LANTING_PATHS=$(find "/Users/dp/Downloads/书画拼图/兰亭" -maxdepth 1 -type f \
   -iname 'DSC*.jpg' ! -iname '*FocusStack*' -print | sort | paste -sd: -)
 RAW_EDITOR_FOCUS_STACK_PATHS="$LANTING_PATHS" \
-RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG="/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg" \
 RAW_EDITOR_STACK_ACCEPTANCE_OUTPUT="/private/tmp/raw-editor-lanting-baseline.tiff" \
 RAW_EDITOR_STACK_REPORT_DIR="/private/tmp/raw-editor-lanting-stack-reports" \
+RAW_EDITOR_STACK_ACCEPTANCE_METRICS="/private/tmp/raw-editor-lanting-baseline.metrics.json" \
+RAW_EDITOR_STACK_ACCEPTANCE_METRICS_REFERENCE="/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg" \
 RAW_EDITOR_STACK_ACCEPTANCE_CROPS=1 CARGO_NET_OFFLINE=true \
 cargo test --release --manifest-path src-tauri/Cargo.toml --lib \
   real_focus_stack_fixture_from_env -- --ignored --nocapture --test-threads=1

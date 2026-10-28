@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "baselines": [
+    {
+      "dataset": "lanting",
+      "subset": null,
+      "scale": 0.1,
+      "previewEdge": 1200,
+      "previewOnly": true,
+      "output": {
+        "width": 2975,
+        "height": 1283
+      },
+      "inputs": 45,
+      "orderedInputs": 45,
+      "streamedSources": null,
+      "ownershipVerified": false,
+      "selectedPath": "layered_virtual_tile",
+      "stationCount": 44,
+      "qualityGate": "insufficient_evidence",
+      "toneStatus": "degraded",
+      "nativeAcceptance": "rejected: native output did not pass the complete quality gate",
+      "digests": {
+        "preview": "e75e8bd9e3d7cf3029881721c4db3e13f534ace1dab0ffeae65428a6667d1936",
+        "crops": {
+          "top-left": "09a14073ac74edc797ceb9e56e8ba7ad0080a578e2e5de12aef22d98d1e0c1b7",
+          "top-center": "70534e7316b0b5ef47be89249aa29e074ea4140b4014abd611206979084e07fd",
+          "top-right": "0e1b3722aa10f5f80678925014dc6d602cfce46a28c802a1b173a198c9e07c7a",
+          "bottom-left": "a1147575bf3c9c3e70d2f44e6b985ba8b07252a9d48b0c155f0801c95e0ddbd2",
+          "bottom-center": "7d15bd857f1f99f83b189bfdc3fedec28273ee6cca1ac5370453641b7573ae0b",
+          "bottom-right": "171702b0c52388eb91b470986f5f00e4b2ed050d8bc34130908928dd1f51880a"
+        },
+        "appJpeg": null
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 590,
+          "sharpnessMedian": 0.2036947229304287,
+          "sharpnessP10": 0.05103511851625374,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.20236582304643938
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.18350315405061204
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.2283939469988532
+            }
+          ]
+        },
+        "reference": {
+          "file": "DSC08854_FocusStack.jpg",
+          "inliers": 1429,
+          "localScale": 11.106364522588384,
+          "contentTiles": 544,
+          "ratioMedian": 0.9926488178421377,
+          "ratioP05": 0.8269564607988026,
+          "ratioP10": 0.8882706782801968,
+          "softTileFraction": 0.02389705882352941,
+          "lowContrastFraction": 0,
+          "thirds": [
+            {
+              "band": "left",
+              "ratioMedian": 0.9636824870683545,
+              "ratioP10": 0.8913870350960703
+            },
+            {
+              "band": "center",
+              "ratioMedian": 0.9780507775594353,
+              "ratioP10": 0.8330048386509822
+            },
+            {
+              "band": "right",
+              "ratioMedian": 1.0334321037138392,
+              "ratioP10": 0.9352015858562286
+            }
+          ]
+        }
+      },
+      "recordedAt": "2026-10-28",
+      "commit": "8fa99498"
+    },
+    {
+      "dataset": "mayuan-psd",
+      "subset": null,
+      "scale": 0.1,
+      "previewEdge": 1200,
+      "previewOnly": true,
+      "output": {
+        "width": 1318,
+        "height": 1116
+      },
+      "inputs": 14,
+      "orderedInputs": 14,
+      "streamedSources": null,
+      "ownershipVerified": false,
+      "selectedPath": null,
+      "stationCount": null,
+      "qualityGate": null,
+      "toneStatus": null,
+      "nativeAcceptance": "passed-or-not-applicable",
+      "digests": {
+        "preview": "dad3cac0ceeb3e8232815a0ee92cda749f68c9396022c99517e76f9e29037dc2",
+        "crops": {
+          "top-left": "d5df9e6f8cc20e22b444bcbef458d508ab50eb997586e50260cc0d21240ccc33",
+          "top-center": "825c32a4bd44ec5d0f85c6e9ecf01162680803941a05197b8193dd01e897bebe",
+          "top-right": "0c83fe5352a2dbd86c34e9939a3be44e0f4a7a3dde6b1f92d29d3360bf60122d",
+          "bottom-left": "0704a1e7a7b1a250de3c937e28a780852f06dab10ea2b044fa453205bfaa5195",
+          "bottom-center": "bbaf3a244b15ad8cb296fb69978f8e91c5c7091d619b0d8bf714688db4fde3ba",
+          "bottom-right": "3272a6b80b4d5a1d97d2f17d8df13ea310fe23bf12b460748b34e7d88ae8aad6"
+        },
+        "appJpeg": null
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 156,
+          "sharpnessMedian": 0.1246206903752297,
+          "sharpnessP10": 0.029287006573480146,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.11512298508962338
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.22348130522377027
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.04862314178425127
+            }
+          ]
+        },
+        "reference": null
+      },
+      "recordedAt": "2026-10-28",
+      "commit": "8fa99498"
+    }
+  ]
+}

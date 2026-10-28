@@ -41,7 +41,8 @@
       "sourceBytes": 5011254251,
       "sourceAggregateSha256": "e0ba1b71572ec365f8e753e5c6d2bf0d7a77d5031748fc543923ba000838f4cd",
       "baseline": false,
-      "referenceOutput": "DSC_3762_FocusStack.jpg"
+      "referenceOutput": "DSC_3762_FocusStack.jpg",
+      "regressionSubsets": [{ "id": "langyuan-10", "first": 10 }]
     },
     {
       "id": "wenyuan",
@@ -52,7 +53,8 @@
       "expectedSourceCount": 126,
       "sourceBytes": 6985740554,
       "sourceAggregateSha256": "eb76658a20b23be187e1e195e3331141765b6f776f82d9e168bd3a07ab8bd722",
-      "baseline": false
+      "baseline": false,
+      "regressionSubsets": [{ "id": "wenyuan-10", "first": 10 }]
     },
     {
       "id": "zhang-haohao-2",
