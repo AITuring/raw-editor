@@ -74,8 +74,9 @@ left/center/right third, against the recorded baseline. A changed output that pa
 needs a visual check of the preview and crops. Other datasets run the same way (`--dataset mayuan-psd`,
 `--subset langyuan-10`, `--limit 10`); datasets without a reference report only output-side sharpness.
 `--binary <test executable>` runs a prebuilt `cargo test --release --no-run` binary, and
-`--update-baseline` or `--record-summary <run>.summary.json` records a verified run; the baseline keeps
-only counts, digests and metric summaries.
+`--update-baseline` or `--record-summary <run>.summary.json` records a verified run, and `--rebaseline`
+records an intended, visually reviewed change that deviates from the old baseline (crashes, missing inputs and
+reference changes still fail). The baseline keeps only counts, digests and metric summaries.
 
 The equivalent manual command is below. Do not add `--exact` to the Rust filter because the test is
 nested under `panorama_stitching::acceptance_tests`. `RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG` requests a

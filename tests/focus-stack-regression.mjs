@@ -15,7 +15,8 @@
 //     npm run focus-stack-regression -- --dataset lanting [--scale 0.1] [--label n17]
 //   Options: --subset <id> | --limit <n>, --write-output, --preview-only,
 //            --out-dir <dir>, --binary <cargo test --no-run executable>,
-//            --update-baseline, --record-summary <run.summary.json>,
+//            --update-baseline, --rebaseline (accept a reviewed change),
+//            --record-summary <run.summary.json>,
 //            --reuse-artifacts (re-evaluate the last run), --dry-run
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -81,6 +82,9 @@ function parseArgs(argv) {
         break;
       case '--update-baseline':
         options.updateBaseline = true;
+        break;
+      case '--rebaseline':
+        options.rebaseline = true;
         break;
       case '--record-summary':
         options.recordSummary = path.resolve(value());
@@ -454,15 +458,18 @@ function main() {
   if (log.nativeRejection) {
     notices.push(`layered native acceptance rejected the report: ${log.nativeRejection}`);
   }
+  // Deviations from the recorded baseline. `--rebaseline` accepts them for an
+  // intended, visually reviewed behavior change; hard failures above still block.
+  const baselineFailures = [];
   if (baseline) {
     if (baseline.ownershipVerified && !summary.ownershipVerified) {
-      failures.push('per-pixel source ownership verification disappeared');
+      baselineFailures.push('per-pixel source ownership verification disappeared');
     }
     if (baseline.nativeAcceptance === 'passed-or-not-applicable' && log.nativeRejection) {
-      failures.push('layered native acceptance regressed from the baseline');
+      baselineFailures.push('layered native acceptance regressed from the baseline');
     }
     if (baseline.streamedSources && summary.streamedSources !== baseline.streamedSources) {
-      failures.push(`streamed sources ${summary.streamedSources} != baseline ${baseline.streamedSources}`);
+      baselineFailures.push(`streamed sources ${summary.streamedSources} != baseline ${baseline.streamedSources}`);
     }
     const identical =
       digests.preview === baseline.digests.preview &&
@@ -477,11 +484,16 @@ function main() {
           `output size changed: ${summary.output?.width}x${summary.output?.height} (baseline ${baseline.output.width}x${baseline.output.height})`,
         );
       }
-      compareFloors(summary.metrics, baseline.metrics, failures);
+      compareFloors(summary.metrics, baseline.metrics, baselineFailures);
       notices.push('output changed; sharpness floors were applied — inspect the preview and crops visually');
     }
   }
-  if (options.updateBaseline && failures.length === 0) {
+  if (options.rebaseline) {
+    notices.push(...baselineFailures.map((failure) => `accepted by --rebaseline: ${failure}`));
+  } else {
+    failures.push(...baselineFailures);
+  }
+  if ((options.updateBaseline || options.rebaseline) && failures.length === 0) {
     recordBaseline(summary);
     notices.push(`baseline recorded in ${path.relative(repoRoot, baselinePath)}`);
   }
