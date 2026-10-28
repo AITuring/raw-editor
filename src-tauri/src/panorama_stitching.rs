@@ -1,11 +1,14 @@
-use crate::app_settings::{AppSettings, load_settings_for_runtime};
+#[cfg(test)]
+use crate::app_settings::AppSettings;
+use crate::app_settings::load_settings_for_runtime;
 use crate::app_state::AppState;
-use crate::file_management::{parse_virtual_path, read_file_mapped};
+use crate::file_management::parse_virtual_path;
 use base64::{Engine as _, engine::general_purpose};
 use image::ImageFormat;
-use image::{ColorType, DynamicImage, GenericImageView, GrayImage, Rgb32FImage, RgbImage};
+#[cfg(test)]
+use image::RgbImage;
+use image::{DynamicImage, GenericImageView, GrayImage, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Point3};
-use rand::prelude::*;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use std::borrow::Cow;
@@ -18,7 +21,6 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::formats::{is_psd_file, is_raw_file};
-use crate::image_processing::apply_cpu_default_raw_processing;
 use crate::panorama_utils::registration;
 use crate::panorama_utils::stack_pipeline;
 use crate::panorama_utils::stack_pipeline::compositor::{
@@ -38,6 +40,7 @@ use crate::panorama_utils::stack_pipeline::residual_warp;
 use crate::panorama_utils::stack_pipeline::resources;
 use crate::panorama_utils::stack_pipeline::tone;
 use crate::panorama_utils::stack_pipeline::topology;
+#[cfg(test)]
 use crate::panorama_utils::stack_pipeline::virtual_tile;
 use crate::panorama_utils::stitching::{Projection, project_point};
 use crate::panorama_utils::{processing, stitching};
@@ -197,67 +200,61 @@ use capture_groups::{
     lock_focus_local_bracket_poses, order_focus_render_sources_by_capture_group,
 };
 
-/// Owns the run-scoped RSS sampler and publishes its final sample even when a
-/// focus-stack stage returns early.  The sampler only requests cancellation;
-/// the caller checks it at stage boundaries and returns before writing output.
-struct FocusRssGuard {
-    sampler: Option<resources::RssSampler>,
-    threshold_bytes: u64,
-    recorder: Option<Arc<stack_report::StackReportRecorder>>,
-}
+mod run_control;
 
-impl FocusRssGuard {
-    fn cancelled(&self) -> bool {
-        self.sampler
-            .as_ref()
-            .is_some_and(resources::RssSampler::cancelled)
-    }
+use run_control::{
+    FocusRssGuard, PairMatchProgress, ensure_focus_memory_available, focus_stack_cache_key_inputs,
+    focus_stack_source_digests, memory_safe_panorama_render_scale, scalable_alignment_budget,
+    scalable_preparation_worker_count, source_digest_hex, stack_requires_bounded_memory,
+};
+#[cfg(test)]
+use run_control::{
+    MAX_IN_MEMORY_PANORAMA_PIXELS, MAX_SCALABLE_PREPARATION_WORKERS,
+    PREPARATION_RAM_PER_WORKER_BYTES, bounded_preparation_worker_count,
+    focus_stack_cache_pipeline_version,
+};
 
-    fn finish(&mut self) -> Option<resources::RssSample> {
-        let sample = self
-            .sampler
-            .take()
-            .map(|sampler| sampler.stop(self.threshold_bytes))?;
-        if let Some(recorder) = self.recorder.as_ref() {
-            recorder.update(|report| {
-                report.resources.peak_rss_bytes = sample.peak_rss_bytes;
-                report.resources.rss_sample_count = sample.sample_count;
-                report.resources.memory_threshold_exceeded = sample.threshold_exceeded;
-            });
-        }
-        if sample.threshold_exceeded {
-            degradation::record_run_degradation(
-                degradation::MEMORY_THRESHOLD_EXCEEDED,
-                serde_json::json!({
-                    "threshold_bytes": self.threshold_bytes,
-                    "peak_rss_bytes": sample.peak_rss_bytes,
-                    "sample_count": sample.sample_count,
-                }),
-            );
-        }
-        Some(sample)
-    }
-}
+mod options;
 
-impl Drop for FocusRssGuard {
-    fn drop(&mut self) {
-        let _ = self.finish();
-    }
-}
+pub(crate) use options::StitchOutcome;
+pub use options::{AlignmentMode, BlendMode};
 
-fn ensure_focus_memory_available(sampler: Option<&FocusRssGuard>) -> Result<(), String> {
-    if degradation::run_generation_changed() {
-        degradation::record_run_degradation(
-            degradation::RUN_CANCELLED_BY_USER,
-            serde_json::json!({"reason": "newer_image_stack_generation"}),
-        );
-        return Err("image-stack run cancelled by a newer request".to_string());
-    }
-    if sampler.is_some_and(FocusRssGuard::cancelled) {
-        return Err("memory threshold exceeded during focus-stack run".to_string());
-    }
-    Ok(())
-}
+mod source_prep;
+
+use source_prep::{
+    absolute_source_path, excluded_source_records, image_pair_has_mixed_focal_lengths,
+    images_have_mixed_focal_lengths, is_auxiliary_stitch_file, is_generated_stitch_output,
+    load_prepared_stack_source, normalize_stack_raw_display_exposure, prepare_focus_rescue_image,
+    raw_display_channel_percentile, scaled_render_image_info, scaled_source_render_homographies,
+    selection_has_mixed_focal_lengths, shared_stack_raw_display_gain, source_to_render_rgb32f,
+    stack_raw_exposure_reference, undecodable_source_paths,
+};
+#[cfg(test)]
+use source_prep::{
+    focal_lengths_span_multiple_lenses, resize_rgb8_area_to_rgb32f, scaled_homographies,
+    stack_raw_exposure_value,
+};
+
+mod transform_math;
+
+use transform_math::{
+    Dsu, RobustTransformFit, estimate_affine, estimate_similarity, estimate_translation,
+    focus_transform_disagreement_px, homography_preserves_focus_orientation, matrix3_row_major,
+    median_symmetric_error, median_value, normalized_homography, refine_homography_inliers,
+    retain_model_inliers, robust_transform_fit, robust_transform_fit_with_threshold,
+    symmetric_inlier_indices, symmetric_point_error, symmetric_reprojection_rmse,
+    transform_is_stable_for_focus_stack, transformed_point,
+};
+
+mod transform_selection;
+
+#[cfg(test)]
+use transform_selection::focus_fit_is_competitive;
+use transform_selection::{
+    find_mixed_focal_similarity_ransac, focus_stack_motion_is_shifted_mosaic,
+    mixed_focal_scale_is_plausible, panorama_model_fit, panorama_model_linear_characteristics,
+    panorama_transform_is_stable, select_focus_stack_transform, select_large_panorama_transform,
+};
 
 const FULL_RES_RANSAC_INLIER_THRESHOLD: f64 = 12.0;
 const FULL_RES_REFINEMENT_THRESHOLD: f64 = 2.5;
@@ -271,7 +268,6 @@ const MATCH_REFINE_SEARCH_RADIUS: i32 = 14;
 const FOCUS_MATCH_REFINE_PATCH_RADIUS: i32 = 20;
 const FOCUS_MATCH_REFINE_SEARCH_RADIUS: i32 = 24;
 const FOCUS_MODEL_INLIER_THRESHOLD: f64 = 6.0;
-const FOCUS_MODEL_RANSAC_ITERATIONS: usize = 1_500;
 const FOCUS_MODEL_MIN_INLIERS: usize = 8;
 // A handheld angle change over a planar artwork can leave a real projective
 // residual even when the optical centre barely moves.  Do not force that
@@ -280,7 +276,6 @@ const FOCUS_MODEL_MIN_INLIERS: usize = 8;
 // repeated stroke from enabling a projective warp by itself.
 const FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT: f64 = 0.22;
 const FOCUS_LOCAL_MODEL_MIN_INLIERS: usize = 6;
-const FOCUS_SHIFTED_MOSAIC_MOTION_RATIO: f64 = 0.015;
 const FOCUS_GLOBAL_MAX_POINTS_PER_EDGE: usize = 256;
 // A real neighbouring capture can move by almost one frame width when the
 // camera advances to the next tile. A descriptor match that moves the frame
@@ -489,15 +484,9 @@ const MIXED_FOCAL_EMERGENCY_MATCH_RATIO_THRESHOLD: f32 = 0.99;
 // strict, but let RANSAC collect a wider provisional consensus so a real zoom
 // bridge is not discarded prematurely.
 const MIXED_FOCAL_SIMILARITY_RANSAC_THRESHOLD: f64 = 96.0;
-const MIXED_FOCAL_SIMILARITY_RANSAC_ITERATIONS: usize = 2_500;
 const SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION: usize = 10;
 const PANORAMA_MODEL_INLIER_THRESHOLD: f64 = 8.0;
 const PANORAMA_MODEL_MIN_INLIERS: usize = 8;
-const PANORAMA_MODEL_MIN_ERROR_GAIN: f64 = 0.12;
-const PANORAMA_MODEL_RELATIVE_ERROR_GAIN: f64 = 0.90;
-const PANORAMA_MODEL_SCALE_EPSILON: f64 = 0.012;
-const PANORAMA_MODEL_ROTATION_EPSILON: f64 = 0.004;
-const MIXED_FOCAL_LENGTH_RATIO: f64 = 1.12;
 // EXIF focal lengths are approximate and a phone may crop one module, so keep
 // a broad tolerance.  Still reject a visually convincing repeated wall patch
 // whose fitted transform has no relationship to the lens switch; accepting
@@ -523,30 +512,8 @@ const MIXED_FOCAL_COARSE_MIN_EDGE_ORIENTATION: f64 = 0.25;
 const FOCUS_MATCH_MIN_INTENSITY_NCC: f64 = 0.25;
 const FOCUS_MATCH_MIN_EDGE_NCC: f64 = 0.10;
 const FOCUS_MATCH_MIN_EDGE_ORIENTATION: f64 = 0.18;
-const MAX_SCALABLE_PREPARATION_WORKERS: usize = 6;
-const PREPARATION_RAM_PER_WORKER_BYTES: u64 = 1024 * 1024 * 1024;
-const MAX_IN_MEMORY_PANORAMA_PIXELS: u64 = 240_000_000;
 const MAX_STITCH_SOURCE_IMAGES: usize = 500;
 const MAX_RETAINED_STACK_PIXELS: u64 = 120_000_000;
-
-fn stack_requires_bounded_memory(image_paths: &[String]) -> bool {
-    if image_paths.len() > SCALABLE_STACK_THRESHOLD {
-        return true;
-    }
-    let mut pixels = 0u64;
-    for path in image_paths {
-        // Unknown/RAW dimensions use the bounded path as well. A count-only
-        // limit lets even two 200MP phone frames retain several GiB of floats.
-        let Ok((width, height)) = image::image_dimensions(path) else {
-            return true;
-        };
-        pixels = pixels.saturating_add(u64::from(width) * u64::from(height));
-        if pixels > MAX_RETAINED_STACK_PIXELS {
-            return true;
-        }
-    }
-    false
-}
 
 #[derive(Clone, Copy, Debug)]
 struct FocusHorizontalEdgeLine {
@@ -566,275 +533,6 @@ struct FocusVerticalEdgeLine {
     slope: f64,
     intercept: f64,
     median_error: f64,
-}
-
-pub(crate) struct StitchOutcome {
-    pub image: DynamicImage,
-    /// The layered path's output Coverage_Mask, the same size as `image`;
-    /// the export writes it as alpha (需求 10.3 / 10.6).
-    pub coverage: Option<GrayImage>,
-    pub full_canvas_width: u32,
-    pub full_canvas_height: u32,
-    pub render_scale: f64,
-    pub ordered_paths: Vec<String>,
-    /// The report written for this focus-stack run.  Image-stack export fills
-    /// in the result identifier and output metadata after the file is
-    /// published, while keeping the report tied to the same run.
-    pub stack_report_path: Option<PathBuf>,
-}
-
-fn scalable_alignment_budget(image_count: usize) -> (u32, usize) {
-    if image_count <= 64 {
-        (2_400, 1_600)
-    } else if image_count <= 128 {
-        (1_800, 1_100)
-    } else {
-        (1_536, 800)
-    }
-}
-
-fn focal_lengths_span_multiple_lenses<I>(focal_lengths: I) -> bool
-where
-    I: IntoIterator<Item = f64>,
-{
-    let mut minimum = f64::INFINITY;
-    let mut maximum = f64::NEG_INFINITY;
-    let mut count = 0usize;
-    for focal_length in focal_lengths {
-        if !focal_length.is_finite() || focal_length <= 0.0 {
-            continue;
-        }
-        minimum = minimum.min(focal_length);
-        maximum = maximum.max(focal_length);
-        count += 1;
-    }
-    count >= 2
-        && minimum.is_finite()
-        && maximum.is_finite()
-        && maximum / minimum >= MIXED_FOCAL_LENGTH_RATIO
-}
-
-fn selection_has_mixed_focal_lengths(image_paths: &[String]) -> bool {
-    // Large stacks already use the scale-robust path.  This lightweight EXIF
-    // pass exists for small selections, where the old count-only switch would
-    // otherwise miss a 35mm/85mm camera-module change.
-    focal_lengths_span_multiple_lenses(image_paths.iter().filter_map(|filename| {
-        read_file_mapped(Path::new(filename))
-            .ok()
-            .and_then(|bytes| crate::exif_processing::focal_length_35mm_from_bytes(&bytes))
-    }))
-}
-
-fn image_pair_has_mixed_focal_lengths(source: &ImageInfo, target: &ImageInfo) -> bool {
-    focal_lengths_span_multiple_lenses(
-        [source.focal_length_35mm, target.focal_length_35mm]
-            .into_iter()
-            .flatten(),
-    )
-}
-
-fn images_have_mixed_focal_lengths(images: &[ImageInfo]) -> bool {
-    focal_lengths_span_multiple_lenses(images.iter().filter_map(|image| image.focal_length_35mm))
-}
-
-fn bounded_preparation_worker_count(
-    image_count: usize,
-    available_threads: usize,
-    available_memory_bytes: u64,
-) -> usize {
-    let memory_limit = (available_memory_bytes / PREPARATION_RAM_PER_WORKER_BYTES) as usize;
-    image_count
-        .max(1)
-        .min(available_threads.max(1))
-        .min(memory_limit.max(1))
-        .min(MAX_SCALABLE_PREPARATION_WORKERS)
-}
-
-fn scalable_preparation_worker_count(image_count: usize) -> usize {
-    let available_threads = std::thread::available_parallelism()
-        .map(|threads| threads.get())
-        .unwrap_or(1);
-    let mut system = sysinfo::System::new();
-    system.refresh_memory();
-    bounded_preparation_worker_count(image_count, available_threads, system.available_memory())
-}
-
-fn memory_safe_panorama_render_scale(width: u32, height: u32) -> f64 {
-    let pixels = u64::from(width).saturating_mul(u64::from(height));
-    if pixels <= MAX_IN_MEMORY_PANORAMA_PIXELS || pixels == 0 {
-        1.0
-    } else {
-        (MAX_IN_MEMORY_PANORAMA_PIXELS as f64 / pixels as f64).sqrt()
-    }
-}
-
-#[cfg(test)]
-fn scaled_homographies(
-    homographies: &HashMap<usize, Matrix3<f64>>,
-    scale: f64,
-) -> HashMap<usize, Matrix3<f64>> {
-    let scale_matrix = Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0);
-    homographies
-        .iter()
-        .map(|(&id, homography)| (id, scale_matrix * homography))
-        .collect()
-}
-
-fn scaled_source_render_homographies(
-    homographies: &HashMap<usize, Matrix3<f64>>,
-    scale: f64,
-) -> HashMap<usize, Matrix3<f64>> {
-    let output_scale = Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0);
-    let source_scale_inverse = Matrix3::new(
-        scale.recip(),
-        0.0,
-        0.0,
-        0.0,
-        scale.recip(),
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-    );
-    homographies
-        .iter()
-        .map(|(&id, homography)| (id, output_scale * homography * source_scale_inverse))
-        .collect()
-}
-
-fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
-    ImageInfo {
-        id: image.id,
-        filename: image.filename.clone(),
-        width: (f64::from(image.width) * scale).round().max(1.0) as u32,
-        height: (f64::from(image.height) * scale).round().max(1.0) as u32,
-        alignment_image: GrayImage::new(0, 0),
-        full_image: None,
-        scale_factor: image.scale_factor,
-        focal_length_35mm: image.focal_length_35mm,
-        source_footprint: image.source_footprint,
-        overview_reference: image.overview_reference,
-        features: Vec::new(),
-        top_features: Vec::new(),
-        foreground_range: image.foreground_range,
-        foreground_mask: image.foreground_mask.clone(),
-        horizontal_edge_rows: image.horizontal_edge_rows.clone(),
-        vertical_edge_columns: image.vertical_edge_columns.clone(),
-    }
-}
-
-struct AreaContributions {
-    offsets: Vec<usize>,
-    indices: Vec<usize>,
-    weights: Vec<f32>,
-}
-
-fn area_contributions(source_length: u32, target_length: u32) -> AreaContributions {
-    let mut offsets = Vec::with_capacity(target_length as usize + 1);
-    let mut indices = Vec::new();
-    let mut weights = Vec::new();
-    let scale = f64::from(source_length) / f64::from(target_length.max(1));
-    offsets.push(0);
-    for target in 0..target_length.max(1) {
-        let start = f64::from(target) * scale;
-        let end = (f64::from(target) + 1.0) * scale;
-        let first = start.floor() as usize;
-        let last = (end.ceil() as usize)
-            .saturating_sub(1)
-            .min(source_length.saturating_sub(1) as usize);
-        let normalization = (end - start).recip();
-        for source in first..=last {
-            let overlap = ((source + 1) as f64).min(end) - (source as f64).max(start);
-            if overlap > 0.0 {
-                indices.push(source);
-                weights.push((overlap * normalization) as f32);
-            }
-        }
-        offsets.push(indices.len());
-    }
-    AreaContributions {
-        offsets,
-        indices,
-        weights,
-    }
-}
-
-fn resize_rgb8_area_to_rgb32f(
-    source: &RgbImage,
-    target_width: u32,
-    target_height: u32,
-) -> Rgb32FImage {
-    let (source_width, source_height) = source.dimensions();
-    debug_assert!(target_width > 0 && target_height > 0);
-    debug_assert!(target_width <= source_width && target_height <= source_height);
-
-    let horizontal_contributions = area_contributions(source_width, target_width);
-    let vertical_contributions = area_contributions(source_height, target_height);
-    let source_stride = source_width as usize * 3;
-    let horizontal_stride = target_width as usize * 3;
-    let mut horizontal = vec![0.0f32; horizontal_stride * source_height as usize];
-    horizontal
-        .par_chunks_mut(horizontal_stride)
-        .zip(source.as_raw().par_chunks(source_stride))
-        .for_each(|(output_row, source_row)| {
-            for target_x in 0..target_width as usize {
-                let contribution_start = horizontal_contributions.offsets[target_x];
-                let contribution_end = horizontal_contributions.offsets[target_x + 1];
-                let output_start = target_x * 3;
-                for contribution in contribution_start..contribution_end {
-                    let source_start = horizontal_contributions.indices[contribution] * 3;
-                    let weight = horizontal_contributions.weights[contribution] / 255.0;
-                    for channel in 0..3 {
-                        output_row[output_start + channel] +=
-                            f32::from(source_row[source_start + channel]) * weight;
-                    }
-                }
-            }
-        });
-
-    let mut output = vec![0.0f32; horizontal_stride * target_height as usize];
-    output
-        .par_chunks_mut(horizontal_stride)
-        .enumerate()
-        .for_each(|(target_y, output_row)| {
-            let contribution_start = vertical_contributions.offsets[target_y];
-            let contribution_end = vertical_contributions.offsets[target_y + 1];
-            for contribution in contribution_start..contribution_end {
-                let source_y = vertical_contributions.indices[contribution];
-                let weight = vertical_contributions.weights[contribution];
-                let horizontal_row =
-                    &horizontal[source_y * horizontal_stride..(source_y + 1) * horizontal_stride];
-                for (output, source) in output_row.iter_mut().zip(horizontal_row) {
-                    *output += source * weight;
-                }
-            }
-        });
-
-    Rgb32FImage::from_raw(target_width, target_height, output)
-        .expect("area-resized RGB buffer dimensions must match")
-}
-
-fn source_to_render_rgb32f(
-    source: DynamicImage,
-    target_width: u32,
-    target_height: u32,
-) -> Rgb32FImage {
-    if source.dimensions() == (target_width, target_height) {
-        return source.to_rgb32f();
-    }
-    if source.color() == ColorType::Rgb8
-        && target_width <= source.width()
-        && target_height <= source.height()
-    {
-        return resize_rgb8_area_to_rgb32f(&source.into_rgb8(), target_width, target_height);
-    }
-    source
-        .resize_exact(
-            target_width,
-            target_height,
-            image::imageops::FilterType::Triangle,
-        )
-        .to_rgb32f()
 }
 
 fn detect_horizontal_edge_rows(alignment_image: &GrayImage) -> Vec<f64> {
@@ -1726,319 +1424,6 @@ fn build_focus_vertical_edge_bands_in_region(
     bands
 }
 
-fn emit_match_progress<R: Runtime>(
-    completed: &Mutex<usize>,
-    total: usize,
-    progress_step: usize,
-    app_handle: &AppHandle<R>,
-    progress_event: &str,
-) {
-    // Count and emit under the same short lock so parallel match workers cannot
-    // deliver an older progress value after a newer one.
-    let mut completed = completed
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    *completed += 1;
-    let current = *completed;
-    if current != total && !current.is_multiple_of(progress_step) {
-        return;
-    }
-    let overall_percentage = 30.0 + (current as f64 / total.max(1) as f64) * 24.0;
-    let _ = app_handle.emit(
-        progress_event,
-        format!("Matching image overlaps {current} of {total} ({overall_percentage:.0}%)"),
-    );
-}
-
-struct PairMatchProgress<'a, R: Runtime> {
-    completed: &'a Mutex<usize>,
-    total: usize,
-    progress_step: usize,
-    app_handle: &'a AppHandle<R>,
-    progress_event: &'a str,
-}
-
-impl<R: Runtime> Drop for PairMatchProgress<'_, R> {
-    fn drop(&mut self) {
-        emit_match_progress(
-            self.completed,
-            self.total,
-            self.progress_step,
-            self.app_handle,
-            self.progress_event,
-        );
-    }
-}
-
-struct PreparedStackSource {
-    image: DynamicImage,
-    source_footprint: Option<crate::lens_correction::StackLensFootprint>,
-    focal_length_35mm: Option<f64>,
-}
-
-/// Photon exposure at the sensor, including the recorded ISO sensitivity.
-/// This is a camera metadata calibration, not a frame histogram adjustment.
-#[cfg(test)]
-fn stack_raw_exposure_value(metadata: &HashMap<String, String>) -> Option<f64> {
-    let number = |text: &str| {
-        let text = text.trim().trim_start_matches("f/").trim_end_matches(" s");
-        if let Some((a, b)) = text.split_once('/') {
-            Some(a.parse::<f64>().ok()? / b.parse::<f64>().ok()?)
-        } else {
-            text.parse::<f64>().ok()
-        }
-    };
-    let time = number(metadata.get("ExposureTime")?)?;
-    let aperture = number(metadata.get("FNumber")?)?;
-    let iso = number(
-        metadata
-            .get("ISOSpeedRatings")
-            .or_else(|| metadata.get("PhotographicSensitivity"))
-            .or_else(|| metadata.get("ISOSpeed"))?,
-    )?;
-    let exposure = time * iso / aperture.powi(2);
-    (time > 0.0 && aperture > 0.0 && iso > 0.0 && exposure.is_finite()).then_some(exposure)
-}
-
-fn stack_raw_exposure_from_bytes(bytes: &[u8]) -> Option<f64> {
-    let metadata = crate::exif_processing::read_raw_metadata(bytes)?;
-    let time = metadata.exif.exposure_time?;
-    let aperture = metadata.exif.fnumber?;
-    if time.d == 0 || aperture.d == 0 {
-        return None;
-    }
-    let iso = metadata
-        .exif
-        .iso_speed
-        .or_else(|| metadata.exif.iso_speed_ratings.map(|iso| iso as u32))?;
-    let time = f64::from(time.n) / f64::from(time.d);
-    let aperture = f64::from(aperture.n) / f64::from(aperture.d);
-    let exposure = time * f64::from(iso) / aperture.powi(2);
-    (time > 0.0 && aperture > 0.0 && iso > 0 && exposure.is_finite()).then_some(exposure)
-}
-
-fn stack_raw_exposure_reference(paths: &[String]) -> Option<f64> {
-    let mut exposures = Vec::with_capacity(paths.len());
-    let mut camera = None;
-    for path in paths {
-        if !is_raw_file(path) {
-            return None;
-        }
-        let bytes = read_file_mapped(Path::new(path)).ok()?;
-        let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
-        let identity = (
-            metadata.get("Make")?.clone(),
-            metadata.get("Model")?.clone(),
-        );
-        if camera.as_ref().is_some_and(|camera| camera != &identity) {
-            return None;
-        }
-        camera = Some(identity);
-        exposures.push(stack_raw_exposure_from_bytes(&bytes)?);
-    }
-    exposures.sort_by(f64::total_cmp);
-    exposures.get(exposures.len() / 2).copied()
-}
-
-fn load_prepared_stack_source(
-    filename: &str,
-    settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
-) -> Result<PreparedStackSource, String> {
-    let file_data = read_file_mapped(Path::new(filename))
-        .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
-    let focal_length_35mm = crate::exif_processing::focal_length_35mm_from_bytes(&file_data);
-    let mut image = crate::image_loader::load_base_image_from_bytes(
-        &file_data, filename, false, settings, None,
-    )
-    .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
-    let mut source_footprint = None;
-    if is_raw_file(filename) {
-        let mut metadata = crate::exif_processing::read_exif_data_from_bytes(filename, &file_data);
-        // RAW metadata extraction otherwise copies the physical focal length
-        // into this field. Use the actual EXIF value to detect sensor crop mode.
-        if let Some(equivalent) = focal_length_35mm {
-            metadata.insert("FocalLengthIn35mmFilm".into(), equivalent.to_string());
-        } else {
-            metadata.remove("FocalLengthIn35mmFilm");
-        }
-        let calibration =
-            crate::lens_correction::stack_lens_calibration(&metadata, image.dimensions());
-        if let Some(reference) = raw_exposure_reference
-            && let Some(exposure) = stack_raw_exposure_from_bytes(&file_data)
-        {
-            let gain = (reference / exposure) as f32;
-            if gain.is_finite() && gain > 0.0 {
-                if image.as_rgb32f().is_none() {
-                    image = DynamicImage::ImageRgb32F(image.to_rgb32f());
-                }
-                image
-                    .as_mut_rgb32f()
-                    .unwrap()
-                    .as_mut()
-                    .par_iter_mut()
-                    .for_each(|channel| *channel = (*channel * gain).max(0.0));
-            }
-        }
-        if let Some(calibration) = calibration {
-            if image.as_rgb32f().is_none() {
-                image = DynamicImage::ImageRgb32F(image.to_rgb32f());
-            }
-            calibration.correct_linear_illumination(image.as_mut_rgb32f().unwrap());
-        }
-        apply_cpu_default_raw_processing(&mut image);
-        if let Some(calibration) = calibration
-            && let Some(corrected) = {
-                // Developed RAW is already RGB32F. Borrow it so optical
-                // preparation does not retain another full 45MP RGB buffer.
-                let rgb = image
-                    .as_rgb32f()
-                    .map(Cow::Borrowed)
-                    .unwrap_or_else(|| Cow::Owned(image.to_rgb32f()));
-                calibration.correct(&rgb)
-            }
-        {
-            println!(
-                "  - Calibrated stack lens geometry: {} ({}x{} -> {}x{})",
-                filename,
-                image.width(),
-                image.height(),
-                corrected.width(),
-                corrected.height()
-            );
-            source_footprint = Some(crate::lens_correction::StackLensFootprint {
-                calibration,
-                original: image.dimensions(),
-                corrected: corrected.dimensions(),
-            });
-            image = DynamicImage::ImageRgb32F(corrected);
-        }
-    }
-    Ok(PreparedStackSource {
-        image,
-        source_footprint,
-        focal_length_35mm,
-    })
-}
-
-fn normalize_stack_raw_display_exposure(rgb: &mut Rgb32FImage) {
-    const TARGET_BRIGHT_PERCENTILE: f32 = 0.90;
-    const MAX_DISPLAY_GAIN: f32 = 2.10;
-    // The RAW developer deliberately leaves headroom, while image-stack
-    // export freezes these samples directly as display-referred sRGB. Restore
-    // a conservative display white from the bright end of the actual frame;
-    // use a percentile rather than a maximum so lamps and specular acrylic do
-    // not suppress the correction. This is bounded and can only brighten.
-    let step = ((u64::from(rgb.width()) * u64::from(rgb.height()) / 24_000).max(1) as f64)
-        .sqrt()
-        .floor()
-        .max(1.0) as usize;
-    let mut luma_samples = Vec::with_capacity(24_000);
-    for y in (0..rgb.height()).step_by(step) {
-        for x in (0..rgb.width()).step_by(step) {
-            let pixel = rgb.get_pixel(x, y);
-            let luma = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
-            if luma.is_finite() && luma > 0.02 {
-                luma_samples.push(luma);
-            }
-        }
-    }
-    if luma_samples.len() < 64 {
-        return;
-    }
-    luma_samples.sort_by(f32::total_cmp);
-    let high = luma_samples[((luma_samples.len() - 1) * 97) / 100];
-    if !high.is_finite() || high <= 0.0 {
-        return;
-    }
-    let gain = (TARGET_BRIGHT_PERCENTILE / high).clamp(1.0, MAX_DISPLAY_GAIN);
-    if gain <= 1.005 {
-        return;
-    }
-    rgb.as_mut()
-        .par_iter_mut()
-        .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-}
-
-/// Return the robust bright-end luma of a developed RAW frame without
-/// allocating a second image.  This is used only during focus-stack
-/// preparation to derive one shared display gain for the whole selection.
-/// Each frame already excludes the brightest 3% of pixels. Protect the
-/// brightest retained channel across the batch: a median frame white clips
-/// brighter scan regions and changes their RGB ratios before tone matching.
-fn shared_stack_raw_display_gain(highs: &[f32]) -> Option<f32> {
-    highs
-        .iter()
-        .copied()
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .max_by(f32::total_cmp)
-        .map(|high| (0.90 / high).clamp(1.0, 2.10))
-}
-
-fn raw_display_channel_percentile(image: &DynamicImage) -> Option<f32> {
-    let rgb = image.as_rgb32f()?;
-    let step = ((u64::from(rgb.width()) * u64::from(rgb.height()) / 24_000).max(1) as f64)
-        .sqrt()
-        .floor()
-        .max(1.0) as usize;
-    let mut samples = Vec::with_capacity(24_000);
-    for y in (0..rgb.height()).step_by(step) {
-        for x in (0..rgb.width()).step_by(step) {
-            let pixel = rgb.get_pixel(x, y);
-            let luma = pixel[0].max(pixel[1]).max(pixel[2]);
-            if luma.is_finite() && luma > 0.02 {
-                samples.push(luma);
-            }
-        }
-    }
-    if samples.len() < 64 {
-        return None;
-    }
-    samples.sort_unstable_by(f32::total_cmp);
-    samples.get(((samples.len() - 1) * 97) / 100).copied()
-}
-
-fn prepare_focus_rescue_image(
-    image: &ImageInfo,
-    settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
-    brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
-) -> Result<ImageInfo, String> {
-    let prepared = load_prepared_stack_source(&image.filename, settings, raw_exposure_reference)?;
-    let (width, height) = prepared.image.dimensions();
-    let (new_width, new_height, scale_factor) =
-        processing::calculate_downscale_dimensions_capped(width, height, 2_400);
-    let alignment_image = prepared
-        .image
-        .resize_exact(new_width, new_height, image::imageops::FilterType::Triangle)
-        .to_luma8();
-    let foreground_range = detect_foreground_range(&alignment_image);
-    Ok(ImageInfo {
-        id: image.id,
-        filename: image.filename.clone(),
-        width,
-        height,
-        features: find_alignment_features(
-            &alignment_image,
-            brief_pairs,
-            1_600,
-            true,
-            prepared.focal_length_35mm,
-        ),
-        top_features: find_top_alignment_features(&alignment_image, brief_pairs, foreground_range),
-        foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
-        horizontal_edge_rows: horizontal_edge_row_candidates(&alignment_image, foreground_range),
-        vertical_edge_columns: detect_vertical_edge_columns(&alignment_image, foreground_range),
-        alignment_image,
-        full_image: None,
-        scale_factor,
-        focal_length_35mm: prepared.focal_length_35mm,
-        source_footprint: prepared.source_footprint,
-        overview_reference: false,
-        foreground_range,
-    })
-}
-
 fn largest_focus_match_component(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -2271,51 +1656,6 @@ fn station_relation_overlap_scale(
         && scale.is_finite()
         && scale > 0.0)
         .then_some(scale)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AlignmentMode {
-    Auto,
-    Perspective,
-    Cylindrical,
-    Spherical,
-    Position,
-    /// Alignment for a flat artwork photographed as a mostly orthogonal grid.
-    /// Keep the per-pair model at similarity (translation + uniform scale +
-    /// rotation) instead of allowing the panorama selector to overfit paper
-    /// texture with a projective warp.
-    FlatArtwork,
-}
-
-impl AlignmentMode {
-    pub fn from_wire(value: &str) -> Self {
-        match value {
-            "perspective" => Self::Perspective,
-            "cylindrical" => Self::Cylindrical,
-            "spherical" => Self::Spherical,
-            "position" => Self::Position,
-            "flat-artwork" | "flat_artwork" | "artwork" => Self::FlatArtwork,
-            _ => Self::Auto,
-        }
-    }
-
-    fn projection_for(self, blend_mode: BlendMode) -> Projection {
-        match self {
-            Self::Cylindrical => Projection::Cylindrical,
-            Self::Spherical => Projection::Spherical,
-            Self::Perspective | Self::Position | Self::FlatArtwork => Projection::Planar,
-            Self::Auto => match blend_mode {
-                BlendMode::Panorama => Projection::Planar,
-                BlendMode::FocusStack => Projection::Planar,
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlendMode {
-    Panorama,
-    FocusStack,
 }
 
 fn match_image_pair(
@@ -4262,119 +3602,6 @@ fn collect_foreground_feature_points(
     points
 }
 
-fn panorama_transform_is_stable(transform: &Matrix3<f64>, dimensions: (u32, u32)) -> bool {
-    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
-    if width <= 1.0 || height <= 1.0 || transform.try_inverse().is_none() {
-        return false;
-    }
-    let corners = [
-        Point2::new(0.0, 0.0),
-        Point2::new(width, 0.0),
-        Point2::new(width, height),
-        Point2::new(0.0, height),
-    ]
-    .into_iter()
-    .map(|point| transformed_point(transform, point))
-    .collect::<Option<Vec<_>>>();
-    let Some(corners) = corners else {
-        return false;
-    };
-
-    let edge_scales = [
-        (corners[1] - corners[0]).norm() / width.max(1.0),
-        (corners[2] - corners[1]).norm() / height.max(1.0),
-        (corners[2] - corners[3]).norm() / width.max(1.0),
-        (corners[3] - corners[0]).norm() / height.max(1.0),
-    ];
-    if edge_scales
-        .iter()
-        .any(|scale| !scale.is_finite() || *scale < 0.18 || *scale > 5.5)
-    {
-        return false;
-    }
-    let min_scale = edge_scales.iter().copied().fold(f64::INFINITY, f64::min);
-    let max_scale = edge_scales
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
-    if !min_scale.is_finite() || max_scale / min_scale > 6.0 {
-        return false;
-    }
-
-    let signed_double_area = corners
-        .iter()
-        .zip(corners.iter().cycle().skip(1))
-        .take(4)
-        .map(|(left, right)| left.x * right.y - right.x * left.y)
-        .sum::<f64>();
-    let area_ratio = signed_double_area / (2.0 * width * height);
-    area_ratio.is_finite() && area_ratio.abs() >= 0.025 && area_ratio.abs() <= 30.0
-}
-
-fn panorama_model_fit(
-    transform: Matrix3<f64>,
-    points: &[(Point2<f64>, Point2<f64>)],
-) -> Option<(Matrix3<f64>, Vec<usize>, f64)> {
-    let inliers = symmetric_inlier_indices(&transform, points, PANORAMA_MODEL_INLIER_THRESHOLD);
-    if inliers.len() < PANORAMA_MODEL_MIN_INLIERS {
-        return None;
-    }
-    let inlier_points = inliers
-        .iter()
-        .map(|&index| points[index])
-        .collect::<Vec<_>>();
-    // One deterministic refit removes the small bias introduced when a model
-    // was estimated from a mixed set of descriptor inliers.
-    let refitted = if transform[(2, 0)].abs() < 1e-14 && transform[(2, 1)].abs() < 1e-14 {
-        // Keep the model family (translation/similarity/affine) selected by the
-        // caller; a generic projective refit here would reintroduce drift.
-        transform
-    } else {
-        processing::compute_homography(&inlier_points).unwrap_or(transform)
-    };
-    let error = median_symmetric_error(&refitted, &inlier_points);
-    error.is_finite().then_some((refitted, inliers, error))
-}
-
-fn panorama_model_linear_characteristics(transform: &Matrix3<f64>) -> (f64, f64, f64) {
-    let a = transform[(0, 0)];
-    let b = transform[(0, 1)];
-    let c = transform[(1, 0)];
-    let d = transform[(1, 1)];
-    let scale_x = (a * a + c * c).sqrt();
-    let scale_y = (b * b + d * d).sqrt();
-    let scale = ((scale_x * scale_y).max(0.0)).sqrt();
-    let rotation = 0.5 * (c - b).atan2(a + d);
-    let anisotropy = if scale_x.max(scale_y) > f64::EPSILON {
-        (scale_x - scale_y).abs() / scale_x.max(scale_y)
-    } else {
-        f64::INFINITY
-    };
-    (scale, rotation, anisotropy)
-}
-
-fn mixed_focal_scale_is_plausible(
-    transform: &Matrix3<f64>,
-    source_focal: f64,
-    target_focal: f64,
-) -> bool {
-    if !source_focal.is_finite()
-        || !target_focal.is_finite()
-        || source_focal <= 0.0
-        || target_focal <= 0.0
-    {
-        return true;
-    }
-    let expected = target_focal / source_focal;
-    let (scale, _, anisotropy) = panorama_model_linear_characteristics(transform);
-    if !expected.is_finite() || !scale.is_finite() || anisotropy > 0.35 {
-        return false;
-    }
-    let ratio = scale / expected;
-    ratio.is_finite()
-        && (MIXED_FOCAL_SCALE_MIN_RATIO..=MIXED_FOCAL_SCALE_MAX_RATIO).contains(&ratio)
-}
-
 fn estimate_mixed_focal_coarse_registration(
     source: &ImageInfo,
     target: &ImageInfo,
@@ -5030,207 +4257,6 @@ fn normalized_correlation(left: &[f64], right: &[f64]) -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-fn find_mixed_focal_similarity_ransac(
-    points: &[(Point2<f64>, Point2<f64>)],
-    source_focal: f64,
-    target_focal: f64,
-    inlier_threshold: f64,
-    minimum_inliers: usize,
-) -> Option<(Matrix3<f64>, Vec<usize>)> {
-    if points.len() < 2 || !inlier_threshold.is_finite() || inlier_threshold <= 0.0 {
-        return None;
-    }
-
-    // See `find_homography_ransac_points_with_solver`: site constant mixed with
-    // the content derived run seed, no time and no thread id (需求 14.6).
-    let mut rng = StdRng::seed_from_u64(
-        0xB4D4_5EED_5CA1_E001u64
-            ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
-            ^ determinism::run_random_seed_mix(),
-    );
-    let all_indices: Vec<usize> = (0..points.len()).collect();
-    let required_inliers = minimum_inliers.max(2);
-    let mut best_transform = None;
-    let mut best_inliers = Vec::new();
-    let mut best_median = f64::INFINITY;
-
-    for _ in 0..MIXED_FOCAL_SIMILARITY_RANSAC_ITERATIONS {
-        let sample_indices: Vec<usize> = all_indices.sample(&mut rng, 2).copied().collect();
-        if sample_indices.len() != 2 {
-            continue;
-        }
-        let sample = sample_indices
-            .iter()
-            .map(|&index| points[index])
-            .collect::<Vec<_>>();
-        let source_span = (sample[1].0 - sample[0].0).norm();
-        let target_span = (sample[1].1 - sample[0].1).norm();
-        if source_span < 8.0 || target_span < 8.0 {
-            continue;
-        }
-        let Some(transform) = estimate_similarity(&sample) else {
-            continue;
-        };
-        if !mixed_focal_scale_is_plausible(&transform, source_focal, target_focal) {
-            continue;
-        }
-        let inliers = symmetric_inlier_indices(&transform, points, inlier_threshold);
-        if inliers.len() < required_inliers {
-            continue;
-        }
-        let inlier_points = inliers
-            .iter()
-            .map(|&index| points[index])
-            .collect::<Vec<_>>();
-        let median = median_symmetric_error(&transform, &inlier_points);
-        if inliers.len() > best_inliers.len()
-            || (inliers.len() == best_inliers.len() && median < best_median)
-        {
-            best_transform = Some(transform);
-            best_inliers = inliers;
-            best_median = median;
-        }
-    }
-
-    if best_inliers.len() < required_inliers {
-        return None;
-    }
-    let mut transform = best_transform?;
-    let mut inliers = best_inliers;
-    for _ in 0..4 {
-        let inlier_points = inliers
-            .iter()
-            .map(|&index| points[index])
-            .collect::<Vec<_>>();
-        let Some(refitted) = estimate_similarity(&inlier_points) else {
-            break;
-        };
-        if !mixed_focal_scale_is_plausible(&refitted, source_focal, target_focal) {
-            break;
-        }
-        let refitted_inliers = symmetric_inlier_indices(&refitted, points, inlier_threshold);
-        if refitted_inliers.len() < required_inliers {
-            break;
-        }
-        transform = refitted;
-        if refitted_inliers == inliers {
-            break;
-        }
-        inliers = refitted_inliers;
-    }
-
-    Some((transform, inliers))
-}
-
-fn select_large_panorama_transform(
-    projective: &Matrix3<f64>,
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    source_dimensions: (u32, u32),
-    log_selection: bool,
-) -> Matrix3<f64> {
-    if points.len() < PANORAMA_MODEL_MIN_INLIERS {
-        return *projective;
-    }
-
-    let translation = panorama_model_fit(estimate_translation(points), points);
-    let similarity = estimate_similarity(points).and_then(|model| {
-        panorama_transform_is_stable(&model, source_dimensions)
-            .then(|| panorama_model_fit(model, points))
-            .flatten()
-    });
-    let affine = estimate_affine(points).and_then(|model| {
-        panorama_transform_is_stable(&model, source_dimensions)
-            .then(|| panorama_model_fit(model, points))
-            .flatten()
-    });
-    let projective_fit = panorama_transform_is_stable(projective, source_dimensions)
-        .then(|| panorama_model_fit(*projective, points))
-        .flatten();
-
-    let mut selected = translation
-        .clone()
-        .or_else(|| similarity.clone())
-        .or_else(|| affine.clone())
-        .or_else(|| projective_fit.clone());
-    let mut selected_name = if translation.is_some() {
-        "translation"
-    } else if similarity.is_some() {
-        "similarity"
-    } else if affine.is_some() {
-        "affine"
-    } else {
-        "projective"
-    };
-
-    // A pure translation is still the safest model for a conventional long
-    // panorama.  Promote it only when the data demonstrates a real scale or
-    // rotation change, or when the lower-DOF model cannot explain the overlap.
-    if let (Some(current), Some(candidate)) = (selected.as_ref(), similarity.as_ref()) {
-        let (scale, rotation, _) = panorama_model_linear_characteristics(&candidate.0);
-        let current_error = current.2;
-        let meaningful_motion = (scale - 1.0).abs() > PANORAMA_MODEL_SCALE_EPSILON
-            || rotation.abs() > PANORAMA_MODEL_ROTATION_EPSILON;
-        let materially_better = candidate.2 + PANORAMA_MODEL_MIN_ERROR_GAIN < current_error
-            || candidate.2 <= current_error * PANORAMA_MODEL_RELATIVE_ERROR_GAIN;
-        let sufficient_support = candidate.1.len() + 2 >= current.1.len();
-        if meaningful_motion && materially_better && sufficient_support {
-            selected = Some(candidate.clone());
-            selected_name = "similarity";
-        }
-    }
-
-    if let (Some(current), Some(candidate)) = (selected.as_ref(), affine.as_ref()) {
-        let (_, _, anisotropy) = panorama_model_linear_characteristics(&candidate.0);
-        let meaningful_deformation = anisotropy > 0.018
-            || candidate.0[(2, 0)].abs() > 1e-8
-            || candidate.0[(2, 1)].abs() > 1e-8;
-        let materially_better = candidate.2 + PANORAMA_MODEL_MIN_ERROR_GAIN < current.2
-            && candidate.2 <= current.2 * 0.92;
-        if meaningful_deformation && materially_better && candidate.1.len() + 2 >= current.1.len() {
-            selected = Some(candidate.clone());
-            selected_name = "affine";
-        }
-    }
-
-    if let (Some(current), Some(candidate)) = (selected.as_ref(), projective_fit.as_ref()) {
-        let perspective_strength = projective[(2, 0)].abs() + projective[(2, 1)].abs();
-        let materially_better = candidate.2 + 0.2 < current.2 && candidate.2 <= current.2 * 0.82;
-        if perspective_strength > 1e-8
-            && materially_better
-            && candidate.1.len() + 3 >= current.1.len()
-        {
-            selected = Some(candidate.clone());
-            selected_name = "projective";
-        }
-    }
-
-    let selected = selected.map(|fit| fit.0).unwrap_or_else(|| {
-        // Never hand an unbounded projective fit to the graph merely because
-        // every scored model missed the minimum support. A finite translation
-        // is the conservative fallback and cannot fold the output canvas.
-        if panorama_transform_is_stable(projective, source_dimensions) {
-            *projective
-        } else {
-            estimate_translation(points)
-        }
-    });
-    if log_selection {
-        let describe = |fit: &Option<(Matrix3<f64>, Vec<usize>, f64)>| {
-            fit.as_ref()
-                .map(|(_, inliers, error)| format!("{error:.3}px/{}", inliers.len()))
-                .unwrap_or_else(|| "n/a".to_string())
-        };
-        println!(
-            "  - Large-panorama alignment selected {selected_name}: translation {}, similarity {}, affine {}, projective {}",
-            describe(&translation),
-            describe(&similarity),
-            describe(&affine),
-            describe(&projective_fit),
-        );
-    }
-    selected
-}
-
 #[tauri::command]
 pub async fn stitch_panorama(
     paths: Vec<String>,
@@ -5353,92 +4379,6 @@ pub async fn save_panorama(
         crate::exif_processing::write_rrexif_sidecar(&real_path.to_string_lossy(), &output_path);
 
     Ok(output_path.to_string_lossy().to_string())
-}
-
-/// SHA-256 over every byte of each selected Source_RAW, in the order the paths
-/// were handed in.  `None` marks a source that could not be read.
-///
-/// Every file is opened read only with `File::open` and streamed (需求 4.8), so
-/// a 50 MB RAW never lands in memory as a whole and no path in this function can
-/// modify a source.  Hashing runs on the `rayon` pool; the result is a plain
-/// per-path mapping, so the thread count cannot reach it.
-fn focus_stack_source_digests(image_paths: &[String]) -> Vec<Option<[u8; 32]>> {
-    image_paths
-        .par_iter()
-        .map(|path| {
-            let (real_path, _) = crate::file_management::parse_virtual_path(path);
-            match virtual_tile::source_file_sha256(&real_path) {
-                Ok(digest) => Some(digest),
-                Err(error) => {
-                    println!("Focus stack: {error}");
-                    None
-                }
-            }
-        })
-        .collect()
-}
-
-/// Lower hex of a source digest, or the empty string when the file could not be
-/// read.  An empty string is what the Stack_Report records for "not measured",
-/// which must stay distinguishable from a digest that is genuinely all zero.
-fn source_digest_hex(digest: Option<[u8; 32]>) -> String {
-    digest
-        .map(|digest| virtual_tile::hex_digest(&digest))
-        .unwrap_or_default()
-}
-
-/// The Source_RAW digests taken before the run, together with the three
-/// Virtual_Tile `cache_key` ingredients they feed (需求 4.5).
-struct FocusStackSourceDigests {
-    /// Pipeline version, sorted absolute source paths, sorted source digests.
-    inputs: virtual_tile::CacheKeyInputs,
-    /// Lower hex digest per selected path, in selection order (需求 4.8 / 12.8).
-    sha256_before: Vec<String>,
-}
-
-/// Hash every selected Source_RAW once and derive the run's `cache_key`
-/// ingredients from the result.
-///
-/// A source that cannot be opened contributes an all-zero digest to the key
-/// rather than dropping out of the set: the key must stay a pure function of the
-/// selection, and an unreadable source fails the run later on its own terms.
-/// `sha256_before` keeps that case empty instead, so the report never claims a
-/// digest it did not measure.
-///
-/// The ingredients are sorted after hashing, so neither the import order nor the
-/// completion order of the `rayon` tasks reaches the key.
-fn focus_stack_cache_key_inputs(image_paths: &[String]) -> FocusStackSourceDigests {
-    let digests = focus_stack_source_digests(image_paths);
-    let sources = image_paths
-        .iter()
-        .zip(&digests)
-        .map(|(path, digest)| (path.clone(), digest.unwrap_or([0u8; 32])))
-        .collect::<Vec<_>>();
-    // The proxy is part of the focus-stack analysis input even though its
-    // pixels are generated inside the preparation workers.  Include the
-    // versioned resize contract and the input-count budget in the cache
-    // identity so a change to proxy dimensions/filtering cannot reuse a stale
-    // Virtual_Tile entry.  Source dimensions remain content-bound through the
-    // digest set below.
-    FocusStackSourceDigests {
-        inputs: virtual_tile::CacheKeyInputs::new(
-            &focus_stack_cache_pipeline_version(image_paths.len()),
-            &sources,
-        ),
-        sha256_before: digests.into_iter().map(source_digest_hex).collect(),
-    }
-}
-
-fn focus_stack_cache_pipeline_version(input_count: usize) -> String {
-    stack_pipeline::proxy::ProxyBudget::for_source(1, 1, input_count, None)
-        .map(|budget| {
-            format!(
-                "{}|{}",
-                crate::image_stack::STACK_PIPELINE_VERSION,
-                budget.cache_key_fragment()
-            )
-        })
-        .unwrap_or_else(|_| crate::image_stack::STACK_PIPELINE_VERSION.to_string())
 }
 
 pub(crate) fn stitch_images_with_options<R: Runtime>(
@@ -9476,538 +8416,6 @@ fn write_alignment_cache(
     Ok(())
 }
 
-fn is_generated_stitch_output(path: &str) -> bool {
-    let Some(stem) = Path::new(path).file_stem().and_then(|stem| stem.to_str()) else {
-        return false;
-    };
-    let stem = stem.to_ascii_lowercase();
-    ["_focusstack", "_panorama", "_pano"]
-        .into_iter()
-        .any(|suffix| {
-            let Some(marker) = stem.rfind(suffix) else {
-                return false;
-            };
-            let trailing = &stem[marker + suffix.len()..];
-            trailing.is_empty()
-                || trailing
-                    .chars()
-                    .all(|character| character.is_ascii_digit() || matches!(character, '-' | '_'))
-        })
-}
-
-fn is_auxiliary_stitch_file(path: &str) -> bool {
-    Path::new(path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("._"))
-}
-
-fn estimate_translation(points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Matrix3<f64> {
-    let mut dx: Vec<f64> = points.iter().map(|(a, b)| b.x - a.x).collect();
-    let mut dy: Vec<f64> = points.iter().map(|(a, b)| b.y - a.y).collect();
-    // `partial_cmp(...).unwrap_or(Equal)` is not a valid sort order when a
-    // degenerate homography produces NaN: NaN compares equal to every finite
-    // value but finite values still compare against one another.  Use the
-    // IEEE total order so a real mixed-focal stack cannot panic in the
-    // geometry fallback.
-    dx.sort_by(f64::total_cmp);
-    dy.sort_by(f64::total_cmp);
-    let median = |values: &[f64]| values[values.len() / 2];
-    Matrix3::new(1.0, 0.0, median(&dx), 0.0, 1.0, median(&dy), 0.0, 0.0, 1.0)
-}
-
-fn estimate_similarity(
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-) -> Option<Matrix3<f64>> {
-    if points.len() < 2 {
-        return None;
-    }
-    let count = points.len() as f64;
-    let source_center = points
-        .iter()
-        .fold(nalgebra::Vector2::zeros(), |sum, (source, _)| {
-            sum + source.coords
-        })
-        / count;
-    let target_center = points
-        .iter()
-        .fold(nalgebra::Vector2::zeros(), |sum, (_, target)| {
-            sum + target.coords
-        })
-        / count;
-
-    let mut denominator = 0.0;
-    let mut dot = 0.0;
-    let mut cross = 0.0;
-    for (source, target) in points {
-        let source_delta = source.coords - source_center;
-        let target_delta = target.coords - target_center;
-        denominator += source_delta.norm_squared();
-        dot += source_delta.x * target_delta.x + source_delta.y * target_delta.y;
-        cross += source_delta.x * target_delta.y - source_delta.y * target_delta.x;
-    }
-    if denominator <= f64::EPSILON {
-        return None;
-    }
-    let a = dot / denominator;
-    let b = cross / denominator;
-    let translation_x = target_center.x - a * source_center.x + b * source_center.y;
-    let translation_y = target_center.y - b * source_center.x - a * source_center.y;
-    let transform = Matrix3::new(a, -b, translation_x, b, a, translation_y, 0.0, 0.0, 1.0);
-    transform
-        .iter()
-        .all(|value| value.is_finite())
-        .then_some(transform)
-}
-
-fn estimate_affine(
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-) -> Option<Matrix3<f64>> {
-    if points.len() < 3 {
-        return None;
-    }
-    let mut design_data = Vec::with_capacity(points.len() * 3);
-    let mut target_x = Vec::with_capacity(points.len());
-    let mut target_y = Vec::with_capacity(points.len());
-    for (source, target) in points {
-        design_data.extend_from_slice(&[source.x, source.y, 1.0]);
-        target_x.push(target.x);
-        target_y.push(target.y);
-    }
-    let design = nalgebra::DMatrix::from_row_slice(points.len(), 3, &design_data);
-    let decomposition = design.svd(true, true);
-    let x_solution = decomposition
-        .solve(&nalgebra::DVector::from_vec(target_x), 1e-10)
-        .ok()?;
-    let y_solution = decomposition
-        .solve(&nalgebra::DVector::from_vec(target_y), 1e-10)
-        .ok()?;
-    let transform = Matrix3::new(
-        x_solution[0],
-        x_solution[1],
-        x_solution[2],
-        y_solution[0],
-        y_solution[1],
-        y_solution[2],
-        0.0,
-        0.0,
-        1.0,
-    );
-    transform
-        .iter()
-        .all(|value| value.is_finite())
-        .then_some(transform)
-}
-
-fn transformed_point(
-    transform: &Matrix3<f64>,
-    point: nalgebra::Point2<f64>,
-) -> Option<nalgebra::Point2<f64>> {
-    let mapped = transform * nalgebra::Point3::new(point.x, point.y, 1.0);
-    if mapped.z.abs() < 1e-8 {
-        return None;
-    }
-    let mapped = nalgebra::Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
-    (mapped.x.is_finite() && mapped.y.is_finite()).then_some(mapped)
-}
-
-fn homography_preserves_focus_orientation(
-    transform: &Matrix3<f64>,
-    dimensions: (u32, u32),
-) -> bool {
-    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
-    if width <= 1.0 || height <= 1.0 {
-        return false;
-    }
-    let source_corners = [
-        Point2::new(0.0, 0.0),
-        Point2::new(width, 0.0),
-        Point2::new(width, height),
-        Point2::new(0.0, height),
-    ];
-    let mut mapped_corners = Vec::with_capacity(source_corners.len());
-    let mut depth_sign = 0.0;
-    for corner in source_corners {
-        let mapped = transform * Point3::new(corner.x, corner.y, 1.0);
-        if !mapped.iter().all(|value| value.is_finite()) || mapped.z.abs() < 1e-8 {
-            return false;
-        }
-        let sign = mapped.z.signum();
-        if depth_sign == 0.0 {
-            depth_sign = sign;
-        } else if sign != depth_sign {
-            // A corner crossing the projective horizon can fold the image even
-            // when the matrix is numerically invertible. Such a pose is never
-            // a valid focus-stack registration.
-            return false;
-        }
-        mapped_corners.push(Point2::new(mapped.x / mapped.z, mapped.y / mapped.z));
-    }
-    let signed_double_area = mapped_corners
-        .iter()
-        .zip(mapped_corners.iter().cycle().skip(1))
-        .take(4)
-        .map(|(left, right)| left.x * right.y - right.x * left.y)
-        .sum::<f64>();
-    signed_double_area.is_finite() && signed_double_area > 0.0
-}
-
-fn transform_is_stable_for_focus_stack(transform: &Matrix3<f64>, dimensions: (u32, u32)) -> bool {
-    let (width, height) = (dimensions.0 as f64, dimensions.1 as f64);
-    if width <= 1.0 || height <= 1.0 || transform.try_inverse().is_none() {
-        return false;
-    }
-    let source_corners = [
-        nalgebra::Point2::new(0.0, 0.0),
-        nalgebra::Point2::new(width, 0.0),
-        nalgebra::Point2::new(width, height),
-        nalgebra::Point2::new(0.0, height),
-    ];
-    let Some(corners) = source_corners
-        .into_iter()
-        .map(|point| transformed_point(transform, point))
-        .collect::<Option<Vec<_>>>()
-    else {
-        return false;
-    };
-
-    let top = (corners[1] - corners[0]).norm() / width;
-    let right = (corners[2] - corners[1]).norm() / height;
-    let bottom = (corners[2] - corners[3]).norm() / width;
-    let left = (corners[3] - corners[0]).norm() / height;
-    let edge_scales = [top, right, bottom, left];
-    if edge_scales
-        .iter()
-        .any(|scale| !scale.is_finite() || *scale < 0.65 || *scale > 1.45)
-    {
-        return false;
-    }
-    let min_scale = edge_scales.iter().copied().fold(f64::INFINITY, f64::min);
-    let max_scale = edge_scales
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
-    if max_scale / min_scale > 1.18 {
-        return false;
-    }
-
-    let top_vector = corners[1] - corners[0];
-    let left_vector = corners[3] - corners[0];
-    let orthogonality = top_vector.dot(&left_vector) / (top_vector.norm() * left_vector.norm());
-    if !orthogonality.is_finite() || orthogonality.abs() > 0.22 {
-        return false;
-    }
-
-    let signed_double_area = corners
-        .iter()
-        .zip(corners.iter().cycle().skip(1))
-        .take(4)
-        .map(|(a, b)| a.x * b.y - b.x * a.y)
-        .sum::<f64>();
-    let area_ratio = signed_double_area / (2.0 * width * height);
-    area_ratio.is_finite() && (0.5..=2.0).contains(&area_ratio)
-}
-
-fn median_symmetric_error(
-    transform: &Matrix3<f64>,
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-) -> f64 {
-    let Some(inverse) = transform.try_inverse() else {
-        return f64::INFINITY;
-    };
-    let mut errors: Vec<f64> = points
-        .iter()
-        .map(|(source, target)| symmetric_point_error(transform, &inverse, *source, *target))
-        .filter(|error| error.is_finite())
-        .collect();
-    if errors.is_empty() {
-        return f64::INFINITY;
-    }
-    errors.sort_by(f64::total_cmp);
-    errors[errors.len() / 2]
-}
-
-#[derive(Debug, Clone)]
-struct RobustTransformFit {
-    transform: Matrix3<f64>,
-    inlier_indices: Vec<usize>,
-    median_error: f64,
-}
-
-fn symmetric_inlier_indices(
-    transform: &Matrix3<f64>,
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    threshold: f64,
-) -> Vec<usize> {
-    let Some(inverse) = transform.try_inverse() else {
-        return Vec::new();
-    };
-    points
-        .iter()
-        .enumerate()
-        .filter_map(|(index, (source, target))| {
-            (symmetric_point_error(transform, &inverse, *source, *target) <= threshold)
-                .then_some(index)
-        })
-        .collect()
-}
-
-fn robust_transform_fit<F>(
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    sample_size: usize,
-    seed: u64,
-    estimator: F,
-) -> Option<RobustTransformFit>
-where
-    F: Fn(&[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Option<Matrix3<f64>>,
-{
-    robust_transform_fit_with_threshold(
-        points,
-        sample_size,
-        seed,
-        FOCUS_MODEL_INLIER_THRESHOLD,
-        estimator,
-    )
-}
-
-/// [`robust_transform_fit`] with a caller-chosen symmetric inlier threshold.
-fn robust_transform_fit_with_threshold<F>(
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    sample_size: usize,
-    seed: u64,
-    inlier_threshold: f64,
-    estimator: F,
-) -> Option<RobustTransformFit>
-where
-    F: Fn(&[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)]) -> Option<Matrix3<f64>>,
-{
-    if points.len() < sample_size {
-        return None;
-    }
-
-    // `seed` is the caller's site constant; the run seed below is derived from
-    // the input content (需求 14.6).
-    let mut rng = StdRng::seed_from_u64(
-        seed ^ (points.len() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
-            ^ determinism::run_random_seed_mix(),
-    );
-    let all_indices: Vec<usize> = (0..points.len()).collect();
-    let mut best_transform = None;
-    let mut best_inliers = Vec::new();
-    let mut best_median = f64::INFINITY;
-
-    let iterations = if points.len() == sample_size {
-        1
-    } else {
-        FOCUS_MODEL_RANSAC_ITERATIONS
-    };
-    for _ in 0..iterations {
-        let sample_indices: Vec<usize> =
-            all_indices.sample(&mut rng, sample_size).copied().collect();
-        if sample_indices.len() != sample_size {
-            continue;
-        }
-        let sample: Vec<_> = sample_indices.iter().map(|&index| points[index]).collect();
-        let Some(transform) = estimator(&sample) else {
-            continue;
-        };
-        let inlier_indices = symmetric_inlier_indices(&transform, points, inlier_threshold);
-        if inlier_indices.len() < sample_size {
-            continue;
-        }
-        let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
-        let median = median_symmetric_error(&transform, &inlier_points);
-        if inlier_indices.len() > best_inliers.len()
-            || (inlier_indices.len() == best_inliers.len() && median < best_median)
-        {
-            best_transform = Some(transform);
-            best_inliers = inlier_indices;
-            best_median = median;
-        }
-    }
-
-    let mut transform = best_transform?;
-    let mut inlier_indices = best_inliers;
-    for _ in 0..4 {
-        let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
-        let Some(refitted) = estimator(&inlier_points) else {
-            break;
-        };
-        let refitted_inliers = symmetric_inlier_indices(&refitted, points, inlier_threshold);
-        if refitted_inliers.len() < sample_size {
-            break;
-        }
-        transform = refitted;
-        if refitted_inliers == inlier_indices {
-            break;
-        }
-        inlier_indices = refitted_inliers;
-    }
-
-    let inlier_points: Vec<_> = inlier_indices.iter().map(|&index| points[index]).collect();
-    Some(RobustTransformFit {
-        transform,
-        inlier_indices,
-        median_error: median_symmetric_error(&transform, &inlier_points),
-    })
-}
-
-fn focus_fit_is_competitive(candidate: &RobustTransformFit, selected: &RobustTransformFit) -> bool {
-    if candidate.inlier_indices.len() < FOCUS_MODEL_MIN_INLIERS {
-        return false;
-    }
-    // A focus stack is normally captured from one stable camera pose. Prefer the
-    // lower-error, lower-DOF model instead of allowing a slightly larger inlier
-    // consensus to select an affine warp that bends the paper differently at each
-    // edge. Extra support may win only when it does not materially worsen the fit.
-    let materially_more_precise = candidate.median_error + 0.25 < selected.median_error
-        && candidate.median_error <= selected.median_error * 0.90;
-    let similar_precision_with_more_support = candidate.inlier_indices.len()
-        >= selected.inlier_indices.len() + 4
-        && candidate.median_error <= selected.median_error * 1.04;
-    materially_more_precise || similar_precision_with_more_support
-}
-
-fn select_focus_stack_transform(
-    projective: &Matrix3<f64>,
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    source_dimensions: (u32, u32),
-    alignment_mode: AlignmentMode,
-) -> Matrix3<f64> {
-    // A scale change is a shifted mosaic even when the optical centres line up
-    // perfectly.  Use the broader, bounded geometry guard for that case; the
-    // normal focus-stack guard intentionally rejects large scale changes so a
-    // bad repeated-stroke match cannot bend a fixed-camera stack.
-    let shifted_mosaic = focus_stack_motion_is_shifted_mosaic(points, source_dimensions);
-    let stable_transform = |transform: &Matrix3<f64>| {
-        if shifted_mosaic {
-            panorama_transform_is_stable(transform, source_dimensions)
-        } else {
-            transform_is_stable_for_focus_stack(transform, source_dimensions)
-        }
-    };
-    let translation = estimate_translation(points);
-    let translation_inliers =
-        symmetric_inlier_indices(&translation, points, FOCUS_MODEL_INLIER_THRESHOLD);
-    let translation_is_valid = translation_inliers.len() >= FOCUS_MODEL_MIN_INLIERS;
-    let translation_points: Vec<_> = translation_inliers
-        .iter()
-        .map(|&index| points[index])
-        .collect();
-    let mut selected = RobustTransformFit {
-        transform: translation,
-        inlier_indices: if translation_is_valid {
-            translation_inliers
-        } else {
-            Vec::new()
-        },
-        median_error: if translation_is_valid {
-            median_symmetric_error(&translation, &translation_points)
-        } else {
-            f64::INFINITY
-        },
-    };
-    let mut selected_name = "translation";
-
-    let similarity = robust_transform_fit(points, 2, 0xA24B_AED4_963E_E407, estimate_similarity);
-    if let Some(model) = similarity.as_ref()
-        && stable_transform(&model.transform)
-        && focus_fit_is_competitive(model, &selected)
-    {
-        selected = model.clone();
-        selected_name = "similarity";
-    }
-
-    let affine = robust_transform_fit(points, 3, 0x9FB2_1C65_1E98_DF25, estimate_affine);
-    if let Some(model) = affine.as_ref()
-        && stable_transform(&model.transform)
-        && focus_fit_is_competitive(model, &selected)
-    {
-        selected = model.clone();
-        selected_name = "affine";
-    }
-
-    let projective_error = median_symmetric_error(projective, points);
-    let explicit_projective = matches!(
-        alignment_mode,
-        AlignmentMode::Perspective | AlignmentMode::Cylindrical | AlignmentMode::Spherical
-    );
-    // Auto mode may still need a homography for a handheld view of a flat
-    // artwork. Require the inliers to cover a substantial part of both
-    // frames before accepting it; a compact repeated brush stroke must stay
-    // on the lower-DOF model even if its projective fit has a tiny residual.
-    let projective_spatial_support =
-        panorama_spatial_support(points, source_dimensions, source_dimensions);
-    let allow_projective =
-        explicit_projective || projective_spatial_support >= FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT;
-    if allow_projective
-        && stable_transform(projective)
-        && projective_error <= FOCUS_MODEL_INLIER_THRESHOLD * 0.5
-        && projective_error + 0.15 < selected.median_error
-        && projective_error <= selected.median_error * 0.80
-    {
-        selected.transform = *projective;
-        selected.inlier_indices = (0..points.len()).collect();
-        selected.median_error = projective_error;
-        selected_name = "projective";
-    }
-
-    let similarity_summary = similarity
-        .as_ref()
-        .map(|fit| format!("{:.3}px/{}", fit.median_error, fit.inlier_indices.len()))
-        .unwrap_or_else(|| "n/a".to_string());
-    let affine_summary = affine
-        .as_ref()
-        .map(|fit| format!("{:.3}px/{}", fit.median_error, fit.inlier_indices.len()))
-        .unwrap_or_else(|| "n/a".to_string());
-    let translation_summary = if translation_is_valid {
-        format!(
-            "{:.3}px/{}",
-            median_symmetric_error(&translation, &translation_points),
-            translation_points.len()
-        )
-    } else {
-        format!("invalid/{}", translation_points.len())
-    };
-    println!(
-        "  - Focus alignment selected {selected_name}: median symmetric error {:.3}px with {} inliers (translation {translation_summary}, similarity {similarity_summary}, affine {affine_summary}, projective {:.3}px/{}, shifted-mosaic {})",
-        selected.median_error,
-        selected.inlier_indices.len(),
-        projective_error,
-        points.len(),
-        shifted_mosaic
-    );
-    selected.transform
-}
-
-fn focus_stack_motion_is_shifted_mosaic(
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-    source_dimensions: (u32, u32),
-) -> bool {
-    if points.len() < FOCUS_MODEL_MIN_INLIERS {
-        return false;
-    }
-    let translation = estimate_translation(points);
-    let motion = nalgebra::Vector2::new(translation[(0, 2)], translation[(1, 2)]).norm();
-    let image_scale = source_dimensions.0.max(source_dimensions.1) as f64;
-    let translation_shift = motion.is_finite()
-        && image_scale > 1.0
-        && motion > image_scale * FOCUS_SHIFTED_MOSAIC_MOTION_RATIO;
-    let scale_or_rotation_shift = estimate_similarity(points)
-        .map(|similarity| {
-            let scale_x = similarity[(0, 0)].hypot(similarity[(1, 0)]);
-            let scale_y = similarity[(0, 1)].hypot(similarity[(1, 1)]);
-            let scale = (scale_x.max(0.0) * scale_y.max(0.0)).sqrt();
-            let rotation = 0.5
-                * (similarity[(1, 0)] - similarity[(0, 1)])
-                    .atan2(similarity[(0, 0)] + similarity[(1, 1)]);
-            (scale.is_finite() && (scale - 1.0).abs() > 0.10)
-                || (rotation.is_finite() && rotation.abs() > 0.035)
-        })
-        .unwrap_or(false);
-    translation_shift || scale_or_rotation_shift
-}
-
 fn refine_match_point_from_homography(
     image1: &ImageInfo,
     image2: &ImageInfo,
@@ -10450,153 +8858,6 @@ fn patch_ncc(
         f64::NEG_INFINITY
     } else {
         covariance / (variance1 * variance2).sqrt()
-    }
-}
-
-fn refine_homography_inliers(
-    points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
-    refinement_threshold: f64,
-    minimum_inliers: usize,
-) -> Option<Matrix3<f64>> {
-    if points.len() < minimum_inliers {
-        return None;
-    }
-
-    // Patch correlation can occasionally lock onto a nearby repeated stroke or
-    // texture. Starting the least-squares refinement from every correlation lets
-    // a coherent minority bend a projective model enough that none of those bad
-    // points exceeds the later residual threshold. Re-run a deterministic robust
-    // fit at full resolution before optimizing all remaining correspondences.
-    let (_, robust_inlier_indices) =
-        processing::find_homography_ransac_points_stable_with_min_inliers(
-            points,
-            refinement_threshold,
-            minimum_inliers,
-        )?;
-    if robust_inlier_indices.len() < minimum_inliers {
-        return None;
-    }
-    if robust_inlier_indices.len() < points.len() {
-        *points = robust_inlier_indices
-            .into_iter()
-            .map(|index| points[index])
-            .collect();
-    }
-
-    let mut homography = processing::compute_homography(points)?;
-    for _ in 0..3 {
-        let Some(inverse) = homography.try_inverse() else {
-            break;
-        };
-        let refined_points: Vec<_> = points
-            .iter()
-            .copied()
-            .filter(|(source, target)| {
-                symmetric_point_error(&homography, &inverse, *source, *target)
-                    <= refinement_threshold
-            })
-            .collect();
-        if refined_points.len() < minimum_inliers || refined_points.len() == points.len() {
-            break;
-        }
-        *points = refined_points;
-        homography = processing::compute_homography(points)?;
-    }
-    Some(homography)
-}
-
-fn retain_model_inliers(
-    points: &mut Vec<(nalgebra::Point2<f64>, nalgebra::Point2<f64>)>,
-    transform: &Matrix3<f64>,
-    threshold: f64,
-    minimum_inliers: usize,
-) -> bool {
-    let Some(inverse) = transform.try_inverse() else {
-        return false;
-    };
-    let filtered = points
-        .iter()
-        .copied()
-        .filter(|(source, target)| {
-            symmetric_point_error(transform, &inverse, *source, *target) <= threshold
-        })
-        .collect::<Vec<_>>();
-    if filtered.len() < minimum_inliers {
-        return false;
-    }
-    *points = filtered;
-    true
-}
-
-fn symmetric_point_error(
-    homography: &Matrix3<f64>,
-    inverse: &Matrix3<f64>,
-    source: nalgebra::Point2<f64>,
-    target: nalgebra::Point2<f64>,
-) -> f64 {
-    let forward = homography * nalgebra::Point3::new(source.x, source.y, 1.0);
-    let reverse = inverse * nalgebra::Point3::new(target.x, target.y, 1.0);
-    if forward.z.abs() < 1e-8 || reverse.z.abs() < 1e-8 {
-        return f64::INFINITY;
-    }
-    let forward_point = nalgebra::Point2::new(forward.x / forward.z, forward.y / forward.z);
-    let reverse_point = nalgebra::Point2::new(reverse.x / reverse.z, reverse.y / reverse.z);
-    ((forward_point - target).norm_squared() + (reverse_point - source).norm_squared()).sqrt()
-}
-
-fn symmetric_reprojection_rmse(
-    homography: &Matrix3<f64>,
-    points: &[(nalgebra::Point2<f64>, nalgebra::Point2<f64>)],
-) -> f64 {
-    let Some(inverse) = homography.try_inverse() else {
-        return f64::INFINITY;
-    };
-    let sum_squared_error = points
-        .iter()
-        .filter_map(|(source, target)| {
-            let forward = homography * nalgebra::Point3::new(source.x, source.y, 1.0);
-            let reverse = inverse * nalgebra::Point3::new(target.x, target.y, 1.0);
-            if forward.z.abs() < 1e-8 || reverse.z.abs() < 1e-8 {
-                return None;
-            }
-            let forward_point = nalgebra::Point2::new(forward.x / forward.z, forward.y / forward.z);
-            let reverse_point = nalgebra::Point2::new(reverse.x / reverse.z, reverse.y / reverse.z);
-            Some((forward_point - target).norm_squared() + (reverse_point - source).norm_squared())
-        })
-        .sum::<f64>();
-    if points.is_empty() {
-        f64::INFINITY
-    } else {
-        (sum_squared_error / (points.len() as f64 * 2.0)).sqrt()
-    }
-}
-
-struct Dsu {
-    parent: Vec<usize>,
-}
-
-impl Dsu {
-    fn new(n: usize) -> Self {
-        Dsu {
-            parent: (0..n).collect(),
-        }
-    }
-
-    fn find(&mut self, i: usize) -> usize {
-        if self.parent[i] == i {
-            i
-        } else {
-            self.parent[i] = self.find(self.parent[i]);
-            self.parent[i]
-        }
-    }
-
-    fn union(&mut self, i: usize, j: usize) {
-        let root_i = self.find(i);
-        let root_j = self.find(j);
-        if root_i != root_j {
-            self.parent[root_i] = root_j;
-        }
     }
 }
 
@@ -12024,40 +10285,6 @@ fn refine_flat_artwork_tree_poses(
         max_correction,
     );
     Some(corrected)
-}
-
-/// The selected sources that produced no decoded image (需求 1.9).
-///
-/// Returned in selection order and by absolute path, which is what the
-/// Stack_Report and the degradation ledger record.  Excluding them from every
-/// Capture_Station is not a separate step: the grouper only ever sees the decoded
-/// images, so a source named here cannot reach it.
-fn undecodable_source_paths(selection: &[String], decoded: &[ImageInfo]) -> Vec<String> {
-    selection
-        .iter()
-        .filter(|path| !decoded.iter().any(|image| &image.filename == *path))
-        .cloned()
-        .collect()
-}
-
-/// The Stack_Report records of the sources one grouping excluded (需求 1.6 / 1.9).
-///
-/// Each record names the absolute path of the excluded Source_RAW and the stable
-/// reason identifier it was excluded for, and nothing else: the exclusion itself
-/// has already happened by the time this runs.
-fn excluded_source_records(
-    images: &[ImageInfo],
-    indices: &[usize],
-    reason: &'static str,
-) -> Vec<stack_report::ExcludedSourceRecord> {
-    indices
-        .iter()
-        .filter_map(|&image_index| images.get(image_index))
-        .map(|image| stack_report::ExcludedSourceRecord {
-            path: image.filename.clone(),
-            reason: reason.to_string(),
-        })
-        .collect()
 }
 
 struct FocusAnchorRenderFrames {
@@ -16083,18 +14310,6 @@ fn virtual_tile_polished_station_match(
         .collect()
 }
 
-fn normalized_homography(transform: &Matrix3<f64>) -> Option<Matrix3<f64>> {
-    let scale = transform[(2, 2)];
-    if !scale.is_finite() || scale.abs() <= f64::EPSILON {
-        return None;
-    }
-    let normalized = transform / scale;
-    normalized
-        .iter()
-        .all(|value| value.is_finite())
-        .then_some(normalized)
-}
-
 /// Rendering-prior relation `left tile -> right tile` in native tile pixels.
 fn virtual_tile_prior_relation(
     left: &ImageInfo,
@@ -17435,31 +15650,6 @@ fn focus_group_candidate_key(candidate: &FocusGroupEdgeCandidate) -> [u64; 9] {
     key
 }
 
-fn focus_transform_disagreement_px(
-    left: &Matrix3<f64>,
-    right: &Matrix3<f64>,
-    dimensions: (u32, u32),
-) -> Option<f64> {
-    let (width, height) = dimensions;
-    let samples = [
-        Point2::new(width as f64 * 0.2, height as f64 * 0.2),
-        Point2::new(width as f64 * 0.8, height as f64 * 0.2),
-        Point2::new(width as f64 * 0.5, height as f64 * 0.5),
-        Point2::new(width as f64 * 0.2, height as f64 * 0.8),
-        Point2::new(width as f64 * 0.8, height as f64 * 0.8),
-    ];
-    let mut errors = samples
-        .into_iter()
-        .filter_map(|point| {
-            let left = transformed_point(left, point)?;
-            let right = transformed_point(right, point)?;
-            let error = (left - right).norm();
-            error.is_finite().then_some(error)
-        })
-        .collect::<Vec<_>>();
-    median_value(&mut errors)
-}
-
 #[derive(Clone)]
 struct SourceRawLayerDiagnosticModel {
     left_source: usize,
@@ -17467,20 +15657,6 @@ struct SourceRawLayerDiagnosticModel {
     record_index: usize,
     transform: Matrix3<f64>,
     spatial_support: f64,
-}
-
-fn matrix3_row_major(transform: &Matrix3<f64>) -> [f64; 9] {
-    [
-        transform[(0, 0)],
-        transform[(0, 1)],
-        transform[(0, 2)],
-        transform[(1, 0)],
-        transform[(1, 1)],
-        transform[(1, 2)],
-        transform[(2, 0)],
-        transform[(2, 1)],
-        transform[(2, 2)],
-    ]
 }
 
 /// Select the largest set of cluster observations that shares no Source_RAW
@@ -19760,18 +17936,6 @@ fn filter_flat_artwork_blurry_sources(images: &mut Vec<ImageInfo>) {
         images.len(),
         images.len() + rejected.len()
     );
-}
-
-fn absolute_source_path(path: &str) -> String {
-    let path = Path::new(path);
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("/"))
-            .join(path)
-    };
-    absolute.to_string_lossy().into_owned()
 }
 
 /// Refine native camera stations jointly, then validate the exact bounded
@@ -22094,14 +20258,6 @@ fn foreground_edge_samples(
         }
     }
     samples
-}
-
-fn median_value(values: &mut [f64]) -> Option<f64> {
-    if values.is_empty() {
-        return None;
-    }
-    values.sort_by(f64::total_cmp);
-    Some(values[values.len() / 2])
 }
 
 fn fit_foreground_edge_line(samples: &[FocusForegroundEdgeSample]) -> Option<(f64, f64)> {
