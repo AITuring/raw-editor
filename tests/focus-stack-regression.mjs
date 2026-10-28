@@ -395,7 +395,8 @@ function main() {
   // compared with the baseline below; any other non-zero exit is a crash.
   const nativeRejectedAfterOutput = run.status !== 0 && log.nativeRejection && log.result && metrics;
   if ((run.status !== 0 || !log.passed) && !nativeRejectedAfterOutput) {
-    failures.push(`harness failed (exit ${run.status}); see ${logPath}`);
+    const cause = run.error ? `, ${run.error.message}` : run.signal ? `, signal ${run.signal}` : '';
+    failures.push(`harness failed (exit ${run.status}${cause}); see ${logPath}`);
   }
   if (!log.result) failures.push('no focus-stack result line in the log');
   if (!metrics) failures.push('acceptance metrics were not written');
