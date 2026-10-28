@@ -55,9 +55,14 @@ manifest、station 或 focus-layer 语义。首期支持 RGB/RGBA 的 8/16-bit P
 `/Users/dp/Downloads/书画拼图/马远` 登记为 PSD 回归集（14 张 PSD，单张约 8334×5528，16-bit RGBA），
 用于验证批量导入、拼接和处处清晰输出。
 
-2026-10-28 的回归已验证 14/14 PSD 成功解码，匹配形成 13/13 连续邻接边，10% 受控输出为
-`1397×1173`，报告确认每个输出像素都有 source ownership。该运行没有参考 ROI，Quality Gate 保持
-`insufficient_evidence`；这表示证据不足，不表示 PSD 成片失败。兰亭 45 张同日 1:1 回归仍让 45/45
+PSD 组不会按 FocusStack 的单例站点 fallback 处理。入口检测到“全选输入均为 PSD 且请求为 FocusStack”时，
+会自动改走 `Panorama + Auto` 的平面扫描路径：先用全组重叠关系求联合 photometric gain，再进入 seam
+compositor；重叠区对 PSD 使用连续 detail blend，避免把每个文件直接写成一个硬 ownership 矩形。普通 RAW/JPEG
+焦点堆栈和显式 Panorama 输入保持原有路径。
+
+2026-10-28 的回归已验证 14/14 PSD 成功解码，匹配形成 13/13 连续邻接边；当前受控输出走联合
+photometric + progressive seam，仍需用人工 ROI 对处处清晰和接缝连续性做最终视觉门禁，不能只用测试返回码
+判定成片质量。该运行没有参考 ROI，Quality Gate 保持 `insufficient_evidence`。兰亭 45 张同日 1:1 回归仍让 45/45
 源进入 compositor 并生成 `33895×13888` 成片，但现有已知画布尺寸差异仍使它与参考 Photoshop JPEG
 无法字节一致；本次 PSD 导入没有改变这条既有边界。
 

@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 
-use crate::formats::is_raw_file;
+use crate::formats::{is_psd_file, is_raw_file};
 use crate::image_processing::apply_cpu_default_raw_processing;
 use crate::panorama_utils::registration;
 use crate::panorama_utils::stack_pipeline;
@@ -4991,6 +4991,24 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
         .collect::<Vec<_>>();
+    // A PSD in this product is one flattened scan tile, not one focus plane.
+    // The default UI blend mode is FocusStack, but routing a complete PSD set
+    // through the singleton focus fallback creates hard source-owner blocks.
+    // Use the panorama seam compositor for this specific input shape while
+    // keeping the historical focus path unchanged for RAW/JPEG stacks.
+    let psd_source_scan = image_paths.len() > 1
+        && image_paths.iter().all(is_psd_file)
+        && blend_mode == BlendMode::FocusStack;
+    let blend_mode = if psd_source_scan {
+        BlendMode::Panorama
+    } else {
+        blend_mode
+    };
+    let alignment_mode = if psd_source_scan {
+        AlignmentMode::Auto
+    } else {
+        alignment_mode
+    };
     // Open a fresh degradation observation window for this run. Recording is
     // additive: no fallback decision below consults the ledger.
     degradation::reset_run_ledger();
@@ -6421,7 +6439,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             &render_images_info,
             render_homographies,
             projection,
-            alignment_mode == AlignmentMode::FlatArtwork,
+            alignment_mode == AlignmentMode::FlatArtwork || psd_source_scan,
             app_handle.clone(),
             progress_event,
             &mut load_render_image,

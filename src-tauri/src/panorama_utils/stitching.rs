@@ -882,6 +882,11 @@ struct ExposureCompensation {
     representative_gain: f32,
     channel_gains: Vec<[f32; 3]>,
     representative_channel_gain: [f32; 3],
+    /// Flat source scans often contain a broad illumination field that cannot
+    /// be represented by one gain for the whole tile. Keep the historical
+    /// representative gain for ordinary panoramas, but allow the PSD/source
+    /// scan compositor to use the smoothed spatial field.
+    use_spatial_field: bool,
 }
 
 /// Decide whether a projected focus tile should replace the current owner at
@@ -964,9 +969,12 @@ impl ExposureCompensation {
         top * (1.0 - ty) + bottom * ty
     }
 
-    fn channel_gain_at(&self, _x: u32, _y: u32) -> [f32; 3] {
+    fn channel_gain_at(&self, x: u32, y: u32) -> [f32; 3] {
         if self.channel_gains.is_empty() || self.grid_width == 0 || self.grid_height == 0 {
             return [1.0; 3];
+        }
+        if self.use_spatial_field {
+            return self.spatial_channel_gain_at(x, y);
         }
         // RGB gains use the same conservative default as the scalar field:
         // one robust overlap constant per candidate.  A per-cell RGB field is
@@ -1235,6 +1243,7 @@ fn estimate_overlap_exposure_compensation(ctx: ExposureOverlap<'_>) -> ExposureC
         representative_gain,
         channel_gains,
         representative_channel_gain,
+        use_spatial_field: false,
     }
 }
 
@@ -4133,6 +4142,73 @@ where
         return Ok(Rgb32FImage::new(0, 0));
     }
 
+    let psd_scan = images
+        .iter()
+        .all(|image| image.filename.to_ascii_lowercase().ends_with(".psd"));
+    // Solve one photometric model for the whole connected PSD tile set before
+    // the order-dependent seam pass. Pairwise gains measured against the
+    // already-composited panorama can otherwise leave a residual block on a
+    // late tile even when every local seam is geometrically valid.
+    let photometric_models = if psd_scan && images.len() > 1 {
+        let mut analysis_tiles = Vec::with_capacity(images.len());
+        for image in images {
+            let source = load_image(image)?;
+            let (analysis_width, analysis_height) =
+                focus_analysis_dimensions(source.width(), source.height(), 512);
+            let analysis = resize_rgb(&source, analysis_width, analysis_height);
+            let scale_x = analysis_width as f64 / source.width().max(1) as f64;
+            let scale_y = analysis_height as f64 / source.height().max(1) as f64;
+            let mut source_to_analysis = Matrix3::identity();
+            source_to_analysis[(0, 0)] = 1.0 / scale_x.max(1e-9);
+            source_to_analysis[(1, 1)] = 1.0 / scale_y.max(1e-9);
+            let transform = global_homographies
+                .get(&image.id)
+                .copied()
+                .unwrap_or_else(Matrix3::identity)
+                * source_to_analysis;
+            analysis_tiles.push((analysis, transform));
+        }
+        let paper_medians = analysis_tiles
+            .iter()
+            .map(|(image, _)| flat_scan_paper_median(image))
+            .collect::<Vec<_>>();
+        let mut median_samples = paper_medians.iter().copied().flatten().collect::<Vec<_>>();
+        let target_median = median_f32(&mut median_samples).unwrap_or(0.5);
+        let absolute_gains = paper_medians
+            .iter()
+            .map(|median| {
+                median
+                    .map(|value| (target_median / value.max(0.05)).clamp(0.78, 1.28))
+                    .unwrap_or(1.0)
+            })
+            .collect::<Vec<_>>();
+        println!(
+            "  - PSD paper-level normalization: target median luma {:.3}, gains {:?}",
+            target_median, absolute_gains
+        );
+        let options = PhotometricOptions {
+            allow_linear: true,
+            min_samples_per_pair: 32,
+            max_samples_per_pair: 4096,
+            max_pair_log_scatter: 0.30,
+            ..PhotometricOptions::default()
+        };
+        let calibration = calibrate_overlap_photometry(&analysis_tiles, &options);
+        println!(
+            "  - PSD joint photometric solve: {} models, {} reliable pairs, linear={}",
+            calibration.models.len(),
+            calibration
+                .pairs
+                .iter()
+                .filter(|pair| pair.reliable)
+                .count(),
+            calibration.linear_used
+        );
+        Some((calibration.models, absolute_gains))
+    } else {
+        None
+    };
+
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
 
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
@@ -4143,7 +4219,16 @@ where
     let mut panorama_mask = GrayImage::new(out_width, out_height);
 
     let base_img_info = images[0];
-    let base_image = load_image(base_img_info)?;
+    let mut base_image = load_image(base_img_info)?;
+    if let Some((models, absolute_gains)) = photometric_models.as_ref() {
+        if let Some(model) = models.get(0) {
+            apply_photometric_model_to_image(
+                &mut base_image,
+                model,
+                absolute_gains.get(0).copied().unwrap_or(1.0),
+            );
+        }
+    }
     let h_base = &global_homographies[&base_img_info.id];
     let h_base_inv = h_base
         .try_inverse()
@@ -4222,7 +4307,24 @@ where
                 img_to_add_info.filename
             )
         })?;
-        let img_to_add = load_image(img_to_add_info)?;
+        let mut img_to_add = load_image(img_to_add_info)?;
+        if let Some((models, absolute_gains)) = photometric_models.as_ref() {
+            // The model vector follows `images`, not the progressive order;
+            // use the stable ImageInfo id to select the matching entry.
+            if let Some((model_index, _)) = images
+                .iter()
+                .enumerate()
+                .find(|(_, image)| image.id == img_to_add_info.id)
+            {
+                if let Some(model) = models.get(model_index) {
+                    apply_photometric_model_to_image(
+                        &mut img_to_add,
+                        model,
+                        absolute_gains.get(model_index).copied().unwrap_or(1.0),
+                    );
+                }
+            }
+        }
         let (candidate_left, candidate_right, candidate_top, candidate_bottom) =
             transformed_image_region(
                 img_to_add_info,
@@ -4239,7 +4341,9 @@ where
                 0,
                 out_height.saturating_sub(1),
             ));
-        let exposure = if std::env::var_os("RAW_EDITOR_SKIP_PROGRESSIVE_EXPOSURE_GAIN").is_some() {
+        let mut exposure = if std::env::var_os("RAW_EDITOR_SKIP_PROGRESSIVE_EXPOSURE_GAIN")
+            .is_some()
+        {
             ExposureCompensation {
                 cell_size: 1,
                 grid_width: 1,
@@ -4248,6 +4352,7 @@ where
                 representative_gain: 1.0,
                 channel_gains: vec![[1.0; 3]],
                 representative_channel_gain: [1.0; 3],
+                use_spatial_field: false,
             }
         } else {
             let estimated = estimate_overlap_exposure_compensation(ExposureOverlap {
@@ -4283,6 +4388,29 @@ where
                 });
             estimated.damped(strength)
         };
+        // A flat source scan has broad illumination variation inside a single
+        // tile. Use the already smoothed overlap field for this path so the
+        // correction follows the paper plane instead of stopping at a source
+        // rectangle. Ordinary panoramas retain the representative gain path.
+        if flat_artwork
+            && std::env::var_os("RAW_EDITOR_SKIP_PROGRESSIVE_SPATIAL_EXPOSURE").is_none()
+        {
+            exposure.use_spatial_field = true;
+            if let (Some(min), Some(max)) = (
+                exposure
+                    .channel_gains
+                    .iter()
+                    .flat_map(|gains| gains.iter().copied())
+                    .min_by(f32::total_cmp),
+                exposure
+                    .channel_gains
+                    .iter()
+                    .flat_map(|gains| gains.iter().copied())
+                    .max_by(f32::total_cmp),
+            ) {
+                println!("    - Spatial exposure field range: {:.3}..{:.3}", min, max);
+            }
+        }
         println!(
             "    - Overlap exposure gain: {:.3} with local illumination correction",
             exposure.representative_gain
@@ -4503,6 +4631,10 @@ where
         harmonize_focus_background_tone(&mut panorama, &panorama_mask, &empty_foreground);
     }
 
+    let all_psd_scan = images
+        .iter()
+        .all(|image| image.filename.to_ascii_lowercase().ends_with(".psd"));
+
     // Virtual tiles are resampled once while being fused at the station and a
     // second time while they are projected onto the scan canvas.  The seam
     // pyramid deliberately keeps the fine bands source-owned, but that second
@@ -4535,7 +4667,7 @@ where
     // complete projected union is required here; cropping to the coverage box
     // would move both side rails inward and make the left/right borders jump
     // between source strips.  Ordinary panoramas keep the historical crop.
-    let cropped = if flat_artwork {
+    let cropped = if flat_artwork && !all_psd_scan {
         panorama
     } else if valid_coverage >= 0.995 {
         crop_to_valid_bounds(panorama, &panorama_mask)
@@ -5042,6 +5174,7 @@ where
                 representative_gain: 1.0,
                 channel_gains: vec![[1.0; 3]],
                 representative_channel_gain: [1.0; 3],
+                use_spatial_field: false,
             }
         } else {
             estimate_overlap_exposure_compensation(ExposureOverlap {
@@ -6730,6 +6863,50 @@ struct SeamBandBlend<'a> {
     exposure: &'a ExposureCompensation,
 }
 
+fn flat_scan_paper_median(image: &Rgb32FImage) -> Option<f32> {
+    let pixels = image.as_raw();
+    let step = (pixels.len() / 3 / 4096).max(1);
+    let mut samples = Vec::new();
+    for index in (0..pixels.len() / 3).step_by(step) {
+        let start = index * 3;
+        let pixel = &pixels[start..start + 3];
+        if focus_stack_pixel_is_canvas_like(pixel) && !focus_stack_pixel_is_tone_foreground(pixel) {
+            samples.push(pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114);
+        }
+    }
+    median_f32(&mut samples)
+}
+
+fn apply_photometric_model_to_image(
+    image: &mut Rgb32FImage,
+    model: &PhotometricModel,
+    absolute_gain: f32,
+) {
+    let (width, height) = image.dimensions();
+    if width == 0 || height == 0 || model.preview_width == 0 || model.preview_height == 0 {
+        return;
+    }
+    let scale_x = model.preview_width as f64 / width as f64;
+    let scale_y = model.preview_height as f64 / height as f64;
+    image
+        .as_mut()
+        .par_chunks_mut(width as usize * 3)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let preview_y = y as f64 * scale_y;
+            for x in 0..width as usize {
+                let start = x * 3;
+                let gain = model.gain_at(x as f64 * scale_x, preview_y);
+                let offset = model.offset_at(x as f64 * scale_x, preview_y);
+                for channel in 0..3 {
+                    row[start + channel] =
+                        ((row[start + channel] * gain[channel] + offset[channel]) * absolute_gain)
+                            .clamp(0.0, 1.0);
+                }
+            }
+        });
+}
+
 fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
     let SeamBandBlend {
         panorama,
@@ -6787,6 +6964,11 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
     if patch_width < 8 || patch_height < 8 {
         return;
     }
+
+    let psd_scan = img_to_add_info
+        .filename
+        .to_ascii_lowercase()
+        .ends_with(".psd");
 
     let Some(h_add_inv) = h_add.try_inverse() else {
         return;
@@ -6884,7 +7066,37 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
                             }
                         }
                     };
-                    let detail_alpha = panorama_detail_alpha(candidate_signed_distance);
+                    let detail_alpha = if psd_scan && candidate_valid && panorama_valid {
+                        // A source scan is a planar tile mosaic. Blend its
+                        // detail over the complete overlap instead of only a
+                        // narrow seam band; a one-pixel pose residual then
+                        // cannot leave a source-sized texture rectangle.
+                        let span = match orientation {
+                            SeamOrientation::Horizontal => {
+                                (overlap_bottom - overlap_top).max(1) as f32
+                            }
+                            SeamOrientation::Vertical => {
+                                (overlap_right - overlap_left).max(1) as f32
+                            }
+                        };
+                        let position = match orientation {
+                            SeamOrientation::Horizontal => {
+                                (global_y.saturating_sub(overlap_top)) as f32 / span
+                            }
+                            SeamOrientation::Vertical => {
+                                (global_x.saturating_sub(overlap_left)) as f32 / span
+                            }
+                        };
+                        if new_image_is_dominant_side {
+                            position.clamp(0.0, 1.0)
+                        } else {
+                            (1.0 - position).clamp(0.0, 1.0)
+                        }
+                    } else if psd_scan {
+                        if candidate_valid { 1.0 } else { 0.0 }
+                    } else {
+                        panorama_detail_alpha(candidate_signed_distance)
+                    };
 
                     let base_start = local_x as usize * 3;
                     base_row[base_start..base_start + 3].copy_from_slice(&base_pixel.0);
@@ -6946,7 +7158,12 @@ fn blend_panorama_seam_band(ctx: SeamBandBlend<'_>) {
         // the visible detail bands. Keep the source ownership hard for the
         // finest and middle frequencies; only the coarse tone pyramid is
         // allowed to feather across the seam.
-        true,
+        // PSD source scans are overlapping views of one plane.  Keeping all
+        // high and middle bands hard-owned leaves a visible paper/brush
+        // rectangle whenever the registration has a small residual.  Blend
+        // the bands across the measured overlap for this path; ordinary
+        // photographic panoramas retain hard detail ownership to avoid ghosting.
+        !psd_scan,
     );
 
     let panorama_rgb_stride = out_width as usize * 3;
@@ -16223,6 +16440,7 @@ mod interpolation_tests {
             representative_gain: 0.75,
             channel_gains: vec![[0.75, 1.20, 1.0]],
             representative_channel_gain: [0.75, 1.20, 1.0],
+            use_spatial_field: false,
         }
         .damped(0.45);
         let expected = 0.75f32.ln().mul_add(0.45, 0.0).exp();
@@ -16258,6 +16476,7 @@ mod interpolation_tests {
             representative_gain: 1.0,
             channel_gains: vec![[1.0; 3]],
             representative_channel_gain: [1.0; 3],
+            use_spatial_field: false,
         };
         let seam_coords = vec![HEIGHT as i32 / 2; WIDTH as usize];
         blend_panorama_seam_band(SeamBandBlend {
