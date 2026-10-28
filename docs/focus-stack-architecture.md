@@ -4,8 +4,8 @@
 `.kiro/specs/layered-camera-group-focus-stitching/tasks.md` 的 N0–N9 为准；未接入生产的研究模块不算作
 当前架构的一部分。
 
-本文按 `v1` 分支 2026-10-28 的 N1-6 代码基线修订。新增匹配模块的行数以当前工作区为准；历史记录中的
-行号和临时报告路径只用于追溯，不能作为当前模块定位或验收依据。
+本文按 `v1` 分支 2026-10-28 合并后（`8fa99498`）的 N1-7 代码基线修订。新增模块的行数以当前工作区为准；
+历史记录中的行号和临时报告路径只用于追溯，不能作为当前模块定位或验收依据。
 
 ## 当前入口
 
@@ -28,6 +28,25 @@ N1-6 将 `match_image_pair_with_seed` 的匹配执行体拆成四个阶段模块
 `panorama_match_focus_rescue.rs`（mixed-focal、focus overlap 和 adjacent focus-layer rescue，270 行）以及
 `panorama_match_result.rs`（统一 `MatchInfo` 结果组装，28 行）。入口只保留候选阶段调用、几何阶段调用、
 focus rescue 分支和最终结果编排；阈值、坐标、回退顺序、日志语义与 `match_image_pair` 调用合同保持不变。
+
+N1-7 把 station 关系门、闭环、拓扑、pose 和 solver 从入口拆成九个私有子模块。它们都是
+`panorama_stitching` 的 `#[path]` 子模块，入口用 facade import 保持原调用名；依赖方向只有子模块读取入口的
+常量/共享 helper 和前序 station 模块，入口不承载这些实现：
+
+| 模块                                 | 行数 | 职责                                                                                                                                    |
+| ------------------------------------ | ---: | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `panorama_station_relation_gate.rs`  |  566 | Station_Relation 证据类型、Virtual_Tile coverage 视图、requirement-6 测量、拒绝原因和共享 gate、overlap/spatial support 与凸包/裁剪几何 |
+| `panorama_station_closure.rs`        |  737 | Closure_Optimizer 的 translation/affine/projective robust solve、M-estimator 权重和收敛判据                                             |
+| `panorama_station_closure_gate.rs`   |  637 | 闭环采样点、corner/overlap 修正上限、closure acceptance、direct-pair P95 和保持连通的 relation 拒绝                                     |
+| `panorama_station_closure_refine.rs` |  749 | 从最大 inlier 生成树种子出发的闭环 driver 和 ClosureReport 记录                                                                         |
+| `panorama_station_topology.rs`       |  258 | 生成树 key、pose-free topology 观测、连通分量和断连错误                                                                                 |
+| `panorama_station_pose_seed.rs`      |  339 | translation pose 种子、长边 roll 校正和 Local_Scale pose candidate guard                                                                |
+| `panorama_station_solver.rs`         |  899 | Source_RAW 与 Virtual_Tile 共用的 station pose solver 主流程                                                                            |
+| `panorama_station_solve_entry.rs`    |  106 | 按证据类型进入共享 solver 的入口                                                                                                        |
+| `panorama_station_residual.rs`       |  177 | 从已接受 relation 对应点构建 Residual_Warp 证据                                                                                         |
+
+这一步只移动代码：阈值、坐标、回退顺序、日志和报告字段均未改变，`panorama_stitching.rs` 从 36,315 行降到
+32,184 行。`FocusCaptureGroup`、`absolute_source_path` 和 grouping/virtual-tile 匹配仍在入口，留给后续拆分。
 
 `src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
 顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
@@ -82,8 +101,8 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 完成候选 pair 生成拆分：
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
 没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。N1-5 已拆 focus feature preparation
-和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装，下一步进入 station solver、topology 和
-closure 的职责拆分；
+和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装；N1-7 拆出 station relation gate、closure、
+topology、pose seed、solver 和 Residual_Warp 证据。下一步是 focus grouping 与 Virtual_Tile 关系匹配；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -102,7 +121,27 @@ closure 的职责拆分；
 兰亭 45 张 JPG 是强制保护基准，参考成片 `DSC08854_FocusStack.jpg` 只读。每次行为变更先运行数据契约，
 再运行兰亭真实成片回归；输出和报告写入 `/private/tmp`，不得覆盖参考文件。
 
-当前已恢复兰亭 45/45 输入的完整渲染：N1-2a 后的 1:1 回归把 45 张都写入 streaming compositor，成片覆盖范围为
+真实素材回归由 `npm run focus-stack-regression -- --dataset <id>` 执行（说明见
+[`tests/acceptance/README.md`](../tests/acceptance/README.md)）。它调用 ignored harness
+`real_focus_stack_fixture_from_env`，检查全部输入进入拼接顺序（streaming compositor 运行时还要求全部输入被
+streaming）、per-pixel ownership 行、参考文件运行前后 digest 不变，并把 preview 与六个裁片的 digest 和
+[`focus-stack-regression-baselines.json`](../tests/acceptance/focus-stack-regression-baselines.json) 对照。
+test-only 模块 `panorama_acceptance_metrics.rs` 只测量成片：用 FAST/BRIEF + RANSAC 把输出配准到参考成片，
+在内容 tile 上比较对比度归一化梯度能量 `mean |∇I|² / var I`，并分左/中/右三段统计；它不向生产渲染提供任何
+参考像素或变换。digest 一致即证明职责迁移未改变成片；digest 变化时按 baseline 的清晰度下限判定，并仍需
+人工查看 preview 和裁片。基线只保存计数、尺寸、digest 和指标摘要，不保存日志、报告、预览或临时路径。
+
+2026-10-28 合并后的 `v1`（`8fa99498`）改变了兰亭的执行路径：恢复连通性后 45 张形成 44 个 station、1 个连通
+分量，不再触发 singleton source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`（旧
+legacy 基线为 `3388×1389`），45/45 进入拼接顺序，closure `converged`，tone `degraded`（最大边界
+ΔE00 1.676 > 1.5），Quality Gate `insufficient_evidence`，因此 harness 的 layered native acceptance 在写出产物后
+拒绝该报告；本机单次耗时约 25 分钟（旧 legacy 路径约 2.5 分钟）。与参考成片配准后（1,429 个 inlier）内容
+tile 清晰度比值中位数 0.993、P05 0.827，左/中/右中位数 0.964/0.978/1.033，低于中位数一半的 tile 占 2.4%，
+裁片笔画清晰、色调比旧 legacy 输出均匀。旧 legacy 基线在同一测量下为中位数 1.097、P05 0.809。该路径的 1:1
+成片能力需要单独复核。
+
+以下各段记录合并前（`20c085c3` 及更早）的 legacy 基线，供追溯。当时已恢复兰亭 45/45 输入的完整渲染：N1-2a
+后的 1:1 回归把 45 张都写入 streaming compositor，成片覆盖范围为
 `33895×13888`，并成功写出 `/private/tmp/raw-editor-lanting-coordinates-full.tiff`（2.6 GiB）和同尺寸
 `app.jpg`，预览为 `1600×656`；对应 10% 保护性回归输出为 `3388×1389`、预览 `1200×492`，整图和关键裁片
 均保持笔画可辨。该恢复路径使用 `legacy_single_layer_mosaic` 的 source-scan fallback，避免移动扫描被误判为
@@ -154,5 +193,13 @@ N1-4 的候选、feature provider、processing、registration 定向测试也全
 裁片可读。报告仍记录 `selected_path=legacy_single_layer_mosaic` 和
 `quality_gate=insufficient_evidence`，这表示回归保护通过而非 Quality Gate 已通过。
 
-N0 的基准行为门已通过，N1 当前推进到 N1-6；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
+N1-7 station 拆分在合并后的 `v1` 上验证：`cargo check --lib --tests` 的警告集合与 `v1` 完全一致，fmt 通过，
+release 全量库测试两次均为 `901 passed, 0 failed, 40 ignored`（含 3 个新 metrics 单测），closure/
+station_relation/topology/spanning/station_pose/capture_group/residual 定向测试为 `23/11/11/1/3/9/30 passed`，
+Node 契约和数据集契约（含输入 hash）通过。兰亭 10% 与马远 PSD 10% 回归的 preview 和六个裁片均与 `v1`
+基线逐字节一致（`identical`）。验证中发现 `world_resampled_reference_uses_the_same_scale_and_still_detects_blur`
+在 `v1` 上与 compositor 测试并行时约一半概率失败：前一个测试留下的进程级 tone run report 被该测试的
+`source_roi` 回放。测试现在在取得 run scope 后先清空 tone 记录，同一组合 8 次运行 0 次失败（`v1` 为 4/8）。
+
+N0 的基准行为门已通过，N1 当前推进到 N1-7；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。

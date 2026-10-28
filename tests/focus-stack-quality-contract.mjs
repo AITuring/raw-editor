@@ -12,7 +12,8 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 
 const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
 const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
-// Matching contracts are split out of the panorama facade by N1-5/N1-6.
+// Matching contracts are split out of the panorama facade by N1-5/N1-6, and
+// the station relation gate, closure, topology, pose and solver stages by N1-7.
 // Keep source-level invariants searching the facade plus those focused sibling
 // modules, so the check follows the implementation boundary instead of a
 // historical single-file layout.
@@ -24,6 +25,15 @@ const panorama = [
   'panorama_match_geometry.rs',
   'panorama_match_focus_rescue.rs',
   'panorama_match_result.rs',
+  'panorama_station_relation_gate.rs',
+  'panorama_station_closure.rs',
+  'panorama_station_closure_gate.rs',
+  'panorama_station_topology.rs',
+  'panorama_station_closure_refine.rs',
+  'panorama_station_pose_seed.rs',
+  'panorama_station_solver.rs',
+  'panorama_station_solve_entry.rs',
+  'panorama_station_residual.rs',
 ]
   .map((file) => read(`src-tauri/src/${file}`))
   .join('\n');

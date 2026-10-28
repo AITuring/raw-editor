@@ -65,6 +65,15 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
 
 ### 当前验收基线
 
+- 真实素材回归统一用 `RAW_EDITOR_FOCUS_STACK_DATA_ROOT=/Users/dp/Downloads/书画拼图 npm run
+  focus-stack-regression -- --dataset <id>`；产物写入 `/private/tmp/raw-editor-regression`，基线（计数、尺寸、
+  preview/裁片 digest、配准清晰度摘要）记录在 `tests/acceptance/focus-stack-regression-baselines.json`。
+- 合并后的 `v1`（`8fa99498`）改变了兰亭路径：45 张形成 44 个 station、1 个连通分量，不再触发 singleton
+  source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`，45/45 进入拼接顺序，closure
+  `converged`，tone `degraded`（最大边界 ΔE00 1.676 > 1.5），Quality Gate `insufficient_evidence`，harness 的
+  layered native acceptance 在写出产物后拒绝该报告；单次约 25 分钟。配准参考成片后内容 tile 清晰度比值中位数
+  0.993、P05 0.827，裁片笔画清晰。该路径的 1:1 成片能力需单独复核，复核前不能把 legacy 1:1 结论套用到 `v1`。
+- 以下兰亭条目是合并前（`20c085c3` 及更早）legacy 路径的历史基线。
 - 兰亭 45 张基准已恢复到 45/45 输入完整参与渲染。N1-2a 后的 1:1 回归输出 `33895×13888`，成功写出
   `/private/tmp/raw-editor-lanting-coordinates-full.tiff` 和同尺寸 app JPEG，预览 `1600×656`；日志包含 45 条
   source streaming 记录，整图及关键裁片笔画可辨，参考文件保持只读。
@@ -163,8 +172,18 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过。兰亭 acceptance 保持 45/45 source
   streaming，输出 `3388×1389`、预览 `1200×492`，
   报告写入 `/private/tmp/raw-editor-lanting-n16-stack-reports/`，`quality_gate=insufficient_evidence` 保持原语义。
-- [ ] N1-7 station solver/topology/closure 拆分：把 station pose、关系图、闭环验证和诊断组装分成单一职责模块；
-  先保持 canonical relation gate 和现有 `match_image_pair` 输出合同，再进入 compositor。
+- [x] N1-7 station solver/topology/closure 拆分：在合并后的 `v1` 上新增九个单一职责模块——
+  `panorama_station_relation_gate.rs`（566 行，证据类型、requirement-6 测量与共享 gate、overlap/spatial
+  support）、`panorama_station_closure.rs`（737，robust closure solve）、`panorama_station_closure_gate.rs`
+  （637，闭环采样、修正上限、acceptance 与 relation 拒绝）、`panorama_station_closure_refine.rs`（749，闭环
+  driver）、`panorama_station_topology.rs`（258，生成树、topology 观测、连通性）、`panorama_station_pose_seed.rs`
+  （339，translation 种子、roll 校正、Local_Scale guard）、`panorama_station_solver.rs`（899，共享 solver）、
+  `panorama_station_solve_entry.rs`（106，证据类型入口）和 `panorama_station_residual.rs`（177，Residual_Warp
+  证据）。只移动代码，canonical relation gate、阈值、日志和报告字段不变；`panorama_stitching.rs` 由 36,356 行
+  降到 32,184 行。警告集合与 `v1` 一致，release 全量库测试两次 `901 passed, 0 failed, 40 ignored`，station 相关
+  定向测试、Node 契约和数据集契约（含输入 hash）通过；兰亭 10% 与马远 PSD 10% 回归的 preview 和六个裁片与
+  `v1` 基线逐字节一致。同时修复了 `v1` 上约 50% 概率失败的 `world_resampled_reference_*` 测试隔离问题（残留的
+  进程级 tone run report）。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
@@ -203,6 +222,10 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   回归，确认不展开图层且输出可进入现有拼接流程。当前回归为 14/14 decoded、13/13 连续邻接边，
   10% 输出 `1397×1173`，每个输出像素均有 source ownership；Quality Gate 因无参考 ROI 保持
   `insufficient_evidence`。
+- [x] 真实素材回归入口：`npm run focus-stack-regression` 按 manifest 解析输入（含 `langyuan-10`、`wenyuan-10`
+  冻结子集），运行 ignored harness，检查输入完整性、streaming/ownership 证据、参考文件 digest，并对照
+  `tests/acceptance/focus-stack-regression-baselines.json`；test-only `panorama_acceptance_metrics.rs` 把输出配准到
+  参考成片，按内容 tile 和左/中/右三段比较对比度归一化梯度能量。`v1` 的兰亭/马远 10% 基线已记录。
 - [ ] 每个职责层完成后先运行上述数据契约检查；涉及成片行为时，必须用兰亭 45 张真实输入运行
   `real_focus_stack_fixture_from_env`，将输出和 `RAW_EDITOR_STACK_REPORT_DIR` 都写入 `/private/tmp`，并
   检查 45/45 输入、整图与左中右清晰度裁剪、Coverage/Ownership 证据和参考成片对照；禁止覆盖
