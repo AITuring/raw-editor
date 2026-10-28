@@ -198,9 +198,25 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   31,077 行。警告集合与 `v1` 一致，release 全量库测试 `901 passed, 0 failed, 40 ignored`，grouping/
   station_evidence/capture_group/split/bracket/anchor 定向测试 `3/2/9/5/3/10 passed`，Node 契约通过；兰亭与
   马远 PSD 10% 回归的 preview 和六个裁片与 `v1` 基线逐字节一致。
+- [x] N1-9 `panorama_utils/stitching.rs` 拆分：两个并行计划按不相交区间把 18,898 行的 `stitching.rs` 拆成 574 行
+  facade 和 `panorama_utils/stitching/` 下的 34 个子模块：25 个生产模块（`canvas_maps` 345、`virtual_tiles` 350、
+  `exposure` 431、`station_seam_sampling` 539、`station_seam_plan` 793、`station_seam_apply` 639、
+  `progressive_seam` 680、`panorama_seam_band` 337、`layered_compositor` 441、`tile_ownership_stitcher` 1,363、
+  `focus_layers` 496、`focus_color` 639、`focus_decision` 304、`focus_masks` 492、`focus_alignment` 909、
+  `focus_foreground` 533、`focus_analysis` 429、`filters` 511、`canvas_fill` 441、`focus_tone` 717、
+  `focus_seam_blend` 489、`focus_stack_entry` 415、`focus_stack_stitcher` 972、`seam_path` 388、`sampling` 161）
+  和 9 个测试专用模块（`station_stroke_match`、`station_seam_diagnostics`、`test_tone_capture`、
+  `final_world_owner_runner`、`score_noise_probes`、`score_noise_diagnostics`，以及外置的 `interpolation_tests`、
+  `station_degradation_wiring_tests`、`focus_fusion_test_access`）。只移动代码：外部 `stitching::X` 路径通过重导出
+  保持不变，函数体只做 43 处 `super::<兄弟模块>::` → `crate::panorama_utils::<兄弟模块>::` 路径限定。合并到
+  `f5b4e555` 之上后警告集合与 `v1` 一致；`v1` 的 310 个非 `use` 条目逐项对应（305 个归一化后一致、3 个外置测试
+  模块一致、2 个只差 rustfmt 闭包花括号）；release 全量库测试 `903 passed, 0 failed, 40 ignored`，14 个 Node 契约
+  通过；兰亭与马远 PSD 10% 回归的 preview 和六个裁片与 `v1` 基线逐字节一致。仍超过 1000 行：
+  `tile_ownership_stitcher.rs`（单函数 1,302 行，后续按阶段拆函数）、测试专用的 `final_world_owner_runner.rs`
+  （1,067）和 `interpolation_tests.rs`（1,480，归 N2）。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
-  模块；facade 不承载算法实现。
+  模块；facade 不承载算法实现。`stitching.rs` 已在 N1-9 完成（facade 只保留四个共享像素 helper）。
 - [ ] 所有目标生产文件不超过 1000 行；N1-6 新增模块已经满足，剩余历史大文件和测试支持文件按 N1-7/N2
   继续拆分；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
 - [x] 更新并维护 `docs/focus-stack-architecture.md`，记录当前 N1-6 模块树、阶段边界、验证命令和实际回归

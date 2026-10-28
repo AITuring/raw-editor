@@ -4,7 +4,7 @@
 `.kiro/specs/layered-camera-group-focus-stitching/tasks.md` 的 N0–N9 为准；未接入生产的研究模块不算作
 当前架构的一部分。
 
-本文按 `v1` 分支 2026-10-28 合并后（`8fa99498`）的 N1-7 代码基线修订。新增模块的行数以当前工作区为准；
+本文按 `v1` 分支 2026-10-28 的 N1-9 代码基线修订（`stitching.rs` 拆分合并在 `f5b4e555` 之上）。新增模块的行数以当前工作区为准；
 历史记录中的行号和临时报告路径只用于追溯，不能作为当前模块定位或验收依据。
 
 ## 当前入口
@@ -56,9 +56,49 @@ group 构建、anchor 规范化和按 capture group 的渲染顺序。移出的 
 通过，兰亭与马远 PSD 10% 回归仍与 `v1` 基线逐字节一致。`absolute_source_path`、输入预检 helper 和
 Virtual_Tile 关系匹配仍在入口，留给后续拆分。
 
-`src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
-顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
-几何和颜色 primitive。它们仍有跨职责实现，不能据此宣称已经完成模块化。
+N1-9 把 `src-tauri/src/panorama_utils/stitching.rs`（`v1` 上 18,898 行）拆成 574 行的 facade 和
+`panorama_utils/stitching/` 下的 34 个子模块。facade 只保留共享常量、`use`、模块声明、兼容重导出、两个
+oracle 模块声明与 `reset_final_world_owner_oracle`、四个跨区共享的像素 helper（`luminance`、
+`focus_stack_pixel_is_canvas_like`、`focus_stack_pixel_is_tone_foreground`、`median_f32`）以及两个小型内联契约
+测试模块。移出的条目按原可见性在 facade 重导出，外部 `stitching::X` 路径不变；私有条目改为 `pub(super)`，
+原 `pub(super)` 条目改为 `pub(in crate::panorama_utils)`；函数体只把 43 处 `super::<兄弟模块>::` 路径改写为
+`crate::panorama_utils::<兄弟模块>::`。生产子模块如下：
+
+| 模块                         |  行数 | 职责                                                                                                     |
+| ---------------------------- | ----: | -------------------------------------------------------------------------------------------------------- |
+| `canvas_maps.rs`             |   345 | `NO_OWNER`、ownership/coverage/confidence map、source provenance、残差坐标映射和带 focus warp 的画布尺寸 |
+| `virtual_tiles.rs`           |   350 | Virtual_Tile 与 focus virtual-tile 几何、native station 几何                                             |
+| `exposure.rs`                |   431 | 曝光增益与补偿、重叠区曝光估计                                                                           |
+| `station_seam_sampling.rs`   |   539 | station seam plan 类型、relation/owner 判定、seam 采样、局部 tone 与边缘误差                             |
+| `station_seam_plan.rs`       |   793 | station seam plan 构建、cross/series 查询与 transition 候选                                              |
+| `station_seam_apply.rs`      |   639 | station seam plan 应用、owner 拷贝、owner 岛清理和 owner trace                                           |
+| `progressive_seam.rs`        |   680 | 渐进接缝 stitcher、平面扫描纸色中位数和 photometric model 应用                                           |
+| `panorama_seam_band.rs`      |   337 | 全景接缝带 detail alpha 与混合                                                                           |
+| `layered_compositor.rs`      |   441 | 分层 Virtual_Tile compositor 入口、tile payload/source、finishing 开关和 tile 边界距离                   |
+| `tile_ownership_stitcher.rs` | 1,363 | `focus_tile_ownership_stitcher_with_finishing` 主体（单函数 1,302 行）                                   |
+| `focus_layers.rs`            |   496 | focus layer 渲染、band inverse 与 source sampling                                                        |
+| `focus_color.rs`             |   639 | focus 颜色校正估计与应用                                                                                 |
+| `focus_decision.rs`          |   304 | focus 分析尺寸、score map、决策 mask 和画布切换抑制                                                      |
+| `focus_masks.rs`             |   492 | 二值 mask 形态学、前景孔洞与连通域、背景参考 mask 和 focus 像素放置                                      |
+| `focus_alignment.rs`         |   909 | focus layer 平移与 patch 配准、station 帧 native 配准和前景对齐                                          |
+| `focus_foreground.rs`        |   533 | 前景抑制、overlap/edge mask、前景与 owner 标记                                                           |
+| `focus_analysis.rs`          |   429 | focus 分析层、决策、cell 测量与 cell 到像素的展开                                                        |
+| `filters.rs`                 |   511 | RGB 缩放与下采样、金字塔辅助、masked box blur 和 multiband blend                                         |
+| `canvas_fill.rs`             |   441 | 有效矩形裁切、无效像素 run 填充和 focus 画布边距填充                                                     |
+| `focus_tone.rs`              |   717 | focus 背景 tone 协调（含 owner 与参考版本）                                                              |
+| `focus_seam_blend.rs`        |   489 | focus seam band 混合与 patch 外硬选择                                                                    |
+| `focus_stack_entry.rs`       |   415 | focus-stack stitcher 入口、tile render 记录、平面采样和 station 成员排序                                 |
+| `focus_stack_stitcher.rs`    |   972 | 全局 focus-stack compositor 主体与可选 tile 锐化                                                         |
+| `seam_path.rs`               |   388 | 自适应与 pairwise DP 最小代价接缝                                                                        |
+| `sampling.rs`                |   161 | homography warp 与双线性/双三次采样                                                                      |
+
+测试专用子模块（均为 `#[cfg(test)]`）：`station_stroke_match.rs`（491）、`station_seam_diagnostics.rs`（540）、
+`test_tone_capture.rs`（144）、`final_world_owner_runner.rs`（1,067，单函数 `run_final_world_owner_oracle`）、
+`score_noise_probes.rs`（552）、`score_noise_diagnostics.rs`（883），以及原样外置的内联测试模块
+`interpolation_tests.rs`（1,480）、`station_degradation_wiring_tests.rs`（316）和 `focus_fusion_test_access.rs`
+（15）。超过 1000 行的 `tile_ownership_stitcher.rs`、`final_world_owner_runner.rs` 和 `interpolation_tests.rs`
+分别留给按阶段拆函数和 N2 测试拆分。`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs`
+承担通用采样、滤波、几何和颜色 primitive；这两个文件仍有跨职责实现，不能据此宣称已经完成模块化。
 
 `src-tauri/src/panorama_utils/shared.rs` 保存 BRIEF descriptor、`ImageInfo`、`MatchInfo` 和 focus warp 等
 跨阶段共享合同；`panorama_stitching.rs` 只做兼容重导出，低层模块直接依赖 `shared`。这一步不改变算法、
@@ -110,7 +150,7 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
 没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。N1-5 已拆 focus feature preparation
 和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装；N1-7 拆出 station relation gate、closure、
-topology、pose seed、solver 和 Residual_Warp 证据；N1-8 拆出 focus grouping 与 capture groups。下一步是
+topology、pose seed、solver 和 Residual_Warp 证据；N1-8 拆出 focus grouping 与 capture groups；N1-9 把 `stitching.rs` 拆成 facade 与 34 个子模块。下一步是
 Virtual_Tile 关系匹配；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
@@ -219,5 +259,17 @@ Node 契约和数据集契约（含输入 hash）通过。兰亭 10% 与马远 P
 在 `v1` 上与 compositor 测试并行时约一半概率失败：前一个测试留下的进程级 tone run report 被该测试的
 `source_roi` 回放。测试现在在取得 run scope 后先清空 tone 记录，同一组合 8 次运行 0 次失败（`v1` 为 4/8）。
 
-N0 的基准行为门已通过，N1 当前推进到 N1-7；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
+N1-9 `stitching.rs` 拆分由两个并行计划在独立 worktree 中完成：计划 A 负责原文件前半区的画布、曝光、station
+seam、全景接缝与分层合成；计划 B 负责后半区的 focus layer、颜色/tone、mask、对齐、融合、滤波、采样和测试
+模块外置。每一步都要求 `cargo check --lib --tests` 的警告集合与基线一致。两个计划各自通过 release 全量库测试
+`903 passed, 0 failed, 40 ignored`、Node 契约和兰亭/马远 PSD 10% 逐字节回归后，合并到 `f5b4e555`（PSD scan
+mosaic 已进入 `v1`）之上。合并后的树：警告集合与 `v1` 一致，fmt/diff 检查通过；`v1` 的 `stitching.rs` 中 310 个
+非 `use` 条目在 facade 或子模块中各出现一次，其中 305 个在归一化空白、可见性和路径限定后完全一致，3 个外置
+测试模块与原模块体一致，2 个只差 rustfmt 的闭包花括号；release 全量库测试 `903 passed, 0 failed, 40 ignored`，
+14 个 Node 契约通过；兰亭 10%（45/45 streaming，`3381×1386`）与马远 PSD 10%（`1554×1300`，`f5b4e555` 重新记录
+的 PSD scan mosaic 基线）回归的 preview 和六个裁片均与 `v1` 基线逐字节一致。质量契约中
+`current_seam_penalty … 32.0 … desired_owner` 的跨函数顺序断言因模块按文件名拼接而改为分别断言存在，仍保留
+`32.0 → desired_owner` 的模块内顺序。
+
+N0 的基准行为门已通过，N1 当前推进到 N1-9；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。
