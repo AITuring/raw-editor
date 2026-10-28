@@ -5032,6 +5032,11 @@ mod tests {
     #[test]
     fn world_resampled_reference_uses_the_same_scale_and_still_detects_blur() {
         let _scope = degradation::begin_run_scope();
+        // `source_roi` replays the run's recorded tone transform. A previous
+        // test that ran the tone harmonizer inside its own run scope leaves
+        // that report behind, which would turn this identity comparison into
+        // a tone mismatch; production resets it at every run start.
+        super::super::tone::reset_run_records();
         let source = Rgb32FImage::from_fn(1024, 1024, |x, y| {
             let value = 0.42 + 0.12 * (x as f32 * 0.27).sin() + 0.08 * (y as f32 * 0.19).cos();
             Rgb([value; 3])
