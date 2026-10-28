@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readRustModule } from './support/rust-source.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+// Rust modules split into `name.rs` plus a `name/` child directory are read as one source.
+const read = (relativePath) =>
+  relativePath.endsWith('.rs')
+    ? readRustModule(repoRoot, relativePath)
+    : fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
 const previewResolution = read('src/utils/previewResolution.ts');
 const imageProcessingHook = read('src/hooks/useImageProcessing.ts');

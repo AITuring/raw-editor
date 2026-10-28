@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { transform } from 'esbuild';
+import { readRustModule } from './support/rust-source.mjs';
 
 async function loadTypeScriptModule(relativePath) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -22,8 +23,8 @@ const [
   processingHookSource,
   adjustmentsSource,
 ] = await Promise.all([
-  readFile(resolve('src-tauri/src/lib.rs'), 'utf8'),
-  readFile(resolve('src-tauri/src/image_processing.rs'), 'utf8'),
+  readRustModule(process.cwd(), 'src-tauri/src/lib.rs'),
+  readRustModule(process.cwd(), 'src-tauri/src/image_processing.rs'),
   readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
   readFile(resolve('src/components/panel/Editor.tsx'), 'utf8'),
   readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),

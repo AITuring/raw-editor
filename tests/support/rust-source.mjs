@@ -15,12 +15,13 @@ const listRustFiles = (directory) =>
 /**
  * Child module files of a split Rust module, as repository-relative paths in
  * sorted order (`name/a.rs`, `name/a/b.rs`, `name/c.rs`). Returns an empty list
- * when the module has not been split. `mod.rs` and `lib.rs` declare their
- * children next to themselves, so they have no child directory of this kind.
+ * when the module has not been split. `mod.rs` declares its children next to
+ * itself, so it has no child directory of this kind; a split `lib.rs` keeps its
+ * children in `lib/` through `#[path = "lib/<child>.rs"]` declarations.
  */
 export const rustChildModuleFiles = (repoRoot, relativePath) => {
   const base = path.basename(relativePath);
-  if (!relativePath.endsWith('.rs') || base === 'mod.rs' || base === 'lib.rs' || base === 'main.rs') return [];
+  if (!relativePath.endsWith('.rs') || base === 'mod.rs' || base === 'main.rs') return [];
   const directory = path.join(repoRoot, relativePath.slice(0, -'.rs'.length));
   if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) return [];
   return listRustFiles(directory)

@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readRustModule } from './support/rust-source.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceExtensions = new Set(['.js', '.mjs', '.ts', '.tsx', '.rs']);
@@ -75,7 +76,7 @@ const buildScript = await readFile(path.join(projectRoot, 'src-tauri', 'build.rs
 for (const [relativePath, content] of [
   [
     path.join('src-tauri', 'src', 'ai_processing.rs'),
-    await readFile(path.join(projectRoot, 'src-tauri', 'src', 'ai_processing.rs'), 'utf8'),
+    readRustModule(projectRoot, path.join('src-tauri', 'src', 'ai_processing.rs')),
   ],
   [path.join('src-tauri', 'build.rs'), buildScript],
 ]) {
