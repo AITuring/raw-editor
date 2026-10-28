@@ -197,6 +197,27 @@ pub(super) struct FocusCaptureGroup {
     pub(super) local_to_anchor: HashMap<usize, Matrix3<f64>>,
 }
 
+/// Single-frame share at which a Capture_Station set is a moving source scan:
+/// `singletons / stations >= 9 / 10`.
+const SOURCE_SCAN_SINGLETON_STATIONS_NUMERATOR: usize = 9;
+const SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR: usize = 10;
+
+/// Whether the stations describe a moving source scan rather than a layered
+/// focus grid. A scan has one frame per camera position, yet grouping can still
+/// pair an occasional near-duplicate frame into a two-member bracket. When
+/// nearly every station is a single frame there is no focus bracket to fuse at
+/// most positions, so re-solving one Virtual_Tile per frame only adds cost and
+/// closure drift.
+pub(super) fn capture_groups_form_singleton_scan(groups: &[FocusCaptureGroup]) -> bool {
+    let singletons = groups
+        .iter()
+        .filter(|group| group.members.len() == 1)
+        .count();
+    groups.len() > 1
+        && singletons * SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR
+            >= groups.len() * SOURCE_SCAN_SINGLETON_STATIONS_NUMERATOR
+}
+
 pub(super) fn focus_capture_groups(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -461,4 +482,53 @@ pub(super) fn order_focus_render_sources_by_capture_group(
             .then_with(|| focus_image_direction_key(left).cmp(&focus_image_direction_key(right)))
             .then_with(|| natural_path_cmp(&left.filename, &right.filename))
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stations(member_counts: &[usize]) -> Vec<FocusCaptureGroup> {
+        let mut next = 0;
+        member_counts
+            .iter()
+            .map(|&count| {
+                let members = (next..next + count).collect::<Vec<_>>();
+                next += count;
+                FocusCaptureGroup {
+                    anchor: members[0],
+                    local_to_anchor: members
+                        .iter()
+                        .map(|&member| (member, Matrix3::identity()))
+                        .collect(),
+                    members,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn singleton_dominated_stations_form_a_source_scan() {
+        // 兰亭: 43 single frames plus one near-duplicate pair.
+        let mut lanting = vec![1; 43];
+        lanting.push(2);
+        assert!(capture_groups_form_singleton_scan(&stations(&lanting)));
+        assert!(capture_groups_form_singleton_scan(&stations(&[1, 1])));
+        // Exactly nine of ten stations are single frames.
+        assert!(capture_groups_form_singleton_scan(&stations(&[
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 3
+        ])));
+    }
+
+    #[test]
+    fn layered_focus_grids_keep_the_virtual_tile_compositor() {
+        assert!(!capture_groups_form_singleton_scan(&stations(&[3, 4, 3])));
+        assert!(!capture_groups_form_singleton_scan(&stations(&[
+            1, 1, 1, 1, 1, 1, 1, 1, 2, 2
+        ])));
+        // One station is a compact stack, not a scan.
+        assert!(!capture_groups_form_singleton_scan(&stations(&[1])));
+        assert!(!capture_groups_form_singleton_scan(&stations(&[5])));
+        assert!(!capture_groups_form_singleton_scan(&[]));
+    }
 }

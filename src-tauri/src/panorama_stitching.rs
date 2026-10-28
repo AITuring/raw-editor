@@ -192,8 +192,8 @@ use station_grouping::{
 mod capture_groups;
 
 use capture_groups::{
-    FocusCaptureGroup, canonicalize_station_geometry_anchors, focus_capture_groups,
-    focus_capture_groups_with_grouping, focus_station_binding_evidence,
+    FocusCaptureGroup, canonicalize_station_geometry_anchors, capture_groups_form_singleton_scan,
+    focus_capture_groups, focus_capture_groups_with_grouping, focus_station_binding_evidence,
     lock_focus_local_bracket_poses, order_focus_render_sources_by_capture_group,
 };
 
@@ -6926,22 +6926,23 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             // developer opts in.
             let configured_compositor =
                 compositor_choice.expect("focus-stack compositor choice resolved above");
-            // A long moving scan can produce several Capture_Stations whose
-            // members are all singletons, or leave a source isolated from the
-            // station graph. There is no local focus bracket to fuse in that
-            // shape; treating every singleton as a Virtual_Tile and then
-            // re-solving their poses compounds projective closure drift, while
-            // omitting an isolated source loses a real input. Keep the default
-            // layered compositor for complete multi-frame stations, but route
-            // this source-backed shape through the proven global focus
+            // A long moving scan can produce Capture_Stations that are (almost)
+            // all single frames — grouping may still pair a near-duplicate
+            // frame — or leave a source isolated from the station graph. There
+            // is no local focus bracket to fuse at most positions in that
+            // shape; treating every frame as a Virtual_Tile and then re-solving
+            // their poses compounds projective closure drift and multiplies the
+            // runtime, while omitting an isolated source loses a real input.
+            // Keep the default layered compositor for multi-frame stations, but
+            // route this source-backed shape through the proven global focus
             // compositor. An explicit persisted compositor still wins, so
             // comparison runs remain reproducible.
             let source_scan_legacy_fallback = settings.stack_compositor.is_none()
                 && configured_compositor == StackCompositorChoice::LayeredVirtualTile
                 && (has_isolated_focus_sources
-                    || focus_capture_groups.as_ref().is_some_and(|groups| {
-                        groups.len() > 1 && groups.iter().all(|group| group.members.len() == 1)
-                    }));
+                    || focus_capture_groups
+                        .as_deref()
+                        .is_some_and(capture_groups_form_singleton_scan));
             let compositor_choice = if source_scan_legacy_fallback {
                 println!(
                     "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
