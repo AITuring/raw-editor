@@ -72,7 +72,8 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
   source-scan fallback，改走 `layered_virtual_tile`。10% 回归输出 `2975×1283`，45/45 进入拼接顺序，closure
   `converged`，tone `degraded`（最大边界 ΔE00 1.676 > 1.5），Quality Gate `insufficient_evidence`，harness 的
   layered native acceptance 在写出产物后拒绝该报告；单次约 25 分钟。配准参考成片后内容 tile 清晰度比值中位数
-  0.993、P05 0.827，裁片笔画清晰。该路径的 1:1 成片能力需单独复核，复核前不能把 legacy 1:1 结论套用到 `v1`。
+  0.993、P05 0.827，裁片笔画清晰。该路径的 1:1 成片能力尚未确认：1:1 尝试约 95 分钟只完成 258 个 Virtual_Tile
+  relation 候选（10% 共 946 个），峰值 footprint 9.3 GB，因系统 swap 接近耗尽而中止；不能把 legacy 1:1 结论套用到 `v1`。
 - 以下兰亭条目是合并前（`20c085c3` 及更早）legacy 路径的历史基线。
 - 兰亭 45 张基准已恢复到 45/45 输入完整参与渲染。N1-2a 后的 1:1 回归输出 `33895×13888`，成功写出
   `/private/tmp/raw-editor-lanting-coordinates-full.tiff` 和同尺寸 app JPEG，预览 `1600×656`；日志包含 45 条
@@ -184,6 +185,13 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   定向测试、Node 契约和数据集契约（含输入 hash）通过；兰亭 10% 与马远 PSD 10% 回归的 preview 和六个裁片与
   `v1` 基线逐字节一致。同时修复了 `v1` 上约 50% 概率失败的 `world_resampled_reference_*` 测试隔离问题（残留的
   进程级 tone run report）。
+- [x] N1-8 focus grouping 拆分：新增 `panorama_station_grouping.rs`（721 行，pairwise station evidence、
+  局部 bracket 运动判定、verified scan overlap、按运动拆分组件和 grouping outcome）与
+  `panorama_capture_groups.rs`（464 行，`FocusCaptureGroup`、binding evidence、bracket pose 锁定、capture group
+  构建、anchor 规范化和渲染顺序）。只移动代码，移出的 1,089 行非空代码与新模块逐行一致；facade 降到
+  31,077 行。警告集合与 `v1` 一致，release 全量库测试 `901 passed, 0 failed, 40 ignored`，grouping/
+  station_evidence/capture_group/split/bracket/anchor 定向测试 `3/2/9/5/3/10 passed`，Node 契约通过；兰亭与
+  马远 PSD 10% 回归的 preview 和六个裁片与 `v1` 基线逐字节一致。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。

@@ -46,7 +46,15 @@ N1-7 把 station 关系门、闭环、拓扑、pose 和 solver 从入口拆成�
 | `panorama_station_residual.rs`       |  177 | 从已接受 relation 对应点构建 Residual_Warp 证据                                                                                         |
 
 这一步只移动代码：阈值、坐标、回退顺序、日志和报告字段均未改变，`panorama_stitching.rs` 从 36,315 行降到
-32,184 行。`FocusCaptureGroup`、`absolute_source_path` 和 grouping/virtual-tile 匹配仍在入口，留给后续拆分。
+32,184 行。
+
+N1-8 继续拆出 focus grouping：`panorama_station_grouping.rs`（721 行）负责 pairwise station evidence、局部
+bracket 运动判定、verified scan overlap、按运动拆分连通组件和 `StationGroupingOutcome`；
+`panorama_capture_groups.rs`（464 行）负责 `FocusCaptureGroup`、binding evidence、bracket pose 锁定、capture
+group 构建、anchor 规范化和按 capture group 的渲染顺序。移出的 1,089 行非空代码与新模块逐行一致，facade 降到
+31,077 行。警告集合与 `v1` 一致，release 全量库测试 `901 passed, 0 failed, 40 ignored`，grouping 相关定向测试
+通过，兰亭与马远 PSD 10% 回归仍与 `v1` 基线逐字节一致。`absolute_source_path`、输入预检 helper 和
+Virtual_Tile 关系匹配仍在入口，留给后续拆分。
 
 `src-tauri/src/panorama_utils/stitching.rs` 承担全局画布、focus warp、focus ownership、station fusion 和
 顶层渲染回退；`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs` 承担通用采样、滤波、
@@ -102,7 +110,8 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
 没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。N1-5 已拆 focus feature preparation
 和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装；N1-7 拆出 station relation gate、closure、
-topology、pose seed、solver 和 Residual_Warp 证据。下一步是 focus grouping 与 Virtual_Tile 关系匹配；
+topology、pose seed、solver 和 Residual_Warp 证据；N1-8 拆出 focus grouping 与 capture groups。下一步是
+Virtual_Tile 关系匹配；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -138,7 +147,8 @@ legacy 基线为 `3388×1389`），45/45 进入拼接顺序，closure `converged
 拒绝该报告；本机单次耗时约 25 分钟（旧 legacy 路径约 2.5 分钟）。与参考成片配准后（1,429 个 inlier）内容
 tile 清晰度比值中位数 0.993、P05 0.827，左/中/右中位数 0.964/0.978/1.033，低于中位数一半的 tile 占 2.4%，
 裁片笔画清晰、色调比旧 legacy 输出均匀。旧 legacy 基线在同一测量下为中位数 1.097、P05 0.809。该路径的 1:1
-成片能力需要单独复核。
+成片能力尚未确认：同日的 1:1 尝试运行约 95 分钟后只完成 258 个 Virtual_Tile relation 候选（10% 运行共记录 946 个），
+进程峰值 footprint 9.3 GB，系统 swap 接近耗尽后被中止；旧 legacy 1:1 回归约 14 分钟完成。
 
 以下各段记录合并前（`20c085c3` 及更早）的 legacy 基线，供追溯。当时已恢复兰亭 45/45 输入的完整渲染：N1-2a
 后的 1:1 回归把 45 张都写入 streaming compositor，成片覆盖范围为
