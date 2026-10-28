@@ -224,8 +224,13 @@ assert.match(
 );
 assert.match(
   qualityGateRunner,
-  /collect_tone_owner_evidence[\s\S]*?source_roi_with_native\([\s\S]*?source_info\.native_warp\.as_ref\(\)/,
+  /collect_tone_owner_evidence[\s\S]*?source_roi_for_quality\(&source, roi, source_info, input\.residual\)/,
   'owner fidelity must reuse the production inverse mapping and source sampler',
+);
+assert.match(
+  qualityGateRunner,
+  /fn source_roi_for_quality[\s\S]*?source\.native_registration\.is_some\(\)[\s\S]*?source_roi_with_registration\([\s\S]*?source_roi_with_native\(/,
+  'the source sampler must preserve direct RAW provenance and the legacy station fallback',
 );
 assert.match(
   qualityGateRunner,

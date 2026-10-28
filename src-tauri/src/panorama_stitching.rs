@@ -30,6 +30,7 @@ use crate::panorama_utils::stack_pipeline::determinism::{sorted_keys, sorted_pai
 use crate::panorama_utils::stack_pipeline::diagnostics::{DiagnosticItem, DiagnosticsRecorder};
 use crate::panorama_utils::stack_pipeline::focus_fuser;
 use crate::panorama_utils::stack_pipeline::intra_station;
+use crate::panorama_utils::stack_pipeline::joint_warp;
 use crate::panorama_utils::stack_pipeline::quality_gate;
 use crate::panorama_utils::stack_pipeline::quality_gate_runner;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
@@ -603,6 +604,7 @@ fn scaled_render_image_info(image: &ImageInfo, scale: f64) -> ImageInfo {
         full_image: None,
         scale_factor: image.scale_factor,
         focal_length_35mm: image.focal_length_35mm,
+        source_footprint: image.source_footprint,
         overview_reference: image.overview_reference,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -849,6 +851,15 @@ fn horizontal_edge_line_samples(
         .map(|x| {
             (y_start..=y_end)
                 .map(|y| {
+                    if !image.source_is_supported(Point2::new(
+                        x as f64 * image.scale_factor,
+                        (y - 1) as f64 * image.scale_factor,
+                    )) || !image.source_is_supported(Point2::new(
+                        x as f64 * image.scale_factor,
+                        (y + 1) as f64 * image.scale_factor,
+                    )) {
+                        return (y, 0.0);
+                    }
                     let above = pixels[(y as usize - 1) * stride + x as usize] as i32;
                     let below = pixels[(y as usize + 1) * stride + x as usize] as i32;
                     (y, (below - above).unsigned_abs() as f64 * 0.5)
@@ -1153,6 +1164,15 @@ fn vertical_edge_line_samples(
         .map(|y| {
             (x_start..=x_end)
                 .map(|x| {
+                    if !image.source_is_supported(Point2::new(
+                        (x - 1) as f64 * image.scale_factor,
+                        y as f64 * image.scale_factor,
+                    )) || !image.source_is_supported(Point2::new(
+                        (x + 1) as f64 * image.scale_factor,
+                        y as f64 * image.scale_factor,
+                    )) {
+                        return (x, 0.0);
+                    }
                     let left = pixels[y as usize * stride + (x as usize - 1)] as i32;
                     let right = pixels[y as usize * stride + (x as usize + 1)] as i32;
                     (x, (right - left).unsigned_abs() as f64 * 0.5)
@@ -1444,7 +1464,15 @@ fn focus_vertical_edge_correction(
 
 fn build_focus_vertical_edge_bands(
     images: &[ImageInfo],
+    poses: &HashMap<usize, Matrix3<f64>>,
+) -> Vec<FocusWarpBand> {
+    build_focus_vertical_edge_bands_in_region(images, poses, true)
+}
+
+fn build_focus_vertical_edge_bands_in_region(
+    images: &[ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
+    use_foreground_region: bool,
 ) -> Vec<FocusWarpBand> {
     let mut lines = Vec::new();
     for image in images {
@@ -1456,7 +1484,11 @@ fn build_focus_vertical_edge_bands(
                 image,
                 homography,
                 normalized_column,
-                image.foreground_range,
+                if use_foreground_region {
+                    image.foreground_range
+                } else {
+                    None
+                },
             ) {
                 lines.push(line);
             }
@@ -1632,12 +1664,78 @@ impl<R: Runtime> Drop for PairMatchProgress<'_, R> {
 
 struct PreparedStackSource {
     image: DynamicImage,
+    source_footprint: Option<crate::lens_correction::StackLensFootprint>,
     focal_length_35mm: Option<f64>,
+}
+
+/// Photon exposure at the sensor, including the recorded ISO sensitivity.
+/// This is a camera metadata calibration, not a frame histogram adjustment.
+#[cfg(test)]
+fn stack_raw_exposure_value(metadata: &HashMap<String, String>) -> Option<f64> {
+    let number = |text: &str| {
+        let text = text.trim().trim_start_matches("f/").trim_end_matches(" s");
+        if let Some((a, b)) = text.split_once('/') {
+            Some(a.parse::<f64>().ok()? / b.parse::<f64>().ok()?)
+        } else {
+            text.parse::<f64>().ok()
+        }
+    };
+    let time = number(metadata.get("ExposureTime")?)?;
+    let aperture = number(metadata.get("FNumber")?)?;
+    let iso = number(
+        metadata
+            .get("ISOSpeedRatings")
+            .or_else(|| metadata.get("PhotographicSensitivity"))
+            .or_else(|| metadata.get("ISOSpeed"))?,
+    )?;
+    let exposure = time * iso / aperture.powi(2);
+    (time > 0.0 && aperture > 0.0 && iso > 0.0 && exposure.is_finite()).then_some(exposure)
+}
+
+fn stack_raw_exposure_from_bytes(bytes: &[u8]) -> Option<f64> {
+    let metadata = crate::exif_processing::read_raw_metadata(bytes)?;
+    let time = metadata.exif.exposure_time?;
+    let aperture = metadata.exif.fnumber?;
+    if time.d == 0 || aperture.d == 0 {
+        return None;
+    }
+    let iso = metadata
+        .exif
+        .iso_speed
+        .or_else(|| metadata.exif.iso_speed_ratings.map(|iso| iso as u32))?;
+    let time = f64::from(time.n) / f64::from(time.d);
+    let aperture = f64::from(aperture.n) / f64::from(aperture.d);
+    let exposure = time * f64::from(iso) / aperture.powi(2);
+    (time > 0.0 && aperture > 0.0 && iso > 0 && exposure.is_finite()).then_some(exposure)
+}
+
+fn stack_raw_exposure_reference(paths: &[String]) -> Option<f64> {
+    let mut exposures = Vec::with_capacity(paths.len());
+    let mut camera = None;
+    for path in paths {
+        if !is_raw_file(path) {
+            return None;
+        }
+        let bytes = read_file_mapped(Path::new(path)).ok()?;
+        let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
+        let identity = (
+            metadata.get("Make")?.clone(),
+            metadata.get("Model")?.clone(),
+        );
+        if camera.as_ref().is_some_and(|camera| camera != &identity) {
+            return None;
+        }
+        camera = Some(identity);
+        exposures.push(stack_raw_exposure_from_bytes(&bytes)?);
+    }
+    exposures.sort_by(f64::total_cmp);
+    exposures.get(exposures.len() / 2).copied()
 }
 
 fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
+    raw_exposure_reference: Option<f64>,
 ) -> Result<PreparedStackSource, String> {
     let file_data = read_file_mapped(Path::new(filename))
         .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
@@ -1646,11 +1744,71 @@ fn load_prepared_stack_source(
         &file_data, filename, false, settings, None,
     )
     .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
+    let mut source_footprint = None;
     if is_raw_file(filename) {
+        let mut metadata = crate::exif_processing::read_exif_data_from_bytes(filename, &file_data);
+        // RAW metadata extraction otherwise copies the physical focal length
+        // into this field. Use the actual EXIF value to detect sensor crop mode.
+        if let Some(equivalent) = focal_length_35mm {
+            metadata.insert("FocalLengthIn35mmFilm".into(), equivalent.to_string());
+        } else {
+            metadata.remove("FocalLengthIn35mmFilm");
+        }
+        let calibration =
+            crate::lens_correction::stack_lens_calibration(&metadata, image.dimensions());
+        if let Some(reference) = raw_exposure_reference
+            && let Some(exposure) = stack_raw_exposure_from_bytes(&file_data)
+        {
+            let gain = (reference / exposure) as f32;
+            if gain.is_finite() && gain > 0.0 {
+                if image.as_rgb32f().is_none() {
+                    image = DynamicImage::ImageRgb32F(image.to_rgb32f());
+                }
+                image
+                    .as_mut_rgb32f()
+                    .unwrap()
+                    .as_mut()
+                    .par_iter_mut()
+                    .for_each(|channel| *channel = (*channel * gain).max(0.0));
+            }
+        }
+        if let Some(calibration) = calibration {
+            if image.as_rgb32f().is_none() {
+                image = DynamicImage::ImageRgb32F(image.to_rgb32f());
+            }
+            calibration.correct_linear_illumination(image.as_mut_rgb32f().unwrap());
+        }
         apply_cpu_default_raw_processing(&mut image);
+        if let Some(calibration) = calibration
+            && let Some(corrected) = {
+                // Developed RAW is already RGB32F. Borrow it so optical
+                // preparation does not retain another full 45MP RGB buffer.
+                let rgb = image
+                    .as_rgb32f()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_else(|| Cow::Owned(image.to_rgb32f()));
+                calibration.correct(&rgb)
+            }
+        {
+            println!(
+                "  - Calibrated stack lens geometry: {} ({}x{} -> {}x{})",
+                filename,
+                image.width(),
+                image.height(),
+                corrected.width(),
+                corrected.height()
+            );
+            source_footprint = Some(crate::lens_correction::StackLensFootprint {
+                calibration,
+                original: image.dimensions(),
+                corrected: corrected.dimensions(),
+            });
+            image = DynamicImage::ImageRgb32F(corrected);
+        }
     }
     Ok(PreparedStackSource {
         image,
+        source_footprint,
         focal_length_35mm,
     })
 }
@@ -1697,7 +1855,19 @@ fn normalize_stack_raw_display_exposure(rgb: &mut Rgb32FImage) {
 /// Return the robust bright-end luma of a developed RAW frame without
 /// allocating a second image.  This is used only during focus-stack
 /// preparation to derive one shared display gain for the whole selection.
-fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
+/// Each frame already excludes the brightest 3% of pixels. Protect the
+/// brightest retained channel across the batch: a median frame white clips
+/// brighter scan regions and changes their RGB ratios before tone matching.
+fn shared_stack_raw_display_gain(highs: &[f32]) -> Option<f32> {
+    highs
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .max_by(f32::total_cmp)
+        .map(|high| (0.90 / high).clamp(1.0, 2.10))
+}
+
+fn raw_display_channel_percentile(image: &DynamicImage) -> Option<f32> {
     let rgb = image.as_rgb32f()?;
     let step = ((u64::from(rgb.width()) * u64::from(rgb.height()) / 24_000).max(1) as f64)
         .sqrt()
@@ -1707,7 +1877,7 @@ fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
     for y in (0..rgb.height()).step_by(step) {
         for x in (0..rgb.width()).step_by(step) {
             let pixel = rgb.get_pixel(x, y);
-            let luma = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+            let luma = pixel[0].max(pixel[1]).max(pixel[2]);
             if luma.is_finite() && luma > 0.02 {
                 samples.push(luma);
             }
@@ -1723,9 +1893,10 @@ fn raw_display_luma_percentile(image: &DynamicImage) -> Option<f32> {
 fn prepare_focus_rescue_image(
     image: &ImageInfo,
     settings: &AppSettings,
+    raw_exposure_reference: Option<f64>,
     brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
 ) -> Result<ImageInfo, String> {
-    let prepared = load_prepared_stack_source(&image.filename, settings)?;
+    let prepared = load_prepared_stack_source(&image.filename, settings, raw_exposure_reference)?;
     let (width, height) = prepared.image.dimensions();
     let (new_width, new_height, scale_factor) =
         processing::calculate_downscale_dimensions_capped(width, height, 2_400);
@@ -1754,6 +1925,7 @@ fn prepare_focus_rescue_image(
         full_image: None,
         scale_factor,
         focal_length_35mm: prepared.focal_length_35mm,
+        source_footprint: prepared.source_footprint,
         overview_reference: false,
         foreground_range,
     })
@@ -1897,6 +2069,100 @@ fn focus_overlap_is_verified(
         && median_error.is_finite()
         && median_error <= 2.5;
     normal || low_texture_boundary
+}
+
+fn focus_source_structure_plane(info: &ImageInfo) -> ImageInfo {
+    let (width, height, scale_factor) = processing::calculate_downscale_dimensions_capped(
+        info.width,
+        info.height,
+        info.alignment_image
+            .width()
+            .max(info.alignment_image.height())
+            .min(600),
+    );
+    ImageInfo {
+        id: info.id,
+        filename: info.filename.clone(),
+        width: info.width,
+        height: info.height,
+        scale_factor,
+        alignment_image: imageproc::filter::gaussian_blur_f32(
+            &image::imageops::resize(
+                &info.alignment_image,
+                width,
+                height,
+                image::imageops::FilterType::Triangle,
+            ),
+            1.0,
+        ),
+        full_image: None,
+        focal_length_35mm: info.focal_length_35mm,
+        source_footprint: info.source_footprint,
+        features: Vec::new(),
+        top_features: Vec::new(),
+        overview_reference: false,
+        foreground_range: None,
+        foreground_mask: None,
+        horizontal_edge_rows: Vec::new(),
+        vertical_edge_columns: Vec::new(),
+    }
+}
+
+fn shifted_focus_structure_is_verified(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    homography: &Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+    log_match: bool,
+) -> bool {
+    if !focus_compatible_focal_length(source, target)
+        || points.len() < 30
+        || !focus_stack_motion_is_shifted_mosaic(points, source.dimensions())
+        || !panorama_transform_is_stable(homography, source.dimensions())
+        || panorama_spatial_support(points, source.dimensions(), target.dimensions())
+            < FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT
+        || median_symmetric_error(homography, points) > 3.0
+    {
+        return false;
+    }
+    let quality = focus_overlap_quality(
+        &focus_source_structure_plane(source),
+        &focus_source_structure_plane(target),
+        homography,
+    );
+    let verified = quality.is_some_and(|(intensity, edge, orientation, samples)| {
+        intensity >= 0.65 && edge >= 0.30 && orientation >= 0.35 && samples >= 600
+    });
+    if log_match {
+        println!(
+            "  - Shifted focus structural validation: {:?} ({} distributed inliers, {})",
+            quality,
+            points.len(),
+            if verified { "verified" } else { "rejected" }
+        );
+    }
+    verified
+}
+
+fn station_relation_overlap_scale(
+    transform: &Matrix3<f64>,
+    points: &[(Point2<f64>, Point2<f64>)],
+) -> Option<f64> {
+    if points.is_empty() {
+        return None;
+    }
+    let centre = points.iter().fold(Point2::origin(), |sum, point| {
+        Point2::new(sum.x + point.0.x, sum.y + point.0.y)
+    }) / points.len() as f64;
+    let denominator =
+        transform[(2, 0)] * centre.x + transform[(2, 1)] * centre.y + transform[(2, 2)];
+    let determinant = transform.determinant() / denominator.powi(3);
+    let scale = determinant.abs().sqrt();
+    (denominator.is_finite()
+        && denominator.abs() > f64::EPSILON
+        && scale.is_finite()
+        && scale > 0.0)
+        .then_some(scale)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2103,6 +2369,7 @@ fn match_image_pair_with_seed(
         alignment_mode,
         stable_four_point_solver,
         log_match,
+        allow_low_texture_boundary,
         mixed_focal_pair,
         minimum_inliers,
         &initial_matches,
@@ -3275,6 +3542,7 @@ fn recover_adjacent_focus_position_match(
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         },
     )?;
     let overlap =
@@ -3344,6 +3612,7 @@ fn recover_adjacent_focus_position_match(
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     })
 }
 
@@ -3435,6 +3704,7 @@ fn coarse_focus_component_candidate(
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     };
     let scale = homography[(0, 0)].abs();
     let motion = focus_match_center_motion_ratio(source, target, &provisional)?;
@@ -4341,6 +4611,9 @@ struct FocusOverlapQuality {
     low_frequency_mean_relative_difference: f64,
     edge_strength_ratio: f64,
     median_edge_orientation_difference_degrees: f64,
+    exposure_gain: f64,
+    exposure_normalized_difference: f64,
+    exposure_normalized_mean_relative_difference: f64,
 }
 
 impl FocusOverlapQuality {
@@ -4472,8 +4745,25 @@ fn focus_overlap_quality_measurements_on_coverage(
             else {
                 continue;
             };
-            let source_dx = source_dx_right - source_dx_left;
-            let source_dy = source_dy_down - source_dy_up;
+            // Gradients are covectors: compare them in the target pixel grid,
+            // not in the two independently rotated/scaled source grids. The
+            // patch matcher already applies this inverse-transpose Jacobian;
+            // the dense acceptance check must use the same convention.
+            let Some(gradient_transform) =
+                virtual_tile_local_jacobian(source_to_target, source_full)
+                    .and_then(|jacobian| jacobian.try_inverse())
+                    .map(|inverse| inverse.transpose())
+            else {
+                continue;
+            };
+            let source_gradient = gradient_transform
+                * nalgebra::Vector2::new(
+                    source_dx_right - source_dx_left,
+                    source_dy_down - source_dy_up,
+                )
+                * (target.scale_factor / source.scale_factor.max(f64::EPSILON));
+            let source_dx = source_gradient.x;
+            let source_dy = source_gradient.y;
             let target_dx = target_dx_right - target_dx_left;
             let target_dy = target_dy_down - target_dy_up;
             let source_edge = source_dx.hypot(source_dy);
@@ -4511,6 +4801,37 @@ fn focus_overlap_quality_measurements_on_coverage(
     // by the larger magnitude makes the comparison symmetric and bounded.
     let low_frequency_mean_relative_difference = (source_mean - target_mean).abs()
         / source_mean.abs().max(target_mean.abs()).max(f64::EPSILON);
+    // Estimate a scalar exposure gain on alternating overlap samples and
+    // validate it on the held-out samples. Unlike matching the two means,
+    // this residual cannot be made zero for arbitrary different images.
+    let mut exposure_ratios = source_values
+        .iter()
+        .zip(&target_values)
+        .enumerate()
+        .filter_map(|(index, (&source, &target))| {
+            (index % 2 == 0 && source > 8.0 && target > 8.0).then_some(target / source)
+        })
+        .collect::<Vec<_>>();
+    let exposure_gain = median_value(&mut exposure_ratios).unwrap_or(f64::NAN);
+    let mut exposure_residual = 0.0;
+    let mut exposure_magnitude = 0.0;
+    let mut predicted_sum = 0.0;
+    let mut held_out_target_sum = 0.0;
+    for (index, (&source, &target)) in source_values.iter().zip(&target_values).enumerate() {
+        if index % 2 == 1 {
+            let predicted = source * exposure_gain;
+            exposure_residual += (predicted - target).abs();
+            exposure_magnitude += predicted.abs().max(target.abs());
+            predicted_sum += predicted;
+            held_out_target_sum += target;
+        }
+    }
+    let exposure_normalized_difference = exposure_residual / exposure_magnitude.max(f64::EPSILON);
+    let exposure_normalized_mean_relative_difference = (predicted_sum - held_out_target_sum).abs()
+        / predicted_sum
+            .abs()
+            .max(held_out_target_sum.abs())
+            .max(f64::EPSILON);
     let source_edge_mean = source_edges.iter().sum::<f64>() / source_edges.len() as f64;
     let target_edge_mean = target_edges.iter().sum::<f64>() / target_edges.len() as f64;
     let edge_strength_ratio = if target_edge_mean > f64::EPSILON {
@@ -4530,7 +4851,43 @@ fn focus_overlap_quality_measurements_on_coverage(
         low_frequency_mean_relative_difference,
         edge_strength_ratio,
         median_edge_orientation_difference_degrees,
+        exposure_gain,
+        exposure_normalized_difference,
+        exposure_normalized_mean_relative_difference,
     })
+}
+
+/// Geometry is checked before the tone harmonizer runs. A confirmed structural
+/// overlap must therefore survive a moderate camera-exposure change. Keep the
+/// ordinary raw photometric gate unless correlation, held-out compensated
+/// pixels and compensated edge strength independently verify that change.
+fn virtual_tile_photometric_measurements(quality: FocusOverlapQuality) -> (f64, f64) {
+    let compensated_strength = quality.edge_strength_ratio * quality.exposure_gain;
+    let exposure_structure_verified = (quality.intensity_ncc >= 0.95
+        && quality.edge_ncc >= 0.65
+        && quality.exposure_normalized_difference <= 0.20)
+        || (quality.intensity_ncc >= 0.85
+            && quality.edge_ncc >= 0.45
+            && quality.exposure_normalized_difference <= 0.10);
+    if quality.low_frequency_mean_relative_difference
+        > STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE
+        && exposure_structure_verified
+        && (0.5..=2.0).contains(&quality.exposure_gain)
+        && quality.exposure_normalized_mean_relative_difference
+            <= STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE
+        && (STATION_RELATION_EDGE_STRENGTH_RATIO_MIN..=STATION_RELATION_EDGE_STRENGTH_RATIO_MAX)
+            .contains(&compensated_strength)
+    {
+        (
+            quality.exposure_normalized_mean_relative_difference,
+            compensated_strength,
+        )
+    } else {
+        (
+            quality.low_frequency_mean_relative_difference,
+            quality.edge_strength_ratio,
+        )
+    }
 }
 
 /// Legacy overlap score used by non-Station_Relation paths. Station relation
@@ -5200,6 +5557,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // gains.  Collect the inexpensive low-resolution percentile while the
     // preparation workers already have each developed frame in memory; the
     // rendering closure below applies one robust gain to every RAW.
+    let raw_exposure_reference = focus_stack
+        .then(|| stack_raw_exposure_reference(&image_paths))
+        .flatten();
+    if let Some(reference) = raw_exposure_reference {
+        println!("Shared RAW physical exposure reference: {reference:.6} (time × ISO / aperture²)");
+    }
     let raw_display_highs = Mutex::new(Vec::<f32>::new());
 
     let start_time = Instant::now();
@@ -5227,17 +5590,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
                 println!("  - Processing '{}'", filename);
-                let prepared_source = load_prepared_stack_source(filename, &settings)?;
+                let prepared_source =
+                    load_prepared_stack_source(filename, &settings, raw_exposure_reference)?;
                 if degradation::run_generation_changed_for(run_generation) {
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
                 let dynamic_image = prepared_source.image;
                 let focal_length_35mm = prepared_source.focal_length_35mm;
+                let source_footprint = prepared_source.source_footprint;
                 if (focus_stack || alignment_mode == AlignmentMode::FlatArtwork)
                     && is_raw_file(filename)
                     && std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
                         .is_none()
-                    && let Some(high) = raw_display_luma_percentile(&dynamic_image)
+                    && let Some(high) = raw_display_channel_percentile(&dynamic_image)
                 {
                     raw_display_highs.lock().unwrap().push(high);
                 }
@@ -5338,6 +5703,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     full_image,
                     scale_factor,
                     focal_length_35mm,
+                    source_footprint: source_footprint,
                     overview_reference: false,
                     features,
                     top_features,
@@ -5516,13 +5882,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         && std::env::var_os("RAW_EDITOR_STACK_RAW_FIXED_GAIN").is_none()
         && std::env::var_os("RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION").is_none()
     {
-        let mut highs = raw_display_highs.into_inner().unwrap_or_default();
-        highs.sort_unstable_by(f32::total_cmp);
-        highs
-            .get(highs.len() / 2)
-            .copied()
-            .filter(|high| high.is_finite() && *high > 0.0)
-            .map(|high| (0.90 / high).clamp(1.0, 2.10))
+        shared_stack_raw_display_gain(&raw_display_highs.into_inner().unwrap_or_default())
     } else {
         None
     };
@@ -5739,6 +6099,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         prepare_focus_rescue_image(
                             &image_data[source_index],
                             &settings,
+                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -5749,6 +6110,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         prepare_focus_rescue_image(
                             &image_data[target_index],
                             &settings,
+                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -6356,7 +6718,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 ))
             }
         } else {
-            load_prepared_stack_source(&image.filename, &settings)
+            load_prepared_stack_source(&image.filename, &settings, raw_exposure_reference)
                 .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
         }?;
         if is_raw_file(&image.filename) {
@@ -6558,15 +6920,45 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 } else {
                     focus_layer_warp.as_ref()
                 };
+                // Fuse in a station's own anchor grid. Baking uncertain global
+                // placement into these pixels made the subsequent station
+                // solve try to undo a distorted image through a bounded repair.
+                let anchor_frames = if compositor_choice
+                    == StackCompositorChoice::LayeredVirtualTile
+                    && projection == Projection::Planar
+                {
+                    Some(
+                        focus_anchor_render_frames(
+                            groups,
+                            &image_data,
+                            render_homographies,
+                            tile_focus_warp,
+                        )
+                        .ok_or("cannot establish camera-station anchor coordinates")?,
+                    )
+                } else {
+                    None
+                };
+                let anchor_layout = anchor_frames
+                    .as_ref()
+                    .map(|frames| frames.anchor_to_world.clone());
+                let mut station_render_homographies = anchor_frames.as_ref().map_or_else(
+                    || render_homographies.clone(),
+                    |frames| frames.homographies.clone(),
+                );
+                let mut station_focus_warp = anchor_frames.as_ref().map_or_else(
+                    || tile_focus_warp.cloned(),
+                    |frames| frames.focus_warp.clone(),
+                );
                 let geometries = if groups_complete {
                     group_slices
                         .iter()
                         .map(|group| {
                             stitching::focus_stack_virtual_tile_geometry(
                                 group,
-                                render_homographies,
+                                &station_render_homographies,
                                 projection,
-                                tile_focus_warp,
+                                station_focus_warp.as_ref(),
                             )
                         })
                         .collect::<Option<Vec<_>>>()
@@ -6611,7 +7003,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             .map(|image| image.id.to_string())
                             .collect::<Vec<_>>()
                             .join(",");
-                        tile_homographies.insert(tile_id, geometry.tile_to_world);
+                        let placement = anchor_layout
+                            .as_ref()
+                            .map_or(geometry.tile_to_world, |anchors| {
+                                anchors[group_index] * geometry.tile_to_world
+                            });
+                        tile_homographies.insert(tile_id, placement);
                         tile_group_indices.insert(tile_id, group_index);
                         tile_infos.push(ImageInfo {
                             id: tile_id,
@@ -6627,6 +7024,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             full_image: None,
                             scale_factor: 1.0,
                             focal_length_35mm: None,
+                            source_footprint: None,
                             overview_reference: false,
                             features: Vec::new(),
                             top_features: Vec::new(),
@@ -6648,8 +7046,6 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     // Rendering priors may be repaired below, so every later
                     // render (including the compositor's) reads these owned
                     // copies rather than the source-stage poses.
-                    let mut station_render_homographies = render_homographies.clone();
-                    let mut station_focus_warp = tile_focus_warp.cloned();
                     let mut pyramid = VirtualTileMatchPyramid::new(
                         virtual_tile_pyramid_factors(
                             geometries
@@ -6740,14 +7136,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             &authoritative_pairs,
                             station_topology,
                         );
-                        let finest_factor = pyramid.factors.last().copied().unwrap_or(1);
                         let mut proposals = Vec::new();
                         for (left, right) in prior_free_pairs {
                             let mut feature_relation_passed = false;
                             if let Some((seed, feature_inliers)) = virtual_tile_prior_free_relation(
-                                finest_factor,
+                                pyramid.feature_factors[left],
                                 &tile_infos[left].features,
-                                finest_factor,
+                                pyramid.feature_factors[right],
                                 &tile_infos[right].features,
                                 tile_infos[left].dimensions(),
                             ) {
@@ -7041,9 +7436,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             let center_shift_px = old_center
                                 .zip(new_center)
                                 .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
-                            let correction_scale_ratio =
-                                homography_scale_ratio(&repair.world_correction)
-                                    .unwrap_or(f64::NAN);
+                            let correction_scale_ratio = old_center
+                                .and_then(|center| {
+                                    virtual_tile_repair_local_scale_ratio(
+                                        &repair.world_correction,
+                                        center,
+                                    )
+                                })
+                                .unwrap_or(f64::NAN);
                             if !virtual_tile_prior_repair_is_bounded(
                                 center_shift_px,
                                 correction_scale_ratio,
@@ -7169,7 +7569,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     &tile_relations,
                                     pyramid.solver_coverages(),
                                 );
-                            let solved = solve_virtual_tile_station_poses_with_report(
+                            let mut solved = solve_virtual_tile_station_poses_with_report(
                                 &tile_infos,
                                 pyramid.solver_coverages(),
                                 &selected_station_relations,
@@ -7178,6 +7578,70 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 &mut closure,
                                 &mut station_relations,
                             );
+                            // Calibration uses measured native correspondence evidence before
+                            // the geometry-only photometric rejection removes a relation.
+                            // Fitted colour still has its own ordinary-range/MAD/DeltaE gates.
+                            let mut photometric_pairs = station_relations
+                                .accepted
+                                .iter()
+                                .map(|r| (r.left, r.right))
+                                .collect::<Vec<_>>();
+                            photometric_pairs.extend(native_photometric_pairs(
+                                &selected_station_relations,
+                                &tile_infos,
+                                pyramid.solver_coverages(),
+                            ));
+                            photometric_pairs.sort_unstable();
+                            photometric_pairs.dedup();
+                            #[cfg(test)]
+                            if let Some(directory) =
+                                std::env::var_os("RAW_EDITOR_NATIVE_PROOF_DIAGNOSTICS_DIR")
+                            {
+                                let records = photometric_pairs.iter().map(|&(left, right)| {
+                                    serde_json::json!({"left":left,"right":right,"calibration_eligible":true,
+                                        "native_round_trip_matches":selected_station_relations.get(&(left,right)).map(|r|r.native_verified_points.len()).unwrap_or(0)})
+                                }).collect::<Vec<_>>();
+                                std::fs::create_dir_all(&directory).unwrap();
+                                std::fs::write(
+                                    Path::new(&directory).join("native-photometric-relations.json"),
+                                    serde_json::to_vec(&records).unwrap(),
+                                )
+                                .unwrap();
+                            }
+                            tone::record_native_photometric_topology(tone::ToneStationTopology {
+                                seam_candidates: Vec::new(),
+                                seam_candidate_transforms: Vec::new(),
+                                stations: tile_infos
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(station, tile)| (tile.id, station))
+                                    .collect(),
+                                accepted: photometric_pairs
+                                    .into_iter()
+                                    .filter_map(|(left, right)| {
+                                        Some((tile_infos.get(left)?.id, tile_infos.get(right)?.id))
+                                    })
+                                    .collect(),
+                            });
+                            if let Some(refined) = refine_virtual_tile_joint_geometry(
+                                &tile_infos,
+                                &selected_station_relations,
+                                &solved,
+                                &mut closure,
+                                &mut station_relations,
+                            ) {
+                                solved = refined;
+                                for rejected in &closure.rejected_nonlinear_constraints {
+                                    if let Some(candidate) =
+                                        tile_relation_candidates.iter_mut().find(|c| {
+                                            (c.left, c.right) == (rejected.left, rejected.right)
+                                        })
+                                    {
+                                        candidate.failure_stage =
+                                            "native_joint_validation_p95".to_string();
+                                    }
+                                }
+                            }
                             let source_station_members = group_slices
                                 .iter()
                                 .map(|members| {
@@ -7398,12 +7862,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 ));
                             }
                             tile_homographies = solved;
-                            record_residual_warp_for_station_relations(
-                                &tile_infos,
-                                &tile_homographies,
-                                &selected_station_relations,
-                                &station_relations.accepted,
-                            );
+                            if closure.geometry_model != "bounded_station_field" {
+                                record_residual_warp_for_station_relations(
+                                    &tile_infos,
+                                    &tile_homographies,
+                                    &selected_station_relations,
+                                    &station_relations.accepted,
+                                );
+                            }
                             station_poses_replaced = true;
                             println!(
                                 "  - Authoritative Virtual_Tile station solve accepted {} relation(s)",
@@ -7463,7 +7929,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 format!("Missing virtual tile provenance {}", tile.id)
                             })?;
                         if let Some(cached) = rendered_tile_cache.get(&tile.id) {
-                            return Ok(cached.clone());
+                            return Ok(stitching::FocusTilePayload::from(cached.clone()));
                         }
                         let rendered = stitching::focus_stack_stitcher_unfilled(
                             group_slices[group_index],
@@ -7577,17 +8043,61 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 },
                             );
                         }
+                        let source_samples = if compositor_choice
+                            == StackCompositorChoice::LayeredVirtualTile
+                        {
+                            if let Some(masks) = rendered.masks.as_ref() {
+                                let mut originals =
+                                    Vec::with_capacity(masks.ownership.legend().len());
+                                for path in masks.ownership.legend() {
+                                    let source = group_slices[group_index]
+                                        .iter()
+                                        .find(|source| Path::new(&source.filename) == path)
+                                        .ok_or_else(|| {
+                                            format!("Missing original for owner {}", path.display())
+                                        })?;
+                                    let refinement = masks
+                                        .source_refinements
+                                        .get(&source.id)
+                                        .filter(|refinement| refinement.source_sampling.is_some())
+                                        .cloned()
+                                        .ok_or_else(|| {
+                                            format!(
+                                                "Missing source sampling for {}",
+                                                path.display()
+                                            )
+                                        })?;
+                                    originals.push(stitching::FocusTileSource {
+                                        image: load_render_image(source)?,
+                                        refinement,
+                                    });
+                                }
+                                Some(stitching::FocusTileSources {
+                                    ownership: masks.ownership.clone(),
+                                    origin: rendered.sampling_origin,
+                                    originals,
+                                })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
                         let image = rendered.into_image();
                         let pixels =
                             u64::from(image.width()).saturating_mul(u64::from(image.height()));
-                        if rendered_tile_cache_pixels.saturating_add(pixels)
-                            <= rendered_tile_cache_budget
+                        if source_samples.is_none()
+                            && rendered_tile_cache_pixels.saturating_add(pixels)
+                                <= rendered_tile_cache_budget
                         {
                             rendered_tile_cache_pixels =
                                 rendered_tile_cache_pixels.saturating_add(pixels);
                             rendered_tile_cache.insert(tile.id, image.clone());
                         }
-                        Ok(image)
+                        Ok(stitching::FocusTilePayload {
+                            image,
+                            sources: source_samples,
+                        })
                     };
                     if let Some(recorder) = stack_report.as_ref() {
                         let tiles = tile_infos
@@ -7633,7 +8143,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 false,
                                 app_handle.clone(),
                                 progress_event,
-                                &mut load_tile,
+                                &mut |tile| load_tile(tile).map(|payload| payload.image),
                             )
                         }
                         // Comparison: the image-space minimum-cost seam with a
@@ -7649,7 +8159,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 false,
                                 app_handle.clone(),
                                 progress_event,
-                                &mut load_tile,
+                                &mut |tile| load_tile(tile).map(|payload| payload.image),
                             )
                         }
                         // Default (需求 15.1): hard source-interior ownership,
@@ -7784,6 +8294,21 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                             },
                                             dimensions: (source.width, source.height),
                                             native_warp,
+                                            native_registration: station_masks
+                                                .get(station)
+                                                .and_then(Option::as_ref)
+                                                .and_then(|masks| {
+                                                    masks.source_refinements.get(&source.id)
+                                                })
+                                                .and_then(|refinement| {
+                                                    Some(quality_gate_runner::NativeReferenceMap {
+                                                        world_to_station: station_to_world
+                                                            .try_inverse()?,
+                                                        station_to_world,
+                                                        station_origin,
+                                                        refinement: refinement.clone(),
+                                                    })
+                                                }),
                                         });
                                         next_owner = next_owner.saturating_add(1);
                                     }
@@ -8256,37 +8781,40 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     {
         diagnostics_world_origin = Some(world_origin);
         let sources = quality_sources.take().unwrap_or_default();
-        let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
-            load_prepared_stack_source(&source.path, &settings).map(|prepared| {
-                let mut rendered = source_to_render_rgb32f(
-                    prepared.image,
-                    source.dimensions.0,
-                    source.dimensions.1,
-                );
-                if is_raw_file(&source.path) {
-                    if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                        .ok()
-                        .and_then(|value| value.parse::<f32>().ok())
-                        .filter(|value| value.is_finite() && *value > 0.0)
-                    {
+        let mut quality_loader =
+            |source: &quality_gate_runner::QualitySource| {
+                load_prepared_stack_source(&source.path, &settings, raw_exposure_reference).map(
+                    |prepared| {
+                        let mut rendered = source_to_render_rgb32f(
+                            prepared.image,
+                            source.dimensions.0,
+                            source.dimensions.1,
+                        );
+                        if is_raw_file(&source.path) {
+                            if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                                .ok()
+                                .and_then(|value| value.parse::<f32>().ok())
+                                .filter(|value| value.is_finite() && *value > 0.0)
+                            {
+                                rendered.as_mut().par_iter_mut().for_each(|channel| {
+                                    *channel = (*channel * gain).clamp(0.0, 1.0)
+                                });
+                            } else if let Some(gain) = shared_raw_display_gain {
+                                rendered.as_mut().par_iter_mut().for_each(|channel| {
+                                    *channel = (*channel * gain).clamp(0.0, 1.0)
+                                });
+                            } else if std::env::var_os(
+                                "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION",
+                            )
+                            .is_none()
+                            {
+                                normalize_stack_raw_display_exposure(&mut rendered);
+                            }
+                        }
                         rendered
-                            .as_mut()
-                            .par_iter_mut()
-                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-                    } else if let Some(gain) = shared_raw_display_gain {
-                        rendered
-                            .as_mut()
-                            .par_iter_mut()
-                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-                    } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
-                        .is_none()
-                    {
-                        normalize_stack_raw_display_exposure(&mut rendered);
-                    }
-                }
-                rendered
-            })
-        };
+                    },
+                )
+            };
         let residual = residual_warp::run_model_snapshot();
         let accepted_station_relations = tone::run_topology_snapshot()
             .map(|topology| {
@@ -8337,7 +8865,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 acceptance_render_scale: render_scale,
                 final_sharpen_amount: stitching::layered_final_sharpen_amount() as f64,
             };
-            quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader)
+            let report = quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader);
+            #[cfg(test)]
+            acceptance_tests::capture_failed_native_boundaries(&quality_input, &report);
+            report
         };
         #[cfg(test)]
         if std::env::var_os("RAW_EDITOR_FOCUS_BOUNDARY_DEBUG").is_some()
@@ -10375,6 +10906,7 @@ fn synthetic_capture_sequence_bridge(
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     })
 }
 
@@ -10414,6 +10946,7 @@ fn synthetic_overview_overlay_bridge(source: &ImageInfo, target: &ImageInfo) -> 
         dense_focus_points: Vec::new(),
         foreground_feature_points: Vec::new(),
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     })
 }
 
@@ -10516,6 +11049,7 @@ fn synthetic_overview_gap_bridges(
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         },
         MatchInfo {
             homography: overview_to_right,
@@ -10528,6 +11062,7 @@ fn synthetic_overview_gap_bridges(
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         },
     ))
 }
@@ -10610,6 +11145,7 @@ fn add_capture_sequence_bridges(
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         };
         if source_index > target_index {
             let Some(inverse) = match_info.homography.try_inverse() else {
@@ -11906,9 +12442,9 @@ fn split_focus_local_component_by_motion(
 /// 1.9 / 1.4 / 1.10 ask the Stack_Report to carry.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct StationGroupingOutcome {
-    /// Capture_Stations of two or more members, in station order.
+    /// Capture_Stations in station order, including connected single-frame scans.
     pub components: Vec<Vec<usize>>,
-    /// 需求 1.6: sources that satisfy the 需求 1.1 evidence with no other source.
+    /// 需求 1.6: sources with neither same-pose nor verified scan-overlap evidence.
     pub isolated: Vec<usize>,
     /// 需求 1.4 / 1.10: every split position, in the order it was applied.
     pub splits: Vec<StationSplit>,
@@ -11918,7 +12454,47 @@ pub(crate) struct StationGroupingOutcome {
 ///
 /// Membership is a DSU over the accepted 需求 1.1 relations — a set operation,
 /// so it cannot see the insertion order — followed by the accumulated-motion
-/// split above.
+/// split above. A verified scan overlap marks a source as connected without
+/// unioning the camera poses: an unbracketed scan remains a single-frame station.
+fn focus_match_has_verified_scan_overlap(
+    images: &[ImageInfo],
+    source_index: usize,
+    target_index: usize,
+    match_info: &MatchInfo,
+) -> bool {
+    if source_index >= images.len() || target_index >= images.len() {
+        return false;
+    }
+    !match_info.coarse_bridge
+        && !match_info.sequence_bridge
+        && match_info.points.len() >= 30
+        && median_symmetric_error(&match_info.homography, &match_info.points) <= 3.0
+        && match_has_spatial_support(
+            &match_info.points,
+            images[source_index].dimensions(),
+            images[target_index].dimensions(),
+        )
+        && (focus_overlap_quality(
+            &images[source_index],
+            &images[target_index],
+            &match_info.homography,
+        )
+        .is_some_and(|quality| {
+            focus_overlap_is_verified(
+                quality,
+                match_info.points.len(),
+                median_symmetric_error(&match_info.homography, &match_info.points),
+                false,
+            )
+        }) || shifted_focus_structure_is_verified(
+            &images[source_index],
+            &images[target_index],
+            &match_info.homography,
+            &match_info.points,
+            false,
+        ))
+}
+
 fn focus_station_grouping(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -11931,6 +12507,14 @@ fn focus_station_grouping(
         }
         if focus_match_is_capture_station_link(images, source_index, target_index, match_info) {
             dsu.union(source_index, target_index);
+            linked[source_index] = true;
+            linked[target_index] = true;
+        } else if (!linked[source_index] || !linked[target_index])
+            && focus_match_has_verified_scan_overlap(images, source_index, target_index, match_info)
+        {
+            // A verified spatial scan edge proves this source is connected,
+            // but does not prove the two frames share a camera pose. Preserve
+            // each as its own station when it has no focus-bracket partner.
             linked[source_index] = true;
             linked[target_index] = true;
         }
@@ -11962,7 +12546,7 @@ fn focus_station_grouping(
     let isolated = (0..images.len())
         .filter(|&image_index| !linked[image_index])
         .collect::<Vec<_>>();
-    components.retain(|component| component.len() >= 2);
+    components.retain(|component| component.iter().any(|&index| linked[index]));
     for component in &mut components {
         component.sort_by(|left, right| {
             natural_path_cmp(&images[*left].filename, &images[*right].filename)
@@ -12195,6 +12779,52 @@ struct FocusCaptureGroup {
     members: Vec<usize>,
     anchor: usize,
     local_to_anchor: HashMap<usize, Matrix3<f64>>,
+}
+
+struct FocusAnchorRenderFrames {
+    homographies: HashMap<usize, Matrix3<f64>>,
+    focus_warp: Option<FocusLayerWarp>,
+    anchor_to_world: Vec<Matrix3<f64>>,
+}
+
+fn focus_anchor_render_frames(
+    groups: &[FocusCaptureGroup],
+    sources: &[ImageInfo],
+    global: &HashMap<usize, Matrix3<f64>>,
+    warp: Option<&FocusLayerWarp>,
+) -> Option<FocusAnchorRenderFrames> {
+    let reference_anchor = sources.get(groups.first()?.anchor)?;
+    let world_to_reference = global.get(&reference_anchor.id)?.try_inverse()?;
+    let mut local = HashMap::new();
+    let mut local_warp = warp.cloned();
+    let mut placements = Vec::with_capacity(groups.len());
+    for group in groups {
+        let anchor = sources.get(group.anchor)?;
+        let anchor_global = global.get(&anchor.id)?;
+        let world_to_anchor = anchor_global.try_inverse()?;
+        placements.push(normalized_homography(
+            &(world_to_reference * anchor_global),
+        )?);
+        for &member in &group.members {
+            let source = sources.get(member)?;
+            local.insert(
+                source.id,
+                normalized_homography(&(world_to_anchor * global.get(&source.id)?))?,
+            );
+            if let Some(warp) = local_warp.as_mut() {
+                for band in &mut warp.bands {
+                    if let Some(pose) = band.homographies.get_mut(&source.id) {
+                        *pose = normalized_homography(&(world_to_anchor * *pose))?;
+                    }
+                }
+            }
+        }
+    }
+    Some(FocusAnchorRenderFrames {
+        homographies: local,
+        focus_warp: local_warp,
+        anchor_to_world: placements,
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -12625,18 +13255,34 @@ fn measure_station_relation_candidate(
     if !quality.is_finite() || quality <= 0.0 {
         return None;
     }
-    let edge_strength_ratio = dense_measurements.map_or(f64::INFINITY, |measurements| {
-        if invert_edge_strength_ratio {
-            1.0 / measurements.edge_strength_ratio
+    let photometric = dense_measurements.map(|measurements| {
+        if matches!(overlap_measure, Some(StationOverlapMeasure::Covered { .. })) {
+            virtual_tile_photometric_measurements(measurements)
         } else {
-            measurements.edge_strength_ratio
+            (
+                measurements.low_frequency_mean_relative_difference,
+                measurements.edge_strength_ratio,
+            )
+        }
+    });
+    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
+        if invert_edge_strength_ratio {
+            1.0 / strength
+        } else {
+            strength
         }
     });
     Some(MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
             inliers,
             median_error_px,
-            scale_ratio: homography_scale_ratio(source_to_target).unwrap_or(f64::INFINITY),
+            scale_ratio:
+                if matches!(overlap_measure, Some(StationOverlapMeasure::Covered { .. })) {
+                    station_relation_overlap_scale(source_to_target, points)
+                } else {
+                    homography_scale_ratio(source_to_target)
+                }
+                .unwrap_or(f64::INFINITY),
             spatial_support: overlap_measure.map_or(0.0, |measure| {
                 station_relation_spatial_support_with(
                     points,
@@ -12646,10 +13292,8 @@ fn measure_station_relation_candidate(
                     measure,
                 )
             }),
-            low_frequency_mean_relative_difference: dense_measurements
-                .map_or(f64::INFINITY, |measurements| {
-                    measurements.low_frequency_mean_relative_difference
-                }),
+            low_frequency_mean_relative_difference: photometric
+                .map_or(f64::INFINITY, |(difference, _)| difference),
             edge_strength_ratio,
             median_edge_orientation_difference_degrees: dense_measurements
                 .map_or(f64::INFINITY, |measurements| {
@@ -14206,6 +14850,7 @@ fn virtual_tile_unseeded_station_match(
         foreground_feature_points: Vec::new(),
         // Key-direction Virtual_Tile fit; see `MatchInfo::canonical_homography`.
         canonical_homography: None,
+        native_verified_points: Vec::new(),
     })
 }
 
@@ -14247,6 +14892,20 @@ fn virtual_tile_gradient(image: &GrayImage, point: Point2<f64>) -> Option<nalgeb
         .iter()
         .all(|value| value.is_finite())
         .then_some(gradient)
+}
+
+/// A projective repair's scale belongs at the station, not at the unrelated
+/// world origin. Reading its normalized linear block made the bound depend on
+/// canvas translation and rejected a near-unit correction as a 1.5x jump.
+fn virtual_tile_repair_local_scale_ratio(
+    transform: &Matrix3<f64>,
+    center: Point2<f64>,
+) -> Option<f64> {
+    let ratio = virtual_tile_local_jacobian(transform, center)?
+        .determinant()
+        .abs()
+        .sqrt();
+    (ratio.is_finite() && ratio > 0.0).then_some(ratio)
 }
 
 fn axial_orientation_difference_degrees(
@@ -14911,6 +15570,7 @@ fn virtual_tile_descriptor_guided_station_match(
             foreground_feature_points: Vec::new(),
             // Key-direction Virtual_Tile fit; see `MatchInfo::canonical_homography`.
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         }),
         diagnostic,
     )
@@ -16187,6 +16847,7 @@ fn virtual_tile_direct_station_match_with_structure(
             foreground_feature_points: Vec::new(),
             // Key-direction Virtual_Tile fit; see `MatchInfo::canonical_homography`.
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         }),
         diagnostic,
     )
@@ -16758,6 +17419,7 @@ fn virtual_tile_plane_image_info(tile: &ImageInfo, plane: &VirtualTileMatchPlane
         full_image: None,
         scale_factor: 1.0,
         focal_length_35mm: None,
+        source_footprint: None,
         overview_reference: false,
         features: Vec::new(),
         top_features: Vec::new(),
@@ -16827,6 +17489,10 @@ struct VirtualTileMatchPyramid {
     coverages: Vec<Vec<stitching::CoverageMask>>,
     /// Native tile dimensions per station.
     native_dimensions: Vec<(u32, u32)>,
+    /// Feature proposal grids are independent of the bounded probe grids.
+    feature_factors: Vec<u32>,
+    /// Native structural images for the final, one-native-pixel round trip.
+    native_refinement: Vec<Option<(GrayImage, stitching::CoverageMask)>>,
     /// Coverage_Mask of each station's relation-quality plane, in the pixels
     /// of the `alignment_image` [`install_virtual_tile_match_planes`] installs.
     quality_coverages: Vec<stitching::CoverageMask>,
@@ -16849,6 +17515,7 @@ impl VirtualTileMatchPyramid {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -16867,6 +17534,8 @@ impl VirtualTileMatchPyramid {
                 .map(|_| (0..station_count).map(|_| empty_coverage()).collect())
                 .collect(),
             native_dimensions: vec![(1, 1); station_count],
+            feature_factors: vec![1; station_count],
+            native_refinement: vec![None; station_count],
             quality_coverages: (0..station_count).map(|_| empty_coverage()).collect(),
             global_planes: vec![None; station_count],
         }
@@ -16894,6 +17563,21 @@ impl VirtualTileMatchPyramid {
         let mut planes = Vec::with_capacity(self.factors.len());
         self.native_dimensions[station] = gray.dimensions();
         self.global_planes[station] = VirtualTileGlobalSearchPlane::from_native(gray, coverage);
+        let native_sigma = 1.0;
+        #[cfg(test)]
+        let native_sigma = std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_SIGMA")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .unwrap_or(native_sigma);
+        self.native_refinement[station] = (gray.width().max(gray.height()) >= 4096
+            && self.factors.last().is_some_and(|factor| *factor > 1))
+        .then(|| {
+            (
+                imageproc::filter::gaussian_blur_f32(gray, native_sigma),
+                coverage.clone(),
+            )
+        });
         for (level, &factor) in self.factors.iter().enumerate() {
             let plane = VirtualTileMatchPlane::from_native(gray, coverage, factor)?;
             self.levels[level][station] = virtual_tile_plane_image_info(tile, &plane);
@@ -16924,13 +17608,40 @@ const VIRTUAL_TILE_QUALITY_COVERAGE_RADIUS_PX: f64 = 4.0;
 /// planes — the level of a 40px-shifted wrong relation (38–46°), because single
 /// pixel gradients follow fine silk texture. Two octaves above the finest level
 /// and after a σ = 1 blur they read 4.6–5.9°, against 27–28° for the shifted
-/// relation. A single native level (small tiles) keeps its unfiltered plane.
-fn virtual_tile_relation_quality_plane(planes: &[VirtualTileMatchPlane]) -> (GrayImage, u32) {
+/// relation. A single matching level still needs a separate structural quality
+/// plane: the probe pyramid's minimum size must not switch verification back
+/// to fine silk texture. Keep at least 64 pixels on its shorter side so the
+/// dense grid, gradient taps and covered blur neighbourhood remain measurable.
+fn virtual_tile_relation_quality_plane(
+    planes: &[VirtualTileMatchPlane],
+    native: &GrayImage,
+    coverage: &stitching::CoverageMask,
+) -> (GrayImage, u32) {
     let Some(finest) = planes.last() else {
         return (GrayImage::new(1, 1), 1);
     };
     if planes.len() < 2 {
-        return (finest.gray.clone(), finest.factor);
+        // The probe's factor can be truncated to fit a small preview. It is
+        // not a structural scale: multiplying that factor by four gave only
+        // ~100 pixels across real previews and followed illumination gradients
+        // instead of artwork edges. Choose the quality grid from native pixels.
+        let wanted = native
+            .width()
+            .max(native.height())
+            .div_ceil(600)
+            .max(1)
+            .next_power_of_two()
+            .max(1 << VIRTUAL_TILE_RELATION_QUALITY_OCTAVES);
+        let factor = wanted.min((native.width().min(native.height()) / 64).max(1));
+        let structural = VirtualTileMatchPlane::from_native(native, coverage, factor)
+            .expect("a validated probe plane has valid grayscale and coverage dimensions");
+        return (
+            imageproc::filter::gaussian_blur_f32(
+                &structural.gray,
+                VIRTUAL_TILE_RELATION_QUALITY_BLUR_SIGMA,
+            ),
+            factor,
+        );
     }
     let wanted = finest
         .factor
@@ -17086,7 +17797,7 @@ fn virtual_tile_pyramid_station_match(
             return (Vec::new(), diagnostic);
         };
         seed = native;
-        if single_level {
+        if single_level && factor == 1 {
             let points = relation
                 .points
                 .iter()
@@ -17102,6 +17813,7 @@ fn virtual_tile_pyramid_station_match(
                     points,
                     // Key-direction fit; see `MatchInfo::canonical_homography`.
                     canonical_homography: None,
+                    native_verified_points: Vec::new(),
                     ..relation
                 }],
                 diagnostic,
@@ -17124,7 +17836,284 @@ fn virtual_tile_pyramid_station_match(
         ),
         &mut diagnostic,
     );
-    (relation, diagnostic)
+    let relation = relation.into_iter().filter_map(|relation| {
+        match (
+            &pyramid.native_refinement[left],
+            &pyramid.native_refinement[right],
+        ) {
+            (Some(left_native), Some(right_native)) => virtual_tile_native_station_polish(
+                left_native,
+                right_native,
+                &relation,
+                &mut diagnostic,
+            ),
+            _ => Some(relation),
+        }
+    });
+    (relation.collect(), diagnostic)
+}
+
+/// Coarse pixels establish a search model. Final camera geometry is measured
+/// on native pixels: a one-level-pixel reverse check at factor four otherwise
+/// admits four-native-pixel errors and biases long projective tree chains.
+fn native_station_affine_candidate(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    source: &stitching::CoverageMask,
+    target: &stitching::CoverageMask,
+) -> Option<Matrix3<f64>> {
+    if points.len() < STATION_RELATION_MIN_INLIERS {
+        return None;
+    }
+    robust_native_affine(points).filter(|affine| {
+        median_symmetric_error(affine, points) <= STATION_RELATION_MAX_MEDIAN_ERROR_PX
+            && homography_preserves_focus_orientation(affine, source_dimensions)
+            && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+                .contains(&homography_scale_ratio(affine).unwrap_or(f64::NAN))
+            && station_relation_spatial_support_with(
+                points,
+                affine,
+                source_dimensions,
+                target_dimensions,
+                StationOverlapMeasure::Covered {
+                    source,
+                    target,
+                    factor: 1,
+                },
+            ) >= STATION_RELATION_MIN_SPATIAL_SUPPORT
+    })
+}
+
+/// Downweight native point outliers without changing the observations used by
+/// the acceptance gates. Keep the model with the lowest symmetric median.
+fn robust_native_affine(points: &[(Point2<f64>, Point2<f64>)]) -> Option<Matrix3<f64>> {
+    let mut best = estimate_affine(points)?;
+    let mut best_error = median_symmetric_error(&best, points);
+    let mut current = best;
+    for _ in 0..30 {
+        let inverse = current.try_inverse()?;
+        let errors = points
+            .iter()
+            .map(|&(a, b)| {
+                Some(
+                    ((transformed_point(&current, a)? - b).norm_squared()
+                        + (transformed_point(&inverse, b)? - a).norm_squared())
+                    .sqrt(),
+                )
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let mut design = nalgebra::DMatrix::zeros(points.len(), 3);
+        let mut targets = nalgebra::DMatrix::zeros(points.len(), 2);
+        for (index, (&(a, b), error)) in points.iter().zip(&errors).enumerate() {
+            let weight = (1.0 / error.max(1e-9)).min(1.0).sqrt();
+            design[(index, 0)] = a.x * weight;
+            design[(index, 1)] = a.y * weight;
+            design[(index, 2)] = weight;
+            targets[(index, 0)] = b.x * weight;
+            targets[(index, 1)] = b.y * weight;
+        }
+        let solution = design.svd(true, true).solve(&targets, 1e-10).ok()?;
+        current = Matrix3::new(
+            solution[(0, 0)],
+            solution[(1, 0)],
+            solution[(2, 0)],
+            solution[(0, 1)],
+            solution[(1, 1)],
+            solution[(2, 1)],
+            0.0,
+            0.0,
+            1.0,
+        );
+        let error = median_symmetric_error(&current, points);
+        if error < best_error {
+            best = current;
+            best_error = error;
+        }
+    }
+    Some(best)
+}
+
+/// Use only the perspective needed by the native evidence. A noisy projective
+/// fit can predict large corner motion outside the measured overlap even when
+/// its inlier error is small. Every proposal is checked on the full retained
+/// point set and against the existing coverage, scale and orientation gates.
+fn native_station_regularized_candidate(
+    points: &[(Point2<f64>, Point2<f64>)],
+    projective: &Matrix3<f64>,
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    source: &stitching::CoverageMask,
+    target: &stitching::CoverageMask,
+) -> Option<Matrix3<f64>> {
+    if points.len() < STATION_RELATION_MIN_INLIERS {
+        return None;
+    }
+    let affine = robust_native_affine(points)?;
+    let projective = projective / projective[(2, 2)];
+    for step in 0..=100 {
+        let fraction = step as f64 / 100.0;
+        let candidate = affine * (1.0 - fraction) + projective * fraction;
+        if median_symmetric_error(&candidate, points) <= STATION_RELATION_MAX_MEDIAN_ERROR_PX
+            && homography_preserves_focus_orientation(&candidate, source_dimensions)
+            && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+                .contains(&homography_scale_ratio(&candidate).unwrap_or(f64::NAN))
+            && station_relation_spatial_support_with(
+                points,
+                &candidate,
+                source_dimensions,
+                target_dimensions,
+                StationOverlapMeasure::Covered {
+                    source,
+                    target,
+                    factor: 1,
+                },
+            ) >= STATION_RELATION_MIN_SPATIAL_SUPPORT
+        {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn virtual_tile_native_station_polish(
+    left: &(GrayImage, stitching::CoverageMask),
+    right: &(GrayImage, stitching::CoverageMask),
+    seed: &MatchInfo,
+    diagnostic: &mut stack_report::StationRelationCandidateRecord,
+) -> Option<MatchInfo> {
+    let gates = crate::panorama_utils::registration::PatchMatchGates::LEGACY;
+    #[cfg(test)]
+    let gates = crate::panorama_utils::registration::PatchMatchGates {
+        min_correlation: std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_CORRELATION")
+            .ok()
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+            .unwrap_or(gates.min_correlation),
+        min_peak_margin: std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_PEAK_MARGIN")
+            .ok()
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite() && *value >= 0.0)
+            .unwrap_or(gates.min_peak_margin),
+        ..gates
+    };
+    let inverse = seed.homography.try_inverse()?;
+    let step = (seed.points.len() / 1000).max(1);
+    let supported = |mask: &stitching::CoverageMask, point: Point2<f64>| {
+        let (w, h) = mask.dimensions();
+        let radius = 40i32;
+        let (x, y) = (point.x.round() as i32, point.y.round() as i32);
+        x >= radius
+            && y >= radius
+            && x + radius < w as i32
+            && y + radius < h as i32
+            && (-radius..=radius).step_by(8).all(|dy| {
+                (-radius..=radius)
+                    .step_by(8)
+                    .all(|dx| mask.is_covered((x + dx) as u32, (y + dy) as u32))
+            })
+    };
+    let native_verified_points = seed
+        .points
+        .par_iter()
+        .enumerate()
+        .filter(|(index, _)| index % step == 0)
+        .filter_map(|(_, &(source, target))| {
+            if !supported(&left.1, source) || !supported(&right.1, target) {
+                return None;
+            }
+            let measured = residual_warp::verify_round_trip_match_with_gates(
+                &left.0,
+                &right.0,
+                &seed.homography,
+                &inverse,
+                source,
+                31,
+                gates,
+            )?;
+            supported(&right.1, measured.forward).then_some((
+                source,
+                measured.forward,
+                measured.round_trip_error_px,
+            ))
+        })
+        .collect::<Vec<_>>();
+    let points = native_verified_points
+        .iter()
+        .map(|&(a, b, _)| (a, b))
+        .collect::<Vec<_>>();
+    diagnostic.failure_stage = "insufficient_native_round_trip_matches".to_string();
+    diagnostic.bidirectional_match_count = points.len();
+    diagnostic.measurement_factor = 1;
+    if points.len() < STATION_RELATION_MIN_INLIERS {
+        return None;
+    }
+    let (homography, indices) = virtual_tile_polish_fit(
+        &points,
+        VIRTUAL_TILE_POLISH_INLIER_THRESHOLD_NATIVE_PX,
+        left.0.dimensions(),
+    )?;
+    let native_verified_points = indices
+        .into_iter()
+        .map(|index| native_verified_points[index])
+        .collect::<Vec<_>>();
+    let points = native_verified_points
+        .iter()
+        .map(|&(a, b, _)| (a, b))
+        .collect::<Vec<_>>();
+    // Prefer fewer camera parameters only on the same verified native points
+    // and with the existing median, scale, orientation and support gates.
+    let regularized = native_station_regularized_candidate(
+        &points,
+        &homography,
+        left.0.dimensions(),
+        right.0.dimensions(),
+        &left.1,
+        &right.1,
+    );
+    let homography = regularized.unwrap_or(homography);
+    diagnostic.fitted_inliers = points.len();
+    diagnostic.hull_support = station_relation_spatial_support_with(
+        &points,
+        &homography,
+        left.0.dimensions(),
+        right.0.dimensions(),
+        StationOverlapMeasure::Covered {
+            source: &left.1,
+            target: &right.1,
+            factor: 1,
+        },
+    );
+    diagnostic.residual_magnitude_px = residual_distribution(match homography.try_inverse() {
+        Some(inverse) => points
+            .iter()
+            .map(|(a, b)| symmetric_point_error(&homography, &inverse, *a, *b))
+            .collect(),
+        None => Vec::new(),
+    });
+    diagnostic.failure_stage = "insufficient_native_polished_support".to_string();
+    if diagnostic.hull_support < STATION_RELATION_MIN_SPATIAL_SUPPORT
+        || median_symmetric_error(&homography, &points) > STATION_RELATION_MAX_MEDIAN_ERROR_PX
+    {
+        return None;
+    }
+    diagnostic.residual_model = if homography[(2, 0)] == 0.0 && homography[(2, 1)] == 0.0 {
+        "native_polished_affine"
+    } else if regularized.is_some() {
+        "native_polished_regularized_projective"
+    } else {
+        "native_polished_projective"
+    }
+    .to_string();
+    diagnostic.failure_stage = "fitted".to_string();
+    Some(MatchInfo {
+        homography,
+        inliers: points.len(),
+        points,
+        canonical_homography: None,
+        native_verified_points,
+        ..seed.clone()
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -17245,6 +18234,11 @@ fn virtual_tile_polish_correspondences(
     counts: &mut VirtualTilePolishCounts,
 ) -> Vec<(Point2<f64>, Point2<f64>)> {
     let half = VIRTUAL_TILE_POLISH_TEMPLATE_HALF;
+    #[cfg(test)]
+    let half = std::env::var("RAW_EDITOR_TILE_REPLAY_TEMPLATE_HALF")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(half);
     let reach = half + search;
     let (min_x, min_y, max_x, max_y) = bounds;
     let mut centers = Vec::new();
@@ -17701,6 +18695,7 @@ fn virtual_tile_polished_station_match(
                 dense_focus_points: Vec::new(),
                 foreground_feature_points: Vec::new(),
                 canonical_homography: None,
+                native_verified_points: Vec::new(),
             }
         })
         .collect()
@@ -18529,6 +19524,88 @@ fn virtual_tile_provisional_authoritative_candidate(
         .is_some_and(|selection| selection.passes)
 }
 
+fn virtual_tile_relation_measurements(
+    left: usize,
+    right: usize,
+    relation: &MatchInfo,
+    tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+) -> Option<StationRelationMeasurements> {
+    if left == right || relation.sequence_bridge || relation.points.len() < FOCUS_MODEL_MIN_INLIERS
+    {
+        return None;
+    }
+    let canonical = canonical_relation_view(tiles, left, right, relation).ok()?;
+    let points: Cow<'_, [(Point2<f64>, Point2<f64>)]> = if canonical.inverted {
+        Cow::Owned(
+            relation
+                .points
+                .iter()
+                .map(|&(source, target)| (target, source))
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(&relation.points)
+    };
+    let quality_coverages = coverages
+        .quality
+        .get(canonical.source_index)
+        .zip(coverages.quality.get(canonical.target_index));
+    let dense_measurements = focus_overlap_quality_measurements_on_coverage(
+        &tiles[canonical.source_index],
+        &tiles[canonical.target_index],
+        &canonical.homography,
+        quality_coverages,
+    );
+    let overlap_measure = coverages.overlap_measure(canonical.source_index, canonical.target_index);
+    let candidate = measure_station_relation_candidate(
+        relation.inliers.max(points.len()),
+        &canonical.homography,
+        &points,
+        tiles[canonical.source_index].dimensions(),
+        tiles[canonical.target_index].dimensions(),
+        overlap_measure,
+        dense_measurements,
+        canonical.inverted,
+    )?;
+    Some(candidate.measurements)
+}
+
+/// Geometry keeps all of its original rejection gates. Radiometry may fit an
+/// exposure difference, but only on independently verified native image pairs
+/// whose geometry, support and edge measurements passed those same gates.
+fn native_photometric_measurements_are_usable(measurements: &StationRelationMeasurements) -> bool {
+    measurements
+        .low_frequency_mean_relative_difference
+        .is_finite()
+        && station_relation_rejection_reasons(measurements)
+            .iter()
+            .all(|&reason| reason == degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH)
+}
+
+fn native_photometric_pairs(
+    relations: &HashMap<(usize, usize), MatchInfo>,
+    tiles: &[ImageInfo],
+    coverages: VirtualTileSolverCoverages<'_>,
+) -> Vec<(usize, usize)> {
+    let mut pairs = relations
+        .iter()
+        .filter_map(|(&(left, right), relation)| {
+            if relation.sequence_bridge
+                || relation.native_verified_points.len() < STATION_RELATION_MIN_INLIERS
+            {
+                return None;
+            }
+            let measurements =
+                virtual_tile_relation_measurements(left, right, relation, tiles, coverages)?;
+            native_photometric_measurements_are_usable(&measurements).then_some((left, right))
+        })
+        .collect::<Vec<_>>();
+    pairs.sort_unstable();
+    pairs.dedup();
+    pairs
+}
+
 fn virtual_tile_authoritative_pairs(
     relations: &VirtualTileRelationHypotheses,
     tiles: &[ImageInfo],
@@ -18770,10 +19847,10 @@ where
 
 /// Install one station's probe planes. The tile keeps the structural
 /// relation-quality plane as its analysis image (`scale_factor` = that plane's
-/// factor, the source `ImageInfo` convention) and the finest plane's covered
-/// features. The features propose prior-free relations (keypoints in finest
-/// plane pixels) and give the relation solver its content-derived measurement
-/// direction; nothing reads them in analysis-image coordinates.
+/// factor, the source `ImageInfo` convention) and independent covered features.
+/// Small preview probe grids must not downsample feature descriptors twice.
+/// The feature factor is explicit; nothing reads keypoints in quality-plane
+/// coordinates or promotes a feature fit to solver evidence.
 fn install_virtual_tile_match_planes(
     tile: &mut ImageInfo,
     pyramid: &mut VirtualTileMatchPyramid,
@@ -18788,12 +19865,36 @@ fn install_virtual_tile_match_planes(
     let finest = planes
         .last()
         .expect("set_station returns at least one plane");
-    tile.features = virtual_tile_plane_features(finest, brief_pairs);
-    let (quality, factor) = virtual_tile_relation_quality_plane(&planes);
+    let feature_factor = finest
+        .factor
+        .min((gray.width().max(gray.height()) / 1200).max(1));
+    let feature_plane = VirtualTileMatchPlane::from_native(gray, coverage, feature_factor)
+        .ok_or_else(|| format!("Virtual tile station {station} has no feature proposal plane"))?;
+    tile.features = virtual_tile_plane_features(&feature_plane, brief_pairs);
+    pyramid.feature_factors[station] = feature_factor;
+    let (quality, factor) = virtual_tile_relation_quality_plane(&planes, gray, coverage);
+    #[cfg(test)]
+    if let Some(directory) = std::env::var_os("RAW_EDITOR_VIRTUAL_TILE_DIAGNOSTICS_DIR") {
+        let directory = PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        gray.save(directory.join(format!("station-{station:03}.gray.png")))
+            .map_err(|error| error.to_string())?;
+        quality
+            .save(directory.join(format!("station-{station:03}.quality.png")))
+            .map_err(|error| error.to_string())?;
+        let (w, h) = coverage.dimensions();
+        GrayImage::from_raw(w, h, coverage.covered().to_vec())
+            .ok_or("invalid diagnostic coverage")?
+            .save(directory.join(format!("station-{station:03}.coverage.png")))
+            .map_err(|error| error.to_string())?;
+    }
     let quality_coverage = planes
         .iter()
         .find(|plane| plane.factor == factor)
         .map(|plane| plane.coverage.clone())
+        .or_else(|| {
+            VirtualTileMatchPlane::from_native(gray, coverage, factor).map(|plane| plane.coverage)
+        })
         .ok_or_else(|| format!("Virtual tile station {station} has no relation-quality plane"))?;
     pyramid.quality_coverages[station] = quality_coverage;
     tile.scale_factor = f64::from(factor);
@@ -21296,8 +22397,8 @@ fn focus_capture_groups_with_grouping(
     locked_homographies: &HashMap<usize, Matrix3<f64>>,
 ) -> Option<(Vec<FocusCaptureGroup>, Vec<usize>, StationGroupingOutcome)> {
     // Direct local links already provide the strongest station membership
-    // evidence.  Keep those components intact and use solved world centres
-    // only to attach a weak/unmatched layer.  The previous implementation
+    // evidence. Keep those components intact; solved world centres may only
+    // select among attachments backed by same-pose evidence. The previous implementation
     // sorted each connected component by filename before splitting it; a
     // renamed or shuffled import therefore changed the station count even
     // though every geometric match was identical.
@@ -21307,8 +22408,8 @@ fn focus_capture_groups_with_grouping(
         .iter()
         .flat_map(|component| component.iter().copied())
         .collect::<HashSet<_>>();
-    // 需求 1.6: a source that satisfies the 需求 1.1 overlap evidence with no
-    // other source is isolated.  It joins no Capture_Station at all — not even
+    // 需求 1.6: a source with neither same-pose nor verified scan overlap is
+    // isolated. It joins no Capture_Station at all — not even
     // by its solved world centre, which is only as trustworthy as the pose the
     // missing evidence could not confirm — while every other source keeps the
     // grouping it would have had anyway.  A single member left over by the
@@ -21349,8 +22450,8 @@ fn focus_capture_groups_with_grouping(
         Some(Point2::new(x, y))
     };
 
-    // Absorb a singleton into the nearest established station only when its
-    // measured centre is within the same bracket-sized radius.  A coarse-only
+    // Absorb a singleton into the nearest established station only with
+    // same-pose evidence and a centre within the bracket-sized radius. A coarse-only
     // edge is an explicit boundary: it can suggest scan order, but cannot
     // make two focus layers compete for ownership.
     for singleton_index in (0..components.len())
@@ -21826,6 +22927,9 @@ fn refine_focus_group_projective_tree_poses_with_report_protected(
             closure_relation_sample_points(&left_to_right, left_dimensions, right_dimensions);
         let mut dx = Vec::new();
         let mut dy = Vec::new();
+        // A relation is measured only on its overlap. Extrapolating its
+        // projective fit to the rest of the source plane invents closure
+        // observations and can pull even a well-aligned overlap apart.
         for point in samples {
             let Some(left_world) = transformed_point(&base_poses[left_group], point) else {
                 continue;
@@ -21833,6 +22937,13 @@ fn refine_focus_group_projective_tree_poses_with_report_protected(
             let Some(right_local) = transformed_point(&left_to_right, point) else {
                 continue;
             };
+            if right_local.x < 0.0
+                || right_local.y < 0.0
+                || right_local.x >= f64::from(right_dimensions.0)
+                || right_local.y >= f64::from(right_dimensions.1)
+            {
+                continue;
+            }
             let Some(right_world) = transformed_point(&base_poses[right_group], right_local) else {
                 continue;
             };
@@ -23046,6 +24157,247 @@ fn record_residual_warp_for_station_relations(
     let model =
         residual_model_from_station_relations(tiles, tile_homographies, relations, accepted);
     residual_warp::record_run_model(&model);
+}
+
+/// Refine native camera stations jointly, then validate the exact bounded
+/// sampling field on points excluded from both global and local fitting.
+/// Rejecting a relation never removes a source or disconnects the graph.
+fn refine_virtual_tile_joint_geometry(
+    tiles: &[ImageInfo],
+    matches: &HashMap<(usize, usize), MatchInfo>,
+    initial: &HashMap<usize, Matrix3<f64>>,
+    closure: &mut stack_report::ClosureReport,
+    report: &mut stack_report::StationRelationsReport,
+) -> Option<HashMap<usize, Matrix3<f64>>> {
+    if tiles.len() < 3
+        || report.accepted.len() < tiles.len()
+        || closure.status == stack_report::ClosureStatus::Converged
+    {
+        return None;
+    }
+    let poses = tiles
+        .iter()
+        .map(|tile| initial.get(&tile.id).copied())
+        .collect::<Option<Vec<_>>>()?;
+    let dimensions = tiles.iter().map(ImageInfo::dimensions).collect::<Vec<_>>();
+    let mut pairs = report
+        .accepted
+        .iter()
+        .map(|r| (r.left.min(r.right), r.left.max(r.right)))
+        .collect::<Vec<_>>();
+    pairs.sort_unstable();
+    pairs.dedup();
+    // Coarse matches have no native reverse-check evidence. They retain the
+    // established matrix-only path, including all small property fixtures.
+    if pairs.iter().any(|pair| {
+        matches
+            .get(pair)
+            .is_none_or(|m| m.native_verified_points.len() < STATION_RELATION_MIN_INLIERS)
+    }) {
+        return None;
+    }
+    let mut limits = vec![CLOSURE_MAX_CORNER_CORRECTION_PX; tiles.len()];
+    for &(left, right) in &pairs {
+        let relation = matches.get(&(left, right))?;
+        for (station, source_side) in [(left, true), (right, false)] {
+            let polygon = station_relation_overlap_polygon(
+                &relation.homography,
+                dimensions[left],
+                dimensions[right],
+                source_side,
+            )?;
+            let short = projected_polygon_short_side(&polygon, &poses[station])?;
+            limits[station] =
+                limits[station].min(short * CLOSURE_OVERLAP_SHORT_SIDE_CORRECTION_RATIO);
+        }
+    }
+    let mut rejected = Vec::new();
+    #[cfg(test)]
+    if let Some(directory) = std::env::var_os("RAW_EDITOR_NATIVE_PROOF_DIAGNOSTICS_DIR")
+        .or_else(|| std::env::var_os("RAW_EDITOR_VIRTUAL_TILE_DIAGNOSTICS_DIR"))
+    {
+        let records = report.accepted.iter().map(|r| {
+            let key=(r.left.min(r.right),r.left.max(r.right));
+            let relation=&matches[&key];
+            serde_json::json!({"left":key.0,"right":key.1,"authoritative":true,
+                "inliers":relation.inliers,"error":r.median_error_px,"scale":r.scale_ratio,
+                "diagnostic":{"hull_support":r.spatial_support},
+                "homography":relation.homography.as_slice(),
+                "points":relation.points.iter().map(|(a,b)|[a.x,a.y,b.x,b.y]).collect::<Vec<_>>(),
+                "native_verified_points":relation.native_verified_points.iter().map(|(a,b,e)|[a.x,a.y,b.x,b.y,*e]).collect::<Vec<_>>()})
+        }).collect::<Vec<_>>();
+        let snapshot = serde_json::json!({"poses":poses.iter().map(|h|(0..3).map(|r|(0..3).map(|c|h[(r,c)]).collect::<Vec<_>>()).collect::<Vec<_>>()).collect::<Vec<_>>(),"dimensions":dimensions,"limits":limits,"records":records});
+        let path = Path::new(&directory).join("joint-production-input.json");
+        std::fs::create_dir_all(&directory).unwrap();
+        if let Err(error) = std::fs::write(&path, serde_json::to_vec(&snapshot).unwrap()) {
+            eprintln!(
+                "Could not save native joint diagnostic {}: {error}",
+                path.display()
+            );
+        }
+    }
+    // Use the complete native graph once to initialize the projective part.
+    // Re-solving this gauge after every rejected local constraint can drift
+    // through weakly observed corners. The final field is fitted and checked
+    // only on retained relations; this proposal never establishes acceptance.
+    let proposal_relations = pairs
+        .iter()
+        .map(|&(left, right)| joint_warp::Relation {
+            left,
+            right,
+            points: matches[&(left, right)].points.clone(),
+        })
+        .collect::<Vec<_>>();
+    let scale = dimensions.iter().map(|&(w, h)| w.max(h)).max()? as f64;
+    let proposal = joint_warp::projective_proposal(&poses, &proposal_relations, 0, scale)?;
+    for attempt in 0..8 {
+        let relations = pairs
+            .iter()
+            .map(|&(left, right)| joint_warp::Relation {
+                left,
+                right,
+                points: matches[&(left, right)].points.clone(),
+            })
+            .collect::<Vec<_>>();
+        let fitted = joint_warp::fit(&proposal, &dimensions, &relations, 0)?;
+        let mut verified = vec![Vec::new(); tiles.len()];
+        for &(left, right) in &pairs {
+            for &(a, b, error) in &matches[&(left, right)].native_verified_points {
+                verified[left].push(joint_warp::VerifiedSource {
+                    point: a,
+                    round_trip_error_px: error,
+                });
+                verified[right].push(joint_warp::VerifiedSource {
+                    point: b,
+                    round_trip_error_px: error,
+                });
+            }
+        }
+        let mut bounded = joint_warp::materialize(
+            &proposal,
+            &fitted,
+            &dimensions,
+            &poses,
+            &limits,
+            &relations,
+            &verified,
+        )?;
+        let record = |v: &joint_warp::PairValidation| stack_report::ClosurePairValidationRecord {
+            left: v.left,
+            right: v.right,
+            count: v.count,
+            median_px: v.median,
+            p95_px: v.p95,
+        };
+        let failed = bounded
+            .validation
+            .iter()
+            .filter(|v| !v.p95.is_finite() || v.p95 > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+            .collect::<Vec<_>>();
+        if failed.is_empty() {
+            // A nonlinear correction does not waive the station-pose scale
+            // or orientation gates used by the matrix-only solver.
+            let station_groups = (0..tiles.len())
+                .map(|station| FocusCaptureGroup {
+                    members: vec![station],
+                    anchor: station,
+                    local_to_anchor: HashMap::from([(station, Matrix3::identity())]),
+                })
+                .collect::<Vec<_>>();
+            if bounded
+                .poses
+                .iter()
+                .zip(&dimensions)
+                .any(|(pose, &size)| !homography_preserves_focus_orientation(pose, size))
+                || !station_pose_candidate_has_bounded_local_scale(
+                    tiles,
+                    &station_groups,
+                    &bounded.poses,
+                    "native_joint_field",
+                )
+            {
+                return None;
+            }
+            let distribution = residual_distribution(bounded.validation_errors.clone());
+            let mut errors = bounded.validation_errors.clone();
+            errors.sort_by(f64::total_cmp);
+            closure.global_before_residual_median_px = Some(closure.residual_median_px);
+            closure.global_before_residual_p95_px = Some(closure.residual_p95_px);
+            closure.geometry_model = "bounded_station_field".to_string();
+            closure.nonlinear_initialization_constraints = proposal_relations.len();
+            closure.nonlinear_refit_passes = attempt + 1;
+            closure.nonlinear_validation = bounded.validation.iter().map(record).collect();
+            closure.rejected_nonlinear_constraints = rejected;
+            closure.residual_median_px = distribution.median;
+            closure.residual_p95_px = errors[(errors.len() * 95).div_ceil(100) - 1];
+            closure.max_direct_pair_p95_px =
+                bounded.validation.iter().map(|v| v.p95).fold(0.0, f64::max);
+            closure.max_corner_correction_px = bounded.maximum_corner_motion;
+            closure.status = stack_report::ClosureStatus::Converged;
+            closure.fallback_reason = None;
+            closure.offending_pair = None;
+            closure.participating_constraints = pairs.len();
+            closure.constraint_weights = bounded
+                .validation
+                .iter()
+                .map(|v| stack_report::ClosureConstraintWeightRecord {
+                    left: v.left,
+                    right: v.right,
+                    residual_px: v.median,
+                    weight: 1.0,
+                })
+                .collect();
+            report.accepted.retain(|r| {
+                pairs
+                    .binary_search(&(r.left.min(r.right), r.left.max(r.right)))
+                    .is_ok()
+            });
+            report.rejected_count += closure.rejected_nonlinear_constraints.len();
+            *report
+                .rejected_by_reason
+                .entry("native_joint_validation_p95".to_string())
+                .or_default() += closure.rejected_nonlinear_constraints.len() as u64;
+            for (station, tile) in tiles.iter().enumerate() {
+                bounded.residual.register_station_alias(tile.id, station);
+            }
+            residual_warp::record_run_model(&bounded.residual);
+            println!(
+                "  - Bounded native station field: {} relations, independent P95 {:.3}px, maximum corner {:.3}px",
+                pairs.len(),
+                closure.max_direct_pair_p95_px,
+                bounded.maximum_corner_motion
+            );
+            return Some(
+                tiles
+                    .iter()
+                    .zip(bounded.poses)
+                    .map(|(tile, pose)| (tile.id, pose))
+                    .collect(),
+            );
+        }
+        let failed_pairs = failed
+            .iter()
+            .map(|v| (v.left, v.right))
+            .collect::<BTreeSet<_>>();
+        let retained = pairs
+            .iter()
+            .copied()
+            .filter(|pair| !failed_pairs.contains(pair))
+            .collect::<Vec<_>>();
+        let mut graph = Dsu::new(tiles.len());
+        for &(left, right) in &retained {
+            graph.union(left, right);
+        }
+        let root = graph.find(0);
+        if retained.len() < tiles.len()
+            || (0..tiles.len()).any(|station| graph.find(station) != root)
+        {
+            return None;
+        }
+        rejected.extend(failed.into_iter().map(record));
+        pairs = retained;
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -26617,6 +27969,15 @@ pub(crate) mod grouping_test_access {
         })
     }
 
+    pub(crate) fn has_verified_scan_overlap(
+        images: &[ImageInfo],
+        first: usize,
+        second: usize,
+        match_info: &MatchInfo,
+    ) -> bool {
+        focus_match_has_verified_scan_overlap(images, first, second, match_info)
+    }
+
     /// [`focus_match_is_capture_station_link`] — the membership decision the
     /// grouper's union-find is driven by.
     pub(crate) fn is_capture_station_link(
@@ -26799,6 +28160,7 @@ pub(crate) mod station_relation_test_access {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -27118,6 +28480,92 @@ mod alignment_tests {
     use super::*;
     use nalgebra::Point2;
 
+    #[test]
+    fn robust_native_affine_resists_outliers_without_removing_gate_observations() {
+        let expected = Matrix3::new(1.001, 0.002, 18.0, -0.001, 0.999, 20.0, 0.0, 0.0, 1.0);
+        let mut points = Vec::new();
+        for y in (128..896).step_by(64) {
+            for x in (128..896).step_by(64) {
+                let a = Point2::new(x as f64, y as f64);
+                let mut b = transformed_point(&expected, a).unwrap();
+                if points.len() % 5 == 0 {
+                    b.x += 30.0;
+                    b.y += 20.0;
+                }
+                points.push((a, b));
+            }
+        }
+        let ordinary = estimate_affine(&points).unwrap();
+        assert!(median_symmetric_error(&ordinary, &points) > 3.0);
+        let robust = robust_native_affine(&points).unwrap();
+        assert!(median_symmetric_error(&robust, &points) < 1.0);
+        assert_eq!(points.len(), 144);
+        let corner = Point2::new(1024.0, 1024.0);
+        assert!(
+            (transformed_point(&robust, corner).unwrap()
+                - transformed_point(&expected, corner).unwrap())
+            .norm()
+                < 1.0
+        );
+    }
+
+    #[test]
+    fn native_affine_model_only_replaces_perspective_when_native_gates_hold() {
+        let coverage = stitching::CoverageMask::from_gray(GrayImage::from_pixel(
+            1024,
+            1024,
+            image::Luma([255]),
+        ));
+        let points_for = |h: &Matrix3<f64>| {
+            (128..896)
+                .step_by(64)
+                .flat_map(|y| {
+                    (128..896).step_by(64).map(move |x| {
+                        let source = Point2::new(x as f64, y as f64);
+                        (source, transformed_point(h, source).unwrap())
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        let affine = Matrix3::new(1.001, 0.002, 18.0, -0.001, 0.999, 20.0, 0.0, 0.0, 1.0);
+        let points = points_for(&affine);
+        let measured = native_station_affine_candidate(
+            &points,
+            (1024, 1024),
+            (1024, 1024),
+            &coverage,
+            &coverage,
+        )
+        .unwrap();
+        assert!(median_symmetric_error(&measured, &points) < 1e-6);
+        let perspective = Matrix3::new(1.0, 0.0, 18.0, 0.0, 1.0, 20.0, 0.00015, -0.00004, 1.0);
+        let native_points = points_for(&perspective);
+        let regularized = native_station_regularized_candidate(
+            &native_points,
+            &perspective,
+            (1024, 1024),
+            (1024, 1024),
+            &coverage,
+            &coverage,
+        )
+        .unwrap();
+        assert!(
+            regularized[(2, 0)].abs() > 1e-6,
+            "genuine perspective was removed"
+        );
+        assert!(median_symmetric_error(&regularized, &native_points) <= 3.0);
+        assert!(
+            native_station_affine_candidate(
+                &points_for(&perspective),
+                (1024, 1024),
+                (1024, 1024),
+                &coverage,
+                &coverage
+            )
+            .is_none()
+        );
+    }
+
     fn test_image(id: usize, filename: &str) -> ImageInfo {
         ImageInfo {
             id,
@@ -27128,6 +28576,7 @@ mod alignment_tests {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -27218,6 +28667,53 @@ mod alignment_tests {
     }
 
     #[test]
+    fn shared_raw_display_gain_preserves_bright_scan_channels() {
+        let mut highs = vec![0.3; 40];
+        highs.extend([0.8, 0.95]);
+        let gain = shared_stack_raw_display_gain(&highs).unwrap();
+        assert_eq!(gain, 1.0);
+        assert!(0.95 * gain < 1.0);
+        let warm =
+            DynamicImage::ImageRgb32F(Rgb32FImage::from_pixel(32, 32, image::Rgb([0.8, 0.4, 0.2])));
+        assert_eq!(raw_display_channel_percentile(&warm), Some(0.8));
+        let gain = shared_stack_raw_display_gain(&[raw_display_channel_percentile(&warm).unwrap()])
+            .unwrap();
+        assert!((gain - 1.125).abs() < 1e-6);
+        assert!(shared_stack_raw_display_gain(&[f32::NAN, -1.0]).is_none());
+    }
+
+    #[test]
+    fn native_tone_evidence_does_not_relax_geometry_acceptance() {
+        let actual = StationRelationMeasurements {
+            inliers: 972,
+            median_error_px: 2.266923987432463,
+            scale_ratio: 1.0004691316830572,
+            spatial_support: 0.5755645891054085,
+            low_frequency_mean_relative_difference: 0.26202033364182203,
+            edge_strength_ratio: 0.9321190720076769,
+            median_edge_orientation_difference_degrees: 5.7927737338494625,
+            preserves_convex_orientation: true,
+        };
+        assert_eq!(
+            station_relation_rejection_reasons(&actual),
+            vec![degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH]
+        );
+        assert!(native_photometric_measurements_are_usable(&actual));
+        assert!(!native_photometric_measurements_are_usable(
+            &StationRelationMeasurements {
+                median_error_px: 3.01,
+                ..actual
+            }
+        ));
+        assert!(!native_photometric_measurements_are_usable(
+            &StationRelationMeasurements {
+                low_frequency_mean_relative_difference: f64::NAN,
+                ..actual
+            }
+        ));
+    }
+
+    #[test]
     fn station_relation_contract_accepts_every_literal_boundary() {
         let measurements = StationRelationMeasurements {
             inliers: STATION_RELATION_MIN_INLIERS,
@@ -27270,7 +28766,7 @@ mod alignment_tests {
             ),
             (
                 StationRelationMeasurements {
-                    scale_ratio: STATION_RELATION_SCALE_RATIO_MIN - f64::EPSILON,
+                    scale_ratio: STATION_RELATION_SCALE_RATIO_MIN - 0.000_001,
                     ..accepted
                 },
                 degradation::STATION_RELATION_SCALE_OUT_OF_RANGE,
@@ -27489,7 +28985,127 @@ mod alignment_tests {
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         }
+    }
+
+    #[test]
+    fn shifted_focus_structure_requires_geometry_and_rejects_wrong_overlap() {
+        let mut source = test_image(0, "source.nef");
+        let mut target = test_image(1, "target.nef");
+        let texture = |x: i32, y: i32, seed: u32| {
+            let xf = x as f64;
+            let yf = y as f64;
+            let grain =
+                ((x as u32).wrapping_mul(73856093) ^ (y as u32).wrapping_mul(19349663) ^ seed)
+                    .wrapping_mul(83492791);
+            let value = 128.0
+                + 45.0 * (xf * 0.029 + yf * 0.013).sin()
+                + 35.0 * (xf * 0.017 - yf * 0.037).cos()
+                + 25.0 * (xf * 0.053 + yf * 0.041).sin()
+                + ((grain >> 24) as f64 - 128.0) * 0.30;
+            image::Luma([value.clamp(0.0, 255.0) as u8])
+        };
+        for image in [&mut source, &mut target] {
+            image.width = 4800;
+            image.height = 3200;
+            image.scale_factor = 4.0;
+        }
+        source.alignment_image =
+            GrayImage::from_fn(1200, 800, |x, y| texture(x as i32, y as i32, 7));
+        target.alignment_image =
+            GrayImage::from_fn(1200, 800, |x, y| texture(x as i32 - 160, y as i32 - 40, 91));
+        let transform = Matrix3::new(1.0, 0.0, 640.0, 0.0, 1.0, 160.0, 0.0, 0.0, 1.0);
+        let points = (0..6)
+            .flat_map(|row| {
+                (0..8).map(move |col| {
+                    let p = Point2::new(400.0 + col as f64 * 450.0, 400.0 + row as f64 * 450.0);
+                    (p, Point2::new(p.x + 640.0, p.y + 160.0))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(shifted_focus_structure_is_verified(
+            &source, &target, &transform, &points, true
+        ));
+        source.focal_length_35mm = Some(24.0);
+        target.focal_length_35mm = Some(50.0);
+        assert!(!shifted_focus_structure_is_verified(
+            &source, &target, &transform, &points, false
+        ));
+        target.focal_length_35mm = Some(24.0);
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &transform,
+            &points[..29],
+            false
+        ));
+        let wrong = Matrix3::new(1.0, 0.0, 960.0, 0.0, 1.0, 160.0, 0.0, 0.0, 1.0);
+        let wrong_points = points
+            .iter()
+            .map(|&(p, _)| (p, Point2::new(p.x + 960.0, p.y + 160.0)))
+            .collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &wrong,
+            &wrong_points,
+            true
+        ));
+        let concentrated = (0..48)
+            .map(|i| {
+                let p = Point2::new(1000.0 + (i % 8) as f64 * 5.0, 1000.0 + (i / 8) as f64 * 5.0);
+                (p, Point2::new(p.x + 640.0, p.y + 160.0))
+            })
+            .collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &target,
+            &transform,
+            &concentrated,
+            false
+        ));
+        let fixed_points = points.iter().map(|&(p, _)| (p, p)).collect::<Vec<_>>();
+        assert!(!shifted_focus_structure_is_verified(
+            &source,
+            &source,
+            &Matrix3::identity(),
+            &fixed_points,
+            false
+        ));
+        let scan_match = MatchInfo {
+            homography: transform,
+            inliers: points.len(),
+            sequence_bridge: false,
+            coarse_bridge: false,
+            points: points.clone(),
+            candidate_points: points.clone(),
+            top_candidate_points: Vec::new(),
+            dense_focus_points: Vec::new(),
+            foreground_feature_points: Vec::new(),
+            canonical_homography: None,
+            native_verified_points: Vec::new(),
+        };
+        let matches = HashMap::from([((0, 1), scan_match)]);
+        let images = [source, target];
+        let grouped = focus_station_grouping(&images, &matches);
+        assert!(
+            grouped.isolated.is_empty(),
+            "a verified scan source is not an isolated source"
+        );
+        assert_eq!(
+            grouped.components,
+            [vec![0], vec![1]],
+            "scan positions must remain separate stations"
+        );
+        let misleading_priors = HashMap::from([(0, Matrix3::identity()), (1, Matrix3::identity())]);
+        let (groups, _) = focus_capture_groups(&images, &matches, &misleading_priors)
+            .expect("connected scan stations");
+        assert_eq!(
+            groups.len(),
+            2,
+            "coincident world priors cannot merge distinct scan positions"
+        );
     }
 
     #[test]
@@ -27573,6 +29189,7 @@ mod alignment_tests {
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         }
     }
 
@@ -27602,6 +29219,7 @@ mod alignment_tests {
             dense_focus_points: Vec::new(),
             foreground_feature_points: Vec::new(),
             canonical_homography: None,
+            native_verified_points: Vec::new(),
         }
     }
 
@@ -27904,6 +29522,28 @@ mod alignment_tests {
             .collect::<Vec<_>>();
         assert_eq!(original_physical, vec![0, 1, 2, 3]);
         assert_eq!(shuffled_physical, original_physical);
+    }
+
+    #[test]
+    fn raw_physical_exposure_normalisation_uses_camera_settings() {
+        let mut metadata = HashMap::from([
+            ("ExposureTime".into(), "1/3 s".into()),
+            ("FNumber".into(), "f/4".into()),
+            ("ISOSpeedRatings".into(), "1000".into()),
+        ]);
+        let reference = stack_raw_exposure_value(&metadata).unwrap();
+        assert!((reference - 1000.0 / 48.0).abs() < 1e-9);
+        metadata.insert("ExposureTime".into(), "1/4 s".into());
+        assert!(
+            (reference / stack_raw_exposure_value(&metadata).unwrap() - 4.0 / 3.0).abs() < 1e-9
+        );
+        metadata.insert("ExposureTime".into(), "0.625 s".into());
+        metadata.insert("FNumber".into(), "f/5".into());
+        assert_eq!(stack_raw_exposure_value(&metadata), Some(25.0));
+        metadata.insert("FNumber".into(), "f/0".into());
+        assert!(stack_raw_exposure_value(&metadata).is_none());
+        metadata.remove("ExposureTime");
+        assert!(stack_raw_exposure_value(&metadata).is_none());
     }
 
     #[test]
@@ -28280,6 +29920,45 @@ mod alignment_tests {
         // matrix must report the same ratio as its normalised form.
         let unnormalised = Matrix3::identity() * 4.0;
         assert!((homography_scale_ratio(&unnormalised).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn station_overlap_scale_is_independent_of_both_tile_origins() {
+        let pose = Matrix3::new(0.74, 0.01, 220.0, 0.0, 0.74, 80.0, -0.0002, 0.0, 1.0);
+        let points = [
+            (500.0, 300.0),
+            (740.0, 300.0),
+            (500.0, 540.0),
+            (740.0, 540.0),
+        ]
+        .into_iter()
+        .map(|(x, y)| {
+            let source = Point2::new(x, y);
+            (source, transformed_point(&pose, source).unwrap())
+        })
+        .collect::<Vec<_>>();
+        let scale = station_relation_overlap_scale(&pose, &points).unwrap();
+        assert!(scale > 0.9 && scale < 1.1, "{scale}");
+        assert!(homography_scale_ratio(&pose).unwrap() < STATION_RELATION_SCALE_RATIO_MIN);
+        let source_shift = Matrix3::new(1.0, 0.0, 1000.0, 0.0, 1.0, 300.0, 0.0, 0.0, 1.0);
+        let target_shift = Matrix3::new(1.0, 0.0, -500.0, 0.0, 1.0, 400.0, 0.0, 0.0, 1.0);
+        let shifted = target_shift * pose * source_shift.try_inverse().unwrap();
+        let shifted_points = points
+            .iter()
+            .map(|&(source, target)| {
+                (
+                    transformed_point(&source_shift, source).unwrap(),
+                    transformed_point(&target_shift, target).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            (station_relation_overlap_scale(&shifted, &shifted_points).unwrap() - scale).abs()
+                < 1e-10
+        );
+        let affine = Matrix3::new(1.03, 0.0, 120.0, 0.0, 1.03, -40.0, 0.0, 0.0, 1.0);
+        assert!((station_relation_overlap_scale(&affine, &points).unwrap() - 1.03).abs() < 1e-12);
+        assert!(station_relation_overlap_scale(&pose, &[]).is_none());
     }
 
     #[test]
@@ -29287,6 +30966,218 @@ mod alignment_tests {
     }
 
     #[test]
+    fn anchor_frame_fusion_is_independent_of_global_station_placement() {
+        let sources = (0..4)
+            .map(|id| test_image(id, &format!("{id}.nef")))
+            .collect::<Vec<_>>();
+        let groups = vec![
+            FocusCaptureGroup {
+                members: vec![0, 1],
+                anchor: 0,
+                local_to_anchor: HashMap::new(),
+            },
+            FocusCaptureGroup {
+                members: vec![2, 3],
+                anchor: 2,
+                local_to_anchor: HashMap::new(),
+            },
+        ];
+        let child = Matrix3::new(1.001, 0.0, 5.0, 0.0, 1.001, -3.0, 0.0, 0.0, 1.0);
+        let first = Matrix3::new(1.4, 0.2, 1000.0, 0.1, 1.2, 700.0, 0.0003, 0.0002, 1.0);
+        let second = Matrix3::new(0.8, -0.3, 3000.0, 0.2, 0.9, 200.0, -0.0001, 0.0003, 1.0);
+        let global = HashMap::from([
+            (0, first),
+            (1, first * child),
+            (2, second),
+            (3, second * child),
+        ]);
+        let local = focus_anchor_render_frames(&groups, &sources, &global, None).unwrap();
+        for (id, expected) in [
+            (0, Matrix3::identity()),
+            (1, child),
+            (2, Matrix3::identity()),
+            (3, child),
+        ] {
+            assert!((local.homographies[&id] - expected).norm() < 1e-8);
+        }
+        assert!((local.anchor_to_world[0] - Matrix3::identity()).norm() < 1e-8);
+        let mut moved = global.clone();
+        let movement = Matrix3::new(1.3, 0.1, -800.0, 0.0, 1.1, 600.0, 0.0002, 0.0, 1.0);
+        moved.insert(2, movement * second);
+        moved.insert(3, movement * second * child);
+        let other = focus_anchor_render_frames(&groups, &sources, &moved, None).unwrap();
+        assert!((other.homographies[&3] - local.homographies[&3]).norm() < 1e-8);
+        // Local source pixels and source provenance share the same composition.
+        let expected_world = first.try_inverse().unwrap() * moved[&3];
+        assert!(
+            (normalized_homography(&(other.anchor_to_world[1] * other.homographies[&3])).unwrap()
+                - normalized_homography(&expected_world).unwrap())
+            .norm()
+                < 1e-8
+        );
+    }
+
+    #[test]
+    fn projective_repair_scale_is_measured_at_the_station_center() {
+        let correction = Matrix3::new(1.5, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0005, 0.0, 1.0);
+        let center = Point2::new(600.0, 400.0);
+        assert!(!virtual_tile_prior_repair_is_bounded(
+            38.9,
+            homography_scale_ratio(&correction).unwrap()
+        ));
+        let scale = virtual_tile_repair_local_scale_ratio(&correction, center).unwrap();
+        assert!(virtual_tile_prior_repair_is_bounded(38.9, scale));
+        let translation = Matrix3::new(1.0, 0.0, 1000.0, 0.0, 1.0, 500.0, 0.0, 0.0, 1.0);
+        let relocated = translation * correction * translation.try_inverse().unwrap();
+        let relocated_center = transformed_point(&translation, center).unwrap();
+        assert!(
+            (virtual_tile_repair_local_scale_ratio(&relocated, relocated_center).unwrap() - scale)
+                .abs()
+                < 1e-8
+        );
+    }
+
+    #[test]
+    fn virtual_tile_exposure_compensation_requires_verified_structure_and_held_out_pixels() {
+        let mut tiles = synthetic_virtual_tiles(2);
+        let texture = |x: f64, y: f64| {
+            128.0 + 45.0 * (x * 0.075 + y * 0.035).sin() + 35.0 * (x * 0.027 - y * 0.081).cos()
+        };
+        for tile in &mut tiles {
+            tile.width = 500;
+            tile.height = 400;
+            tile.scale_factor = 1.0;
+        }
+        tiles[0].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            image::Luma([texture(x as f64, y as f64).round() as u8])
+        });
+        tiles[1].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            image::Luma([(0.7 * texture(x as f64, y as f64)).round() as u8])
+        });
+        let good =
+            focus_overlap_quality_measurements(&tiles[0], &tiles[1], &Matrix3::identity()).unwrap();
+        assert!(good.low_frequency_mean_relative_difference > 0.29);
+        let compensated = virtual_tile_photometric_measurements(good);
+        assert!(
+            compensated.0 < 0.01 && (compensated.1 - 1.0).abs() < 0.03,
+            "{good:?}"
+        );
+        let wrong = Matrix3::new(1.0, 0.0, 30.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let bad = focus_overlap_quality_measurements(&tiles[0], &tiles[1], &wrong).unwrap();
+        assert_eq!(
+            virtual_tile_photometric_measurements(bad).0,
+            bad.low_frequency_mean_relative_difference
+        );
+        assert!(virtual_tile_photometric_measurements(bad).0 > 0.2);
+        let excessive = FocusOverlapQuality {
+            exposure_gain: 3.0,
+            ..good
+        };
+        assert_eq!(
+            virtual_tile_photometric_measurements(excessive).0,
+            excessive.low_frequency_mean_relative_difference
+        );
+    }
+
+    #[test]
+    fn overlap_gradient_measurement_uses_the_registered_pixel_grid() {
+        let mut tiles = synthetic_virtual_tiles(2);
+        let angle = 0.35f64;
+        let level_transform = Matrix3::new(
+            angle.cos(),
+            -angle.sin(),
+            90.0,
+            angle.sin(),
+            angle.cos(),
+            -60.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        let inverse = level_transform.try_inverse().unwrap();
+        let texture = |x: f64, y: f64| {
+            image::Luma([(128.0
+                + 45.0 * (x * 0.075 + y * 0.035).sin()
+                + 35.0 * (x * 0.027 - y * 0.081).cos()) as u8])
+        };
+        tiles[0].alignment_image = GrayImage::from_fn(500, 400, |x, y| texture(x as f64, y as f64));
+        tiles[1].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+            let p = transformed_point(&inverse, Point2::new(x as f64, y as f64)).unwrap();
+            texture(p.x, p.y)
+        });
+        for (tile, factor) in tiles.iter_mut().zip([4.0, 6.0]) {
+            tile.width = (500.0 * factor) as u32;
+            tile.height = (400.0 * factor) as u32;
+            tile.scale_factor = factor;
+        }
+        let native = Matrix3::new(6.0, 0.0, 0.0, 0.0, 6.0, 0.0, 0.0, 0.0, 1.0)
+            * level_transform
+            * Matrix3::new(0.25, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 1.0);
+        let quality = focus_overlap_quality_measurements(&tiles[0], &tiles[1], &native).unwrap();
+        assert!(quality.intensity_ncc > 0.99, "{quality:?}");
+        // Quantized, independently sampled 8-bit gradients retain some
+        // rounding noise even though the continuous texture is identical.
+        assert!(quality.edge_ncc > 0.97, "{quality:?}");
+        assert!(
+            quality.median_edge_orientation_difference_degrees < 3.0,
+            "{quality:?}"
+        );
+        assert!(
+            (quality.edge_strength_ratio - 1.0).abs() < 0.03,
+            "{quality:?}"
+        );
+    }
+
+    #[test]
+    fn single_level_relation_quality_distinguishes_registered_and_shifted_structure() {
+        let (mut tiles, coverages, _, _, actual) = direct_projective_fixture();
+        let mut quality_coverages = Vec::new();
+        for (tile, coverage) in tiles.iter_mut().zip(&coverages) {
+            let plane =
+                VirtualTileMatchPlane::from_native(&tile.alignment_image, coverage, 1).unwrap();
+            let (quality, factor) =
+                virtual_tile_relation_quality_plane(&[plane], &tile.alignment_image, coverage);
+            assert_eq!(factor, 4);
+            quality_coverages.push(
+                VirtualTileMatchPlane::from_native(&tile.alignment_image, coverage, factor)
+                    .unwrap()
+                    .coverage,
+            );
+            tile.scale_factor *= f64::from(factor);
+            tile.alignment_image = quality;
+        }
+        let scale = Matrix3::new(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0);
+        let native = scale * actual * scale.try_inverse().unwrap();
+        let good = focus_overlap_quality_measurements_on_coverage(
+            &tiles[0],
+            &tiles[1],
+            &native,
+            Some((&quality_coverages[0], &quality_coverages[1])),
+        )
+        .unwrap();
+        let mut shifted = native;
+        shifted[(0, 2)] += 80.0;
+        let bad = focus_overlap_quality_measurements_on_coverage(
+            &tiles[0],
+            &tiles[1],
+            &shifted,
+            Some((&quality_coverages[0], &quality_coverages[1])),
+        )
+        .unwrap();
+        assert!(
+            good.median_edge_orientation_difference_degrees < 10.0,
+            "{:?}",
+            good.median_edge_orientation_difference_degrees
+        );
+        assert!(
+            bad.median_edge_orientation_difference_degrees > 10.0,
+            "{:?}",
+            bad.median_edge_orientation_difference_degrees
+        );
+        assert!(good.intensity_ncc > bad.intensity_ncc + 0.2);
+    }
+
+    #[test]
     fn direct_grid_structure_planes_only_carry_the_orientation_measurement() {
         let (tiles, coverages, initial, _, _) = direct_projective_fixture();
         let threshold = STATION_RELATION_MAX_MEDIAN_ERROR_PX;
@@ -30172,7 +32063,18 @@ mod alignment_tests {
         for image in &mut images {
             image.focal_length_35mm = Some(90.0);
         }
-        let station_transform = Matrix3::new(1.25, 0.01, 240.0, -0.01, 1.25, 20.0, 0.0, 0.0, 1.0);
+        let rejected_scale = STATION_RELATION_SCALE_RATIO_MIN - 0.01;
+        let station_transform = Matrix3::new(
+            rejected_scale,
+            0.01,
+            240.0,
+            -0.01,
+            rejected_scale,
+            20.0,
+            0.0,
+            0.0,
+            1.0,
+        );
         let mut consensus_bridge = observed_transform_match(station_transform, 24);
         consensus_bridge.coarse_bridge = true;
         consensus_bridge.top_candidate_points = consensus_bridge.points.clone();
@@ -31362,11 +33264,643 @@ mod alignment_tests {
 }
 
 #[cfg(test)]
-mod acceptance_tests {
+pub(crate) mod acceptance_tests {
     use super::*;
     use image::{ImageFormat, Rgb, RgbImage};
     use std::fs;
     use std::path::PathBuf;
+
+    fn load_saved_tone_tile(
+        path: PathBuf,
+    ) -> crate::panorama_utils::stack_pipeline::tone::ToneTile {
+        use crate::panorama_utils::stack_pipeline::tone::ToneTile;
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let width = value["width"].as_u64().unwrap() as u32;
+        let height = value["height"].as_u64().unwrap() as u32;
+        let rgb = |key: &str| {
+            image::Rgb32FImage::from_raw(
+                width,
+                height,
+                serde_json::from_value(value[key].clone()).unwrap(),
+            )
+            .unwrap()
+        };
+        ToneTile {
+            station_index: value["station"].as_u64().unwrap() as usize,
+            owner_id: value["owner"].as_u64().unwrap() as u16,
+            low: rgb("low"),
+            cell_mean: rgb("cell_mean"),
+            validity: image::GrayImage::from_raw(
+                width,
+                height,
+                serde_json::from_value(value["validity"].clone()).unwrap(),
+            )
+            .unwrap(),
+            world_origin: serde_json::from_value(value["world_origin"].clone()).unwrap(),
+            world_size: serde_json::from_value(value["world_size"].clone()).unwrap(),
+            world_stride: value["world_stride"].as_f64().unwrap(),
+            native_detail: fs::read(path.with_extension("native.f32"))
+                .ok()
+                .map(|bytes| {
+                    assert_eq!(bytes.len(), width as usize * height as usize * 16 * 3 * 4);
+                    image::Rgb32FImage::from_raw(
+                        width * 4,
+                        height * 4,
+                        bytes
+                            .chunks_exact(4)
+                            .map(|v| f32::from_le_bytes(v.try_into().unwrap()))
+                            .collect(),
+                    )
+                    .unwrap()
+                }),
+            cell_coverage: serde_json::from_value(value["cell_coverage"].clone()).unwrap(),
+        }
+    }
+
+    #[test]
+    #[ignore = "requires original native contour view PNGs, reports measured profiles only"]
+    fn real_native_contour_views_from_env() {
+        let paths =
+            std::env::split_paths(&std::env::var_os("RAW_EDITOR_NATIVE_CONTOUR_VIEWS").unwrap())
+                .collect::<Vec<_>>();
+        let mut records = Vec::new();
+        for (station, path) in paths.iter().enumerate() {
+            let mut reader = image::ImageReader::open(path).unwrap();
+            reader.no_limits();
+            let image = reader.decode().unwrap().to_rgb32f();
+            let coverage = image::open(path.with_extension("coverage.png"))
+                .unwrap()
+                .to_luma8();
+            assert_eq!(coverage.dimensions(), image.dimensions());
+            let tracks = crate::panorama_utils::stack_pipeline::line_layers::detect_native_contours(
+                &image,
+                |x, y| coverage.get_pixel(x, y)[0] != 0,
+            );
+            println!(
+                "Native contour view {}: {} tracks",
+                path.display(),
+                tracks.len()
+            );
+            records.push(serde_json::json!({"path":path,"view_index":station,
+                "tracks":tracks.iter().map(|p|p.iter().map(|p|[p.y,p.x]).collect::<Vec<_>>()).collect::<Vec<_>>()}));
+        }
+        fs::write(
+            std::env::var_os("RAW_EDITOR_NATIVE_CONTOUR_OUTPUT").unwrap(),
+            serde_json::to_vec(&records).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires two saved native tone fields; exports their unchanged common-support measurements"]
+    fn real_saved_tone_pair_from_env() {
+        use crate::panorama_utils::stack_pipeline::tone::PairField;
+        let paths =
+            std::env::split_paths(&std::env::var_os("RAW_EDITOR_TONE_PAIR_FIELDS").unwrap())
+                .collect::<Vec<_>>();
+        assert_eq!(paths.len(), 2);
+        let field = PairField::new(
+            &load_saved_tone_tile(paths[0].clone()),
+            &load_saved_tone_tile(paths[1].clone()),
+        )
+        .unwrap();
+        fs::write(
+            std::env::var_os("RAW_EDITOR_TONE_PAIR_OUTPUT").unwrap(),
+            serde_json::to_vec(&field.diagnostic_grid()).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires saved native tone fields, ownership, and native relation proof"]
+    fn real_saved_local_tone_from_env() {
+        use crate::panorama_utils::stack_pipeline::{compositor, tone, tone_local};
+        let directory = PathBuf::from(std::env::var_os("RAW_EDITOR_LOCAL_TONE_FIELDS").unwrap());
+        let mut reader = image::ImageReader::open(directory.join("tone-owners.png")).unwrap();
+        // This is the trusted native ownership artifact emitted by this test
+        // pipeline; its 300MP u16 plane exceeds the decoder's default limit.
+        reader.no_limits();
+        let owners = reader.decode().unwrap().to_luma16();
+        let (width, height) = owners.dimensions();
+        let mut tiles = Vec::new();
+        for owner in 1..=u16::MAX {
+            let path = directory.join(format!("tone-owner-{owner:03}.json"));
+            if !path.exists() {
+                break;
+            }
+            tiles.push(load_saved_tone_tile(path));
+        }
+        let native: serde_json::Value = serde_json::from_slice(
+            &fs::read(std::env::var_os("RAW_EDITOR_LOCAL_TONE_NATIVE_PROOF").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let tile_index = |station: usize| {
+            tiles
+                .iter()
+                .position(|tile| tile.station_index == station)
+                .unwrap()
+        };
+        let mut relations = native["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|record| record["authoritative"].as_bool() != Some(false))
+            .map(|record| {
+                (
+                    tile_index(record["left"].as_u64().unwrap() as usize),
+                    tile_index(record["right"].as_u64().unwrap() as usize),
+                )
+            })
+            .collect::<Vec<_>>();
+        if let Some(path) = std::env::var_os("RAW_EDITOR_LOCAL_TONE_CANDIDATE_REPORT") {
+            let report: serde_json::Value =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            for entry in report["degradation"]["entries"].as_array().unwrap() {
+                if entry["reason"] != degradation::STATION_RELATION_PHOTOMETRIC_MISMATCH {
+                    continue;
+                }
+                let d = &entry["detail"];
+                let (left, right) = (
+                    d["left"].as_u64().unwrap() as usize,
+                    d["right"].as_u64().unwrap() as usize,
+                );
+                let Some(candidate) = report["station_relations"]["candidates"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|c| {
+                        c["left"].as_u64() == Some(left as u64)
+                            && c["right"].as_u64() == Some(right as u64)
+                    })
+                else {
+                    continue;
+                };
+                if candidate["measurement_factor"].as_u64() != Some(1)
+                    || candidate["failure_stage"].as_str() != Some("fitted")
+                    || !candidate["residual_model"]
+                        .as_str()
+                        .is_some_and(|v| v.starts_with("native_polished_"))
+                    || candidate["bidirectional_match_count"].as_u64().unwrap_or(0)
+                        < STATION_RELATION_MIN_INLIERS as u64
+                {
+                    continue;
+                }
+                let measurements = StationRelationMeasurements {
+                    inliers: d["inliers"].as_u64().unwrap() as usize,
+                    median_error_px: d["median_error_px"].as_f64().unwrap(),
+                    scale_ratio: d["scale_ratio"].as_f64().unwrap(),
+                    spatial_support: d["spatial_support"].as_f64().unwrap(),
+                    low_frequency_mean_relative_difference:
+                        d["low_frequency_mean_relative_difference"]
+                            .as_f64()
+                            .unwrap(),
+                    edge_strength_ratio: d["edge_strength_ratio"].as_f64().unwrap(),
+                    median_edge_orientation_difference_degrees:
+                        d["median_edge_orientation_difference_degrees"]
+                            .as_f64()
+                            .unwrap(),
+                    preserves_convex_orientation: d["preserves_convex_orientation"]
+                        .as_bool()
+                        .unwrap(),
+                };
+                if native_photometric_measurements_are_usable(&measurements) {
+                    println!(
+                        "Original native photometric evidence {left}/{right}: {} inliers, {:.3}px, support {:.3}",
+                        measurements.inliers,
+                        measurements.median_error_px,
+                        measurements.spatial_support
+                    );
+                    relations.push((tile_index(left), tile_index(right)));
+                }
+            }
+            for pair in &mut relations {
+                if pair.0 > pair.1 {
+                    *pair = (pair.1, pair.0);
+                }
+            }
+            relations.sort_unstable();
+            relations.dedup();
+        }
+        let use_saved = std::env::var_os("RAW_EDITOR_LOCAL_TONE_USE_SAVED_OWNERS").is_some();
+        let plan = (!use_saved).then(|| {
+            compositor::refine_station_ownership(&tiles, &relations, owners.as_raw(), width, height)
+                .unwrap()
+        });
+        let planned = if let Some(plan) = plan.as_ref() {
+            (0..height)
+                .flat_map(|y| (0..width).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    if owners.get_pixel(x, y)[0] == 0 {
+                        0
+                    } else {
+                        plan.owner_at(x, y)
+                    }
+                })
+                .collect::<Vec<_>>()
+        } else {
+            owners.as_raw().clone()
+        };
+        if let Some(path) = std::env::var_os("RAW_EDITOR_LOCAL_TONE_PLANNED_OWNERS") {
+            image::ImageBuffer::<image::Luma<u16>, Vec<u16>>::from_raw(
+                width,
+                height,
+                planned.clone(),
+            )
+            .unwrap()
+            .save(path)
+            .unwrap();
+        }
+        let model =
+            tone_local::fit_local_tone(&tiles, &relations, &planned, width, height).unwrap();
+        let native_roi_prediction=std::env::var_os("RAW_EDITOR_LOCAL_TONE_ROI_JSON").map(|path| {
+            let d:serde_json::Value=serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let reference=image::open(d["reference"].as_str().unwrap()).unwrap().to_rgb32f();
+            let actual=image::open(d["actual"].as_str().unwrap()).unwrap().to_rgb32f();
+            let x=d["x"].as_f64().unwrap();let y=d["y"].as_f64().unwrap();let scale=d["local_scale"].as_f64().unwrap();
+            let tile=tiles.iter().position(|t|t.owner_id==d["owner"].as_u64().unwrap() as u16).unwrap();
+            let old=tone_local::fit_local_tone_with_identity_prior(&tiles,&relations,&planned,width,height,d["old_prior"].as_f64().unwrap() as f32).unwrap();
+            let predict=|model:&tone_local::LocalToneField| image::Rgb32FImage::from_fn(reference.width(),reference.height(),|px,py| {
+                let (wx,wy)=(x+px as f64,y+py as f64);
+                let low=tone::sample_tile_bilinear(&tiles[tile],wx,wy).unwrap();
+                let corrected=model.corrected(tile,low,wx,wy);
+                let source=reference.get_pixel(px,py);
+                image::Rgb(std::array::from_fn(|c|(source[c]+corrected[c]-low[c]).clamp(0.0,1.0)))
+            });
+            let previous=predict(&old);let proposed=predict(&model);
+            let error=previous.as_raw().iter().zip(actual.as_raw()).map(|(a,b)|(a-b).abs()).fold(0.0f32,f32::max);
+            let reference_energy=quality_gate::normalized_gradient_energy(&reference,scale).unwrap();
+            let old_ratio=quality_gate::normalized_gradient_energy(&previous,scale).unwrap()/reference_energy;
+            let new_ratio=quality_gate::normalized_gradient_energy(&proposed,scale).unwrap()/reference_energy;
+            println!("True RAW ROI backtest max reconstruction error={error} old={old_ratio} proposed={new_ratio}");
+            serde_json::json!({"true_reference_used":true,"old_reconstruction_error":error,"old_ratio":old_ratio,"proposed_ratio":new_ratio})
+        });
+        // Match production: every adjacent ownership transition, all 16 pixels
+        // on each side, accumulated in the boundary pixel's 256px window.
+        let step = 1u32;
+        let columns = width.div_ceil(step);
+        let rows = height.div_ceil(step);
+        let mut fields = std::collections::BTreeMap::new();
+        let mut windows = std::collections::BTreeMap::<
+            (usize, usize, u32, u32),
+            ([f64; 3], [f64; 3], usize),
+        >::new();
+        let witness_window = std::env::var("RAW_EDITOR_LOCAL_TONE_WITNESS_WINDOW")
+            .ok()
+            .map(|s| {
+                let values = s
+                    .split(',')
+                    .map(|v| v.parse::<u32>().unwrap() / 256)
+                    .collect::<Vec<_>>();
+                (values[0], values[1])
+            });
+        let mut witnesses =
+            std::collections::BTreeMap::<(usize, usize, u32, u32), Vec<serde_json::Value>>::new();
+        for gy in 0..rows {
+            for gx in 0..columns {
+                let (x, y) = (
+                    (gx * step + step / 2).min(width - 1),
+                    (gy * step + step / 2).min(height - 1),
+                );
+                let owner = planned[y as usize * width as usize + x as usize];
+                for (nx, ny, horizontal) in [
+                    (x.saturating_add(step), y, true),
+                    (x, y.saturating_add(step), false),
+                ] {
+                    if nx >= width || ny >= height {
+                        continue;
+                    }
+                    let other = planned[ny as usize * width as usize + nx as usize];
+                    if owner == 0 || other == 0 || owner == other {
+                        continue;
+                    }
+                    let a = tiles
+                        .iter()
+                        .position(|tile| tile.owner_id == owner)
+                        .unwrap();
+                    let b = tiles
+                        .iter()
+                        .position(|tile| tile.owner_id == other)
+                        .unwrap();
+                    let (first, second) = (a.min(b), a.max(b));
+                    let Some(field) = fields
+                        .entry((first, second))
+                        .or_insert_with(|| tone::PairField::new(&tiles[first], &tiles[second]))
+                        .as_ref()
+                    else {
+                        continue;
+                    };
+                    for offset in -15i64..=16 {
+                        let px = i64::from(x) + if horizontal { offset } else { 0 };
+                        let py = i64::from(y) + if horizontal { 0 } else { offset };
+                        if px < 0 || py < 0 || px >= i64::from(width) || py >= i64::from(height) {
+                            continue;
+                        }
+                        let Some((a, b)) = field.at(px as f64, py as f64) else {
+                            continue;
+                        };
+                        if witness_window == Some((x / 256, y / 256)) {
+                            let list = witnesses
+                                .entry((first, second, x / 256, y / 256))
+                                .or_default();
+                            if list.len() < 128 {
+                                list.push(serde_json::json!({"x":px,"y":py,"first_rgb":a,"second_rgb":b,
+                                    "first_parameters":model.at(first,px as f64,py as f64),"second_parameters":model.at(second,px as f64,py as f64)}));
+                            }
+                        }
+                        let (a, b) = (
+                            model.corrected(first, a, px as f64, py as f64),
+                            model.corrected(second, b, px as f64, py as f64),
+                        );
+                        let entry = windows
+                            .entry((first, second, x / 256, y / 256))
+                            .or_insert(([0.0; 3], [0.0; 3], 0));
+                        for c in 0..3 {
+                            entry.0[c] += f64::from(a[c]);
+                            entry.1[c] += f64::from(b[c])
+                        }
+                        entry.2 += 1;
+                    }
+                }
+            }
+        }
+        let mut maximum = 0.0f64;
+        let mut failed = Vec::new();
+        for ((a, b, x, y), (first, second, count)) in windows {
+            let delta = tone::delta_e00_rgb(
+                first.map(|v| (v / count as f64) as f32),
+                second.map(|v| (v / count as f64) as f32),
+            );
+            maximum = maximum.max(delta);
+            if delta > stack_report::TONE_BOUNDARY_DELTA_E_THRESHOLD {
+                let (cx, cy) = ((x * 256 + 128) as f64, (y * 256 + 128) as f64);
+                failed.push(serde_json::json!({"first":tiles[a].station_index,"second":tiles[b].station_index,"x":x*256,"y":y*256,"delta":delta,"samples":count,
+                    "first_parameters":model.at(a,cx,cy),"second_parameters":model.at(b,cx,cy),
+                    "witnesses":witnesses.remove(&(a,b,x,y)),
+                    "common_rgb":fields.get(&(a,b)).and_then(|f| f.as_ref()).and_then(|f| f.at(cx,cy))}))
+            }
+        }
+        let result = serde_json::json!({"diagnostic_only":true,"native_roi_prediction":native_roi_prediction,"maximum":maximum,"failed":failed,"iterations":model.iterations,"maximum_parameter_change":model.maximum_parameter_change,"fitted_relations":model.fitted_relations.len(),"plan_step":plan.as_ref().map(|p|p.step)});
+        fs::write(
+            std::env::var_os("RAW_EDITOR_LOCAL_TONE_OUTPUT").unwrap(),
+            serde_json::to_vec_pretty(&result).unwrap(),
+        )
+        .unwrap();
+        println!("Local native tone prediction: {maximum:.6}");
+        assert!(
+            failed.is_empty(),
+            "local native tone prediction failed: {result}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires an actual saved native render and a boundary coordinate"]
+    fn real_saved_boundary_edge_from_env() {
+        let image = image::open(std::env::var("RAW_EDITOR_BOUNDARY_IMAGE").unwrap())
+            .unwrap()
+            .to_rgb32f();
+        let x = std::env::var("RAW_EDITOR_BOUNDARY_X")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let y = std::env::var("RAW_EDITOR_BOUNDARY_Y")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let coverage = std::env::var_os("RAW_EDITOR_BOUNDARY_COVERAGE")
+            .map(|path| image::open(path).unwrap().to_luma8());
+        let normal = if std::env::var_os("RAW_EDITOR_BOUNDARY_VERTICAL_NORMAL").is_some() {
+            (0.0, 1.0)
+        } else {
+            (1.0, 0.0)
+        };
+        println!(
+            "Actual paired boundary fits: {:?}",
+            quality_gate::paired_boundary_edge_fits_with_coverage(
+                &image,
+                coverage.as_ref(),
+                x,
+                y,
+                normal
+            )
+        );
+        println!(
+            "Actual paired boundary edge: {:?}",
+            quality_gate::paired_boundary_edge_error_with_coverage(
+                &image,
+                coverage.as_ref(),
+                x,
+                y,
+                normal
+            )
+        );
+    }
+
+    #[test]
+    #[ignore = "replays an actual saved seam grid using its native measurements and coverage constraints"]
+    fn real_saved_seam_grid_from_env() {
+        use crate::panorama_utils::stack_pipeline::compositor;
+        let d: serde_json::Value = serde_json::from_slice(
+            &fs::read(std::env::var_os("RAW_EDITOR_SEAM_GRID").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let dir = PathBuf::from(std::env::var_os("RAW_EDITOR_TONE_FIELDS_DIR").unwrap());
+        let owner = d["owner"].as_u64().unwrap() as u16;
+        let mut tiles = Vec::new();
+        for id in 1..=owner {
+            tiles.push(load_saved_tone_tile(
+                dir.join(format!("tone-owner-{id:03}.json")),
+            ));
+        }
+        let width = d["columns"].as_u64().unwrap() as usize;
+        let height = d["rows"].as_u64().unwrap() as usize;
+        let floats = |key: &str| serde_json::from_value::<Vec<f64>>(d[key].clone()).unwrap();
+        let base: Vec<u16> = serde_json::from_value(d["base_owners"].clone()).unwrap();
+        let fixed: Vec<i8> = serde_json::from_value(d["fixed"].clone()).unwrap();
+        let base_distance = floats("base_distance");
+        let candidate_distance = floats("candidate_distance");
+        let preference = floats("preference");
+        let disagreement = floats("disagreement");
+        let bounds = (
+            d["left"].as_u64().unwrap() as u32,
+            d["top"].as_u64().unwrap() as u32,
+            d["right"].as_u64().unwrap() as u32,
+            d["bottom"].as_u64().unwrap() as u32,
+        );
+        let step = d["step"].as_u64().unwrap() as u32;
+        let existing = compositor::existing_owner_boundary_costs(
+            &tiles,
+            &base,
+            &base_distance,
+            width,
+            height,
+            bounds,
+            step,
+        );
+        let labels = compositor::layered_seam_cut_with_existing_boundaries(
+            width,
+            height,
+            &preference,
+            &disagreement,
+            &base_distance,
+            &candidate_distance,
+            &fixed,
+            &existing,
+        );
+        for (label, pin) in labels.iter().zip(&fixed) {
+            if *pin < 0 {
+                assert_eq!(*label, 0);
+            } else if *pin > 0 {
+                assert_eq!(*label, 255);
+            }
+        }
+        fs::write(std::env::var_os("RAW_EDITOR_SEAM_REPLAY_OUTPUT").unwrap(),
+            serde_json::to_vec(&serde_json::json!({"labels":labels,"existing_costs":existing,"diagnostic_only":true})).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires saved measured native relation points and station poses"]
+    fn real_joint_geometry_from_saved_native_points() {
+        let _scope = degradation::begin_run_scope();
+        residual_warp::reset_run_records();
+        let data: serde_json::Value = serde_json::from_slice(
+            &fs::read(std::env::var("RAW_EDITOR_JOINT_PRODUCTION_INPUT").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let tiles = data["dimensions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(station, d)| ImageInfo {
+                id: usize::MAX - station,
+                filename: format!("virtual://saved-native-station-{station}"),
+                width: d[0].as_u64().unwrap() as u32,
+                height: d[1].as_u64().unwrap() as u32,
+                alignment_image: GrayImage::new(1, 1),
+                full_image: None,
+                scale_factor: 1.0,
+                focal_length_35mm: Some(24.0),
+                source_footprint: None,
+                overview_reference: false,
+                features: Vec::new(),
+                top_features: Vec::new(),
+                foreground_range: None,
+                foreground_mask: None,
+                horizontal_edge_rows: Vec::new(),
+                vertical_edge_columns: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let initial = data["poses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(&tiles)
+            .map(|(p, tile)| (tile.id, Matrix3::from_fn(|r, c| p[r][c].as_f64().unwrap())))
+            .collect::<HashMap<_, _>>();
+        let mut matches = HashMap::new();
+        let mut report = stack_report::StationRelationsReport::default();
+        for record in data["records"].as_array().unwrap() {
+            if record["authoritative"].as_bool() == Some(false) {
+                continue;
+            }
+            let (left, right) = (
+                record["left"].as_u64().unwrap() as usize,
+                record["right"].as_u64().unwrap() as usize,
+            );
+            let points = record["points"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    (
+                        Point2::new(p[0].as_f64().unwrap(), p[1].as_f64().unwrap()),
+                        Point2::new(p[2].as_f64().unwrap(), p[3].as_f64().unwrap()),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let native = record["native_verified_points"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    (
+                        Point2::new(p[0].as_f64().unwrap(), p[1].as_f64().unwrap()),
+                        Point2::new(p[2].as_f64().unwrap(), p[3].as_f64().unwrap()),
+                        p[4].as_f64().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let coefficients = record["homography"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect::<Vec<_>>();
+            matches.insert(
+                (left, right),
+                MatchInfo {
+                    homography: Matrix3::from_column_slice(&coefficients),
+                    inliers: points.len(),
+                    sequence_bridge: false,
+                    coarse_bridge: false,
+                    points,
+                    candidate_points: Vec::new(),
+                    top_candidate_points: Vec::new(),
+                    dense_focus_points: Vec::new(),
+                    foreground_feature_points: Vec::new(),
+                    canonical_homography: None,
+                    native_verified_points: native,
+                },
+            );
+            report
+                .accepted
+                .push(stack_report::AcceptedStationRelationRecord {
+                    left,
+                    right,
+                    evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
+                    inliers: matches[&(left, right)].inliers,
+                    spatial_support: record["diagnostic"]["hull_support"].as_f64().unwrap(),
+                    scale_ratio: record["scale"].as_f64().unwrap(),
+                    median_error_px: record["error"].as_f64().unwrap(),
+                    independent_support: 0,
+                });
+        }
+        let mut closure = stack_report::ClosureReport {
+            status: stack_report::ClosureStatus::Unreliable,
+            ..stack_report::ClosureReport::default()
+        };
+        let solved = refine_virtual_tile_joint_geometry(
+            &tiles,
+            &matches,
+            &initial,
+            &mut closure,
+            &mut report,
+        )
+        .expect("production joint geometry refused the measured native evidence");
+        let model = residual_warp::run_model_snapshot();
+        let fields=model.regions.iter().map(|region|serde_json::json!({
+            "station":region.right_station,"world":region.world,"columns":region.columns,"rows":region.rows,
+            "values":region.nodes().iter().map(|node|node.displacement).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>();
+        let poses = tiles
+            .iter()
+            .map(|tile| {
+                let h = solved[&tile.id];
+                (0..3)
+                    .map(|r| (0..3).map(|c| h[(r, c)]).collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        fs::write(
+            std::env::var("RAW_EDITOR_JOINT_PRODUCTION_OUTPUT").unwrap(),
+            serde_json::to_vec(
+                &serde_json::json!({"poses":poses,"fields":fields,"closure":closure,
+                "station_relations":report}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    }
 
     fn ordered_panorama_fixture_paths() -> Vec<PathBuf> {
         let fixture_root = std::env::var("RAW_EDITOR_ORDERED_PANORAMA_DIR")
@@ -31433,9 +33967,12 @@ mod acceptance_tests {
                 // NEF fixture fail before alignment was even exercised. Keep
                 // diagnostics on the production loader so this harness tests
                 // the actual RAW decode and preprocessing path.
-                let prepared =
-                    load_prepared_stack_source(&path.to_string_lossy(), &AppSettings::default())
-                        .expect("fixture image must decode through the production loader");
+                let prepared = load_prepared_stack_source(
+                    &path.to_string_lossy(),
+                    &AppSettings::default(),
+                    None,
+                )
+                .expect("fixture image must decode through the production loader");
                 let source = prepared.image;
                 let (width, height) = source.dimensions();
                 let focal_length_35mm = prepared.focal_length_35mm;
@@ -31468,6 +34005,7 @@ mod acceptance_tests {
                     full_image: None,
                     scale_factor,
                     focal_length_35mm,
+                    source_footprint: None,
                     overview_reference: false,
                     features,
                     top_features,
@@ -32121,6 +34659,580 @@ mod acceptance_tests {
     }
 
     #[test]
+    #[ignore = "requires saved real Virtual_Tile grayscale and coverage planes"]
+    fn real_virtual_tile_pair_diagnostics_from_env() {
+        let _run_scope = degradation::begin_run_scope();
+        degradation::reset_run_ledger();
+        if let Ok(path) = std::env::var("RAW_EDITOR_TILE_REPLAY_MANIFEST") {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let sources = manifest
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|source| {
+                    let hex = source["sha256_before"].as_str().unwrap();
+                    let mut digest = [0u8; 32];
+                    for (index, byte) in digest.iter_mut().enumerate() {
+                        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).unwrap();
+                    }
+                    (source["path"].as_str().unwrap().to_string(), digest)
+                })
+                .collect::<Vec<_>>();
+            let key = virtual_tile::CacheKeyInputs::new(
+                crate::image_stack::STACK_PIPELINE_VERSION,
+                &sources,
+            );
+            let seed = determinism::derive_run_seed_from_cache_key(&key.digest());
+            determinism::set_run_random_seed(seed);
+            println!("TILE_REPLAY run seed={seed}");
+        }
+        let directory = PathBuf::from(
+            std::env::var_os("RAW_EDITOR_TILE_REPLAY_DIR").expect("saved tile directory"),
+        );
+        let count: usize = std::env::var("RAW_EDITOR_TILE_REPLAY_COUNT")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let brief_pairs = processing::generate_brief_pairs();
+        let mut tiles = Vec::new();
+        let mut native = Vec::new();
+        let mut masks = Vec::new();
+        let factors = std::env::var("RAW_EDITOR_TILE_REPLAY_FACTORS")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|factor| factor.parse().unwrap())
+                    .collect()
+            })
+            .unwrap_or_else(|_| vec![1]);
+        let mut pyramid = VirtualTileMatchPyramid::new(factors, count);
+        for station in 0..count {
+            let gray = image::open(directory.join(format!("station-{station:03}.gray.png")))
+                .unwrap()
+                .to_luma8();
+            let mask = image::open(directory.join(format!("station-{station:03}.coverage.png")))
+                .unwrap()
+                .to_luma8();
+            let coverage =
+                stitching::CoverageMask::from_bytes(mask.width(), mask.height(), mask.into_raw())
+                    .unwrap();
+            let mut tile = ImageInfo {
+                id: station,
+                filename: format!("station-{station:03}"),
+                width: gray.width(),
+                height: gray.height(),
+                alignment_image: gray.clone(),
+                full_image: None,
+                scale_factor: 1.0,
+                focal_length_35mm: None,
+                source_footprint: None,
+                features: Vec::new(),
+                top_features: Vec::new(),
+                overview_reference: false,
+                foreground_range: None,
+                foreground_mask: None,
+                horizontal_edge_rows: Vec::new(),
+                vertical_edge_columns: Vec::new(),
+            };
+            install_virtual_tile_match_planes(
+                &mut tile,
+                &mut pyramid,
+                station,
+                &gray,
+                &coverage,
+                &brief_pairs,
+            )
+            .unwrap();
+            tiles.push(tile);
+            native.push(gray);
+            masks.push(coverage);
+        }
+        let native_sigma = std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_SIGMA")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let native_structure = native
+            .iter()
+            .map(|image| {
+                if native_sigma > 0.0 {
+                    imageproc::filter::gaussian_blur_f32(image, native_sigma)
+                } else {
+                    image.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let native_half = std::env::var("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_HALF")
+            .ok()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(7);
+        let mut records = Vec::new();
+        let mut replay_matches = HashMap::new();
+        let selected_pairs = std::env::var("RAW_EDITOR_TILE_REPLAY_PAIRS")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|pair| {
+                        let (left, right) = pair.split_once(':').unwrap();
+                        (
+                            left.parse::<usize>().unwrap(),
+                            right.parse::<usize>().unwrap(),
+                        )
+                    })
+                    .collect::<BTreeSet<_>>()
+            });
+        if let Ok(sigma) = std::env::var("RAW_EDITOR_TILE_REPLAY_POLISH_BLUR") {
+            let sigma: f32 = sigma.parse().unwrap();
+            for plane in pyramid.levels.last_mut().unwrap() {
+                plane.alignment_image =
+                    imageproc::filter::gaussian_blur_f32(&plane.alignment_image, sigma);
+            }
+        }
+        let quality_factors: Vec<u32> = std::env::var("RAW_EDITOR_TILE_REPLAY_QUALITY_FACTORS")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(|factor| factor.parse().unwrap())
+                    .collect()
+            })
+            .unwrap_or_else(|_| vec![1, 2, 4, 12]);
+        let seed_poses = std::env::var("RAW_EDITOR_TILE_REPLAY_SEED_POSES")
+            .ok()
+            .map(|path| {
+                let poses: Vec<Vec<Vec<f64>>> =
+                    serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+                assert_eq!(poses.len(), count);
+                poses
+                    .into_iter()
+                    .map(|p| {
+                        Matrix3::new(
+                            p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2], p[2][0], p[2][1],
+                            p[2][2],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            });
+        for left in 0..count {
+            for right in left + 1..count {
+                if selected_pairs
+                    .as_ref()
+                    .is_some_and(|pairs| !pairs.contains(&(left, right)))
+                {
+                    continue;
+                }
+                let feature_seed = virtual_tile_prior_free_relation(
+                    pyramid.feature_factors[left],
+                    &tiles[left].features,
+                    pyramid.feature_factors[right],
+                    &tiles[right].features,
+                    tiles[left].dimensions(),
+                );
+                let Some((seed, feature_inliers)) = seed_poses
+                    .as_ref()
+                    .and_then(|poses| Some((poses[right].try_inverse()? * poses[left], 0)))
+                    .or(feature_seed)
+                else {
+                    continue;
+                };
+                let (relation, mut diagnostic) =
+                    virtual_tile_pyramid_station_match(left, right, &pyramid, &seed, "saved_tiles");
+                let Some(selection) = select_virtual_tile_relation_hypothesis(
+                    &tiles,
+                    left,
+                    right,
+                    &relation,
+                    pyramid.solver_coverages(),
+                ) else {
+                    println!(
+                        "TILE_NO_FIT {left}->{right} stage={} inliers={} support={:.4}",
+                        diagnostic.failure_stage,
+                        diagnostic.fitted_inliers,
+                        diagnostic.hull_support
+                    );
+                    continue;
+                };
+                let mut relation = selection.relation;
+                if std::env::var_os("RAW_EDITOR_TILE_REPLAY_POLISH").is_some() {
+                    let polished = virtual_tile_polished_station_match(
+                        &pyramid.levels[0][left],
+                        &pyramid.coverages[0][left],
+                        &pyramid.levels[0][right],
+                        &pyramid.coverages[0][right],
+                        1,
+                        &relation.homography,
+                        (tiles[left].dimensions(), tiles[right].dimensions()),
+                        &mut diagnostic,
+                    );
+                    let Some(selection) = select_virtual_tile_relation_hypothesis(
+                        &tiles,
+                        left,
+                        right,
+                        &polished,
+                        pyramid.solver_coverages(),
+                    ) else {
+                        continue;
+                    };
+                    relation = selection.relation;
+                }
+                let native_verified_points =
+                    if std::env::var_os("RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP").is_some() {
+                        let backward = relation.homography.try_inverse().unwrap();
+                        let step = (relation.points.len() / 400).max(1);
+                        relation
+                            .points
+                            .par_iter()
+                            .enumerate()
+                            .filter(|(index, _)| index % step == 0)
+                            .filter_map(|(_, &(center, _))| {
+                                let check = residual_warp::verify_round_trip_match_with_template(
+                                    &native_structure[left],
+                                    &native_structure[right],
+                                    &relation.homography,
+                                    &backward,
+                                    center,
+                                    native_half,
+                                )?;
+                                Some([
+                                    center.x,
+                                    center.y,
+                                    check.forward.x,
+                                    check.forward.y,
+                                    check.round_trip_error_px,
+                                ])
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        relation
+                            .native_verified_points
+                            .iter()
+                            .map(|&(a, b, error)| [a.x, a.y, b.x, b.y, error])
+                            .collect::<Vec<_>>()
+                    };
+                let authoritative = virtual_tile_provisional_authoritative_candidate(
+                    &tiles,
+                    left,
+                    right,
+                    std::slice::from_ref(&relation),
+                    pyramid.solver_coverages(),
+                );
+                if authoritative {
+                    replay_matches.insert((left, right), relation.clone());
+                }
+                let (canonical_left, canonical_right, inverted) =
+                    canonical_match_direction(&tiles, left, right);
+                let canonical_pose = if inverted {
+                    relation.homography.try_inverse().unwrap()
+                } else {
+                    relation.homography
+                };
+                let canonical_quality = focus_overlap_quality_measurements_on_coverage(
+                    &tiles[canonical_left],
+                    &tiles[canonical_right],
+                    &canonical_pose,
+                    Some((
+                        &pyramid.quality_coverages[canonical_left],
+                        &pyramid.quality_coverages[canonical_right],
+                    )),
+                );
+                println!(
+                    "TILE_GATE {left}->{right} authoritative={authoritative} inverted={inverted} quality={canonical_quality:?}"
+                );
+                for &factor in &quality_factors {
+                    let lp =
+                        VirtualTileMatchPlane::from_native(&native[left], &masks[left], factor)
+                            .unwrap();
+                    let rp =
+                        VirtualTileMatchPlane::from_native(&native[right], &masks[right], factor)
+                            .unwrap();
+                    let mut l = virtual_tile_plane_image_info(&tiles[left], &lp);
+                    let mut r = virtual_tile_plane_image_info(&tiles[right], &rp);
+                    for (t, p) in [(&mut l, &lp), (&mut r, &rp)] {
+                        t.width = p.gray.width() * factor;
+                        t.height = p.gray.height() * factor;
+                        t.scale_factor = f64::from(factor);
+                        t.alignment_image = imageproc::filter::gaussian_blur_f32(&p.gray, 1.0);
+                    }
+                    let q = focus_overlap_quality_measurements_on_coverage(
+                        &l,
+                        &r,
+                        &relation.homography,
+                        Some((&lp.coverage, &rp.coverage)),
+                    );
+                    println!(
+                        "TILE_REPLAY {left}->{right} factor={factor} features={feature_inliers} fit={} error={:.3} quality={q:?}",
+                        relation.points.len(),
+                        median_symmetric_error(&relation.homography, &relation.points)
+                    );
+                    if let Some(q) = q {
+                        let (photometric, strength) = virtual_tile_photometric_measurements(q);
+                        records.push(serde_json::json!({"left":left,"right":right,"factor":factor,
+                            "inliers":relation.points.len(),"error":median_symmetric_error(&relation.homography,&relation.points),
+                            "scale":station_relation_overlap_scale(&relation.homography,&relation.points),
+                            "authoritative":authoritative,
+                            "orientation":q.median_edge_orientation_difference_degrees,"strength":strength,
+                            "photometric":photometric,"raw_photometric":q.low_frequency_mean_relative_difference,
+                            "exposure_gain":q.exposure_gain,"normalized_difference":q.exposure_normalized_difference,"intensity_ncc":q.intensity_ncc,
+                            "edge_ncc":q.edge_ncc,"homography":relation.homography.as_slice(),
+                            "points":relation.points.iter().map(|(a,b)| [a.x,a.y,b.x,b.y]).collect::<Vec<_>>(),
+                            "native_verified_points": native_verified_points, "diagnostic":diagnostic}));
+                    }
+                }
+            }
+        }
+        if let Ok(path) = std::env::var("RAW_EDITOR_TILE_REPLAY_INITIAL_POSES") {
+            let poses: Vec<Vec<Vec<f64>>> =
+                serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let initial = poses
+                .iter()
+                .enumerate()
+                .map(|(index, p)| {
+                    (
+                        index,
+                        Matrix3::new(
+                            p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2], p[2][0], p[2][1],
+                            p[2][2],
+                        ),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let groups = (0..tiles.len())
+                .map(|anchor| FocusCaptureGroup {
+                    anchor,
+                    members: vec![anchor],
+                    local_to_anchor: HashMap::from([(anchor, Matrix3::identity())]),
+                })
+                .collect::<Vec<_>>();
+            let topology = focus_station_topology(&tiles, &groups, &initial);
+            let mut closure = stack_report::ClosureReport::default();
+            let mut relations = stack_report::StationRelationsReport::default();
+            let mut solved = solve_virtual_tile_station_poses_with_report(
+                &tiles,
+                pyramid.solver_coverages(),
+                &replay_matches,
+                &initial,
+                &topology,
+                &mut closure,
+                &mut relations,
+            );
+            if std::env::var_os("RAW_EDITOR_TILE_REPLAY_JOINT").is_some() {
+                // Preserve the measured evidence before an intentional guard
+                // assertion, so a refused model can be diagnosed without
+                // repeating the native patch measurements.
+                fs::write(
+                    directory.join("replayed-relations.json"),
+                    serde_json::to_vec_pretty(&records).unwrap(),
+                )
+                .unwrap();
+                fs::write(
+                    directory.join("joint-production-input.json"),
+                    serde_json::to_vec(&serde_json::json!({
+                        "poses":tiles.iter().map(|tile| {
+                            let h=solved[&tile.id];(0..3).map(|r|(0..3).map(|c|h[(r,c)])
+                                .collect::<Vec<_>>()).collect::<Vec<_>>()
+                        }).collect::<Vec<_>>(),
+                        "dimensions":tiles.iter().map(ImageInfo::dimensions).collect::<Vec<_>>(),
+                        "records":records,
+                    }))
+                    .unwrap(),
+                )
+                .unwrap();
+                solved = refine_virtual_tile_joint_geometry(
+                    &tiles,
+                    &replay_matches,
+                    &solved,
+                    &mut closure,
+                    &mut relations,
+                )
+                .expect("native joint model failed its guards");
+                let model = residual_warp::run_model_snapshot();
+                let fields = model.regions.iter().map(|region| serde_json::json!({
+                    "station":region.right_station,"world":region.world,"columns":region.columns,
+                    "rows":region.rows,"values":region.nodes().iter().map(|node|node.displacement).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>();
+                fs::write(
+                    directory.join("joint-render-fields.json"),
+                    serde_json::to_vec(&fields).unwrap(),
+                )
+                .unwrap();
+            }
+            fs::write(directory.join("solver-replay.json"),serde_json::to_vec_pretty(&serde_json::json!({
+                "poses":solved.iter().map(|(id,h)| (id.to_string(),h.as_slice())).collect::<BTreeMap<_,_>>(),
+                "closure":closure,"station_relations":relations,
+            })).unwrap()).unwrap();
+        }
+        fs::write(
+            directory.join("replayed-relations.json"),
+            serde_json::to_vec_pretty(&records).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires RAW_EDITOR_FOCUS_STACK_PATHS and an external diagnostic directory"]
+    fn real_focus_pair_diagnostics_from_env() {
+        let paths = std::env::split_paths(
+            &std::env::var_os("RAW_EDITOR_FOCUS_STACK_PATHS").expect("source paths"),
+        )
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+        let output = PathBuf::from(
+            std::env::var_os("RAW_EDITOR_FOCUS_PAIR_DIAGNOSTICS_DIR")
+                .expect("diagnostic directory"),
+        );
+        fs::create_dir_all(&output).unwrap();
+        crate::sidecar_storage::initialize(&output.join("sidecars")).unwrap();
+        let brief_pairs = processing::generate_brief_pairs();
+        let settings = AppSettings::default();
+        let raw_exposure_reference = stack_raw_exposure_reference(&paths);
+        let mut images = Vec::new();
+        for (id, filename) in paths.iter().enumerate() {
+            let prepared =
+                load_prepared_stack_source(filename, &settings, raw_exposure_reference).unwrap();
+            let (width, height) = prepared.image.dimensions();
+            let (w, h, scale_factor) =
+                processing::calculate_downscale_dimensions_capped(width, height, 2400);
+            let alignment_image = prepared
+                .image
+                .resize_exact(w, h, image::imageops::FilterType::Triangle)
+                .to_luma8();
+            let foreground_range = detect_foreground_range(&alignment_image);
+            let features = find_alignment_features(
+                &alignment_image,
+                &brief_pairs,
+                1600,
+                true,
+                prepared.focal_length_35mm,
+            );
+            alignment_image
+                .save(output.join(format!(
+                    "{}.png",
+                    Path::new(filename).file_stem().unwrap().to_string_lossy()
+                )))
+                .unwrap();
+            images.push(ImageInfo {
+                id,
+                filename: filename.clone(),
+                width,
+                height,
+                scale_factor,
+                focal_length_35mm: prepared.focal_length_35mm,
+                source_footprint: prepared.source_footprint,
+                features,
+                top_features: find_top_alignment_features(
+                    &alignment_image,
+                    &brief_pairs,
+                    foreground_range,
+                ),
+                foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
+                horizontal_edge_rows: horizontal_edge_row_candidates(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                vertical_edge_columns: detect_vertical_edge_columns(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                alignment_image,
+                foreground_range,
+                overview_reference: false,
+                full_image: None,
+            });
+        }
+        for i in 0..images.len() {
+            for j in i + 1..images.len() {
+                let (a, b, _) = canonical_match_direction(&images, i, j);
+                println!(
+                    "PROBE {} -> {}",
+                    Path::new(&images[a].filename)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy(),
+                    Path::new(&images[b].filename)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                );
+                let result = match_image_pair(
+                    &images[a],
+                    &images[b],
+                    Projection::Planar,
+                    BlendMode::FocusStack,
+                    AlignmentMode::Auto,
+                    true,
+                    true,
+                    false,
+                );
+                println!(
+                    "PROBE_RESULT {} {} {:?}",
+                    i,
+                    j,
+                    result.as_ref().map(|m| (
+                        m.inliers,
+                        median_symmetric_error(&m.homography, &m.points),
+                        m.homography
+                    ))
+                );
+                if result.is_none() {
+                    if let Some(m) = match_image_pair(
+                        &images[a],
+                        &images[b],
+                        Projection::Planar,
+                        BlendMode::Panorama,
+                        AlignmentMode::Auto,
+                        true,
+                        true,
+                        false,
+                    ) {
+                        println!(
+                            "PANORAMA_CANDIDATE {:?} quality={:?}",
+                            m.homography,
+                            focus_overlap_quality(&images[a], &images[b], &m.homography)
+                        );
+                        for factor in [1u32, 2, 4] {
+                            let structural = |info: &ImageInfo| ImageInfo {
+                                id: info.id,
+                                filename: info.filename.clone(),
+                                width: info.width,
+                                height: info.height,
+                                scale_factor: info.scale_factor * factor as f64,
+                                alignment_image: imageproc::filter::gaussian_blur_f32(
+                                    &image::imageops::resize(
+                                        &info.alignment_image,
+                                        info.alignment_image.width() / factor,
+                                        info.alignment_image.height() / factor,
+                                        image::imageops::FilterType::Triangle,
+                                    ),
+                                    1.0,
+                                ),
+                                full_image: None,
+                                focal_length_35mm: info.focal_length_35mm,
+                                source_footprint: info.source_footprint,
+                                features: Vec::new(),
+                                top_features: Vec::new(),
+                                overview_reference: false,
+                                foreground_range: None,
+                                foreground_mask: None,
+                                horizontal_edge_rows: Vec::new(),
+                                vertical_edge_columns: Vec::new(),
+                            };
+                            println!(
+                                "STRUCTURAL factor={} quality={:?}",
+                                factor,
+                                focus_overlap_quality(
+                                    &structural(&images[a]),
+                                    &structural(&images[b]),
+                                    &m.homography
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     #[ignore = "temporary fixture diagnostics"]
     fn temporary_pair_probe() {
         let root = std::env::var("RAW_EDITOR_ORDERED_PANORAMA_DIR").expect("fixture dir");
@@ -32174,6 +35286,7 @@ mod acceptance_tests {
                     full_image: Some(source.to_rgb32f()),
                     scale_factor: sf,
                     focal_length_35mm: focal,
+                    source_footprint: None,
                     overview_reference: false,
                     features,
                     top_features: Vec::new(),
@@ -32438,9 +35551,475 @@ mod acceptance_tests {
         );
     }
 
+    fn verify_layered_native_acceptance(report: &stack_report::StackReport) -> Result<(), String> {
+        use stack_report::{ClosureStatus, QualityGateVerdict, SelectedPath, ToneStatus};
+        if report.selected_path != SelectedPath::LayeredVirtualTile {
+            return Ok(());
+        }
+        if report.station_relations.connectivity.components != 1
+            || report.closure.status != ClosureStatus::Converged
+        {
+            return Err("native station geometry is not connected and converged".into());
+        }
+        let criteria = &report.quality_gate.criteria;
+        if report.quality_gate.verdict != QualityGateVerdict::Pass
+            || criteria.len() != quality_gate::QUALITY_CRITERIA.len()
+        {
+            return Err("native output did not pass the complete quality gate".into());
+        }
+        for name in quality_gate::QUALITY_CRITERIA {
+            let matches = criteria
+                .iter()
+                .filter(|criterion| criterion.name == name)
+                .collect::<Vec<_>>();
+            if matches.len() != 1 {
+                return Err(format!("missing or duplicate quality criterion: {name}"));
+            }
+            let criterion = matches[0];
+            let accepted = criterion.verdict == QualityGateVerdict::Pass
+                || (name == "mtf50_normalized"
+                    && criterion.verdict == QualityGateVerdict::NotApplicable
+                    && criterion.technical_unmeasurable_count == 0);
+            if !accepted {
+                return Err(format!("native quality criterion failed: {name}"));
+            }
+        }
+        let maximum = report.tone.boundary_delta_e.max;
+        if report.tone.status != ToneStatus::Applied
+            || !maximum.is_finite()
+            || maximum > stack_report::TONE_BOUNDARY_DELTA_E_THRESHOLD
+        {
+            return Err(format!(
+                "native tone boundary failed: {maximum:.6} Delta E00"
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn native_acceptance_rejects_degraded_tone_even_when_all_quality_criteria_pass() {
+        let mut report = stack_report::StackReport::default();
+        report.station_relations.connectivity.components = 1;
+        report.closure.status = stack_report::ClosureStatus::Converged;
+        report.quality_gate.verdict = stack_report::QualityGateVerdict::Pass;
+        report.quality_gate.criteria = quality_gate::QUALITY_CRITERIA
+            .iter()
+            .map(|name| stack_report::QualityGateCriterionRecord {
+                name: (*name).into(),
+                verdict: stack_report::QualityGateVerdict::Pass,
+                ..Default::default()
+            })
+            .collect();
+        report.tone.status = stack_report::ToneStatus::Applied;
+        assert!(verify_layered_native_acceptance(&report).is_ok());
+        report.tone.status = stack_report::ToneStatus::Degraded;
+        report.tone.boundary_delta_e.max = 9.8;
+        assert!(
+            verify_layered_native_acceptance(&report)
+                .unwrap_err()
+                .contains("tone boundary failed")
+        );
+        report.tone.status = stack_report::ToneStatus::Applied;
+        report.tone.boundary_delta_e.max = 0.0;
+        let mtf = report
+            .quality_gate
+            .criteria
+            .iter_mut()
+            .find(|c| c.name == "mtf50_normalized")
+            .unwrap();
+        mtf.verdict = stack_report::QualityGateVerdict::NotApplicable;
+        assert!(verify_layered_native_acceptance(&report).is_ok());
+        report
+            .quality_gate
+            .criteria
+            .iter_mut()
+            .find(|c| c.name == "mtf50_normalized")
+            .unwrap()
+            .technical_unmeasurable_count = 1;
+        assert!(verify_layered_native_acceptance(&report).is_err());
+    }
+
+    pub(crate) fn capture_native_gradient_roi(
+        world: (f64, f64),
+        path: &str,
+        value: f64,
+        local_scale: f64,
+        output: &image::Rgb32FImage,
+        reference: &image::Rgb32FImage,
+    ) {
+        let Some(directory) =
+            std::env::var_os("RAW_EDITOR_NATIVE_GRADIENT_DIAGNOSTICS").map(PathBuf::from)
+        else {
+            return;
+        };
+        let witness = std::env::var("RAW_EDITOR_NATIVE_GRADIENT_ROIS")
+            .ok()
+            .is_some_and(|text| {
+                text.split(';').any(|pair| {
+                    let values = pair
+                        .split(',')
+                        .filter_map(|v| v.parse::<f64>().ok())
+                        .collect::<Vec<_>>();
+                    values.len() == 2 && values[0] == world.0 && values[1] == world.1
+                })
+            });
+        if !witness && value >= quality_gate::QUALITY_GRADIENT_RATIO_MIN {
+            return;
+        }
+        fs::create_dir_all(&directory).unwrap();
+        let prefix = directory.join(format!("gradient-{}-{}", world.0, world.1));
+        for (name, image) in [("output", output), ("reference", reference)] {
+            DynamicImage::ImageRgb32F(image.clone())
+                .save(prefix.with_extension(format!("{name}.float.tiff")))
+                .unwrap();
+            DynamicImage::ImageRgb32F(image.clone())
+                .to_rgb16()
+                .save(prefix.with_extension(format!("{name}.png")))
+                .unwrap();
+        }
+        fs::write(prefix.with_extension("json"),serde_json::to_vec_pretty(&serde_json::json!({
+            "diagnostic_only":true,"world":world,"owner_path":path,"measured":value,"local_scale":local_scale,
+            "threshold":quality_gate::QUALITY_GRADIENT_RATIO_MIN,
+        })).unwrap()).unwrap();
+    }
+
+    pub(super) fn capture_failed_native_boundaries(
+        input: &quality_gate_runner::QualityGateInput<'_>,
+        report: &stack_report::QualityGateReport,
+    ) {
+        let Some(directory) =
+            std::env::var_os("RAW_EDITOR_FAILED_NATIVE_BOUNDARIES").map(PathBuf::from)
+        else {
+            return;
+        };
+        fs::create_dir_all(&directory).unwrap();
+        for criterion in &report.criteria {
+            if criterion.name != "boundary_stroke_alignment" {
+                continue;
+            }
+            for (index, failed) in criterion.failed.iter().enumerate() {
+                let x = (failed.world.x - input.world_origin.0).round() as u32;
+                let y = (failed.world.y - input.world_origin.1).round() as u32;
+                let left = x.saturating_sub(48);
+                let top = y.saturating_sub(48);
+                let width = 96.min(input.output.width().saturating_sub(left));
+                let height = 96.min(input.output.height().saturating_sub(top));
+                let crop =
+                    image::imageops::crop_imm(input.output, left, top, width, height).to_image();
+                let prefix = directory.join(format!("boundary-{index:03}"));
+                DynamicImage::ImageRgb32F(crop.clone())
+                    .save(prefix.with_extension("float.tiff"))
+                    .unwrap();
+                DynamicImage::ImageRgb32F(crop)
+                    .to_rgb16()
+                    .save(prefix.with_extension("visible.png"))
+                    .unwrap();
+                image::imageops::crop_imm(input.coverage, left, top, width, height)
+                    .to_image()
+                    .save(prefix.with_extension("coverage.png"))
+                    .unwrap();
+                let owners = (top..top + height)
+                    .flat_map(|row| {
+                        (left..left + width).map(move |column| {
+                            input.ownership
+                                [row as usize * input.output.width() as usize + column as usize]
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                image::ImageBuffer::<image::Luma<u16>, Vec<u16>>::from_raw(width, height, owners)
+                    .unwrap()
+                    .save(prefix.with_extension("owners.png"))
+                    .unwrap();
+                let legend=input.sources.iter().map(|source|serde_json::json!({
+                    "owner":source.owner,"path":source.path,"station":source.geometry.station_id
+                })).collect::<Vec<_>>();
+                fs::write(prefix.with_extension("json"),serde_json::to_vec_pretty(&serde_json::json!({
+                    "diagnostic_only":true,"reported":failed,"world_origin":input.world_origin,
+                    "canvas":[x,y],"crop":[left,top,width,height],"crop_point":[x-left,y-top],"legend":legend,
+                })).unwrap()).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "renders one real station from the saved source alignment for native diagnostics"]
+    fn real_saved_capture_station_from_env() {
+        let _scope = degradation::begin_run_scope();
+        let cache: serde_json::Value = serde_json::from_slice(
+            &fs::read(std::env::var("RAW_EDITOR_NATIVE_STATION_ALIGNMENT").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let station: usize = std::env::var("RAW_EDITOR_NATIVE_STATION_INDEX")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let output = PathBuf::from(std::env::var("RAW_EDITOR_NATIVE_STATION_OUTPUT").unwrap());
+        crate::sidecar_storage::initialize(
+            PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
+        )
+        .unwrap();
+        let all_paths = cache["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["filename"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let settings = AppSettings::default();
+        let exposure = stack_raw_exposure_reference(&all_paths);
+        let group = &cache["capture_groups"][station];
+        let ids = group["member_ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|id| id.as_u64().unwrap() as usize)
+            .collect::<Vec<_>>();
+        let matrix = |value: &serde_json::Value| {
+            let coefficients = value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect::<Vec<_>>();
+            Matrix3::from_row_slice(&coefficients)
+        };
+        let global = cache["global_homographies"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(id, h)| (id.parse::<usize>().unwrap(), matrix(h)))
+            .collect::<HashMap<_, _>>();
+        let anchor = group["anchor_id"].as_u64().unwrap() as usize;
+        let inverse_anchor = global[&anchor].try_inverse().unwrap();
+        let local = ids
+            .iter()
+            .map(|&id| {
+                (
+                    id,
+                    normalized_homography(&(inverse_anchor * global[&id])).unwrap(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let mut warp = FocusLayerWarp {
+            bands: cache["focus_warp"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|band| {
+                    let ranges = |key: &str| {
+                        band[key]
+                            .as_object()
+                            .unwrap()
+                            .iter()
+                            .map(|(id, r)| {
+                                (
+                                    id.parse::<usize>().unwrap(),
+                                    (r[0].as_f64().unwrap(), r[1].as_f64().unwrap()),
+                                )
+                            })
+                            .collect::<HashMap<_, _>>()
+                    };
+                    FocusWarpBand {
+                        homographies: band["homographies"]
+                            .as_object()
+                            .unwrap()
+                            .iter()
+                            .map(|(id, h)| {
+                                (
+                                    id.parse::<usize>().unwrap(),
+                                    normalized_homography(&(inverse_anchor * matrix(h))).unwrap(),
+                                )
+                            })
+                            .collect(),
+                        source_ranges: ranges("source_ranges"),
+                        source_x_ranges: ranges("source_x_ranges"),
+                        foreground_only: band["foreground_only"].as_bool().unwrap(),
+                        relax_foreground_seam: band["relax_foreground_seam"].as_bool().unwrap(),
+                        physical_edge: band["physical_edge"].as_bool().unwrap(),
+                    }
+                })
+                .collect(),
+        };
+        if std::env::var_os("RAW_EDITOR_NATIVE_STATION_NO_GENERIC_WARP").is_some() {
+            warp.bands.retain(|band| band.physical_edge);
+        }
+        let mut images = Vec::new();
+        for id in ids {
+            let source = cache["sources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["id"].as_u64().unwrap() as usize == id)
+                .unwrap();
+            let path = source["filename"].as_str().unwrap().to_string();
+            let prepared = load_prepared_stack_source(&path, &settings, exposure).unwrap();
+            let (w, h, scale) = processing::calculate_downscale_dimensions_capped(
+                prepared.image.width(),
+                prepared.image.height(),
+                2400,
+            );
+            let alignment_image = prepared
+                .image
+                .resize_exact(w, h, image::imageops::FilterType::Triangle)
+                .to_luma8();
+            let foreground_range = detect_foreground_range(&alignment_image);
+            images.push(ImageInfo {
+                id,
+                filename: path,
+                width: prepared.image.width(),
+                height: prepared.image.height(),
+                scale_factor: scale,
+                focal_length_35mm: prepared.focal_length_35mm,
+                source_footprint: prepared.source_footprint,
+                overview_reference: false,
+                features: Vec::new(),
+                top_features: Vec::new(),
+                foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
+                foreground_range,
+                horizontal_edge_rows: horizontal_edge_row_candidates(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                vertical_edge_columns: detect_vertical_edge_columns(
+                    &alignment_image,
+                    foreground_range,
+                ),
+                alignment_image,
+                full_image: None,
+            });
+        }
+        if std::env::var_os("RAW_EDITOR_NATIVE_STATION_EDGE_DIAGNOSTICS").is_some() {
+            for info in &images {
+                println!(
+                    "Station physical candidates {} H {:?} V {:?}",
+                    info.id, info.horizontal_edge_rows, info.vertical_edge_columns
+                );
+                for row in &info.horizontal_edge_rows {
+                    println!(
+                        "Physical curve samples H {} {} {:?}",
+                        info.id,
+                        row,
+                        horizontal_edge_line_samples(info, &local[&info.id], *row)
+                    );
+                    println!(
+                        "Station horizontal fit {} {} {:?}",
+                        info.id,
+                        row,
+                        fit_focus_horizontal_edge_line(info, &local[&info.id], *row)
+                    );
+                }
+                for column in &info.vertical_edge_columns {
+                    println!(
+                        "Physical curve samples V {} {} {:?}",
+                        info.id,
+                        column,
+                        vertical_edge_line_samples(info, &local[&info.id], *column, None)
+                    );
+                    println!(
+                        "Station vertical fit {} {} {:?}",
+                        info.id,
+                        column,
+                        fit_focus_vertical_edge_line(info, &local[&info.id], *column, None)
+                    );
+                }
+            }
+            let h = build_focus_horizontal_edge_bands(&images, &local);
+            let v = build_focus_vertical_edge_bands_in_region(&images, &local, false);
+            println!("Station physical bands H={} V={}", h.len(), v.len());
+        }
+        let references = images.iter().collect::<Vec<_>>();
+        let mut load = |info: &ImageInfo| {
+            load_prepared_stack_source(&info.filename, &settings, exposure)
+                .map(|p| p.image.to_rgb32f())
+        };
+        let app = tauri::test::mock_app();
+        let rendered = stitching::focus_stack_stitcher_unfilled(
+            &references,
+            &local,
+            Projection::Planar,
+            (!warp.bands.is_empty()).then_some(&warp),
+            None,
+            station,
+            false,
+            app.handle().clone(),
+            "station-native-diagnostic",
+            &mut load,
+        )
+        .unwrap();
+        if let Some(masks) = rendered.masks.as_ref() {
+            let (width, height) = masks.coverage.dimensions();
+            image::GrayImage::from_raw(width, height, masks.coverage.covered().to_vec())
+                .unwrap()
+                .save(output.with_extension("coverage.png"))
+                .unwrap();
+        }
+        if let (Some(roi), Some(masks)) = (
+            std::env::var("RAW_EDITOR_NATIVE_STATION_ROI").ok(),
+            rendered.masks.as_ref(),
+        ) {
+            let r = roi
+                .split(',')
+                .map(|v| v.parse::<u32>().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(r.len(), 4);
+            let owner =
+                image::ImageBuffer::<image::Luma<u16>, Vec<u16>>::from_fn(r[2], r[3], |x, y| {
+                    image::Luma([masks.ownership.owner_at(r[0] + x, r[1] + y)])
+                });
+            owner.save(output.with_extension("roi-owners.png")).unwrap();
+            for info in &images {
+                let Some(refinement) = masks.source_refinements.get(&info.id) else {
+                    continue;
+                };
+                let source = load_prepared_stack_source(&info.filename, &settings, exposure)
+                    .unwrap()
+                    .image
+                    .to_rgb32f();
+                let patch = image::Rgb32FImage::from_fn(r[2], r[3], |x, y| {
+                    let point = refinement
+                        .inverse_canvas_point(Point2::new((r[0] + x) as f64, (r[1] + y) as f64));
+                    refinement
+                        .source_sampling
+                        .as_ref()
+                        .and_then(|s| {
+                            s.source_point(Point3::new(
+                                point.x + rendered.sampling_origin.0,
+                                point.y + rendered.sampling_origin.1,
+                                1.0,
+                            ))
+                        })
+                        .map_or(image::Rgb([0.0; 3]), |p| {
+                            stitching::get_high_quality_interpolated_pixel(&source, p.x, p.y)
+                        })
+                });
+                DynamicImage::ImageRgb32F(patch)
+                    .to_rgb16()
+                    .save(output.with_extension(format!("roi-source-{}.png", info.id)))
+                    .unwrap();
+            }
+        }
+        let canonical = crate::image_stack::canonicalize_image_stack_result(
+            DynamicImage::ImageRgb32F(rendered.image),
+        );
+        canonical.save(&output).unwrap();
+        canonical
+            .resize(1800, 1800, image::imageops::FilterType::Lanczos3)
+            .save(output.with_extension("preview.jpg"))
+            .unwrap();
+        println!(
+            "Native station diagnostic only: {}x{} origin {:?}; {} generic/physical bands",
+            canonical.width(),
+            canonical.height(),
+            rendered.sampling_origin,
+            warp.bands.len()
+        );
+    }
+
     #[test]
     #[ignore = "requires user-provided focus-stack paths and writes a large temporary output"]
     fn real_focus_stack_fixture_from_env() {
+        stitching::set_test_tone_capture_directory(
+            std::env::var_os("RAW_EDITOR_TONE_DIAGNOSTICS_DIR").map(PathBuf::from),
+        );
         let encoded_paths = std::env::var_os("RAW_EDITOR_FOCUS_STACK_PATHS")
             .expect("RAW_EDITOR_FOCUS_STACK_PATHS must contain platform-separated image paths");
         let paths: Vec<String> = std::env::split_paths(&encoded_paths)
@@ -32486,10 +36065,6 @@ mod acceptance_tests {
             });
         let canonical = crate::image_stack::canonicalize_image_stack_result(result.image);
         let preview_only = std::env::var_os("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_ONLY").is_some();
-        if !preview_only {
-            crate::image_stack::write_srgb_tiff(&canonical, &output_path)
-                .expect("full-resolution color-managed TIFF result should be writable");
-        }
         let preview_edge = std::env::var("RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_EDGE")
             .ok()
             .and_then(|value| value.parse::<u32>().ok())
@@ -32547,6 +36122,10 @@ mod acceptance_tests {
         }
         let app_jpeg_path = output_path.with_extension("app.jpg");
         if !preview_only {
+            // Keep visual diagnostics even if a later large export runs out
+            // of disk space. Export failure still fails this acceptance run.
+            crate::image_stack::write_srgb_tiff(&canonical, &output_path)
+                .expect("full-resolution color-managed TIFF result should be writable");
             crate::image_stack::write_srgb_jpeg(&canonical, &app_jpeg_path)
                 .expect("full-resolution application JPEG should be writable");
         }
@@ -32580,6 +36159,17 @@ mod acceptance_tests {
             app_jpeg_path.display(),
             preview_path.display()
         );
+        // Save diagnostics first, but successful file writes cannot establish
+        // acceptance. In particular, a degraded tone report must fail the run
+        // even when all nine independent quality criteria passed.
+        if let Some(path) = result.stack_report_path {
+            let report: stack_report::StackReport = serde_json::from_slice(
+                &fs::read(&path).expect("native acceptance report should be readable"),
+            )
+            .expect("native acceptance report should match its schema");
+            verify_layered_native_acceptance(&report)
+                .unwrap_or_else(|error| panic!("{error}; report: {}", path.display()));
+        }
     }
 
     #[test]

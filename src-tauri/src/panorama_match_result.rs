@@ -14,6 +14,7 @@ pub(super) fn build_match_info(
     coarse_bridge: bool,
 ) -> MatchInfo {
     MatchInfo {
+        native_verified_points: Vec::new(),
         homography,
         inliers: points.len(),
         sequence_bridge: false,

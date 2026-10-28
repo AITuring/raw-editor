@@ -14,9 +14,11 @@ use super::{
     collect_dense_focus_region_points, collect_foreground_feature_points,
     estimate_mixed_focal_coarse_registration, estimate_similarity, estimate_translation,
     find_mixed_focal_similarity_ransac, focus_alignment_keypoint_is_foreground,
-    focus_overlap_quality, match_has_spatial_support, mixed_focal_scale_is_plausible,
-    panorama_model_fit, refine_homography_inliers, refine_match_point_from_homography,
-    retain_model_inliers, select_focus_stack_transform, select_large_panorama_transform,
+    focus_overlap_is_verified, focus_overlap_quality, match_has_spatial_support,
+    median_symmetric_error, mixed_focal_scale_is_plausible, panorama_model_fit,
+    refine_homography_inliers, refine_match_point_from_homography, retain_model_inliers,
+    select_focus_stack_transform, select_large_panorama_transform,
+    shifted_focus_structure_is_verified, symmetric_inlier_indices,
 };
 
 #[derive(Debug)]
@@ -48,6 +50,7 @@ pub(super) fn verify_match_geometry(
     alignment_mode: AlignmentMode,
     stable_four_point_solver: bool,
     log_match: bool,
+    allow_low_texture_boundary: bool,
     mixed_focal_pair: bool,
     minimum_inliers: usize,
     initial_matches: &[Match],
@@ -503,7 +506,7 @@ pub(super) fn verify_match_geometry(
         // graph edge and pull an otherwise coherent mosaic into a false overlap.
         return None;
     }
-    let homography = if alignment_mode == AlignmentMode::Position {
+    let mut homography = if alignment_mode == AlignmentMode::Position {
         estimate_translation(&inlier_points)
     } else if alignment_mode == AlignmentMode::FlatArtwork {
         // The projective RANSAC above is only a candidate generator.  A flat
@@ -550,6 +553,58 @@ pub(super) fn verify_match_geometry(
     } else {
         refined_homography
     };
+    // A shifted artwork scan can require perspective even when every frame
+    // uses the same lens. The low-DOF selector may favour a precise minority
+    // while rejecting the correctly registered full overlap. Keep the original
+    // feature/RANSAC fit as a candidate; only a distributed, independently
+    // image-verified fit may supersede that minority.
+    if blend_mode == BlendMode::FocusStack
+        && stable_four_point_solver
+        && !mixed_focal_pair
+        && !mixed_focal_fallback_used
+        && alignment_mode == AlignmentMode::Auto
+    {
+        let selected_indices =
+            symmetric_inlier_indices(&homography, &inlier_points, FOCUS_MODEL_INLIER_THRESHOLD);
+        let selected_points = selected_indices
+            .iter()
+            .map(|&index| inlier_points[index])
+            .collect::<Vec<_>>();
+        let selected_verified = focus_overlap_quality(source_image, target_image, &homography)
+            .is_some_and(|quality| {
+                focus_overlap_is_verified(
+                    quality,
+                    selected_points.len(),
+                    median_symmetric_error(&homography, &selected_points),
+                    allow_low_texture_boundary,
+                )
+            });
+        if !selected_verified {
+            if shifted_focus_structure_is_verified(
+                source_image,
+                target_image,
+                &homography,
+                &selected_points,
+                log_match,
+            ) {
+                // Keep the simpler model when its structure is independently
+                // supported; do not promote perspective solely for more points.
+            } else if shifted_focus_structure_is_verified(
+                source_image,
+                target_image,
+                &refined_homography,
+                &inlier_points,
+                log_match,
+            ) {
+                homography = refined_homography;
+                if log_match {
+                    println!(
+                        "  - Retaining structure-verified shifted focus projective fit instead of a low-DOF minority"
+                    );
+                }
+            }
+        }
+    }
     if blend_mode == BlendMode::FocusStack
         && !mixed_focal_fallback_used
         && !retain_model_inliers(

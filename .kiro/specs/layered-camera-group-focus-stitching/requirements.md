@@ -119,9 +119,12 @@
 4. WHEN 相邻候选之间累计画面中心位移超过画面长边的 0.02 倍，THE Station_Grouper SHALL 在该位置拆分
    Capture_Station。
 5. THE Station_Grouper SHALL 支持单个 Capture_Station 包含 1 至 48 张 Source_RAW。
-6. IF 某张 Source_RAW 与所有其他 Source_RAW 都不满足验收准则 1 的重叠证据判据，THEN THE
+6. IF 某张 Source_RAW 与所有其他 Source_RAW 既不满足验收准则 1 的同机位证据、也不存在经过真实
+   几何、空间支持及像素结构复核的扫描邻接，THEN THE
    Station_Grouper SHALL 把该 Source_RAW 标记为孤立、不并入任何 Capture_Station、继续完成其余
    Source_RAW 的分组，并在 Stack_Report 中记录该文件路径和孤立原因标识。
+   只有可靠扫描邻接的帧 SHALL 保留为单张 Capture_Station；并入其他组必须有同机位图像证据，
+   不能仅凭先验世界中心接近。
 7. THE Station_Grouper SHALL 在 Stack_Report 中记录每个 Capture_Station 的成员文件路径、判定依据类型、
    判定分数、匹配内点数量和内点空间支持比例。
 8. IF Source_RAW 数量少于 2 或超过 `IMAGE_STACK_MAX_SOURCES`，THEN THE Stack_Pipeline SHALL 拒绝启动
@@ -131,6 +134,17 @@
 10. IF 某个候选 Capture_Station 的成员数量超过 48，THEN THE Station_Grouper SHALL 在累计画面中心位移
     最大的相邻候选处反复拆分该 Capture_Station，直到每个 Capture_Station 成员数量不超过 48，
     并在 Stack_Report 中记录每个拆分位置。
+
+11. WHEN 原始 RAW 的相机、镜头、焦距、传感器裁切系数和画幅比例精确匹配已知的 rectilinear PTLens 标定，
+    THE Stack_Pipeline SHALL 在共同解码入口使用物理标定校正几何，使源图分析、站内融合和最终渲染一致。
+    半径按原图短边的一半归一化，强度为完整标定值；不能使用编辑器艺术强度倍率或模糊器材匹配。
+    校正画布 SHALL 包含原图完整边界，超出真实覆盖区域的像素不得作为配准或融合证据。未知器材、
+    非匹配裁切规格、缺失标定或折叠映射 SHALL 保持未校正流程，不能猜测系数。
+
+12. WHEN 整批 RAW 的相机型号一致且曝光时间、ISO 和光圈元数据完整，THE Stack_Pipeline SHALL
+    在 gamma 前根据准确曝光值统一线性曝光；已知精确镜头的 PA 暗角标定 SHALL 在同一线性阶段
+    应用，半径使用原图对角线的一半并保留线性高光余量。分析、融合与质量参考使用同一准备流程。
+    元数据不完整或器材不匹配时 SHALL 保留未校正流程，不猜测曝光或暗角系数。
 
 ### Requirement 2: 机位内原生分辨率配准
 
@@ -313,6 +327,12 @@
 8. WHEN 一个 Candidate_Adjacency 通过内点数量、重投影误差与尺度比复核，THE Station_Pose_Solver SHALL
    在重叠像素上复核低频亮度均值相对差不超过 20%、边缘强度比落在 `[0.7, 1.4]` 范围内、边缘方向中位
    差不超过 10 度，并在任一判据未通过时拒绝该 Candidate_Adjacency。
+   边缘须经单应性局部 Jacobian 的逆转置变换到同一像素坐标系，复核使用结构尺度平面及其覆盖掩码。
+   相机曝光差异仅可在标量增益在 `[0.5, 2.0]` 且结构与保留样本联合验证通过时补偿：
+   intensity NCC ≥ 0.95、edge NCC ≥ 0.65 时独立保留样本的相对绝对残差须 ≤ 20%；
+   intensity NCC ≥ 0.85、edge NCC ≥ 0.45 时该残差须 ≤ 10%。用交替重叠样本估计增益，
+   补偿后的低频均值差仍须 ≤ 20%，
+   补偿后的边缘强度比仍须在 `[0.7, 1.4]` 内。此补偿仅用于几何验证，不修改所有权或交付像素。
 9. IF 一个 Candidate_Adjacency 的内点数量少于 24、内点重投影误差中位数超过 3.0 个世界坐标原生像素、
    尺度比落在 `[0.95, 1.05]` 之外，或拟合单应性使 Virtual_Tile 四角投影成非凸四边形，THEN THE
    Station_Pose_Solver SHALL 拒绝该 Candidate_Adjacency、不写入任何位姿参数，并在 Stack_Report 中以

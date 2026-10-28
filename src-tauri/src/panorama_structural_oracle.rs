@@ -1094,6 +1094,7 @@ fn synthetic_pyramid(
 
 fn plane_info_for_oracle(id: usize, dimensions: (u32, u32)) -> ImageInfo {
     ImageInfo {
+        source_footprint: None,
         id,
         filename: String::new(),
         width: dimensions.0,

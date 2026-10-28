@@ -40,6 +40,9 @@ impl Default for WarpRegionRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ResidualWarpReport {
     pub regions: Vec<WarpRegionRecord>,
+    /// Independently measured normal constraints for a separate depth layer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub normal_layers: Vec<super::super::line_layers::NormalAlignmentReport>,
     /// True while the model is the identity map everywhere (requirement 8.1).
     pub identity: bool,
 }
@@ -48,6 +51,7 @@ impl Default for ResidualWarpReport {
     fn default() -> Self {
         Self {
             regions: Vec::new(),
+            normal_layers: Vec::new(),
             identity: true,
         }
     }
@@ -75,8 +79,21 @@ pub(crate) struct ToneTileRecord {
     pub offset: [f64; 3],
     pub samples: u64,
     pub clamped: bool,
+    /// Unbounded station-wide baseline solve. For supported_spatial_affine,
+    /// the applied model is described by gain/offset and spatial ranges below.
     pub solved_gain: [f64; 3],
     pub solved_offset: [f64; 3],
+    /// Strength of the measured correction after source-fidelity bounds.
+    #[serde(default = "full_tone_strength")]
+    pub source_fidelity_strength: f64,
+    #[serde(default)]
+    pub spatial_gain_min: [f64; 3],
+    #[serde(default)]
+    pub spatial_gain_max: [f64; 3],
+    #[serde(default)]
+    pub spatial_offset_min: [f64; 3],
+    #[serde(default)]
+    pub spatial_offset_max: [f64; 3],
 }
 
 impl Default for ToneTileRecord {
@@ -89,6 +106,11 @@ impl Default for ToneTileRecord {
             clamped: false,
             solved_gain: [1.0, 1.0, 1.0],
             solved_offset: [0.0, 0.0, 0.0],
+            source_fidelity_strength: 1.0,
+            spatial_gain_min: [1.0; 3],
+            spatial_gain_max: [1.0; 3],
+            spatial_offset_min: [0.0; 3],
+            spatial_offset_max: [0.0; 3],
         }
     }
 }
@@ -132,6 +154,14 @@ pub(crate) struct ToneReport {
     pub tiles: Vec<ToneTileRecord>,
     pub pairs_without_evidence: Vec<TonePairWithoutEvidenceRecord>,
     pub boundary_delta_e: ToneBoundaryReport,
+    #[serde(default)]
+    pub correction_model: String,
+    /// Native-validated radiometric fitting relations, distinct from the
+    /// closure optimizer's retained geometric constraints.
+    #[serde(default)]
+    pub native_fitting_relations: Vec<[usize; 2]>,
+    #[serde(default)]
+    pub geometry_active_relation_count: usize,
 }
 
 impl Default for ToneReport {
@@ -142,6 +172,9 @@ impl Default for ToneReport {
             tiles: Vec::new(),
             pairs_without_evidence: Vec::new(),
             boundary_delta_e: ToneBoundaryReport::default(),
+            correction_model: "station_affine".into(),
+            native_fitting_relations: Vec::new(),
+            geometry_active_relation_count: 0,
         }
     }
 }
@@ -540,3 +573,7 @@ impl Default for DegradationReport {
 }
 
 // ---------------------------------------------------------------------------
+
+fn full_tone_strength() -> f64 {
+    1.0
+}

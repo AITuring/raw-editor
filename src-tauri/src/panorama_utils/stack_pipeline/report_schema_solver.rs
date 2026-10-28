@@ -743,6 +743,21 @@ pub(crate) struct ClosureReport {
     pub clamped_stations: usize,
     pub fallback_reason: Option<String>,
     pub offending_pair: Option<ClosureOffendingPairRecord>,
+    /// Final validated mapping; matrix-only runs retain their legacy label.
+    #[serde(default = "default_closure_geometry_model")]
+    pub geometry_model: String,
+    #[serde(default)]
+    pub global_before_residual_median_px: Option<f64>,
+    #[serde(default)]
+    pub global_before_residual_p95_px: Option<f64>,
+    #[serde(default)]
+    pub nonlinear_validation: Vec<ClosurePairValidationRecord>,
+    #[serde(default)]
+    pub rejected_nonlinear_constraints: Vec<ClosurePairValidationRecord>,
+    #[serde(default)]
+    pub nonlinear_initialization_constraints: usize,
+    #[serde(default)]
+    pub nonlinear_refit_passes: usize,
 }
 
 impl Default for ClosureReport {
@@ -760,8 +775,28 @@ impl Default for ClosureReport {
             clamped_stations: 0,
             fallback_reason: None,
             offending_pair: None,
+            geometry_model: default_closure_geometry_model(),
+            global_before_residual_median_px: None,
+            global_before_residual_p95_px: None,
+            nonlinear_validation: Vec::new(),
+            rejected_nonlinear_constraints: Vec::new(),
+            nonlinear_initialization_constraints: 0,
+            nonlinear_refit_passes: 0,
         }
     }
 }
 
 // ---------------------------------------------------------------------------
+
+fn default_closure_geometry_model() -> String {
+    "homography".to_string()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ClosurePairValidationRecord {
+    pub left: usize,
+    pub right: usize,
+    pub count: usize,
+    pub median_px: f64,
+    pub p95_px: f64,
+}

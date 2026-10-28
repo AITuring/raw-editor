@@ -10,7 +10,8 @@ use super::stack_pipeline::compositor::tile_coordinate_with_residual;
 use super::stack_pipeline::compositor::{seam_candidate_cost, seam_candidate_cost_with_alignment};
 use super::stack_pipeline::degradation;
 use super::stack_pipeline::focus_fuser::{
-    self, CandidateCells, CellSamplingPlan, OwnershipGridGeometry, StationFusion, cell_disagreement,
+    self, CandidateCells, CellSamplingPlan, OwnershipGridGeometry, StationFusion,
+    cell_disagreement_with_seam_evidence,
 };
 use super::stack_pipeline::intra_station;
 use super::stack_pipeline::report::{
@@ -183,7 +184,7 @@ pub(crate) fn map_target_to_source_with_residual(
     projection: Projection,
     residual: &residual_warp::ResidualWarp,
 ) -> Option<Point2<f64>> {
-    if residual.identity() {
+    if residual.regions.is_empty() && residual.line_layers.reports.is_empty() {
         return map_target_to_source(inverse_homography, target, image, projection);
     }
     let world = Point2::new(target.x, target.y);
@@ -679,6 +680,8 @@ pub(crate) fn focus_stack_virtual_tile_geometry(
     projection: Projection,
     focus_warp: Option<&FocusLayerWarp>,
 ) -> Option<FocusVirtualTileGeometry> {
+    let native_warp = focus_warp.map(native_station_geometry);
+    let focus_warp = native_warp.as_ref().filter(|warp| !warp.bands.is_empty());
     if group.is_empty() {
         return None;
     }
@@ -809,6 +812,17 @@ pub(crate) fn virtual_tile_from_render(
         ColorEncoding::DisplaySrgb,
         provenance,
     )
+}
+
+fn native_station_geometry(warp: &FocusLayerWarp) -> FocusLayerWarp {
+    FocusLayerWarp {
+        bands: warp
+            .bands
+            .iter()
+            .filter(|band| band.physical_edge)
+            .cloned()
+            .collect(),
+    }
 }
 
 #[allow(dead_code)]
@@ -2762,7 +2776,7 @@ fn write_station_seam_diagnostics(
 /// Solve one deterministic minimum-cost seam for each accepted station pair.
 /// This is intentionally an analysis-grid operation; applying the plan later
 /// resamples only pixels that actually change owner.
-fn build_station_seam_plans<F>(
+fn build_station_seam_plans<F, T>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
@@ -2776,7 +2790,8 @@ fn build_station_seam_plans<F>(
     load_image: &mut F,
 ) -> Result<Vec<StationSeamPlan>, String>
 where
-    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+    F: FnMut(&ImageInfo) -> Result<T, String>,
+    T: Into<FocusTilePayload>,
 {
     const MAX_SEAM_GRID_DIMENSION: u32 = 768;
     const NARROW_OVERLAP_PX: u32 = 32;
@@ -2833,8 +2848,8 @@ where
             SeamOrientation::Horizontal => (min_x, max_x, min_y, max_y, overlap_height),
         };
 
-        let left_pixels = load_image(left)?;
-        let right_pixels = load_image(right)?;
+        let left_pixels = load_image(left)?.into().image;
+        let right_pixels = load_image(right)?.into().image;
         let left_inverse = left_h.try_inverse().ok_or_else(|| {
             format!(
                 "Station seam pose for '{}' is not invertible",
@@ -3816,7 +3831,7 @@ fn cleanup_station_pair_owner_islands(
     changed
 }
 
-fn apply_station_seam_plans<F>(
+fn apply_station_seam_plans<F, T>(
     plans: &[StationSeamPlan],
     panorama: &mut Rgb32FImage,
     owner_map: &mut GrayImage,
@@ -3830,7 +3845,8 @@ fn apply_station_seam_plans<F>(
     load_image: &mut F,
 ) -> Result<usize, String>
 where
-    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+    F: FnMut(&ImageInfo) -> Result<T, String>,
+    T: Into<FocusTilePayload>,
 {
     let mut changed_pixels = 0usize;
     #[cfg(test)]
@@ -3877,8 +3893,10 @@ where
                 second.filename
             )
         })?;
-        let first_pixels = load_image(first)?;
-        let second_pixels = load_image(second)?;
+        let first_payload: FocusTilePayload = load_image(first)?.into();
+        let first_pixels = &first_payload.image;
+        let second_payload: FocusTilePayload = load_image(second)?.into();
+        let second_pixels = &second_payload.image;
         let first_owner = plan.first_owner;
         let second_owner = plan.second_owner;
         let local_relation = plan.local_relation.as_ref();
@@ -4092,7 +4110,18 @@ where
                         offset_y,
                     )
                 };
-                if let Some((mut pixel, _)) = sampled {
+                if let Some((mut pixel, source_point)) = sampled {
+                    let originals = if desired_owner == first_owner {
+                        first_payload.sources.as_ref()
+                    } else {
+                        second_payload.sources.as_ref()
+                    };
+                    if let Some(originals) = originals {
+                        let Some(original) = originals.sample(source_point) else {
+                            continue;
+                        };
+                        pixel = original;
+                    }
                     if desired_owner == second_owner && local_second_band {
                         if let Some(solve) = plan.local_tone.as_ref() {
                             for channel in 0..3 {
@@ -4791,12 +4820,91 @@ impl LayeredOwnershipRender {
     }
 }
 
+/// A station supplies geometry/ownership; delivered pixels can be sampled
+/// directly from its prepared originals, without filtering the fused raster
+/// a second time. Only one station's original buffers are resident here.
+pub(crate) struct FocusTilePayload {
+    pub(crate) image: Rgb32FImage,
+    pub(crate) sources: Option<FocusTileSources>,
+}
+
+impl From<Rgb32FImage> for FocusTilePayload {
+    fn from(image: Rgb32FImage) -> Self {
+        Self {
+            image,
+            sources: None,
+        }
+    }
+}
+
+pub(crate) struct FocusTileSource {
+    pub(crate) image: Rgb32FImage,
+    pub(crate) refinement: FocusSourceRefinement,
+}
+
+pub(crate) struct FocusTileSources {
+    pub(crate) ownership: OwnershipMap,
+    pub(crate) origin: (f64, f64),
+    /// Same legend order as the station's exact ownership plane.
+    pub(crate) originals: Vec<FocusTileSource>,
+}
+
+impl FocusTileSources {
+    fn sample(&self, point: Point2<f64>) -> Option<Rgb<f32>> {
+        let (width, height) = self.ownership.dimensions();
+        let mut selected = None;
+        let mut minimum_distance = f64::INFINITY;
+        let rounded = (point.x.round(), point.y.round());
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let x = rounded.0 + f64::from(dx);
+                let y = rounded.1 + f64::from(dy);
+                if x < 0.0 || y < 0.0 || x >= f64::from(width) || y >= f64::from(height) {
+                    continue;
+                }
+                let owner = self.ownership.owner_at(x as u32, y as u32);
+                let Some(index) = owner.checked_sub(1) else {
+                    continue;
+                };
+                let distance = (x - point.x).powi(2) + (y - point.y).powi(2);
+                if distance < minimum_distance {
+                    minimum_distance = distance;
+                    selected = Some(usize::from(index));
+                }
+            }
+        }
+        let original = self.originals.get(selected?)?;
+        let corrected = original.refinement.inverse_canvas_point(point);
+        let source = original
+            .refinement
+            .source_sampling
+            .as_ref()?
+            .source_point(Point3::new(
+                corrected.x + self.origin.0,
+                corrected.y + self.origin.1,
+                1.0,
+            ))?;
+        if source.x < 0.0
+            || source.y < 0.0
+            || source.x >= f64::from(original.image.width())
+            || source.y >= f64::from(original.image.height())
+        {
+            return None;
+        }
+        Some(get_high_quality_interpolated_pixel(
+            &original.image,
+            source.x,
+            source.y,
+        ))
+    }
+}
+
 /// Provenance-preserving form of [`layered_virtual_tile_compositor`]. The
 /// image-only production entry point above calls this exact function; exposing
 /// the masks prevents tests and later pipeline stages from reconstructing
 /// ownership from pixel colours.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn layered_virtual_tile_compositor_with_ownership<R: Runtime, F>(
+pub(crate) fn layered_virtual_tile_compositor_with_ownership<R: Runtime, F, T>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
@@ -4805,7 +4913,8 @@ pub(crate) fn layered_virtual_tile_compositor_with_ownership<R: Runtime, F>(
     load_image: &mut F,
 ) -> Result<LayeredOwnershipRender, String>
 where
-    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+    F: FnMut(&ImageInfo) -> Result<T, String>,
+    T: Into<FocusTilePayload>,
 {
     focus_tile_ownership_stitcher_with_finishing(
         images,
@@ -4948,7 +5057,273 @@ mod compositor_switch_contract_tests {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
+fn tile_covered_boundary_distance(
+    tile: &Rgb32FImage,
+    sources: Option<&FocusTileSources>,
+) -> GrayImage {
+    let (w, h) = (tile.width() as usize, tile.height() as usize);
+    let mut distance = vec![0u8; w * h];
+    for (index, pixel) in tile.pixels().enumerate() {
+        let covered = sources.map_or_else(
+            || pixel[0].max(pixel[1]).max(pixel[2]) > 1e-6,
+            |sources| {
+                sources
+                    .ownership
+                    .owners()
+                    .get(index)
+                    .is_some_and(|&owner| owner != NO_OWNER)
+            },
+        );
+        if covered {
+            distance[index] = 255;
+        }
+    }
+    // Eight-neighbour distance is a lower bound on Euclidean distance. The
+    // exterior is uncovered even when the tile's first row is fully opaque.
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            if distance[i] == 0 {
+                continue;
+            }
+            if x == 0 || y == 0 || x + 1 == w || y + 1 == h {
+                distance[i] = 1;
+            }
+            for (dx, dy) in [(-1, 0), (-1, -1), (0, -1), (1, -1)] {
+                let (nx, ny) = (x as isize + dx, y as isize + dy);
+                if nx >= 0 && ny >= 0 && nx < w as isize && ny < h as isize {
+                    distance[i] =
+                        distance[i].min(distance[ny as usize * w + nx as usize].saturating_add(1));
+                }
+            }
+        }
+    }
+    for y in (0..h).rev() {
+        for x in (0..w).rev() {
+            let i = y * w + x;
+            if distance[i] == 0 {
+                continue;
+            }
+            for (dx, dy) in [(1, 0), (1, 1), (0, 1), (-1, 1)] {
+                let (nx, ny) = (x as isize + dx, y as isize + dy);
+                if nx >= 0 && ny >= 0 && nx < w as isize && ny < h as isize {
+                    distance[i] =
+                        distance[i].min(distance[ny as usize * w + nx as usize].saturating_add(1));
+                }
+            }
+        }
+    }
+    GrayImage::from_raw(w as u32, h as u32, distance).unwrap()
+}
+
+fn tile_boundary_distance_world(
+    distance: &GrayImage,
+    source: Point2<f64>,
+    pose: &Matrix3<f64>,
+    nonrigid: bool,
+) -> f64 {
+    if source.x < 0.0
+        || source.y < 0.0
+        || source.x >= distance.width() as f64
+        || source.y >= distance.height() as f64
+    {
+        return 0.0;
+    }
+    let x = source
+        .x
+        .round()
+        .clamp(0.0, distance.width().saturating_sub(1) as f64) as u32;
+    let y = source
+        .y
+        .round()
+        .clamp(0.0, distance.height().saturating_sub(1) as f64) as u32;
+    let world = pose * Point3::new(source.x, source.y, 1.0);
+    if !world.z.is_finite() || world.z.abs() < 1e-8 {
+        return 0.0;
+    }
+    let (wx, wy) = (world.x / world.z, world.y / world.z);
+    let a = (pose[(0, 0)] - wx * pose[(2, 0)]) / world.z;
+    let b = (pose[(0, 1)] - wx * pose[(2, 1)]) / world.z;
+    let c = (pose[(1, 0)] - wy * pose[(2, 0)]) / world.z;
+    let d = (pose[(1, 1)] - wy * pose[(2, 1)]) / world.z;
+    let norm = (a * a + b * b + c * c + d * d).sqrt();
+    if !norm.is_finite() || norm <= 1e-8 {
+        return 0.0;
+    }
+    // |det J| / ||J||F is a conservative lower singular-value bound. The
+    // residual grid's 32/8 limits plus its 128px smoothstep permit at most
+    // 0.625 operator deviation, hence the 0.375 lower scale bound.
+    let scale = (a * d - b * c).abs() / norm * if nonrigid { 0.375 } else { 1.0 };
+    (f64::from(distance.get_pixel(x, y)[0]) - 2.0).max(0.0) * scale
+}
+
+#[cfg(test)]
+mod layered_coverage_distance_tests {
+    use super::*;
+    #[test]
+    fn distance_uses_real_coverage_holes_and_native_world_units() {
+        let (w, h) = (64, 64);
+        let owners = (0..h)
+            .flat_map(|_| (0..w).map(|x| if x == 32 { 0 } else { 1 }))
+            .collect::<Vec<_>>();
+        let sources = FocusTileSources {
+            ownership: OwnershipMap::new(
+                w,
+                h,
+                owners,
+                vec![std::path::PathBuf::from("covered-source.nef")],
+            )
+            .unwrap(),
+            origin: (0.0, 0.0),
+            originals: Vec::new(),
+        };
+        // Black is a covered source sample here; its colour cannot turn it
+        // into transparent padding in the seam's coverage-distance evidence.
+        let tile = Rgb32FImage::new(w, h);
+        let distance = tile_covered_boundary_distance(&tile, Some(&sources));
+        assert_eq!(distance.get_pixel(32, 20)[0], 0);
+        assert_eq!(distance.get_pixel(31, 20)[0], 1);
+        assert_eq!(distance.get_pixel(16, 16)[0], 16);
+        let pose = Matrix3::new(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0);
+        let near = tile_boundary_distance_world(&distance, Point2::new(31.0, 20.0), &pose, false);
+        assert!(near < 16.0);
+        assert!(super::super::stack_pipeline::compositor::seam_candidate_cost(0.0, near) >= 1.0);
+        let interior =
+            tile_boundary_distance_world(&distance, Point2::new(16.0, 16.0), &pose, false);
+        assert!(interior > 16.0 && interior <= 32.0);
+    }
+}
+
+#[cfg(test)]
+static TEST_TONE_CAPTURE: std::sync::Mutex<Option<std::path::PathBuf>> =
+    std::sync::Mutex::new(None);
+#[cfg(test)]
+pub(crate) fn set_test_tone_capture_directory(path: Option<std::path::PathBuf>) {
+    *TEST_TONE_CAPTURE.lock().unwrap() = path;
+}
+#[cfg(test)]
+fn capture_test_tone_tile(tile: &tone::ToneTile) {
+    let directory = TEST_TONE_CAPTURE.lock().unwrap().clone();
+    let Some(directory) = directory else {
+        return;
+    };
+    let directory = directory.as_path();
+    std::fs::create_dir_all(directory).unwrap();
+    if let Some(native) = tile.native_detail.as_ref() {
+        use std::io::Write;
+        let mut file = std::io::BufWriter::new(
+            std::fs::File::create(
+                directory.join(format!("tone-owner-{:03}.native.f32", tile.owner_id)),
+            )
+            .unwrap(),
+        );
+        for value in native.as_raw() {
+            file.write_all(&value.to_le_bytes()).unwrap();
+        }
+        file.flush().unwrap();
+    }
+    let record = serde_json::json!({"station":tile.station_index,"owner":tile.owner_id,
+                "world_origin":tile.world_origin,"world_size":tile.world_size,"world_stride":tile.world_stride,
+                "width":tile.low.width(),"height":tile.low.height(),"low":tile.low.as_raw(),
+                "validity":tile.validity.as_raw(),"cell_mean":tile.cell_mean.as_raw(),"cell_coverage":tile.cell_coverage});
+    std::fs::write(
+        directory.join(format!("tone-owner-{:03}.json", tile.owner_id)),
+        serde_json::to_vec(&record).unwrap(),
+    )
+    .unwrap();
+}
+
+#[cfg(test)]
+fn capture_test_contour_probe(
+    station: usize,
+    track: usize,
+    points: &[[f64; 2]],
+    sample: impl Fn(f64, f64) -> Option<Rgb<f32>> + Sync,
+) {
+    let Some(directory) = TEST_TONE_CAPTURE.lock().unwrap().clone() else {
+        return;
+    };
+    if points.is_empty() {
+        return;
+    }
+    let left = (points.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min) - 64.0).floor() as i32;
+    let right = (points
+        .iter()
+        .map(|p| p[1])
+        .fold(f64::NEG_INFINITY, f64::max)
+        + 64.0)
+        .ceil() as i32;
+    let top = points[0][0].floor() as i32;
+    let bottom = points.last().unwrap()[0].ceil() as i32;
+    let (width, height) = (
+        (right - left + 1).max(1) as u32,
+        (bottom - top + 1).max(1) as u32,
+    );
+    if u64::from(width) * u64::from(height) > 4_000_000 {
+        return;
+    }
+    let mut rgb = Rgb32FImage::new(width, height);
+    let mut mask = GrayImage::new(width, height);
+    rgb.as_mut()
+        .par_chunks_mut(width as usize * 3)
+        .zip(mask.as_mut().par_chunks_mut(width as usize))
+        .enumerate()
+        .for_each(|(y, (row, covered))| {
+            for x in 0..width as usize {
+                if let Some(p) = sample(left as f64 + x as f64, top as f64 + y as f64) {
+                    row[x * 3..x * 3 + 3].copy_from_slice(&p.0);
+                    covered[x] = 255;
+                }
+            }
+        });
+    std::fs::create_dir_all(&directory).unwrap();
+    let prefix = directory.join(format!("native-contour-{station:03}-{track:02}"));
+    image::DynamicImage::ImageRgb32F(rgb)
+        .save(prefix.with_extension("float.tiff"))
+        .unwrap();
+    mask.save(prefix.with_extension("coverage.png")).unwrap();
+    std::fs::write(
+        prefix.with_extension("json"),
+        serde_json::to_vec(&serde_json::json!({
+        "station":station,"world_origin":[left,top],"points":points,"diagnostic_only":true}))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+#[cfg(test)]
+fn capture_test_seam_grid(owner: u16, record: serde_json::Value) {
+    let Some(directory) = TEST_TONE_CAPTURE.lock().unwrap().clone() else {
+        return;
+    };
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join(format!("seam-owner-{owner:03}.json")),
+        serde_json::to_vec(&record).unwrap(),
+    )
+    .unwrap();
+}
+
+#[cfg(test)]
+fn capture_test_tone_fields(panorama: &Rgb32FImage, owners: &[u16], tiles: &[tone::ToneTile]) {
+    for tile in tiles {
+        capture_test_tone_tile(tile);
+    }
+    let Some(directory) = TEST_TONE_CAPTURE.lock().unwrap().clone() else {
+        return;
+    };
+    image::ImageBuffer::<image::Luma<u16>, Vec<u16>>::from_raw(
+        panorama.width(),
+        panorama.height(),
+        owners.to_vec(),
+    )
+    .unwrap()
+    .save(directory.join("tone-owners.png"))
+    .unwrap();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F, T>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
@@ -4958,9 +5333,10 @@ fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F>(
     load_image: &mut F,
 ) -> Result<LayeredOwnershipRender, String>
 where
-    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+    F: FnMut(&ImageInfo) -> Result<T, String>,
+    T: Into<FocusTilePayload>,
 {
-    let residual_model = residual_warp::run_model_snapshot();
+    let mut residual_model = residual_warp::run_model_snapshot();
     if images.is_empty() {
         return Ok(LayeredOwnershipRender {
             image: Rgb32FImage::new(0, 0),
@@ -4973,7 +5349,19 @@ where
             full_resolution_sample_counts: Vec::new(),
         });
     }
+    let residual_padding = residual_model
+        .regions
+        .iter()
+        .map(|region| region.max_node_displacement_px)
+        .fold(0.0f64, f64::max)
+        .ceil();
     let (min_x, max_x, min_y, max_y) = output_bounds(images, global_homographies, projection);
+    let (min_x, max_x, min_y, max_y) = (
+        min_x - residual_padding,
+        max_x + residual_padding,
+        min_y - residual_padding,
+        max_y + residual_padding,
+    );
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
         return Ok(LayeredOwnershipRender {
             image: Rgb32FImage::new(0, 0),
@@ -5014,6 +5402,7 @@ where
     // Source-level semantic plane for the exact same write decisions. The u16
     // identifier is not capped at the 8-bit tone-group key above.
     let mut source_owner_ids = vec![NO_OWNER; out_width as usize * out_height as usize];
+    let mut source_boundary_distances = vec![0u8; out_width as usize * out_height as usize];
     #[cfg(test)]
     let full_resolution_samples = AtomicUsize::new(0);
     #[cfg(test)]
@@ -5022,6 +5411,9 @@ where
         .collect::<Vec<_>>();
     let mut tone_tiles = Vec::with_capacity(images.len());
     let mut tone_tile_ids = Vec::with_capacity(images.len());
+    let mut all_have_native_sources = true;
+    let mut native_contour_tracks = Vec::new();
+    let mut tone_native_bounds = Vec::new();
     // Station indices and accepted Station_Relations of this run, published by
     // the station solve; without them no tile pair is tone evidence.
     let tone_topology = tone::run_topology_snapshot().unwrap_or_default();
@@ -5063,7 +5455,7 @@ where
     {
         let mut previews = Vec::with_capacity(images.len());
         for image_info in images {
-            let image = load_image(image_info)?;
+            let image = load_image(image_info)?.into().image;
             let longest = image.width().max(image.height()).max(1);
             let scale = (1536.0 / longest as f64).min(1.0);
             let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
@@ -5143,14 +5535,69 @@ where
                 image_info.filename
             )
         })?;
-        let tile = load_image(image_info)?;
+        let loaded: FocusTilePayload = load_image(image_info)?.into();
+        let tile = loaded.image;
+        let originals = loaded.sources;
+        all_have_native_sources &= originals.is_some();
+        if finishing == TileCompositorFinishing::LayeredVirtualTile
+            && projection == Projection::Planar
+            && let Some(sources) = originals.as_ref()
+        {
+            let local =
+                super::stack_pipeline::line_layers::detect_native_contours(&tile, |x, y| {
+                    sources.ownership.owner_at(x, y) != 0
+                });
+            let station = tone_topology
+                .station_of(image_info.id)
+                .unwrap_or(image_info.id);
+            for points in local {
+                let mut points = points
+                    .into_iter()
+                    .filter_map(|p| {
+                        let q = homography * Point3::new(p.x, p.y, 1.0);
+                        if !q.z.is_finite() || q.z.abs() < 1e-9 {
+                            return None;
+                        }
+                        let w = residual_model.forward_world_for_station(
+                            Point2::new(q.x / q.z, q.y / q.z),
+                            image_info.id,
+                        );
+                        Some([w.y, w.x])
+                    })
+                    .collect::<Vec<_>>();
+                points.sort_by(|a, b| a[0].total_cmp(&b[0]));
+                if points.len() >= 30 {
+                    #[cfg(test)]
+                    capture_test_contour_probe(
+                        station,
+                        native_contour_tracks.len(),
+                        &points,
+                        |x, y| {
+                            map_target_to_source_with_residual(
+                                &inverse,
+                                Point3::new(x, y, 1.0),
+                                image_info,
+                                projection,
+                                &residual_model,
+                            )
+                            .and_then(|p| sources.sample(p))
+                        },
+                    );
+                    native_contour_tracks
+                        .push(super::stack_pipeline::line_layers::ContourTrack { station, points });
+                }
+            }
+        }
+        let covered_distance = (finishing == TileCompositorFinishing::LayeredVirtualTile
+            && originals.is_some())
+        .then(|| tile_covered_boundary_distance(&tile, originals.as_ref()));
         let tile_width = tile.width().max(1) as f64;
         let tile_height = tile.height().max(1) as f64;
         let tile_short = tile_width.min(tile_height).max(1.0);
         // The layered compositor keeps hard Source_RAW ownership exact.  The
-        // calibration is still solved unconditionally for the Tone_Harmonizer
-        // report, while the retired comparison path is the only one that
-        // applies its pixels during this legacy ownership pass.
+        // retired comparison path owns this calibration. The layered path
+        // measures its own overlap fields in Tone_Harmonizer after ownership;
+        // computing these unused previews would fuse every station twice.
         let photo_model = (finishing == TileCompositorFinishing::LegacyOwnership)
             .then(|| {
                 photometric_models
@@ -5265,32 +5712,203 @@ where
         if left > right || top > bottom {
             continue;
         }
-        let left = left.min(out_width.saturating_sub(1));
-        let right = right.min(out_width.saturating_sub(1));
-        let top = top.min(out_height.saturating_sub(1));
-        let bottom = bottom.min(out_height.saturating_sub(1));
+        // The nonlinear map may extend beyond a homography's corner bounds.
+        let pad = residual_padding as u32;
+        let left = left.saturating_sub(pad).min(out_width.saturating_sub(1));
+        let right = right.saturating_add(pad).min(out_width.saturating_sub(1));
+        let top = top.saturating_sub(pad).min(out_height.saturating_sub(1));
+        let bottom = bottom.saturating_add(pad).min(out_height.saturating_sub(1));
         // The tone field reads covered tile pixels only and is resampled
         // through the same world-to-tile map the pixels below are drawn with,
         // so neighbouring tiles are compared where they show the same content.
         tone_tile_ids.push(image_info.id);
-        tone_tiles.push(tone::world_aligned_tone_tile(
-            tone_topology
-                .station_of(image_info.id)
-                .unwrap_or(image_info.id),
-            (index + 1).min(u16::MAX as usize) as u16,
-            &tile,
-            (left, top, right, bottom),
-            |x, y| {
-                map_target_to_source_with_residual(
-                    &inverse,
-                    Point3::new(x - offset_x, y - offset_y, 1.0),
-                    image_info,
-                    projection,
-                    &residual_model,
-                )
-                .map(|source| (source.x, source.y))
-            },
-        ));
+        let tone_station = tone_topology
+            .station_of(image_info.id)
+            .unwrap_or(image_info.id);
+        let tone_owner = (index + 1).min(u16::MAX as usize) as u16;
+        let to_source = |x, y| {
+            map_target_to_source_with_residual(
+                &inverse,
+                Point3::new(x - offset_x, y - offset_y, 1.0),
+                image_info,
+                projection,
+                &residual_model,
+            )
+        };
+        tone_native_bounds.push((left, top, right, bottom));
+        tone_tiles.push(if let Some(sources) = originals.as_ref() {
+            tone::world_aligned_native_tone_tile(
+                tone_station,
+                tone_owner,
+                (left, top, right, bottom),
+                |x, y| {
+                    to_source(x, y)
+                        .and_then(|point| sources.sample(point))
+                        .map(|rgb| rgb.0)
+                },
+            )
+        } else {
+            tone::world_aligned_tone_tile(
+                tone_station,
+                tone_owner,
+                &tile,
+                (left, top, right, bottom),
+                |x, y| to_source(x, y).map(|point| (point.x, point.y)),
+            )
+        });
+        #[cfg(test)]
+        capture_test_tone_tile(tone_tiles.last().unwrap());
+        let seam = covered_distance.as_ref().map(|distance| {
+            let longest = (right - left + 1).max(bottom - top + 1);
+            let step = longest.div_ceil(512).clamp(1, 64);
+            let columns = (right - left + 1).div_ceil(step) as usize;
+            let rows = (bottom - top + 1).div_ceil(step) as usize;
+            let count = columns * rows;
+            let mut preference = vec![0.0; count];
+            let mut disagreement = vec![0.0; count];
+            let mut base_distance = vec![0.0; count];
+            let mut candidate_distance = vec![0.0; count];
+            let mut fixed = vec![-1i8; count];
+            let base_owners = (0..count).map(|i| {
+                let x = (left+(i%columns) as u32*step+step/2).min(right);
+                let y = (top+(i/columns) as u32*step+step/2).min(bottom);
+                source_owner_ids[y as usize*out_width as usize+x as usize]
+            }).collect::<Vec<_>>();
+            let mut tone_pairs =
+                std::collections::BTreeMap::<usize, Option<tone::PairField>>::new();
+            for row in 0..rows {
+                for column in 0..columns {
+                    let x = (left + column as u32 * step + step / 2).min(right);
+                    let y = (top + row as u32 * step + step / 2).min(bottom);
+                    let index = row * columns + column;
+                    let Some(source) = map_target_to_source_with_residual(
+                        &inverse,
+                        Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0),
+                        image_info,
+                        projection,
+                        &residual_model,
+                    ) else {
+                        continue;
+                    };
+                    if source.x < 0.0
+                        || source.y < 0.0
+                        || source.x >= tile_width
+                        || source.y >= tile_height
+                    {
+                        continue;
+                    }
+                    let Some(color) = originals
+                        .as_ref()
+                        .and_then(|sources| sources.sample(source))
+                    else {
+                        continue;
+                    };
+                    if color[0].max(color[1]).max(color[2]) <= 1e-6 {
+                        continue;
+                    }
+                    let pixel_index = y as usize * out_width as usize + x as usize;
+                    candidate_distance[index] = tile_boundary_distance_world(
+                        distance,
+                        source,
+                        homography,
+                        !residual_model.regions.is_empty(),
+                    );
+                    if panorama_mask.get_pixel(x, y)[0] == 0 {
+                        fixed[index] = 1;
+                        continue;
+                    }
+                    fixed[index] = 0;
+                    base_distance[index] = f64::from(source_boundary_distances[pixel_index]);
+                    let edge = source
+                        .x
+                        .min(source.y)
+                        .min(tile_width - 1.0 - source.x)
+                        .min(tile_height - 1.0 - source.y)
+                        .max(0.0);
+                    let candidate_quality = (1.0 + edge / tile_short * 510.0).clamp(1.0, 255.0);
+                    preference[index] =
+                        (candidate_quality - f64::from(ownership[pixel_index])) / 255.0;
+                    // Sample the actual owned composite and native candidate at
+                    // several world locations, so paper noise cannot choose the
+                    // path from one fortuitous equal pixel.
+                    let mut differences = Vec::with_capacity(5);
+                    for (dx, dy) in [(0.0, 0.0), (-4.0, 0.0), (4.0, 0.0), (0.0, -4.0), (0.0, 4.0)] {
+                        let wx = x as f64 + dx;
+                        let wy = y as f64 + dy;
+                        if wx < 0.0 || wy < 0.0 || wx >= out_width as f64 || wy >= out_height as f64
+                        {
+                            continue;
+                        }
+                        if panorama_mask.get_pixel(wx as u32, wy as u32)[0] == 0 {
+                            continue;
+                        }
+                        let Some(point) = map_target_to_source_with_residual(
+                            &inverse,
+                            Point3::new(wx - offset_x, wy - offset_y, 1.0),
+                            image_info,
+                            projection,
+                            &residual_model,
+                        ) else {
+                            continue;
+                        };
+                        if let Some(candidate) =
+                            originals.as_ref().and_then(|sources| sources.sample(point))
+                        {
+                            let base = panorama.get_pixel(wx as u32, wy as u32);
+                            differences.push(
+                                (0..3)
+                                    .map(|c| f64::from((candidate[c] - base[c]).abs()))
+                                    .sum::<f64>()
+                                    / 3.0,
+                            );
+                        }
+                    }
+                    differences.sort_by(f64::total_cmp);
+                    disagreement[index] = differences
+                        .get(differences.len() / 2)
+                        .copied()
+                        .unwrap_or(1.0);
+                    if let Some(base_tile) = tone_tiles
+                        .iter()
+                        .position(|tile| tile.owner_id == source_owner_ids[pixel_index])
+                        && base_tile + 1 < tone_tiles.len()
+                        && let Some(field) = tone_pairs
+                            .entry(base_tile)
+                            .or_insert_with(|| {
+                                tone::PairField::new(
+                                    &tone_tiles[base_tile],
+                                    tone_tiles.last().unwrap(),
+                                )
+                            })
+                            .as_ref()
+                        && let Some(cost) = field.seam_disagreement(x as f64, y as f64)
+                    {
+                        disagreement[index] += 0.1 * cost;
+                    }
+                }
+            }
+            let existing_costs = super::stack_pipeline::compositor::existing_owner_boundary_costs(
+                &tone_tiles,&base_owners,&base_distance,columns,rows,(left,top,right,bottom),step);
+            let labels = super::stack_pipeline::compositor::layered_seam_cut_with_existing_boundaries(
+                columns,
+                rows,
+                &preference,
+                &disagreement,
+                &base_distance,
+                &candidate_distance,
+                &fixed,
+                &existing_costs,
+            );
+            #[cfg(test)]
+            capture_test_seam_grid(tone_owner, {
+                serde_json::json!({"owner":tone_owner,"left":left,"top":top,
+                    "right":right,"bottom":bottom,"step":step,"columns":columns,"rows":rows,
+                    "preference":preference,"disagreement":disagreement,"base_distance":base_distance,
+                    "candidate_distance":candidate_distance,"fixed":fixed,"base_owners":base_owners,"labels":labels,
+                    "existing_costs":existing_costs})
+            });
+            (step, columns, labels)
+        });
         let image_width = tile.width() as f64;
         let image_height = tile.height() as f64;
         panorama
@@ -5300,11 +5918,13 @@ where
             .zip(panorama_mask.as_mut().par_chunks_mut(out_width as usize))
             .zip(owner_map.as_mut().par_chunks_mut(out_width as usize))
             .zip(source_owner_ids.par_chunks_mut(out_width as usize))
+            .zip(source_boundary_distances.par_chunks_mut(out_width as usize))
             .enumerate()
             .skip(top as usize)
             .take((bottom - top + 1) as usize)
             .for_each(
-                |(y, ((((row, quality_row), mask_row), owner_row), source_owner_row))| {
+                |(y, rows)| {
+                    let (((((row, quality_row), mask_row), owner_row), source_owner_row), boundary_row) = rows;
                     for x in left..=right {
                         let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
                         let Some(source) = map_target_to_source_with_residual(
@@ -5333,12 +5953,16 @@ where
                             .clamp(1.0, 255.0) as u8;
                         let quality_slot = &mut quality_row[x as usize];
                         let candidate_owner = (index + 1).min(255) as u8;
-                        if !focus_tile_ownership_should_replace(
+                        let selected = if mask_row[x as usize]==0 { true }
+                            else if let Some((step,columns,labels)) = seam.as_ref() {
+                                labels[((y as u32-top)/step) as usize*columns+((x-left)/step) as usize]!=0
+                            } else { focus_tile_ownership_should_replace(
                             *quality_slot,
                             owner_row[x as usize],
                             quality,
                             candidate_owner,
-                        ) {
+                        ) };
+                        if !selected {
                             continue;
                         }
                         #[cfg(test)]
@@ -5346,8 +5970,14 @@ where
                             .fetch_add(1, Ordering::Relaxed);
                         #[cfg(test)]
                         full_resolution_samples.fetch_add(1, Ordering::Relaxed);
-                        let mut color =
-                            get_high_quality_interpolated_pixel(&tile, source.x, source.y);
+                        let mut color = if let Some(originals) = originals.as_ref() {
+                            let Some(color) = originals.sample(source) else {
+                                continue;
+                            };
+                            color
+                        } else {
+                            get_high_quality_interpolated_pixel(&tile, source.x, source.y)
+                        };
                         if let Some(model) = photo_model {
                             let preview_x = source.x * model.preview_width as f64 / image_width;
                             let preview_y = source.y * model.preview_height as f64 / image_height;
@@ -5378,7 +6008,7 @@ where
                             let luma_delta = (candidate_luma - current_luma).abs();
                             let quality_ratio =
                                 f32::from(quality) / f32::from((*quality_slot).max(1));
-                            if luma_delta > 0.075 && quality_ratio < 1.35 {
+                            if seam.is_none() && luma_delta > 0.075 && quality_ratio < 1.35 {
                                 continue;
                             }
                             // Interior distance chooses the sharper source, but a
@@ -5401,6 +6031,10 @@ where
                                         + color[channel] * alpha;
                                 }
                             }
+                        }
+                        if let Some(distance) = covered_distance.as_ref() {
+                            boundary_row[x as usize] = tile_boundary_distance_world(distance,source,
+                                homography,!residual_model.regions.is_empty()).floor().clamp(0.0,255.0) as u8;
                         }
                         let start = x as usize * 3;
                         row[start..start + 3].copy_from_slice(&color.0);
@@ -5631,24 +6265,221 @@ where
         );
     }
 
+    let tone_tile_index = |image_id: usize| tone_tile_ids.iter().position(|&id| id == image_id);
+    let fitting_topology =
+        tone::native_photometric_topology_snapshot().unwrap_or_else(|| tone_topology.clone());
+    let tone_relations = fitting_topology
+        .accepted
+        .iter()
+        .filter_map(|&(left, right)| Some((tone_tile_index(left)?, tone_tile_index(right)?)))
+        .collect::<Vec<_>>();
+    if finishing == TileCompositorFinishing::LayeredVirtualTile && all_have_native_sources {
+        #[cfg(test)]
+        if let Some(directory) = TEST_TONE_CAPTURE.lock().unwrap().clone() {
+            std::fs::create_dir_all(&directory).unwrap();
+            let records = native_contour_tracks
+                .iter()
+                .map(|t| serde_json::json!({"station":t.station,"points":t.points}))
+                .collect::<Vec<_>>();
+            std::fs::write(
+                directory.join("native-contour-tracks.json"),
+                serde_json::to_vec(&records).unwrap(),
+            )
+            .unwrap();
+        }
+        let layers = super::stack_pipeline::line_layers::LineLayers::fit(native_contour_tracks);
+        if !layers.reports.is_empty() {
+            println!(
+                "  - Native contour depth layer: {} independently validated normal alignments",
+                layers.reports.len()
+            );
+            for report in &layers.reports {
+                println!(
+                    "    - Contour {} -> {}: {} training, {} held-out, normal P95 {:.3}px, displacement {:.3}px",
+                    report.reference_station,
+                    report.station,
+                    report.training_samples,
+                    report.held_out_samples,
+                    report.normal_p95_px,
+                    report.maximum_displacement_px
+                );
+            }
+            residual_model.line_layers = layers;
+            residual_warp::replace_run_model(&residual_model);
+            // These shifted analysis fields are planning estimates only.
+            // Every affected field is rebuilt from original RAW samples in
+            // the mandatory native reconstruction below, before final tone.
+            for tile in &mut tone_tiles {
+                super::stack_pipeline::line_layers::warp_planning_detail(
+                    tile,
+                    &residual_model.line_layers,
+                    (offset_x, offset_y),
+                );
+            }
+        }
+    }
+    // Revisit earlier station choices using all immutable native fields.
+    // A changed pixel is sampled directly from its new original RAW owner;
+    // invalid proposals keep the previous valid pixel and its ownership.
+    let plan =
+        if finishing == TileCompositorFinishing::LayeredVirtualTile && all_have_native_sources {
+            super::stack_pipeline::compositor::refine_station_ownership(
+                &tone_tiles,
+                &tone_relations,
+                &source_owner_ids,
+                out_width,
+                out_height,
+            )
+        } else {
+            None
+        };
+    if !residual_model.line_layers.reports.is_empty() && plan.is_none() {
+        return Err(
+            "Native contour depth layer requires bounded original-RAW reconstruction".to_string(),
+        );
+    }
+    if let Some(plan) = plan {
+        for (index, image_info) in images.iter().enumerate() {
+            let candidate = (index + 1).min(u16::MAX as usize) as u16;
+            if !residual_model.has_line_layer(image_info.id)
+                && !source_owner_ids.iter().enumerate().any(|(pixel, &old)| {
+                    old != 0
+                        && old != candidate
+                        && plan.owner_at(
+                            (pixel % out_width as usize) as u32,
+                            (pixel / out_width as usize) as u32,
+                        ) == candidate
+                })
+            {
+                continue;
+            }
+            println!(
+                "  - Revisiting native station ownership: {} of {}",
+                index + 1,
+                images.len()
+            );
+            let homography = global_homographies
+                .get(&image_info.id)
+                .ok_or_else(|| "missing revisit pose".to_string())?;
+            let inverse = homography
+                .try_inverse()
+                .ok_or_else(|| "non-invertible revisit pose".to_string())?;
+            let loaded: FocusTilePayload = load_image(image_info)?.into();
+            let originals = loaded.sources.ok_or_else(|| {
+                "native ownership revisit lost its original RAW payload".to_string()
+            })?;
+            let distance = tile_covered_boundary_distance(&loaded.image, Some(&originals));
+            let tile_width = loaded.image.width() as f64;
+            let tile_height = loaded.image.height() as f64;
+            let short = tile_width.min(tile_height).max(1.0);
+            panorama
+                .as_mut()
+                .par_chunks_mut(row_stride)
+                .zip(source_owner_ids.par_chunks_mut(out_width as usize))
+                .zip(owner_map.as_mut().par_chunks_mut(out_width as usize))
+                .zip(ownership.par_chunks_mut(out_width as usize))
+                .zip(source_boundary_distances.par_chunks_mut(out_width as usize))
+                .enumerate()
+                .for_each(
+                    |(y, ((((row, source_row), owner_row), quality_row), boundary_row))| {
+                        for x in 0..out_width as usize {
+                            let previous = source_row[x];
+                            if previous == 0
+                                || plan.owner_at(x as u32, y as u32) != candidate
+                                || (previous == candidate
+                                    && !residual_model.line_layer_affects(
+                                        Point2::new(x as f64 - offset_x, y as f64 - offset_y),
+                                        image_info.id,
+                                    ))
+                            {
+                                continue;
+                            }
+                            let Some(source) = map_target_to_source_with_residual(
+                                &inverse,
+                                Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0),
+                                image_info,
+                                projection,
+                                &residual_model,
+                            ) else {
+                                continue;
+                            };
+                            if source.x < 0.0
+                                || source.y < 0.0
+                                || source.x >= tile_width
+                                || source.y >= tile_height
+                            {
+                                continue;
+                            }
+                            let Some(color) = originals.sample(source) else {
+                                continue;
+                            };
+                            row[x * 3..x * 3 + 3].copy_from_slice(&color.0);
+                            source_row[x] = candidate;
+                            owner_row[x] = candidate.min(255) as u8;
+                            let edge = source
+                                .x
+                                .min(source.y)
+                                .min(tile_width - 1.0 - source.x)
+                                .min(tile_height - 1.0 - source.y)
+                                .max(0.0);
+                            quality_row[x] =
+                                (1.0 + (edge / short * 510.0).round()).clamp(1.0, 255.0) as u8;
+                            boundary_row[x] = tile_boundary_distance_world(
+                                &distance,
+                                source,
+                                homography,
+                                !residual_model.regions.is_empty(),
+                            )
+                            .floor()
+                            .clamp(0.0, 255.0) as u8;
+                            #[cfg(test)]
+                            {
+                                full_resolution_sample_counts[y * out_width as usize + x]
+                                    .fetch_add(1, Ordering::Relaxed);
+                                full_resolution_samples.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                    },
+                );
+            if residual_model.has_line_layer(image_info.id) {
+                let station = tone_tiles[index].station_index;
+                let owner = tone_tiles[index].owner_id;
+                tone_tiles[index] = tone::world_aligned_native_tone_tile(
+                    station,
+                    owner,
+                    tone_native_bounds[index],
+                    |x, y| {
+                        map_target_to_source_with_residual(
+                            &inverse,
+                            Point3::new(x - offset_x, y - offset_y, 1.0),
+                            image_info,
+                            projection,
+                            &residual_model,
+                        )
+                        .and_then(|p| originals.sample(p))
+                        .map(|p| p.0)
+                    },
+                );
+            }
+        }
+    }
+
     // Detail ownership is already final at this point. Correct only the
     // remaining owner-level tone difference using selected virtual-tile
     // regions at once; doing this after the consensus pass removes residual
     // source steps without averaging or replacing brush pixels.
     if finishing == TileCompositorFinishing::LayeredVirtualTile {
-        let tone_tile_index = |image_id: usize| tone_tile_ids.iter().position(|&id| id == image_id);
-        let tone_relations = tone_topology
-            .accepted
-            .iter()
-            .filter_map(|&(left, right)| Some((tone_tile_index(left)?, tone_tile_index(right)?)))
-            .collect::<Vec<_>>();
-        let tone_report = tone::harmonize_tone_tiles(
+        #[cfg(test)]
+        capture_test_tone_fields(&panorama, &source_owner_ids, &tone_tiles);
+
+        let tone_report = tone::harmonize_tone_tiles_with_fidelity(
             &mut panorama,
             &source_owner_ids,
             out_width,
             &tone_tiles,
             &panorama_mask,
             &tone_relations,
+            all_have_native_sources,
         );
         println!(
             "  - Tone_Harmonizer: status={:?}, tiles={}, boundary_max_delta_e00={:.3}",
@@ -7921,10 +8752,15 @@ fn source_is_focus_foreground(image: &ImageInfo, source: Point2<f64>) -> bool {
     if !(minimum_y..=maximum_y).contains(&source_y) {
         return false;
     }
-    let alignment_scale = image.scale_factor.max(1.0);
-    let alignment_x = (source.x / alignment_scale).round() as i32;
-    let alignment_y = (source.y / alignment_scale).round() as i32;
-    let (alignment_width, alignment_height) = image.alignment_image.dimensions();
+    // Render metadata may intentionally omit the alignment pixels while
+    // retaining its measured mask. Address that mask in normalized source
+    // coordinates, so preview scaling cannot disable or move a depth band.
+    let (alignment_width, alignment_height) = image.foreground_mask.as_ref().map_or_else(
+        || image.alignment_image.dimensions(),
+        |mask| mask.dimensions(),
+    );
+    let alignment_x = (source.x * f64::from(alignment_width) / source_width).round() as i32;
+    let alignment_y = (source.y * f64::from(alignment_height) / source_height).round() as i32;
     if alignment_x < 0
         || alignment_y < 0
         || alignment_x >= alignment_width as i32
@@ -7943,6 +8779,292 @@ fn source_is_focus_foreground(image: &ImageInfo, source: Point2<f64>) -> bool {
     )
 }
 
+type FocusBandInverse = (
+    f64,
+    f64,
+    f64,
+    f64,
+    Matrix3<f64>,
+    Matrix3<f64>,
+    u8,
+    bool,
+    bool,
+);
+
+/// The shared inverse map used by rendering and the owner RAW reference.
+#[derive(Clone)]
+pub(crate) struct FocusSourceSampling {
+    image: std::sync::Arc<ImageInfo>,
+    projection: Projection,
+    global_inverse: Matrix3<f64>,
+    band_inverses: Vec<FocusBandInverse>,
+}
+
+impl std::fmt::Debug for FocusSourceSampling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FocusSourceSampling")
+            .field("image_id", &self.image.id)
+            .field("band_count", &self.band_inverses.len())
+            .finish()
+    }
+}
+
+impl FocusSourceSampling {
+    fn new(
+        image: &ImageInfo,
+        homography: &Matrix3<f64>,
+        projection: Projection,
+        focus_warp: Option<&FocusLayerWarp>,
+    ) -> Self {
+        let global_inverse = homography.try_inverse().unwrap_or_else(Matrix3::identity);
+        let band_inverses = focus_warp
+            .into_iter()
+            .flat_map(|warp| warp.bands.iter())
+            .filter_map(|band| {
+                let homography = band.homographies.get(&image.id)?;
+                let &(minimum_source_y, maximum_source_y) = band.source_ranges.get(&image.id)?;
+                let (minimum_source_x, maximum_source_x) = band
+                    .source_x_ranges
+                    .get(&image.id)
+                    .copied()
+                    .unwrap_or((0.0, 1.0));
+                let inverse = homography.try_inverse()?;
+                let correction_inverse = (*homography * global_inverse).try_inverse()?;
+                let axis =
+                    if maximum_source_x - minimum_source_x < maximum_source_y - minimum_source_y {
+                        0u8 // vertical edge: narrow source-x band
+                    } else {
+                        1u8 // horizontal/depth band: narrow source-y band
+                    };
+                Some((
+                    minimum_source_x,
+                    maximum_source_x,
+                    minimum_source_y,
+                    maximum_source_y,
+                    inverse,
+                    correction_inverse,
+                    axis,
+                    band.relax_foreground_seam,
+                    band.foreground_only,
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        Self {
+            image: std::sync::Arc::new(ImageInfo {
+                id: image.id,
+                filename: image.filename.clone(),
+                width: image.width,
+                height: image.height,
+                alignment_image: image.alignment_image.clone(),
+                full_image: None,
+                scale_factor: image.scale_factor,
+                focal_length_35mm: image.focal_length_35mm,
+                source_footprint: image.source_footprint,
+                overview_reference: image.overview_reference,
+                features: Vec::new(),
+                top_features: Vec::new(),
+                foreground_range: image.foreground_range,
+                foreground_mask: image.foreground_mask.clone(),
+                horizontal_edge_rows: Vec::new(),
+                vertical_edge_columns: Vec::new(),
+            }),
+            projection,
+            global_inverse,
+            band_inverses,
+        }
+    }
+
+    pub(crate) fn source_point(&self, target: Point3<f64>) -> Option<Point2<f64>> {
+        self.mapping(target).0
+    }
+
+    fn mapping(&self, target: Point3<f64>) -> (Option<Point2<f64>>, bool) {
+        let image = &self.image;
+        let global_inverse = self.global_inverse;
+        let band_inverses = &self.band_inverses;
+        let projection = self.projection;
+        let global_source = map_target_to_source(&global_inverse, target, image, projection)
+            .filter(|candidate| {
+                image.source_is_supported(*candidate)
+                    && candidate.x >= 0.0
+                    && candidate.y >= 0.0
+                    && candidate.x < image.width() as f64
+                    && candidate.y < image.height() as f64
+            });
+        // A local model moves a depth layer relative to the paper. Do
+        // not use the global inverse to decide whether that moved pixel
+        // belongs to the band: doing so drops the local model exactly
+        // along the displaced silhouette and creates a step back to the
+        // paper transform. Instead, validate each local inverse in its
+        // own source domain, then let the narrowest active band win.
+        // This is content-agnostic; when no local bands exist the global
+        // inverse remains the only mapping.
+        let mut local_candidates = Vec::new();
+        for &(
+            minimum_source_x,
+            maximum_source_x,
+            minimum_source_y,
+            maximum_source_y,
+            ref band_inverse,
+            ref correction_inverse,
+            axis,
+            relax_foreground_seam,
+            foreground_only,
+        ) in band_inverses
+        {
+            let Some(candidate) = map_target_to_source(band_inverse, target, image, projection)
+            else {
+                continue;
+            };
+            if !image.source_is_supported(candidate)
+                || candidate.x < 0.0
+                || candidate.y < 0.0
+                || candidate.x >= image.width() as f64
+                || candidate.y >= image.height() as f64
+            {
+                continue;
+            }
+            if foreground_only && !source_is_focus_foreground(image, candidate) {
+                continue;
+            }
+            let normalized_x = candidate.x / image.width().max(1) as f64;
+            let normalized_y = candidate.y / image.height().max(1) as f64;
+            if normalized_x < minimum_source_x - 0.02
+                || normalized_x > maximum_source_x + 0.02
+                || normalized_y < minimum_source_y - 0.02
+                || normalized_y > maximum_source_y + 0.02
+            {
+                continue;
+            }
+            let x_span = (maximum_source_x - minimum_source_x).max(1e-6);
+            let y_span = (maximum_source_y - minimum_source_y).max(1e-6);
+            let (span, normalized_axis, center_axis) = if x_span < y_span {
+                (
+                    x_span,
+                    normalized_x,
+                    (minimum_source_x + maximum_source_x) * 0.5,
+                )
+            } else {
+                (
+                    y_span,
+                    normalized_y,
+                    (minimum_source_y + maximum_source_y) * 0.5,
+                )
+            };
+            local_candidates.push((
+                span,
+                normalized_axis,
+                center_axis,
+                axis,
+                candidate,
+                *correction_inverse,
+                relax_foreground_seam,
+                foreground_only,
+            ));
+        }
+        let select_local_candidate = |axis: u8| {
+            let narrowest_span = local_candidates
+                .iter()
+                .filter(|candidate| candidate.3 == axis)
+                .map(|candidate| candidate.0)
+                .fold(f64::INFINITY, f64::min);
+            if !narrowest_span.is_finite() {
+                return None;
+            }
+            let maximum_span = narrowest_span * 1.25;
+            // Several generic/edge bands can overlap in source space.
+            // Keep one candidate per axis: prefer the narrowest valid
+            // band, then the band whose centre is closest to this
+            // sample. Orthogonal bands are composed below rather than
+            // allowing one axis to discard the other.
+            local_candidates
+                .iter()
+                .filter(|candidate| candidate.3 == axis && candidate.0 <= maximum_span)
+                .min_by(|left, right| {
+                    left.0.total_cmp(&right.0).then_with(|| {
+                        (left.1 - left.2)
+                            .abs()
+                            .total_cmp(&(right.1 - right.2).abs())
+                    })
+                })
+        };
+        let selected_vertical = select_local_candidate(0);
+        let selected_horizontal = select_local_candidate(1);
+        let local_strength_for =
+            |candidate: &(f64, f64, f64, u8, Point2<f64>, Matrix3<f64>, bool, bool)| {
+                (1.0 - (candidate.1 - candidate.2).abs() / (candidate.0 * 0.5)).clamp(0.0, 1.0)
+            };
+        let vertical_strength = selected_vertical.map(local_strength_for);
+        let horizontal_strength = selected_horizontal.map(local_strength_for);
+        let mut local_source = None;
+        let mut local_strength = 0.0f64;
+        let mut relax_foreground_seam = false;
+        match (selected_vertical, selected_horizontal) {
+            (Some(vertical), Some(horizontal)) => {
+                // The stored correction is a world-space correction
+                // on top of the global pose. Apply inverse horizontal
+                // then inverse vertical correction before the global
+                // inverse; this preserves both sides of a detected
+                // corner/endpoint without introducing an averaged pose.
+                let corrected_target = horizontal.5 * target;
+                let corrected_target = vertical.5 * corrected_target;
+                local_source =
+                    map_target_to_source(&global_inverse, corrected_target, image, projection)
+                        .filter(|candidate| {
+                            candidate.x >= 0.0
+                                && candidate.y >= 0.0
+                                && candidate.x < image.width() as f64
+                                && candidate.y < image.height() as f64
+                        });
+                local_strength = vertical_strength
+                    .unwrap_or(0.0)
+                    .min(horizontal_strength.unwrap_or(0.0));
+                relax_foreground_seam = vertical.6 || horizontal.6;
+            }
+            (Some(vertical), None) => {
+                local_source = Some(vertical.4);
+                local_strength = vertical_strength.unwrap_or(0.0);
+                relax_foreground_seam = vertical.6;
+            }
+            (None, Some(horizontal)) => {
+                local_source = Some(horizontal.4);
+                local_strength = horizontal_strength.unwrap_or(0.0);
+                relax_foreground_seam = horizontal.6;
+            }
+            (None, None) => {}
+        }
+        if local_strength <= 0.0 {
+            local_source = None;
+            relax_foreground_seam = false;
+        }
+        // Blend each selected regional correction into the global
+        // mapping at the edges of its source band. A hard switch is
+        // itself visible as a seam, especially when the corrected
+        // object is a rail or paper boundary. Each axis' influence
+        // falls continuously to zero at its band boundary; when both
+        // axes are active their composed correction uses the smaller
+        // overlap weight. If the global inverse is unavailable, the
+        // local mapping remains a valid fallback.
+        let source = match (global_source, local_source) {
+            (Some(global), Some(local)) => {
+                let local_weight = local_strength.clamp(0.0, 1.0);
+                Some(Point2::new(
+                    global.x * (1.0 - local_weight) + local.x * local_weight,
+                    global.y * (1.0 - local_weight) + local.y * local_weight,
+                ))
+            }
+            (Some(global), None) => Some(global),
+            (None, Some(local)) => Some(local),
+            (None, None) => None,
+        };
+        (
+            source.filter(|point| image.source_is_supported(*point)),
+            relax_foreground_seam,
+        )
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_focus_layer(
     image: &ImageInfo,
@@ -7955,10 +9077,40 @@ fn render_focus_layer(
     out_width: u32,
     out_height: u32,
 ) -> RenderedFocusLayer {
-    let global_inverse = homography.try_inverse().unwrap_or_else(Matrix3::identity);
-    let Some((left, right, top, bottom)) = focus_transformed_image_region(
-        image, homography, projection, focus_warp, offset_x, offset_y, out_width, out_height,
-    ) else {
+    render_focus_layer_with_refinement(
+        image,
+        source_image,
+        homography,
+        projection,
+        focus_warp,
+        offset_x,
+        offset_y,
+        out_width,
+        out_height,
+        None,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_focus_layer_with_refinement(
+    image: &ImageInfo,
+    source_image: &Rgb32FImage,
+    homography: &Matrix3<f64>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+    offset_x: f64,
+    offset_y: f64,
+    out_width: u32,
+    out_height: u32,
+    refinement: Option<&FocusSourceRefinement>,
+    region: Option<(u32, u32, u32, u32)>,
+) -> RenderedFocusLayer {
+    let Some((left, right, top, bottom)) = region.or_else(|| {
+        focus_transformed_image_region(
+            image, homography, projection, focus_warp, offset_x, offset_y, out_width, out_height,
+        )
+    }) else {
         return RenderedFocusLayer {
             image: Rgb32FImage::new(0, 0),
             mask: GrayImage::new(0, 0),
@@ -7968,38 +9120,7 @@ fn render_focus_layer(
             top: 0,
         };
     };
-    let band_inverses = focus_warp
-        .into_iter()
-        .flat_map(|warp| warp.bands.iter())
-        .filter_map(|band| {
-            let homography = band.homographies.get(&image.id)?;
-            let &(minimum_source_y, maximum_source_y) = band.source_ranges.get(&image.id)?;
-            let (minimum_source_x, maximum_source_x) = band
-                .source_x_ranges
-                .get(&image.id)
-                .copied()
-                .unwrap_or((0.0, 1.0));
-            let inverse = homography.try_inverse()?;
-            let correction_inverse = (*homography * global_inverse).try_inverse()?;
-            let axis = if maximum_source_x - minimum_source_x < maximum_source_y - minimum_source_y
-            {
-                0u8 // vertical edge: narrow source-x band
-            } else {
-                1u8 // horizontal/depth band: narrow source-y band
-            };
-            Some((
-                minimum_source_x,
-                maximum_source_x,
-                minimum_source_y,
-                maximum_source_y,
-                inverse,
-                correction_inverse,
-                axis,
-                band.relax_foreground_seam,
-                band.foreground_only,
-            ))
-        })
-        .collect::<Vec<_>>();
+    let source_sampling = FocusSourceSampling::new(image, homography, projection, focus_warp);
     let layer_width = right - left + 1;
     let layer_height = bottom - top + 1;
     let mut pixels = vec![0.0f32; layer_width as usize * layer_height as usize * 3];
@@ -8018,188 +9139,11 @@ fn render_focus_layer(
                 let global_y = top + y as u32;
                 for local_x in 0..layer_width {
                     let global_x = left + local_x;
-                    let target =
-                        Point3::new(global_x as f64 - offset_x, global_y as f64 - offset_y, 1.0);
-                    let global_source =
-                        map_target_to_source(&global_inverse, target, image, projection).filter(
-                            |candidate| {
-                                candidate.x >= 0.0
-                                    && candidate.y >= 0.0
-                                    && candidate.x < source_image.width() as f64
-                                    && candidate.y < source_image.height() as f64
-                            },
-                        );
-                    // A local model moves a depth layer relative to the paper. Do
-                    // not use the global inverse to decide whether that moved pixel
-                    // belongs to the band: doing so drops the local model exactly
-                    // along the displaced silhouette and creates a step back to the
-                    // paper transform. Instead, validate each local inverse in its
-                    // own source domain, then let the narrowest active band win.
-                    // This is content-agnostic; when no local bands exist the global
-                    // inverse remains the only mapping.
-                    let mut local_candidates = Vec::new();
-                    for &(
-                        minimum_source_x,
-                        maximum_source_x,
-                        minimum_source_y,
-                        maximum_source_y,
-                        ref band_inverse,
-                        ref correction_inverse,
-                        axis,
-                        relax_foreground_seam,
-                        foreground_only,
-                    ) in &band_inverses
-                    {
-                        let Some(candidate) =
-                            map_target_to_source(band_inverse, target, image, projection)
-                        else {
-                            continue;
-                        };
-                        if candidate.x < 0.0
-                            || candidate.y < 0.0
-                            || candidate.x >= source_image.width() as f64
-                            || candidate.y >= source_image.height() as f64
-                        {
-                            continue;
-                        }
-                        if foreground_only && !source_is_focus_foreground(image, candidate) {
-                            continue;
-                        }
-                        let normalized_x = candidate.x / image.width().max(1) as f64;
-                        let normalized_y = candidate.y / image.height().max(1) as f64;
-                        if normalized_x < minimum_source_x - 0.02
-                            || normalized_x > maximum_source_x + 0.02
-                            || normalized_y < minimum_source_y - 0.02
-                            || normalized_y > maximum_source_y + 0.02
-                        {
-                            continue;
-                        }
-                        let x_span = (maximum_source_x - minimum_source_x).max(1e-6);
-                        let y_span = (maximum_source_y - minimum_source_y).max(1e-6);
-                        let (span, normalized_axis, center_axis) = if x_span < y_span {
-                            (
-                                x_span,
-                                normalized_x,
-                                (minimum_source_x + maximum_source_x) * 0.5,
-                            )
-                        } else {
-                            (
-                                y_span,
-                                normalized_y,
-                                (minimum_source_y + maximum_source_y) * 0.5,
-                            )
-                        };
-                        local_candidates.push((
-                            span,
-                            normalized_axis,
-                            center_axis,
-                            axis,
-                            candidate,
-                            *correction_inverse,
-                            relax_foreground_seam,
-                            foreground_only,
-                        ));
-                    }
-                    let select_local_candidate = |axis: u8| {
-                        let narrowest_span = local_candidates
-                            .iter()
-                            .filter(|candidate| candidate.3 == axis)
-                            .map(|candidate| candidate.0)
-                            .fold(f64::INFINITY, f64::min);
-                        if !narrowest_span.is_finite() {
-                            return None;
-                        }
-                        let maximum_span = narrowest_span * 1.25;
-                        // Several generic/edge bands can overlap in source space.
-                        // Keep one candidate per axis: prefer the narrowest valid
-                        // band, then the band whose centre is closest to this
-                        // sample. Orthogonal bands are composed below rather than
-                        // allowing one axis to discard the other.
-                        local_candidates
-                            .iter()
-                            .filter(|candidate| candidate.3 == axis && candidate.0 <= maximum_span)
-                            .min_by(|left, right| {
-                                left.0.total_cmp(&right.0).then_with(|| {
-                                    (left.1 - left.2)
-                                        .abs()
-                                        .total_cmp(&(right.1 - right.2).abs())
-                                })
-                            })
-                    };
-                    let selected_vertical = select_local_candidate(0);
-                    let selected_horizontal = select_local_candidate(1);
-                    let local_strength_for =
-                        |candidate: &(f64, f64, f64, u8, Point2<f64>, Matrix3<f64>, bool, bool)| {
-                            (1.0 - (candidate.1 - candidate.2).abs() / (candidate.0 * 0.5))
-                                .clamp(0.0, 1.0)
-                        };
-                    let vertical_strength = selected_vertical.map(local_strength_for);
-                    let horizontal_strength = selected_horizontal.map(local_strength_for);
-                    let mut local_source = None;
-                    let mut local_strength = 0.0f64;
-                    let mut relax_foreground_seam = false;
-                    match (selected_vertical, selected_horizontal) {
-                        (Some(vertical), Some(horizontal)) => {
-                            // The stored correction is a world-space correction
-                            // on top of the global pose. Apply inverse horizontal
-                            // then inverse vertical correction before the global
-                            // inverse; this preserves both sides of a detected
-                            // corner/endpoint without introducing an averaged pose.
-                            let corrected_target = horizontal.5 * target;
-                            let corrected_target = vertical.5 * corrected_target;
-                            local_source = map_target_to_source(
-                                &global_inverse,
-                                corrected_target,
-                                image,
-                                projection,
-                            )
-                            .filter(|candidate| {
-                                candidate.x >= 0.0
-                                    && candidate.y >= 0.0
-                                    && candidate.x < source_image.width() as f64
-                                    && candidate.y < source_image.height() as f64
-                            });
-                            local_strength = vertical_strength
-                                .unwrap_or(0.0)
-                                .min(horizontal_strength.unwrap_or(0.0));
-                            relax_foreground_seam = vertical.6 || horizontal.6;
-                        }
-                        (Some(vertical), None) => {
-                            local_source = Some(vertical.4);
-                            local_strength = vertical_strength.unwrap_or(0.0);
-                            relax_foreground_seam = vertical.6;
-                        }
-                        (None, Some(horizontal)) => {
-                            local_source = Some(horizontal.4);
-                            local_strength = horizontal_strength.unwrap_or(0.0);
-                            relax_foreground_seam = horizontal.6;
-                        }
-                        (None, None) => {}
-                    }
-                    if local_strength <= 0.0 {
-                        local_source = None;
-                        relax_foreground_seam = false;
-                    }
-                    // Blend each selected regional correction into the global
-                    // mapping at the edges of its source band. A hard switch is
-                    // itself visible as a seam, especially when the corrected
-                    // object is a rail or paper boundary. Each axis' influence
-                    // falls continuously to zero at its band boundary; when both
-                    // axes are active their composed correction uses the smaller
-                    // overlap weight. If the global inverse is unavailable, the
-                    // local mapping remains a valid fallback.
-                    let source = match (global_source, local_source) {
-                        (Some(global), Some(local)) => {
-                            let local_weight = local_strength.clamp(0.0, 1.0);
-                            Some(Point2::new(
-                                global.x * (1.0 - local_weight) + local.x * local_weight,
-                                global.y * (1.0 - local_weight) + local.y * local_weight,
-                            ))
-                        }
-                        (Some(global), None) => Some(global),
-                        (None, Some(local)) => Some(local),
-                        (None, None) => None,
-                    };
+                    let canvas = Point2::new(global_x as f64, global_y as f64);
+                    let canvas = refinement
+                        .map_or(canvas, |refinement| refinement.inverse_canvas_point(canvas));
+                    let target = Point3::new(canvas.x - offset_x, canvas.y - offset_y, 1.0);
+                    let (source, relax_foreground_seam) = source_sampling.mapping(target);
                     let Some(source) = source else {
                         continue;
                     };
@@ -8207,6 +9151,7 @@ fn render_focus_layer(
                         || source.y < 1.0
                         || source.x >= source_image.width() as f64 - 2.0
                         || source.y >= source_image.height() as f64 - 2.0
+                        || !source_sample_has_support(source_image, source.x, source.y)
                     {
                         continue;
                     }
@@ -9368,6 +10313,7 @@ fn register_station_frame_native_layer(
     candidate: &RenderedFocusLayer,
     anchor_long_side: u32,
     anchor_to_station_inverse: Option<Matrix3<f64>>,
+    focus_warp: Option<&FocusLayerWarp>,
 ) -> Option<super::mosaic::StationFrameRegistration> {
     let (candidate_width, candidate_height) = candidate.image.dimensions();
     if candidate_width < 2 || candidate_height < 2 {
@@ -9381,7 +10327,15 @@ fn register_station_frame_native_layer(
     let into_anchor = anchor_to_station_inverse
         .map(|inverse| inverse * rendered_pose)
         .unwrap_or_else(Matrix3::identity);
-    super::mosaic::register_station_frame_native(
+    let sampling = FocusSourceSampling::new(image, homography, projection, focus_warp);
+    let native_mapping = |target: Point3<f64>| {
+        sampling.source_point(Point3::new(
+            target.x - f64::from(applied_translation.0),
+            target.y - f64::from(applied_translation.1),
+            target.z,
+        ))
+    };
+    super::mosaic::register_station_frame_native_with_mapping(
         merged,
         merged_mask,
         image,
@@ -9397,6 +10351,9 @@ fn register_station_frame_native_layer(
         ),
         anchor_long_side,
         into_anchor,
+        focus_warp
+            .filter(|warp| !warp.bands.is_empty())
+            .map(|_| &native_mapping as &(dyn Fn(Point3<f64>) -> Option<Point2<f64>> + Sync)),
     )
 }
 
@@ -9707,6 +10664,7 @@ fn translate_rendered_focus_layer(
 fn align_focus_foreground_layer_to_existing(
     candidate: RenderedFocusLayer,
     merged_foreground_mask: &GrayImage,
+    refinement: &mut Option<FocusForegroundMove>,
 ) -> RenderedFocusLayer {
     let (layer_width, layer_height) = candidate.foreground_mask.dimensions();
     if layer_width == 0 || layer_height == 0 || merged_foreground_mask.width() == 0 {
@@ -9846,6 +10804,13 @@ fn align_focus_foreground_layer_to_existing(
             relaxed_foreground_mask[destination_index] = 255;
         }
     }
+    *refinement = Some(FocusForegroundMove {
+        delta: best_delta,
+        left: candidate.left,
+        top: candidate.top,
+        destinations: GrayImage::from_raw(layer_width, layer_height, foreground_mask.clone())
+            .expect("foreground refinement dimensions"),
+    });
     for (destination_index, pixel) in moved_pixels {
         let destination_start = destination_index * 3;
         image_pixels[destination_start..destination_start + 3].copy_from_slice(&pixel);
@@ -12738,12 +13703,30 @@ where
     .map(FocusStackTileRender::into_image)
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct FocusForegroundMove {
+    pub(crate) delta: (i32, i32),
+    pub(crate) left: u32,
+    pub(crate) top: u32,
+    pub(crate) destinations: GrayImage,
+}
+
 /// The Coverage_Mask and Ownership_Map the focus renderer already maintains
 /// internally (需求 3.7 / 3.11 / 4.6).  They are recorded at the exact pixel
 /// write sites of the hard focus selection, so publishing them does not change
 /// a single pixel write.
+/// Inverse sampling corrections actually applied after a member's homography.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FocusSourceRefinement {
+    pub(crate) translation: (i32, i32),
+    pub(crate) displacement: Option<super::mosaic::NativeResidualDisplacement>,
+    pub(crate) source_sampling: Option<FocusSourceSampling>,
+    pub(crate) foreground_move: Option<FocusForegroundMove>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FocusStackTileMasks {
+    pub(crate) source_refinements: HashMap<usize, FocusSourceRefinement>,
     pub(crate) coverage: CoverageMask,
     pub(crate) ownership: OwnershipMap,
     /// Per-pixel Sharpness_Confidence of the owning ownership cell (需求 3.9).
@@ -12764,6 +13747,34 @@ pub(crate) struct FocusStackTileMasks {
     /// The Focus_Fuser observations of 需求 3.5 / 3.8 / 3.9.  `station_index` is
     /// filled by the call site that knows it.
     pub(crate) fusion: FusionReport,
+}
+
+impl FocusSourceRefinement {
+    pub(crate) fn inverse_canvas_point(&self, point: Point2<f64>) -> Point2<f64> {
+        let mut point = point;
+        if let Some(moved) = self.foreground_move.as_ref() {
+            let x = point.x.round() as i64 - i64::from(moved.left);
+            let y = point.y.round() as i64 - i64::from(moved.top);
+            if x >= 0
+                && y >= 0
+                && x < i64::from(moved.destinations.width())
+                && y < i64::from(moved.destinations.height())
+                && moved.destinations.get_pixel(x as u32, y as u32)[0] > 0
+            {
+                point.x -= f64::from(moved.delta.0);
+                point.y -= f64::from(moved.delta.1);
+            }
+        }
+        let delta = self
+            .displacement
+            .as_ref()
+            .map(|field| field.at(point.x, point.y))
+            .unwrap_or([0.0, 0.0]);
+        Point2::new(
+            point.x + delta[0] - f64::from(self.translation.0),
+            point.y + delta[1] - f64::from(self.translation.1),
+        )
+    }
 }
 
 /// One focus-fused station: the pixels plus, for the unfilled Virtual_Tile
@@ -14288,11 +15299,11 @@ fn measure_focus_cell_disagreement(
     candidate: &RenderedFocusLayer,
     base: &Rgb32FImage,
     base_mask: &GrayImage,
-) -> Vec<f64> {
+) -> (Vec<f64>, Vec<f64>) {
     let count = geometry.cell_count();
     let columns = geometry.columns as usize;
     let cell_size = f64::from(geometry.cell_size_px);
-    let mut disagreement = vec![0.0f64; count];
+    let mut disagreement = vec![(0.0f64, 0.0f64); count];
     disagreement
         .par_iter_mut()
         .enumerate()
@@ -14302,7 +15313,7 @@ fn measure_focus_cell_disagreement(
             // Both closures receive the same fractional cell offsets and map
             // them into their own plane, which is how 需求 3.3's "same cell"
             // comparison stays a property of the code.
-            *disagreement = cell_disagreement(
+            *disagreement = cell_disagreement_with_seam_evidence(
                 |fx, fy| {
                     sample_focus_plane(
                         &candidate.image,
@@ -14325,7 +15336,7 @@ fn measure_focus_cell_disagreement(
                 },
             );
         });
-    disagreement
+    disagreement.into_iter().unzip()
 }
 
 /// Rasterise an ownership cell decision onto a layer's own pixel grid
@@ -14677,6 +15688,18 @@ where
         )
         .map(FocusStackTileRender::unattributed);
     }
+    // An attributed station measures its own native residual against its
+    // anchor. Global scan depth bands can carry a different camera position's
+    // mask fit and are not evidence for this bracket. Retain independently
+    // observed physical-edge consensus; measure other local motion here.
+    let native_station_warp = (!fill_margins).then(|| {
+        focus_warp
+            .map(native_station_geometry)
+            .unwrap_or(FocusLayerWarp { bands: Vec::new() })
+    });
+    let focus_warp = native_station_warp
+        .as_ref()
+        .map_or(focus_warp, |warp| (!warp.bands.is_empty()).then_some(warp));
     let (min_x, max_x, min_y, max_y) =
         focus_output_bounds(images, global_homographies, projection, focus_warp);
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite() {
@@ -14734,6 +15757,19 @@ where
     if let Some(member) = station_members.get_mut(seed_index) {
         member.status = IntraStationFrameStatus::Anchor;
     }
+    let mut source_refinements = HashMap::new();
+    source_refinements.insert(
+        images[seed_index].id,
+        FocusSourceRefinement {
+            source_sampling: Some(FocusSourceSampling::new(
+                images[seed_index],
+                &global_homographies[&images[seed_index].id],
+                projection,
+                focus_warp,
+            )),
+            ..Default::default()
+        },
+    );
     let first_source = load_image(images[seed_index])?;
     let first_layer = render_focus_layer(
         images[seed_index],
@@ -14902,6 +15938,7 @@ where
             out_height,
         );
         let mut applied_translation = (0i32, 0i32);
+        let mut applied_displacement = None;
         if let Some((delta_x, delta_y, score, support, patch_count)) =
             estimate_focus_layer_translation(&candidate, &merged, &merged_mask)
         {
@@ -14931,8 +15968,8 @@ where
             &candidate,
             anchor_long_side,
             anchor_to_station_inverse,
+            focus_warp,
         );
-        drop(source_image);
         if let Some(registration) = registration {
             let record = registration.record.clone();
             #[cfg(test)]
@@ -14997,11 +16034,44 @@ where
                 let max_offset = displacement.max_offset_px();
                 if max_offset >= FOCUS_NATIVE_REFINEMENT_MIN_OFFSET_PX {
                     println!("    - Applying native refinement field: up to {max_offset:.2}px");
-                    candidate = warp_rendered_focus_layer(candidate, &displacement);
-                    native_displacements[index] = Some(displacement);
+                    native_displacements[index] = Some(displacement.clone());
+                    applied_displacement = Some(displacement.clone());
                 }
             }
         }
+        // Compose the measured inverse field with the member's inverse geometry.
+        // A second warp of the developed layer blurs non-anchor frames and makes
+        // the focus comparison asymmetric. Final pixels sample the source once.
+        if applied_displacement.is_some() {
+            let inverse_refinement = FocusSourceRefinement {
+                translation: applied_translation,
+                displacement: applied_displacement.clone(),
+                ..Default::default()
+            };
+            let (width, height) = candidate.image.dimensions();
+            if width > 0 && height > 0 {
+                let region = (
+                    candidate.left,
+                    candidate.left + width - 1,
+                    candidate.top,
+                    candidate.top + height - 1,
+                );
+                candidate = render_focus_layer_with_refinement(
+                    image,
+                    &source_image,
+                    &global_homographies[&image.id],
+                    projection,
+                    focus_warp,
+                    offset_x,
+                    offset_y,
+                    out_width,
+                    out_height,
+                    Some(&inverse_refinement),
+                    Some(region),
+                );
+            }
+        }
+        drop(source_image);
         // A regional warp can still leave a small residual translation on a
         // depth-discontinuous layer. Refine only the detected foreground
         // ownership mask against the already selected foreground when the
@@ -15012,10 +16082,32 @@ where
         // The shifted-mosaic path has already used the bounded edge-consensus
         // geometry above; leave its residuals to that model and the focus
         // ownership pass.
-        if !shifted_mosaic {
-            candidate =
-                align_focus_foreground_layer_to_existing(candidate, &merged_foreground_mask);
+        // A measured native inverse field also supersedes this mask-only
+        // fallback: moving just the bright silhouette afterward introduces a
+        // discontinuity between that object and adjacent pixels of one RAW.
+        let mut foreground_move = None;
+        if !shifted_mosaic && applied_displacement.is_none() {
+            candidate = align_focus_foreground_layer_to_existing(
+                candidate,
+                &merged_foreground_mask,
+                &mut foreground_move,
+            );
         }
+        source_refinements.insert(
+            image.id,
+            FocusSourceRefinement {
+                translation: applied_translation,
+                displacement: applied_displacement,
+                foreground_move,
+                source_sampling: Some(FocusSourceSampling::new(
+                    image,
+                    &global_homographies[&image.id],
+                    projection,
+                    focus_warp,
+                )),
+            },
+        );
+
         // Requirement 3.6: registration chooses the corresponding sample and
         // ownership chooses the frame; neither step may tone-modify the
         // candidate while continuing to identify that Source_RAW as owner.
@@ -15089,7 +16181,7 @@ where
             );
             cells.sharpness = sharpness;
             cells.covered = covered;
-            cells.disagreement = measure_focus_cell_disagreement(
+            (cells.disagreement, cells.seam_disagreement) = measure_focus_cell_disagreement(
                 &fusion_geometry,
                 &candidate,
                 &merged,
@@ -15356,6 +16448,7 @@ where
                     .filter(|&&covered| covered > 0)
                     .count() as u64;
             Ok(FocusStackTileMasks {
+                source_refinements,
                 coverage: CoverageMask::from_gray(merged_mask),
                 ownership,
                 confidence,
@@ -15912,7 +17005,7 @@ fn source_sample_has_support(image: &Rgb32FImage, x: f64, y: f64) -> bool {
         && pixel.0.iter().any(|value| *value > SUPPORT_EPSILON)
 }
 
-pub(super) fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
+pub(crate) fn get_high_quality_interpolated_pixel(img: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
     let (width, height) = img.dimensions();
     if width < 4
         || height < 4
@@ -15968,6 +17061,7 @@ mod interpolation_tests {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),
@@ -16313,6 +17407,218 @@ mod interpolation_tests {
     }
 
     #[test]
+    fn virtual_tile_geometry_uses_the_same_validated_station_bands_as_rendering() {
+        let info = geometry_test_image(0, None);
+        let poses = HashMap::from([(0, Matrix3::identity())]);
+        let mut warp = FocusLayerWarp {
+            bands: vec![crate::panorama_stitching::FocusWarpBand {
+                homographies: HashMap::from([(
+                    0,
+                    Matrix3::new(1.0, 0.0, 50.0, 0.0, 1.0, 50.0, 0.0, 0.0, 1.0),
+                )]),
+                source_ranges: HashMap::from([(0, (0.0, 1.0))]),
+                source_x_ranges: HashMap::new(),
+                relax_foreground_seam: false,
+                foreground_only: true,
+                physical_edge: false,
+            }],
+        };
+        let baseline =
+            focus_stack_virtual_tile_geometry(&[&info], &poses, Projection::Planar, None).unwrap();
+        let ignored =
+            focus_stack_virtual_tile_geometry(&[&info], &poses, Projection::Planar, Some(&warp))
+                .unwrap();
+        assert_eq!(
+            (ignored.width, ignored.height),
+            (baseline.width, baseline.height)
+        );
+        assert_eq!(ignored.tile_to_world, baseline.tile_to_world);
+        assert!(native_station_geometry(&warp).bands.is_empty());
+        warp.bands[0].physical_edge = true;
+        let retained =
+            focus_stack_virtual_tile_geometry(&[&info], &poses, Projection::Planar, Some(&warp))
+                .unwrap();
+        assert_eq!(
+            (retained.width, retained.height),
+            (baseline.width + 50, baseline.height + 50)
+        );
+        assert_eq!(native_station_geometry(&warp).bands.len(), 1);
+    }
+
+    #[test]
+    fn retained_foreground_mask_survives_empty_alignment_pixels_and_render_scaling() {
+        let mut info = geometry_test_image(0, None);
+        info.alignment_image = GrayImage::new(0, 0);
+        info.foreground_range = Some((0.0, 1.0));
+        info.foreground_mask = Some(GrayImage::from_fn(100, 80, |x, y| {
+            image::Luma([if (40..60).contains(&x) && (30..50).contains(&y) {
+                255
+            } else {
+                0
+            }])
+        }));
+        assert!(source_is_focus_foreground(&info, Point2::new(500.0, 400.0)));
+        assert!(!source_is_focus_foreground(
+            &info,
+            Point2::new(100.0, 400.0)
+        ));
+        info.width = 500;
+        info.height = 400;
+        assert!(source_is_focus_foreground(&info, Point2::new(250.0, 200.0)));
+        assert!(!source_is_focus_foreground(&info, Point2::new(50.0, 200.0)));
+    }
+
+    #[test]
+    fn quality_scale_uses_the_native_sampling_map_instead_of_the_seed_pose() {
+        use super::super::stack_pipeline::{quality_gate, quality_gate_runner};
+        let info = geometry_test_image(0, None);
+        let roi = quality_gate::QualityRoi {
+            x: 0,
+            y: 0,
+            side: 32,
+            region_label: 1,
+            owner: 1,
+            world_origin: (64.0, 64.0),
+            boundary_clearance: 16.0,
+        };
+        for scale in [0.5, 2.0] {
+            let sampling = FocusSourceSampling::new(
+                &info,
+                &Matrix3::new(scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 1.0),
+                Projection::Planar,
+                None,
+            );
+            let source = quality_gate_runner::QualitySource {
+                native_warp: None,
+                owner: 1,
+                path: "native-sampling".into(),
+                dimensions: info.dimensions(),
+                geometry: quality_gate::SourceGeometry {
+                    member_to_anchor: Matrix3::identity(),
+                    tile_to_world: Matrix3::identity(),
+                    station_id: 0,
+                },
+                native_registration: Some(quality_gate_runner::NativeReferenceMap {
+                    world_to_station: Matrix3::identity(),
+                    station_to_world: Matrix3::identity(),
+                    station_origin: (0.0, 0.0),
+                    refinement: FocusSourceRefinement {
+                        translation: (0, 0),
+                        displacement: None,
+                        foreground_move: None,
+                        source_sampling: Some(sampling),
+                    },
+                }),
+            };
+            let measured = quality_gate_runner::measure_source_local_scale(
+                &roi,
+                &source,
+                &residual_warp::ResidualWarp::new(),
+                1.0,
+            )
+            .unwrap();
+            assert!((measured.median - scale).abs() < 1e-10);
+            assert_eq!(
+                measured.fraction_at_least_095,
+                if scale >= 0.95 { 1.0 } else { 0.0 }
+            );
+        }
+    }
+
+    #[test]
+    fn native_focus_refinement_samples_fine_texture_once_from_the_original() {
+        let mut info = geometry_test_image(0, None);
+        info.width = 64;
+        info.height = 48;
+        let source = Rgb32FImage::from_fn(64, 48, |x, y| {
+            let value = if (x + y) % 2 == 0 { 0.15 } else { 0.85 };
+            Rgb([value, value * 0.8, value * 0.6])
+        });
+        let mut field = super::super::mosaic::Field::<2>::new(64, 48, 16.0);
+        field.values.fill([0.37, -0.23]);
+        let refinement = FocusSourceRefinement {
+            translation: (2, -1),
+            displacement: Some(
+                super::super::mosaic::NativeResidualDisplacement::from_test_field(field),
+            ),
+            ..Default::default()
+        };
+        let h = Matrix3::new(1.0, 0.0, 0.31, 0.0, 1.0, -0.19, 0.0, 0.0, 1.0);
+        let direct = render_focus_layer_with_refinement(
+            &info,
+            &source,
+            &h,
+            Projection::Planar,
+            None,
+            0.0,
+            0.0,
+            64,
+            48,
+            Some(&refinement),
+            None,
+        );
+        for y in 12..28 {
+            for x in 12..44 {
+                let expected = get_high_quality_interpolated_pixel(
+                    &source,
+                    x as f64 + 0.37 - 2.0 - 0.31,
+                    y as f64 - 0.23 + 1.0 + 0.19,
+                );
+                let actual = direct.image.get_pixel(x - direct.left, y - direct.top);
+                for channel in 0..3 {
+                    assert!((actual[channel] - expected[channel]).abs() < 1e-6);
+                }
+            }
+        }
+        // The old two-filter path attenuates this detail despite identical geometry.
+        let projected = render_focus_layer(
+            &info,
+            &source,
+            &h,
+            Projection::Planar,
+            None,
+            0.0,
+            0.0,
+            64,
+            48,
+        );
+        let translated = translate_rendered_focus_layer(projected, 2, -1, 64, 48);
+        let old = warp_rendered_focus_layer(translated, refinement.displacement.as_ref().unwrap());
+        let actual = direct.image.get_pixel(24 - direct.left, 20 - direct.top)[0];
+        let blurred = old.image.get_pixel(24 - old.left, 20 - old.top)[0];
+        assert!((actual - blurred).abs() > 0.02);
+    }
+
+    #[test]
+    fn focus_layer_masks_optical_padding_before_ownership() {
+        let mut info = geometry_test_image(0, None);
+        info.width = 64;
+        info.height = 48;
+        let source = Rgb32FImage::from_fn(64, 48, |x, y| {
+            if (10..54).contains(&x) && (8..40).contains(&y) {
+                Rgb([0.002, 0.003, 0.001])
+            } else {
+                Rgb([0.0; 3])
+            }
+        });
+        let layer = render_focus_layer(
+            &info,
+            &source,
+            &Matrix3::identity(),
+            Projection::Planar,
+            None,
+            0.0,
+            0.0,
+            64,
+            48,
+        );
+        assert_eq!(layer.mask.get_pixel(4, 4)[0], 0);
+        assert_eq!(layer.mask.get_pixel(32, 24)[0], 255);
+        assert_eq!(layer.image.get_pixel(4, 4).0, [0.0; 3]);
+        assert_eq!(layer.image.get_pixel(32, 24).0, [0.002, 0.003, 0.001]);
+    }
+
+    #[test]
     fn pixel_aligned_canvas_preserves_integer_reference_coordinates() {
         let (offset, size) = pixel_aligned_canvas(-123.4, 876.2);
         assert_eq!(offset, 124.0);
@@ -16521,6 +17827,60 @@ mod interpolation_tests {
         // the caller's loading order changes.
         assert!(focus_tile_ownership_should_replace(120, 9, 120, 4));
         assert!(!focus_tile_ownership_should_replace(120, 4, 120, 9));
+    }
+
+    #[test]
+    fn final_source_sampling_does_not_filter_a_fused_owner_boundary() {
+        let mut info = geometry_test_image(0, None);
+        info.width = 64;
+        info.height = 64;
+        let original = Rgb32FImage::from_fn(64, 64, |x, y| {
+            Rgb([if (x + y) % 2 == 0 { 0.25 } else { 0.55 }; 3])
+        });
+        let refinement = FocusSourceRefinement {
+            source_sampling: Some(FocusSourceSampling::new(
+                &info,
+                &Matrix3::identity(),
+                Projection::Planar,
+                None,
+            )),
+            ..Default::default()
+        };
+        let sources = FocusTileSources {
+            ownership: OwnershipMap::new(
+                64,
+                64,
+                (0..4096).map(|i| if i % 64 < 32 { 1 } else { 2 }).collect(),
+                vec![PathBuf::from("/a.nef"), PathBuf::from("/b.nef")],
+            )
+            .unwrap(),
+            origin: (0.0, 0.0),
+            originals: vec![
+                FocusTileSource {
+                    image: original.clone(),
+                    refinement: refinement.clone(),
+                },
+                FocusTileSource {
+                    image: Rgb32FImage::from_pixel(64, 64, Rgb([0.9; 3])),
+                    refinement,
+                },
+            ],
+        };
+        let point = Point2::new(31.49, 30.1);
+        let expected = get_high_quality_interpolated_pixel(&original, point.x, point.y);
+        assert_eq!(sources.sample(point), Some(expected));
+        let fused = Rgb32FImage::from_fn(64, 64, |x, y| {
+            if x < 32 {
+                *original.get_pixel(x, y)
+            } else {
+                Rgb([0.9; 3])
+            }
+        });
+        let filtered = get_high_quality_interpolated_pixel(&fused, point.x, point.y);
+        assert!(
+            (filtered[0] - expected[0]).abs() > 0.1,
+            "fixture must expose cross-owner colour mixing"
+        );
     }
 
     #[test]
@@ -17233,6 +18593,7 @@ mod station_degradation_wiring_tests {
             full_image: None,
             scale_factor: 1.0,
             focal_length_35mm: None,
+            source_footprint: None,
             overview_reference: false,
             features: Vec::new(),
             top_features: Vec::new(),

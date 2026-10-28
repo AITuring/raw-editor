@@ -9,7 +9,8 @@ use super::{
     BlendMode, ImageInfo, MIXED_FOCAL_MAX_MEDIAN_ERROR, MIXED_FOCAL_MIN_INLIERS, MatchInfo,
     estimate_mixed_focal_coarse_registration, focus_adjacent_same_focal_pair,
     focus_overlap_is_verified, focus_overlap_quality, median_symmetric_error,
-    panorama_transform_overlap_support, trailing_capture_number, transformed_point,
+    panorama_transform_overlap_support, shifted_focus_structure_is_verified,
+    trailing_capture_number, transformed_point,
 };
 
 pub(super) enum FocusRescueResult {
@@ -53,7 +54,16 @@ pub(super) fn apply_focus_rescue(
             median_error,
             allow_low_texture_boundary,
         )
-    });
+    }) || (blend_mode == BlendMode::FocusStack
+        && stable_four_point_solver
+        && !mixed_focal_pair
+        && shifted_focus_structure_is_verified(
+            source_image,
+            target_image,
+            &homography,
+            &inlier_points,
+            log_match,
+        ));
     if log_match
         && let Some((intensity_ncc, edge_ncc, edge_orientation, samples)) = focus_overlap_quality
     {

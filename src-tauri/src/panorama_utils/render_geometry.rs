@@ -234,6 +234,7 @@ mod tests {
 
     fn image_info() -> ImageInfo {
         ImageInfo {
+            source_footprint: None,
             id: 0,
             filename: "/test/geometry.jpg".to_string(),
             width: 100,
