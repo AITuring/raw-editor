@@ -729,7 +729,7 @@ export default function BatchGeometryModal({ isOpen, onClose }: BatchGeometryMod
         filters: [
           { name: t('library.import.allSupportedImages'), extensions: allExtensions },
           { name: 'RAW', extensions: rawExtensions },
-          { name: 'JPEG / PNG / TIFF', extensions: nonRawExtensions },
+          { name: 'JPEG / PNG / TIFF / PSD', extensions: nonRawExtensions },
         ],
         multiple: true,
         title: t('modals.batchGeometry.selectImages'),

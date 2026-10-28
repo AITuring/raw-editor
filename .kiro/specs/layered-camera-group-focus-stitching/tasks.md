@@ -6,7 +6,7 @@
 分支状态不再作为任务状态，也不作为验收依据。历史报告可以留在 Git 历史和 `.agents/` 归档中，但不能
 直接勾选本文件中的任务。
 
-当前基线是 `v1`：2026-10-28 将远端 `d58ff8aa` 与本地快照 `a4f27d09` 合并。
+当前基线是 `v1`：2026-10-28 将远端 `20c085c3`（包含 `d58ff8aa` 基线及其后续更新）与本地快照 `a4f27d09` 合并。
 本次保留的候选修改仍须经过本文件的 N0 分流和验证，合并、编译和回归测试不代表真实素材验收完成。
 合并前的本地执行记录保存在 `docs/focus-stack-local-work-history.md`，仅供历史追溯，不改变下列任务状态。
 
@@ -33,8 +33,8 @@
 - 测试与属性支持：`panorama_stitching_*_tests.rs`、`panorama_virtual_tile_tests.rs`、
   `stack_pipeline/{properties,test_support}.rs`。
 
-当前工作区这些文件仍有超过 1000 行的生产或测试实现。N1/N2 必须重新测量实际文件，而不是引用其他
-分支的行数结论。
+当前工作区仍有超过 1000 行的历史生产或测试实现；本轮新增的 N1-6 生产组件均已低于 1000 行。N1/N2
+继续按实际文件重新测量，不引用其他分支的行数结论；测试支持和属性测试的拆分留在 N2。
 
 ### 未提交修改的分流对象
 
@@ -76,8 +76,8 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
   行为没有回退，不把本次 preview-only 运行标记为 Quality Gate 或正式输出通过。
 - 当前恢复保住了“45 张完整且处处清晰”的行为门，但输出画布尚未与参考 Photoshop 成片 `31065×11007` 对齐；
   Stack_Report 的 `output.written=false` 是因为验收测试在报告生成后另行写出 TIFF/app JPEG，不能据此判断测试文件未写出。
-- 数据契约覆盖 8 个数据集并通过：兰亭 45、阆苑女仙 84、文苑图 126、张好好2 244、睡觉 45、枫鹰雉鸡
-  63，以及头部 17、底部 24。
+- 数据契约覆盖 9 个数据集并通过：兰亭 45、马远 PSD 14、阆苑女仙 84、文苑图 126、张好好2 244、睡觉
+  45、枫鹰雉鸡 63，以及头部 17、底部 24。
 - Rust 完整 release 库测试在 N1-2b 后为 `818 passed, 0 failed, 30 ignored`。两个属性测试的回归根因是已有 station anchor
   被重新按清晰度排序；现在已改为“已有记录锚点优先、无记录时才按清晰度选锚点”，属性测试和完整套件均通过。
 - Langyuan/Wenyuan 的 owner、effective-pixel、boundary、tone 和 residual evidence 仍不能视为通过；不能用兰亭
@@ -91,9 +91,9 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
 
 - [ ] 保存当前 `git status`、tracked diff、untracked 清单和忽略规则摘要；不 reset、stash、clean 或覆盖
   工作区已有代码。
-- [x] 建立 `tests/acceptance/focus-stack-datasets.json` 和 `focus-stack-datasets:check`；登记兰亭、阆苑女仙、
-  文苑图、张好好2、睡觉、枫鹰雉鸡及其头部/底部输入，排除派生图；兰亭 45 张输入的参考成片路径、
-  SHA-256、尺寸和文件大小已冻结。
+- [x] 建立 `tests/acceptance/focus-stack-datasets.json` 和 `focus-stack-datasets:check`；登记兰亭、马远 PSD、
+  阆苑女仙、文苑图、张好好2、睡觉、枫鹰雉鸡及其头部/底部输入，排除派生图；兰亭 45 张输入的参考
+  成片路径、SHA-256、尺寸和文件大小已冻结。
 - [x] 恢复兰亭 45 张完整成片行为：45/45 输入进入 streaming compositor，1:1 回归成功写出 TIFF/app JPEG，
   整图与左中右裁片保持清晰；参考成片未覆盖。输出尺寸/裁切对齐仍作为后续独立门禁。
 - [ ] 为每个修改建立 `keep`、`adapt`、`test-only`、`exclude` 四类登记，注明生产入口、测试入口和证据。
@@ -135,12 +135,43 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   库测试通过，行为和诊断阈值未改变；随后用同一 release 二进制完成兰亭 1:1 写盘回归，输出
   `33895×13888`，成功写出 `/private/tmp/raw-editor-lanting-focus-geometry-full.tiff`、同尺寸 app JPEG
   和预览，45/45 source streaming 保持不变。
+- [x] N1-3 report schema/recorder 拆分：新增 `report_schema_core.rs`、`report_schema_solver.rs`、
+  `report_schema_metrics.rs`、`report_document.rs`、`report_recorder.rs` 和 `report_io.rs`；各生产文件均低于
+  1000 行，`report.rs` 保留兼容 facade、重导出和测试，未改变 `Stack_Report` schema 版本、字段、阈值或原子
+  写盘语义。report 定向测试 `16 passed`、quality-gate 定向测试 `24 passed`、完整 release 库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约通过；兰亭 10% 回归保持 45/45、`3388×1389`，报告成功写出。
+- [x] N1-4 候选 pair 生成拆分：新增 `panorama_feature_pairs.rs`（239 行），承载输入/自然文件名排序、邻域
+  候选、focus/panorama 候选策略、受限视觉检索和大堆栈候选扩展；`panorama_stitching.rs` 只保留 facade import
+  和后续编排调用，未改变阈值、排序、回退或报告语义。候选定向测试 `5 passed`，底层
+  `feature_provider`/`processing`/`registration` 为 `6/5/3 passed`，完整 release 库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 10% 回归保持 45/45、
+  `3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-feature-pairs-10-stack-reports/`。
+- [x] N1-5 focus feature preparation 与匹配合同拆分：新增 `panorama_focus_feature_prep.rs`（279 行）和
+  `panorama_match_contract.rs`（262 行），分别承载 bounded focus 特征、foreground range/mask、top feature、
+  foreground predicate，以及 canonical relation 方向、空间支持、homography/station scale 和 adjacent
+  same-focal pair 合同；完整 `match_image_pair_with_seed` 暂留 facade，避免职责迁移混入算法变化。feature/
+  contract、guided/direct/polished/prior-free、候选和底层 provider/processing/registration 定向测试均通过，
+  完整 release 库测试 `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过；兰亭 acceptance
+  保持 45/45、`3388×1389`、预览 `1200×492`，报告写入 `/private/tmp/raw-editor-lanting-n15-stack-reports/`，
+  `quality_gate=insufficient_evidence` 语义未改变。
+- [x] N1-6 匹配执行体拆分：将 `match_image_pair_with_seed` 按候选生成、几何验证、focus rescue 和结果组装拆成
+  单一职责模块：`panorama_match_candidates.rs`（97 行）、`panorama_match_geometry.rs`（584 行）、
+  `panorama_match_focus_rescue.rs`（270 行）和 `panorama_match_result.rs`（28 行）。入口保留原有
+  `match_image_pair` 合同与阶段顺序，未改变阈值、坐标、回退或报告语义；新增模块均低于 1000 行。
+  focus/mixed-focal/canonical/direct-grid/direct-residual/polished/prior-free 定向测试、N1-4 底层定向测试、
+  `cargo check --lib`、fmt/diff 检查和 `npm run focus-stack-quality:check` 均通过；release 全量库测试
+  `818 passed, 0 failed, 30 ignored`，数据集契约（含输入 hash）通过。兰亭 acceptance 保持 45/45 source
+  streaming，输出 `3388×1389`、预览 `1200×492`，
+  报告写入 `/private/tmp/raw-editor-lanting-n16-stack-reports/`，`quality_gate=insufficient_evidence` 保持原语义。
+- [ ] N1-7 station solver/topology/closure 拆分：把 station pose、关系图、闭环验证和诊断组装分成单一职责模块；
+  先保持 canonical relation gate 和现有 `match_image_pair` 输出合同，再进入 compositor。
 - [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
 - [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
   模块；facade 不承载算法实现。
-- [ ] 所有生产文件不超过 1000 行；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
-- [ ] 新建并维护 `docs/focus-stack-architecture.md`，只描述当前实际模块树和依赖方向，不复制其他 worktree
-  的完成数字。
+- [ ] 所有目标生产文件不超过 1000 行；N1-6 新增模块已经满足，剩余历史大文件和测试支持文件按 N1-7/N2
+  继续拆分；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
+- [x] 更新并维护 `docs/focus-stack-architecture.md`，记录当前 N1-6 模块树、阶段边界、验证命令和实际回归
+  证据；不复制其他 worktree 的完成数字。
 - [ ] 每完成一个职责层，运行该层定向测试并记录迁移前后输出等价性。
 
 **N1 通过条件**：生产模块树可由架构文档生成；入口、缓存、solver、compositor 和 output 的边界清晰；
@@ -168,6 +199,10 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   focus-stack-datasets:check -- --require-data --hash-inputs` 校验数量、输入 digest 和参考文件。
 - [ ] 在 manifest 基础上固定 Langyuan-10、Wenyuan-10 和 84 张 NEF 的解码状态、network=0、输出目录和
   运行参数；不把旧临时路径或旧报告 hash 写入任务状态。
+- [x] PSD 导入按“一文件一张合成源图”完成解码、目录扫描和文件选择器接线；用马远 14 张 PSD 做批量
+  回归，确认不展开图层且输出可进入现有拼接流程。当前回归为 14/14 decoded、13/13 连续邻接边，
+  10% 输出 `1397×1173`，每个输出像素均有 source ownership；Quality Gate 因无参考 ROI 保持
+  `insufficient_evidence`。
 - [ ] 每个职责层完成后先运行上述数据契约检查；涉及成片行为时，必须用兰亭 45 张真实输入运行
   `real_focus_stack_fixture_from_env`，将输出和 `RAW_EDITOR_STACK_REPORT_DIR` 都写入 `/private/tmp`，并
   检查 45/45 输入、整图与左中右清晰度裁剪、Coverage/Ownership 证据和参考成片对照；禁止覆盖

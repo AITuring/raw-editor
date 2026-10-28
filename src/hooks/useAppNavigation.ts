@@ -675,7 +675,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         filters: [
           { name: i18n.t('library.import.allSupportedImages'), extensions: allExtensions },
           { name: 'RAW', extensions: rawExtensions },
-          { name: 'JPEG / PNG / TIFF', extensions: nonRawExtensions },
+          { name: 'JPEG / PNG / TIFF / PSD', extensions: nonRawExtensions },
         ],
         multiple: false,
         title: i18n.t('library.splash.openImage'),
@@ -701,7 +701,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         filters: [
           { name: i18n.t('library.import.allSupportedImages'), extensions: allExtensions },
           { name: 'RAW', extensions: rawExtensions },
-          { name: 'JPEG / PNG / TIFF', extensions: nonRawExtensions },
+          { name: 'JPEG / PNG / TIFF / PSD', extensions: nonRawExtensions },
         ],
         multiple: true,
         title,

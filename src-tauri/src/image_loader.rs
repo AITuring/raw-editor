@@ -4,12 +4,13 @@ use crate::app_state::{AppState, LoadedImage};
 use crate::color_management::{normalize_encoded_rgb_profile_to_srgb, srgb_to_linear_channel};
 use crate::exif_processing;
 use crate::file_management::{parse_virtual_path, read_file_mapped};
-use crate::formats::is_raw_file;
+use crate::formats::{is_psd_file, is_raw_file};
 use crate::image_processing::ImageMetadata;
 use crate::image_processing::{
     apply_orientation, apply_srgb_to_linear, remove_raw_artifacts_and_enhance,
 };
 use crate::mask_generation::{MaskDefinition, SubMask, generate_mask_bitmap};
+use crate::psd_loader::load_psd_image;
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose};
 use exif::{Reader as ExifReader, Tag};
@@ -29,7 +30,6 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::Instant;
-
 #[derive(serde::Serialize)]
 pub struct LoadImageResult {
     pub width: u32,
@@ -235,7 +235,11 @@ fn load_base_image_from_bytes_with_exif_persistence(
             }
         }
     } else {
-        let mut image = load_image_with_orientation(bytes, cancel_token)?;
+        let mut image = if is_psd_file(path_for_ext_check) {
+            load_psd_image(bytes, cancel_token)?
+        } else {
+            load_image_with_orientation(bytes, cancel_token)?
+        };
 
         if apply_to_non_raws
             && !use_fast_raw_dev
@@ -999,7 +1003,7 @@ mod color_profile_tests {
     use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, ImageReader, Rgb};
     use moxcms::ColorProfile;
 
-    use super::{load_image_with_orientation, read_embedded_icc};
+    use super::{load_image_with_orientation, load_psd_image, read_embedded_icc};
     use crate::color_management::srgb_v4_profile;
 
     fn encode_rgb_png(pixel: [u8; 3], profile: Option<Vec<u8>>) -> Vec<u8> {
@@ -1114,5 +1118,21 @@ mod color_profile_tests {
 
         assert_pixel_close("untagged PNG", decoded_pixel(&untagged), expected, 1.0e-6);
         assert_pixel_close("malformed PNG", decoded_pixel(&malformed), expected, 1.0e-6);
+    }
+
+    #[test]
+    fn configured_psd_fixture_decodes_as_one_source_image() {
+        let Some(path) = std::env::var_os("RAW_EDITOR_PSD_FIXTURE") else {
+            return;
+        };
+        let path = std::path::PathBuf::from(path);
+        let bytes = std::fs::read(&path).expect("read PSD fixture");
+        let image = load_psd_image(&bytes, None).expect("decode PSD fixture");
+        assert!(image.width() > 0);
+        assert!(image.height() > 0);
+        assert!(matches!(
+            image,
+            DynamicImage::ImageRgb16(_) | DynamicImage::ImageRgba16(_)
+        ));
     }
 }

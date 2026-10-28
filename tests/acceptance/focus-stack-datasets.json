@@ -20,6 +20,18 @@
       "referenceDimensions": { "width": 31065, "height": 11007 }
     },
     {
+      "id": "mayuan-psd",
+      "label": "马远（PSD）",
+      "directory": "马远",
+      "sourceExtensions": [".psd"],
+      "excludePatterns": [],
+      "expectedSourceCount": 14,
+      "sourceBytes": 19753757872,
+      "sourceAggregateSha256": "8140ac58eb0fae1ed82729431d3e93621df74f4355cb8ffc8e593b0cd8b93b5a",
+      "baseline": false,
+      "notes": "每个 PSD 作为一张已合成源图导入，不展开内部图层。"
+    },
+    {
       "id": "langyuan",
       "label": "阆苑女仙",
       "directory": "阆苑女仙",

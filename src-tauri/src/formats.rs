@@ -72,6 +72,7 @@ pub const RAW_EXTENSIONS: &[(&str, &str)] = &[
 
 pub const NON_RAW_EXTENSIONS: &[&str] = &[
     "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif", "webp", "jxl", // Standard formats
+    "psd", // Adobe Photoshop composite image (one PSD is one source image)
     "exr", "hdr", // High Dynamic Range / Wide Gamut
     "tga", "ico", "dds", // Graphics & Icons
     "qoi", "ff", // Simple/Specialist formats
@@ -97,6 +98,17 @@ pub fn is_raw_file<P: AsRef<Path>>(path: P) -> bool {
     RAW_EXTENSIONS
         .iter()
         .any(|(raw_ext, _)| raw_ext.eq_ignore_ascii_case(ext))
+}
+
+pub fn is_psd_file<P: AsRef<Path>>(path: P) -> bool {
+    let path = path.as_ref();
+    if is_apple_double_file(path) {
+        return false;
+    }
+
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("psd"))
 }
 
 pub fn is_supported_image_file<P: AsRef<Path>>(path: P) -> bool {
@@ -132,5 +144,8 @@ mod tests {
         assert!(!is_raw_file("._DSC08890.arw"));
         assert!(is_supported_image_file("DSC08890.jpg"));
         assert!(is_raw_file("DSC08890.arw"));
+        assert!(is_supported_image_file("painting.PSD"));
+        assert!(is_psd_file("painting.PSD"));
+        assert!(!is_psd_file("._painting.psd"));
     }
 }

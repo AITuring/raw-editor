@@ -12,11 +12,38 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 
 const mosaic = read('src-tauri/src/panorama_utils/mosaic.rs');
 const stitching = read('src-tauri/src/panorama_utils/stitching.rs');
-const panorama = read('src-tauri/src/panorama_stitching.rs');
+// Matching contracts are split out of the panorama facade by N1-5/N1-6.
+// Keep source-level invariants searching the facade plus those focused sibling
+// modules, so the check follows the implementation boundary instead of a
+// historical single-file layout.
+const panorama = [
+  'panorama_stitching.rs',
+  'panorama_focus_feature_prep.rs',
+  'panorama_match_contract.rs',
+  'panorama_match_candidates.rs',
+  'panorama_match_geometry.rs',
+  'panorama_match_focus_rescue.rs',
+  'panorama_match_result.rs',
+]
+  .map((file) => read(`src-tauri/src/${file}`))
+  .join('\n');
 const processing = read('src-tauri/src/panorama_utils/processing.rs');
 const stackPipelineDir = 'src-tauri/src/panorama_utils/stack_pipeline';
 const degradation = read(`${stackPipelineDir}/degradation.rs`);
-const stackReport = read(`${stackPipelineDir}/report.rs`);
+// `report.rs` is now a compatibility facade.  Keep the source contract
+// checking the complete report implementation after N1-3 moved the schema,
+// recorder and atomic I/O into focused siblings.
+const stackReport = [
+  'report.rs',
+  'report_document.rs',
+  'report_io.rs',
+  'report_recorder.rs',
+  'report_schema_core.rs',
+  'report_schema_metrics.rs',
+  'report_schema_solver.rs',
+]
+  .map((file) => read(`${stackPipelineDir}/${file}`))
+  .join('\n');
 const determinism = read(`${stackPipelineDir}/determinism.rs`);
 const virtualTile = read(`${stackPipelineDir}/virtual_tile.rs`);
 const photometric = read('src-tauri/src/panorama_utils/photometric.rs');
