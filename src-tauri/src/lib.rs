@@ -138,34 +138,8 @@ struct ImageDimensions {
 }
 
 #[cfg(test)]
-mod transformed_image_sharing_tests {
-    use super::{apply_all_transformations, transformed_image_into_arc};
-    use image::{DynamicImage, Rgb32FImage};
-    use std::borrow::Cow;
-    use std::sync::Arc;
-
-    #[test]
-    fn unchanged_full_resolution_images_reuse_the_decoded_arc() {
-        let original = Arc::new(DynamicImage::ImageRgb32F(Rgb32FImage::new(64, 48)));
-        let (unchanged, offset) =
-            apply_all_transformations(Cow::Borrowed(original.as_ref()), &serde_json::json!({}));
-        let shared = transformed_image_into_arc(unchanged, &original);
-
-        assert_eq!(offset, (0.0, 0.0));
-        assert!(Arc::ptr_eq(&shared, &original));
-    }
-
-    #[test]
-    fn owned_transform_results_keep_their_existing_allocation() {
-        let original = Arc::new(DynamicImage::ImageRgb32F(Rgb32FImage::new(64, 48)));
-        let transformed = DynamicImage::ImageRgb32F(Rgb32FImage::new(48, 64));
-        let shared = transformed_image_into_arc(Cow::Owned(transformed), &original);
-
-        assert!(!Arc::ptr_eq(&shared, &original));
-        assert_eq!(shared.width(), 48);
-        assert_eq!(shared.height(), 64);
-    }
-}
+#[path = "lib/transformed_image_sharing_tests.rs"]
+mod transformed_image_sharing_tests;
 
 #[tauri::command]
 fn get_image_dimensions(path: String) -> Result<ImageDimensions, String> {
@@ -197,28 +171,8 @@ fn cancel_thumbnail_generation(
 }
 
 #[cfg(test)]
-mod native_preview_display_tests {
-    use super::should_output_to_native_display;
-
-    #[test]
-    fn requires_an_enabled_native_display_and_supported_dimensions() {
-        assert!(should_output_to_native_display(
-            true, true, 3840, 2160, 16_384
-        ));
-        assert!(!should_output_to_native_display(
-            false, true, 3840, 2160, 16_384
-        ));
-        assert!(!should_output_to_native_display(
-            true, false, 3840, 2160, 16_384
-        ));
-        assert!(!should_output_to_native_display(
-            true, true, 17_598, 2735, 16_384
-        ));
-        assert!(!should_output_to_native_display(
-            true, true, 2735, 17_598, 16_384
-        ));
-    }
-}
+#[path = "lib/native_preview_display_tests.rs"]
+mod native_preview_display_tests;
 
 #[tauri::command]
 async fn save_temp_file(bytes: Vec<u8>) -> Result<String, String> {
