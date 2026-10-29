@@ -9,7 +9,6 @@ use super::*;
 
 /// 256x160 planes: the 60x36 sample grid sits at x = 4c + 2, y = 4r + 2.
 const QUALITY_PLANE: (u32, u32) = (256, 160);
-
 const QUALITY_GRID_SAMPLES: usize = 60 * 36;
 
 #[test]

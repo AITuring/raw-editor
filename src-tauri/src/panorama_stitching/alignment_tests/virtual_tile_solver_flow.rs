@@ -18,7 +18,6 @@ fn fully_covered_solver_coverages<'a>(
             .map_or(1, |tile| tile.scale_factor.round().max(1.0) as u32),
     }
 }
-
 /// Relation-quality Coverage_Masks of tiles whose analysis planes are
 /// covered everywhere.
 fn fully_covered_quality_coverages(tiles: &[ImageInfo]) -> Vec<stitching::CoverageMask> {
