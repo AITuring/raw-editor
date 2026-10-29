@@ -9,7 +9,6 @@ use crate::file_management::read_file_mapped;
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_cpu_default_raw_processing;
 use crate::panorama_utils::processing;
-use crate::panorama_utils::shared::ImageInfo;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
 use image::ColorType;
 use image::DynamicImage;
@@ -25,7 +24,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use super::{
-    build_foreground_mask, detect_foreground_range, detect_vertical_edge_columns,
+    ImageInfo, build_foreground_mask, detect_foreground_range, detect_vertical_edge_columns,
     find_alignment_features, find_top_alignment_features, horizontal_edge_row_candidates,
 };
 

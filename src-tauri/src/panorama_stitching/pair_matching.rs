@@ -3,20 +3,17 @@
 //! Matches one image pair under the selected alignment mode, with the coarse
 //! registration used for mixed focal lengths.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::Match;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stitching::Projection;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use std::path::Path;
 
 use super::{
-    AlignmentMode, BlendMode, MIXED_FOCAL_COARSE_MIN_EDGE_NCC,
+    AlignmentMode, BlendMode, ImageInfo, MIXED_FOCAL_COARSE_MIN_EDGE_NCC,
     MIXED_FOCAL_COARSE_MIN_EDGE_ORIENTATION, MIXED_FOCAL_COARSE_MIN_INTENSITY_NCC,
-    MIXED_FOCAL_MIN_INLIERS, MatchCandidates, build_match_candidates, build_match_info,
-    focus_overlap_quality, match_focus_rescue, match_geometry, symmetric_reprojection_rmse,
-    transformed_point,
+    MIXED_FOCAL_MIN_INLIERS, Match, MatchCandidates, MatchInfo, build_match_candidates,
+    build_match_info, focus_overlap_quality, match_focus_rescue, match_geometry,
+    symmetric_reprojection_rmse, transformed_point,
 };
 
 pub(super) fn match_image_pair(

@@ -3,8 +3,6 @@
 //! Per-capture and per-group geometry diagnostics, and the capture and
 //! compositor orders derived from solved geometry or from the source order.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::determinism::sorted_keys;
 use crate::panorama_utils::stack_pipeline::topology;
 use nalgebra::Matrix3;
@@ -15,11 +13,11 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::{
-    Dsu, FocusCaptureGroup, canonical_match_direction, focus_auto_order_motion_scale,
-    focus_auto_order_path_motion_cost, focus_auto_order_path_score, focus_capture_groups,
-    focus_compatible_focal_length, focus_image_direction_key, focus_overlap_quality, median_value,
-    natural_path_cmp, panorama_model_linear_characteristics, panorama_transform_overlap_support,
-    transformed_point,
+    Dsu, FocusCaptureGroup, ImageInfo, MatchInfo, canonical_match_direction,
+    focus_auto_order_motion_scale, focus_auto_order_path_motion_cost, focus_auto_order_path_score,
+    focus_capture_groups, focus_compatible_focal_length, focus_image_direction_key,
+    focus_overlap_quality, median_value, natural_path_cmp, panorama_model_linear_characteristics,
+    panorama_transform_overlap_support, transformed_point,
 };
 
 pub(super) fn focus_capture_geometry_diagnostics(

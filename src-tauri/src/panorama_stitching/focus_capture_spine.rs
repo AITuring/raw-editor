@@ -4,8 +4,6 @@
 //! spine edges between neighbouring stations and attaches bracket orphans to
 //! the pose graph.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::determinism::sorted_pairs;
 use nalgebra::Matrix3;
 use std::collections::BTreeMap;
@@ -14,8 +12,8 @@ use std::collections::HashSet;
 
 use super::{
     Dsu, FOCUS_BRACKET_MAX_CAPTURE_GAP, FOCUS_BRACKET_MAX_CENTER_MOTION_RATIO,
-    FOCUS_MODEL_MIN_INLIERS, MIXED_FOCAL_SCALE_MAX_RATIO, MIXED_FOCAL_SCALE_MIN_RATIO,
-    SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES, focus_auto_order_edge_weight,
+    FOCUS_MODEL_MIN_INLIERS, ImageInfo, MIXED_FOCAL_SCALE_MAX_RATIO, MIXED_FOCAL_SCALE_MIN_RATIO,
+    MatchInfo, SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES, focus_auto_order_edge_weight,
     focus_auto_order_motion_scale, focus_capture_number_gap, focus_compatible_focal_length,
     focus_cycle_edge_factor, focus_match_center_motion_ratio, focus_match_is_capture_station_link,
     focus_match_is_local_bracket, focus_overlap_quality, focus_stack_link_transform,

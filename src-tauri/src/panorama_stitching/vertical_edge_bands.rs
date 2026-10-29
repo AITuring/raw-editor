@@ -3,8 +3,6 @@
 //! Detects near-vertical edge columns, fits and clusters edge lines across
 //! layers and turns consistent clusters into bounded per-band corrections.
 
-use crate::panorama_utils::shared::FocusWarpBand;
-use crate::panorama_utils::shared::ImageInfo;
 use image::GrayImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
@@ -12,8 +10,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use super::{
-    focus_band_maximum_displacement, median_value, transform_is_stable_for_focus_stack,
-    transformed_point,
+    FocusWarpBand, ImageInfo, focus_band_maximum_displacement, median_value,
+    transform_is_stable_for_focus_stack, transformed_point,
 };
 
 pub(super) const FOCUS_VERTICAL_EDGE_MAX_COLUMNS: usize = 8;

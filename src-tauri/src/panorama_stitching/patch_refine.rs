@@ -4,8 +4,6 @@
 //! refine a match or a foreground point, plus dense-region and foreground
 //! feature point collection.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::KeyPoint;
 use crate::panorama_utils::stitching::Projection;
 use crate::panorama_utils::stitching::project_point;
 use image::GrayImage;
@@ -15,6 +13,7 @@ use nalgebra::Point2;
 use nalgebra::Point3;
 
 use super::FOCUS_HORIZONTAL_EDGE_SEARCH_RADIUS;
+use super::{ImageInfo, KeyPoint};
 
 pub(super) const MATCH_REFINE_PATCH_RADIUS: i32 = 14;
 

@@ -3,8 +3,6 @@
 //! Builds the focus-stack order and reference homographies from the match graph
 //! and records the decisions in the stack report.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
 use nalgebra::Matrix3;
 use std::collections::HashMap;
@@ -15,9 +13,10 @@ use super::add_capture_sequence_bridges;
 #[cfg(test)]
 use super::build_focus_sequence_homographies;
 use super::{
-    SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES, attach_focus_bracket_orphans_to_pose_graph,
-    build_graph_stitching_order, canonical_focus_order_direction, focus_auto_order_edge_weight,
-    focus_auto_order_greedy_path, focus_auto_order_motion_scale, focus_auto_order_path_max_motion,
+    ImageInfo, MatchInfo, SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES,
+    attach_focus_bracket_orphans_to_pose_graph, build_graph_stitching_order,
+    canonical_focus_order_direction, focus_auto_order_edge_weight, focus_auto_order_greedy_path,
+    focus_auto_order_motion_scale, focus_auto_order_path_max_motion,
     focus_auto_order_path_motion_cost, focus_auto_order_path_score,
     focus_capture_geometry_diagnostics, focus_capture_geometry_passes,
     focus_capture_group_geometry_diagnostics, focus_capture_group_geometry_passes,

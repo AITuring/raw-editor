@@ -3,8 +3,6 @@
 //! Verifies rescue matches, recovers adjacent position matches and bridges
 //! overlap components through coarse candidates.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::determinism::sorted_keys;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -12,8 +10,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::{
-    Dsu, FOCUS_BRACKET_MAX_CAPTURE_GAP, FOCUS_MODEL_MIN_INLIERS, MIXED_FOCAL_SCALE_MAX_RATIO,
-    MIXED_FOCAL_SCALE_MIN_RATIO, canonical_match_direction,
+    Dsu, FOCUS_BRACKET_MAX_CAPTURE_GAP, FOCUS_MODEL_MIN_INLIERS, ImageInfo,
+    MIXED_FOCAL_SCALE_MAX_RATIO, MIXED_FOCAL_SCALE_MIN_RATIO, MatchInfo, canonical_match_direction,
     estimate_mixed_focal_coarse_registration, focus_alignment_support, focus_capture_number_gap,
     focus_match_center_motion_ratio, focus_overlap_quality, focus_position_recovery_accepts,
     focus_transform_disagreement_px, natural_path_cmp, panorama_transform_overlap_support,

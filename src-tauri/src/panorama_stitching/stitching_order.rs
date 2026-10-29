@@ -3,8 +3,6 @@
 //! Edge weights from match support and the graph order shared by the panorama
 //! and focus-stack paths.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use nalgebra::Matrix3;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -14,8 +12,8 @@ use std::path::Path;
 #[cfg(test)]
 use super::virtual_tile_translation;
 use super::{
-    Dsu, FULL_RES_RANSAC_INLIER_THRESHOLD, median_symmetric_error, natural_path_cmp,
-    panorama_spatial_support, panorama_transform_overlap_support,
+    Dsu, FULL_RES_RANSAC_INLIER_THRESHOLD, ImageInfo, MatchInfo, median_symmetric_error,
+    natural_path_cmp, panorama_spatial_support, panorama_transform_overlap_support,
 };
 
 pub(super) fn build_stitching_order(

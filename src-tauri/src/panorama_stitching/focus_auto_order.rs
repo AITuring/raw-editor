@@ -3,16 +3,15 @@
 //! Motion- and quality-based edge weights, path scores, the greedy path, the
 //! sequence homographies and the dense continuous-scan check.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use super::{
-    FOCUS_MODEL_INLIER_THRESHOLD, FOCUS_MODEL_MIN_INLIERS, focus_match_center_motion_ratio,
-    median_symmetric_error, median_value, natural_path_cmp, transformed_point,
+    FOCUS_MODEL_INLIER_THRESHOLD, FOCUS_MODEL_MIN_INLIERS, ImageInfo, MatchInfo,
+    focus_match_center_motion_ratio, median_symmetric_error, median_value, natural_path_cmp,
+    transformed_point,
 };
 
 // A real neighbouring capture can move by almost one frame width when the

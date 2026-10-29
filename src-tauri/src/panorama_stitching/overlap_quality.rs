@@ -6,7 +6,6 @@
 
 use crate::panorama_utils::processing;
 use crate::panorama_utils::registration;
-use crate::panorama_utils::shared::ImageInfo;
 use crate::panorama_utils::stitching;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
@@ -14,7 +13,7 @@ use nalgebra::Point3;
 use std::collections::HashSet;
 
 use super::{
-    FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT, STATION_RELATION_EDGE_STRENGTH_RATIO_MAX,
+    FOCUS_PROJECTIVE_MIN_SPATIAL_SUPPORT, ImageInfo, STATION_RELATION_EDGE_STRENGTH_RATIO_MAX,
     STATION_RELATION_EDGE_STRENGTH_RATIO_MIN,
     STATION_RELATION_MAX_LOW_FREQUENCY_MEAN_RELATIVE_DIFFERENCE, focus_compatible_focal_length,
     focus_stack_motion_is_shifted_mosaic, median_symmetric_error, median_value,

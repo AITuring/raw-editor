@@ -3,8 +3,6 @@
 //! Orders flat-artwork sources as an overlap walk, closes the translation drift
 //! of the panorama tree and drops clear sharpness outliers.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::intra_station;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
@@ -12,7 +10,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use super::{
-    Dsu, median_symmetric_error, median_value, solve_robust_closure_translations, transformed_point,
+    Dsu, ImageInfo, MatchInfo, median_symmetric_error, median_value,
+    solve_robust_closure_translations, transformed_point,
 };
 
 #[derive(Clone, Copy, Debug)]

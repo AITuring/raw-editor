@@ -3,10 +3,6 @@
 //! Builds each layer's warp with its generic and edge bands, bounds the band
 //! displacement, aligns foreground edges and derives the anchor render frames.
 
-use crate::panorama_utils::shared::FocusLayerWarp;
-use crate::panorama_utils::shared::FocusWarpBand;
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stitching::Projection;
 use crate::panorama_utils::stitching::project_point;
 use nalgebra::Matrix3;
@@ -16,8 +12,9 @@ use std::collections::HashMap;
 
 use super::{
     FOCUS_FOREGROUND_LUMA_THRESHOLD, FOCUS_FOREGROUND_SCAN_MAX_Y, FocusCaptureGroup,
-    build_focus_horizontal_edge_bands, build_focus_vertical_edge_bands, median_value,
-    normalized_homography, optimize_focus_stack_global_homographies_in_generic_region,
+    FocusLayerWarp, FocusWarpBand, ImageInfo, MatchInfo, build_focus_horizontal_edge_bands,
+    build_focus_vertical_edge_bands, median_value, normalized_homography,
+    optimize_focus_stack_global_homographies_in_generic_region,
     optimize_focus_stack_global_homographies_in_region, transform_is_stable_for_focus_stack,
     transformed_point,
 };

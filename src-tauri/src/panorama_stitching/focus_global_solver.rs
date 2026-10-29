@@ -4,8 +4,6 @@
 //! focus-layer homography against a reference, globally or per region.
 
 use crate::panorama_utils::processing;
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use std::collections::HashMap;
@@ -14,9 +12,10 @@ use super::{
     FOCUS_GLOBAL_DAMPING, FOCUS_GLOBAL_MAX_LINEAR_ADJUSTMENT,
     FOCUS_GLOBAL_MAX_PROJECTIVE_ADJUSTMENT, FOCUS_GLOBAL_MAX_TRANSLATION_ADJUSTMENT,
     FOCUS_GLOBAL_PRIOR_WEIGHT, FOCUS_GLOBAL_PROJECTIVE_PRIOR_WEIGHT, FOCUS_LOCAL_MODEL_MIN_INLIERS,
-    FOCUS_MODEL_MIN_INLIERS, FocusGlobalObservation, FocusPose, focus_global_observations,
-    focus_global_observations_for_generic_region, focus_homography_to_pose, focus_normalized_point,
-    focus_pose_projection, focus_pose_to_full_homography, homography_preserves_focus_orientation,
+    FOCUS_MODEL_MIN_INLIERS, FocusGlobalObservation, FocusPose, ImageInfo, MatchInfo,
+    focus_global_observations, focus_global_observations_for_generic_region,
+    focus_homography_to_pose, focus_normalized_point, focus_pose_projection,
+    focus_pose_to_full_homography, homography_preserves_focus_orientation,
     images_have_mixed_focal_lengths,
 };
 

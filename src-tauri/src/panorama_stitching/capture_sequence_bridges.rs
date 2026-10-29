@@ -3,8 +3,6 @@
 //! Uses capture numbers and horizontal capture shifts to bridge sequence gaps
 //! and unmatched overview captures, and orders filenames around overview gaps.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use image::GrayImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
@@ -13,8 +11,9 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::{
-    MIXED_FOCAL_MIN_INLIERS, SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION, focus_stack_link_transform,
-    image_pair_has_mixed_focal_lengths, median_value, natural_path_cmp, transformed_point,
+    ImageInfo, MIXED_FOCAL_MIN_INLIERS, MatchInfo, SCALE_ROBUST_MIN_INLIERS_FOR_CONNECTION,
+    focus_stack_link_transform, image_pair_has_mixed_focal_lengths, median_value, natural_path_cmp,
+    transformed_point,
 };
 
 pub(super) fn trailing_capture_number(path: &str) -> Option<u64> {

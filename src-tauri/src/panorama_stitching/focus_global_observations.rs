@@ -3,8 +3,6 @@
 //! Normalised pose and homography conversions and the regional, generic-region
 //! and whole-frame correspondences fed to the global optimisation.
 
-use crate::panorama_utils::shared::ImageInfo;
-use crate::panorama_utils::shared::MatchInfo;
 use crate::panorama_utils::stack_pipeline::determinism::sorted_pairs;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
@@ -12,7 +10,7 @@ use nalgebra::Point3;
 use std::collections::HashMap;
 
 use super::{
-    FOCUS_LOCAL_MODEL_MIN_INLIERS, RobustTransformFit, estimate_affine,
+    FOCUS_LOCAL_MODEL_MIN_INLIERS, ImageInfo, MatchInfo, RobustTransformFit, estimate_affine,
     focus_match_is_local_bracket, robust_transform_fit, transform_is_stable_for_focus_stack,
 };
 
