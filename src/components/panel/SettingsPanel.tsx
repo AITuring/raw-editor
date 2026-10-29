@@ -1,23 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ArrowLeft,
-  ExternalLink as ExternalLinkIcon,
-  Info,
-  Trash2,
-  Plus,
-  X,
-  Bookmark,
-  Scaling,
-  Image as ImageIcon,
-  Mouse,
-  Touchpad,
-} from 'lucide-react';
+import { ArrowLeft, ExternalLink as ExternalLinkIcon, Info, Trash2, Plus, X, Bookmark } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { motion, AnimatePresence, LayoutGroup, type Variants } from 'framer-motion';
 import clsx from 'clsx';
-import Button, { type ButtonVariant } from '../ui/Button';
+import Button from '../ui/Button';
 import ConfirmModal from '../modals/ConfirmModal';
 import Dropdown, { OptionItem } from '../ui/Dropdown';
 import Switch from '../ui/Switch';
@@ -26,316 +14,24 @@ import Slider from '../ui/Slider';
 import { ThemeProps, THEMES, DEFAULT_THEME_ID } from '../../utils/themes';
 import { useTranslation } from 'react-i18next';
 import { Invokes } from '../ui/AppProperties';
-import {
-  formatKeyCode,
-  KeybindDefinition,
-  KEYBIND_DEFINITIONS,
-  KEYBIND_SECTIONS,
-  normalizeCombo,
-} from '../../utils/keyboardUtils';
+import { KEYBIND_DEFINITIONS, KEYBIND_SECTIONS } from '../../utils/keyboardUtils';
 import Text from '../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useOsPlatform } from '../../hooks/useOsPlatform';
 import { UPSTREAM_NAME } from '../../config/app';
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../../i18n/languages';
-
-const THIRD_PARTY_DISPLAY_NAMES = {
-  rawler: 'rawler',
-  lensfun: 'lensfun',
-  negpy: 'NegPy',
-  lama: 'LaMa',
-  sam2: 'SAM 2',
-  u2net: 'U-2-Net',
-  depthAnything: 'Depth Anything V2',
-  nind: 'nind-denoise',
-  darktable: 'darktable & co.',
-} as const;
-
-interface ConfirmModalState {
-  confirmText: string;
-  confirmVariant: ButtonVariant;
-  isOpen: boolean;
-  message: string;
-  onConfirm(): void;
-  title: string;
-}
-
-interface DataActionItemProps {
-  buttonAction(): void;
-  buttonText: string;
-  description: any;
-  disabled?: boolean;
-  icon: any;
-  isProcessing: boolean;
-  message: string;
-  title: string;
-}
-
-interface KeybindRowProps {
-  def: KeybindDefinition;
-  currentCombo?: string[];
-  osPlatform: string;
-  onSave: (action: string, combo: string[]) => void;
-  recordingAction: string | null;
-  onStartRecording: (action: string) => void;
-  isConflicting: boolean;
-}
-
-interface SettingItemProps {
-  children: any;
-  description?: string;
-  label: string;
-}
-
-interface SettingsPanelProps {
-  appSettings: any;
-  onBack(): void;
-  onLibraryRefresh(): void;
-  onSettingsChange(settings: any): Promise<void>;
-  rootPaths: string[];
-}
-
-interface MyLens {
-  maker: string;
-  model: string;
-}
-
-const EXECUTE_TIMEOUT = 3000;
-
-const adjustmentVisibilityDefaults = {
-  sharpening: true,
-  presence: true,
-  noiseReduction: true,
-  chromaticAberration: false,
-  vignette: true,
-  colorCalibration: false,
-  grain: true,
-};
-
-const resolutions: OptionItem<number>[] = [
-  { value: 720, label: '720px' },
-  { value: 1280, label: '1280px' },
-  { value: 1920, label: '1920px' },
-  { value: 2560, label: '2560px' },
-  { value: 3840, label: '3840px' },
-];
-
-const thumbnailResolutions: OptionItem<number>[] = [
-  { value: 640, label: '640px' },
-  { value: 720, label: '720px' },
-  { value: 960, label: '960px' },
-  { value: 1080, label: '1080px' },
-];
-
-const zoomMultiplierOptions: OptionItem<number>[] = [
-  { value: 1.0, label: '1.0x (Native)' },
-  { value: 0.75, label: '0.75x' },
-  { value: 0.5, label: '0.50x (Half)' },
-  { value: 0.25, label: '0.25x' },
-];
-
-const KeybindRow = ({
-  def,
-  currentCombo,
-  osPlatform,
-  onSave,
-  recordingAction,
-  onStartRecording,
-  isConflicting,
-}: KeybindRowProps) => {
-  const { t } = useTranslation();
-  const recording = recordingAction === def.action;
-
-  useEffect(() => {
-    if (!recording) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onSave(def.action, []);
-        onStartRecording('');
-        return;
-      }
-      e.preventDefault();
-      const parts = normalizeCombo(e, osPlatform);
-      if (parts.length > 0 && !['ctrl', 'shift', 'alt'].includes(parts[parts.length - 1])) {
-        onSave(def.action, parts);
-        onStartRecording('');
-      }
-    };
-    window.addEventListener('keydown', handler, { capture: true });
-    return () => window.removeEventListener('keydown', handler, { capture: true });
-  }, [recording, def.action, onSave, onStartRecording]);
-
-  const displayCombo = currentCombo !== undefined ? (currentCombo.length ? currentCombo : null) : def.defaultCombo;
-
-  return (
-    <div className="flex justify-between items-center py-2">
-      <Text variant={TextVariants.label}>{t(def.description as any)}</Text>
-      <div className="flex items-center gap-1">
-        {isConflicting && <span className="text-status-warning text-xs">⚠</span>}
-        <button onClick={() => onStartRecording(def.action)} className="flex items-center gap-1 flex-wrap shrink-0">
-          {recording ? (
-            <Text
-              as="kbd"
-              variant={TextVariants.small}
-              color={TextColors.accent}
-              weight={TextWeights.semibold}
-              className="px-2 py-1 font-sans bg-bg-primary border border-accent rounded-md animate-pulse"
-            >
-              {t('settings.controls.pressKey')}
-            </Text>
-          ) : (
-            <Text
-              as="kbd"
-              variant={TextVariants.small}
-              color={TextColors.primary}
-              weight={TextWeights.semibold}
-              className={`px-2 py-1 font-sans bg-bg-primary border rounded-md cursor-pointer hover:border-accent transition-colors ${isConflicting ? 'border-yellow-400' : 'border-border-color'}`}
-            >
-              {displayCombo ? (
-                displayCombo.map((k) => formatKeyCode(k, osPlatform)).join(' + ')
-              ) : (
-                <span className="text-text-secondary italic">{t('settings.controls.notAssigned')}</span>
-              )}
-            </Text>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const SettingItem = ({ children, description, label }: SettingItemProps) => (
-  <div className="settings-item">
-    <Text variant={TextVariants.label} weight={TextWeights.semibold} color={TextColors.primary} className="block">
-      {label}
-    </Text>
-    {children}
-    {description && (
-      <Text variant={TextVariants.small} className="settings-item-description">
-        {description}
-      </Text>
-    )}
-  </div>
-);
-
-const DataActionItem = ({
-  buttonAction,
-  buttonText,
-  description,
-  disabled = false,
-  icon,
-  isProcessing,
-  message,
-  title,
-}: DataActionItemProps) => {
-  const { t } = useTranslation();
-
-  return (
-    <div className="pb-8 border-b border-border-color last:border-b-0 last:pb-0">
-      <Text variant={TextVariants.label} weight={TextWeights.semibold} color={TextColors.primary} className="mb-2">
-        {title}
-      </Text>
-      <Text variant={TextVariants.small} className="mb-3">
-        {description}
-      </Text>
-      <Button variant="destructive" onClick={buttonAction} disabled={isProcessing || disabled}>
-        {icon}
-        {isProcessing ? t('settings.data.statuses.processing') : buttonText}
-      </Button>
-      {message && (
-        <Text color={TextColors.accent} className="mt-3">
-          {message}
-        </Text>
-      )}
-    </div>
-  );
-};
-
-interface CanvasInputModeSwitchProps {
-  mode: 'mouse' | 'trackpad';
-  onModeChange: (mode: 'mouse' | 'trackpad') => void;
-}
-
-const CanvasInputModeSwitch = ({ mode, onModeChange }: CanvasInputModeSwitchProps) => {
-  const { t } = useTranslation();
-
-  const canvasInputModes = useMemo(
-    () => [
-      { id: 'mouse', label: t('settings.controls.modes.mouse'), icon: Mouse },
-      { id: 'trackpad', label: t('settings.controls.modes.trackpad'), icon: Touchpad },
-    ],
-    [t],
-  );
-
-  return (
-    <div className="ui-segmented-frame relative flex w-full">
-      {canvasInputModes.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => onModeChange(item.id as 'mouse' | 'trackpad')}
-          className={clsx('ui-segmented-option', mode === item.id && 'is-active')}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          {mode === item.id && (
-            <motion.span
-              layoutId="canvas-input-mode-switch-bubble"
-              className="absolute inset-0 z-0 bg-accent"
-              style={{ borderRadius: 6 }}
-              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-            />
-          )}
-          <span className="relative z-10 flex items-center">
-            <item.icon size={16} className="mr-2" />
-            {item.label}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-};
-
-interface PreviewModeSwitchProps {
-  mode: 'static' | 'dynamic';
-  onModeChange: (mode: 'static' | 'dynamic') => void;
-}
-
-const PreviewModeSwitch = ({ mode, onModeChange }: PreviewModeSwitchProps) => {
-  const { t } = useTranslation();
-
-  const previewModes = useMemo(
-    () => [
-      { id: 'static', label: t('settings.processing.modes.static'), icon: ImageIcon },
-      { id: 'dynamic', label: t('settings.processing.modes.dynamic'), icon: Scaling },
-    ],
-    [t],
-  );
-
-  return (
-    <div className="ui-segmented-frame relative flex w-full">
-      {previewModes.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => onModeChange(item.id as 'static' | 'dynamic')}
-          className={clsx('ui-segmented-option', mode === item.id && 'is-active')}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          {mode === item.id && (
-            <motion.span
-              layoutId="preview-mode-switch-bubble"
-              className="absolute inset-0 z-0 bg-accent"
-              style={{ borderRadius: 6 }}
-              transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-            />
-          )}
-          <span className="relative z-10 flex items-center">
-            <item.icon size={16} className="mr-2" />
-            {item.label}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-};
+import type { ConfirmModalState, SettingsPanelProps, MyLens } from './SettingsPanel/types';
+import {
+  THIRD_PARTY_DISPLAY_NAMES,
+  EXECUTE_TIMEOUT,
+  adjustmentVisibilityDefaults,
+  resolutions,
+  thumbnailResolutions,
+  zoomMultiplierOptions,
+} from './SettingsPanel/constants';
+import { KeybindRow } from './SettingsPanel/KeybindRow';
+import { SettingItem, DataActionItem } from './SettingsPanel/SettingItems';
+import { CanvasInputModeSwitch, PreviewModeSwitch } from './SettingsPanel/ModeSwitches';
 
 export default function SettingsPanel({
   appSettings,
