@@ -9,7 +9,6 @@ import {
   ChevronsLeftRight,
   Download,
   FileImage,
-  ImagePlus,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -29,225 +28,19 @@ import {
   type StyleTransferTransform,
 } from '../../utils/styleTransfer';
 import { comparePositionFromClientX, comparePositionFromKey } from '../../utils/compareSlider';
-
-const MAX_PREVIEW_EDGE = 1_600;
-const DEFAULT_STRENGTH = 0.86;
-const IMAGE_EXTENSIONS = [
-  'jpg',
-  'jpeg',
-  'png',
-  'gif',
-  'bmp',
-  'tiff',
-  'tif',
-  'webp',
-  'jxl',
-  'exr',
-  'hdr',
-  'tga',
-  'ico',
-  'dds',
-  'qoi',
-  'ff',
-  'pnm',
-  'pbm',
-  'pgm',
-  'ppm',
-  'pam',
-  'dng',
-  'pro',
-  'ari',
-  'crw',
-  'cr2',
-  'cr3',
-  'bay',
-  'raw',
-  'erf',
-  'raf',
-  '3fr',
-  'fff',
-  'iiq',
-  'kdc',
-  'k25',
-  'dcs',
-  'dcr',
-  'mos',
-  'rwl',
-  'mef',
-  'mrw',
-  'nef',
-  'nrw',
-  'orf',
-  'rw2',
-  'pef',
-  'ptx',
-  'srw',
-  'x3f',
-  'arw',
-  'srf',
-  'sr2',
-];
-
-type SourceRole = 'reference' | 'target';
-
-interface StyleImage {
-  isPath: boolean;
-  name: string;
-  url: string;
-  width: number;
-  height: number;
-  path?: string;
-  image: HTMLImageElement;
-}
-
-interface ImageDimensions {
-  width: number;
-  height: number;
-}
-
-interface StyleTransferModalProps {
-  fullPage?: boolean;
-  isOpen: boolean;
-  onClose(): void;
-}
-
-interface SourceCardProps {
-  image: StyleImage | null;
-  isBusy: boolean;
-  onChoose(): void;
-  onDrop(event: React.DragEvent<HTMLDivElement>): void;
-  onRemove(): void;
-  role: SourceRole;
-}
-
-const readImageElement = (url: string) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.decoding = 'async';
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('The selected image could not be decoded.'));
-    image.src = url;
-  });
-
-const getFileName = (path: string) => path.split(/[\\/]/).pop() || path;
-
-const getOutputName = (name: string) => {
-  const withoutExtension = name.replace(/\.[^.]+$/, '');
-  return `${withoutExtension}_styled.jpg`;
-};
+import { DEFAULT_STRENGTH, IMAGE_EXTENSIONS } from './StyleTransferModal/constants';
+import type { SourceRole, StyleImage, ImageDimensions, StyleTransferModalProps } from './StyleTransferModal/types';
+import {
+  readImageElement,
+  getFileName,
+  getOutputName,
+  orientDimensionsLikePreview,
+  makeImageData,
+  toNativeImageData,
+} from './StyleTransferModal/utils';
+import { SourceCard } from './StyleTransferModal/SourceCard';
 
 const toUint8Array = (value: Uint8Array | ArrayBuffer) => (value instanceof Uint8Array ? value : new Uint8Array(value));
-
-const orientDimensionsLikePreview = (
-  dimensions: ImageDimensions | null,
-  previewWidth: number,
-  previewHeight: number,
-): ImageDimensions => {
-  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
-    return { width: previewWidth, height: previewHeight };
-  }
-
-  const sourceIsLandscape = dimensions.width >= dimensions.height;
-  const previewIsLandscape = previewWidth >= previewHeight;
-  return sourceIsLandscape === previewIsLandscape ? dimensions : { width: dimensions.height, height: dimensions.width };
-};
-
-const makeImageData = (image: HTMLImageElement): ImageDataLike => {
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  const scale = Math.min(1, MAX_PREVIEW_EDGE / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) throw new Error('Canvas preview is unavailable in this environment.');
-  context.drawImage(image, 0, 0, width, height);
-  return context.getImageData(0, 0, width, height);
-};
-
-const toNativeImageData = (source: ImageDataLike): ImageData =>
-  source instanceof ImageData ? source : new ImageData(new Uint8ClampedArray(source.data), source.width, source.height);
-
-function SourceCard({ image, isBusy, onChoose, onDrop, onRemove, role }: SourceCardProps) {
-  const { t } = useTranslation();
-  const isReference = role === 'reference';
-  const title = isReference
-    ? t('styleTransfer.reference', { defaultValue: 'Reference image' })
-    : t('styleTransfer.target', { defaultValue: 'Target image' });
-  const helper = isReference
-    ? t('styleTransfer.referenceHint', { defaultValue: 'The image whose colour language you want to borrow.' })
-    : t('styleTransfer.targetHint', { defaultValue: 'The image that keeps its composition and detail.' });
-
-  return (
-    <div className="style-transfer-source-card" data-source-role={role}>
-      <div className="style-transfer-source-heading">
-        <span className="style-transfer-source-index">{isReference ? '01' : '02'}</span>
-        <div className="min-w-0">
-          <h3>{title}</h3>
-          <p>{helper}</p>
-        </div>
-      </div>
-      <div
-        className={`style-transfer-dropzone ${image ? 'has-image' : ''} ${isBusy ? 'is-busy' : ''}`}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={onDrop}
-      >
-        <button
-          aria-busy={isBusy}
-          aria-label={image ? t('styleTransfer.replaceImage', { defaultValue: `Replace ${title}` }) : title}
-          className="style-transfer-choose-source"
-          disabled={isBusy}
-          onClick={onChoose}
-          type="button"
-        >
-          {image ? (
-            <>
-              <span className="style-transfer-image-frame">
-                <img alt={image.name} src={image.url} />
-              </span>
-              <span className="style-transfer-image-meta">
-                <span className="style-transfer-image-name" title={image.name}>
-                  {image.name}
-                </span>
-                <span>
-                  {image.width.toLocaleString()} × {image.height.toLocaleString()}
-                </span>
-              </span>
-            </>
-          ) : (
-            <span className="style-transfer-empty-dropzone">
-              {isBusy ? (
-                <Loader2 aria-hidden="true" className="animate-spin" size={25} />
-              ) : (
-                <span className="style-transfer-upload-mark" aria-hidden="true">
-                  <ImagePlus size={22} />
-                </span>
-              )}
-              <strong>
-                {isBusy
-                  ? t('styleTransfer.loading', { defaultValue: 'Preparing preview…' })
-                  : t('styleTransfer.chooseImage', { defaultValue: 'Choose an image' })}
-              </strong>
-              <span>{t('styleTransfer.dropHint', { defaultValue: 'or drop it here · JPG, PNG, TIFF, RAW' })}</span>
-            </span>
-          )}
-        </button>
-        {image && (
-          <button
-            aria-label={t('styleTransfer.removeImage', { defaultValue: `Remove ${title}` })}
-            className="style-transfer-remove"
-            onClick={onRemove}
-            type="button"
-          >
-            <X aria-hidden="true" size={14} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function StyleTransferModal({ fullPage = false, isOpen, onClose }: StyleTransferModalProps) {
   const { t } = useTranslation();
