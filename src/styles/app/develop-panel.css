@@ -1,0 +1,557 @@
+@layer components {
+  .develop-workspace-root {
+    letter-spacing: -0.006em;
+  }
+
+  .develop-workspace {
+    background: color-mix(in srgb, var(--app-bg-primary) 88%, black);
+  }
+
+  .develop-workspace.is-wgpu-active {
+    background: transparent;
+  }
+
+  .develop-panel-shell {
+    position: relative;
+    display: flex;
+    height: 100%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--app-bg-secondary);
+    opacity: 1;
+  }
+
+  .develop-panel-shell::before {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 31;
+    width: 1px;
+    background: var(--editor-structural-border);
+    content: '';
+    pointer-events: none;
+  }
+
+  .develop-panel-shell.is-animated {
+    transition:
+      width 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 120ms ease-out;
+  }
+
+  .develop-panel-shell.is-hidden {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .develop-panel-resizer {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 30;
+    width: 8px;
+    cursor: col-resize;
+  }
+
+  .develop-panel-resizer::after {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 1px;
+    background: transparent;
+    content: '';
+    transition: background-color 120ms ease-out;
+  }
+
+  .develop-panel-resizer:hover::after {
+    background: color-mix(in srgb, var(--app-accent) 76%, var(--editor-structural-border));
+  }
+
+  .develop-panel-content {
+    position: relative;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    background: var(--app-bg-secondary);
+    container-type: inline-size;
+  }
+
+  .develop-panel-shell.is-collapsed .develop-panel-content {
+    display: none;
+  }
+
+  .develop-tool-rail {
+    position: relative;
+    display: flex;
+    width: var(--develop-tool-rail-size);
+    flex-shrink: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    border-left: var(--ui-border-width) solid var(--editor-structural-border);
+    background: color-mix(in srgb, var(--app-bg-secondary) 88%, black);
+    padding: var(--ui-tool-rail-inset);
+  }
+
+  .develop-panel-shell.is-collapsed .develop-tool-rail {
+    width: var(--develop-tool-rail-size);
+  }
+
+  .develop-tool-group {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .develop-tool-group-secondary {
+    padding-top: 4px;
+    box-shadow: inset 0 1px 0 var(--editor-structural-border);
+  }
+
+  .develop-tool-button {
+    position: relative;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
+    color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  .develop-tool-button:hover {
+    background: var(--ui-surface-tool-hover);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
+  }
+
+  .develop-tool-button.is-active {
+    background: var(--ui-surface-tool-selected);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-selected);
+  }
+
+  .ui-panel-header,
+  .develop-panel-header {
+    display: flex;
+    min-height: var(--ui-panel-header-height);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    padding: var(--ui-space-1-5) var(--ui-panel-inset);
+  }
+
+  .ui-panel-header-actions,
+  .develop-panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .ui-panel-header h3,
+  .develop-panel-header h3 {
+    font-size: var(--ui-font-size-title);
+    line-height: 20px;
+  }
+
+  .develop-profile-strip {
+    display: grid;
+    min-height: 40px;
+    flex-shrink: 0;
+    grid-template-columns: minmax(70px, 0.32fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
+    padding: 8px var(--ui-panel-inset);
+    color: var(--app-text-secondary);
+    font-size: 11px;
+  }
+
+  .ui-icon-button,
+  .develop-panel-action,
+  .modal-icon-action,
+  .editor-command-button,
+  .editor-status-icon-button {
+    display: inline-grid;
+    width: var(--ui-size-icon-hit);
+    height: var(--ui-size-icon-hit);
+    flex-shrink: 0;
+    place-items: center;
+    border: 0;
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-tool-rest);
+    color: var(--app-text-secondary);
+    box-shadow: var(--ui-shadow-tool-rest);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  .ui-icon-button:hover,
+  .develop-panel-action:hover,
+  .modal-icon-action:hover,
+  .editor-command-button:hover,
+  .editor-status-icon-button:hover {
+    background: var(--ui-surface-tool-hover);
+    color: var(--app-text-primary);
+    box-shadow: var(--ui-shadow-tool-hover);
+  }
+
+  .ui-icon-button--md,
+  .modal-icon-action {
+    width: var(--ui-size-control);
+    height: var(--ui-size-control);
+  }
+
+  .ui-icon-button:disabled,
+  .develop-panel-action:disabled,
+  .modal-icon-action:disabled,
+  .editor-command-button:disabled,
+  .editor-status-icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.32;
+  }
+
+  .editor-command-button.is-active {
+    background: var(--ui-surface-tool-selected);
+    color: var(--app-accent);
+    box-shadow: var(--ui-shadow-tool-selected);
+  }
+
+  .ui-icon-button:focus-visible,
+  .develop-panel-action:focus-visible,
+  .modal-icon-action:focus-visible,
+  .editor-command-button:focus-visible,
+  .editor-status-icon-button:focus-visible,
+  .develop-tool-button:focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .develop-histogram {
+    position: relative;
+    display: flex;
+    height: 158px;
+    flex-shrink: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
+    padding: 8px var(--ui-panel-inset) 0;
+  }
+
+  .develop-histogram-graph {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .develop-capture-strip {
+    display: flex;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 9px;
+    border-top: var(--ui-border-width) solid var(--ui-border-control);
+    margin-top: 5px;
+    color: var(--app-text-primary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    line-height: 27px;
+  }
+
+  .develop-capture-strip > span {
+    min-width: 0;
+  }
+
+  .develop-capture-strip > span:nth-last-child(-n + 2) {
+    flex-shrink: 0;
+  }
+
+  .develop-histogram-collapse {
+    position: absolute;
+    top: 9px;
+    right: calc(var(--ui-panel-inset) + 24px);
+    z-index: 25;
+    display: grid;
+    width: 22px;
+    height: 20px;
+    place-items: center;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--app-bg-secondary) 78%, transparent);
+    color: var(--app-text-secondary);
+    opacity: 0;
+    transition:
+      opacity 120ms ease-out,
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .develop-histogram:hover .develop-histogram-collapse,
+  .develop-histogram-collapse:focus-visible {
+    opacity: 1;
+  }
+
+  .develop-histogram-collapse:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-histogram-collapsed {
+    display: grid;
+    width: 100%;
+    height: 30px;
+    flex-shrink: 0;
+    place-items: center;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    background: color-mix(in srgb, var(--app-surface) 62%, var(--app-bg-secondary));
+    color: var(--app-text-secondary);
+  }
+
+  .develop-histogram-collapsed:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .histogram-surface {
+    border-color: rgb(255 255 255 / 9%);
+    border-radius: 2px;
+    background: rgb(20 22 25);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  }
+
+  .waveform-histogram-layer {
+    inset: 5px 5px 18px;
+  }
+
+  .histogram-chart {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .histogram-grid line {
+    stroke: rgb(226 232 240 / 9%);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .histogram-grid .histogram-baseline {
+    stroke: rgb(226 232 240 / 18%);
+  }
+
+  .histogram-channel {
+    mix-blend-mode: screen;
+  }
+
+  .histogram-tonal-axis {
+    position: absolute;
+    right: 7px;
+    bottom: 3px;
+    left: 7px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgb(226 232 240 / 50%);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 12px;
+    pointer-events: none;
+  }
+
+  .histogram-clipping-toggle {
+    position: absolute;
+    top: 4px;
+    z-index: 24;
+    display: grid;
+    width: 21px;
+    height: 20px;
+    place-items: center;
+    border-radius: 2px;
+    color: rgb(226 232 240 / 52%);
+    transition:
+      color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+
+  .histogram-clipping-toggle.is-shadow {
+    left: 4px;
+  }
+
+  .histogram-clipping-toggle.is-highlight {
+    right: 4px;
+  }
+
+  .histogram-clipping-toggle:hover,
+  .histogram-clipping-toggle:focus-visible {
+    background: rgb(255 255 255 / 8%);
+    color: rgb(241 245 249 / 88%);
+  }
+
+  .histogram-clipping-toggle svg {
+    width: 14px;
+    height: 13px;
+    overflow: visible;
+    fill: transparent;
+    stroke: currentColor;
+    stroke-linejoin: round;
+    stroke-width: 1.25;
+  }
+
+  .histogram-clipping-toggle.is-shadow.is-active {
+    background: rgb(78 140 255 / 13%);
+    color: rgb(104 159 255);
+  }
+
+  .histogram-clipping-toggle.is-highlight.is-active {
+    background: rgb(255 79 88 / 13%);
+    color: rgb(255 105 112);
+  }
+
+  .histogram-clipping-toggle.is-active svg {
+    fill: currentColor;
+    stroke: rgb(248 250 252 / 88%);
+  }
+
+  .histogram-loader {
+    position: absolute;
+    inset: 5px 5px 18px;
+    overflow: hidden;
+    border-bottom: 1px solid rgb(226 232 240 / 16%);
+    background-image:
+      linear-gradient(
+        to right,
+        transparent calc(25% - 0.5px),
+        rgb(226 232 240 / 8%) 25%,
+        transparent calc(25% + 0.5px)
+      ),
+      linear-gradient(
+        to right,
+        transparent calc(50% - 0.5px),
+        rgb(226 232 240 / 8%) 50%,
+        transparent calc(50% + 0.5px)
+      ),
+      linear-gradient(to right, transparent calc(75% - 0.5px), rgb(226 232 240 / 8%) 75%, transparent calc(75% + 0.5px));
+  }
+
+  .histogram-loader-sweep {
+    position: absolute;
+    inset-block: 0;
+    left: -38%;
+    width: 38%;
+    background: linear-gradient(to right, transparent, rgb(226 232 240 / 8%), transparent);
+    animation: histogram-loading-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes histogram-loading-sweep {
+    to {
+      transform: translateX(365%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .histogram-loader-sweep {
+      animation: none;
+      transform: translateX(180%);
+    }
+  }
+
+  .develop-adjustment-stack {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .develop-collapsible {
+    flex-shrink: 0;
+    border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+    background: transparent;
+  }
+
+  .develop-collapsible-header {
+    display: flex;
+    min-height: var(--ui-section-header-height);
+    align-items: center;
+    padding: 0 var(--ui-panel-inset);
+  }
+
+  .develop-collapsible-toggle {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    align-self: stretch;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--app-text-primary);
+  }
+
+  .develop-collapsible-toggle:hover {
+    color: color-mix(in srgb, var(--app-text-primary) 88%, var(--app-accent));
+  }
+
+  .develop-collapsible.is-disabled .develop-collapsible-toggle {
+    color: var(--app-text-secondary);
+  }
+
+  .develop-collapsible-chevron {
+    flex-shrink: 0;
+    color: var(--app-text-secondary);
+    transform: rotate(-90deg);
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .develop-collapsible-chevron.is-open {
+    transform: rotate(0deg);
+  }
+
+  .develop-collapsible-visibility {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 2px;
+    color: var(--app-text-secondary);
+    opacity: 0.52;
+    transition:
+      opacity 120ms ease-out,
+      background-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+
+  .develop-collapsible:hover .develop-collapsible-visibility,
+  .develop-collapsible.is-disabled .develop-collapsible-visibility,
+  .develop-collapsible-visibility:focus-visible {
+    opacity: 1;
+  }
+
+  .develop-collapsible-visibility:hover {
+    background: var(--app-card-active);
+    color: var(--app-text-primary);
+  }
+
+  .develop-collapsible-content {
+    padding: 0 var(--ui-panel-inset) 10px;
+  }
+}

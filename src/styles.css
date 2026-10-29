@@ -6,7 +6,13 @@
 
 @import './styles/app/core-components.css';
 
-@import './styles/app/editor-components.css';
+@import './styles/app/develop-panel.css';
+
+@import './styles/app/camera-raw-controls.css';
+
+@import './styles/app/crop-panel.css';
+
+@import './styles/app/editor-chrome.css';
 
 @import './styles/app/controls.css';
 
