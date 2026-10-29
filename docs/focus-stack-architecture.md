@@ -4,14 +4,17 @@
 `.kiro/specs/layered-camera-group-focus-stitching/tasks.md` 的 N0–N9 为准；未接入生产的研究模块不算作
 当前架构的一部分。
 
-本文按 `v1` 分支 2026-10-28 的 N1-9 代码基线修订（`stitching.rs` 拆分合并在 `f5b4e555` 之上）。新增模块的行数以当前工作区为准；
+本文按 `v1` 分支 2026-10-29 的 N1-10 代码基线修订（长文件拆分合并之后）。全部 facade、子模块、行数与职责见
+[`source-layout.md`](source-layout.md)，该表由 `scripts/source-layout.py` 从源码生成；新增模块的行数以当前工作区为准；
 历史记录中的行号和临时报告路径只用于追溯，不能作为当前模块定位或验收依据。
 
 ## 当前入口
 
 `src-tauri/src/panorama_stitching.rs` 是 Rust 堆栈入口，负责输入预检、源图准备、特征匹配、全局关系、
-机位求解、focus-stack 执行流程、取消、缓存和最终输出发布。当前仍是超大 facade 与实现混合文件，N1
-完成前不把其中的实验入口视为稳定 API。
+机位求解、focus-stack 执行流程、取消、缓存和最终输出发布。N1-10 之后它是 936 行的 facade：共享常量、`#[path]`
+兄弟模块声明、兼容重导出和两个 Tauri 命令（`stitch_panorama`、`save_panorama`）；实现位于
+`src-tauri/src/panorama_stitching/` 的 38 个生产子模块，总编排函数 `stitch_images_with_options`（约 3,820 行，
+单函数）在 `stitch_images.rs`。N1 完成前仍不把其中的实验入口视为稳定 API。
 
 候选 pair 枚举已移到 `src-tauri/src/panorama_feature_pairs.rs`。该模块只负责输入顺序/自然文件名排序、
 邻域候选、受限视觉检索和大堆栈候选扩展；完整特征提取、几何验证和后续 solver 仍由入口编排。入口通过
@@ -97,8 +100,17 @@ oracle 模块声明与 `reset_final_world_owner_oracle`、四个跨区共享的�
 `score_noise_probes.rs`（552）、`score_noise_diagnostics.rs`（883），以及原样外置的内联测试模块
 `interpolation_tests.rs`（1,480）、`station_degradation_wiring_tests.rs`（316）和 `focus_fusion_test_access.rs`
 （15）。超过 1000 行的 `tile_ownership_stitcher.rs`、`final_world_owner_runner.rs` 和 `interpolation_tests.rs`
-分别留给按阶段拆函数和 N2 测试拆分。`mosaic.rs` 承担渐进接缝与 detail-preserving mosaic；`processing.rs`
-承担通用采样、滤波、几何和颜色 primitive；这两个文件仍有跨职责实现，不能据此宣称已经完成模块化。
+分别留给按阶段拆函数和 N2 测试拆分（`interpolation_tests.rs` 已在 N2 按主题拆分）。
+
+N1-10 用同样的方法拆分了其余超过 1000 行的文件，按 facade 列出：`panorama_stitching.rs`（31,128 → 936 行，
+38 个生产子模块 + 5 个外置测试模块）、`panorama_utils/mosaic.rs`（7,079 → 277，13 + 2）、`scan_mosaic.rs`
+（2,861 → 264，7）、`processing.rs`（1,299 → 98，2 + tests），以及 `stack_pipeline` 中的 compositor、degradation、
+intra_station、residual_warp、joint_warp、quality_gate、virtual_tile、focus_fuser、tone 与 quality_gate_runner
+（1,288–5,524 → 113–917 行，26 个生产子模块，最大 879 行）。应用层的 export/exif/image_stack/style_transfer、
+image_processing/gpu_processing/lens_*/denoising、file_management/mask_generation/ai_processing/crop_analysis/
+image_loader 与 crate 根 `lib.rs`（子模块在 `src/lib/`）也已拆分。N2 把测试支持、研究 oracle 和外置测试模块拆成主题文件，
+测试名与测试总数不变。前端的大组件文件只移出顶层声明，`styles.css` 按原顺序拆成 `src/styles/app/` 下的 12 个文件。
+约定、验证方法与仍超过 1000 行的文件见 [`source-layout.md`](source-layout.md)。
 
 `src-tauri/src/panorama_utils/shared.rs` 保存 BRIEF descriptor、`ImageInfo`、`MatchInfo` 和 focus warp 等
 跨阶段共享合同；`panorama_stitching.rs` 只做兼容重导出，低层模块直接依赖 `shared`。这一步不改变算法、
@@ -150,8 +162,10 @@ Planar、曲面投影往返和带平移画布的 3 个单元测试，旧的 pixe
 `panorama_feature_pairs.rs` 为 239 行，`panorama_stitching.rs` 通过 facade import 继续提供原有内部调用名；
 没有移动完整 feature matcher，也没有改变算法阈值、候选排序或报告语义。N1-5 已拆 focus feature preparation
 和匹配合同；N1-6 又拆出候选、几何验证、focus rescue 和结果组装；N1-7 拆出 station relation gate、closure、
-topology、pose seed、solver 和 Residual_Warp 证据；N1-8 拆出 focus grouping 与 capture groups；N1-9 把 `stitching.rs` 拆成 facade 与 34 个子模块。下一步是
-Virtual_Tile 关系匹配；
+topology、pose seed、solver 和 Residual_Warp 证据；N1-8 拆出 focus grouping 与 capture groups；N1-9 把 `stitching.rs` 拆成 facade 与 34 个子模块；
+N1-10 拆分其余超过 1000 行的生产文件（Virtual_Tile 关系匹配已在 `panorama_stitching/virtual_tile_*.rs`）。
+下一步是把仍为单个超长函数的 `stitch_images_with_options` 与 `focus_tile_ownership_stitcher_with_finishing` 按阶段拆函数，
+这需要单独的行为核对；
 每一步都先跑定向测试，再跑完整库测试和兰亭保护性回归。
 
 1. 共享类型、错误、报告和坐标转换。
@@ -161,14 +175,16 @@ Virtual_Tile 关系匹配；
 5. virtual-tile store、tile source、BigTIFF/output adapter。
 6. 顶层 prepare、执行流程、取消、缓存和最终发布。
 
-每一步只移动代码和收敛依赖，不改算法阈值、坐标含义、回退行为或输出格式。本轮新增的生产拆分模块均不
-超过 1000 行；测试支持文件的进一步拆分列入 N2。最终 facade 只保留稳定入口、阶段编排、常量和重导出。
+每一步只移动代码和收敛依赖，不改算法阈值、坐标含义、回退行为或输出格式。除两个单函数文件外，新增的生产拆分模块
+均不超过 1000 行；测试支持文件已在 N2 拆分。最终 facade 只保留稳定入口、阶段编排、常量和重导出。
 
 ## 验收边界
 
 真实输入清单位于 [`tests/acceptance/focus-stack-datasets.json`](../tests/acceptance/focus-stack-datasets.json)。
 兰亭 45 张 JPG 是强制保护基准，参考成片 `DSC08854_FocusStack.jpg` 只读。每次行为变更先运行数据契约，
-再运行兰亭真实成片回归；输出和报告写入 `/private/tmp`，不得覆盖参考文件。
+再运行兰亭真实成片回归；输出和报告写入 `/private/tmp`，不得覆盖参考文件。2026-10-29 起清单共 11 个数据集：
+`张好好2` 已从数据根目录移除并从清单删除，新增 `祁序1`（75 张 NEF）、`祁序2`（98 张 NEF）和 `马远2`（47 张 NEF），
+三者暂无回归基线。
 
 真实素材回归由 `npm run focus-stack-regression -- --dataset <id>` 执行（说明见
 [`tests/acceptance/README.md`](../tests/acceptance/README.md)）。它调用 ignored harness
@@ -271,5 +287,12 @@ mosaic 已进入 `v1`）之上。合并后的树：警告集合与 `v1` 一致�
 `current_seam_penalty … 32.0 … desired_owner` 的跨函数顺序断言因模块按文件名拼接而改为分别断言存在，仍保留
 `32.0 → desired_owner` 的模块内顺序。
 
-N0 的基准行为门已通过，N1 当前推进到 N1-9；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
+N1-10/N2 的长文件拆分由多个并行 track 在独立 worktree 中完成，每个 track 自行通过警告集合、条目级核对、release 全量
+测试、Node 契约和兰亭/马远 PSD 10% 回归后，合并到同一个 integration 分支。合并期间还并入了另一个会话针对 `马远2`
+的两项修复：排除帧在 Ownership_Map legend 中保留槽位但不拥有像素，分层 Virtual_Tile 载入原图时跳过这些槽位，
+不再因缺少 source sampling 回退到旧渲染器；`Stack_Report` 中无可测重叠的 station relation 测量值（NaN 写成 `null`）
+读回时恢复为 NaN，`rewrite_stack_report` 与验收 harness 不再报 `invalid type: null`。两项修复按拆分后的文件位置应用，
+改动行与原提交逐行相同。合并后的完整树（含两项修复与数据集清单更新）：警告集合与基线一致，fmt 通过；release 全量库测试 `903 passed, 0 failed, 40 ignored`，943 个测试按名字与拆分前一一对应（531 个移入主题模块，路径对照见 [`test-path-map.tsv`](test-path-map.tsv)）；14 个 Node 契约通过，数据集契约含 `--hash-inputs`；兰亭 10%（45/45 streaming，`3381×1386`）与马远 PSD 10%（`1554×1300`）回归的 preview 和六个裁片与基线逐字节一致；前端 typecheck、lint、build、i18n:check 通过，构建出的 CSS 与拆分前逐字节相同。
+
+N0 的基准行为门已通过，N1 当前推进到 N1-10；每一层拆分后必须重新跑数据契约、兰亭回归和完整 Rust 测试，
 并保持上述 45/45 与清晰度门槛。

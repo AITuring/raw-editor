@@ -79,7 +79,7 @@ records an intended, visually reviewed change that deviates from the old baselin
 reference changes still fail). The baseline keeps only counts, digests and metric summaries.
 
 The equivalent manual command is below. Do not add `--exact` to the Rust filter because the test is
-nested under `panorama_stitching::acceptance_tests`. `RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG` requests a
+nested under `panorama_stitching::acceptance_tests::focus_stack_fixture`. `RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG` requests a
 byte-for-byte comparison with the Photoshop file; the canvas differs from Photoshop's, so leave it unset
 for protection runs.
 

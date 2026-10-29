@@ -91,7 +91,8 @@ N0 要逐项登记以下候选修改的来源、依赖、测试和生产状态�
 - 当前恢复保住了“45 张完整且处处清晰”的行为门，但输出画布尚未与参考 Photoshop 成片 `31065×11007` 对齐；
   Stack_Report 的 `output.written=false` 是因为验收测试在报告生成后另行写出 TIFF/app JPEG，不能据此判断测试文件未写出。
 - 数据契约覆盖 9 个数据集并通过：兰亭 45、马远 PSD 14、阆苑女仙 84、文苑图 126、张好好2 244、睡觉
-  45、枫鹰雉鸡 63，以及头部 17、底部 24。
+  45、枫鹰雉鸡 63，以及头部 17、底部 24。2026-10-29 起为 11 个：张好好2 已移除，新增祁序1 75、祁序2 98、
+  马远2 47（NEF，暂无回归基线）；`--hash-inputs` 全部通过。
 - Rust 完整 release 库测试在 N1-2b 后为 `818 passed, 0 failed, 30 ignored`。两个属性测试的回归根因是已有 station anchor
   被重新按清晰度排序；现在已改为“已有记录锚点优先、无记录时才按清晰度选锚点”，属性测试和完整套件均通过。
 - Langyuan/Wenyuan 的 owner、effective-pixel、boundary、tone 和 residual evidence 仍不能视为通过；不能用兰亭
@@ -107,7 +108,7 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   工作区已有代码。
 - [x] 建立 `tests/acceptance/focus-stack-datasets.json` 和 `focus-stack-datasets:check`；登记兰亭、马远 PSD、
   阆苑女仙、文苑图、张好好2、睡觉、枫鹰雉鸡及其头部/底部输入，排除派生图；兰亭 45 张输入的参考
-  成片路径、SHA-256、尺寸和文件大小已冻结。
+  成片路径、SHA-256、尺寸和文件大小已冻结。2026-10-29：张好好2 移除，新增祁序1、祁序2、马远2。
 - [x] 恢复兰亭 45 张完整成片行为：45/45 输入进入 streaming compositor，1:1 回归成功写出 TIFF/app JPEG，
   整图与左中右裁片保持清晰；参考成片未覆盖。输出尺寸/裁切对齐仍作为后续独立门禁。
 - [x] `v1` 合并后重新确认兰亭行为门：singleton-dominated scan 回到 legacy compositor（`2a722f3d`），10% 与 1:1
@@ -214,11 +215,22 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
   通过；兰亭与马远 PSD 10% 回归的 preview 和六个裁片与 `v1` 基线逐字节一致。仍超过 1000 行：
   `tile_ownership_stitcher.rs`（单函数 1,302 行，后续按阶段拆函数）、测试专用的 `final_world_owner_runner.rs`
   （1,067）和 `interpolation_tests.rs`（1,480，归 N2）。
-- [ ] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
-- [ ] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
-  模块；facade 不承载算法实现。`stitching.rs` 已在 N1-9 完成（facade 只保留四个共享像素 helper）。
+- [x] N1-10 其余长文件拆分（2026-10-29）：`panorama_stitching.rs`（31,128 → 936 行 facade，38 个生产子模块 + 5 个外置
+  测试模块）、`panorama_utils/mosaic.rs`（7,079 → 277）、`scan_mosaic.rs`（2,861 → 264）、`processing.rs`（1,299 → 98）、
+  `stack_pipeline` 的十个生产文件（1,288–5,524 → 113–917，26 个生产子模块），以及应用层 export/exif/image_stack/
+  style_transfer、image_processing/gpu_processing/lens_correction/lens_blur/denoising、file_management/mask_generation/
+  ai_processing/crop_analysis/image_loader 与 `lib.rs`（子模块在 `src/lib/`，`generate_handler!` 中 52 个命令改为完整路径，
+  命令名不变）。只移动代码：每个 track 的警告集合与基线一致、条目级核对 missing 0，release 全量库测试
+  `903 passed, 0 failed, 40 ignored`，Node 契约通过，兰亭与马远 PSD 10% 回归 identical。约定、模块地图和仍超过 1000 行
+  的文件见 `docs/source-layout.md`；按 2026-10-29 的决定，单个超长函数/组件不在本轮拆分。
+- [x] `panorama_stitching.rs` 只保留稳定入口、阶段编排、常量和重导出。
+- [x] `stitching.rs`、`mosaic.rs`、`processing.rs` 和 `stack_pipeline` 生产模块拆成单一职责 sibling
+  模块；facade 不承载算法实现。`stitching.rs` 已在 N1-9 完成（facade 只保留四个共享像素 helper）；`mosaic.rs`、
+  `processing.rs` 与 `stack_pipeline` 生产模块已在 N1-10 完成。
 - [ ] 所有目标生产文件不超过 1000 行；N1-6 新增模块已经满足，剩余历史大文件和测试支持文件按 N1-7/N2
-  继续拆分；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。
+  继续拆分；模块 import 方向通过源码检查，禁止测试支持反向依赖生产。2026-10-29：除 `panorama_stitching/stitch_images.rs`
+  与 `stitching/tile_ownership_stitcher.rs`（各只含一个超长函数，按决定保留）外，生产 Rust 文件均不超过 1000 行；
+  import 方向的源码检查尚未建立。
 - [x] 更新并维护 `docs/focus-stack-architecture.md`，记录当前 N1-6 模块树、阶段边界、验证命令和实际回归
   证据；不复制其他 worktree 的完成数字。
 - [ ] 每完成一个职责层，运行该层定向测试并记录迁移前后输出等价性。
@@ -228,15 +240,24 @@ N1 后每个职责层的回归保护条件，其他数据集的历史结果不�
 
 ## N2：拆分测试支持和研究 oracle
 
-- [ ] 先拆 `stack_pipeline/test_support.rs` 和共享 fixture，再拆 focus ownership、registration/topology、
-  alignment、Virtual_Tile、acceptance 和 interpolation 测试。
-- [ ] `properties.rs` 按领域拆分；每个 property 保留原名称、过滤路径、生成器语义和失败样本。
+- [x] 先拆 `stack_pipeline/test_support.rs` 和共享 fixture，再拆 focus ownership、registration/topology、
+  alignment、Virtual_Tile、acceptance 和 interpolation 测试。2026-10-29：`test_support.rs`（2,150 → 78 行 facade + 5 个
+  生成器模块）、`alignment_tests`、`acceptance_tests`、`panorama_virtual_tile_tests.rs`、`interpolation_tests`、
+  `mosaic/tests`、`focus_fuser/tests`、`quality_gate_runner/tests`、`export_processing/tests` 与 `mask_generation/tests`
+  均按主题拆分；测试名和总数（943）不变，路径对照见 `docs/test-path-map.tsv`。
+- [x] `properties.rs` 按领域拆分；每个 property 保留原名称、过滤路径、生成器语义和失败样本。2026-10-29：
+  13,683 行拆成 598 行 facade 与 22 个 Correctness Property 领域模块（最大 870 行），52 个 `proptest!` 块整块移动；
+  测试名不变，路径保留 `stack_pipeline::properties::` 前缀，`package.json` 以 `--exact` 调用的两个 harness 留在 facade；
+  `properties.txt` 的 8 条种子复制到每个含 proptest 的子模块对应路径。
 - [ ] `panorama_structural_oracle.rs`、`owner_quality_oracle.rs`、`final_world_owner_oracle.rs` 拆成不超过
-  1000 行的 test-only 模块，禁止从生产模块 import。
+  1000 行的 test-only 模块，禁止从生产模块 import。2026-10-29：三者都已不超过 1000 行（structural 与 final-world 已
+  拆分，owner_quality 为 889 行）；`stitch_images.rs` 与 `quality_gate_runner` 仍在 `#[cfg(test)]` 分支中调用
+  structural oracle 和 acceptance helper，import 方向待处理。
 - [ ] 将 `tests/focus-stack-quality-contract.mjs` 中的 production invariant 与 research/test-only oracle
   断言分开；release contract 不再依赖已停止的 owner、tone 或 structural research。
 - [ ] `stack-pair-evidence:check` 只作为 research harness，不能成为 release gate，除非 N3 重新定义并验收它。
-- [ ] 每次迁移先跑定向测试，再跑完整 `cargo test --lib`；测试迁移提交不得同时改变生产逻辑。
+- [x] 每次迁移先跑定向测试，再跑完整 `cargo test --lib`；测试迁移提交不得同时改变生产逻辑。2026-10-29 的测试
+  拆分提交只移动测试代码，生产拆分（含 `impl GpuProcessor` 分块）单独提交。
 
 **N2 通过条件**：测试支持和 oracle 均不超过 1000 行，失败能定位到一个领域，测试数量和过滤路径可追踪，
 生产构建不携带研究实现。
