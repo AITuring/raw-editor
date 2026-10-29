@@ -1,15 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useTranslation } from 'react-i18next';
 import { PresetListType, usePresets, UserPreset } from '../../../hooks/usePresets';
 import { useContextMenu } from '../../../context/ContextMenuContext';
@@ -18,18 +10,12 @@ import {
   Edit,
   FileDown,
   FileUp,
-  Folder as FolderIcon,
-  FolderOpen,
   FolderPlus,
   Loader2,
   Plus,
   SortAsc,
   Trash2,
-  Layers,
-  Crop,
   Save,
-  Wrench,
-  Palette,
   Settings2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,36 +23,19 @@ import ConfigurePresetModal from '../../modals/ConfigurePresetModal';
 import CreateFolderModal from '../../modals/CreateFolderModal';
 import RenameFolderModal from '../../modals/RenameFolderModal';
 import Text from '../../ui/Text';
-import Slider from '../../ui/Slider';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
-import { Adjustments, INITIAL_ADJUSTMENTS, ADJUSTMENT_GROUPS } from '../../../utils/adjustments';
+import { Adjustments, INITIAL_ADJUSTMENTS } from '../../../utils/adjustments';
 import { Invokes, OPTION_SEPARATOR, Preset } from '../../ui/AppProperties';
 import { useEditorStore } from '../../../store/useEditorStore';
 import { useEditorActions } from '../../../hooks/useEditorActions';
-
-interface DroppableFolderItemProps {
-  children: any;
-  folder: any;
-  isExpanded: boolean;
-  onContextMenu(event: any, folder: any): void;
-  onToggle(id: string): void;
-}
-
-interface DraggablePresetItemProps {
-  isGeneratingPreviews: boolean;
-  onApply(preset: any): void;
-  onContextMenu(event: any, preset: any): void;
-  preset: any;
-  previewUrl: string;
-  isActive?: boolean;
-  intensity?: number;
-  onIntensityChange?: (val: number) => void;
-  onDragStateChange?: (isDragging: boolean) => void;
-}
-
-interface FolderProps {
-  folder: any;
-}
+import { mixAdjustments } from './PresetsPanel/mixAdjustments';
+import { PresetItemDisplay } from './PresetsPanel/PresetItemDisplay';
+import {
+  FolderItemDisplay,
+  DraggablePresetItem,
+  DroppableFolderItem,
+  RootDroppableArea,
+} from './PresetsPanel/DragAndDrop';
 
 interface FolderState {
   isOpen: boolean;
@@ -76,75 +45,6 @@ interface FolderState {
 interface ModalState {
   isOpen: boolean;
   preset: Preset | null;
-}
-
-interface PresetItemDisplayProps {
-  isGeneratingPreviews: boolean;
-  preset: Preset;
-  previewUrl: string;
-  isActive?: boolean;
-  intensity?: number;
-  onIntensityChange?: (val: number) => void;
-  onDragStateChange?: (isDragging: boolean) => void;
-}
-
-interface ImageLayer {
-  id: string;
-  url: string;
-  opacity: number;
-}
-
-function PreviewImage({ src, alt }: { src: string; alt: string }) {
-  const [layers, setLayers] = useState<ImageLayer[]>([]);
-
-  useEffect(() => {
-    if (!src) {
-      setLayers([]);
-      return;
-    }
-
-    setLayers((prev) => {
-      if (prev.some((l) => l.id === src)) return prev;
-
-      return [...prev, { id: src, url: src, opacity: 0 }];
-    });
-  }, [src]);
-
-  useEffect(() => {
-    const layerToFadeIn = layers.find((l) => l.opacity === 0);
-    if (layerToFadeIn) {
-      const frame = requestAnimationFrame(() => {
-        setLayers((prev) => prev.map((l) => (l.id === layerToFadeIn.id ? { ...l, opacity: 1 } : l)));
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [layers]);
-
-  const handleTransitionEnd = useCallback((finishedId: string) => {
-    setLayers((prev) => {
-      const finishedIndex = prev.findIndex((l) => l.id === finishedId);
-      if (finishedIndex < 0 || prev.length <= 1) return prev;
-      return prev.slice(finishedIndex);
-    });
-  }, []);
-
-  return (
-    <div className="absolute inset-0 w-full h-full overflow-hidden rounded-md">
-      {layers.map((layer) => (
-        <div
-          key={layer.id}
-          className="absolute inset-0 w-full h-full"
-          style={{
-            opacity: layer.opacity,
-            transition: 'opacity 300ms ease-in-out',
-          }}
-          onTransitionEnd={() => handleTransitionEnd(layer.id)}
-        >
-          <img src={layer.url} alt={alt} className="w-full h-full object-cover rounded-md pointer-events-none" />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 const itemVariants = {
@@ -159,384 +59,6 @@ const itemVariants = {
   }),
   exit: { opacity: 0, x: -15, transition: { duration: 0.2 } },
 };
-
-const evaluateCurveY = (curve: Array<{ x: number; y: number }>, targetX: number): number => {
-  const len = curve.length;
-  if (len === 1) return curve[0].y;
-  if (targetX <= curve[0].x) return curve[0].y;
-  if (targetX >= curve[len - 1].x) return curve[len - 1].y;
-
-  for (let i = 0; i < len - 1; i++) {
-    const p2 = curve[i + 1];
-    if (targetX <= p2.x) {
-      const p1 = curve[i];
-      const range = p2.x - p1.x;
-      return range === 0 ? p1.y : p1.y + ((targetX - p1.x) / range) * (p2.y - p1.y);
-    }
-  }
-  return targetX;
-};
-
-const mixAdjustments = (presetObj: any, intensity: number, initialObj: any = INITIAL_ADJUSTMENTS): any => {
-  const fraction = intensity / 100;
-
-  if (fraction === 1) return { ...presetObj };
-  if (fraction === 0) return { ...initialObj };
-
-  const result: any = {};
-  const keys = Object.keys(presetObj);
-
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    const presetVal = presetObj[key];
-    const initialVal = initialObj[key] !== undefined ? initialObj[key] : (INITIAL_ADJUSTMENTS as any)[key];
-
-    if (typeof presetVal === 'number') {
-      result[key] = typeof initialVal === 'number' ? initialVal + (presetVal - initialVal) * fraction : presetVal;
-    } else if (Array.isArray(presetVal)) {
-      if (!Array.isArray(initialVal)) {
-        result[key] = fraction > 0 ? presetVal : initialVal;
-        continue;
-      }
-
-      if (presetVal.length > 0 && presetVal[0].x !== undefined && presetVal[0].y !== undefined) {
-        const xVals: number[] = [];
-        let p1 = 0,
-          p2 = 0;
-        const len1 = initialVal.length,
-          len2 = presetVal.length;
-
-        while (p1 < len1 && p2 < len2) {
-          const x1 = initialVal[p1].x,
-            x2 = presetVal[p2].x;
-          if (x1 < x2) {
-            xVals.push(x1);
-            p1++;
-          } else if (x1 > x2) {
-            xVals.push(x2);
-            p2++;
-          } else {
-            xVals.push(x1);
-            p1++;
-            p2++;
-          }
-        }
-        while (p1 < len1) xVals.push(initialVal[p1++].x);
-        while (p2 < len2) xVals.push(presetVal[p2++].x);
-
-        const newCurve = new Array(xVals.length);
-
-        for (let j = 0; j < xVals.length; j++) {
-          const x = xVals[j];
-          const yInit = evaluateCurveY(initialVal, x);
-          const yPreset = evaluateCurveY(presetVal, x);
-          const yInterp = yInit + (yPreset - yInit) * fraction;
-
-          newCurve[j] = {
-            x,
-            y: yInterp < 0 ? 0 : yInterp > 255 ? 255 : yInterp,
-          };
-        }
-        result[key] = newCurve;
-      } else {
-        result[key] = fraction > 0 ? presetVal : initialVal;
-      }
-    } else if (presetVal !== null && typeof presetVal === 'object') {
-      result[key] = mixAdjustments(presetVal, intensity, initialVal || {});
-    } else {
-      result[key] = fraction > 0 ? presetVal : initialVal;
-    }
-  }
-  return result;
-};
-
-function PresetItemDisplay({
-  preset,
-  previewUrl,
-  isActive,
-  intensity,
-  onIntensityChange,
-  onDragStateChange,
-}: PresetItemDisplayProps) {
-  const { t } = useTranslation();
-  const geometryKeys = ADJUSTMENT_GROUPS.geometry.flatMap((g) => g.keys);
-
-  const supportsMasks = preset.includeMasks ?? (preset.adjustments?.masks && preset.adjustments.masks.length > 0);
-  const supportsGeometry =
-    preset.includeCropTransform ?? geometryKeys.some((key) => preset.adjustments?.[key] !== undefined);
-  const isTool = preset.presetType === 'tool';
-  const tooltipContent = useMemo(() => {
-    const features = [];
-    if (supportsMasks) features.push(t('editor.presets.supports.masks'));
-    if (supportsGeometry) features.push(t('editor.presets.supports.cropTransform'));
-
-    if (features.length === 0) return undefined;
-    return t('editor.presets.supports.label', { features: features.join(' + ') });
-  }, [supportsMasks, supportsGeometry, t]);
-
-  return (
-    <div className="flex flex-col p-2 rounded-lg bg-surface cursor-grabbing">
-      <div className="flex items-center gap-3">
-        <div
-          className="w-20 h-14 bg-bg-tertiary rounded-md flex items-center justify-center shrink-0 relative overflow-hidden"
-          data-tooltip={tooltipContent}
-        >
-          {previewUrl ? (
-            <PreviewImage src={previewUrl} alt={`${preset.name} preview`} />
-          ) : (
-            <Loader2 size={20} className="animate-spin text-status-info" />
-          )}
-
-          {(supportsMasks || supportsGeometry) && (
-            <>
-              <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-linear-to-bl from-black/30 via-black/0 to-transparent pointer-events-none z-0" />
-
-              <div className="absolute top-1 right-1 bg-primary rounded-full px-1.5 py-0.5 flex items-center gap-1.5 backdrop-blur-xs shadow-xs z-10 pointer-events-none">
-                {supportsMasks && <Layers size={11} className="text-white" />}
-                {supportsGeometry && <Crop size={11} className="text-white" />}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="grow min-w-0 flex flex-col justify-center">
-          <Text color={TextColors.primary} weight={TextWeights.medium} className="truncate">
-            {preset.name}
-          </Text>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            {isTool ? (
-              <Wrench size={12} className="text-text-secondary" />
-            ) : (
-              <Palette size={12} className="text-text-secondary" />
-            )}
-            <Text
-              variant={TextVariants.small}
-              color={TextColors.secondary}
-              className="text-[10px] uppercase tracking-wider"
-            >
-              {isTool ? t('editor.presets.types.tool') : t('editor.presets.types.style')}
-            </Text>
-          </div>
-        </div>
-      </div>
-
-      <AnimatePresence initial={false}>
-        {isActive && onIntensityChange && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="w-full cursor-auto overflow-hidden"
-            onClick={(e: any) => e.stopPropagation()}
-            onPointerDown={(e: any) => e.stopPropagation()}
-          >
-            <div className="mt-3 px-1 pb-1">
-              <Slider
-                min={0}
-                max={200}
-                defaultValue={100}
-                value={intensity ?? 100}
-                onChange={(e: any) => onIntensityChange(Number(e.target.value))}
-                onDragStateChange={onDragStateChange}
-                label={t('editor.presets.amount')}
-                step={1}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function FolderItemDisplay({ folder }: FolderProps) {
-  return (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-surface cursor-grabbing w-full">
-      <div className="p-1">
-        <FolderIcon size={18} />
-      </div>
-      <Text color={TextColors.primary} weight={TextWeights.medium} className="grow truncate select-none">
-        {folder.name}
-      </Text>
-      <Text as="span" weight={TextWeights.medium} className="ml-auto pr-1">
-        {folder.children?.length || 0}
-      </Text>
-    </div>
-  );
-}
-
-function DraggablePresetItem({
-  preset,
-  onApply,
-  onContextMenu,
-  previewUrl,
-  isGeneratingPreviews,
-  isActive,
-  intensity,
-  onIntensityChange,
-  onDragStateChange,
-}: DraggablePresetItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef: setDraggableNodeRef,
-    isDragging,
-  } = useDraggable({
-    id: preset.id,
-    data: { type: PresetListType.Preset, preset },
-  });
-
-  const { setNodeRef: setDroppableNodeRef, isOver } = useDroppable({
-    data: { type: PresetListType.Preset, preset },
-    id: preset.id,
-  });
-
-  const setCombinedRef = useCallback(
-    (node: any) => {
-      setDraggableNodeRef(node);
-      setDroppableNodeRef(node);
-    },
-    [setDraggableNodeRef, setDroppableNodeRef],
-  );
-
-  const style = {
-    borderRadius: '10px',
-    opacity: isDragging ? 0.4 : 1,
-    outline: isOver ? '2px solid var(--color-primary)' : '2px solid transparent',
-    outlineOffset: '-2px',
-    touchAction: 'none',
-  };
-
-  return (
-    <div
-      onClick={() => onApply(preset)}
-      onContextMenu={(e: any) => onContextMenu(e, { preset })}
-      ref={setCombinedRef}
-      style={style}
-    >
-      <motion.div
-        {...listeners}
-        {...attributes}
-        className="cursor-grab"
-        whileTap={{ scale: isActive ? 1 : 0.98 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-      >
-        <PresetItemDisplay
-          preset={preset}
-          previewUrl={previewUrl}
-          isGeneratingPreviews={isGeneratingPreviews}
-          isActive={isActive}
-          intensity={intensity}
-          onIntensityChange={onIntensityChange}
-          onDragStateChange={onDragStateChange}
-        />
-      </motion.div>
-    </div>
-  );
-}
-
-function DroppableFolderItem({ folder, onContextMenu, children, onToggle, isExpanded }: DroppableFolderItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef: setDraggableNodeRef,
-    isDragging,
-  } = useDraggable({
-    data: { type: PresetListType.Folder, folder },
-    id: folder.id,
-  });
-
-  const { setNodeRef: setDroppableNodeRef, isOver } = useDroppable({
-    data: { type: PresetListType.Folder, folder },
-    id: folder.id,
-  });
-
-  const style = {
-    opacity: isDragging ? 0.4 : 1,
-    touchAction: 'none',
-  };
-
-  const hasChildren = folder.children && folder.children.length > 0;
-
-  return (
-    <div
-      className={`rounded-lg transition-colors ${isOver ? 'bg-surface-hover' : ''}`}
-      ref={setDroppableNodeRef}
-      style={style}
-    >
-      <div
-        className="flex items-center gap-2 p-2 rounded-lg bg-surface cursor-pointer"
-        onContextMenu={(e: any) => onContextMenu(e, { folder })}
-      >
-        <div className="p-1 cursor-grab" ref={setDraggableNodeRef} {...listeners} {...attributes}>
-          {isExpanded ? (
-            <FolderOpen
-              className="text-primary"
-              onClick={(e: any) => {
-                e.stopPropagation();
-                onToggle(folder.id);
-              }}
-              size={18}
-            />
-          ) : (
-            <FolderIcon
-              className="text-text-secondary"
-              onClick={(e: any) => {
-                e.stopPropagation();
-                onToggle(folder.id);
-              }}
-              size={18}
-            />
-          )}
-        </div>
-        <Text
-          color={TextColors.primary}
-          weight={TextWeights.medium}
-          className="grow truncate select-none"
-          onClick={() => onToggle(folder.id)}
-        >
-          {folder.name}
-        </Text>
-        <Text as="span" variant={TextVariants.small} color={TextColors.secondary} className="ml-auto pr-1">
-          {folder.children?.length || 0}
-        </Text>
-      </div>
-      <AnimatePresence>
-        {isExpanded && hasChildren && (
-          <motion.div
-            animate={{ height: 'auto', opacity: 1 }}
-            className="ml-4 pl-2 border-l-[1.5px] border-border-color/50 space-y-2 overflow-hidden pt-2"
-            exit={{ height: 0, opacity: 0 }}
-            initial={{ height: 0, opacity: 0 }}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function RootDroppableArea({
-  children,
-  onContextMenu,
-}: {
-  children: React.ReactNode;
-  onContextMenu: (e: any) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: 'root' });
-
-  return (
-    <div
-      className={`ui-panel-body space-y-2 transition-colors ${isOver ? 'bg-surface-hover' : ''}`}
-      onContextMenu={onContextMenu}
-      ref={setNodeRef}
-    >
-      {children}
-    </div>
-  );
-}
 
 export default function PresetsPanel() {
   const { t } = useTranslation();
