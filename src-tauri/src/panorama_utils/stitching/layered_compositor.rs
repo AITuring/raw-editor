@@ -163,8 +163,11 @@ pub(crate) struct FocusTileSource {
 pub(crate) struct FocusTileSources {
     pub(crate) ownership: OwnershipMap,
     pub(crate) origin: (f64, f64),
-    /// Same legend order as the station's exact ownership plane.
-    pub(crate) originals: Vec<FocusTileSource>,
+    /// Same legend order as the station's exact ownership plane. A legend
+    /// entry that owns no pixel has no original: a frame the intra-station
+    /// registrar excluded keeps its owner identifier but has neither pixels
+    /// nor source sampling, and nothing can sample it.
+    pub(crate) originals: Vec<Option<FocusTileSource>>,
 }
 
 impl FocusTileSources {
@@ -191,7 +194,7 @@ impl FocusTileSources {
                 }
             }
         }
-        let original = self.originals.get(selected?)?;
+        let original = self.originals.get(selected?)?.as_ref()?;
         let corrected = original.refinement.inverse_canvas_point(point);
         let source = original
             .refinement

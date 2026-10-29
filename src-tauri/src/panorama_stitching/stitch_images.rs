@@ -2842,9 +2842,20 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             == StackCompositorChoice::LayeredVirtualTile
                         {
                             if let Some(masks) = rendered.masks.as_ref() {
+                                let owned_pixels = masks.ownership.owned_pixel_counts();
                                 let mut originals =
                                     Vec::with_capacity(masks.ownership.legend().len());
-                                for path in masks.ownership.legend() {
+                                for (path, &owned) in
+                                    masks.ownership.legend().iter().zip(&owned_pixels)
+                                {
+                                    // A frame the intra-station registrar excluded
+                                    // keeps its legend slot but owns no pixel and
+                                    // has no source sampling. Nothing samples it,
+                                    // so it needs no original and no decode.
+                                    if owned == 0 {
+                                        originals.push(None);
+                                        continue;
+                                    }
                                     let source = group_slices[group_index]
                                         .iter()
                                         .find(|source| Path::new(&source.filename) == path)
@@ -2862,10 +2873,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                                 path.display()
                                             )
                                         })?;
-                                    originals.push(stitching::FocusTileSource {
+                                    originals.push(Some(stitching::FocusTileSource {
                                         image: load_render_image(source)?,
                                         refinement,
-                                    });
+                                    }));
                                 }
                                 Some(stitching::FocusTileSources {
                                     ownership: masks.ownership.clone(),

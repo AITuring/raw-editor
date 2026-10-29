@@ -298,14 +298,14 @@ fn final_source_sampling_does_not_filter_a_fused_owner_boundary() {
         .unwrap(),
         origin: (0.0, 0.0),
         originals: vec![
-            FocusTileSource {
+            Some(FocusTileSource {
                 image: original.clone(),
                 refinement: refinement.clone(),
-            },
-            FocusTileSource {
+            }),
+            Some(FocusTileSource {
                 image: Rgb32FImage::from_pixel(64, 64, Rgb([0.9; 3])),
                 refinement,
-            },
+            }),
         ],
     };
     let point = Point2::new(31.49, 30.1);
