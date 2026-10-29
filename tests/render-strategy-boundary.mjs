@@ -59,7 +59,7 @@ assert.match(cacheUtils, /state\.range_mask_source_cache\.lock\(\)/);
 assert.match(imageLoader, /state\.range_mask_source_cache\.lock\(\)\.unwrap\(\)/);
 assert.match(lib, /resolve_preview_render_tier\(/);
 const processPreviewStart = lib.indexOf('fn process_preview_job(');
-const processPreviewEnd = lib.indexOf('\nfn start_analytics_worker(', processPreviewStart);
+const processPreviewEnd = lib.indexOf('fn start_analytics_worker(', processPreviewStart);
 assert.ok(processPreviewStart >= 0 && processPreviewEnd > processPreviewStart);
 const processPreview = lib.slice(processPreviewStart, processPreviewEnd);
 assert.match(
