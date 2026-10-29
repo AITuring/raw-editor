@@ -57,14 +57,36 @@
       "regressionSubsets": [{ "id": "wenyuan-10", "first": 10 }]
     },
     {
-      "id": "zhang-haohao-2",
-      "label": "张好好2",
-      "directory": "张好好2",
+      "id": "qixu-1",
+      "label": "祁序1",
+      "directory": "祁序1",
       "sourceExtensions": [".nef"],
       "excludePatterns": [],
-      "expectedSourceCount": 244,
-      "sourceBytes": 13630222757,
-      "sourceAggregateSha256": "d8d4be063ee9c9eeac439d2f752503279fefb16e15ff5fdd9636ae41387ca872",
+      "expectedSourceCount": 75,
+      "sourceBytes": 4516277858,
+      "sourceAggregateSha256": "c8225550cd0750da20d7afb573a3942382665bff256cdcb8feb4fdef74027ef9",
+      "baseline": false
+    },
+    {
+      "id": "qixu-2",
+      "label": "祁序2",
+      "directory": "祁序2",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 98,
+      "sourceBytes": 5736644234,
+      "sourceAggregateSha256": "6768751294ced838828b9d8b74329dcd18aa0ed7a19c1863170a82c933e88e68",
+      "baseline": false
+    },
+    {
+      "id": "mayuan-2",
+      "label": "马远2",
+      "directory": "马远2",
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 47,
+      "sourceBytes": 2806559947,
+      "sourceAggregateSha256": "c1225dd236fb42abd54e4ae3b3a97faf8f28cc336aa37ecd9ad682fe08e2f8b4",
       "baseline": false
     },
     {
