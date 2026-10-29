@@ -247,7 +247,7 @@ assert.match(exportProcessing, /final_temporary\.persist\(output_path\)/);
 assert.match(exportProcessing, /reclaim_gpu_resources_after_export\(&context/);
 
 const saveImageStart = exportProcessing.indexOf('fn save_image_with_metadata(');
-const saveImageEnd = exportProcessing.indexOf('\nfn supports_streaming_export', saveImageStart);
+const saveImageEnd = exportProcessing.indexOf('fn supports_streaming_export', saveImageStart);
 assert.ok(saveImageStart >= 0 && saveImageEnd > saveImageStart);
 const saveImageWithMetadata = exportProcessing.slice(saveImageStart, saveImageEnd);
 assert.ok(
