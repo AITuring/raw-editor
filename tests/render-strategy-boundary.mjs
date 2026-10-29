@@ -138,8 +138,10 @@ assert.match(gpuProcessing, /materialize_cpu_fallback/);
 assert.match(gpuProcessing, /upload_source_to_texture_bounded/);
 assert.match(gpuProcessing, /GPU_INPUT_UPLOAD_BAND_ROWS/);
 assert.doesNotMatch(gpuProcessing, /let img_rgba_f16 = to_rgba_f16\(base_image\)/);
+// Function slices end at the function's own closing brace: in a split module
+// the next item may live in another child file or carry a visibility prefix.
 const rgbaF16Start = gpuProcessing.indexOf('fn to_rgba_f16(');
-const rgbaF16End = gpuProcessing.indexOf('\n#[repr(C)]', rgbaF16Start);
+const rgbaF16End = gpuProcessing.indexOf('\n}\n', rgbaF16Start);
 assert.ok(rgbaF16Start >= 0 && rgbaF16End > rgbaF16Start);
 const rgbaF16Conversion = gpuProcessing.slice(rgbaF16Start, rgbaF16End);
 assert.match(rgbaF16Conversion, /DynamicImage::ImageRgb32F\(rgb\)/);
@@ -153,11 +155,11 @@ assert.match(rawHandoff, /pixels\.into_inner\(\)\.into_flattened\(\)/);
 assert.match(rawHandoff, /DynamicImage::ImageRgb32F\(buffer\)/);
 assert.doesNotMatch(rawHandoff, /ImageRgba32F/);
 const rawEnhancementStart = imageProcessing.indexOf('pub fn remove_raw_artifacts_and_enhance(');
-const rawEnhancementEnd = imageProcessing.indexOf('\nfn enhance_rgb32f_buffer(', rawEnhancementStart);
+const rawEnhancementEnd = imageProcessing.indexOf('\n}\n', rawEnhancementStart);
 assert.ok(rawEnhancementStart >= 0 && rawEnhancementEnd > rawEnhancementStart);
 assert.match(imageProcessing.slice(rawEnhancementStart, rawEnhancementEnd), /image\.as_mut_rgb32f\(\)/);
 const rawDisplayStart = imageProcessing.indexOf('pub fn apply_cpu_default_raw_processing(');
-const rawDisplayEnd = imageProcessing.indexOf('\nfn apply_cpu_default_raw_processing_to_rgb32f(', rawDisplayStart);
+const rawDisplayEnd = imageProcessing.indexOf('\n}\n', rawDisplayStart);
 assert.ok(rawDisplayStart >= 0 && rawDisplayEnd > rawDisplayStart);
 assert.match(imageProcessing.slice(rawDisplayStart, rawDisplayEnd), /image\.as_mut_rgb32f\(\)/);
 assert.match(imageProcessing, /enum GeometryPixelSource/);
@@ -177,7 +179,7 @@ assert.match(imageProcessing, /GeometrySampleData::Rgba16/);
 assert.match(imageProcessing, /GeometrySampleData::Rgba32F/);
 assert.match(imageProcessing, /context\s*\.write_rgba32f_row/);
 const geometryWarpStart = imageProcessing.indexOf('pub fn warp_image_geometry(');
-const geometryWarpEnd = imageProcessing.indexOf('\npub fn unwarp_image_geometry(', geometryWarpStart);
+const geometryWarpEnd = imageProcessing.indexOf('\n}\n', geometryWarpStart);
 assert.ok(geometryWarpStart >= 0 && geometryWarpEnd > geometryWarpStart);
 assert.doesNotMatch(
   imageProcessing.slice(geometryWarpStart, geometryWarpEnd),
