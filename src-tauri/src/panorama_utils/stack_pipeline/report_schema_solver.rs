@@ -250,8 +250,14 @@ pub(crate) struct StationRelationHypothesisRecord {
     pub median_error_px: f64,
     pub scale_ratio: f64,
     pub spatial_support: f64,
+    /// The three overlap measurements below are NaN when a hypothesis has no
+    /// measurable overlap. serde_json writes a non-finite `f64` as `null`, so
+    /// they read `null` back as NaN; otherwise the report cannot be reopened.
+    #[serde(deserialize_with = "nan_when_null")]
     pub low_frequency_mean_relative_difference: f64,
+    #[serde(deserialize_with = "nan_when_null")]
     pub edge_strength_ratio: f64,
+    #[serde(deserialize_with = "nan_when_null")]
     pub median_edge_orientation_difference_degrees: f64,
     pub preserves_convex_orientation: bool,
     pub rejection_reasons: Vec<String>,
@@ -790,6 +796,14 @@ impl Default for ClosureReport {
 
 fn default_closure_geometry_model() -> String {
     "homography".to_string()
+}
+
+/// Read a JSON `null` as NaN, the value serde_json wrote it from.
+fn nan_when_null<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<f64>::deserialize(deserializer)?.unwrap_or(f64::NAN))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
