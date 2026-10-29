@@ -44,91 +44,13 @@ import {
   type UprightMode,
 } from '../../../types/crop';
 import { mapOrientedUprightCorrection, snapUprightGuides, solveGuidedUpright } from '../../../utils/upright';
-
-const BASE_RATIO = 1.618;
-const ORIGINAL_RATIO = 0;
-const RATIO_TOLERANCE = 0.01;
-
-function orientRatio(ratio: number, portrait: boolean): number {
-  if (Math.abs(ratio - 1) < RATIO_TOLERANCE) return 1;
-  if (portrait) return ratio > 1 ? 1 / ratio : ratio;
-  return ratio < 1 ? 1 / ratio : ratio;
-}
-
-interface CropPreset {
-  id: string;
-  name: string;
-  value: number | null;
-  tooltip: string;
-}
-
-interface StraightenAnalysisResult {
-  angle: number;
-  confidence: number;
-  detected: boolean;
-  lineCount: number;
-}
-
-interface UprightAnalysisResult {
-  rotation: number;
-  vertical: number;
-  horizontal: number;
-  confidence: number;
-  detected: boolean;
-  lineCount: number;
-}
-
-const CROP_SESSION_KEYS = [
-  'aspectRatio',
-  'constrainCrop',
-  'crop',
-  'flipHorizontal',
-  'flipVertical',
-  'orientationSteps',
-  'rotation',
-  'transformDistortion',
-  'transformProjection',
-  'transformVertical',
-  'transformHorizontal',
-  'transformRotate',
-  'transformAspect',
-  'transformScale',
-  'transformXOffset',
-  'transformYOffset',
-] as const satisfies ReadonlyArray<keyof Adjustments>;
-
-type CropSessionSnapshot = Pick<Adjustments, (typeof CROP_SESSION_KEYS)[number]>;
-
-const CROP_RESET_KEYS = [
-  'aspectRatio',
-  'constrainCrop',
-  'crop',
-  'flipHorizontal',
-  'flipVertical',
-  'orientationSteps',
-  'rotation',
-  'transformProjection',
-  'transformVertical',
-  'transformHorizontal',
-  'transformRotate',
-  'transformAspect',
-  'transformScale',
-  'transformXOffset',
-  'transformYOffset',
-] as const satisfies ReadonlyArray<keyof Adjustments>;
-
-type CropResetSnapshot = Pick<Adjustments, (typeof CROP_RESET_KEYS)[number]>;
-
-function createCropSessionSnapshot(adjustments: Adjustments): CropSessionSnapshot {
-  return Object.fromEntries(CROP_SESSION_KEYS.map((key) => [key, adjustments[key]])) as CropSessionSnapshot;
-}
-
-function createCropResetSnapshot(originalAspectRatio: number | null): CropResetSnapshot {
-  return {
-    ...(Object.fromEntries(CROP_RESET_KEYS.map((key) => [key, INITIAL_ADJUSTMENTS[key]])) as CropResetSnapshot),
-    aspectRatio: originalAspectRatio,
-  };
-}
+import { BASE_RATIO, ORIGINAL_RATIO, RATIO_TOLERANCE, orientRatio, type CropPreset } from './CropPanel/aspectRatios';
+import { type StraightenAnalysisResult, type UprightAnalysisResult } from './CropPanel/analysisResults';
+import {
+  type CropSessionSnapshot,
+  createCropSessionSnapshot,
+  createCropResetSnapshot,
+} from './CropPanel/cropSnapshots';
 
 export default function CropPanel() {
   const { t } = useTranslation();
