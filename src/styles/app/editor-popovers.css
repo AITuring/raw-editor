@@ -1,0 +1,290 @@
+/* Quick filter is a compact menu anchored to its status-bar trigger. */
+.editor-filter-popover {
+  box-sizing: border-box;
+  width: var(--ui-filter-popover-width);
+  max-width: calc(100vw - (var(--ui-floating-viewport-inset) * 2));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--ui-space-2-5);
+}
+
+.editor-filter-popover-header {
+  min-height: 22px;
+  gap: var(--ui-space-1);
+  padding: 0 0 var(--ui-space-1-5);
+  font-size: var(--ui-font-size-label);
+  line-height: 16px;
+}
+
+.editor-filter-clear {
+  padding: var(--ui-space-0-5) var(--ui-space-1);
+  font-size: var(--ui-font-size-caption);
+  line-height: 16px;
+}
+
+.editor-filter-section {
+  padding: var(--ui-space-1-5) 0 0;
+  box-shadow: inset 0 1px 0 var(--ui-border-control);
+}
+
+.editor-filter-section.is-first {
+  padding-top: 0;
+  box-shadow: none;
+}
+
+.editor-filter-section + .editor-filter-section {
+  margin-top: var(--ui-space-1-5);
+}
+
+.editor-filter-section-label {
+  margin-bottom: var(--ui-space-0-5);
+  font-size: var(--ui-font-size-caption);
+  line-height: 12px;
+}
+
+.editor-filter-options {
+  justify-content: space-between;
+  gap: var(--ui-space-0-5);
+}
+
+.editor-filter-option-button {
+  width: 24px;
+  height: 24px;
+}
+
+.editor-color-filter-button {
+  width: 20px;
+  height: 24px;
+}
+
+.editor-color-filter-swatch {
+  width: 14px;
+  height: 14px;
+}
+
+/* Copy/paste settings is a dense editor utility, not a document-sized modal. */
+.copy-paste-dialog {
+  display: flex;
+  width: min(var(--ui-copy-paste-dialog-width), calc(100vw - (var(--ui-floating-viewport-inset) * 2)));
+  height: min(var(--ui-copy-paste-dialog-max-height), calc(100dvh - (var(--ui-floating-viewport-inset) * 2)));
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  container-name: copy-paste-dialog;
+  container-type: inline-size;
+}
+
+.copy-paste-dialog-header {
+  display: flex;
+  min-height: var(--ui-panel-header-height);
+  flex: 0 0 auto;
+  align-items: center;
+  border-bottom: var(--ui-border-width) solid var(--ui-border-structural);
+  padding-inline: var(--ui-space-4);
+}
+
+.copy-paste-dialog-title,
+.copy-paste-section-title,
+.copy-paste-adjustment-group-title {
+  margin: 0;
+  color: var(--app-text-primary);
+}
+
+.copy-paste-dialog-title {
+  font-size: var(--ui-font-size-title);
+  line-height: 20px;
+}
+
+.copy-paste-dialog-body {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--ui-space-4);
+  overflow: hidden;
+  padding: var(--ui-space-3) var(--ui-space-4);
+}
+
+.copy-paste-section {
+  display: grid;
+  min-width: 0;
+  gap: var(--ui-space-2);
+}
+
+.copy-paste-section-title {
+  font-size: var(--ui-font-size-body);
+  line-height: 18px;
+}
+
+.copy-paste-description {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  line-height: var(--ui-line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-mode-control {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ui-button-height);
+  gap: var(--ui-space-1);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--app-bg-primary);
+  padding: var(--ui-space-0-5);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.copy-paste-mode-indicator {
+  position: absolute;
+  inset-block: var(--ui-space-0-5);
+  left: 0;
+  z-index: 0;
+  border-radius: calc(var(--ui-radius-control) - 1px);
+  background: var(--app-accent);
+}
+
+.copy-paste-mode-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--ui-radius-control) - 1px);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 20px;
+  transition: color var(--ui-duration-fast) ease-out;
+}
+
+.copy-paste-mode-option:hover:not(.is-active) {
+  color: var(--app-text-primary);
+}
+
+.copy-paste-mode-option.is-active {
+  color: var(--app-button-text);
+}
+
+.copy-paste-auto-sync {
+  min-height: 24px;
+}
+
+.copy-paste-adjustments-section {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.copy-paste-adjustments-heading,
+.copy-paste-selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.copy-paste-adjustments-heading {
+  min-width: 0;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.copy-paste-selection-actions {
+  flex: 0 0 auto;
+  gap: var(--ui-space-1);
+}
+
+.copy-paste-adjustment-list {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: var(--ui-border-width) solid var(--ui-border-structural);
+  border-radius: var(--ui-radius-surface);
+  background: var(--app-bg-primary);
+  overscroll-behavior: contain;
+}
+
+.copy-paste-adjustment-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-4) var(--ui-space-6);
+  padding: var(--ui-space-3);
+}
+
+.copy-paste-adjustment-group {
+  min-width: 0;
+}
+
+.copy-paste-adjustment-group-title {
+  margin-bottom: var(--ui-space-1);
+  font-size: var(--ui-font-size-label);
+  line-height: 18px;
+}
+
+.copy-paste-adjustment-options {
+  display: grid;
+  gap: var(--ui-space-0-5);
+}
+
+.copy-paste-dialog .camera-raw-switch {
+  min-width: 0;
+  min-height: 22px;
+  gap: var(--ui-space-2);
+}
+
+.copy-paste-dialog .camera-raw-switch-label {
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 400;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-dialog-footer {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-component-gap);
+  border-top: var(--ui-border-width) solid var(--ui-border-structural);
+  background: color-mix(in srgb, var(--app-bg-secondary) 94%, var(--app-surface));
+  padding: var(--ui-space-2) var(--ui-space-4);
+}
+
+@container copy-paste-dialog (max-width: 480px) {
+  .copy-paste-adjustment-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ui-space-3);
+  }
+
+  .copy-paste-adjustments-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+  }
+}
+
+@media (max-height: 480px) {
+  .copy-paste-dialog-body {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .copy-paste-adjustments-section {
+    min-height: 220px;
+  }
+}

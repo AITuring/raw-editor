@@ -1,0 +1,402 @@
+/*
+ * Shared text-action contract
+ *
+ * This intentionally lives outside Tailwind layers so utility classes cannot
+ * enlarge action text or erase button boundaries in dense editor surfaces.
+ */
+.ui-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  padding: 3px var(--ui-button-padding-inline);
+  color: var(--app-text-primary);
+  box-shadow: var(--ui-shadow-button-rest);
+  font-size: var(--ui-font-size-label);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out,
+    opacity var(--ui-duration-fast) ease-out;
+}
+
+.ui-button--primary {
+  background: var(--app-accent);
+  color: var(--app-button-text);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-accent) 88%, white);
+}
+
+.ui-button--secondary {
+  background: var(--ui-surface-control);
+  color: var(--app-text-primary);
+}
+
+.ui-button--ghost {
+  background: var(--ui-surface-tool-rest);
+  color: var(--app-text-secondary);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-button--secondary:hover:not(:disabled) {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  background: var(--ui-surface-tool-hover);
+  color: var(--app-text-primary);
+}
+
+.ui-button--destructive {
+  background: color-mix(in srgb, var(--app-status-error) 14%, var(--app-surface));
+  color: var(--app-status-error);
+}
+
+.ui-button--destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-status-error) 22%, var(--app-surface));
+}
+
+.ui-button--sm {
+  min-height: var(--ui-button-height-sm);
+  padding: 2px var(--ui-button-padding-inline-sm);
+  font-size: var(--ui-font-size-caption);
+  line-height: 14px;
+}
+
+.ui-button--lg {
+  min-height: var(--ui-size-control);
+  padding: var(--ui-space-1) var(--ui-space-3);
+  font-size: var(--ui-font-size-body);
+  line-height: 18px;
+}
+
+.ui-button--icon {
+  width: var(--ui-button-height);
+  min-height: var(--ui-button-height);
+  padding: 0;
+}
+
+.ui-button:active:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow: var(--ui-shadow-button-pressed);
+}
+
+.ui-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon) {
+  background: var(--ui-surface-tool-rest);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon):hover:not(:disabled) {
+  background: var(--ui-surface-tool-hover);
+  box-shadow: var(--ui-shadow-tool-hover);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon):active:not(:disabled) {
+  background: var(--ui-surface-tool-selected);
+  box-shadow: var(--ui-shadow-tool-selected);
+}
+
+.ui-button:is(.ui-button--ghost, .ui-button--icon)[aria-pressed='true'] {
+  background: var(--ui-surface-tool-selected);
+  color: var(--app-accent);
+  box-shadow: var(--ui-shadow-tool-selected);
+}
+
+.ui-button:focus-visible,
+.ui-segmented-option:focus-visible,
+.ui-choice-button:focus-visible,
+.ui-tab-action:focus-visible,
+.ui-inline-action:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.ui-segmented-frame {
+  border: 0;
+  border-radius: var(--ui-radius-surface);
+  background: var(--ui-surface-control-subtle);
+  padding: var(--ui-space-1);
+  box-shadow: var(--ui-shadow-tool-rest);
+}
+
+.ui-segmented-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  min-height: var(--ui-button-height-sm);
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border-radius: var(--ui-radius-control);
+  padding: 2px var(--ui-button-padding-inline-sm);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out;
+}
+
+.ui-segmented-option:hover:not(.is-active) {
+  background: var(--ui-surface-control-subtle);
+  color: var(--app-text-primary);
+}
+
+.ui-segmented-option.is-active {
+  color: var(--app-button-text);
+}
+
+.ui-choice-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-1-5);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface-control-subtle);
+  padding: 3px var(--ui-button-padding-inline-sm);
+  color: var(--app-text-secondary);
+  box-shadow: var(--ui-shadow-button-rest);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.ui-choice-button:hover:not(:disabled),
+.ui-choice-button.is-active {
+  background: var(--app-card-active);
+  color: var(--app-text-primary);
+}
+
+.ui-choice-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-choice-button.is-active {
+  box-shadow: var(--ui-shadow-button-selected);
+}
+
+.ui-tab-action {
+  display: inline-flex;
+  min-height: var(--ui-button-height);
+  align-items: center;
+  gap: var(--ui-space-1);
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  padding: 2px var(--ui-space-1);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: var(--ui-shadow-tool-rest);
+  transition:
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.ui-tab-action:hover,
+.ui-tab-action.is-active {
+  color: var(--app-text-primary);
+}
+
+.ui-tab-action.is-active {
+  color: var(--app-accent);
+  box-shadow: var(--ui-shadow-tool-selected);
+}
+
+.ui-count-badge {
+  min-width: 18px;
+  border-radius: 999px;
+  background: var(--ui-surface-control);
+  padding-inline: var(--ui-space-1);
+  color: var(--app-text-secondary);
+  font-size: var(--ui-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.ui-inline-action {
+  display: inline-flex;
+  min-height: var(--ui-button-height-sm);
+  align-items: center;
+  gap: var(--ui-space-1);
+  border-radius: var(--ui-radius-control);
+  padding: 2px var(--ui-space-1);
+  color: var(--app-accent);
+  font-size: var(--ui-font-size-label);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.ui-inline-action:hover {
+  background: var(--ui-surface-control-subtle);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/*
+ * Button boundary contract
+ *
+ * Buttons keep CSS borders at zero. Raised controls opt into the shared
+ * elevation states, while active controls use an inset perimeter highlight;
+ * this keeps the selected state visible on all four edges without changing
+ * layout. This unlayered rule also prevents local Tailwind border utilities
+ * from reintroducing the former border-plus-shadow treatment.
+ */
+button {
+  border: 0;
+}
+
+.ui-surface-button {
+  box-shadow: var(--ui-shadow-button-rest);
+  transition:
+    background-color var(--ui-duration-fast) ease-out,
+    color var(--ui-duration-fast) ease-out,
+    box-shadow var(--ui-duration-fast) ease-out;
+}
+
+.ui-surface-button:hover:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-hover);
+}
+
+.ui-surface-button:active:not(:disabled) {
+  box-shadow: var(--ui-shadow-button-pressed);
+}
+
+.ui-surface-button:is(.is-active, [aria-checked='true'], [aria-pressed='true']) {
+  box-shadow: var(--ui-shadow-button-selected);
+}
+
+/*
+ * Editor edge-safety contract
+ *
+ * These rules intentionally live outside Tailwind layers. The right-side
+ * editor panel is assembled from several independently reusable panels, and
+ * utility-layer rules must not be able to collapse its visual safe area.
+ * The histogram remains full bleed; every interactive panel surface below it
+ * shares one inset token.
+ */
+.develop-panel-content :is(.ui-panel-header, .develop-panel-header, .develop-profile-strip) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.ui-panel-body, .ui-panel-footer) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.develop-collapsible-header, .develop-collapsible-content) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+.develop-panel-content :is(.crop-tool-section, .crop-panel-footer) {
+  padding-inline: var(--ui-editor-panel-inset);
+}
+
+/*
+ * Modal edge-safety contract
+ *
+ * Modal surfaces are deliberately split into two layouts: padded dialogs for
+ * forms/actions and full-bleed dialogs for image workspaces.  Keep this
+ * contract outside Tailwind layers so a utility class cannot collapse the
+ * safety gutter and make a footer appear glued to the card edge.
+ */
+.app-modal-backdrop {
+  box-sizing: border-box;
+  padding: var(--ui-floating-viewport-inset);
+}
+
+.app-modal-surface {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-surface--padded {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--ui-dialog-inset);
+}
+
+.app-modal-surface--padded > * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-surface--full-bleed {
+  padding: 0;
+}
+
+.app-modal-surface--structured {
+  padding: 0;
+}
+
+.app-modal-content {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.app-modal-actions {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.app-modal-footer {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ui-dialog-footer-gap);
+  margin-top: var(--ui-space-4);
+  border-top: var(--ui-border-width) solid var(--ui-border-structural);
+  padding-block: var(--ui-dialog-footer-padding-block) 0;
+}
+
+.app-modal-footer--inset {
+  padding-inline: var(--ui-dialog-inset);
+}
+
+.app-modal-footer.is-result {
+  margin-top: var(--ui-space-3);
+  border-top: 0;
+  padding-top: 0;
+}
+
+.app-modal-footer > * {
+  min-width: 0;
+}
