@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { readSourceModule } from './support/source-module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const componentSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/StyleTransferModal.tsx'), 'utf8');
-const styles = fs.readFileSync(path.join(repoRoot, 'src/styles.css'), 'utf8');
+const componentSource = readSourceModule(repoRoot, 'src/components/modals/StyleTransferModal.tsx');
+const styles = readSourceModule(repoRoot, 'src/styles.css');
 
 const bundled = await build({
   entryPoints: [path.join(repoRoot, 'src/utils/compareSlider.ts')],

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { transform } from 'esbuild';
 import { readRustModule } from './support/rust-source.mjs';
+import { readSourceModule } from './support/source-module.mjs';
 
 async function loadTypeScriptModule(relativePath) {
   const source = await readFile(resolve(relativePath), 'utf8');
@@ -25,12 +26,12 @@ const [
 ] = await Promise.all([
   readRustModule(process.cwd(), 'src-tauri/src/lib.rs'),
   readRustModule(process.cwd(), 'src-tauri/src/image_processing.rs'),
-  readFile(resolve('src/components/panel/right/CropPanel.tsx'), 'utf8'),
-  readFile(resolve('src/components/panel/Editor.tsx'), 'utf8'),
-  readFile(resolve('src/components/panel/editor/ImageCanvas.tsx'), 'utf8'),
-  readFile(resolve('src/components/ui/AppProperties.tsx'), 'utf8'),
-  readFile(resolve('src/hooks/useImageProcessing.ts'), 'utf8'),
-  readFile(resolve('src/utils/adjustments.ts'), 'utf8'),
+  readSourceModule(process.cwd(), 'src/components/panel/right/CropPanel.tsx'),
+  readSourceModule(process.cwd(), 'src/components/panel/Editor.tsx'),
+  readSourceModule(process.cwd(), 'src/components/panel/editor/ImageCanvas.tsx'),
+  readSourceModule(process.cwd(), 'src/components/ui/AppProperties.tsx'),
+  readSourceModule(process.cwd(), 'src/hooks/useImageProcessing.ts'),
+  readSourceModule(process.cwd(), 'src/utils/adjustments.ts'),
 ]);
 
 assert.match(tauriCommands, /async fn analyze_crop_upright\(/, 'Upright must execute through a native image command');

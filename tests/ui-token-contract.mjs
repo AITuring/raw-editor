@@ -1,9 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
+import { readSourceModule } from './support/source-module.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const read = (file) => readFileSync(resolve(root, file), 'utf8');
+// Split modules (TypeScript `Name/` parts, CSS @imports) are read as one source.
+const read = (file) => readSourceModule(root, file);
 const tokens = read('src/styles/tokens.css');
 const styles = read('src/styles.css');
 const failures = [];

@@ -3,14 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readRustModule } from './support/rust-source.mjs';
+import { readSourceModule } from './support/source-module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// Rust modules split into `name.rs` plus a `name/` child directory are read as one source.
-const read = (relativePath) =>
-  relativePath.endsWith('.rs')
-    ? readRustModule(repoRoot, relativePath)
-    : fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+// Split modules (Rust `name/`, TypeScript `Name/` parts, CSS @imports) are read as one source.
+const read = (relativePath) => readSourceModule(repoRoot, relativePath);
 
 const asset = fs.readFileSync(path.join(repoRoot, 'src/assets/default-watermark.png'));
 const watermarkContract = read('src/features/export/watermark.ts');

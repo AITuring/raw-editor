@@ -4,34 +4,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { readRustModule } from './support/rust-source.mjs';
+import { readSourceModule } from './support/source-module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const previewSource = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx'), 'utf8');
-const reusablePreviewSource = fs.readFileSync(
-  path.join(repoRoot, 'src/components/preview/ZoomableImagePreview.tsx'),
-  'utf8',
-);
-const previewModuleSource = fs.readFileSync(path.join(repoRoot, 'src/components/preview/index.ts'), 'utf8');
-const reusablePreviewStyleSource = fs.readFileSync(
-  path.join(repoRoot, 'src/components/preview/ZoomableImagePreview.css'),
-  'utf8',
-);
-const editorSource = fs.readFileSync(path.join(repoRoot, 'src/components/panel/Editor.tsx'), 'utf8');
-const screenPreviewSource = fs.readFileSync(
-  path.join(repoRoot, 'src/components/preview/ScreenSpacePreview.tsx'),
-  'utf8',
-);
-const screenTransformSource = fs.readFileSync(
-  path.join(repoRoot, 'src/hooks/useScreenSpacePreviewTransform.ts'),
-  'utf8',
-);
-const appSource = fs.readFileSync(path.join(repoRoot, 'src/App.tsx'), 'utf8');
-const contextMenuSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useAppContextMenus.ts'), 'utf8');
-const pipelineSource = fs.readFileSync(path.join(repoRoot, 'src/utils/imageStackPipeline.ts'), 'utf8');
+const previewSource = readSourceModule(repoRoot, 'src/components/modals/ImageStackResultPreview.tsx');
+const reusablePreviewSource = readSourceModule(repoRoot, 'src/components/preview/ZoomableImagePreview.tsx');
+const previewModuleSource = readSourceModule(repoRoot, 'src/components/preview/index.ts');
+const reusablePreviewStyleSource = readSourceModule(repoRoot, 'src/components/preview/ZoomableImagePreview.css');
+const editorSource = readSourceModule(repoRoot, 'src/components/panel/Editor.tsx');
+const screenPreviewSource = readSourceModule(repoRoot, 'src/components/preview/ScreenSpacePreview.tsx');
+const screenTransformSource = readSourceModule(repoRoot, 'src/hooks/useScreenSpacePreviewTransform.ts');
+const appSource = readSourceModule(repoRoot, 'src/App.tsx');
+const contextMenuSource = readSourceModule(repoRoot, 'src/hooks/useAppContextMenus.ts');
+const pipelineSource = readSourceModule(repoRoot, 'src/utils/imageStackPipeline.ts');
 const rustStackSource = readRustModule(repoRoot, 'src-tauri/src/image_stack.rs');
 const rustStitchingSource = readRustModule(repoRoot, 'src-tauri/src/panorama_stitching.rs');
-const productivityActionsSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useProductivityActions.ts'), 'utf8');
-const listenerSource = fs.readFileSync(path.join(repoRoot, 'src/hooks/useTauriListeners.ts'), 'utf8');
+const productivityActionsSource = readSourceModule(repoRoot, 'src/hooks/useProductivityActions.ts');
+const listenerSource = readSourceModule(repoRoot, 'src/hooks/useTauriListeners.ts');
 
 const frontendPipelineVersion = pipelineSource.match(/IMAGE_STACK_PIPELINE_VERSION\s*=\s*'([^']+)'/)?.[1];
 const backendPipelineVersion = rustStackSource.match(/IMAGE_STACK_PIPELINE_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1];
