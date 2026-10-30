@@ -9,12 +9,24 @@ use image::Rgb32FImage;
 
 use super::{Field, LayerSampler, median};
 
+/// Weight that pulls the seam-local residual of
+/// [`streaming_tone_field_from_analysis`] back to zero away from the overlap.
+const SEAM_TONE_PRIOR_WEIGHT: f64 = 0.35;
+
+/// `sigma_cells` spreads the overlap evidence over the layer. A broad kernel
+/// carries a frame-wide exposure change into the interior, but it averages the
+/// whole overlap into one level and cannot follow the vignetting of two frames
+/// across it, so the seam inside the overlap keeps a visible step.
+/// `seam_sigma_cells` adds the residual of every overlap cell back with a
+/// short kernel: the layer then matches the mosaic where the seam can fall,
+/// and the residual fades to zero a few cells beyond the overlap.
 pub(super) fn streaming_tone_field_from_analysis(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
     candidate: &Rgb32FImage,
     candidate_mask: &GrayImage,
     sigma_cells: f64,
+    seam_sigma_cells: Option<f64>,
 ) -> Field<3> {
     let width = base.width().min(candidate.width());
     let height = base.height().min(candidate.height());
@@ -121,6 +133,36 @@ pub(super) fn streaming_tone_field_from_analysis(
             }
             field.values[field_y * field.width + field_x] =
                 std::array::from_fn(|channel| (sum[channel] / total).clamp(-0.9, 0.9));
+        }
+    }
+    if let Some(seam_sigma) = seam_sigma_cells.filter(|sigma| sigma.is_finite() && *sigma > 0.0) {
+        let broad = field.values.clone();
+        let residuals = observations
+            .iter()
+            .map(|(index, value)| {
+                let residual: [f64; 3] =
+                    std::array::from_fn(|channel| value[channel] - broad[*index][channel]);
+                (*index, residual)
+            })
+            .collect::<Vec<_>>();
+        for field_y in 0..field.height {
+            for field_x in 0..field.width {
+                let mut total = SEAM_TONE_PRIOR_WEIGHT;
+                let mut sum = [0.0f64; 3];
+                for (index, residual) in &residuals {
+                    let dx = field_x as f64 - (index % field.width) as f64;
+                    let dy = field_y as f64 - (index / field.width) as f64;
+                    let weight = (-(dx * dx + dy * dy) / (2.0 * seam_sigma * seam_sigma)).exp();
+                    for channel in 0..3 {
+                        sum[channel] += residual[channel] * weight;
+                    }
+                    total += weight;
+                }
+                let cell = field_y * field.width + field_x;
+                field.values[cell] = std::array::from_fn(|channel| {
+                    (broad[cell][channel] + sum[channel] / total).clamp(-0.9, 0.9)
+                });
+            }
         }
     }
     field

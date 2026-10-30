@@ -118,12 +118,21 @@ where
             progress_event,
             "Framing or lens change detected; refining registration and selecting sharp detail...",
         );
+        // A sequence-gap render is a moving scan across the artwork: its
+        // sources hold different regions, so only overlap evidence may adjust
+        // their tone (see `MosaicToneFinish::OverlapMeasured`).
+        let tone_finish = if sequence_gap_aware {
+            crate::panorama_utils::mosaic::MosaicToneFinish::OverlapMeasured
+        } else {
+            crate::panorama_utils::mosaic::MosaicToneFinish::ContentLevelling
+        };
         return crate::panorama_utils::mosaic::detail_preserving_mosaic(
             images,
             global_homographies,
             projection,
             capture_group_ids,
             sequence_gap_aware,
+            tone_finish,
             app_handle,
             progress_event,
             load_image,

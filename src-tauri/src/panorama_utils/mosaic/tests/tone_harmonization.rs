@@ -364,3 +364,66 @@ fn smooth_tone_correction_preserves_selected_detail_relative_contrast() {
         assert!((b[c] / a[c] - q[c] / p[c]).abs() < 1e-6);
     }
 }
+
+#[test]
+fn seam_local_tone_follows_the_vignetting_ratio_across_the_overlap() {
+    // The mosaic covers the left 60 % of a new layer. Both frames show the same
+    // paper, but their lens falloff differs, so the true correction changes
+    // across the overlap: wherever the seam falls, the layer must match there.
+    let (width, height) = (1120u32, 560u32);
+    let paper = |x: u32, y: u32| 0.45 + 0.02 * ((x as f32 * 0.31).sin() + (y as f32 * 0.27).cos());
+    let gain = |x: u32| 0.75 + 0.25 * x as f32 / width as f32;
+    let base = Rgb32FImage::from_fn(width, height, |x, y| {
+        let value = paper(x, y);
+        Rgb([value, value, value])
+    });
+    let base_mask = GrayImage::from_fn(width, height, |x, _| {
+        Luma([if x < width * 6 / 10 { 255 } else { 0 }])
+    });
+    let candidate = Rgb32FImage::from_fn(width, height, |x, y| {
+        let value = paper(x, y) * gain(x);
+        Rgb([value, value, value])
+    });
+    let candidate_mask = GrayImage::from_pixel(width, height, Luma([255]));
+    let broad = streaming_tone_field_from_analysis(
+        &base,
+        &base_mask,
+        &candidate,
+        &candidate_mask,
+        16.0,
+        None,
+    );
+    let seam = streaming_tone_field_from_analysis(
+        &base,
+        &base_mask,
+        &candidate,
+        &candidate_mask,
+        16.0,
+        Some(1.5),
+    );
+    let worst_error = |field: &Field<3>| {
+        (112..=448)
+            .step_by(56)
+            .map(|x| {
+                let truth = -f64::from(gain(x)).ln();
+                (field.at(f64::from(x), f64::from(height / 2))[1] - truth).abs()
+            })
+            .fold(0.0, f64::max)
+    };
+    assert!(
+        worst_error(&seam) < 0.02,
+        "the seam-local field must follow the overlap ratio: {:.4}",
+        worst_error(&seam)
+    );
+    assert!(
+        worst_error(&seam) < worst_error(&broad) * 0.5,
+        "seam {:.4} vs broad {:.4}",
+        worst_error(&seam),
+        worst_error(&broad)
+    );
+    // Far beyond the overlap the residual has faded: only the broad exposure
+    // change is carried into the new coverage.
+    let far = f64::from(width - 1);
+    let mid = f64::from(height / 2);
+    assert!((seam.at(far, mid)[1] - broad.at(far, mid)[1]).abs() < 0.02);
+}

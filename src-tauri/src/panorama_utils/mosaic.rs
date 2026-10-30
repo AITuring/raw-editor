@@ -63,9 +63,20 @@ mod layer_tone;
 
 use layer_tone::{streaming_tone_field_from_analysis, tone_field};
 
+mod output_focus;
+
+mod soft_frames;
+
+use soft_frames::{DetailGrid, FrameDetail, measure_frame_detail, soft_frames};
+
+use output_focus::{OutputFocus, measure_output_focus};
+
 mod source_ownership;
 
-use source_ownership::{ownership, ownership_with_long_side, streaming_ownership_from_analysis};
+use source_ownership::{
+    ownership, ownership_with_long_side, streaming_ownership_from_analysis,
+    streaming_ownership_grid,
+};
 #[cfg(test)]
 use source_ownership::{
     ownership_disagreement, ownership_grid, streaming_ownership_with_long_side,
@@ -171,6 +182,25 @@ const STREAMING_OWNER_GLOBAL_SIGMA: f32 = 640.0;
 // several 112px tone-field cells; a one-cell kernel leaves a source-sized
 // exposure rectangle intact.  Focus-stack layers keep the narrower kernel.
 const STREAMING_FLAT_TONE_SIGMA_CELLS: f64 = 16.0;
+// A focus scan then adds back each overlap cell's residual with a short
+// kernel, so the layer matches the mosaic where its seam can fall (the two
+// frames' vignetting differs across the overlap) and the residual fades out
+// three to four cells beyond the overlap.
+const STREAMING_SEAM_TONE_SIGMA_CELLS: f64 = 1.5;
+// Weight of the normalised focus vote in a focus-scan transition seam,
+// relative to the spatial prior (-0.45 near the new layer's edge, -0.15 in
+// the middle of the overlap, +0.15 next to its new coverage, see
+// `SCAN_TRANSITION_PRIOR_WEIGHT`). A 10 % sharper position adds about +0.35,
+// a 30 % sharper one about +1.2 and owns the overlap; a cell whose low-passed
+// views disagree votes -2.5 for the established position. At 1.0 against the
+// full prior, positions 20–30 % sharper lost (祁序2 at 1:1) and the cut
+// between two frames fell where their sharpness differs most.
+const STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT: f64 = 2.5;
+// Band along a focus-scan layer's own footprint edge, as a fraction of its
+// analysis long side, in which the layer may fill new coverage but never
+// takes pixels another layer already covers. Frame borders carry lens
+// correction and interpolation residue that a focus vote would expose.
+const STREAMING_SCAN_EDGE_MARGIN_FRACTION: f64 = 0.015;
 const GRID_STEP: u32 = 32;
 const NATIVE_REFINE_STEP: u32 = 16;
 const NATIVE_FIELD_RADIUS: f64 = 32.0;
@@ -185,6 +215,117 @@ const STREAMING_TILE_SIZE: u32 = 1024;
 // bridges, so using that flag alone made large, valid focus mosaics allocate
 // the entire sparse bounding box in memory.
 const STREAMING_CANVAS_MIN_PIXELS: u64 = 120_000_000;
+// Canvas pixels per source pixel below which a source is resampled before it
+// is warped. Cubic warping alone aliases fine silk weave and paper fibre into
+// false detail once it minifies further than this.
+const SOURCE_PREFILTER_BELOW_SCALE: f64 = 0.8;
+// A prefiltered source keeps this much more resolution than the canvas, so the
+// warp after it still minifies (by at most 1 / 1.25) and never magnifies.
+const SOURCE_PREFILTER_OVERSAMPLING: f64 = 1.25;
+
+/// What the streaming compositor may still do to tone once source ownership
+/// is final.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MosaicToneFinish {
+    /// Broad illumination levelling, plus per-owner median gains on a panorama
+    /// transition. Both infer exposure from the content statistics of a region
+    /// (the flat-artwork panorama behaviour).
+    ContentLevelling,
+    /// Keep only the per-layer tone field measured on pixels two sources
+    /// share. A focus scan puts unlike content on one canvas (dark silk next to
+    /// a pale mount); a content statistic cannot tell an exposure step from
+    /// the painting itself, and levelling it painted frame-sized dark and pale
+    /// blocks into 祁序 and lifted dark ink and background toward grey.
+    OverlapMeasured,
+}
+
+/// Capture_Station of every owner label on a streaming canvas.
+///
+/// A focus-station run labels pixels by station, so the table stays the
+/// identity. A panorama transition labels pixels by source, so adjacent
+/// exposures stay distinguishable; it records the station of each source
+/// label as the label is written. Registration and focus ownership of a later
+/// focus bracket must ask which *station* owns a pixel, never which source.
+#[derive(Clone, Debug)]
+pub(super) struct OwnerStations([u8; 256]);
+
+impl OwnerStations {
+    pub(super) fn identity() -> Self {
+        Self(std::array::from_fn(|label| label as u8))
+    }
+
+    pub(super) fn record(&mut self, owner: u8, station: u8) {
+        self.0[usize::from(owner)] = station;
+    }
+
+    pub(super) fn station(&self, owner: u8) -> u8 {
+        self.0[usize::from(owner)]
+    }
+}
+
+/// Canvas pixels per source pixel at the centre of a planar pose (the smaller
+/// of the two axes).
+fn planar_canvas_scale(info: &ImageInfo, transform: &Matrix3<f64>) -> f64 {
+    let point = |x: f64, y: f64| {
+        let projected = transform * nalgebra::Vector3::new(x, y, 1.0);
+        (projected.x / projected.z, projected.y / projected.z)
+    };
+    let centre_x = info.width as f64 * 0.5;
+    let centre_y = info.height as f64 * 0.5;
+    let centre = point(centre_x, centre_y);
+    let along_x = point(centre_x + 1.0, centre_y);
+    let along_y = point(centre_x, centre_y + 1.0);
+    let scale_x = (along_x.0 - centre.0).hypot(along_x.1 - centre.1);
+    let scale_y = (along_y.0 - centre.0).hypot(along_y.1 - centre.1);
+    scale_x.min(scale_y)
+}
+
+/// Prefilter a source the warp will minify, returning it with the divisor
+/// its samplers address it by.
+///
+/// A power-of-two pyramid used to halve every source drawn below 0.67 canvas
+/// pixels per source pixel. A 120 mm frame of a 79 mm scan sits at about 0.66,
+/// so halving left it 0.76 samples per canvas pixel and the frame carrying the
+/// most detail was rendered the softest. Resample to the needed density
+/// instead, with the same anti-aliasing purpose.
+fn prefilter_minified_source(source: Rgb32FImage, scale: f64) -> (Rgb32FImage, f64) {
+    if !(scale.is_finite() && scale > 0.0)
+        || scale >= SOURCE_PREFILTER_BELOW_SCALE
+        || source.width().min(source.height()) <= 8
+    {
+        return (source, 1.0);
+    }
+    let divisor = 1.0 / (scale * SOURCE_PREFILTER_OVERSAMPLING);
+    (super::stitching::minify_rgb(&source, divisor), divisor)
+}
+
+/// A copy of a layer's (already canvas-prefiltered) source at the density of
+/// its analysis image, with the divisor its samplers address it by; `None`
+/// when the analysis image is no coarser than that source.
+///
+/// Analysis images sample a layer every `layer_scale` canvas pixels. On a
+/// full-scale render that is five or six native pixels of a 45 MP frame, and
+/// a point sample there folds silk weave into a moiré that differs between
+/// two registered frames. On 祁序1 at 1:1, local registration then found no
+/// consistent patches on most layers, focus brackets failed to register and
+/// the low-pass agreement of a sharp, registered position fell to zero, so
+/// it never replaced a soft frame that had covered the area first.
+fn analysis_density_source(
+    source: &Rgb32FImage,
+    source_divisor: f64,
+    layer_scale: f64,
+    canvas_scale: f64,
+) -> Option<(Rgb32FImage, f64)> {
+    // Prefiltered source pixels per analysis pixel, keeping the same
+    // oversampling as the canvas prefilter.
+    let divisor = layer_scale / (canvas_scale * source_divisor) / SOURCE_PREFILTER_OVERSAMPLING;
+    (divisor.is_finite() && divisor > 1.0 && source.width().min(source.height()) > 8).then(|| {
+        (
+            super::stitching::minify_rgb(source, divisor),
+            source_divisor * divisor,
+        )
+    })
+}
 
 fn luma(p: Rgb<f32>) -> f64 {
     f64::from(p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114)

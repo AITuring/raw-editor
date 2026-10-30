@@ -17,7 +17,7 @@ use nalgebra::Matrix3;
 use nalgebra::Point2;
 
 use super::{
-    Field, LayerSampler, NATIVE_FIELD_RADIUS, NATIVE_REFINE_STEP, SimilarityStats,
+    Field, LayerSampler, NATIVE_FIELD_RADIUS, NATIVE_REFINE_STEP, OwnerStations, SimilarityStats,
     StreamingMosaicStore, collect_native_observations, median, rgb_at,
 };
 
@@ -538,10 +538,13 @@ pub(super) fn refine_native_layer(
 /// when the canvas is too large to hold.  Without this entry point the whole of
 /// 需求 2.3–2.9 would be unreachable for every multi-station stack, which is the
 /// only kind of stack the streaming compositor ever sees.
+///
+/// `station` restricts the base to pixels whose owner label belongs to that
+/// Capture_Station, looked up through `OwnerStations`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn refine_native_layer_streaming(
     store: &StreamingMosaicStore,
-    owner: Option<u8>,
+    station: Option<(u8, &OwnerStations)>,
     sampler: &mut LayerSampler<'_>,
     width: u32,
     height: u32,
@@ -567,13 +570,14 @@ pub(super) fn refine_native_layer_streaming(
                 // A later focal plane of a station must register against its own
                 // camera position: pixels owned by another station are available
                 // for colour matching but never for residual motion.
-                let tile_mask = match owner {
-                    Some(group) => {
+                let tile_mask = match station {
+                    Some((group, owner_stations)) => {
                         let tile_owner = store.load_owner_tile(tile_column, tile_row);
                         GrayImage::from_fn(tile_width, tile_height, |x, y| {
                             Luma([
                                 if covered.get_pixel(x, y)[0] != 0
-                                    && tile_owner.get_pixel(x, y)[0] == group
+                                    && owner_stations.station(tile_owner.get_pixel(x, y)[0])
+                                        == group
                                 {
                                     255
                                 } else {

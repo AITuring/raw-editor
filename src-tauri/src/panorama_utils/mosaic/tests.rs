@@ -2,6 +2,8 @@ use super::*;
 
 mod focus_ownership;
 mod native_refinement;
+mod output_focus;
+mod source_prefilter;
 mod streaming_tiles;
 mod tone_harmonization;
 

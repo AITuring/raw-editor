@@ -473,6 +473,7 @@ use focus_analysis::{
 mod filters;
 
 pub(super) use filters::downsample_rgb_half;
+pub(super) use filters::minify_rgb;
 use filters::{
     linear_samples, masked_box_blur_focus_map, masked_box_blur_rgb, multiband_blend, resize_rgb,
 };

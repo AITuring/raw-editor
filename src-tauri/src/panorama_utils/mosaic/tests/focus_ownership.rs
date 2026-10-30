@@ -20,6 +20,9 @@ fn focus_group_ownership_cannot_reclaim_another_camera_position() {
         &owner,
         3,
         false,
+        0.0,
+        0.0,
+        None,
     );
     let left_selected = decision
         .enumerate_pixels()
@@ -61,6 +64,9 @@ fn panorama_group_transition_only_enters_from_new_coverage() {
         &owner,
         3,
         true,
+        0.0,
+        0.0,
+        None,
     );
     let left_quarter_selected = decision
         .enumerate_pixels()
@@ -103,6 +109,156 @@ fn panorama_transition_marks_ink_cells_as_expensive_seam_routes() {
     assert!(
         ink > 0.75,
         "a cell crossed by dark calligraphy must strongly repel the panorama seam"
+    );
+}
+
+/// Silk-like weave under broad dark strokes: the weave carries the focus
+/// evidence, the strokes make a registration error visible at low frequency.
+fn scan_fixture(shift: u32) -> Rgb32FImage {
+    Rgb32FImage::from_fn(240, 120, |x, y| {
+        let x = x + shift;
+        let stroke = if (x / 14).is_multiple_of(3) && (y / 30).is_multiple_of(2) {
+            -0.28
+        } else {
+            0.0
+        };
+        let weave = 0.035 * ((x as f32 * 2.4).sin() + (y as f32 * 2.2).sin());
+        let value = 0.55 + stroke + weave;
+        Rgb([value * 1.1, value, value * 0.8])
+    })
+}
+
+fn transition_cells_taken(
+    base: &Rgb32FImage,
+    candidate: &Rgb32FImage,
+    transition_focus_weight: f64,
+) -> (usize, usize) {
+    let (width, height) = candidate.dimensions();
+    let base_mask = GrayImage::from_fn(width, height, |x, _| {
+        Luma([if x < width * 3 / 4 { 255 } else { 0 }])
+    });
+    let owner = GrayImage::from_fn(width, height, |x, _| {
+        Luma([if x < width * 3 / 4 { 2 } else { 0 }])
+    });
+    let candidate_mask = GrayImage::from_pixel(width, height, Luma([255]));
+    let decision = streaming_ownership_from_analysis(
+        base,
+        &base_mask,
+        candidate,
+        &candidate_mask,
+        &Field::new(width, height, 32.0),
+        &owner,
+        3,
+        true,
+        transition_focus_weight,
+        0.0,
+        None,
+    );
+    let overlap = |x: u32| x >= decision.width() / 8 && x < decision.width() * 5 / 8;
+    let taken = decision
+        .enumerate_pixels()
+        .filter(|(x, _, pixel)| overlap(*x) && pixel[0] != 0)
+        .count();
+    let total = decision
+        .enumerate_pixels()
+        .filter(|(x, _, _)| overlap(*x))
+        .count();
+    (taken, total)
+}
+
+#[test]
+fn focus_scan_transition_lets_the_sharper_aligned_position_own_the_overlap() {
+    let sharp = scan_fixture(0);
+    let blurred = image::imageops::blur(&sharp, 1.5);
+    let (spatial, total) = transition_cells_taken(&blurred, &sharp, 0.0);
+    let (focused, _) = transition_cells_taken(&blurred, &sharp, 1.0);
+    // The spatial prior alone keeps the whole interior of the overlap; the
+    // weave-covered silk makes every seam path expensive, so the sharper
+    // position wins large connected parts rather than every cell.
+    assert!(
+        focused > total / 6 && focused > spatial + total / 10,
+        "the sharper position must own a large part of a consistent overlap: {focused}/{total} vs spatial {spatial}"
+    );
+}
+
+#[test]
+fn focus_scan_transition_replaces_a_darker_blurred_frame_edge_band() {
+    // The established frame's edge band is darker from lens falloff and soft;
+    // a registered sharper position must still be able to replace it even
+    // though the two disagree in absolute level.
+    let sharp = scan_fixture(0);
+    let soft = image::imageops::blur(&sharp, 1.5);
+    let darker_soft = Rgb32FImage::from_fn(sharp.width(), sharp.height(), |x, y| {
+        Rgb(soft.get_pixel(x, y).0.map(|value| value * 0.8))
+    });
+    let (spatial, total) = transition_cells_taken(&darker_soft, &sharp, 0.0);
+    let (focused, _) = transition_cells_taken(&darker_soft, &sharp, 1.0);
+    assert!(
+        focused > total / 6 && focused > spatial + total / 10,
+        "a darker soft band must not block the sharper registered position: {focused}/{total} vs spatial {spatial}"
+    );
+}
+
+#[test]
+fn focus_scan_transition_keeps_the_base_where_the_sharper_position_is_displaced() {
+    let blurred = image::imageops::blur(&scan_fixture(0), 1.5);
+    let (aligned, total) = transition_cells_taken(&blurred, &scan_fixture(0), 1.0);
+    let (displaced, _) = transition_cells_taken(&blurred, &scan_fixture(7), 1.0);
+    assert!(
+        displaced * 2 < aligned,
+        "a displaced sharp layer must not take the overlap: {displaced} vs aligned {aligned} of {total}"
+    );
+}
+
+#[test]
+fn focus_bracket_never_takes_covered_pixels_inside_its_own_edge_margin() {
+    // A sharper bracket whose border rows carry a bright lens-correction
+    // streak: the streak scores as detail, so without the margin the focus
+    // contest would paste it into the painting.
+    let sharp = scan_fixture(0);
+    let (width, height) = sharp.dimensions();
+    let base = image::imageops::blur(&sharp, 1.5);
+    let candidate = Rgb32FImage::from_fn(width, height, |x, y| match y {
+        0..=2 => Rgb([0.95, 0.95, 0.95]),
+        3 => Rgb([0.05, 0.05, 0.05]),
+        _ => *sharp.get_pixel(x, y),
+    });
+    let mask = GrayImage::from_pixel(width, height, Luma([255]));
+    let owner = GrayImage::from_pixel(width, height, Luma([3]));
+    let decision = |edge_margin_px| {
+        streaming_ownership_from_analysis(
+            &base,
+            &mask,
+            &candidate,
+            &mask,
+            &Field::new(width, height, 32.0),
+            &owner,
+            3,
+            false,
+            0.0,
+            edge_margin_px,
+            None,
+        )
+    };
+    let guarded = decision(8.0);
+    let in_margin = guarded
+        .enumerate_pixels()
+        .filter(|(x, y, pixel)| {
+            let near_edge = *x < 8 || *y < 8 || *x >= width - 8 || *y >= height - 8;
+            near_edge && pixel[0] != 0
+        })
+        .count();
+    let interior = guarded
+        .enumerate_pixels()
+        .filter(|(_, _, pixel)| pixel[0] != 0)
+        .count();
+    assert_eq!(
+        in_margin, 0,
+        "no covered cell inside the edge margin may change owner"
+    );
+    assert!(
+        interior > 0,
+        "the sharper bracket must still win its interior"
     );
 }
 
@@ -286,6 +442,7 @@ fn enclosed_sharp_tile_replaces_blur_without_losing_coverage() {
         Projection::Planar,
         None,
         false,
+        MosaicToneFinish::ContentLevelling,
         app.handle().clone(),
         "test-progress",
         &mut |info| Ok(sources[info.id].clone()),
@@ -570,5 +727,55 @@ fn scaled_sparse_detail_is_sampled_at_the_native_cell_centre() {
     assert!(
         selected_on_stroke > 100,
         "a native sharp stroke at a scaled cell centre must own its detail ({selected_on_stroke}/160)"
+    );
+}
+
+#[test]
+fn streaming_scan_lets_the_sharper_focus_bracket_win_inside_its_station() {
+    // Two focus brackets taken at one camera position of a moving scan. A
+    // scan labels canvas owners by source; the second bracket used to be
+    // routed through a panorama seam as if it were a new position, so the
+    // blurred first bracket kept every pixel both of them covered.
+    let sharp = Rgb32FImage::from_fn(640, 480, |x, y| {
+        let value = 0.36
+            + 0.12 * (x as f32 * 0.75).sin()
+            + 0.10 * (y as f32 * 0.65).cos()
+            + 0.03 * ((x + y) as f32 * 0.19).sin();
+        Rgb([value * 1.1, value, value * 0.8])
+    });
+    let blurred = image::imageops::blur(&sharp, 2.0);
+    let sources = [blurred.clone(), sharp.clone()];
+    let infos = [image_info(0, &sources[0]), image_info(1, &sources[1])];
+    let transforms = HashMap::from([(0, Matrix3::identity()), (1, Matrix3::identity())]);
+    let stations = HashMap::from([(0, 1u8), (1, 1u8)]);
+    let app = tauri::test::mock_app();
+    let output = detail_preserving_mosaic_streaming(
+        &[&infos[0], &infos[1]],
+        &transforms,
+        Projection::Planar,
+        Some(&stations),
+        true,
+        MosaicToneFinish::OverlapMeasured,
+        app.handle().clone(),
+        "test-progress",
+        &mut |info| Ok(sources[info.id].clone()),
+        0.0,
+        0.0,
+        640,
+        480,
+    )
+    .unwrap();
+    assert_eq!(output.dimensions(), sharp.dimensions());
+    let mut blurred_error = 0.0;
+    let mut output_error = 0.0;
+    for y in 80..400 {
+        for x in 80..560 {
+            blurred_error += (blurred.get_pixel(x, y)[1] - sharp.get_pixel(x, y)[1]).powi(2);
+            output_error += (output.get_pixel(x, y)[1] - sharp.get_pixel(x, y)[1]).powi(2);
+        }
+    }
+    assert!(
+        output_error < blurred_error * 0.25,
+        "the sharper bracket must own its station's interior: {output_error} vs {blurred_error}"
     );
 }

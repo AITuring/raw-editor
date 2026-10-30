@@ -392,3 +392,176 @@ fn replay_mosaic_roi_from_env() {
         .save(output.join("replayed.png"))
         .unwrap();
 }
+
+/// Append the cells of the last streaming ownership decision that fall inside
+/// a canvas ROI to a CSV (`RAW_EDITOR_OWNERSHIP_TRACE=<csv>;x0,y0,x1,y1`, in
+/// canvas pixels before the final crop, at the render scale), so a soft or
+/// dark region can be traced to the evidence every layer saw there.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn write_ownership_trace(
+    layer: usize,
+    filename: &str,
+    left: u32,
+    top: u32,
+    layer_scale: f64,
+    base_owner: &GrayImage,
+    owner_names: &HashMap<u8, String>,
+) {
+    let Some(trace) = super::source_ownership::trace::take() else {
+        return;
+    };
+    let Ok(spec) = std::env::var("RAW_EDITOR_OWNERSHIP_TRACE") else {
+        return;
+    };
+    // `<csv>;x0,y0,x1,y1[;stride]`: a stride keeps one cell in `stride` along
+    // either grid axis, so a whole canvas can be traced.
+    let mut parts = spec.split(';');
+    let (Some(path), Some(roi)) = (parts.next(), parts.next()) else {
+        return;
+    };
+    let stride = parts
+        .next()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(1)
+        .max(1);
+    let roi = roi
+        .split(',')
+        .filter_map(|value| value.trim().parse::<f64>().ok())
+        .collect::<Vec<_>>();
+    if roi.len() != 4 || base_owner.width() == 0 || base_owner.height() == 0 {
+        return;
+    }
+    let short = |name: &str| {
+        let file = name.rsplit('/').next().unwrap_or(name);
+        file.split('.').next().unwrap_or(file).to_string()
+    };
+    let mut rows = String::new();
+    for (index, &label) in trace.labels.iter().enumerate() {
+        let grid_x = index as u32 % trace.grid_width;
+        let grid_y = index as u32 / trace.grid_width;
+        if !grid_x.is_multiple_of(stride) || !grid_y.is_multiple_of(stride) {
+            continue;
+        }
+        let analysis_x = (f64::from(grid_x) + 0.5) * trace.size;
+        let analysis_y = (f64::from(grid_y) + 0.5) * trace.size;
+        let canvas_x = f64::from(left) + analysis_x * layer_scale;
+        let canvas_y = f64::from(top) + analysis_y * layer_scale;
+        if canvas_x < roi[0] || canvas_y < roi[1] || canvas_x >= roi[2] || canvas_y >= roi[3] {
+            continue;
+        }
+        let owner = base_owner.get_pixel(
+            (analysis_x as u32).min(base_owner.width() - 1),
+            (analysis_y as u32).min(base_owner.height() - 1),
+        )[0];
+        let owner_name = owner_names
+            .get(&owner)
+            .map(|name| short(name))
+            .unwrap_or_else(|| owner.to_string());
+        let (base_focus, candidate_focus) = trace
+            .focus
+            .get(index)
+            .copied()
+            .unwrap_or((f64::NAN, f64::NAN));
+        rows.push_str(&format!(
+            "{layer},{},{grid_x},{grid_y},{canvas_x:.0},{canvas_y:.0},{owner_name},{},{base_focus:.5},{candidate_focus:.5},{:.3},{:.3},{:.3},{:.3},{label}\n",
+            short(filename),
+            trace.fixed[index],
+            trace.agreement.get(index).copied().unwrap_or(f64::NAN),
+            trace.focus_term.get(index).copied().unwrap_or(f64::NAN),
+            trace.preference[index],
+            trace.disagreement[index],
+        ));
+    }
+    if rows.is_empty() {
+        return;
+    }
+    use std::io::Write;
+    let fresh = !std::path::Path::new(path).exists();
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("open ownership trace");
+    if fresh {
+        file.write_all(b"layer,file,gx,gy,canvas_x,canvas_y,base_owner,fixed,base_focus,candidate_focus,agreement,focus_term,preference,disagreement,label\n")
+            .expect("write ownership trace header");
+    }
+    file.write_all(rows.as_bytes())
+        .expect("write ownership trace");
+}
+
+/// Write the final streaming owner plane as a colour-coded PNG (one colour per
+/// owner label, quarter resolution) with a JSON sidecar naming each label's
+/// source, so a region on the delivered canvas can be traced to its frame.
+pub(super) fn write_streaming_owner_map(
+    store: &StreamingMosaicStore,
+    crop: (u32, u32, u32, u32),
+    owner_names: &HashMap<u8, String>,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    const STEP: u32 = 4;
+    let (crop_left, crop_top, crop_width, crop_height) = crop;
+    let width = crop_width.div_ceil(STEP);
+    let height = crop_height.div_ceil(STEP);
+    let mut labels = vec![0u8; width as usize * height as usize];
+    for tile_row in 0..store.tile_rows {
+        for tile_column in 0..store.tile_columns {
+            let (tile_left, tile_top, tile_width, tile_height) =
+                store.tile_extent(tile_column, tile_row);
+            let owner = store.load_owner_tile(tile_column, tile_row);
+            for y in (0..tile_height).filter(|y| (tile_top + y).wrapping_sub(crop_top) % STEP == 0)
+            {
+                let canvas_y = tile_top + y;
+                if canvas_y < crop_top || canvas_y >= crop_top + crop_height {
+                    continue;
+                }
+                for x in 0..tile_width {
+                    let canvas_x = tile_left + x;
+                    if canvas_x < crop_left
+                        || canvas_x >= crop_left + crop_width
+                        || (canvas_x - crop_left) % STEP != 0
+                    {
+                        continue;
+                    }
+                    let index = ((canvas_y - crop_top) / STEP * width
+                        + (canvas_x - crop_left) / STEP) as usize;
+                    labels[index] = owner.get_pixel(x, y)[0];
+                }
+            }
+        }
+    }
+    let colour = |label: u8| {
+        if label == 0 {
+            return [0u8, 0, 0];
+        }
+        let hash = (u32::from(label)).wrapping_mul(2_654_435_761);
+        [
+            64 + (hash >> 24) as u8 % 192,
+            64 + (hash >> 16) as u8 % 192,
+            64 + (hash >> 8) as u8 % 192,
+        ]
+    };
+    let image = image::RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb(colour(labels[(y * width + x) as usize]))
+    });
+    image
+        .save(path)
+        .map_err(|error| format!("write owner map {}: {error}", path.display()))?;
+    let names = owner_names
+        .iter()
+        .map(|(label, name)| {
+            (
+                label.to_string(),
+                json!({"file": name, "rgb": colour(*label)}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>();
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec_pretty(&json!({"step": STEP, "crop": [crop_left, crop_top, crop_width, crop_height], "owners": names}))
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("write owner map names: {error}"))?;
+    println!("  - Owner map written to {}", path.display());
+    Ok(())
+}

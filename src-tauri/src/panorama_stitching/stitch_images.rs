@@ -1553,6 +1553,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 // treats later tiles as focus planes and leaves rectangular
                 // source ownership blocks.
                 true,
+                crate::panorama_utils::mosaic::MosaicToneFinish::ContentLevelling,
                 app_handle.clone(),
                 progress_event,
                 &mut load_render_image,
@@ -2947,6 +2948,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 Projection::Planar,
                                 Some(&tile_groups),
                                 false,
+                                crate::panorama_utils::mosaic::MosaicToneFinish::ContentLevelling,
                                 app_handle.clone(),
                                 progress_event,
                                 &mut |tile| load_tile(tile).map(|payload| payload.image),
