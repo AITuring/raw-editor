@@ -30,6 +30,11 @@ const SCAN_TRANSITION_FLAT_CONTRAST: f64 = 0.02;
 // Bound of one cell's normalised focus vote in a transition, so a few cells
 // with extreme contrast cannot outweigh the seam costs around them.
 const SCAN_TRANSITION_FOCUS_LIMIT: f64 = 2.0;
+// Share of a layer's mean focus energy below which a transition cell's vote
+// is no longer normalised by the cell's own energy. Plain silk sits around
+// half the mean and votes on its relative focus difference; blank mount and
+// paper, where noise is most of the measured energy, stay damped.
+const SCAN_TRANSITION_ENERGY_FLOOR: f64 = 0.35;
 // Weight of the spatial seam prior in a transition that weighs focus. The
 // prior only places the cut where the focus evidence does not decide it.
 const SCAN_TRANSITION_PRIOR_WEIGHT: f64 = 0.5;
@@ -288,6 +293,8 @@ pub(super) fn streaming_ownership_from_analysis(
     let mut mismatch = vec![0.0f64; count];
     let mut energy_sum = 0.0;
     let mut energy_count = 0usize;
+    // Focus energy of each transition cell, `(candidate² + base²) / 2`.
+    let mut cell_energy = vec![0.0f64; count];
     #[cfg(test)]
     let tracing = trace::enabled();
     #[cfg(test)]
@@ -461,7 +468,8 @@ pub(super) fn streaming_ownership_from_analysis(
                         trace_focus[index] = (base_focus, candidate_focus);
                     }
                     preference[index] = candidate_focus.powi(2) - base_focus.powi(2) * 1.06;
-                    energy_sum += (candidate_focus.powi(2) + base_focus.powi(2)) * 0.5;
+                    cell_energy[index] = (candidate_focus.powi(2) + base_focus.powi(2)) * 0.5;
+                    energy_sum += cell_energy[index];
                     energy_count += 1;
                 }
                 continue;
@@ -493,9 +501,15 @@ pub(super) fn streaming_ownership_from_analysis(
                     return 0.0;
                 }
                 // Agreeing cells vote with their bounded focus difference;
-                // disagreeing cells keep the established position.
+                // disagreeing cells keep the established position. A cell
+                // with less texture than the layer's mean is normalised by
+                // its own energy, down to a floor: on the layer mean alone a
+                // 30 % sharper frame barely outvoted the seam prior on plain
+                // silk, which is where a soft frame shows most.
                 let agreement = transition_agreement[index];
-                let focus = (preference[index] / energy_scale)
+                let scale = cell_energy[index]
+                    .clamp(SCAN_TRANSITION_ENERGY_FLOOR * energy_scale, energy_scale);
+                let focus = (preference[index] / scale)
                     .clamp(-SCAN_TRANSITION_FOCUS_LIMIT, SCAN_TRANSITION_FOCUS_LIMIT);
                 transition_focus_weight * (agreement * focus - (1.0 - agreement))
             })

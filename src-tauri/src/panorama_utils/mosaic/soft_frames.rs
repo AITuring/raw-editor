@@ -16,6 +16,7 @@
 //! the station graph (祁序1 without 16 frames fell apart into three
 //! components).
 
+use image::Rgb;
 use rayon::prelude::*;
 
 use super::{LayerSampler, luma};
@@ -65,8 +66,28 @@ impl DetailGrid {
         (f64::from(self.height) / step).ceil() as usize
     }
 
-    fn cell_count(&self) -> usize {
+    pub(super) fn cell_count(&self) -> usize {
         self.columns(self.cell) * self.rows(self.cell)
+    }
+
+    /// Canvas position of the centre of detail cell `index`.
+    pub(super) fn cell_centre(&self, index: usize) -> (f64, f64) {
+        let columns = self.columns(self.cell);
+        (
+            ((index % columns) as f64 + 0.5) * self.cell,
+            ((index / columns) as f64 + 0.5) * self.cell,
+        )
+    }
+
+    /// `(columns, rows)` of the detail grid.
+    #[cfg(test)]
+    pub(super) fn cell_dimensions(&self) -> (usize, usize) {
+        (self.columns(self.cell), self.rows(self.cell))
+    }
+
+    /// Side of the patch measured at a cell centre, in canvas pixels.
+    fn patch(&self) -> u32 {
+        DETAIL_PATCH_PX.min((self.cell * 0.5) as u32).max(8)
     }
 
     fn probe_count(&self) -> usize {
@@ -88,6 +109,44 @@ pub(super) struct FrameDetail {
 /// frame, as the RMS neighbour difference of luma over the mean luma: the
 /// measure of the output-pixel focus evidence, on the pixels the warp would
 /// write.
+/// Contrast-normalised RMS neighbour difference of luma over the `patch`
+/// pixels square centred on canvas position `centre`, or `None` when
+/// `sample` misses any of its pixels.
+fn patch_detail(
+    sample: impl Fn(f64, f64) -> Option<Rgb<f32>>,
+    centre: (f64, f64),
+    patch: u32,
+) -> Option<f64> {
+    let half = f64::from(patch) * 0.5 + 1.0;
+    let side = patch as usize + 2;
+    let mut values = Vec::with_capacity(side * side);
+    for y in 0..side {
+        for x in 0..side {
+            let pixel = sample(
+                (centre.0 - half).floor() + x as f64,
+                (centre.1 - half).floor() + y as f64,
+            )?;
+            values.push(luma(pixel));
+        }
+    }
+    let (mut energy, mut level) = (0.0, 0.0);
+    for y in 1..side - 1 {
+        for x in 1..side - 1 {
+            let centre = values[y * side + x];
+            let differences = [
+                values[y * side + x + 1] - centre,
+                centre - values[y * side + x - 1],
+                values[(y + 1) * side + x] - centre,
+                centre - values[(y - 1) * side + x],
+            ];
+            energy += differences.iter().map(|value| value * value).sum::<f64>() * 0.5;
+            level += centre;
+        }
+    }
+    let count = ((side - 2) * (side - 2)) as f64;
+    Some((energy / count).sqrt() / (level / count).max(DETAIL_LEVEL_FLOOR))
+}
+
 pub(super) fn measure_frame_detail(
     sampler: &LayerSampler<'_>,
     layer: (u32, u32, u32, u32),
@@ -100,50 +159,24 @@ pub(super) fn measure_frame_detail(
             && y >= f64::from(top)
             && y <= f64::from(bottom)
     };
-    let sample = |x: f64, y: f64| sampler.sample(x - f64::from(left), y - f64::from(top));
-    let patch = DETAIL_PATCH_PX.min((grid.cell * 0.5) as u32).max(8);
-    let columns = grid.columns(grid.cell);
+    let sample = |x: f64, y: f64| {
+        inside(x, y)
+            .then(|| sampler.sample(x - f64::from(left), y - f64::from(top)))
+            .flatten()
+    };
+    let patch = grid.patch();
+    let half = f64::from(patch) * 0.5 + 1.0;
     let cells = (0..grid.cell_count())
         .into_par_iter()
         .filter_map(|index| {
-            let centre_x = ((index % columns) as f64 + 0.5) * grid.cell;
-            let centre_y = ((index / columns) as f64 + 0.5) * grid.cell;
-            let half = f64::from(patch) * 0.5 + 1.0;
-            if !inside(centre_x - half, centre_y - half)
-                || !inside(centre_x + half, centre_y + half)
+            let centre = grid.cell_centre(index);
+            // Most cells lie outside the layer; skip them before sampling.
+            if !inside(centre.0 - half, centre.1 - half)
+                || !inside(centre.0 + half, centre.1 + half)
             {
                 return None;
             }
-            let side = patch as usize + 2;
-            let mut values = Vec::with_capacity(side * side);
-            for y in 0..side {
-                for x in 0..side {
-                    let pixel = sample(
-                        (centre_x - half).floor() + x as f64,
-                        (centre_y - half).floor() + y as f64,
-                    )?;
-                    values.push(luma(pixel));
-                }
-            }
-            let (mut energy, mut level) = (0.0, 0.0);
-            for y in 1..side - 1 {
-                for x in 1..side - 1 {
-                    let centre = values[y * side + x];
-                    let differences = [
-                        values[y * side + x + 1] - centre,
-                        centre - values[y * side + x - 1],
-                        values[(y + 1) * side + x] - centre,
-                        centre - values[(y - 1) * side + x],
-                    ];
-                    energy += differences.iter().map(|value| value * value).sum::<f64>() * 0.5;
-                    level += centre;
-                }
-            }
-            let count = ((side - 2) * (side - 2)) as f64;
-            Some((
-                index,
-                (energy / count).sqrt() / (level / count).max(DETAIL_LEVEL_FLOOR),
-            ))
+            patch_detail(sample, centre, patch).map(|value| (index, value))
         })
         .collect::<Vec<_>>();
     let probe_columns = grid.columns(grid.probe);
@@ -226,4 +259,29 @@ pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(us
         dropped.push((index, shares[index].1));
     }
     dropped
+}
+
+/// Detail of a composed `image` whose pixel (0, 0) is canvas pixel `origin`,
+/// on `grid`, measured exactly like a frame. Black pixels count as uncovered.
+#[cfg(test)]
+pub(super) fn measure_image_detail(
+    image: &image::Rgb32FImage,
+    origin: (u32, u32),
+    grid: &DetailGrid,
+) -> Vec<(usize, f64)> {
+    let sample = |x: f64, y: f64| {
+        let (x, y) = (x - f64::from(origin.0), y - f64::from(origin.1));
+        if x < 0.0 || y < 0.0 || x >= f64::from(image.width()) || y >= f64::from(image.height()) {
+            return None;
+        }
+        let pixel = *image.get_pixel(x as u32, y as u32);
+        (pixel[0].max(pixel[1]).max(pixel[2]) > 0.0).then_some(pixel)
+    };
+    let patch = grid.patch();
+    (0..grid.cell_count())
+        .into_par_iter()
+        .filter_map(|index| {
+            patch_detail(sample, grid.cell_centre(index), patch).map(|value| (index, value))
+        })
+        .collect()
 }

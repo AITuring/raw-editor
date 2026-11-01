@@ -147,13 +147,17 @@ where
                     .join(", ")
             );
         }
-        skipped
+        let skipped = skipped
             .into_iter()
             .map(|(index, _)| images[index].id)
-            .collect::<HashSet<_>>()
+            .collect::<HashSet<_>>();
+        (skipped, Some((grid, details)))
     } else {
-        HashSet::new()
+        (HashSet::new(), None)
     };
+    let (skipped_soft_frames, soft_frame_details) = skipped_soft_frames;
+    #[cfg(not(test))]
+    let _ = soft_frame_details;
     for (index, &info) in images.iter().enumerate() {
         if skipped_soft_frames.contains(&info.id) {
             continue;
@@ -326,7 +330,6 @@ where
             // canvas is an intra-station registration; the first layer of a
             // station has no same-station pixels to register against, so it is
             // the anchor and keeps its global pose.
-            let mut bracket_registered = false;
             if !first_capture_group_layer {
                 let anchor = station_anchors.get(&capture_group_id);
                 let anchor_long_side = anchor
@@ -341,8 +344,6 @@ where
                     (left, right, top, bottom),
                     NativeRefineMode::IntraStation { anchor_long_side },
                 )?;
-                bracket_registered = outcome.inlier_area_coverage
-                    >= intra_station::INTRA_STATION_MIN_INLIER_AREA_COVERAGE;
                 let into_anchor = anchor
                     .and_then(|&(_, inverse, _)| inverse)
                     .map(|inverse| inverse * transform)
@@ -399,18 +400,18 @@ where
                 )
             };
             // The first layer of a camera position joins the mosaic through a
-            // seam. In a focus scan a later, registered focus bracket of the
-            // same position competes on focus inside the pixels its own
-            // station owns; the scan used to treat every bracket as a new
-            // position, so the sharper bracket was never chosen where it
-            // overlapped. A bracket whose registration failed joins through a
-            // seam like a new position, and in a focus scan with the same
-            // gated focus vote: it may be displaced by a few pixels, so its
-            // focus counts only where it agrees with the canvas after the
-            // transition low-pass. A purely spatial seam let a defocused
-            // bracket (祁序1 DSC_3861 at 1:1) own part of the canvas.
-            let seam_transition = first_capture_group_layer
-                || (panorama_transition && (!focus_scan || !bracket_registered));
+            // seam, and so does every layer of a panorama transition. A later
+            // focus bracket of a focus stack competes on focus inside the
+            // pixels its own station owns. A focus scan gives every seam the
+            // gated focus vote: a layer, bracket or not, takes any covered
+            // pixel where it is sharper and agrees with the canvas after the
+            // transition low-pass. A focus contest restricted to the
+            // bracket's own station kept the softer frame another position
+            // had put there (祁序2 DSC_6790, about 1.3x sharper, was pinned on
+            // 940 of the 1040 cells of a soft block it covered); a bracket
+            // whose registration failed may be displaced by a few pixels, and
+            // the low-pass gate keeps the canvas there as for any position.
+            let seam_transition = first_capture_group_layer || panorama_transition;
             // Focus is measured on output pixels: the analysis images cannot
             // resolve the silk weave or the blur of a defocused bracket.
             let output_focus = if focus_scan {
@@ -682,5 +683,20 @@ where
         output.width(),
         output.height()
     );
+    #[cfg(test)]
+    if let (Some(path), Some((grid, details))) = (
+        std::env::var_os("RAW_EDITOR_DETAIL_DEFICIT"),
+        soft_frame_details.as_ref(),
+    ) {
+        super::diagnostics::write_detail_deficit(
+            &output,
+            crop,
+            grid,
+            details,
+            images,
+            &skipped_soft_frames,
+            std::path::Path::new(&path),
+        )?;
+    }
     Ok(output)
 }

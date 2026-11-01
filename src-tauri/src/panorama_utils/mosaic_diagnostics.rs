@@ -490,6 +490,108 @@ pub(super) fn write_ownership_trace(
         .expect("write ownership trace");
 }
 
+/// Compare the composed output's detail with the sharpest frame on the
+/// soft-frame detail grid (`RAW_EDITOR_DETAIL_DEFICIT=<prefix>`): writes
+/// `<prefix>.csv` with every measured cell and `<prefix>.png`, one pixel per
+/// cell, grey where the output keeps at least 85 % of the sharpest kept frame,
+/// yellow from 70 %, red below, blue where no kept frame measured the cell.
+/// A red cell is blur that a better owner choice could still remove.
+pub(super) fn write_detail_deficit(
+    output: &Rgb32FImage,
+    crop: (u32, u32, u32, u32),
+    grid: &super::soft_frames::DetailGrid,
+    details: &[super::soft_frames::FrameDetail],
+    images: &[&ImageInfo],
+    skipped: &std::collections::HashSet<usize>,
+    prefix: &std::path::Path,
+) -> Result<(), String> {
+    let measured = super::soft_frames::measure_image_detail(output, (crop.0, crop.1), grid);
+    let count = grid.cell_count();
+    let mut best_kept = vec![(0.0f64, usize::MAX); count];
+    let mut best_all = vec![(0.0f64, usize::MAX); count];
+    for (frame, detail) in details.iter().enumerate() {
+        let kept = !skipped.contains(&images[frame].id);
+        for &(cell, value) in &detail.cells {
+            if value > best_all[cell].0 {
+                best_all[cell] = (value, frame);
+            }
+            if kept && value > best_kept[cell].0 {
+                best_kept[cell] = (value, frame);
+            }
+        }
+    }
+    let name = |frame: usize| {
+        images.get(frame).map_or_else(String::new, |info| {
+            std::path::Path::new(&info.filename)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+    };
+    let (columns, rows) = grid.cell_dimensions();
+    let mut map = image::RgbImage::from_pixel(columns as u32, rows as u32, image::Rgb([0, 0, 0]));
+    let mut csv = String::from(
+        "cell,canvas_x,canvas_y,output,best_kept,best_kept_frame,best_all,best_all_frame,ratio\n",
+    );
+    let mut rows_out = Vec::new();
+    for &(cell, value) in &measured {
+        let (centre_x, centre_y) = grid.cell_centre(cell);
+        let (kept, kept_frame) = best_kept[cell];
+        let (all, all_frame) = best_all[cell];
+        let ratio = if kept > 0.0 { value / kept } else { f64::NAN };
+        let colour = if !ratio.is_finite() {
+            [40, 80, 255]
+        } else if ratio >= 0.85 {
+            [110, 110, 110]
+        } else if ratio >= 0.7 {
+            [255, 210, 40]
+        } else {
+            [255, 40, 40]
+        };
+        map.put_pixel(
+            (cell % columns) as u32,
+            (cell / columns) as u32,
+            image::Rgb(colour),
+        );
+        csv.push_str(&format!(
+            "{cell},{centre_x:.0},{centre_y:.0},{value:.5},{kept:.5},{},{all:.5},{},{ratio:.3}\n",
+            name(kept_frame),
+            name(all_frame)
+        ));
+        rows_out.push((ratio, cell, centre_x, centre_y, value, kept, kept_frame));
+    }
+    std::fs::write(prefix.with_extension("csv"), csv)
+        .map_err(|error| format!("write detail deficit table: {error}"))?;
+    map.save(prefix.with_extension("png"))
+        .map_err(|error| format!("write detail deficit map: {error}"))?;
+    let finite = rows_out
+        .iter()
+        .filter(|row| row.0.is_finite())
+        .collect::<Vec<_>>();
+    let below = |limit: f64| finite.iter().filter(|row| row.0 < limit).count();
+    println!(
+        "  - Detail deficit: {} cells measured, output below 85% / 70% of the sharpest kept frame in {} / {}",
+        finite.len(),
+        below(0.85),
+        below(0.70)
+    );
+    let mut worst = finite;
+    worst.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for row in worst.iter().take(12) {
+        println!(
+            "    - cell {} at ({:.0}, {:.0}): output {:.3}, {} {:.3} (ratio {:.2})",
+            row.1,
+            row.2,
+            row.3,
+            row.4,
+            name(row.6),
+            row.5,
+            row.0
+        );
+    }
+    Ok(())
+}
+
 /// Write the final streaming owner plane as a colour-coded PNG (one colour per
 /// owner label, quarter resolution) with a JSON sidecar naming each label's
 /// source, so a region on the delivered canvas can be traced to its frame.
