@@ -20,19 +20,20 @@ use tauri::Emitter;
 use tauri::Runtime;
 
 use super::{
-    DetailGrid, Field, FrameDetail, GRID_STEP, LayerSampler, MosaicToneFinish, NativeRefineMode,
-    OwnerStations, STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS,
-    STREAMING_OWNERSHIP_FEATHER, STREAMING_SCAN_EDGE_MARGIN_FRACTION,
-    STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT, STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE,
-    StreamingLowFrequencyConsensus, StreamingMosaicStore, analysis_density_source,
-    apply_streaming_seam_harmonization, apply_streaming_source_owner_low_frequency_correction,
-    copy_streaming_owned_tile_region, copy_streaming_tile_region,
-    fill_streaming_uncovered_tile_region, intra_station_frame_record,
-    materialize_streaming_focus_output, measure_frame_detail, measure_output_focus,
-    planar_canvas_scale, prefilter_minified_source, refine_layer_from_analysis,
-    refine_native_layer_streaming, smooth_streaming_low_frequency_illumination, soft_frames,
-    streaming_candidate_analysis, streaming_ownership_from_analysis, streaming_ownership_grid,
-    streaming_refinement_pair, streaming_seam_harmonization, streaming_tone_field_from_analysis,
+    DetailGrid, Field, FocusBand, FrameDetail, GRID_STEP, LayerSampler, MosaicToneFinish,
+    NEAR_BEST_RATIO, NativeRefineMode, OwnerStations, SOFT_FRAME_RATIO,
+    STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS, STREAMING_OWNERSHIP_FEATHER,
+    STREAMING_SCAN_EDGE_MARGIN_FRACTION, STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT,
+    STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE, StreamingLowFrequencyConsensus,
+    StreamingMosaicStore, analysis_density_source, apply_streaming_seam_harmonization,
+    apply_streaming_source_owner_low_frequency_correction, copy_streaming_owned_tile_region,
+    copy_streaming_tile_region, detail_ratios, fill_streaming_uncovered_tile_region,
+    intra_station_frame_record, materialize_streaming_focus_output, measure_frame_detail,
+    measure_output_focus, median, planar_canvas_scale, prefilter_minified_source,
+    refine_layer_from_analysis, refine_native_layer_streaming, sharpness_order,
+    smooth_streaming_low_frequency_illumination, soft_frames, streaming_candidate_analysis,
+    streaming_ownership_from_analysis, streaming_ownership_grid, streaming_refinement_pair,
+    streaming_seam_harmonization, streaming_tone_field_from_analysis,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -75,10 +76,38 @@ where
         "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
     );
+    // One focus band for the whole run, so every frame and the canvas are
+    // measured alike; see `FocusBand`.
+    let focus_band = if focus_scan && projection == Projection::Planar {
+        let mut scales = images
+            .iter()
+            .map(|info| planar_canvas_scale(info, &homographies[&info.id]))
+            .filter(|scale| scale.is_finite())
+            .collect::<Vec<_>>();
+        let canvas_scale = median(&mut scales);
+        let band = FocusBand::for_canvas_scale(canvas_scale);
+        // Experiments compare the bands on the same run.
+        #[cfg(test)]
+        let band = match std::env::var("RAW_EDITOR_FOCUS_BAND").as_deref() {
+            Ok("weave") => FocusBand::Weave,
+            Ok("pixel") => FocusBand::Pixel,
+            _ => band,
+        };
+        println!(
+            "  - Focus scan: measuring focus {} (median canvas scale {canvas_scale:.2})",
+            match band {
+                FocusBand::Pixel => "on output-pixel neighbour differences",
+                FocusBand::Weave => "in the silk-weave band",
+            }
+        );
+        band
+    } else {
+        FocusBand::Pixel
+    };
     // A focus scan leaves its mostly soft frames out of the composition; see
     // `soft_frames` for the rule and why grouping still sees them.
     let skipped_soft_frames = if focus_scan && projection == Projection::Planar {
-        let grid = DetailGrid::new(width, height);
+        let grid = DetailGrid::new(width, height, focus_band);
         let mut details = Vec::with_capacity(images.len());
         for (index, &info) in images.iter().enumerate() {
             let _ = app.emit(
@@ -156,9 +185,38 @@ where
         (HashSet::new(), None)
     };
     let (skipped_soft_frames, soft_frame_details) = skipped_soft_frames;
-    #[cfg(not(test))]
-    let _ = soft_frame_details;
-    for (index, &info) in images.iter().enumerate() {
+    // Every frame's detail relative to the sharpest one per detail cell, and
+    // the frame behind every source owner label written so far: together they
+    // tell a seam where the canvas holds a frame known to be soft.
+    let frame_ratios = soft_frame_details
+        .as_ref()
+        .map(|(grid, details)| (*grid, detail_ratios(details, grid)));
+    let mut label_frames = HashMap::<u8, usize>::new();
+    // A focus scan composes its sharpest frames first, so a blurred frame
+    // cannot hold a region against sharper ones that come later; see
+    // `sharpness_order`. Other runs keep their render order.
+    let order = soft_frame_details
+        .as_ref()
+        .map(|(grid, details)| sharpness_order(details, grid))
+        .unwrap_or_else(|| (0..images.len()).collect());
+    if soft_frame_details.is_some() {
+        println!(
+            "  - Focus scan: composing sharpest frames first: {}",
+            order
+                .iter()
+                .filter(|&&index| !skipped_soft_frames.contains(&images[index].id))
+                .map(|&index| {
+                    std::path::Path::new(&images[index].filename)
+                        .file_stem()
+                        .map(|stem| stem.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    for (step, &index) in order.iter().enumerate() {
+        let info = images[index];
         if skipped_soft_frames.contains(&info.id) {
             continue;
         }
@@ -181,13 +239,14 @@ where
             .unwrap_or(capture_group_id);
         let first_capture_group_layer = seen_capture_groups.insert(capture_group_id);
         owner_stations.record(source_owner_id, capture_group_id);
+        label_frames.insert(source_owner_id, index);
         #[cfg(test)]
         owner_names.insert(source_owner_id, info.filename.clone());
         let _ = app.emit(
             event,
             format!(
                 "Streaming detail and selecting sharp source {} of {}",
-                index + 1,
+                step + 1,
                 images.len()
             ),
         );
@@ -295,9 +354,12 @@ where
             // older positions available for colour matching, but exclude them
             // from residual motion estimation. The first layer of a position
             // has no same-station pixels and registers against the whole
-            // overlap with the existing mosaic.
+            // overlap with the existing mosaic. Every layer of a panorama
+            // transition, a focus scan included, registers against the whole
+            // overlap: a focus-scan bracket may take any covered pixel, so it
+            // has to line up with whichever position owns it.
             let group_refinement_mask =
-                (!first_capture_group_layer && (!panorama_transition || focus_scan)).then(|| {
+                (!first_capture_group_layer && !panorama_transition).then(|| {
                     GrayImage::from_fn(analysis_width, analysis_height, |x, y| {
                         Luma([
                             if base_analysis_mask.get_pixel(x, y)[0] != 0
@@ -420,10 +482,49 @@ where
                     &sampler,
                     (left, right, top, bottom),
                     streaming_ownership_grid(analysis_width, analysis_height),
+                    focus_band,
                 )?)
             } else {
                 None
             };
+            // Ownership cells whose canvas frame was measured soft there
+            // before composing while this layer was near the sharpest: a
+            // frame defocused beyond the transition low-pass agrees with no
+            // sharp frame, and must not hold the region for that reason
+            // (祁序2 DSC_6747 kept islands under the twice as sharp DSC_6760).
+            let defocused_base = frame_ratios
+                .as_ref()
+                .filter(|_| focus_scan && seam_transition)
+                .map(|(grid, ratios)| {
+                    let (grid_width, grid_height, size) =
+                        streaming_ownership_grid(analysis_width, analysis_height);
+                    (0..grid_width * grid_height)
+                        .map(|cell| {
+                            let center_x = (f64::from(cell % grid_width) + 0.5) * size;
+                            let center_y = (f64::from(cell / grid_width) + 0.5) * size;
+                            let label = base_analysis_owner.get_pixel(
+                                (center_x as u32).min(analysis_width - 1),
+                                (center_y as u32).min(analysis_height - 1),
+                            )[0];
+                            let Some(&base_frame) = label_frames.get(&label) else {
+                                return false;
+                            };
+                            let Some(detail_cell) = grid.cell_at(
+                                f64::from(left) + center_x * layer_scale,
+                                f64::from(top) + center_y * layer_scale,
+                            ) else {
+                                return false;
+                            };
+                            let (base_ratio, candidate_ratio) =
+                                (ratios[base_frame][detail_cell], ratios[index][detail_cell]);
+                            base_frame != index
+                                && base_ratio.is_finite()
+                                && candidate_ratio.is_finite()
+                                && f64::from(base_ratio) < SOFT_FRAME_RATIO
+                                && f64::from(candidate_ratio) >= NEAR_BEST_RATIO
+                        })
+                        .collect::<Vec<_>>()
+                });
             let decision = streaming_ownership_from_analysis(
                 &base_analysis,
                 &base_analysis_mask,
@@ -445,6 +546,7 @@ where
                     0.0
                 },
                 output_focus.as_ref(),
+                defocused_base.as_deref(),
             );
             println!(
                 "    - Ownership by {}: {} of {} cells{}",
@@ -477,6 +579,17 @@ where
                 &base_analysis_owner,
                 &owner_names,
             );
+            #[cfg(test)]
+            super::diagnostics::write_layer_probe(
+                index,
+                &info.filename,
+                &store,
+                &sampler,
+                &tone,
+                (left, right, top, bottom),
+                &decision,
+                (analysis_width, analysis_height),
+            )?;
             overlap_candidate = Some((candidate, candidate_mask));
             (tone, decision)
         } else {

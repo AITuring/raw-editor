@@ -60,8 +60,14 @@ fn output_focus_separates_a_defocused_bracket_the_analysis_grid_cannot_resolve()
     let layer = (0, width - 1, 0, height - 1);
     let blurred_canvas = store_with(&defocused);
     let sharp_candidate = layer_sampler(&info, &sharp, 3.0, analysis_width, analysis_height);
-    let focus =
-        measure_output_focus(&blurred_canvas, &sharp_candidate, layer, grid).expect("focus");
+    let focus = measure_output_focus(
+        &blurred_canvas,
+        &sharp_candidate,
+        layer,
+        grid,
+        FocusBand::Pixel,
+    )
+    .expect("focus");
     assert_eq!(focus.base.len(), (grid.0 * grid.1) as usize);
     let measured = (0..focus.base.len())
         .filter(|&index| focus.base[index].is_finite() && focus.candidate[index].is_finite())
@@ -84,8 +90,14 @@ fn output_focus_separates_a_defocused_bracket_the_analysis_grid_cannot_resolve()
     let sharp_canvas = store_with(&sharp);
     let defocused_candidate =
         layer_sampler(&info, &defocused, 3.0, analysis_width, analysis_height);
-    let reverse =
-        measure_output_focus(&sharp_canvas, &defocused_candidate, layer, grid).expect("focus");
+    let reverse = measure_output_focus(
+        &sharp_canvas,
+        &defocused_candidate,
+        layer,
+        grid,
+        FocusBand::Pixel,
+    )
+    .expect("focus");
     let softer = measured
         .iter()
         .filter(|&&index| reverse.candidate[index] * 1.5 < reverse.base[index])
@@ -120,8 +132,14 @@ fn output_focus_ignores_pixels_only_one_source_covers() {
     }
     let sampler = layer_sampler(&info, &sharp, 1.0, width, height);
     let grid = streaming_ownership_grid(width, height);
-    let focus = measure_output_focus(&canvas, &sampler, (0, width - 1, 0, height - 1), grid)
-        .expect("focus");
+    let focus = measure_output_focus(
+        &canvas,
+        &sampler,
+        (0, width - 1, 0, height - 1),
+        grid,
+        FocusBand::Pixel,
+    )
+    .expect("focus");
     let columns = grid.0 as usize;
     for (index, value) in focus.base.iter().enumerate() {
         let column = index % columns;

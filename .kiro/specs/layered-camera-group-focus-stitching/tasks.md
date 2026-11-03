@@ -95,7 +95,8 @@ focus-stack-regression -- --dataset <id>`；产物写入 `/private/tmp/raw-edito
   马远2 47（NEF，暂无回归基线）；`--hash-inputs` 全部通过。
 - 祁序1/祁序2 走 source-scan fallback 的 streaming compositor（需排除斜拍的 DSC_3842/3910/3911 与 DSC_6708）。
   focus scan 的色调只用重叠实测、分析图抗锯齿、所有层（含括号帧）都按带清晰度投票的接缝竞争、低纹理格按本格
-  归一化，以及合成前剔除大半模糊的帧，见架构文档“扫描拼接清晰度”；评估以 1:1 为准，两者暂无回归基线。
+  归一化、接近原始分辨率时在绢纹频段测清晰度、最清楚的帧先合成、低通不一致时用平移搜索区分离焦与错位，以及
+  合成前剔除大半模糊但不是某处最清楚的帧，见架构文档“扫描拼接清晰度”；评估以 1:1 为准，两者暂无回归基线。
 - Rust 完整 release 库测试在 N1-2b 后为 `818 passed, 0 failed, 30 ignored`。两个属性测试的回归根因是已有 station anchor
   被重新按清晰度排序；现在已改为“已有记录锚点优先、无记录时才按清晰度选锚点”，属性测试和完整套件均通过。
 - Langyuan/Wenyuan 的 owner、effective-pixel、boundary、tone 和 residual evidence 仍不能视为通过；不能用兰亭

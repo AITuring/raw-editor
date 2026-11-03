@@ -23,6 +23,7 @@ fn focus_group_ownership_cannot_reclaim_another_camera_position() {
         0.0,
         0.0,
         None,
+        None,
     );
     let left_selected = decision
         .enumerate_pixels()
@@ -66,6 +67,7 @@ fn panorama_group_transition_only_enters_from_new_coverage() {
         true,
         0.0,
         0.0,
+        None,
         None,
     );
     let left_quarter_selected = decision
@@ -153,6 +155,7 @@ fn transition_cells_taken(
         transition_focus_weight,
         0.0,
         None,
+        None,
     );
     let overlap = |x: u32| x >= decision.width() / 8 && x < decision.width() * 5 / 8;
     let taken = decision
@@ -237,6 +240,7 @@ fn focus_bracket_never_takes_covered_pixels_inside_its_own_edge_margin() {
             false,
             0.0,
             edge_margin_px,
+            None,
             None,
         )
     };

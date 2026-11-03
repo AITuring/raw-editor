@@ -6,10 +6,11 @@
 //! a frame only where a later layer is clearly sharper, so the frame that
 //! covered a region first kept it otherwise, and 祁序1 at full size still
 //! showed frame-sized soft blocks. Before composing, every frame's detail is
-//! measured at output resolution on a coarse canvas grid and compared with the
-//! sharpest frame in each cell; a frame soft in at least
-//! [`SOFT_FRAME_SHARE`] of its cells is left out, unless leaving it out would
-//! uncover a part of the canvas or leave a cell without a sharp frame.
+//! measured at output resolution, in the run's [`FocusBand`], on a coarse
+//! canvas grid and compared with the sharpest frame in each cell; a frame soft
+//! in at least [`SOFT_FRAME_SHARE`] of its cells is left out, unless leaving it
+//! out would uncover a part of the canvas or leave a cell without a frame near
+//! the sharpest one there.
 //!
 //! Frames are only skipped by the compositor. Grouping and registration still
 //! see every input, so leaving frames out of the selection itself cannot split
@@ -19,11 +20,18 @@
 use image::Rgb;
 use rayon::prelude::*;
 
-use super::{LayerSampler, luma};
+use super::{FocusBand, LayerSampler, luma, weave_band};
 
 /// A frame is soft in a cell when its detail there is below this share of the
 /// sharpest frame measured in the same cell.
 pub(super) const SOFT_FRAME_RATIO: f64 = 0.6;
+/// A frame is near the best in a cell when its detail there is at least this
+/// share of the sharpest frame measured in the same cell. A frame that is the
+/// last kept one near the best in any cell is never left out: on 祁序2 in the
+/// silk-weave band, frames soft over half their area were still the sharpest
+/// of a whole region, and dropping them handed it to a frame 0.6 as sharp
+/// (DSC_6758, DSC_6790 and DSC_6793).
+pub(super) const NEAR_BEST_RATIO: f64 = 0.85;
 /// Share of a frame's measured cells that must be soft before it is left out.
 pub(super) const SOFT_FRAME_SHARE: f64 = 0.45;
 /// A frame measured in fewer cells than this is never left out.
@@ -38,23 +46,26 @@ const DETAIL_PATCH_PX: u32 = 96;
 /// Lower bound of the luma a contrast-normalised detail is divided by.
 const DETAIL_LEVEL_FLOOR: f64 = 0.04;
 
-/// The canvas grids every frame is measured on.
+/// The canvas grids every frame is measured on, and the band it is measured
+/// in.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct DetailGrid {
     width: u32,
     height: u32,
     cell: f64,
     probe: f64,
+    band: FocusBand,
 }
 
 impl DetailGrid {
-    pub(super) fn new(width: u32, height: u32) -> Self {
+    pub(super) fn new(width: u32, height: u32, band: FocusBand) -> Self {
         let long_side = f64::from(width.max(height)).max(1.0);
         Self {
             width,
             height,
             cell: (long_side / DETAIL_CELLS_LONG_SIDE).max(32.0),
             probe: (long_side / COVERAGE_PROBES_LONG_SIDE).max(8.0),
+            band,
         }
     }
 
@@ -68,6 +79,18 @@ impl DetailGrid {
 
     pub(super) fn cell_count(&self) -> usize {
         self.columns(self.cell) * self.rows(self.cell)
+    }
+
+    /// Detail cell holding canvas position (`x`, `y`), if it lies on the
+    /// canvas.
+    pub(super) fn cell_at(&self, x: f64, y: f64) -> Option<usize> {
+        if !(x >= 0.0 && y >= 0.0 && x < f64::from(self.width) && y < f64::from(self.height)) {
+            return None;
+        }
+        let columns = self.columns(self.cell);
+        let column = ((x / self.cell) as usize).min(columns - 1);
+        let row = ((y / self.cell) as usize).min(self.rows(self.cell) - 1);
+        Some(row * columns + column)
     }
 
     /// Canvas position of the centre of detail cell `index`.
@@ -90,6 +113,12 @@ impl DetailGrid {
         DETAIL_PATCH_PX.min((self.cell * 0.5) as u32).max(8)
     }
 
+    /// Half the side of the square sampled to measure a patch, in canvas
+    /// pixels.
+    fn sampled_half(&self) -> f64 {
+        f64::from(self.patch()) * 0.5 + f64::from(self.band.margin())
+    }
+
     fn probe_count(&self) -> usize {
         self.columns(self.probe) * self.rows(self.probe)
     }
@@ -103,22 +132,17 @@ pub(super) struct FrameDetail {
     pub(super) probes: Vec<usize>,
 }
 
-/// Detail of `sampler`'s layer (canvas bounds `layer`, inclusive) on `grid`.
-///
-/// A cell is measured on a patch at its centre that lies wholly inside the
-/// frame, as the RMS neighbour difference of luma over the mean luma: the
-/// measure of the output-pixel focus evidence, on the pixels the warp would
-/// write.
-/// Contrast-normalised RMS neighbour difference of luma over the `patch`
-/// pixels square centred on canvas position `centre`, or `None` when
-/// `sample` misses any of its pixels.
+/// Contrast-normalised RMS detail of luma in `band` over the `patch` pixels
+/// square centred on canvas position `centre`, or `None` when `sample`
+/// misses any pixel the band needs.
 fn patch_detail(
     sample: impl Fn(f64, f64) -> Option<Rgb<f32>>,
     centre: (f64, f64),
     patch: u32,
+    band: FocusBand,
 ) -> Option<f64> {
-    let half = f64::from(patch) * 0.5 + 1.0;
-    let side = patch as usize + 2;
+    let half = f64::from(patch) * 0.5 + f64::from(band.margin());
+    let side = patch as usize + 2 * band.margin() as usize;
     let mut values = Vec::with_capacity(side * side);
     for y in 0..side {
         for x in 0..side {
@@ -128,6 +152,23 @@ fn patch_detail(
             )?;
             values.push(luma(pixel));
         }
+    }
+    if band == FocusBand::Weave {
+        let values = values.iter().map(|&value| value as f32).collect::<Vec<_>>();
+        let weave = weave_band(&values, side, side);
+        let (mut energy, mut level, mut count) = (0.0, 0.0, 0usize);
+        for (&band, &luma) in weave.band.iter().zip(&weave.level) {
+            if band.is_finite() {
+                energy += f64::from(band * band);
+                level += f64::from(luma);
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return None;
+        }
+        let count = count as f64;
+        return Some((energy / count).sqrt() / (level / count).max(DETAIL_LEVEL_FLOOR));
     }
     let (mut energy, mut level) = (0.0, 0.0);
     for y in 1..side - 1 {
@@ -147,6 +188,11 @@ fn patch_detail(
     Some((energy / count).sqrt() / (level / count).max(DETAIL_LEVEL_FLOOR))
 }
 
+/// Detail of `sampler`'s layer (canvas bounds `layer`, inclusive) on `grid`.
+///
+/// A cell is measured on a patch at its centre that lies wholly inside the
+/// frame, in the grid's band: the measure of the output-pixel focus evidence,
+/// on the pixels the warp would write.
 pub(super) fn measure_frame_detail(
     sampler: &LayerSampler<'_>,
     layer: (u32, u32, u32, u32),
@@ -165,7 +211,7 @@ pub(super) fn measure_frame_detail(
             .flatten()
     };
     let patch = grid.patch();
-    let half = f64::from(patch) * 0.5 + 1.0;
+    let half = grid.sampled_half();
     let cells = (0..grid.cell_count())
         .into_par_iter()
         .filter_map(|index| {
@@ -176,7 +222,7 @@ pub(super) fn measure_frame_detail(
             {
                 return None;
             }
-            patch_detail(sample, centre, patch).map(|value| (index, value))
+            patch_detail(sample, centre, patch, grid.band).map(|value| (index, value))
         })
         .collect::<Vec<_>>();
     let probe_columns = grid.columns(grid.probe);
@@ -191,12 +237,72 @@ pub(super) fn measure_frame_detail(
     FrameDetail { cells, probes }
 }
 
+/// Every frame's detail relative to the sharpest frame of each cell, one
+/// `grid.cell_count()` row per frame; `NaN` where the frame was not measured.
+pub(super) fn detail_ratios(details: &[FrameDetail], grid: &DetailGrid) -> Vec<Vec<f32>> {
+    let mut best = vec![0.0f64; grid.cell_count()];
+    for detail in details {
+        for &(cell, value) in &detail.cells {
+            best[cell] = best[cell].max(value);
+        }
+    }
+    details
+        .iter()
+        .map(|detail| {
+            let mut ratios = vec![f32::NAN; grid.cell_count()];
+            for &(cell, value) in &detail.cells {
+                if best[cell] > 0.0 {
+                    ratios[cell] = (value / best[cell]) as f32;
+                }
+            }
+            ratios
+        })
+        .collect()
+}
+
+/// Frame indices in the order a focus scan composes them: sharpest first,
+/// by the median over a frame's measured cells of its detail relative to the
+/// sharpest frame in that cell. Ties and unmeasured frames keep their order.
+///
+/// The first frame to cover a region becomes the canvas every later frame is
+/// compared with, and a later frame replaces it only where the two agree after
+/// the transition low-pass. In capture order a blurred frame could take a
+/// region first and keep it: 祁序2 DSC_6759, defocused and a few pixels off,
+/// held a branch area against three sharper frames that disagreed with it.
+pub(super) fn sharpness_order(details: &[FrameDetail], grid: &DetailGrid) -> Vec<usize> {
+    let mut best = vec![0.0f64; grid.cell_count()];
+    for detail in details {
+        for &(cell, value) in &detail.cells {
+            best[cell] = best[cell].max(value);
+        }
+    }
+    let score = details
+        .iter()
+        .map(|detail| {
+            let mut ratios = detail
+                .cells
+                .iter()
+                .filter(|&&(cell, _)| best[cell] > 0.0)
+                .map(|&(cell, value)| value / best[cell])
+                .collect::<Vec<_>>();
+            if ratios.is_empty() {
+                return 0.0;
+            }
+            ratios.sort_by(f64::total_cmp);
+            ratios[ratios.len() / 2]
+        })
+        .collect::<Vec<_>>();
+    let mut order = (0..details.len()).collect::<Vec<_>>();
+    order.sort_by(|&a, &b| score[b].total_cmp(&score[a]).then(a.cmp(&b)));
+    order
+}
+
 /// Indices of the frames to leave out, softest first, with the share of their
 /// measured cells that are soft.
 ///
 /// A frame is left out when at least [`SOFT_FRAME_SHARE`] of its cells are
 /// soft, unless every remaining frame would then miss a coverage probe it
-/// covers or a cell would keep no frame within [`SOFT_FRAME_RATIO`] of the
+/// covers or a cell would keep no frame within [`NEAR_BEST_RATIO`] of the
 /// sharpest one there.
 pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(usize, f64)> {
     let mut best = vec![0.0f64; grid.cell_count()];
@@ -226,7 +332,7 @@ pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(us
             probe_cover[probe] += 1;
         }
         for &(cell, value) in &detail.cells {
-            if value >= SOFT_FRAME_RATIO * best[cell] {
+            if value >= NEAR_BEST_RATIO * best[cell] {
                 sharp_cover[cell] += 1;
             }
         }
@@ -244,7 +350,7 @@ pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(us
         let loses_sharp = detail
             .cells
             .iter()
-            .any(|&(cell, value)| value >= SOFT_FRAME_RATIO * best[cell] && sharp_cover[cell] <= 1);
+            .any(|&(cell, value)| value >= NEAR_BEST_RATIO * best[cell] && sharp_cover[cell] <= 1);
         if uncovers || loses_sharp {
             continue;
         }
@@ -252,7 +358,7 @@ pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(us
             probe_cover[probe] -= 1;
         }
         for &(cell, value) in &detail.cells {
-            if value >= SOFT_FRAME_RATIO * best[cell] {
+            if value >= NEAR_BEST_RATIO * best[cell] {
                 sharp_cover[cell] -= 1;
             }
         }
@@ -281,7 +387,8 @@ pub(super) fn measure_image_detail(
     (0..grid.cell_count())
         .into_par_iter()
         .filter_map(|index| {
-            patch_detail(sample, grid.cell_centre(index), patch).map(|value| (index, value))
+            patch_detail(sample, grid.cell_centre(index), patch, grid.band)
+                .map(|value| (index, value))
         })
         .collect()
 }

@@ -63,13 +63,27 @@ mod layer_tone;
 
 use layer_tone::{streaming_tone_field_from_analysis, tone_field};
 
+mod focus_band;
+
+use focus_band::{FocusBand, WeaveBand, weave_band};
+
 mod output_focus;
 
 mod soft_frames;
 
-use soft_frames::{DetailGrid, FrameDetail, measure_frame_detail, soft_frames};
+use soft_frames::{
+    DetailGrid, FrameDetail, NEAR_BEST_RATIO, SOFT_FRAME_RATIO, detail_ratios,
+    measure_frame_detail, sharpness_order, soft_frames,
+};
 
 use output_focus::{OutputFocus, measure_output_focus};
+
+mod transition_gate;
+
+use transition_gate::{
+    LowPassRegistration, box_mean_finite, low_pass_agreement, low_pass_registration,
+    masked_luma_plane,
+};
 
 mod source_ownership;
 
@@ -190,12 +204,14 @@ const STREAMING_SEAM_TONE_SIGMA_CELLS: f64 = 1.5;
 // Weight of the normalised focus vote in a focus-scan transition seam,
 // relative to the spatial prior (-0.45 near the new layer's edge, -0.15 in
 // the middle of the overlap, +0.15 next to its new coverage, see
-// `SCAN_TRANSITION_PRIOR_WEIGHT`). A 10 % sharper position adds about +0.35,
-// a 30 % sharper one about +1.2 and owns the overlap; a cell whose low-passed
-// views disagree votes -2.5 for the established position. At 1.0 against the
+// `SCAN_TRANSITION_PRIOR_WEIGHT`). A 10 % sharper position adds about +0.55,
+// a 30 % sharper one about +1.9 and owns the overlap; a cell whose low-passed
+// views disagree votes -4 for the established position. At 1.0 against the
 // full prior, positions 20–30 % sharper lost (祁序2 at 1:1) and the cut
-// between two frames fell where their sharpness differs most.
-const STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT: f64 = 2.5;
+// between two frames fell where their sharpness differs most; at 2.5 a
+// sharper region still had to be about ten cells across to pay for its seam
+// (祁序2: 8 % of the 1.25x sharper painting cells lost to seam costs).
+const STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT: f64 = 4.0;
 // Band along a focus-scan layer's own footprint edge, as a fraction of its
 // analysis long side, in which the layer may fill new coverage but never
 // takes pixels another layer already covers. Frame borders carry lens

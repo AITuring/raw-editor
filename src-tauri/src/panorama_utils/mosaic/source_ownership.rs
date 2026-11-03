@@ -11,22 +11,16 @@ use image::Rgb32FImage;
 use std::collections::VecDeque;
 
 use super::{
-    Field, LayerSampler, OWNERSHIP_MISMATCH_PENALTY, OutputFocus, SELECTION_LONG_SIDE,
-    STREAMING_SELECTION_LONG_SIDE, adjusted, cell_focus, cell_low_pass_differences, luma, rgb_at,
-    streaming_cell_focus,
+    Field, LayerSampler, LowPassRegistration, OWNERSHIP_MISMATCH_PENALTY, OutputFocus,
+    SELECTION_LONG_SIDE, STREAMING_SELECTION_LONG_SIDE, adjusted, box_mean_finite, cell_focus,
+    cell_low_pass_differences, low_pass_agreement, low_pass_registration, luma, masked_luma_plane,
+    rgb_at, streaming_cell_focus,
 };
 
 // Low-pass (analysis pixels) under which two registered camera positions
 // agree even though one is defocused or shaken. Wider than that blur, narrower
 // than a brush stroke.
 const SCAN_TRANSITION_LOW_PASS_SIGMA: f32 = 3.0;
-// Correlation of the low-passed views at and above which a transition cell
-// counts as registered, and at and below which it keeps the base.
-const SCAN_TRANSITION_AGREEING_CORRELATION: f64 = 0.9;
-const SCAN_TRANSITION_DISAGREEING_CORRELATION: f64 = 0.5;
-// Relative contrast under which a low-passed window has no structure that
-// could be misregistered.
-const SCAN_TRANSITION_FLAT_CONTRAST: f64 = 0.02;
 // Bound of one cell's normalised focus vote in a transition, so a few cells
 // with extreme contrast cannot outweigh the seam costs around them.
 const SCAN_TRANSITION_FOCUS_LIMIT: f64 = 2.0;
@@ -35,6 +29,10 @@ const SCAN_TRANSITION_FOCUS_LIMIT: f64 = 2.0;
 // half the mean and votes on its relative focus difference; blank mount and
 // paper, where noise is most of the measured energy, stay damped.
 const SCAN_TRANSITION_ENERGY_FLOOR: f64 = 0.35;
+// Radius, in ownership cells, of the box the transition focus vote is
+// averaged over before the low-pass gate (5×5 cells, about 50 output pixels
+// at 1:1, on top of the 3×3-cell window each focus value is measured over).
+const SCAN_TRANSITION_FOCUS_SMOOTHING_RADIUS: usize = 2;
 // Weight of the spatial seam prior in a transition that weighs focus. The
 // prior only places the cut where the focus evidence does not decide it.
 const SCAN_TRANSITION_PRIOR_WEIGHT: f64 = 0.5;
@@ -159,61 +157,6 @@ pub(super) fn streaming_distance_to_fixed_label(
     Some(distances)
 }
 
-/// Whether two camera positions agree after the low-pass of a focus-scan
-/// transition, from 0 (structure displaced) to 1 (registered).
-///
-/// The views are compared by the correlation of their luma over a 5×5
-/// window, so a frame-edge band that is darker from lens falloff still agrees
-/// with a sharper registered frame and can be replaced; a displaced stroke
-/// does not correlate. A window without structure in either view agrees.
-fn low_pass_agreement(
-    low_base: &Rgb32FImage,
-    low_candidate: &Rgb32FImage,
-    tone: &Field<3>,
-    x: f64,
-    y: f64,
-) -> f64 {
-    const OFFSETS: [f64; 5] = [-4.0, -2.0, 0.0, 2.0, 4.0];
-    let mut pairs = Vec::with_capacity(OFFSETS.len() * OFFSETS.len());
-    for dy in OFFSETS {
-        for dx in OFFSETS {
-            let (sample_x, sample_y) = (x + dx, y + dy);
-            let (Some(base), Some(candidate)) = (
-                rgb_at(low_base, sample_x, sample_y),
-                rgb_at(low_candidate, sample_x, sample_y),
-            ) else {
-                continue;
-            };
-            pairs.push((
-                luma(base),
-                luma(adjusted(candidate, tone.at(sample_x, sample_y))),
-            ));
-        }
-    }
-    if pairs.len() * 2 < OFFSETS.len() * OFFSETS.len() {
-        return 0.0;
-    }
-    let count = pairs.len() as f64;
-    let base_mean = pairs.iter().map(|pair| pair.0).sum::<f64>() / count;
-    let candidate_mean = pairs.iter().map(|pair| pair.1).sum::<f64>() / count;
-    let (mut base_variance, mut candidate_variance, mut covariance) = (0.0, 0.0, 0.0);
-    for &(base, candidate) in &pairs {
-        let (base, candidate) = (base - base_mean, candidate - candidate_mean);
-        base_variance += base * base;
-        candidate_variance += candidate * candidate;
-        covariance += base * candidate;
-    }
-    let level = base_mean.max(candidate_mean).max(0.04);
-    let flat = |variance: f64| (variance / count).sqrt() / level < SCAN_TRANSITION_FLAT_CONTRAST;
-    if flat(base_variance) && flat(candidate_variance) {
-        return 1.0;
-    }
-    let correlation = covariance / (base_variance * candidate_variance).sqrt().max(1e-12);
-    ((correlation - SCAN_TRANSITION_DISAGREEING_CORRELATION)
-        / (SCAN_TRANSITION_AGREEING_CORRELATION - SCAN_TRANSITION_DISAGREEING_CORRELATION))
-        .clamp(0.0, 1.0)
-}
-
 /// `(columns, rows, analysis pixels per cell)` of the streaming ownership grid
 /// for a `width`×`height` analysis layer.
 pub(super) fn streaming_ownership_grid(width: u32, height: u32) -> (u32, u32, f64) {
@@ -237,7 +180,11 @@ pub(super) fn streaming_ownership_grid(width: u32, height: u32) -> (u32, u32, f6
 /// candidate's own footprint border out of pixels that are already covered;
 /// `0.0` keeps only the one-cell guard. `output_focus` replaces the
 /// analysis-resolution focus probes by measurements on output pixels where it
-/// has a value for a cell.
+/// has a value for a cell. `defocused_base` marks the cells where the frames'
+/// own detail, measured before composing, shows the base's owner soft and
+/// the candidate near the sharpest frame: there a low-pass disagreement is
+/// the base's defocus, and only a shift search that finds the candidate
+/// displaced keeps the base.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn streaming_ownership_from_analysis(
     base: &Rgb32FImage,
@@ -251,11 +198,13 @@ pub(super) fn streaming_ownership_from_analysis(
     transition_focus_weight: f64,
     edge_margin_px: f64,
     output_focus: Option<&OutputFocus>,
+    defocused_base: Option<&[bool]>,
 ) -> GrayImage {
     let width = base.width().min(candidate.width());
     let height = base.height().min(candidate.height());
     let (grid_width, grid_height, size) = streaming_ownership_grid(width, height);
     let count = (grid_width * grid_height) as usize;
+    let defocused_base = defocused_base.filter(|cells| cells.len() == count);
     // Focus measured on output pixels, when the caller supplied it for this
     // very grid; the analysis-resolution probes remain the fallback.
     let output_focus =
@@ -312,6 +261,18 @@ pub(super) fn streaming_ownership_from_analysis(
             image::imageops::blur(candidate, SCAN_TRANSITION_LOW_PASS_SIGMA),
         )
     });
+    // Luma of both low-passed views for the registration check of a sharper
+    // candidate the agreement alone would keep out.
+    let transition_lumas = transition_low_pass
+        .as_ref()
+        .map(|(low_base, low_candidate)| {
+            (
+                masked_luma_plane(low_base, base_mask, width, height),
+                masked_luma_plane(low_candidate, candidate_mask, width, height),
+            )
+        });
+    let mut shift_registered = 0usize;
+    let mut defocus_admitted = 0usize;
     let mut transition_agreement = vec![0.0f64; count];
     // Cells this close to the candidate's own footprint edge never take
     // pixels another layer already covers: a frame border carries lens
@@ -463,6 +424,31 @@ pub(super) fn streaming_ownership_from_analysis(
                     transition_agreement[index] =
                         low_pass_agreement(low_base, low_candidate, tone, sample_x, sample_y);
                     let (base_focus, candidate_focus) = focus_pair(index, center_x, center_y);
+                    // A base defocused beyond the low-pass disagrees with
+                    // every sharp frame. Where the candidate is sharper, ask
+                    // whether it is displaced rather than whether it looks
+                    // alike.
+                    if transition_agreement[index] < 1.0
+                        && candidate_focus.powi(2) > base_focus.powi(2) * 1.06
+                        && let Some((base_luma, candidate_luma)) = transition_lumas.as_ref()
+                    {
+                        let registration = low_pass_registration(
+                            base_luma,
+                            candidate_luma,
+                            width as usize,
+                            height as usize,
+                            sample_x,
+                            sample_y,
+                        );
+                        let known_defocus = defocused_base.is_some_and(|cells| cells[index]);
+                        if registration == LowPassRegistration::Registered {
+                            transition_agreement[index] = 1.0;
+                            shift_registered += 1;
+                        } else if known_defocus && registration == LowPassRegistration::Unknown {
+                            transition_agreement[index] = 1.0;
+                            defocus_admitted += 1;
+                        }
+                    }
                     #[cfg(test)]
                     if tracing {
                         trace_focus[index] = (base_focus, candidate_focus);
@@ -491,27 +477,49 @@ pub(super) fn streaming_ownership_from_analysis(
                 (disagreement[index] * OWNERSHIP_MISMATCH_PENALTY * mismatch_scale).min(1.0);
         }
     }
+    if transition_lumas.is_some() {
+        println!(
+            "    - Transition registration check: {shift_registered} sharper cells line up with a base they do not resemble, {defocus_admitted} replace a base known to be defocused there"
+        );
+    }
     if panorama_transition {
         // The focus evidence of a transition, on the same normalised scale as
         // the focus contest below; zero when the run does not weigh focus.
         let energy_scale = (energy_sum / energy_count.max(1) as f64).max(1e-6);
+        // A cell with less texture than the layer's mean is normalised by its
+        // own energy, down to a floor: on the layer mean alone a 30 % sharper
+        // frame barely outvoted the seam prior on plain silk, which is where a
+        // soft frame shows most.
+        let normalised_focus = (0..count)
+            .map(|index| {
+                if transition_low_pass.is_none() || fixed[index] != 0 {
+                    return f64::NAN;
+                }
+                let scale = cell_energy[index]
+                    .clamp(SCAN_TRANSITION_ENERGY_FLOOR * energy_scale, energy_scale);
+                (preference[index] / scale)
+                    .clamp(-SCAN_TRANSITION_FOCUS_LIMIT, SCAN_TRANSITION_FOCUS_LIMIT)
+            })
+            .collect::<Vec<_>>();
+        // The focus difference of single cells scatters; on its own each
+        // sharper cell had to pay for its whole seam, and a candidate 25 %
+        // sharper over a region still lost most of it (祁序2: 14 187 traced
+        // cells). Average the vote over its neighbourhood before the gate.
+        let smoothed_focus = box_mean_finite(
+            &normalised_focus,
+            grid_width as usize,
+            grid_height as usize,
+            SCAN_TRANSITION_FOCUS_SMOOTHING_RADIUS,
+        );
         let focus_term = (0..count)
             .map(|index| {
                 if transition_low_pass.is_none() || fixed[index] != 0 {
                     return 0.0;
                 }
                 // Agreeing cells vote with their bounded focus difference;
-                // disagreeing cells keep the established position. A cell
-                // with less texture than the layer's mean is normalised by
-                // its own energy, down to a floor: on the layer mean alone a
-                // 30 % sharper frame barely outvoted the seam prior on plain
-                // silk, which is where a soft frame shows most.
+                // disagreeing cells keep the established position.
                 let agreement = transition_agreement[index];
-                let scale = cell_energy[index]
-                    .clamp(SCAN_TRANSITION_ENERGY_FLOOR * energy_scale, energy_scale);
-                let focus = (preference[index] / scale)
-                    .clamp(-SCAN_TRANSITION_FOCUS_LIMIT, SCAN_TRANSITION_FOCUS_LIMIT);
-                transition_focus_weight * (agreement * focus - (1.0 - agreement))
+                transition_focus_weight * (agreement * smoothed_focus[index] - (1.0 - agreement))
             })
             .collect::<Vec<_>>();
         preference.copy_from_slice(&focus_term);

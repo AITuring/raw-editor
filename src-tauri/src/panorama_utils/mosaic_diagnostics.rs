@@ -490,6 +490,112 @@ pub(super) fn write_ownership_trace(
         .expect("write ownership trace");
 }
 
+/// Write what one streaming layer's ownership decision saw inside canvas ROIs
+/// (`RAW_EDITOR_LAYER_PROBE=<dir>;x0,y0,x1,y1[;x0,y0,x1,y1...]`, canvas pixels
+/// before the final crop): the canvas before the layer, the tone-adjusted
+/// candidate and the cells it took, as 8-bit PNGs at canvas resolution.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn write_layer_probe(
+    layer: usize,
+    filename: &str,
+    store: &StreamingMosaicStore,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    region: (u32, u32, u32, u32),
+    decision: &GrayImage,
+    analysis: (u32, u32),
+) -> Result<(), String> {
+    let Ok(spec) = std::env::var("RAW_EDITOR_LAYER_PROBE") else {
+        return Ok(());
+    };
+    let mut parts = spec.split(';');
+    let Some(directory) = parts.next() else {
+        return Ok(());
+    };
+    let directory = PathBuf::from(directory);
+    let (left, right, top, bottom) = region;
+    let stem = std::path::Path::new(filename)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let to_u8 = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    for (roi_index, roi) in parts.enumerate() {
+        let roi = roi
+            .split(',')
+            .filter_map(|value| value.trim().parse::<u32>().ok())
+            .collect::<Vec<_>>();
+        if roi.len() != 4 {
+            continue;
+        }
+        let (x0, y0) = (roi[0].max(left), roi[1].max(top));
+        let (x1, y1) = (roi[2].min(right + 1), roi[3].min(bottom + 1));
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let (width, height) = (x1 - x0, y1 - y0);
+        let mut base = image::RgbImage::new(width, height);
+        for tile_row in y0 / store.tile_size..=(y1 - 1) / store.tile_size {
+            for tile_column in x0 / store.tile_size..=(x1 - 1) / store.tile_size {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    store.tile_extent(tile_column, tile_row);
+                let (tile, mask) = store.load_tile(tile_column, tile_row)?;
+                for y in y0.max(tile_top)..y1.min(tile_top + tile_height) {
+                    for x in x0.max(tile_left)..x1.min(tile_left + tile_width) {
+                        let (tile_x, tile_y) = (x - tile_left, y - tile_top);
+                        if mask.get_pixel(tile_x, tile_y)[0] == 0 {
+                            continue;
+                        }
+                        let pixel = tile.get_pixel(tile_x, tile_y);
+                        base.put_pixel(
+                            x - x0,
+                            y - y0,
+                            image::Rgb([to_u8(pixel[0]), to_u8(pixel[1]), to_u8(pixel[2])]),
+                        );
+                    }
+                }
+            }
+        }
+        let mut candidate = image::RgbImage::new(width, height);
+        let mut take = GrayImage::new(width, height);
+        for y in 0..height {
+            for x in 0..width {
+                let local_x = f64::from(x0 + x - left);
+                let local_y = f64::from(y0 + y - top);
+                let (analysis_x, analysis_y) = (local_x / sampler.scale, local_y / sampler.scale);
+                if let Some(pixel) = sampler.sample(local_x, local_y) {
+                    let pixel = adjusted(pixel, tone.at(analysis_x, analysis_y));
+                    candidate.put_pixel(
+                        x,
+                        y,
+                        image::Rgb([to_u8(pixel[0]), to_u8(pixel[1]), to_u8(pixel[2])]),
+                    );
+                }
+                let cell_x = ((analysis_x / f64::from(analysis.0.max(1)))
+                    * f64::from(decision.width())) as u32;
+                let cell_y = ((analysis_y / f64::from(analysis.1.max(1)))
+                    * f64::from(decision.height())) as u32;
+                let value = decision
+                    .get_pixel(
+                        cell_x.min(decision.width() - 1),
+                        cell_y.min(decision.height() - 1),
+                    )
+                    .0[0];
+                take.put_pixel(x, y, Luma([value]));
+            }
+        }
+        let prefix = directory.join(format!("roi{roi_index}-L{layer:03}-{stem}"));
+        for (suffix, result) in [
+            ("base", base.save(prefix.with_extension("base.png"))),
+            ("cand", candidate.save(prefix.with_extension("cand.png"))),
+            ("take", take.save(prefix.with_extension("take.png"))),
+        ] {
+            result.map_err(|error| format!("write layer probe {suffix}: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
 /// Compare the composed output's detail with the sharpest frame on the
 /// soft-frame detail grid (`RAW_EDITOR_DETAIL_DEFICIT=<prefix>`): writes
 /// `<prefix>.csv` with every measured cell and `<prefix>.png`, one pixel per
