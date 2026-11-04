@@ -18,6 +18,8 @@
 
 @import './styles/app/style-transfer.css';
 
+@import './styles/app/brightness-tool.css';
+
 @import './styles/app/modals.css';
 
 @import './styles/app/editor-popovers.css';

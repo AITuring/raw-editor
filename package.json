@@ -57,7 +57,14 @@
     "i18n:runtime-check": "node src/i18n/check-runtime.mjs",
     "i18n:lint": "i18next-cli lint",
     "stack-acceptance:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_acceptance_harness -- --exact --ignored --nocapture",
-    "stack-pair-evidence:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_station_pair_evidence_harness -- --exact --ignored --nocapture"
+    "stack-pair-evidence:check": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_station_pair_evidence_harness -- --exact --ignored --nocapture",
+    "brightness-map:check": "node tests/brightness-map.mjs",
+    "adaptive-brightness:check": "node tests/adaptive-brightness.mjs",
+    "seam-candidates:check": "node tests/seam-candidates.mjs",
+    "seam-texture:check": "node tests/seam-texture.mjs",
+    "native-seam-texture:check": "node tests/native-seam-texture.mjs",
+    "native-seam-profile:check": "node tests/native-seam-profile.mjs",
+    "native-seam-path:check": "node tests/native-seam-path.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

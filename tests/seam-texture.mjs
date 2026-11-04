@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const bundle=await build({entryPoints:['src/utils/seamTexture.ts'],bundle:true,format:'esm',write:false});
+const {examineSeamTexture,summarizeSeamTexture}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].contents).toString('base64'));
+function field(fn){const width=200,height=200,light=new Float32Array(width*height),valid=new Uint8Array(width*height).fill(1);for(let y=0;y<height;y++)for(let x=0;x<width;x++)light[y*width+x]=fn(x,y);return {width,height,light,valid};}
+const base=(x,y)=>6.5+.06*Math.sin(y*.7)+.02*Math.sin(x*.11);
+const inspect=fn=>examineSeamTexture(field(fn),100,100,1,0);
+const step=inspect((x,y)=>base(x,y)+(x>=100?.4:0));
+assert.equal(step.status,'supported','continuous textured surface with exposure step');
+assert.ok(step.correlation>.95);
+for(const delta of [-.6,-.2,.1,.6])assert.equal(inspect((x,y)=>base(x,y)+(x>=100?delta:0)).status,step.status,'texture evidence independent of exposure difference');
+assert.equal(inspect((x)=>6.5+(x>=100?.4:0)).status,'insufficient','flat gray edge cannot prove continuity');
+assert.equal(inspect((x,y)=>6.5+.06*Math.sin((x<100?y:x)*.7)+(x>=100?.4:0)).status,'inconsistent','reject changed texture orientation');
+const shifted=inspect((x,y)=>base(x,y-(x>=100?3:0))+(x>=100?.4:0));
+assert.equal(shifted.status,'inconsistent','misregistered structure is not exposure-only');
+assert.equal(shifted.shiftedMatch,true);
+assert.equal(inspect((x,y)=>6.5+(x<100?.06*Math.sin(y*.7):0)+(x>=100?.4:0)).status,'inconsistent','one-sided texture evidence');
+const border=examineSeamTexture(field(base),1,1,1,0);
+assert.equal(border.status,'insufficient');
+const invalid=field(base);invalid.valid.fill(0);assert.equal(examineSeamTexture(invalid,100,100,1,0).status,'insufficient');
+assert.equal(summarizeSeamTexture([step,step,step,border]).status,'supported');
+assert.equal(summarizeSeamTexture([step,border,border,border]).status,'insufficient');
+console.log('texture continuity: exposure invariance, direction, displacement, low texture, missing data passed');

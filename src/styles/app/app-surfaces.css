@@ -264,7 +264,8 @@
   grid-template-areas:
     'folder image'
     'stack style-transfer'
-    'batch settings';
+    'batch brightness'
+    'settings settings';
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--ui-space-3);
 }
@@ -350,6 +351,10 @@
   grid-area: batch;
 }
 
+.splash-action-brightness {
+  grid-area: brightness;
+}
+
 .splash-action-settings {
   grid-area: settings;
 }
@@ -368,6 +373,7 @@
       'stack'
       'style-transfer'
       'batch'
+      'brightness'
       'settings';
     grid-template-columns: minmax(0, 1fr);
   }

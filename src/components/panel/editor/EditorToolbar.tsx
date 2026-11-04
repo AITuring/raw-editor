@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Eye, EyeOff, Loader2, Maximize, Redo, Undo } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2, Maximize, Redo, Sun, Undo } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 
@@ -7,6 +7,7 @@ import { useLibraryStore } from '../../../store/useLibraryStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { findGroupVariants, getVariantLabel } from '../../../utils/imageGrouping';
 import { GroupingMode, SelectedImage } from '../../ui/AppProperties';
+import { useUIStore } from '../../../store/useUIStore';
 
 interface EditorToolbarProps {
   adjustmentsHistory: any[];
@@ -214,6 +215,17 @@ const EditorToolbar = memo(
               <Eye aria-hidden="true" size={17} strokeWidth={1.8} />
             )}
           </button>
+          {!isAndroid && (
+            <button
+              aria-label={t('brightnessTool.open', { defaultValue: '打开区域亮度工具' })}
+              className="editor-command-button"
+              data-tooltip={t('brightnessTool.open', { defaultValue: '打开区域亮度工具' })}
+              onClick={() => useUIStore.getState().setUI({ activeView: 'brightness-tool' })}
+              type="button"
+            >
+              <Sun aria-hidden="true" size={16} strokeWidth={1.8} />
+            </button>
+          )}
           <button
             aria-label={t('editor.toolbar.tooltips.fullscreen')}
             className="editor-command-button"

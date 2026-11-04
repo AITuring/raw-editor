@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   Rows3,
   Settings2,
+  Sun,
   ArrowDownAZ,
   ArrowUpAZ,
   ChevronDown,
@@ -593,6 +594,30 @@ export default function MainLibrary(props: MainLibraryProps) {
                         )}
                         {!props.isAndroid && (
                           <Button
+                            aria-label={t('brightnessTool.open', { defaultValue: '打开区域亮度工具' })}
+                            className="splash-action-brightness flex h-11 min-w-0 justify-center bg-surface text-text-primary"
+                            onClick={() =>
+                              setUI({
+                                activeView: 'brightness-tool',
+                                isLibraryQuickPreviewOpen: false,
+                                isSettingsOpen: false,
+                                libraryContextPanel: null,
+                              })
+                            }
+                            size="lg"
+                            type="button"
+                            variant="secondary"
+                          >
+                            <span aria-hidden="true" className="splash-action-icon">
+                              <Sun size={20} strokeWidth={1.7} />
+                            </span>
+                            <span className="truncate">
+                              {t('brightnessTool.entryTitle', { defaultValue: '区域亮度工具' })}
+                            </span>
+                          </Button>
+                        )}
+                        {!props.isAndroid && (
+                          <Button
                             className="splash-action-stack flex h-11 min-w-0 justify-center bg-surface text-text-primary"
                             data-tooltip={t('library.splash.multiImageSelectionHint')}
                             onClick={props.onOpenMultiImageWorkflow}
@@ -852,6 +877,26 @@ export default function MainLibrary(props: MainLibraryProps) {
               variant="secondary"
             >
               <Blend aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          )}
+          {!props.isAndroid && (
+            <Button
+              aria-label={t('brightnessTool.open', { defaultValue: '打开区域亮度工具' })}
+              className="p-0"
+              data-tooltip={t('brightnessTool.open', { defaultValue: '打开区域亮度工具' })}
+              onClick={() =>
+                setUI({
+                  activeView: 'brightness-tool',
+                  isLibraryQuickPreviewOpen: false,
+                  isSettingsOpen: false,
+                  libraryContextPanel: null,
+                })
+              }
+              size="icon"
+              type="button"
+              variant="secondary"
+            >
+              <Sun aria-hidden="true" className="h-4 w-4" />
             </Button>
           )}
         </div>

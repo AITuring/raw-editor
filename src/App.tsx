@@ -29,6 +29,7 @@ import PresetsPanel from './components/panel/right/PresetsPanel';
 import EditorView from './components/views/EditorView';
 import LibraryView from './components/views/LibraryView';
 import StyleTransferView from './components/views/StyleTransferView';
+import BrightnessToolView from './components/views/BrightnessToolView';
 
 import { ContextMenuProvider } from './context/ContextMenuContext';
 import { useSettingsStore } from './store/useSettingsStore';
@@ -135,16 +136,23 @@ function App() {
       })),
     );
 
-  const { selectedImage, activeMaskContainerId, activeAiPatchContainerId, hasRenderedFirstFrame, setEditor } =
-    useEditorStore(
-      useShallow((state) => ({
-        selectedImage: state.selectedImage,
-        activeMaskContainerId: state.activeMaskContainerId,
-        activeAiPatchContainerId: state.activeAiPatchContainerId,
-        hasRenderedFirstFrame: state.hasRenderedFirstFrame,
-        setEditor: state.setEditor,
-      })),
-    );
+  const {
+    selectedImage,
+    finalPreviewUrl,
+    activeMaskContainerId,
+    activeAiPatchContainerId,
+    hasRenderedFirstFrame,
+    setEditor,
+  } = useEditorStore(
+    useShallow((state) => ({
+      selectedImage: state.selectedImage,
+      finalPreviewUrl: state.finalPreviewUrl,
+      activeMaskContainerId: state.activeMaskContainerId,
+      activeAiPatchContainerId: state.activeAiPatchContainerId,
+      hasRenderedFirstFrame: state.hasRenderedFirstFrame,
+      setEditor: state.setEditor,
+    })),
+  );
 
   const { exportState, setExportState } = useProcessStore(
     useShallow((state) => ({
@@ -152,6 +160,14 @@ function App() {
       setExportState: state.setExportState,
     })),
   );
+  // Thumbnail generation is asynchronous. Subscribe to the selected image's
+  // live thumbnail so opening the brightness tool while the editor is still
+  // warming up can adopt it without requiring a second manual import.
+  const selectedThumbnailUrl = useProcessStore((state) => {
+    if (!selectedImage) return '';
+    const physicalPath = selectedImage.path.split('?vc=')[0];
+    return state.thumbnails[selectedImage.path] || state.thumbnails[physicalPath] || '';
+  });
 
   const defaultThumbnailSize = osPlatform === 'android' ? ThumbnailSize.Small : ThumbnailSize.Medium;
   const defaultLibraryViewMode = osPlatform === 'android' ? LibraryViewMode.Recursive : LibraryViewMode.Flat;
@@ -187,6 +203,24 @@ function App() {
   const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(ThumbnailAspectRatio.Cover);
 
   const { requestThumbnails, clearThumbnailQueue, pauseThumbnailQueue, markGenerated } = useThumbnails();
+
+  useEffect(() => {
+    if (activeView !== 'brightness-tool' || !selectedImage?.path) return;
+    const hasSource =
+      Boolean(selectedThumbnailUrl) ||
+      Boolean(selectedImage.thumbnailUrl) ||
+      Boolean((hasRenderedFirstFrame && finalPreviewUrl) || selectedImage.originalUrl);
+    if (!hasSource) requestThumbnails([selectedImage.path]);
+  }, [
+    activeView,
+    finalPreviewUrl,
+    hasRenderedFirstFrame,
+    requestThumbnails,
+    selectedImage?.originalUrl,
+    selectedImage?.path,
+    selectedImage?.thumbnailUrl,
+    selectedThumbnailUrl,
+  ]);
 
   const transformWrapperRef = useRef<any>(null);
   useAppInitialization({
@@ -721,8 +755,37 @@ function App() {
 
   const hasRoots = rootPaths && rootPaths.length > 0;
   const isStyleTransferWorkspace = activeView === 'style-transfer';
+  const isBrightnessWorkspace = activeView === 'brightness-tool';
+  const brightnessReturnViewRef = useRef<'library' | 'editor'>('library');
+  useEffect(() => {
+    if (activeView !== 'brightness-tool') {
+      brightnessReturnViewRef.current = activeView === 'editor' && selectedImage ? 'editor' : 'library';
+    }
+  }, [activeView, selectedImage]);
+  const brightnessToolImage = selectedImage
+    ? {
+        name: selectedImage.path.split(/[\\/]/).pop()?.split('?vc=')[0] || selectedImage.path,
+        path: selectedImage.path,
+        metadata: selectedImage.exif ?? null,
+        // Prefer a finished blob preview because it is same-origin and safe to
+        // read into Canvas. Fall back to the live thumbnail while the editor
+        // is still rendering or when the native renderer owns the preview.
+        url:
+          (hasRenderedFirstFrame && finalPreviewUrl?.startsWith('blob:') ? finalPreviewUrl : '') ||
+          selectedThumbnailUrl ||
+          selectedImage.thumbnailUrl ||
+          (hasRenderedFirstFrame && finalPreviewUrl) ||
+          selectedImage.originalUrl ||
+          finalPreviewUrl ||
+          '',
+      }
+    : null;
   const hasMainContent =
-    hasRoots || libraryImageCount > 0 || (activeView === 'editor' && !!selectedImage) || isStyleTransferWorkspace;
+    hasRoots ||
+    libraryImageCount > 0 ||
+    (activeView === 'editor' && !!selectedImage) ||
+    isStyleTransferWorkspace ||
+    isBrightnessWorkspace;
   const isDevelopWorkspace = activeView === 'editor' && !!selectedImage;
 
   const shouldHideFolderTree = isAndroid;
@@ -805,13 +868,15 @@ function App() {
                 isDevelopWorkspace && isWgpuActive && 'is-wgpu-active',
                 !isDevelopWorkspace && hasMainContent && 'ui-library-workspace',
                 isStyleTransferWorkspace && 'style-transfer-app-workspace',
+                isBrightnessWorkspace && 'brightness-tool-app-workspace',
               )}
             >
               {!shouldHideFolderTree &&
                 hasRoots &&
                 hasMainContent &&
                 !isDevelopWorkspace &&
-                !isStyleTransferWorkspace && (
+                !isStyleTransferWorkspace &&
+                !isBrightnessWorkspace && (
                   <LibraryNavigationPanel
                     width={leftPanelWidth}
                     renderPanel={renderAppPanel}
@@ -863,10 +928,22 @@ function App() {
                     <StyleTransferView onBack={() => setUI({ activeView: 'library' })} />
                   </div>
                 )}
+                {isBrightnessWorkspace && (
+                  <div className="flex-1 flex flex-col min-w-0 h-full">
+                    <BrightnessToolView
+                      initialImage={brightnessToolImage}
+                      onBack={() => setUI({ activeView: brightnessReturnViewRef.current })}
+                    />
+                  </div>
+                )}
                 <div
                   className={clsx(
                     'flex-1 flex flex-col min-w-0 h-full',
-                    activeView === 'editor' && selectedImage ? 'hidden' : isStyleTransferWorkspace ? 'hidden' : 'flex',
+                    activeView === 'editor' && selectedImage
+                      ? 'hidden'
+                      : isStyleTransferWorkspace || isBrightnessWorkspace
+                        ? 'hidden'
+                        : 'flex',
                   )}
                 >
                   <LibraryView
@@ -915,6 +992,7 @@ function App() {
               {!isAndroid &&
                 hasMainContent &&
                 !isStyleTransferWorkspace &&
+                !isBrightnessWorkspace &&
                 (isDevelopWorkspace ? (
                   <DevelopPanel
                     activePanel={activeRightPanel}
