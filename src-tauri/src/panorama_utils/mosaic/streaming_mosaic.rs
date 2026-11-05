@@ -21,19 +21,20 @@ use tauri::Runtime;
 
 use super::{
     DetailGrid, Field, FocusBand, FrameDetail, GRID_STEP, LayerSampler, MosaicToneFinish,
-    NEAR_BEST_RATIO, NativeRefineMode, OwnerStations, SOFT_FRAME_RATIO,
-    STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS, STREAMING_OWNERSHIP_FEATHER,
-    STREAMING_SCAN_EDGE_MARGIN_FRACTION, STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT,
-    STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE, StreamingLowFrequencyConsensus,
-    StreamingMosaicStore, analysis_density_source, apply_streaming_seam_harmonization,
-    apply_streaming_source_owner_low_frequency_correction, copy_streaming_owned_tile_region,
-    copy_streaming_tile_region, detail_ratios, fill_streaming_uncovered_tile_region,
-    intra_station_frame_record, materialize_streaming_focus_output, measure_frame_detail,
-    measure_output_focus, median, planar_canvas_scale, prefilter_minified_source,
-    refine_layer_from_analysis, refine_native_layer_streaming, sharpness_order,
-    smooth_streaming_low_frequency_illumination, soft_frames, streaming_candidate_analysis,
-    streaming_ownership_from_analysis, streaming_ownership_grid, streaming_refinement_pair,
-    streaming_seam_harmonization, streaming_tone_field_from_analysis,
+    NEAR_BEST_RATIO, NativeRefineMode, OwnerStations, REPAIR_CELLS_LONG_SIDE, REPAIR_MIN_CELL,
+    RepairScene, SOFT_FRAME_RATIO, STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS,
+    STREAMING_OWNERSHIP_FEATHER, STREAMING_SCAN_EDGE_MARGIN_FRACTION,
+    STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT, STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE,
+    StreamingLowFrequencyConsensus, StreamingMosaicStore, analysis_density_source,
+    apply_streaming_seam_harmonization, apply_streaming_source_owner_low_frequency_correction,
+    copy_streaming_owned_tile_region, copy_streaming_tile_region, detail_ratios,
+    fill_streaming_uncovered_tile_region, intra_station_frame_record,
+    materialize_streaming_focus_output, measure_frame_detail, measure_output_focus, median,
+    planar_canvas_scale, prefilter_minified_source, refine_layer_from_analysis,
+    refine_native_layer_streaming, repair_detail, repair_summary, report_soft_regions,
+    sharpness_order, smooth_streaming_low_frequency_illumination, soft_frames, soft_regions,
+    streaming_candidate_analysis, streaming_ownership_from_analysis, streaming_ownership_grid,
+    streaming_refinement_pair, streaming_seam_harmonization, streaming_tone_field_from_analysis,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -76,11 +77,41 @@ where
         "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
     );
-    // One focus band for the whole run, so every frame and the canvas are
-    // measured alike; see `FocusBand`.
+    // A focus scan may combine several captures of one artwork, one folder
+    // each. The capture of the first source composes the canvas, so the
+    // canvas keeps one capture's tone and geometry; frames of the others only
+    // fill what it leaves uncovered and lend their detail to the repair.
+    let donor_frames = if focus_scan && projection == Projection::Planar {
+        let capture = |info: &ImageInfo| {
+            std::path::Path::new(&info.filename)
+                .parent()
+                .map(std::path::Path::to_path_buf)
+        };
+        let primary = images
+            .iter()
+            .min_by_key(|info| info.id)
+            .map(|info| capture(info));
+        images
+            .iter()
+            .filter(|info| Some(capture(info)) != primary)
+            .map(|info| info.id)
+            .collect::<HashSet<_>>()
+    } else {
+        HashSet::new()
+    };
+    if !donor_frames.is_empty() {
+        println!(
+            "  - Focus scan: {} of {} frames come from other captures; they fill only uncovered canvas and lend detail to the repair",
+            donor_frames.len(),
+            images.len()
+        );
+    }
+    // One focus band for the whole run, chosen by the composing capture, so
+    // every frame and the canvas are measured alike; see `FocusBand`.
     let focus_band = if focus_scan && projection == Projection::Planar {
         let mut scales = images
             .iter()
+            .filter(|info| !donor_frames.contains(&info.id))
             .map(|info| planar_canvas_scale(info, &homographies[&info.id]))
             .filter(|scale| scale.is_finite())
             .collect::<Vec<_>>();
@@ -106,9 +137,20 @@ where
     };
     // A focus scan leaves its mostly soft frames out of the composition; see
     // `soft_frames` for the rule and why grouping still sees them.
+    // Every frame is measured twice: on the coarse grid the composition
+    // decisions use, and on the fine grid the detail repair compares the
+    // finished canvas with (see `detail_repair`).
     let skipped_soft_frames = if focus_scan && projection == Projection::Planar {
         let grid = DetailGrid::new(width, height, focus_band);
+        let repair_grid = DetailGrid::with_cells(
+            width,
+            height,
+            focus_band,
+            REPAIR_CELLS_LONG_SIDE,
+            REPAIR_MIN_CELL,
+        );
         let mut details = Vec::with_capacity(images.len());
+        let mut repair_details = Vec::with_capacity(images.len());
         for (index, &info) in images.iter().enumerate() {
             let _ = app.emit(
                 event,
@@ -123,6 +165,7 @@ where
                 info, transform, projection, offset_x, offset_y, width, height,
             ) else {
                 details.push(FrameDetail::default());
+                repair_details.push(FrameDetail::default());
                 continue;
             };
             let (source, source_divisor) =
@@ -156,6 +199,18 @@ where
                 (left, right, top, bottom),
                 &grid,
             ));
+            repair_details.push(measure_frame_detail(
+                &sampler,
+                (left, right, top, bottom),
+                &repair_grid,
+            ));
+        }
+        // The composition decisions compare the composing capture's frames
+        // only; the repair grid keeps every frame.
+        for (detail, info) in details.iter_mut().zip(images) {
+            if donor_frames.contains(&info.id) {
+                *detail = FrameDetail::default();
+            }
         }
         let skipped = soft_frames(&details, &grid);
         if !skipped.is_empty() {
@@ -180,11 +235,15 @@ where
             .into_iter()
             .map(|(index, _)| images[index].id)
             .collect::<HashSet<_>>();
-        (skipped, Some((grid, details)))
+        (
+            skipped,
+            Some((grid, details)),
+            Some((repair_grid, repair_details)),
+        )
     } else {
-        (HashSet::new(), None)
+        (HashSet::new(), None, None)
     };
-    let (skipped_soft_frames, soft_frame_details) = skipped_soft_frames;
+    let (skipped_soft_frames, soft_frame_details, repair_measurements) = skipped_soft_frames;
     // Every frame's detail relative to the sharpest one per detail cell, and
     // the frame behind every source owner label written so far: together they
     // tell a seam where the canvas holds a frame known to be soft.
@@ -218,6 +277,19 @@ where
     for (step, &index) in order.iter().enumerate() {
         let info = images[index];
         if skipped_soft_frames.contains(&info.id) {
+            continue;
+        }
+        let donor = donor_frames.contains(&info.id);
+        if donor
+            && !adds_coverage(
+                &store,
+                info,
+                &homographies[&info.id],
+                projection,
+                (offset_x, offset_y),
+                (width, height),
+            )?
+        {
             continue;
         }
         let capture_group_id = capture_group_ids
@@ -591,6 +663,13 @@ where
                 (analysis_width, analysis_height),
             )?;
             overlap_candidate = Some((candidate, candidate_mask));
+            // A frame of another capture takes no covered pixel; it only fills
+            // holes below.
+            let decision = if donor {
+                GrayImage::new(decision.width(), decision.height())
+            } else {
+                decision
+            };
             (tone, decision)
         } else {
             (
@@ -791,6 +870,45 @@ where
     } else {
         low_frequency_consensus.apply(&mut output, crop);
     }
+    // A focus scan finally repairs every cell that holds clearly less detail
+    // than its sharpest source; see `detail_repair`.
+    if let Some((repair_grid, repair_details)) = repair_measurements.as_ref() {
+        let scene = RepairScene {
+            images,
+            donor_frames: &donor_frames,
+            homographies,
+            projection,
+            offset: (offset_x, offset_y),
+            canvas: (width, height),
+        };
+        let outcome = repair_detail(
+            &mut output,
+            (crop.0, crop.1),
+            &scene,
+            repair_grid,
+            repair_details,
+            load,
+            |donor, donors| {
+                let _ = app.emit(
+                    event,
+                    format!("Repairing soft detail from source {donor} of {donors}"),
+                );
+            },
+        )?;
+        println!("  - {}", repair_summary(&outcome));
+        // What stays soft is circled for the user; see `soft_report`.
+        let regions = soft_regions(repair_grid, &outcome, crop);
+        report_soft_regions(&app, &output, &regions)?;
+        #[cfg(test)]
+        if let Some(path) = std::env::var_os("RAW_EDITOR_REPAIR_TRACE") {
+            super::diagnostics::write_repair_trace(
+                repair_grid,
+                &outcome,
+                images,
+                std::path::Path::new(&path),
+            )?;
+        }
+    }
     println!(
         "  - Verified covered output: {}x{}; every pixel has source ownership",
         output.width(),
@@ -812,4 +930,59 @@ where
         )?;
     }
     Ok(output)
+}
+
+/// Whether frame `info` would cover canvas the store has not covered yet,
+/// probed every 16 canvas pixels inside its footprint. A frame of another
+/// capture that adds nothing is not decoded for the composition.
+fn adds_coverage(
+    store: &StreamingMosaicStore,
+    info: &ImageInfo,
+    transform: &Matrix3<f64>,
+    projection: Projection,
+    offset: (f64, f64),
+    canvas: (u32, u32),
+) -> Result<bool, String> {
+    const PROBE_STEP: u32 = 16;
+    let Some((left, right, top, bottom)) = transformed_image_region(
+        info, transform, projection, offset.0, offset.1, canvas.0, canvas.1,
+    ) else {
+        return Ok(false);
+    };
+    let inverse = transform
+        .try_inverse()
+        .ok_or("The stack contains a non-invertible alignment.")?;
+    let covers = |x: u32, y: u32| {
+        let target = nalgebra::Point3::new(f64::from(x) - offset.0, f64::from(y) - offset.1, 1.0);
+        crate::panorama_utils::coordinates::map_target_to_source(&inverse, target, info, projection)
+            .is_some_and(|source| {
+                info.source_is_supported(source)
+                    && source.x >= 0.0
+                    && source.y >= 0.0
+                    && source.x < f64::from(info.width)
+                    && source.y < f64::from(info.height)
+            })
+    };
+    for row in top / STREAMING_TILE_SIZE..=bottom / STREAMING_TILE_SIZE {
+        for column in left / STREAMING_TILE_SIZE..=right / STREAMING_TILE_SIZE {
+            let (tile_left, tile_top, tile_width, tile_height) = store.tile_extent(column, row);
+            let mask = store.read_mask_tile(column, row, tile_width, tile_height);
+            for y in (0..tile_height).step_by(PROBE_STEP as usize) {
+                let canvas_y = tile_top + y;
+                if canvas_y < top || canvas_y > bottom {
+                    continue;
+                }
+                for x in (0..tile_width).step_by(PROBE_STEP as usize) {
+                    let canvas_x = tile_left + x;
+                    if canvas_x < left || canvas_x > right {
+                        continue;
+                    }
+                    if mask[(y * tile_width + x) as usize] == 0 && covers(canvas_x, canvas_y) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+    Ok(false)
 }

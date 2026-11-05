@@ -105,6 +105,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           resultId: null,
           lastSavedPath: null,
           resultSize: null,
+          softRegions: null,
           sourcePaths: paths,
           blendMode,
           alignmentMode,
@@ -129,6 +130,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
               error: String(err),
               resultId: null,
               resultSize: null,
+              softRegions: null,
             },
           };
         });

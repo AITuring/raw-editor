@@ -187,6 +187,7 @@ pub async fn process_image_stack(
                 // a later save from consulting another run's global ledger.
                 let degradation_ledger =
                     crate::panorama_utils::stack_pipeline::degradation::run_ledger_snapshot();
+                let soft_regions = soft_region_notice(&degradation_ledger);
                 let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
                 if !outcome_decision.permits_final_output() {
                     // The composed pixels remain available only as diagnostic
@@ -256,6 +257,7 @@ pub async fn process_image_stack(
                         "requestId": request_id,
                         "resultId": result_id,
                         "result": outcome_decision.as_identifier(),
+                        "softRegions": soft_regions,
                     }),
                 );
                 Ok(())
@@ -283,6 +285,36 @@ pub async fn process_image_stack(
 
 #[cfg(test)]
 mod tests;
+
+/// The soft regions a focus scan reported for this run (`scan_soft_region`),
+/// for the result view: their boxes in result pixels, how many lack a sharp
+/// source, and the overview they are circled on. `Null` when there are none.
+fn soft_region_notice(
+    ledger: &crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+) -> serde_json::Value {
+    use crate::panorama_utils::stack_pipeline::degradation::SCAN_SOFT_REGION;
+    let Some(entry) = ledger
+        .entries()
+        .iter()
+        .rev()
+        .find(|entry| entry.reason == SCAN_SOFT_REGION)
+    else {
+        return serde_json::Value::Null;
+    };
+    let detail = &entry.detail;
+    let regions = detail
+        .get("regions")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    serde_json::json!({
+        "count": regions.len(),
+        "sourcesSoft": detail.get("sources_soft").cloned().unwrap_or(serde_json::Value::Null),
+        "outputSize": detail.get("output_size").cloned().unwrap_or(serde_json::Value::Null),
+        "overviewPath": detail.get("overview").cloned().unwrap_or(serde_json::Value::Null),
+        "regions": regions,
+    })
+}
 
 /// 需求 10.10: the notices of saving the current result in `output_format`
 /// with `bit_depth` (fewer than 16 bits per channel, or transparency the

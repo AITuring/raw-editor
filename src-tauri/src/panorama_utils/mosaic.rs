@@ -67,13 +67,35 @@ mod focus_band;
 
 use focus_band::{FocusBand, WeaveBand, weave_band};
 
+mod dense_align;
+
+use dense_align::{Displacement, Plane, align};
+
+mod detail_repair;
+
+#[cfg(test)]
+use detail_repair::CellOutcome;
+use detail_repair::{REPAIR_DEFICIT_RATIO, RepairOutcome};
+mod cell_neighbourhood;
+use cell_neighbourhood::{neighbourhood_percentiles, neighbourhood_reference};
+
+mod soft_report;
+
+use detail_repair::{
+    REPAIR_CELLS_LONG_SIDE, REPAIR_MIN_CELL, RepairScene, repair_detail, repair_summary,
+};
+#[cfg(test)]
+use soft_report::SoftKind;
+use soft_report::{report_soft_regions, soft_regions};
+
 mod output_focus;
 
 mod soft_frames;
 
 use soft_frames::{
     DetailGrid, FrameDetail, NEAR_BEST_RATIO, SOFT_FRAME_RATIO, detail_ratios,
-    measure_frame_detail, sharpness_order, soft_frames,
+    measure_frame_detail, measure_image_detail, measure_image_tone, sample_detail, sharpness_order,
+    soft_frames,
 };
 
 use output_focus::{OutputFocus, measure_output_focus};

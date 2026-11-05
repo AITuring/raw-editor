@@ -70,6 +70,10 @@ pub const FUSION_GRAPH_CUT_TIMEOUT: &str = "fusion_graph_cut_timeout";
 pub const FUSION_SINGLE_FRAME_DEGRADED: &str = "fusion_single_frame_degraded";
 /// A region whose every candidate is below the station P10 sharpness.
 pub const FUSION_LOW_SHARPNESS_REGION: &str = "fusion_low_sharpness_region";
+/// A focus-scan region that stays well below the detail around it after the
+/// detail repair: every source is soft there, or the sharper one could not be
+/// aligned. The detail lists the regions and the overview they are circled on.
+pub const SCAN_SOFT_REGION: &str = "scan_soft_region";
 
 // ---------------------------------------------------------------------------
 // Virtual_Tile cache stage
@@ -426,6 +430,7 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     (FUSION_GRAPH_CUT_TIMEOUT, Severity::Degraded),
     (FUSION_SINGLE_FRAME_DEGRADED, Severity::Degraded),
     (FUSION_LOW_SHARPNESS_REGION, Severity::Degraded),
+    (SCAN_SOFT_REGION, Severity::Degraded),
     // Virtual_Tile cache
     (CACHE_ENTRY_FIELD_MISSING, Severity::Degraded),
     (CACHE_ENTRY_DIMENSION_MISMATCH, Severity::Degraded),

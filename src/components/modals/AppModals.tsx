@@ -257,6 +257,7 @@ export default function AppModals(props: AppModalsProps) {
         resultId: null,
         lastSavedPath: null,
         resultSize: null,
+        softRegions: null,
         sourcePaths: [],
         blendMode: 'focus',
         alignmentMode: 'auto',
@@ -341,6 +342,7 @@ export default function AppModals(props: AppModalsProps) {
         isOpen={imageStackModalState.isOpen}
         isProcessing={imageStackModalState.isProcessing}
         resultSize={imageStackModalState.resultSize}
+        softRegions={imageStackModalState.softRegions ?? null}
         onClose={closeImageStackModal}
         onChange={() =>
           setUI((state) => ({
@@ -354,6 +356,7 @@ export default function AppModals(props: AppModalsProps) {
               resultId: null,
               lastSavedPath: null,
               resultSize: null,
+              softRegions: null,
             },
           }))
         }

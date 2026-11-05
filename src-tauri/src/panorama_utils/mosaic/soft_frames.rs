@@ -59,14 +59,31 @@ pub(super) struct DetailGrid {
 
 impl DetailGrid {
     pub(super) fn new(width: u32, height: u32, band: FocusBand) -> Self {
+        Self::with_cells(width, height, band, DETAIL_CELLS_LONG_SIDE, 32.0)
+    }
+
+    /// A grid of `cells_long_side` cells along the canvas long side, each at
+    /// least `min_cell` canvas pixels.
+    pub(super) fn with_cells(
+        width: u32,
+        height: u32,
+        band: FocusBand,
+        cells_long_side: f64,
+        min_cell: f64,
+    ) -> Self {
         let long_side = f64::from(width.max(height)).max(1.0);
         Self {
             width,
             height,
-            cell: (long_side / DETAIL_CELLS_LONG_SIDE).max(32.0),
+            cell: (long_side / cells_long_side).max(min_cell),
             probe: (long_side / COVERAGE_PROBES_LONG_SIDE).max(8.0),
             band,
         }
+    }
+
+    /// Side of a cell, in canvas pixels.
+    pub(super) fn cell_size(&self) -> f64 {
+        self.cell
     }
 
     fn columns(&self, step: f64) -> usize {
@@ -103,7 +120,6 @@ impl DetailGrid {
     }
 
     /// `(columns, rows)` of the detail grid.
-    #[cfg(test)]
     pub(super) fn cell_dimensions(&self) -> (usize, usize) {
         (self.columns(self.cell), self.rows(self.cell))
     }
@@ -367,9 +383,66 @@ pub(super) fn soft_frames(details: &[FrameDetail], grid: &DetailGrid) -> Vec<(us
     dropped
 }
 
+/// A display-referred canvas value at or above this is clipped to white.
+const CLIPPED_VALUE: f32 = 0.98;
+
+/// Mean luma of a composed `image` (canvas pixel `origin` at its (0, 0)) on
+/// the patch of every cell of `grid` where the patch is wholly covered, and
+/// the share of the patch's pixels clipped to white in some channel.
+pub(super) fn measure_image_tone(
+    image: &image::Rgb32FImage,
+    origin: (u32, u32),
+    grid: &DetailGrid,
+) -> Vec<(usize, f64, f64)> {
+    let patch = grid.patch();
+    let half = f64::from(patch) * 0.5;
+    (0..grid.cell_count())
+        .into_par_iter()
+        .filter_map(|index| {
+            let (cx, cy) = grid.cell_centre(index);
+            let (x0, y0) = (
+                (cx - half).floor() - f64::from(origin.0),
+                (cy - half).floor() - f64::from(origin.1),
+            );
+            if x0 < 0.0
+                || y0 < 0.0
+                || x0 + f64::from(patch) > f64::from(image.width())
+                || y0 + f64::from(patch) > f64::from(image.height())
+            {
+                return None;
+            }
+            let (mut sum, mut count, mut clipped) = (0.0, 0.0, 0.0);
+            for y in y0 as u32..y0 as u32 + patch {
+                for x in x0 as u32..x0 as u32 + patch {
+                    let pixel = *image.get_pixel(x, y);
+                    let peak = pixel[0].max(pixel[1]).max(pixel[2]);
+                    if peak <= 0.0 {
+                        return None;
+                    }
+                    if peak >= CLIPPED_VALUE {
+                        clipped += 1.0;
+                    }
+                    sum += luma(pixel);
+                    count += 1.0;
+                }
+            }
+            Some((index, sum / count, clipped / count))
+        })
+        .collect()
+}
+
+/// Detail of whatever `sample` returns (canvas coordinates) on the patch of
+/// cell centre `centre`, measured exactly like a frame.
+pub(super) fn sample_detail(
+    sample: impl Fn(f64, f64) -> Option<Rgb<f32>>,
+    centre: (f64, f64),
+    grid: &DetailGrid,
+) -> Option<f64> {
+    patch_detail(sample, centre, grid.patch(), grid.band)
+}
+
 /// Detail of a composed `image` whose pixel (0, 0) is canvas pixel `origin`,
 /// on `grid`, measured exactly like a frame. Black pixels count as uncovered.
-#[cfg(test)]
 pub(super) fn measure_image_detail(
     image: &image::Rgb32FImage,
     origin: (u32, u32),

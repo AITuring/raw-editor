@@ -1,8 +1,8 @@
-import { memo, useId } from 'react';
+import { memo, useEffect, useId, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type { ImageStackResultSize } from '../../store/useUIStore';
+import type { ImageStackResultSize, ImageStackSoftRegions } from '../../store/useUIStore';
 import { ZoomableImagePreview } from '../preview';
 
 interface ImageStackResultPreviewProps {
@@ -13,6 +13,7 @@ interface ImageStackResultPreviewProps {
   modeLabel: string;
   onFocusedChange(isFocused: boolean): void;
   resultSize: ImageStackResultSize | null;
+  softRegions?: ImageStackSoftRegions | null;
   src: string;
 }
 
@@ -24,10 +25,16 @@ function ImageStackResultPreview({
   modeLabel,
   onFocusedChange,
   resultSize,
+  softRegions = null,
   src,
 }: ImageStackResultPreviewProps) {
   const { t } = useTranslation();
   const hintId = useId();
+  // The overview with the soft regions circled replaces the result while shown.
+  const [showSoftRegions, setShowSoftRegions] = useState(false);
+  useEffect(() => setShowSoftRegions(false), [src]);
+  const overviewSrc = softRegions?.overviewPath ?? null;
+  const showingOverview = showSoftRegions && overviewSrc !== null;
   const focusLabel = isFocused ? t('modals.imageStack.exitFocusPreview') : t('modals.imageStack.focusPreview');
   const memorySafeScale =
     resultSize?.renderScale && resultSize.renderScale < 0.999 ? Math.round(resultSize.renderScale * 100) : null;
@@ -35,19 +42,25 @@ function ImageStackResultPreview({
     resultSize?.fullCanvasWidth && resultSize.fullCanvasHeight
       ? `${resultSize.fullCanvasWidth.toLocaleString()} × ${resultSize.fullCanvasHeight.toLocaleString()}`
       : undefined;
+  const softRegionHint = softRegions
+    ? t('modals.imageStack.softRegionsHint', {
+        sourcesSoft: softRegions.sourcesSoft,
+        unaligned: softRegions.count - softRegions.sourcesSoft,
+      })
+    : undefined;
 
   return (
     <ZoomableImagePreview
       alt={alt}
       ariaDescribedBy={hintId}
-      detailSrc={detailSrc}
-      interactionSrc={src}
+      detailSrc={showingOverview ? overviewSrc : detailSrc}
+      interactionSrc={showingOverview ? overviewSrc : src}
       labels={{
         fit: t('modals.imageStack.fitPreview'),
         zoomIn: t('modals.imageStack.zoomIn'),
         zoomOut: t('modals.imageStack.zoomOut'),
       }}
-      sourceSize={resultSize}
+      sourceSize={showingOverview ? null : resultSize}
       toolbarEnd={
         <button
           aria-label={focusLabel}
@@ -80,6 +93,21 @@ function ImageStackResultPreview({
           >
             {t('modals.imageStack.memorySafeResult', { percent: memorySafeScale })}
           </span>
+        )}
+        {softRegions && (
+          <button
+            aria-label={`${t('modals.imageStack.softRegions', { number: softRegions.count })} · ${softRegionHint}`}
+            aria-pressed={showingOverview}
+            className="pointer-events-auto rounded-md border border-status-warning/35 bg-black/80 px-2 py-1 text-[11px] text-status-warning transition-colors hover:bg-black/90 disabled:cursor-default"
+            data-tooltip={softRegionHint}
+            disabled={overviewSrc === null}
+            onClick={() => setShowSoftRegions((shown) => !shown)}
+            type="button"
+          >
+            {showingOverview
+              ? t('modals.imageStack.softRegionsBack')
+              : t('modals.imageStack.softRegions', { number: softRegions.count })}
+          </button>
         )}
       </div>
 

@@ -72,6 +72,7 @@ export function useAndroidBackHandler() {
             resultId: null,
             lastSavedPath: null,
             resultSize: null,
+            softRegions: null,
             sourcePaths: [],
             blendMode: 'focus',
             alignmentMode: 'auto',

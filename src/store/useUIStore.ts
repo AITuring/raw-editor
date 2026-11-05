@@ -52,10 +52,29 @@ export interface ImageStackResultSize {
   renderScale?: number;
 }
 
+/** One region of a focus-scan result that stays soft, in result pixels. */
+export interface ImageStackSoftRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** `sources_soft`: every photo is soft there; `sharper_source_unused`: a sharper photo could not be aligned. */
+  kind: 'sources_soft' | 'sharper_source_unused';
+}
+
+/** The soft regions a focus scan reported, and the overview they are circled on. */
+export interface ImageStackSoftRegions {
+  count: number;
+  sourcesSoft: number;
+  overviewPath: string | null;
+  regions: ImageStackSoftRegion[];
+}
+
 export interface ImageStackModalState {
   detailImageBase64: string | null;
   error: string | null;
   finalImageBase64: string | null;
+  softRegions?: ImageStackSoftRegions | null;
   isOpen: boolean;
   isProcessing: boolean;
   progressMessage: string | null;
@@ -268,6 +287,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     resultId: null,
     lastSavedPath: null,
     resultSize: null,
+    softRegions: null,
     sourcePaths: [],
     blendMode: 'focus',
     alignmentMode: 'auto',

@@ -773,3 +773,155 @@ pub(super) fn write_streaming_owner_map(
     println!("  - Owner map written to {}", path.display());
     Ok(())
 }
+
+/// The detail repair cell by cell (`RAW_EDITOR_REPAIR_TRACE=<prefix>`):
+/// `<prefix>.csv` with every cell the pass looked at, and `<prefix>.png`, one
+/// pixel per repair-grid cell: grey where the canvas already held its
+/// sharpest source, green where a repair brought it within 80 %, yellow
+/// where a repair helped but fell short, red where the donor could not be
+/// aligned, magenta where it disagreed at low frequency, blue where it added
+/// too little detail.
+pub(super) fn write_repair_trace(
+    grid: &super::soft_frames::DetailGrid,
+    outcome: &super::RepairOutcome,
+    images: &[&ImageInfo],
+    prefix: &std::path::Path,
+) -> Result<(), String> {
+    use super::CellOutcome;
+    let name = |frame: usize| {
+        images.get(frame).map_or_else(String::new, |info| {
+            std::path::Path::new(&info.filename)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+    };
+    let (columns, rows) = grid.cell_dimensions();
+    let mut map = image::RgbImage::from_pixel(columns as u32, rows as u32, image::Rgb([0, 0, 0]));
+    for (cell, value) in outcome.detail_after.iter().enumerate() {
+        if value.is_finite() {
+            map.put_pixel(
+                (cell % columns) as u32,
+                (cell / columns) as u32,
+                image::Rgb([90, 90, 90]),
+            );
+        }
+    }
+    let mut csv = String::from("cell,canvas_x,canvas_y,best,donor,before,after,outcome,strain\n");
+    for cell in &outcome.cells {
+        let (centre_x, centre_y) = grid.cell_centre(cell.cell);
+        let colour = match cell.outcome {
+            CellOutcome::Repaired if cell.after >= super::REPAIR_DEFICIT_RATIO * cell.best => {
+                [40, 220, 60]
+            }
+            CellOutcome::Replaced if cell.after >= super::REPAIR_DEFICIT_RATIO * cell.best => {
+                [40, 220, 220]
+            }
+            CellOutcome::Repaired | CellOutcome::Replaced => [255, 210, 40],
+            CellOutcome::Unaligned => [255, 40, 40],
+            CellOutcome::Disagrees => [230, 40, 230],
+            CellOutcome::NoGain => [60, 110, 255],
+        };
+        map.put_pixel(
+            (cell.cell % columns) as u32,
+            (cell.cell / columns) as u32,
+            image::Rgb(colour),
+        );
+        csv.push_str(&format!(
+            "{},{centre_x:.0},{centre_y:.0},{:.5},{},{:.5},{:.5},{:?},{:.4}\n",
+            cell.cell,
+            cell.best,
+            name(cell.donor),
+            cell.before,
+            cell.after,
+            cell.outcome,
+            cell.strain
+        ));
+    }
+    std::fs::write(prefix.with_extension("csv"), csv)
+        .map_err(|error| format!("write repair trace: {error}"))?;
+    map.save(prefix.with_extension("png"))
+        .map_err(|error| format!("write repair map: {error}"))?;
+    // Every measured cell, `<prefix>.grid.csv`, to tune the soft-region
+    // report offline.
+    let mut before = outcome.detail_after.clone();
+    for cell in &outcome.cells {
+        before[cell.cell] = cell.before;
+    }
+    let mut grid_csv =
+        String::from("cell,canvas_x,canvas_y,before,after,best,best_frame,level,clipped\n");
+    for (cell, after) in outcome.detail_after.iter().enumerate() {
+        if !after.is_finite() {
+            continue;
+        }
+        let (centre_x, centre_y) = grid.cell_centre(cell);
+        let (best, frame) = outcome.best[cell];
+        grid_csv.push_str(&format!(
+            "{cell},{centre_x:.0},{centre_y:.0},{:.5},{after:.5},{best:.5},{},{:.4},{:.4}\n",
+            before[cell],
+            name(frame),
+            outcome.level[cell],
+            outcome.clipped[cell],
+        ));
+    }
+    std::fs::write(prefix.with_extension("grid.csv"), grid_csv)
+        .map_err(|error| format!("write repair grid: {error}"))?;
+    Ok(())
+}
+
+/// Images of one repair window (`RAW_EDITOR_REPAIR_PROBE=<dir>;x0,y0,x1,y1;...`,
+/// canvas rectangles): the canvas, the donor at its global pose and the donor
+/// after dense alignment, as 8-bit luma, plus the displacement at the window
+/// centre in the file name.
+pub(super) fn write_repair_probe(
+    window: (usize, usize, usize, usize),
+    info: &ImageInfo,
+    base: &super::Plane,
+    moving: &super::Plane,
+    margin: usize,
+    aligned: &super::Plane,
+    displacement: &super::Displacement,
+) {
+    let Ok(spec) = std::env::var("RAW_EDITOR_REPAIR_PROBE") else {
+        return;
+    };
+    let mut parts = spec.split(';');
+    let Some(directory) = parts.next() else {
+        return;
+    };
+    let (x0, y0, x1, y1) = window;
+    let hit = parts.any(|rect| {
+        let values = rect
+            .split(',')
+            .filter_map(|value| value.trim().parse::<usize>().ok())
+            .collect::<Vec<_>>();
+        values.len() == 4 && values[0] < x1 && values[2] > x0 && values[1] < y1 && values[3] > y0
+    });
+    if !hit {
+        return;
+    }
+    let _ = std::fs::create_dir_all(directory);
+    let to_image = |plane: &super::Plane, offset: usize| {
+        let (width, height) = (plane.width - 2 * offset, plane.height - 2 * offset);
+        image::GrayImage::from_fn(width as u32, height as u32, |x, y| {
+            let value = plane.values[(y as usize + offset) * plane.width + x as usize + offset];
+            image::Luma([if value.is_finite() {
+                (value.clamp(0.0, 1.0) * 255.0) as u8
+            } else {
+                0
+            }])
+        })
+    };
+    let stem = std::path::Path::new(&info.filename)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let [dx, dy] = displacement.at((x1 - x0) as f64 * 0.5, (y1 - y0) as f64 * 0.5);
+    let name = format!(
+        "{directory}/w{x0}_{y0}_{x1}_{y1}-{stem}-d{dx:+.0}_{dy:+.0}-m{:.2}",
+        displacement.matched_share
+    );
+    let _ = to_image(base, 0).save(format!("{name}.canvas.png"));
+    let _ = to_image(moving, margin).save(format!("{name}.donor.png"));
+    let _ = to_image(aligned, 0).save(format!("{name}.aligned.png"));
+}

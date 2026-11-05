@@ -5,6 +5,7 @@ import { Status } from '../components/ui/ExportImportProperties';
 import { useProcessStore } from '../store/useProcessStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
+import type { ImageStackSoftRegion, ImageStackSoftRegions } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { BASIC_MODE } from '../basic/runtime';
 import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
@@ -18,6 +19,33 @@ interface TauriListenerProps {
 }
 
 const normalizeImageStackPath = (path: string): string => path.split('?vc=')[0].replace(/\\/g, '/');
+
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/** The soft regions of an image-stack result, or null when the payload has none or is malformed. */
+const parseImageStackSoftRegions = (payload: unknown): ImageStackSoftRegions | null => {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (!Array.isArray(record.regions)) return null;
+  const regions: ImageStackSoftRegion[] = [];
+  for (const region of record.regions) {
+    if (!region || typeof region !== 'object') continue;
+    const { x, y, width, height, kind } = region as Record<string, unknown>;
+    if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(width) || !isFiniteNumber(height)) continue;
+    if (kind !== 'sources_soft' && kind !== 'sharper_source_unused') continue;
+    regions.push({ x, y, width, height, kind });
+  }
+  if (regions.length === 0) return null;
+  return {
+    count: regions.length,
+    sourcesSoft: regions.filter((region) => region.kind === 'sources_soft').length,
+    overviewPath:
+      typeof record.overviewPath === 'string' && record.overviewPath.length > 0
+        ? convertFileSrc(record.overviewPath.replace(/\\/g, '/'))
+        : null,
+    regions,
+  };
+};
 
 const imageStackBasename = (path: string): string => {
   const normalized = normalizeImageStackPath(path);
@@ -360,6 +388,7 @@ export function useTauriListeners({
                     : {}),
                 }
               : null;
+          const softRegions = parseImageStackSoftRegions(event.payload?.softRegions);
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0
               ? convertFileSrc(previewPath.replace(/\\/g, '/'))
@@ -385,6 +414,7 @@ export function useTauriListeners({
                   resultId: null,
                   lastSavedPath: null,
                   resultSize: null,
+                  softRegions: null,
                 },
               };
             }
@@ -403,6 +433,7 @@ export function useTauriListeners({
                 resultId,
                 lastSavedPath: null,
                 resultSize,
+                softRegions,
                 ...(resolvedOrder ? { sourcePaths: resolvedOrder } : {}),
               },
             };
@@ -426,6 +457,7 @@ export function useTauriListeners({
                 resultId: null,
                 lastSavedPath: null,
                 resultSize: null,
+                softRegions: null,
               },
             };
           });

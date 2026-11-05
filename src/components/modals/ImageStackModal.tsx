@@ -35,7 +35,12 @@ import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
 import { getMessageTaskProgress } from '../../utils/taskProgress';
 import { IMAGE_STACK_MAX_SOURCES } from '../../utils/imageStackPipeline';
-import type { ImageStackAlignmentMode, ImageStackBlendMode, ImageStackResultSize } from '../../store/useUIStore';
+import type {
+  ImageStackAlignmentMode,
+  ImageStackBlendMode,
+  ImageStackResultSize,
+  ImageStackSoftRegions,
+} from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
 import ExportImageDialog from '../../features/export/ExportImageDialog';
 import type { ExportDialogSettings } from '../../features/export/exportDialog';
@@ -48,6 +53,7 @@ interface ImageStackModalProps {
   isProcessing: boolean;
   progressMessage: string | null;
   resultSize: ImageStackResultSize | null;
+  softRegions?: ImageStackSoftRegions | null;
   sourceMetadata?: Record<string, unknown> | null;
   sourcePaths: string[];
   initialBlendMode: ImageStackBlendMode;
@@ -241,6 +247,7 @@ export default function ImageStackModal({
   isProcessing,
   progressMessage,
   resultSize,
+  softRegions = null,
   sourceMetadata = null,
   sourcePaths,
   initialBlendMode,
@@ -524,6 +531,7 @@ export default function ImageStackModal({
                     }
                     onFocusedChange={setIsPreviewFocused}
                     resultSize={resultSize}
+                    softRegions={softRegions}
                     src={finalImageBase64}
                   />
                 ) : (
