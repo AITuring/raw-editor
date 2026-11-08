@@ -80,22 +80,18 @@ where
     // A focus scan may combine several captures of one artwork, one folder
     // each. The capture of the first source composes the canvas, so the
     // canvas keeps one capture's tone and geometry; frames of the others only
-    // fill what it leaves uncovered and lend their detail to the repair.
+    // fill what it leaves uncovered and lend their detail to the repair (see
+    // `captures`).
     let donor_frames = if focus_scan && projection == Projection::Planar {
-        let capture = |info: &ImageInfo| {
-            std::path::Path::new(&info.filename)
-                .parent()
-                .map(std::path::Path::to_path_buf)
-        };
-        let primary = images
-            .iter()
-            .min_by_key(|info| info.id)
-            .map(|info| capture(info));
-        images
-            .iter()
-            .filter(|info| Some(capture(info)) != primary)
-            .map(|info| info.id)
-            .collect::<HashSet<_>>()
+        crate::panorama_utils::captures::composing_capture_ids(images)
+            .map(|composing| {
+                images
+                    .iter()
+                    .map(|info| info.id)
+                    .filter(|id| !composing.contains(id))
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default()
     } else {
         HashSet::new()
     };
@@ -881,6 +877,8 @@ where
             offset: (offset_x, offset_y),
             canvas: (width, height),
         };
+        #[cfg(test)]
+        let crops_before = super::diagnostics::repair_crops(&output);
         let outcome = repair_detail(
             &mut output,
             (crop.0, crop.1),
@@ -899,6 +897,8 @@ where
         // What stays soft is circled for the user; see `soft_report`.
         let regions = soft_regions(repair_grid, &outcome, crop);
         report_soft_regions(&app, &output, &regions)?;
+        #[cfg(test)]
+        super::diagnostics::write_repair_crops(crops_before, &output)?;
         #[cfg(test)]
         if let Some(path) = std::env::var_os("RAW_EDITOR_REPAIR_TRACE") {
             super::diagnostics::write_repair_trace(

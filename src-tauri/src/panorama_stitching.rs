@@ -377,6 +377,12 @@ mod focus_stack_order;
 use focus_stack_order::build_focus_stack_stitching_order;
 use focus_stack_order::build_focus_stack_stitching_order_with_report;
 
+mod capture_gauge;
+
+use capture_gauge::composing_capture_gauge;
+#[cfg(test)]
+use capture_gauge::median_canvas_scale;
+
 mod focus_global_observations;
 
 #[cfg(test)]

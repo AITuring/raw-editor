@@ -925,3 +925,73 @@ pub(super) fn write_repair_probe(
     let _ = to_image(moving, margin).save(format!("{name}.donor.png"));
     let _ = to_image(aligned, 0).save(format!("{name}.aligned.png"));
 }
+
+/// Output crops before the detail repair: the file prefix, and each crop
+/// with its rectangle `(x0, y0, x1, y1)`.
+pub(super) type RepairCrops = (String, Vec<((u32, u32, u32, u32), image::RgbImage)>);
+
+/// Colour crops of the output before the detail repair
+/// (`RAW_EDITOR_REPAIR_CROPS=<prefix>;x0,y0,x1,y1;...`, output pixels), for
+/// `write_repair_crops` to set beside the same crops after it.
+pub(super) fn repair_crops(output: &image::Rgb32FImage) -> Option<RepairCrops> {
+    let spec = std::env::var("RAW_EDITOR_REPAIR_CROPS").ok()?;
+    let mut parts = spec.split(';');
+    let prefix = parts.next()?.to_string();
+    let boxes = parts
+        .filter_map(|rect| {
+            let values = rect
+                .split(',')
+                .filter_map(|value| value.trim().parse::<u32>().ok())
+                .collect::<Vec<_>>();
+            (values.len() == 4 && values[2] > values[0] && values[3] > values[1])
+                .then(|| (values[0], values[1], values[2], values[3]))
+        })
+        .collect::<Vec<_>>();
+    Some((
+        prefix,
+        boxes
+            .into_iter()
+            .map(|rect| (rect, display_crop(output, rect)))
+            .collect(),
+    ))
+}
+
+/// An 8-bit copy of `rect` of the display-referred `output`.
+fn display_crop(
+    output: &image::Rgb32FImage,
+    (x0, y0, x1, y1): (u32, u32, u32, u32),
+) -> image::RgbImage {
+    let (x1, y1) = (x1.min(output.width()), y1.min(output.height()));
+    image::RgbImage::from_fn(x1.saturating_sub(x0), y1.saturating_sub(y0), |x, y| {
+        let pixel = output.get_pixel(x0 + x, y0 + y);
+        image::Rgb(std::array::from_fn(|channel| {
+            (pixel[channel].clamp(0.0, 1.0) * 255.0).round() as u8
+        }))
+    })
+}
+
+/// Writes `<prefix>-<x0>_<y0>.jpg` per crop: before the repair on the left,
+/// after it on the right.
+pub(super) fn write_repair_crops(
+    before: Option<RepairCrops>,
+    output: &image::Rgb32FImage,
+) -> Result<(), String> {
+    let Some((prefix, crops)) = before else {
+        return Ok(());
+    };
+    for (rect, left) in crops {
+        let right = display_crop(output, rect);
+        let mut sheet = image::RgbImage::from_pixel(
+            left.width() * 2 + 12,
+            left.height(),
+            image::Rgb([255, 255, 255]),
+        );
+        image::imageops::replace(&mut sheet, &left, 0, 0);
+        image::imageops::replace(&mut sheet, &right, i64::from(left.width()) + 12, 0);
+        let path = format!("{prefix}-{}_{}.jpg", rect.0, rect.1);
+        sheet
+            .save(&path)
+            .map_err(|error| format!("write repair crop {path}: {error}"))?;
+    }
+    Ok(())
+}

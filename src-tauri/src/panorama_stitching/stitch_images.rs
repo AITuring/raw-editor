@@ -57,18 +57,19 @@ use super::{
     absolute_source_path, add_capture_sequence_bridges, apply_virtual_tile_prior_repair,
     build_focus_layer_warp, build_focus_stack_stitching_order_with_report, build_foreground_mask,
     build_stitching_order, canonical_match_direction, capture_groups_form_singleton_scan,
-    detect_foreground_range, detect_vertical_edge_columns, ensure_focus_memory_available,
-    excluded_source_records, filter_flat_artwork_blurry_sources, find_alignment_features,
-    find_top_alignment_features, flat_artwork_overlap_render_order, focus_alignment_support,
-    focus_anchor_render_frames, focus_capture_groups_with_grouping, focus_overlap_components,
-    focus_rescue_match_is_verified, focus_source_order_group_compositor_order,
-    focus_stack_cache_key_inputs, focus_stack_source_digests, focus_station_binding_evidence,
-    focus_station_topology, focus_unstitched_sources_are_redundant,
-    geometry_disconnected_user_error, horizontal_edge_row_candidates,
-    install_virtual_tile_match_planes, is_auxiliary_stitch_file, is_generated_stitch_output,
-    load_prepared_stack_source, log_virtual_tile_candidate, match_image_pair, matrix3_row_major,
-    memory_safe_panorama_render_scale, native_photometric_pairs,
-    normalize_stack_raw_display_exposure, optimize_focus_stack_global_homographies_with_reference,
+    composing_capture_gauge, detect_foreground_range, detect_vertical_edge_columns,
+    ensure_focus_memory_available, excluded_source_records, filter_flat_artwork_blurry_sources,
+    find_alignment_features, find_top_alignment_features, flat_artwork_overlap_render_order,
+    focus_alignment_support, focus_anchor_render_frames, focus_capture_groups_with_grouping,
+    focus_overlap_components, focus_rescue_match_is_verified,
+    focus_source_order_group_compositor_order, focus_stack_cache_key_inputs,
+    focus_stack_source_digests, focus_station_binding_evidence, focus_station_topology,
+    focus_unstitched_sources_are_redundant, geometry_disconnected_user_error,
+    horizontal_edge_row_candidates, install_virtual_tile_match_planes, is_auxiliary_stitch_file,
+    is_generated_stitch_output, load_prepared_stack_source, log_virtual_tile_candidate,
+    match_image_pair, matrix3_row_major, memory_safe_panorama_render_scale,
+    native_photometric_pairs, normalize_stack_raw_display_exposure,
+    optimize_focus_stack_global_homographies_with_reference,
     order_focus_render_sources_by_capture_group, pairs_to_match_for_images,
     plan_virtual_tile_prior_repairs, populate_station_relation_candidate_geometry,
     prepare_focus_rescue_image, raw_display_channel_percentile,
@@ -90,8 +91,9 @@ use super::{
 };
 #[cfg(test)]
 use super::{
-    acceptance_tests, pair_harness_disconnected_focus_geometry, source_raw_direct_pair_diagnostics,
-    source_raw_layer_pair_diagnostics, structural_oracle, write_alignment_cache,
+    acceptance_tests, median_canvas_scale, pair_harness_disconnected_focus_geometry,
+    source_raw_direct_pair_diagnostics, source_raw_layer_pair_diagnostics, structural_oracle,
+    write_alignment_cache,
 };
 
 pub(crate) fn stitch_images_with_options<R: Runtime>(
@@ -1052,6 +1054,38 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         {
             global_homographies = refined;
         }
+    }
+    // Several captures of one artwork: the canvas takes the scale and
+    // orientation the composing capture has stitched alone (`capture_gauge`).
+    if blend_mode == BlendMode::FocusStack
+        && projection == Projection::Planar
+        && let Some((reference, reanchored)) =
+            composing_capture_gauge(&image_data, &global_homographies)
+    {
+        println!(
+            "  - Several captures: the canvas follows the composing capture, anchored to its first source {}",
+            Path::new(&image_data[reference].filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+        );
+        global_homographies = reanchored;
+    }
+    #[cfg(test)]
+    if blend_mode == BlendMode::FocusStack && !global_homographies.is_empty() {
+        let all = image_data
+            .iter()
+            .map(|image| image.id)
+            .collect::<HashSet<_>>();
+        println!(
+            "  - Canvas gauge: median canvas scale {:.3}, first source {:.3}",
+            median_canvas_scale(&image_data, &global_homographies, &all),
+            median_canvas_scale(
+                &image_data,
+                &global_homographies,
+                &HashSet::from([image_data[0].id])
+            ),
+        );
     }
     let focus_layer_warp = (blend_mode == BlendMode::FocusStack).then(|| {
         build_focus_layer_warp(
