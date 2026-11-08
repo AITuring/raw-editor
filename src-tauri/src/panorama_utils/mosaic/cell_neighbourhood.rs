@@ -1,12 +1,47 @@
-//! What the canvas reaches around a cell of a detail grid, on like material.
+//! What the canvas reaches around a cell of a detail grid, on like material,
+//! and how the cells of a grid hang together.
 //!
 //! The detail repair and the soft-region report both compare a cell with
 //! the cells around it whose mean luma is close to its own: a smooth mount
 //! or acrylic edge must not read as soft next to textured silk.
 
 use rayon::prelude::*;
+use std::collections::{HashSet, VecDeque};
 
 use super::DetailGrid;
+
+/// Connected groups of cells, 8-connected on a grid `columns` wide.
+pub(super) fn components(cells: &[usize], columns: usize) -> Vec<Vec<usize>> {
+    let set = cells.iter().copied().collect::<HashSet<_>>();
+    let mut seen = HashSet::new();
+    let mut groups = Vec::new();
+    for &start in cells {
+        if !seen.insert(start) {
+            continue;
+        }
+        let mut group = Vec::new();
+        let mut pending = VecDeque::from([start]);
+        while let Some(cell) = pending.pop_front() {
+            group.push(cell);
+            let (x, y) = ((cell % columns) as i64, (cell / columns) as i64);
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= columns as i64 {
+                        continue;
+                    }
+                    let neighbour = ny as usize * columns + nx as usize;
+                    if set.contains(&neighbour) && seen.insert(neighbour) {
+                        pending.push_back(neighbour);
+                    }
+                }
+            }
+        }
+        group.sort_unstable();
+        groups.push(group);
+    }
+    groups
+}
 
 /// Cells each way the neighbourhood reaches: about 2500 output pixels on
 /// 祁序1, wider than a band no frame of a capture holds in focus (one ran

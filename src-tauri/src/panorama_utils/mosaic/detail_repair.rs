@@ -23,8 +23,8 @@ use nalgebra::Matrix3;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 
+use super::cell_neighbourhood::components;
 use super::{
     DetailGrid, Displacement, Field, FrameDetail, GRID_STEP, LayerSampler, Plane, align, luma,
     measure_image_detail, measure_image_tone, neighbourhood_reference, planar_canvas_scale,
@@ -48,7 +48,8 @@ const REPAIR_LOCAL_SHARE: f64 = 0.8;
 /// most this factor.
 const LEVEL_SIMILARITY: f64 = 1.5;
 /// The surroundings agree with an aligned donor when this share of their
-/// structured cells correlates at least this well after the low-pass.
+/// structure (every cell weighted by its low-pass contrast) lies in cells
+/// that correlate at least this well after the low-pass.
 const RING_MIN_CORRELATION: f64 = 0.85;
 const RING_MIN_SHARE: f64 = 0.75;
 /// Surrounding cells within this many cells of a soft cell decide whether it
@@ -157,37 +158,25 @@ pub(super) struct RepairOutcome {
     pub(super) clipped: Vec<f64>,
 }
 
-/// Connected groups of cells, 8-connected on the grid.
-fn components(cells: &[usize], columns: usize) -> Vec<Vec<usize>> {
-    let set = cells.iter().copied().collect::<HashSet<_>>();
-    let mut seen = HashSet::new();
-    let mut groups = Vec::new();
-    for &start in cells {
-        if !seen.insert(start) {
-            continue;
-        }
-        let mut group = Vec::new();
-        let mut pending = VecDeque::from([start]);
-        while let Some(cell) = pending.pop_front() {
-            group.push(cell);
-            let (x, y) = ((cell % columns) as i64, (cell / columns) as i64);
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let (nx, ny) = (x + dx, y + dy);
-                    if nx < 0 || ny < 0 || nx >= columns as i64 {
-                        continue;
-                    }
-                    let neighbour = ny as usize * columns + nx as usize;
-                    if set.contains(&neighbour) && seen.insert(neighbour) {
-                        pending.push_back(neighbour);
-                    }
-                }
+/// Relative contrast (standard deviation over the level) of a low-passed
+/// plane over a window, 0 where it holds no finite value.
+fn window_contrast(plane: &Plane, (x0, y0, x1, y1): Rect) -> f64 {
+    let (mut sum, mut squares, mut count) = (0.0, 0.0, 0.0);
+    for y in y0..y1 {
+        for &value in &plane.values[y * plane.width + x0..y * plane.width + x1] {
+            if value.is_finite() {
+                let value = f64::from(value);
+                sum += value;
+                squares += value * value;
+                count += 1.0;
             }
         }
-        group.sort_unstable();
-        groups.push(group);
     }
-    groups
+    if count == 0.0 {
+        return 0.0;
+    }
+    let mean = sum / count;
+    (squares / count - mean * mean).max(0.0).sqrt() / mean.abs().max(0.04)
 }
 
 /// Pearson correlation of two low-passed planes over a window: `None` when
@@ -315,8 +304,9 @@ fn broad_blur(plane: &Plane, sigma: f32) -> Plane {
 /// of its own tone. One whose canvas disagrees (a soft frame displaced from
 /// its neighbours holds it) is replaced by the donor wherever the donor agrees
 /// with the surrounding canvas, with the tone the surroundings set. A cell
-/// whose alignment bends the donor (see `MAX_FIELD_STRAIN`) is left alone.
-/// Returns the outcome of every cell and the strain of its alignment.
+/// whose alignment bends the donor (see `MAX_FIELD_STRAIN`) can only take
+/// detail, from the donor under the field's affine fit. Returns the outcome
+/// of every cell and the strain of its alignment.
 #[allow(clippy::too_many_arguments)]
 fn repair_window(
     output: &mut Rgb32FImage,
@@ -409,8 +399,8 @@ fn repair_window(
         |cx: f64, cy: f64| cx >= x0 as f64 && cy >= y0 as f64 && cx < x1 as f64 && cy < y1 as f64;
     let feather = (2.0 * FEATHER_SIGMA) as usize;
     // The donor resampled through `displacement`, and what every cell may
-    // take from it.
-    let evaluate = |displacement: &Displacement| {
+    // take from it (its detail only, unless `may_replace`).
+    let evaluate = |displacement: &Displacement, may_replace: bool| {
         let mut donor = vec![None; width * height];
         donor
             .par_chunks_mut(width)
@@ -431,29 +421,42 @@ fn repair_window(
         let donor_low = donor_luma.blurred(VERIFY_SIGMA);
         // The surroundings next to a soft cell must agree with the aligned
         // donor before that cell may take the donor's own low frequencies:
-        // they are what its replacement has to continue. A flat neighbour
-        // has no structure that could break.
+        // they are what its replacement has to continue. A neighbour counts
+        // by the structure it holds (its low-pass contrast, in the canvas
+        // or the donor): a flat one has none that could break, faint silk
+        // agrees with almost any donor, and an edge the donor does not
+        // continue (an acrylic bar it sees elsewhere) outweighs it.
         let ring = (first_row..=last_row)
             .flat_map(|row| (first_column..=last_column).map(move |column| row * columns + column))
             .filter(|cell| !soft.contains(cell))
             .filter_map(|cell| {
-                cell_rect(cell).map(|rect| (cell, window_correlation(&base_low, &donor_low, rect)))
+                cell_rect(cell).map(|rect| {
+                    let structure =
+                        window_contrast(&base_low, rect).max(window_contrast(&donor_low, rect));
+                    (
+                        cell,
+                        window_correlation(&base_low, &donor_low, rect),
+                        structure,
+                    )
+                })
             })
             .collect::<Vec<_>>();
         let ring_agrees_near = |cell: usize| {
             let (column, row) = ((cell % columns) as i64, (cell / columns) as i64);
-            let near = ring
-                .iter()
-                .filter(|(neighbour, _)| {
-                    let (nx, ny) = ((neighbour % columns) as i64, (neighbour / columns) as i64);
-                    (nx - column).abs() <= RING_REACH && (ny - row).abs() <= RING_REACH
-                })
-                .filter_map(|(_, correlation)| *correlation)
-                .collect::<Vec<_>>();
-            near.iter()
-                .filter(|&&correlation| correlation >= RING_MIN_CORRELATION)
-                .count() as f64
-                >= RING_MIN_SHARE * near.len() as f64
+            let (mut agreeing, mut total) = (0.0, 0.0);
+            for &(neighbour, correlation, structure) in &ring {
+                let (nx, ny) = ((neighbour % columns) as i64, (neighbour / columns) as i64);
+                if (nx - column).abs() <= RING_REACH
+                    && (ny - row).abs() <= RING_REACH
+                    && let Some(correlation) = correlation
+                {
+                    total += structure;
+                    if correlation >= RING_MIN_CORRELATION {
+                        agreeing += structure;
+                    }
+                }
+            }
+            agreeing >= RING_MIN_SHARE * total
         };
         let mut evaluation = Evaluation {
             outcomes: Vec::with_capacity(cells.len()),
@@ -503,7 +506,7 @@ fn repair_window(
             } else if inner.is_none_or(|correlation| correlation >= VERIFY_MIN_CORRELATION) {
                 evaluation.transfer.push(rect);
                 CellOutcome::Repaired
-            } else if ring_agrees_near(cell) {
+            } else if may_replace && ring_agrees_near(cell) {
                 evaluation.replace.push(rect);
                 CellOutcome::Replaced
             } else if unaligned {
@@ -517,13 +520,17 @@ fn repair_window(
         evaluation.donor_luma = donor_luma;
         evaluation
     };
-    let mut evaluation = evaluate(&displacement);
+    let mut evaluation = evaluate(&displacement, true);
     // Where the dense field bends the donor, its affine fit cannot, and may
     // still carry the donor close enough for the checks to pass: on weakly
     // structured silk a few wrong matches fold the field while the donor
     // as a whole is placed right. Only cells the dense field leaves
     // unrepaired take the affine donor (with their feather); a repaired cell
-    // keeps the dense one.
+    // keeps the dense one. The affine donor only lends detail where the
+    // canvas agrees with it, and never replaces the canvas: the bend may be
+    // the scene, whatever stands off the silk shifting against it from one
+    // view to the next, and cells at the upper acrylic bar of 祁序2 replaced
+    // by affine donors showed the bar twice.
     let bent = evaluation.outcomes.iter().any(|&(_, outcome, strain)| {
         outcome == CellOutcome::Unaligned && strain > MAX_FIELD_STRAIN
     });
@@ -531,7 +538,7 @@ fn repair_window(
         && bent
         && let Some(smooth) = displacement.affine_fit()
     {
-        let alternative = evaluate(&smooth);
+        let alternative = evaluate(&smooth, false);
         let taken =
             |outcome: CellOutcome| matches!(outcome, CellOutcome::Repaired | CellOutcome::Replaced);
         let mut from_alternative = vec![false; width * height];
