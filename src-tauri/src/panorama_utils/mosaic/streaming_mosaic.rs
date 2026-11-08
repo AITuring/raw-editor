@@ -20,21 +20,23 @@ use tauri::Emitter;
 use tauri::Runtime;
 
 use super::{
-    DetailGrid, Field, FocusBand, FrameDetail, GRID_STEP, LayerSampler, MosaicToneFinish,
-    NEAR_BEST_RATIO, NativeRefineMode, OwnerStations, REPAIR_CELLS_LONG_SIDE, REPAIR_MIN_CELL,
-    RepairScene, SOFT_FRAME_RATIO, STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS,
-    STREAMING_OWNERSHIP_FEATHER, STREAMING_SCAN_EDGE_MARGIN_FRACTION,
-    STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT, STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE,
-    StreamingLowFrequencyConsensus, StreamingMosaicStore, analysis_density_source,
+    DetailGrid, ExposureGrid, Field, FocusBand, FrameDetail, FrameSurvey, GRID_STEP, LayerSampler,
+    MosaicToneFinish, NEAR_BEST_RATIO, NativeRefineMode, OwnerStations, REPAIR_CELLS_LONG_SIDE,
+    REPAIR_MIN_CELL, RepairScene, SOFT_FRAME_RATIO, STREAMING_ANALYSIS_LONG_SIDE,
+    STREAMING_FLAT_TONE_SIGMA_CELLS, STREAMING_OWNERSHIP_FEATHER,
+    STREAMING_SCAN_EDGE_MARGIN_FRACTION, STREAMING_SCAN_TRANSITION_FOCUS_WEIGHT,
+    STREAMING_SEAM_TONE_SIGMA_CELLS, STREAMING_TILE_SIZE, StreamingLowFrequencyConsensus,
+    StreamingMosaicStore, analysis_density_source, apply_frame_exposure,
     apply_streaming_seam_harmonization, apply_streaming_source_owner_low_frequency_correction,
-    copy_streaming_owned_tile_region, copy_streaming_tile_region, detail_ratios,
+    copy_streaming_owned_tile_region, copy_streaming_tile_region, detail_ratios, exposure_summary,
     fill_streaming_uncovered_tile_region, intra_station_frame_record,
-    materialize_streaming_focus_output, measure_frame_detail, measure_output_focus, median,
-    planar_canvas_scale, prefilter_minified_source, refine_layer_from_analysis,
-    refine_native_layer_streaming, repair_detail, repair_summary, report_soft_regions,
-    sharpness_order, smooth_streaming_low_frequency_illumination, soft_frames, soft_regions,
+    materialize_streaming_focus_output, measure_output_focus, median, planar_canvas_scale,
+    prefilter_minified_source, refine_layer_from_analysis, refine_native_layer_streaming,
+    repair_detail, repair_summary, report_soft_regions, sharpness_order,
+    smooth_streaming_low_frequency_illumination, soft_frames, soft_regions, solve_frame_exposures,
     streaming_candidate_analysis, streaming_ownership_from_analysis, streaming_ownership_grid,
     streaming_refinement_pair, streaming_seam_harmonization, streaming_tone_field_from_analysis,
+    survey_frames,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -145,62 +147,42 @@ where
             REPAIR_CELLS_LONG_SIDE,
             REPAIR_MIN_CELL,
         );
-        let mut details = Vec::with_capacity(images.len());
-        let mut repair_details = Vec::with_capacity(images.len());
-        for (index, &info) in images.iter().enumerate() {
-            let _ = app.emit(
-                event,
-                format!(
-                    "Measuring the detail of source {} of {}",
-                    index + 1,
-                    images.len()
-                ),
-            );
-            let transform = &homographies[&info.id];
-            let Some((left, right, top, bottom)) = transformed_image_region(
-                info, transform, projection, offset_x, offset_y, width, height,
-            ) else {
-                details.push(FrameDetail::default());
-                repair_details.push(FrameDetail::default());
-                continue;
-            };
-            let (source, source_divisor) =
-                prefilter_minified_source(load(info)?, planar_canvas_scale(info, transform));
-            let layer_width = right - left + 1;
-            let layer_height = bottom - top + 1;
-            let layer_scale = (layer_width.max(layer_height) as f64
-                / STREAMING_ANALYSIS_LONG_SIDE as f64)
-                .max(1.0);
-            let sampler = LayerSampler {
-                info,
-                source: &source,
-                source_divisor,
-                inverse: transform
-                    .try_inverse()
-                    .ok_or("The stack contains a non-invertible alignment.")?,
-                native_mapping: None,
-                projection,
-                offset: (offset_x, offset_y),
-                left,
-                top,
-                scale: layer_scale,
-                residual: Field::new(
-                    (layer_width as f64 / layer_scale).ceil() as u32,
-                    (layer_height as f64 / layer_scale).ceil() as u32,
-                    GRID_STEP as f64,
-                ),
-            };
-            details.push(measure_frame_detail(
-                &sampler,
-                (left, right, top, bottom),
-                &grid,
-            ));
-            repair_details.push(measure_frame_detail(
-                &sampler,
-                (left, right, top, bottom),
-                &repair_grid,
-            ));
-        }
+        let exposure_grid = ExposureGrid::new(width, height);
+        let FrameSurvey {
+            mut details,
+            repair_details,
+            tones,
+        } = survey_frames(
+            images,
+            homographies,
+            projection,
+            (offset_x, offset_y),
+            (width, height),
+            (&grid, &repair_grid, &exposure_grid),
+            &app,
+            event,
+            load,
+        )?;
+        let gains = solve_frame_exposures(&exposure_grid, &tones);
+        #[cfg(test)]
+        super::frame_exposure::trace_frame_exposures(
+            &images
+                .iter()
+                .map(|info| info.filename.clone())
+                .collect::<Vec<_>>(),
+            &exposure_grid,
+            &tones,
+            &gains,
+        );
+        println!(
+            "  - Focus scan: exposure solved over all overlaps: {}",
+            exposure_summary(&gains)
+        );
+        let gains = images
+            .iter()
+            .map(|info| info.id)
+            .zip(gains)
+            .collect::<HashMap<_, _>>();
         // The composition decisions compare the composing capture's frames
         // only; the repair grid keeps every frame.
         for (detail, info) in details.iter_mut().zip(images) {
@@ -235,11 +217,27 @@ where
             skipped,
             Some((grid, details)),
             Some((repair_grid, repair_details)),
+            gains,
         )
     } else {
-        (HashSet::new(), None, None)
+        (HashSet::new(), None, None, HashMap::new())
     };
-    let (skipped_soft_frames, soft_frame_details, repair_measurements) = skipped_soft_frames;
+    let (skipped_soft_frames, soft_frame_details, repair_measurements, frame_gains) =
+        skipped_soft_frames;
+    // Every frame from here on carries its solved exposure (`frame_exposure`).
+    let mut load = |info: &ImageInfo| {
+        let mut image = load(info)?;
+        if let Some(exposure) = frame_gains.get(&info.id) {
+            apply_frame_exposure(
+                &mut image,
+                exposure,
+                &homographies[&info.id],
+                (offset_x, offset_y),
+                (info.width, info.height),
+            );
+        }
+        Ok::<_, String>(image)
+    };
     // Every frame's detail relative to the sharpest one per detail cell, and
     // the frame behind every source owner label written so far: together they
     // tell a seam where the canvas holds a frame known to be soft.
@@ -678,8 +676,14 @@ where
         // flat path deliberately has no second owner-relation solve: raw
         // overlap ratios mix unlike brush/wood content and can become a
         // source-sized gain block.
-        let write_tone = if panorama_transition
-            && std::env::var_os("RAW_EDITOR_SKIP_FLAT_TONE_CORRECTION").is_some()
+        // A focus scan whose exposures were solved jointly (`frame_exposure`)
+        // writes every frame as it is: the per-layer field, matched to
+        // whatever the canvas held before, chained the level of the first
+        // frame of each region into frame-sized blocks again (枫鹰雉鸡's upper
+        // left came out twice as bright as the silk below it).
+        let write_tone = if !frame_gains.is_empty()
+            || panorama_transition
+                && std::env::var_os("RAW_EDITOR_SKIP_FLAT_TONE_CORRECTION").is_some()
         {
             Field::new(analysis_width, analysis_height, 112.0)
         } else {
@@ -885,7 +889,7 @@ where
             &scene,
             repair_grid,
             repair_details,
-            load,
+            &mut load,
             |donor, donors| {
                 let _ = app.emit(
                     event,

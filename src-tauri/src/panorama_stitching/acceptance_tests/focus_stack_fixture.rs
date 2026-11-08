@@ -201,7 +201,7 @@ fn real_saved_capture_station_from_env() {
             .find(|s| s["id"].as_u64().unwrap() as usize == id)
             .unwrap();
         let path = source["filename"].as_str().unwrap().to_string();
-        let prepared = load_prepared_stack_source(&path, &settings, exposure).unwrap();
+        let prepared = load_prepared_stack_source(&path, &settings, exposure.as_ref()).unwrap();
         let (w, h, scale) = processing::calculate_downscale_dimensions_capped(
             prepared.image.width(),
             prepared.image.height(),
@@ -275,7 +275,8 @@ fn real_saved_capture_station_from_env() {
     }
     let references = images.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
-        load_prepared_stack_source(&info.filename, &settings, exposure).map(|p| p.image.to_rgb32f())
+        load_prepared_stack_source(&info.filename, &settings, exposure.as_ref())
+            .map(|p| p.image.to_rgb32f())
     };
     let app = tauri::test::mock_app();
     let rendered = stitching::focus_stack_stitcher_unfilled(
@@ -316,7 +317,7 @@ fn real_saved_capture_station_from_env() {
             let Some(refinement) = masks.source_refinements.get(&info.id) else {
                 continue;
             };
-            let source = load_prepared_stack_source(&info.filename, &settings, exposure)
+            let source = load_prepared_stack_source(&info.filename, &settings, exposure.as_ref())
                 .unwrap()
                 .image
                 .to_rgb32f();

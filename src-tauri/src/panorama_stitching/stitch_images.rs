@@ -320,12 +320,16 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // gains.  Collect the inexpensive low-resolution percentile while the
     // preparation workers already have each developed frame in memory; the
     // rendering closure below applies one robust gain to every RAW.
-    let raw_exposure_reference = focus_stack
+    let raw_exposure_reference_by_camera = focus_stack
         .then(|| stack_raw_exposure_reference(&image_paths))
         .flatten();
-    if let Some(reference) = raw_exposure_reference {
-        println!("Shared RAW physical exposure reference: {reference:.6} (time × ISO / aperture²)");
+    if let Some(reference) = &raw_exposure_reference_by_camera {
+        println!(
+            "Shared RAW physical exposure reference (time × ISO / aperture², per camera): {}",
+            reference.describe()
+        );
     }
+    let raw_exposure_reference = raw_exposure_reference_by_camera.as_ref();
     let raw_display_highs = Mutex::new(Vec::<f32>::new());
 
     let start_time = Instant::now();
@@ -1269,6 +1273,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let has_isolated_focus_sources = focus_station_grouping_outcome
         .as_ref()
         .is_some_and(|(_, _, grouping)| !grouping.isolated.is_empty());
+    // A selection from several folders (several captures, or parts of one
+    // put in folders of their own) is fused by the source-scan compositor on
+    // the global poses, which composes from the first capture and lets any
+    // other fill and lend detail (`panorama_utils::captures`). Its stations
+    // need not relate: 枫鹰雉鸡's head was shot at 1.4 times the magnification
+    // of its body, beyond what a station relation accepts.
+    let several_captures = crate::panorama_utils::captures::spans_several_folders(
+        &image_data.iter().collect::<Vec<_>>(),
+    );
     let focus_capture_groups = focus_station_grouping_outcome.map(|(groups, _, _)| groups);
     let focus_capture_group_ids = focus_capture_groups.as_ref().map(|groups| {
         let mut ids = HashMap::new();
@@ -1661,13 +1674,20 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             let source_scan_legacy_fallback = settings.stack_compositor.is_none()
                 && configured_compositor == StackCompositorChoice::LayeredVirtualTile
                 && (has_isolated_focus_sources
+                    || several_captures
                     || focus_capture_groups
                         .as_deref()
                         .is_some_and(capture_groups_form_singleton_scan));
             let compositor_choice = if source_scan_legacy_fallback {
-                println!(
-                    "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
-                );
+                if several_captures {
+                    println!(
+                        "  - Sources from several folders: fusing them with the legacy focus compositor on their global poses"
+                    );
+                } else {
+                    println!(
+                        "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
+                    );
+                }
                 StackCompositorChoice::LegacySingleLayerMosaic
             } else {
                 configured_compositor

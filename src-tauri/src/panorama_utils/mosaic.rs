@@ -73,6 +73,15 @@ use dense_align::{Displacement, Plane, align};
 
 mod detail_repair;
 
+mod frame_exposure;
+mod frame_survey;
+
+use frame_survey::{FrameSurvey, survey_frames};
+
+use frame_exposure::{
+    ExposureGrid, apply_frame_exposure, exposure_summary, sample_frame_tone, solve_frame_exposures,
+};
+
 #[cfg(test)]
 use detail_repair::CellOutcome;
 use detail_repair::{REPAIR_DEFICIT_RATIO, RepairOutcome};

@@ -290,33 +290,73 @@ pub(super) fn stack_raw_exposure_from_bytes(bytes: &[u8]) -> Option<f64> {
     (time > 0.0 && aperture > 0.0 && iso > 0 && exposure.is_finite()).then_some(exposure)
 }
 
-pub(super) fn stack_raw_exposure_reference(paths: &[String]) -> Option<f64> {
-    let mut exposures = Vec::with_capacity(paths.len());
-    let mut camera = None;
+/// The camera a RAW was taken with: its EXIF make and model.
+fn raw_camera(path: &str, bytes: &[u8]) -> Option<(String, String)> {
+    let metadata = crate::exif_processing::read_exif_data_from_bytes(path, bytes);
+    Some((
+        metadata.get("Make")?.clone(),
+        metadata.get("Model")?.clone(),
+    ))
+}
+
+/// The median photon exposure of every camera in a RAW stack. Each frame is
+/// brought to its own camera's median: time × ISO / aperture² compares frames
+/// of one camera exactly, while two cameras differ by their sensitivity, so
+/// what is left between cameras is the overlap-measured tone's to settle.
+/// 枫鹰雉鸡 mixes 1/2 s and 1/8 s frames of one Sony with a single Nikon
+/// overview; requiring one camera left all of them unnormalised.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct RawExposureReference {
+    by_camera: HashMap<(String, String), (f64, usize)>,
+}
+
+impl RawExposureReference {
+    fn exposure_for(&self, path: &str, bytes: &[u8]) -> Option<f64> {
+        self.by_camera
+            .get(&raw_camera(path, bytes)?)
+            .map(|&(exposure, _)| exposure)
+    }
+
+    /// One line per camera for the run log.
+    pub(super) fn describe(&self) -> String {
+        let mut cameras = self
+            .by_camera
+            .iter()
+            .map(|((make, model), (exposure, frames))| {
+                format!("{make} {model} {exposure:.6} ({frames} frame(s))")
+            })
+            .collect::<Vec<_>>();
+        cameras.sort();
+        cameras.join(", ")
+    }
+}
+
+pub(super) fn stack_raw_exposure_reference(paths: &[String]) -> Option<RawExposureReference> {
+    let mut exposures = HashMap::<(String, String), Vec<f64>>::new();
     for path in paths {
         if !is_raw_file(path) {
             return None;
         }
         let bytes = read_file_mapped(Path::new(path)).ok()?;
-        let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
-        let identity = (
-            metadata.get("Make")?.clone(),
-            metadata.get("Model")?.clone(),
-        );
-        if camera.as_ref().is_some_and(|camera| camera != &identity) {
-            return None;
-        }
-        camera = Some(identity);
-        exposures.push(stack_raw_exposure_from_bytes(&bytes)?);
+        exposures
+            .entry(raw_camera(path, &bytes)?)
+            .or_default()
+            .push(stack_raw_exposure_from_bytes(&bytes)?);
     }
-    exposures.sort_by(f64::total_cmp);
-    exposures.get(exposures.len() / 2).copied()
+    let by_camera = exposures
+        .into_iter()
+        .map(|(camera, mut values)| {
+            values.sort_by(f64::total_cmp);
+            (camera, (values[values.len() / 2], values.len()))
+        })
+        .collect::<HashMap<_, _>>();
+    (!by_camera.is_empty()).then_some(RawExposureReference { by_camera })
 }
 
 pub(super) fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
+    raw_exposure_reference: Option<&RawExposureReference>,
 ) -> Result<PreparedStackSource, String> {
     let file_data = read_file_mapped(Path::new(filename))
         .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
@@ -338,6 +378,7 @@ pub(super) fn load_prepared_stack_source(
         let calibration =
             crate::lens_correction::stack_lens_calibration(&metadata, image.dimensions());
         if let Some(reference) = raw_exposure_reference
+            .and_then(|reference| reference.exposure_for(filename, &file_data))
             && let Some(exposure) = stack_raw_exposure_from_bytes(&file_data)
         {
             let gain = (reference / exposure) as f32;
@@ -474,7 +515,7 @@ pub(super) fn raw_display_channel_percentile(image: &DynamicImage) -> Option<f32
 pub(super) fn prepare_focus_rescue_image(
     image: &ImageInfo,
     settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
+    raw_exposure_reference: Option<&RawExposureReference>,
     brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
 ) -> Result<ImageInfo, String> {
     let prepared = load_prepared_stack_source(&image.filename, settings, raw_exposure_reference)?;
