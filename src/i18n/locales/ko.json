@@ -1577,6 +1577,8 @@
       "softRegions": "흐린 영역 {{number}}곳",
       "softRegionsBack": "결과로 돌아가기",
       "softRegionsHint": "그중 {{sourcesSoft}}곳은 모든 사진이 흐리고, {{unaligned}}곳은 더 선명한 사진을 정렬하지 못했습니다. 클릭하면 위치를 표시합니다.",
+      "skippedSources": "사진 {{number}}장 건너뜀",
+      "skippedSourcesHint": "결과에 포함되지 않은 사진(RAW 사이에 섞인 내보낸 이미지, 다른 사진과 정렬할 수 없는 사진 또는 다른 사진보다 훨씬 비스듬히 찍은 사진): {{names}}",
       "sourceCount_other": "{{count}} source layers",
       "sourceHint": "레이어를 드래그하여 순서를 바꾸거나 화살표 버튼을 사용하세요. 첫 번째 레이어가 출력 기준입니다.",
       "sourceLayers": "Source layers",

@@ -1609,6 +1609,8 @@
       "softRegions": "{{number}} zones floues",
       "softRegionsBack": "Retour au résultat",
       "softRegionsHint": "Dans {{sourcesSoft}} d’entre elles, toutes les photos sont floues ; dans {{unaligned}}, une photo plus nette n’a pas pu être alignée. Cliquez pour les voir entourées.",
+      "skippedSources": "{{number}} photos skipped",
+      "skippedSourcesHint": "These photos are not in the result (exported images among the RAWs, photos that align with none of the others, or photos shot at a much steeper angle than the rest): {{names}}",
       "sourceCount_one": "1 source layer",
       "sourceCount_many": "{{count}} source layers",
       "sourceCount_other": "{{count}} source layers",

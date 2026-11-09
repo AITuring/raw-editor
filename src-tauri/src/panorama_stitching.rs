@@ -379,9 +379,9 @@ use focus_stack_order::build_focus_stack_stitching_order_with_report;
 
 mod capture_gauge;
 
-use capture_gauge::composing_capture_gauge;
 #[cfg(test)]
 use capture_gauge::median_canvas_scale;
+use capture_gauge::{composing_capture_gauge, oblique_frames};
 
 mod focus_global_observations;
 

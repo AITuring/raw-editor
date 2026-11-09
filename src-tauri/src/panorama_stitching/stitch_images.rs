@@ -68,7 +68,7 @@ use super::{
     horizontal_edge_row_candidates, install_virtual_tile_match_planes, is_auxiliary_stitch_file,
     is_generated_stitch_output, load_prepared_stack_source, log_virtual_tile_candidate,
     match_image_pair, matrix3_row_major, memory_safe_panorama_render_scale,
-    native_photometric_pairs, normalize_stack_raw_display_exposure,
+    native_photometric_pairs, normalize_stack_raw_display_exposure, oblique_frames,
     optimize_focus_stack_global_homographies_with_reference,
     order_focus_render_sources_by_capture_group, pairs_to_match_for_images,
     plan_virtual_tile_prior_repairs, populate_station_relation_candidate_geometry,
@@ -96,6 +96,44 @@ use super::{
     write_alignment_cache,
 };
 
+/// A focus stack of at least this many aligned frames goes on without the
+/// frames that align with none of the others, when they are at most one in
+/// `MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR` of the selection.
+const MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED: usize = 20;
+const MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR: usize = 20;
+/// A focus stack whose sources are at least this share camera RAWs is a
+/// camera-RAW stack.
+const RAW_STACK_NUMERATOR: usize = 4;
+const RAW_STACK_DENOMINATOR: usize = 5;
+
+/// The first attempt of a scan that found frames aligning with none of the
+/// others, or frames shot far more obliquely than the rest, ends with this prefix followed by
+/// [`LeftOutFrames`] as JSON, and the scan is solved again without them.
+const RETRY_WITHOUT_FRAMES_PREFIX: &str = "\u{0}retry-without-frames:";
+
+/// Frames the first attempt of a scan found it should be solved without.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct LeftOutFrames {
+    unaligned: Vec<String>,
+    oblique: Vec<String>,
+}
+
+impl LeftOutFrames {
+    fn retry_error(self) -> String {
+        format!(
+            "{RETRY_WITHOUT_FRAMES_PREFIX}{}",
+            serde_json::to_string(&self).unwrap_or_default()
+        )
+    }
+
+    fn contains(&self, path: &str) -> bool {
+        self.unaligned
+            .iter()
+            .chain(&self.oblique)
+            .any(|left| left == path)
+    }
+}
+
 pub(crate) fn stitch_images_with_options<R: Runtime>(
     image_paths: Vec<String>,
     app_handle: AppHandle<R>,
@@ -107,10 +145,96 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let _run_scope = degradation::begin_run_scope_for_generation(run_generation).map_err(|_| {
         "image-stack run cancelled by a newer request before it started".to_string()
     })?;
-    let image_paths = image_paths
+    // Frames that align with nothing are skipped, but while they are part of
+    // the solve they still bend it, and so does a frame shot far more
+    // obliquely than the rest: with DSC_3910, DSC_3911 and DSC_6708 (aligned
+    // nowhere) and DSC_3842 (shot obliquely across 祁序1) in the selection,
+    // 祁序's canvas came out nearly rectangular and its inscription doubled
+    // at 1:1, though the first three were never rendered. The scan is
+    // therefore solved a second time without them, once.
+    let first = stitch_images_attempt(
+        image_paths.clone(),
+        app_handle.clone(),
+        alignment_mode,
+        blend_mode,
+        progress_event,
+        run_generation,
+        None,
+    );
+    let left_out = match &first {
+        Err(message) => match message.strip_prefix(RETRY_WITHOUT_FRAMES_PREFIX) {
+            Some(json) => serde_json::from_str::<LeftOutFrames>(json)
+                .map_err(|error| format!("unreadable list of left-out frames: {error}"))?,
+            None => return first,
+        },
+        Ok(_) => return first,
+    };
+    drop(first);
+    let message = format!(
+        "Solving the scan again without {} frame(s) that align with none of the others and {} oblique frame(s)",
+        left_out.unaligned.len(),
+        left_out.oblique.len()
+    );
+    println!("{message}");
+    let _ = app_handle.emit(progress_event, message);
+    stitch_images_attempt(
+        image_paths,
+        app_handle,
+        alignment_mode,
+        blend_mode,
+        progress_event,
+        run_generation,
+        Some(&left_out),
+    )
+}
+
+/// One solve and render of `image_paths` without the frames in `left_out`,
+/// which the first attempt found the scan should be solved without; `None`
+/// on the first attempt.
+fn stitch_images_attempt<R: Runtime>(
+    image_paths: Vec<String>,
+    app_handle: AppHandle<R>,
+    alignment_mode: AlignmentMode,
+    blend_mode: BlendMode,
+    progress_event: &str,
+    run_generation: usize,
+    left_out: Option<&LeftOutFrames>,
+) -> Result<StitchOutcome, String> {
+    let mut image_paths = image_paths
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
+        .filter(|path| !left_out.is_some_and(|left_out| left_out.contains(path)))
         .collect::<Vec<_>>();
+    // A focus stack is processed in one order whatever order the photos were
+    // selected or dragged into (`captures::processing_order`): the bounded
+    // pairwise search, the pose solve and the render order all follow the
+    // input order, and the same 173 photos of 祁序 listed in another order
+    // aligned one frame fewer and anchored their canvas to another photo. The
+    // dialog shows the order used.
+    if blend_mode == BlendMode::FocusStack {
+        image_paths.sort();
+        image_paths.dedup();
+        crate::panorama_utils::captures::processing_order(&mut image_paths);
+    }
+    // A camera-RAW focus stack holds the photos as shot; a rendered image
+    // among them is an export, such as the 未标题 composites of 枫鹰雉鸡 saved
+    // next to its RAWs (up to 40669 x 21677 px), and is left out.
+    let raw_count = image_paths.iter().filter(|path| is_raw_file(path)).count();
+    let mut rendered_skipped = Vec::new();
+    if blend_mode == BlendMode::FocusStack
+        && raw_count * RAW_STACK_DENOMINATOR >= image_paths.len() * RAW_STACK_NUMERATOR
+        && raw_count < image_paths.len()
+    {
+        let (raws, rendered): (Vec<_>, Vec<_>) =
+            image_paths.into_iter().partition(|path| is_raw_file(path));
+        println!(
+            "  - Leaving {} rendered image(s) out of the camera-RAW stack: {}",
+            rendered.len(),
+            rendered.join(", ")
+        );
+        rendered_skipped = rendered;
+        image_paths = raws;
+    }
     // A PSD in this product is one flattened scan tile, not one focus plane.
     // The default UI blend mode is FocusStack, but routing a complete PSD set
     // through the singleton focus fallback creates hard source-owner blocks.
@@ -132,6 +256,27 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // Open a fresh degradation observation window for this run. Recording is
     // additive: no fallback decision below consults the ledger.
     degradation::reset_run_ledger();
+    if !rendered_skipped.is_empty() {
+        degradation::record_run_degradation(
+            degradation::STACK_RENDERED_SOURCES_SKIPPED,
+            serde_json::json!({ "paths": rendered_skipped }),
+        );
+    }
+    let first_attempt = left_out.is_none();
+    if let Some(left_out) = left_out {
+        if !left_out.unaligned.is_empty() {
+            degradation::record_run_degradation(
+                degradation::SCAN_UNALIGNED_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": left_out.unaligned }),
+            );
+        }
+        if !left_out.oblique.is_empty() {
+            degradation::record_run_degradation(
+                degradation::SCAN_OBLIQUE_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": left_out.oblique }),
+            );
+        }
+    }
     // The Intra_Station_Registrar records one entry per registered frame
     // (需求 2.9); open its window alongside the ledger so a second run in the
     // same process cannot inherit the previous run's frames.
@@ -1067,7 +1212,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             composing_capture_gauge(&image_data, &global_homographies)
     {
         println!(
-            "  - Several captures: the canvas follows the composing capture, anchored to its first source {}",
+            "  - Several captures: the canvas follows the composing capture, anchored to its median-scale frame {}",
             Path::new(&image_data[reference].filename)
                 .file_name()
                 .unwrap_or_default()
@@ -1075,6 +1220,30 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
         global_homographies = reanchored;
     }
+    // Oblique frames of a large scan are solved again without, like the
+    // frames that align with nothing (`capture_gauge::oblique_frames`).
+    let oblique_paths = if focus_stack && scalable_stack && first_attempt {
+        let oblique = oblique_frames(&image_data, &global_homographies);
+        for &(index, ratio) in &oblique {
+            println!(
+                "  - Oblique frame {}: perspective spread {ratio:.2} times its capture's median",
+                image_data[index].filename
+            );
+        }
+        if !oblique.is_empty()
+            && image_data.len() >= MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED
+            && oblique.len() * MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR <= image_data.len()
+        {
+            oblique
+                .iter()
+                .map(|&(index, _)| image_data[index].filename.clone())
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
     #[cfg(test)]
     if blend_mode == BlendMode::FocusStack && !global_homographies.is_empty() {
         let all = image_data
@@ -1082,7 +1251,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .map(|image| image.id)
             .collect::<HashSet<_>>();
         println!(
-            "  - Canvas gauge: median canvas scale {:.3}, first source {:.3}",
+            "  - Canvas gauge: median canvas scale {:.3}, lowest-id source {:.3}",
             median_canvas_scale(&image_data, &global_homographies, &all),
             median_canvas_scale(
                 &image_data,
@@ -1382,7 +1551,38 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         } else {
             "the bounded candidate search"
         };
-        if !redundant_focus_sources {
+        // A large scan goes on without the few frames that join it nowhere and
+        // says so: 祁序1 and 祁序2 each carry a frame or two shot obliquely
+        // past the edge of the work (DSC_3910, DSC_3911, DSC_6708), and
+        // refusing the whole selection for them left the user to find and
+        // remove them by hand.
+        let skippable_scan_sources = scalable_stack
+            && focus_stack
+            && stitched_images_info.len() >= MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED
+            && unstitched_count * MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR <= image_data.len();
+        if skippable_scan_sources && !redundant_focus_sources {
+            let paths = image_data
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !stitched_indices.contains(index))
+                .map(|(_, image)| image.filename.clone())
+                .collect::<Vec<_>>();
+            if first_attempt {
+                return Err(LeftOutFrames {
+                    unaligned: paths,
+                    oblique: oblique_paths,
+                }
+                .retry_error());
+            }
+            println!(
+                "  - Continuing without {unstitched_count} frame(s) of the scan that align with none of the others"
+            );
+            degradation::record_run_degradation(
+                degradation::SCAN_UNALIGNED_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": paths }),
+            );
+        }
+        if !redundant_focus_sources && !skippable_scan_sources {
             return Err(if scalable_stack && focus_stack {
                 format!(
                     "Focus-stack geometry was rejected after strict feature/RANSAC retries: {unstitched_count} image(s) have no verified overlap in {search_description}. No unsafe collage was rendered; select one contiguous scene or ensure each layer has enough visual overlap."
@@ -1397,6 +1597,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 )
             });
         }
+    }
+    if !oblique_paths.is_empty() {
+        return Err(LeftOutFrames {
+            unaligned: Vec::new(),
+            oblique: oblique_paths,
+        }
+        .retry_error());
     }
     println!(
         "Global homography calculation completed in {:.2?}\n",

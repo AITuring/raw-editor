@@ -1580,6 +1580,8 @@
       "softRegions": "{{number}} unscharfe Bereiche",
       "softRegionsBack": "Zurück zum Ergebnis",
       "softRegionsHint": "In {{sourcesSoft}} davon ist jedes Foto unscharf; in {{unaligned}} ließ sich ein schärferes Foto nicht ausrichten. Klicken, um sie markiert zu sehen.",
+      "skippedSources": "{{number}} photos skipped",
+      "skippedSourcesHint": "These photos are not in the result (exported images among the RAWs, photos that align with none of the others, or photos shot at a much steeper angle than the rest): {{names}}",
       "sourceCount_one": "1 source layer",
       "sourceCount_other": "{{count}} source layers",
       "sourceHint": "Ziehen Sie Ebenen, um sie neu anzuordnen, oder verwenden Sie die Pfeiltasten. Die erste Ebene dient als Ausgabereferenz.",

@@ -54,6 +54,7 @@ interface ImageStackModalProps {
   progressMessage: string | null;
   resultSize: ImageStackResultSize | null;
   softRegions?: ImageStackSoftRegions | null;
+  skippedSources?: string[] | null;
   sourceMetadata?: Record<string, unknown> | null;
   sourcePaths: string[];
   initialBlendMode: ImageStackBlendMode;
@@ -248,6 +249,7 @@ export default function ImageStackModal({
   progressMessage,
   resultSize,
   softRegions = null,
+  skippedSources = null,
   sourceMetadata = null,
   sourcePaths,
   initialBlendMode,
@@ -532,6 +534,7 @@ export default function ImageStackModal({
                     onFocusedChange={setIsPreviewFocused}
                     resultSize={resultSize}
                     softRegions={softRegions}
+                    skippedSources={skippedSources}
                     src={finalImageBase64}
                   />
                 ) : (

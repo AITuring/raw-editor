@@ -14,6 +14,7 @@ interface ImageStackResultPreviewProps {
   onFocusedChange(isFocused: boolean): void;
   resultSize: ImageStackResultSize | null;
   softRegions?: ImageStackSoftRegions | null;
+  skippedSources?: string[] | null;
   src: string;
 }
 
@@ -26,6 +27,7 @@ function ImageStackResultPreview({
   onFocusedChange,
   resultSize,
   softRegions = null,
+  skippedSources = null,
   src,
 }: ImageStackResultPreviewProps) {
   const { t } = useTranslation();
@@ -48,6 +50,11 @@ function ImageStackResultPreview({
         unaligned: softRegions.count - softRegions.sourcesSoft,
       })
     : undefined;
+  const skippedNames =
+    skippedSources && skippedSources.length > 0
+      ? skippedSources.map((path) => path.split(/[\\/]/).pop() ?? path).join(', ')
+      : null;
+  const skippedHint = skippedNames ? t('modals.imageStack.skippedSourcesHint', { names: skippedNames }) : undefined;
 
   return (
     <ZoomableImagePreview
@@ -92,6 +99,16 @@ function ImageStackResultPreview({
             role="status"
           >
             {t('modals.imageStack.memorySafeResult', { percent: memorySafeScale })}
+          </span>
+        )}
+        {skippedSources && skippedSources.length > 0 && (
+          <span
+            aria-label={`${t('modals.imageStack.skippedSources', { number: skippedSources.length })} · ${skippedHint}`}
+            className="pointer-events-auto rounded-md border border-status-warning/35 bg-black/80 px-2 py-1 text-[11px] text-status-warning"
+            data-tooltip={skippedHint}
+            role="status"
+          >
+            {t('modals.imageStack.skippedSources', { number: skippedSources.length })}
           </span>
         )}
         {softRegions && (

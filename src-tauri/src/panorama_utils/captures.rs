@@ -1,8 +1,8 @@
 //! Several captures of one artwork in one stitch.
 //!
 //! A focus scan may combine several captures of one artwork (祁序1 and 祁序2
-//! were photographed two days apart). The capture of the first source
-//! composes the canvas: the canvas takes its gauge (see
+//! were photographed two days apart). The largest capture composes the
+//! canvas: the canvas takes its gauge (see
 //! `panorama_stitching::capture_gauge`) and its geometry, while the frames of
 //! the other captures only fill what it leaves uncovered and lend their
 //! detail to the repair (see `mosaic::detail_repair`).
@@ -34,9 +34,9 @@ enum CaptureKey {
 }
 
 /// A source's camera and capture time, when its metadata holds both.
-fn camera_and_time(info: &ImageInfo) -> Option<((String, String), NaiveDateTime)> {
-    let bytes = crate::file_management::read_file_mapped(Path::new(&info.filename)).ok()?;
-    let metadata = crate::exif_processing::read_exif_data_from_bytes(&info.filename, &bytes);
+fn camera_and_time(path: &str) -> Option<((String, String), NaiveDateTime)> {
+    let bytes = crate::file_management::read_file_mapped(Path::new(path)).ok()?;
+    let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
     let camera = (
         metadata.get("Make")?.clone(),
         metadata.get("Model")?.clone(),
@@ -48,8 +48,8 @@ fn camera_and_time(info: &ImageInfo) -> Option<((String, String), NaiveDateTime)
     Some((camera, time))
 }
 
-fn folder_of(info: &ImageInfo) -> String {
-    Path::new(&info.filename)
+fn folder_of(path: &str) -> String {
+    Path::new(path)
         .parent()
         .map(|parent| parent.to_string_lossy().into_owned())
         .unwrap_or_default()
@@ -57,16 +57,14 @@ fn folder_of(info: &ImageInfo) -> String {
 
 /// The capture of every source, by id: sessions numbered per camera in time
 /// order, or the folder.
-fn captures_of(images: &[&ImageInfo]) -> HashMap<usize, (CaptureKey, usize)> {
+fn captures_of(sources: &[(usize, &str)]) -> HashMap<usize, (CaptureKey, usize)> {
     let mut timed = Vec::new();
     let mut captures = HashMap::new();
-    for info in images {
-        match camera_and_time(info) {
-            Some(((make, model), time)) => {
-                timed.push((CaptureKey::Camera(make, model), time, info.id))
-            }
+    for &(id, path) in sources {
+        match camera_and_time(path) {
+            Some(((make, model), time)) => timed.push((CaptureKey::Camera(make, model), time, id)),
             None => {
-                captures.insert(info.id, (CaptureKey::Folder(folder_of(info)), 0));
+                captures.insert(id, (CaptureKey::Folder(folder_of(path)), 0));
             }
         }
     }
@@ -88,18 +86,96 @@ fn captures_of(images: &[&ImageInfo]) -> HashMap<usize, (CaptureKey, usize)> {
     captures
 }
 
-/// Ids of the frames of the composing capture, the capture of the source with
-/// the lowest id, or `None` when every source belongs to one capture.
+/// Ids of the frames of the composing capture, or `None` when every source
+/// belongs to one capture. The composing capture is the one with the most
+/// frames, ties going to the capture whose earliest frame sorts first by
+/// path; the order the sources were listed in decides nothing, so the
+/// image-stack dialog composes the same canvas from any order of the same
+/// photos.
 pub(crate) fn composing_capture_ids(images: &[&ImageInfo]) -> Option<HashSet<usize>> {
-    let first = images.iter().min_by_key(|info| info.id)?;
-    let captures = captures_of(images);
-    let capture = captures.get(&first.id)?;
-    let composing = images
+    composing_capture(
+        &images
+            .iter()
+            .map(|info| (info.id, info.filename.as_str()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Ids of the frames of every capture, each capture's ids sorted.
+pub(crate) fn capture_members(images: &[&ImageInfo]) -> Vec<Vec<usize>> {
+    let captures = captures_of(
+        &images
+            .iter()
+            .map(|info| (info.id, info.filename.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    let mut members = HashMap::<&(CaptureKey, usize), Vec<usize>>::new();
+    for (id, capture) in &captures {
+        members.entry(capture).or_default().push(*id);
+    }
+    let mut members = members.into_values().collect::<Vec<_>>();
+    for ids in &mut members {
+        ids.sort_unstable();
+    }
+    members.sort();
+    members
+}
+
+/// [`composing_capture_ids`] over `(id, path)` pairs.
+fn composing_capture(sources: &[(usize, &str)]) -> Option<HashSet<usize>> {
+    let captures = captures_of(sources);
+    let mut members = HashMap::<&(CaptureKey, usize), (usize, &str)>::new();
+    for &(id, path) in sources {
+        let Some(capture) = captures.get(&id) else {
+            continue;
+        };
+        let entry = members.entry(capture).or_insert((0, path));
+        entry.0 += 1;
+        if path < entry.1 {
+            entry.1 = path;
+        }
+    }
+    if members.len() < 2 {
+        return None;
+    }
+    let composing = members
         .iter()
-        .filter(|info| captures.get(&info.id) == Some(capture))
-        .map(|info| info.id)
-        .collect::<HashSet<_>>();
-    (composing.len() < images.len()).then_some(composing)
+        .max_by(|a, b| a.1.0.cmp(&b.1.0).then_with(|| b.1.1.cmp(a.1.1)))
+        .map(|(capture, _)| (*capture).clone())?;
+    Some(
+        sources
+            .iter()
+            .filter(|(id, _)| captures.get(id) == Some(&composing))
+            .map(|&(id, _)| id)
+            .collect(),
+    )
+}
+
+/// `paths` in the order a focus stack processes them: the composing
+/// capture's photos first, then the rest, each part by path. The pose solve
+/// grows from the first photos, and grown from 祁序1 it bent the fused canvas
+/// of 祁序 into a steeper trapezoid than grown from 祁序2, the capture that
+/// composes it.
+pub(crate) fn processing_order(paths: &mut [String]) {
+    paths.sort();
+    let composing = composing_capture(
+        &paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| (index, path.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    if let Some(composing) = composing {
+        let mut keyed = paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| (!composing.contains(&index), path.clone()))
+            .collect::<Vec<_>>();
+        keyed.sort();
+        for (slot, (_, path)) in paths.iter_mut().zip(keyed) {
+            *slot = path;
+        }
+    }
 }
 
 /// Whether the sources lie in more than one folder: a selection put together
@@ -107,7 +183,7 @@ pub(crate) fn composing_capture_ids(images: &[&ImageInfo]) -> Option<HashSet<usi
 pub(crate) fn spans_several_folders(images: &[&ImageInfo]) -> bool {
     images
         .iter()
-        .map(|info| folder_of(info))
+        .map(|info| folder_of(&info.filename))
         .collect::<HashSet<_>>()
         .len()
         > 1
@@ -139,15 +215,25 @@ mod tests {
     }
 
     #[test]
-    fn the_capture_of_the_first_source_composes() {
-        let images = [
-            info(2, "/scans/second/DSC_0001.NEF"),
+    fn the_largest_capture_composes_whatever_the_order() {
+        let mut images = [
             info(0, "/scans/first/DSC_0101.NEF"),
             info(1, "/scans/first/DSC_0102.NEF"),
+            info(2, "/scans/second/DSC_0001.NEF"),
             info(3, "/scans/second/DSC_0002.NEF"),
+            info(4, "/scans/second/DSC_0003.NEF"),
         ];
-        let refs = images.iter().collect::<Vec<_>>();
-        assert_eq!(composing_capture_ids(&refs), Some(HashSet::from([0, 1])));
+        for _ in 0..images.len() {
+            images.rotate_left(1);
+            let refs = images.iter().collect::<Vec<_>>();
+            assert_eq!(composing_capture_ids(&refs), Some(HashSet::from([2, 3, 4])));
+        }
+        // Equal captures: the one whose first photo sorts first by path.
+        let tied = images
+            .iter()
+            .filter(|info| info.id != 4)
+            .collect::<Vec<_>>();
+        assert_eq!(composing_capture_ids(&tied), Some(HashSet::from([0, 1])));
     }
 
     #[test]

@@ -1636,6 +1636,8 @@
       "softRegions": "Нечёткие области: {{number}}",
       "softRegionsBack": "Вернуться к результату",
       "softRegionsHint": "В {{sourcesSoft}} из них все снимки нечёткие; в {{unaligned}} не удалось совместить более резкий снимок. Нажмите, чтобы увидеть их на обзоре.",
+      "skippedSources": "{{number}} photos skipped",
+      "skippedSourcesHint": "These photos are not in the result (exported images among the RAWs, photos that align with none of the others, or photos shot at a much steeper angle than the rest): {{names}}",
       "sourceCount_one": "1 source layer",
       "sourceCount_few": "{{count}} source layers",
       "sourceCount_many": "{{count}} source layers",

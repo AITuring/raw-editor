@@ -44,6 +44,15 @@ pub const INPUT_PIPELINE_VERSION_MISMATCH: &str = "input_pipeline_version_mismat
 pub const SOURCE_DECODE_FAILED: &str = "source_decode_failed";
 /// A Source_RAW satisfies the overlap evidence of no other source.
 pub const GROUPING_NO_OVERLAP_EVIDENCE: &str = "grouping_no_overlap_evidence";
+/// A few sources of a large scan could not be aligned with the rest and were
+/// left out of it (detail: their paths).
+pub const SCAN_UNALIGNED_SOURCES_SKIPPED: &str = "scan_unaligned_sources_skipped";
+/// Frames of a large scan shot far more obliquely than the rest of their
+/// capture were left out of it (detail: their paths).
+pub const SCAN_OBLIQUE_SOURCES_SKIPPED: &str = "scan_oblique_sources_skipped";
+/// Rendered images (exports) selected among the RAWs of a camera-RAW stack
+/// were left out of it (detail: their paths).
+pub const STACK_RENDERED_SOURCES_SKIPPED: &str = "stack_rendered_sources_skipped";
 /// Accumulated centre motion above 0.02 of the long side forced a split.
 pub const GROUPING_ACCUMULATED_MOTION: &str = "grouping_accumulated_motion";
 /// A candidate station exceeded 48 members and was split.
@@ -417,6 +426,9 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     (INPUT_PIPELINE_VERSION_MISMATCH, Severity::Rejected),
     (SOURCE_DECODE_FAILED, Severity::Degraded),
     (GROUPING_NO_OVERLAP_EVIDENCE, Severity::Degraded),
+    (SCAN_UNALIGNED_SOURCES_SKIPPED, Severity::Degraded),
+    (SCAN_OBLIQUE_SOURCES_SKIPPED, Severity::Degraded),
+    (STACK_RENDERED_SOURCES_SKIPPED, Severity::Degraded),
     (GROUPING_ACCUMULATED_MOTION, Severity::Degraded),
     (GROUPING_MEMBER_LIMIT_SPLIT, Severity::Degraded),
     // Intra station registration and fusion

@@ -188,6 +188,7 @@ pub async fn process_image_stack(
                 let degradation_ledger =
                     crate::panorama_utils::stack_pipeline::degradation::run_ledger_snapshot();
                 let soft_regions = soft_region_notice(&degradation_ledger);
+                let skipped_sources = skipped_sources_notice(&degradation_ledger);
                 let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
                 if !outcome_decision.permits_final_output() {
                     // The composed pixels remain available only as diagnostic
@@ -258,6 +259,7 @@ pub async fn process_image_stack(
                         "resultId": result_id,
                         "result": outcome_decision.as_identifier(),
                         "softRegions": soft_regions,
+                        "skippedSources": skipped_sources,
                     }),
                 );
                 Ok(())
@@ -285,6 +287,36 @@ pub async fn process_image_stack(
 
 #[cfg(test)]
 mod tests;
+
+/// Paths of the sources a stack went on without: rendered images among the
+/// RAWs, and frames of a scan that aligned with none of the others or were shot
+/// far more obliquely than the rest.
+fn skipped_sources_notice(
+    ledger: &crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+) -> serde_json::Value {
+    use crate::panorama_utils::stack_pipeline::degradation::{
+        SCAN_OBLIQUE_SOURCES_SKIPPED, SCAN_UNALIGNED_SOURCES_SKIPPED,
+        STACK_RENDERED_SOURCES_SKIPPED,
+    };
+    let paths = ledger
+        .entries()
+        .iter()
+        .filter(|entry| {
+            entry.reason == SCAN_UNALIGNED_SOURCES_SKIPPED
+                || entry.reason == SCAN_OBLIQUE_SOURCES_SKIPPED
+                || entry.reason == STACK_RENDERED_SOURCES_SKIPPED
+        })
+        .filter_map(|entry| {
+            entry
+                .detail
+                .get("paths")
+                .and_then(serde_json::Value::as_array)
+        })
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
+    serde_json::Value::Array(paths)
+}
 
 /// The soft regions a focus scan reported for this run (`scan_soft_region`),
 /// for the result view: their boxes in result pixels, how many lack a sharp

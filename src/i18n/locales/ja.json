@@ -1577,6 +1577,8 @@
       "softRegions": "ぼけた領域 {{number}} 箇所",
       "softRegionsBack": "結果に戻る",
       "softRegionsHint": "うち {{sourcesSoft}} 箇所はどの写真もぼけています。{{unaligned}} 箇所はより鮮明な写真を位置合わせできませんでした。クリックすると位置を表示します。",
+      "skippedSources": "{{number}} 枚の写真をスキップ",
+      "skippedSourcesHint": "これらの写真は結果に含まれていません（RAW に混じった書き出し画像、他のどの写真とも位置合わせできない写真、または他よりずっと斜めから撮った写真）: {{names}}",
       "sourceCount_other": "{{count}} source layers",
       "sourceHint": "レイヤーをドラッグして並べ替えるか、矢印ボタンを使用します。最初のレイヤーが出力基準になります。",
       "sourceLayers": "Source layers",

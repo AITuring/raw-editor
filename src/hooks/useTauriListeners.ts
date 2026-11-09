@@ -389,6 +389,10 @@ export function useTauriListeners({
                 }
               : null;
           const softRegions = parseImageStackSoftRegions(event.payload?.softRegions);
+          const skippedPayload: unknown = event.payload?.skippedSources;
+          const skippedSources = Array.isArray(skippedPayload)
+            ? skippedPayload.filter((path): path is string => typeof path === 'string')
+            : [];
           const previewSource =
             typeof previewPath === 'string' && previewPath.length > 0
               ? convertFileSrc(previewPath.replace(/\\/g, '/'))
@@ -434,6 +438,7 @@ export function useTauriListeners({
                 lastSavedPath: null,
                 resultSize,
                 softRegions,
+                skippedSources,
                 ...(resolvedOrder ? { sourcePaths: resolvedOrder } : {}),
               },
             };

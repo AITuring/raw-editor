@@ -75,6 +75,8 @@ export interface ImageStackModalState {
   error: string | null;
   finalImageBase64: string | null;
   softRegions?: ImageStackSoftRegions | null;
+  /** Photos a scan went on without because they aligned with none of the others. */
+  skippedSources?: string[] | null;
   isOpen: boolean;
   isProcessing: boolean;
   progressMessage: string | null;
