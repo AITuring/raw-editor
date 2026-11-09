@@ -284,6 +284,10 @@ where
                 (width, height),
             )?
         {
+            println!(
+                "    - Lending '{}': covers no canvas the composing capture left uncovered; it lends detail to the repair only",
+                info.filename
+            );
             continue;
         }
         let capture_group_id = capture_group_ids

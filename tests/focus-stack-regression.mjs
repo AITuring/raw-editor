@@ -116,17 +116,27 @@ function patternToRegExp(pattern) {
   return new RegExp(`^${escaped.replaceAll('*', '.*')}$`, 'i');
 }
 
+// A dataset is one folder (`directory`) or several selected together
+// (`directories`, e.g. two captures of one artwork); `directory` is the first,
+// where a reference rendering lives.
+function datasetDirectories(dataset) {
+  return dataset.directories ?? [dataset.directory];
+}
+
 function datasetInputs(dataset, root) {
-  const directory = path.join(root, dataset.directory);
   const excluded = (name) => dataset.excludePatterns.some((pattern) => patternToRegExp(pattern).test(name));
-  const files = fs
-    .readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .filter((name) => dataset.sourceExtensions.includes(path.extname(name).toLowerCase()))
-    .filter((name) => !excluded(name))
-    .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-  return { directory, files };
+  const paths = datasetDirectories(dataset).flatMap((relative) => {
+    const folder = path.join(root, relative);
+    return fs
+      .readdirSync(folder, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => dataset.sourceExtensions.includes(path.extname(name).toLowerCase()))
+      .filter((name) => !excluded(name))
+      .map((name) => path.join(folder, name));
+  });
+  paths.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  return { directory: path.join(root, datasetDirectories(dataset)[0]), paths };
 }
 
 function sha256File(filePath) {
@@ -154,6 +164,10 @@ function referenceState(dataset, directory) {
 function parseLog(text) {
   const streamed = new Set();
   for (const match of text.matchAll(/Streaming '(.+?)': projected region/g)) streamed.add(match[1]);
+  // A frame of another capture that covers nothing the composing capture left
+  // uncovered is not written; it lends its detail to the repair only.
+  const lending = new Set();
+  for (const match of text.matchAll(/Lending '(.+?)': covers no canvas/g)) lending.add(match[1]);
   const result = text.match(/focus-stack result: (\d+)x(\d+)/);
   const ownership = text.match(/Verified covered output: (\d+)x(\d+); every pixel has source ownership/);
   const report = text.match(/Stack report written to (\S+\.json)/);
@@ -163,6 +177,7 @@ function parseLog(text) {
   const nativeRejection = text.match(/panicked at [^\n]*\n((?:native |missing or duplicate quality criterion)[^\n;]*)/);
   return {
     streamed,
+    lending,
     result: result ? { width: Number(result[1]), height: Number(result[2]) } : null,
     ownershipVerified: Boolean(ownership),
     reportPath: report?.[1] ?? null,
@@ -293,9 +308,9 @@ function main() {
   const dataset = manifest.datasets.find((candidate) => candidate.id === options.dataset);
   if (!dataset) throw new Error(`unknown dataset ${options.dataset}`);
   const root = path.resolve(process.env[manifest.rootEnvironment] ?? manifest.defaultRoot);
-  const { directory, files } = datasetInputs(dataset, root);
-  if (files.length !== dataset.expectedSourceCount) {
-    throw new Error(`${dataset.id}: expected ${dataset.expectedSourceCount} inputs, found ${files.length}`);
+  const { directory, paths } = datasetInputs(dataset, root);
+  if (paths.length !== dataset.expectedSourceCount) {
+    throw new Error(`${dataset.id}: expected ${dataset.expectedSourceCount} inputs, found ${paths.length}`);
   }
   let limit = options.limit;
   let subsetId = null;
@@ -307,7 +322,13 @@ function main() {
   } else if (limit !== undefined) {
     subsetId = `first-${limit}`;
   }
-  const inputs = (limit ? files.slice(0, limit) : files).map((name) => path.join(directory, name));
+  const inputs = limit ? paths.slice(0, limit) : [...paths];
+  // `inputOrder: "reverse"` passes the photos the way a selection made from
+  // the last photo up does; the stack must not depend on the order.
+  if (dataset.inputOrder === 'reverse') inputs.reverse();
+  // Photos the stack is expected to leave out by itself (exports among the
+  // RAWs, frames that align with nothing or were shot obliquely), by name.
+  const expectedSkipped = new Set(limit ? [] : (dataset.expectedSkipped ?? []));
   const scaleTag = `s${String(options.scale).replace('.', 'p')}`;
   const runPrefix = subsetId?.startsWith(dataset.id) ? [subsetId] : [dataset.id, subsetId];
   const runId = [...runPrefix, scaleTag, options.label].filter(Boolean).join('-');
@@ -405,11 +426,23 @@ function main() {
   if (!log.result) failures.push('no focus-stack result line in the log');
   if (!metrics) failures.push('acceptance metrics were not written');
   const missing = metrics?.inputs?.missing_from_order ?? [];
-  if (missing.length > 0) failures.push(`inputs missing from the stitching order: ${missing.join(', ')}`);
-  if (log.streamed.size > 0 && log.streamed.size !== inputs.length) {
-    const absent = inputs.filter((input) => !log.streamed.has(input)).map((input) => path.basename(input));
+  const unexpectedMissing = missing.filter((name) => !expectedSkipped.has(name));
+  if (unexpectedMissing.length > 0) {
+    failures.push(`inputs missing from the stitching order: ${unexpectedMissing.join(', ')}`);
+  }
+  if (metrics) {
+    const stitchedAnyway = [...expectedSkipped].filter((name) => !missing.includes(name));
+    if (stitchedAnyway.length > 0) {
+      failures.push(`inputs expected to be left out were stitched: ${stitchedAnyway.join(', ')}`);
+    }
+  }
+  const streamable = inputs.filter((input) => !expectedSkipped.has(path.basename(input)));
+  const absent = streamable
+    .filter((input) => !log.streamed.has(input) && !log.lending.has(input))
+    .map((input) => path.basename(input));
+  if (log.streamed.size > 0 && absent.length > 0) {
     failures.push(
-      `streaming compositor used ${log.streamed.size}/${inputs.length} inputs; absent: ${absent.join(', ')}`,
+      `streaming compositor used ${log.streamed.size}/${streamable.length} inputs (${log.lending.size} lending detail only); absent: ${absent.join(', ')}`,
     );
   }
   if (referenceBefore && dataset.referenceSha256) {
@@ -440,6 +473,7 @@ function main() {
     inputs: inputs.length,
     orderedInputs: metrics?.inputs?.ordered ?? null,
     streamedSources: log.streamed.size || null,
+    lendingSources: log.lending.size || null,
     ownershipVerified: log.ownershipVerified,
     selectedPath: report?.selected_path ?? null,
     stationCount: report?.grouping?.station_count ?? null,

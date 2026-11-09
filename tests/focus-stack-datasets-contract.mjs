@@ -67,19 +67,35 @@ if (!fs.existsSync(root)) {
 
 const summaries = [];
 for (const dataset of manifest.datasets) {
-  const directory = path.join(root, dataset.directory);
-  if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) {
-    fail(`${dataset.id}: directory does not exist: ${directory}`);
+  // One folder (`directory`) or several selected together (`directories`);
+  // several folders are listed by their path under the root, one by name.
+  const relativeFolders = dataset.directories ?? [dataset.directory];
+  const folders = relativeFolders.map((relative) => path.join(root, relative));
+  const directory = folders[0];
+  const absent = folders.filter((folder) => !fs.existsSync(folder) || !fs.statSync(folder).isDirectory());
+  if (absent.length > 0) {
+    fail(`${dataset.id}: directory does not exist: ${absent.join(", ")}`);
     continue;
   }
 
-  const files = fs
-    .readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .filter((name) => dataset.sourceExtensions.includes(path.extname(name).toLowerCase()))
-    .filter((name) => !isExcluded(name, dataset.excludePatterns));
+  const files = folders.flatMap((folder, index) =>
+    fs
+      .readdirSync(folder, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => dataset.sourceExtensions.includes(path.extname(name).toLowerCase()))
+      .filter((name) => !isExcluded(name, dataset.excludePatterns))
+      .map((name) => (folders.length > 1 ? path.join(relativeFolders[index], name) : name)),
+  );
   files.sort((left, right) => left.localeCompare(right, "en"));
+
+  if (dataset.inputOrder !== undefined && dataset.inputOrder !== "reverse") {
+    fail(`${dataset.id}: unknown inputOrder ${JSON.stringify(dataset.inputOrder)}`);
+  }
+  const names = new Set(files.map((name) => path.basename(name)));
+  for (const skipped of dataset.expectedSkipped ?? []) {
+    if (!names.has(skipped)) fail(`${dataset.id}: expectedSkipped ${skipped} is not an input`);
+  }
 
   if (files.length !== dataset.expectedSourceCount) {
     fail(`${dataset.id}: expected ${dataset.expectedSourceCount} inputs, found ${files.length}`);
@@ -99,7 +115,7 @@ for (const dataset of manifest.datasets) {
   }
 
   if (hashInputs && dataset.sourceAggregateSha256) {
-    const digest = sourceDigest(directory, files);
+    const digest = sourceDigest(folders.length > 1 ? root : directory, files);
     if (digest.bytes !== dataset.sourceBytes || digest.sha256 !== dataset.sourceAggregateSha256) {
       fail(
         `${dataset.id}: source manifest changed (bytes=${digest.bytes}, sha256=${digest.sha256})`,
