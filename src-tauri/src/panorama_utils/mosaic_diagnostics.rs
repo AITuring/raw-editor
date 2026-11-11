@@ -392,3 +392,606 @@ fn replay_mosaic_roi_from_env() {
         .save(output.join("replayed.png"))
         .unwrap();
 }
+
+/// Append the cells of the last streaming ownership decision that fall inside
+/// a canvas ROI to a CSV (`RAW_EDITOR_OWNERSHIP_TRACE=<csv>;x0,y0,x1,y1`, in
+/// canvas pixels before the final crop, at the render scale), so a soft or
+/// dark region can be traced to the evidence every layer saw there.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn write_ownership_trace(
+    layer: usize,
+    filename: &str,
+    left: u32,
+    top: u32,
+    layer_scale: f64,
+    base_owner: &GrayImage,
+    owner_names: &HashMap<u8, String>,
+) {
+    let Some(trace) = super::source_ownership::trace::take() else {
+        return;
+    };
+    let Ok(spec) = std::env::var("RAW_EDITOR_OWNERSHIP_TRACE") else {
+        return;
+    };
+    // `<csv>;x0,y0,x1,y1[;stride]`: a stride keeps one cell in `stride` along
+    // either grid axis, so a whole canvas can be traced.
+    let mut parts = spec.split(';');
+    let (Some(path), Some(roi)) = (parts.next(), parts.next()) else {
+        return;
+    };
+    let stride = parts
+        .next()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(1)
+        .max(1);
+    let roi = roi
+        .split(',')
+        .filter_map(|value| value.trim().parse::<f64>().ok())
+        .collect::<Vec<_>>();
+    if roi.len() != 4 || base_owner.width() == 0 || base_owner.height() == 0 {
+        return;
+    }
+    let short = |name: &str| {
+        let file = name.rsplit('/').next().unwrap_or(name);
+        file.split('.').next().unwrap_or(file).to_string()
+    };
+    let mut rows = String::new();
+    for (index, &label) in trace.labels.iter().enumerate() {
+        let grid_x = index as u32 % trace.grid_width;
+        let grid_y = index as u32 / trace.grid_width;
+        if !grid_x.is_multiple_of(stride) || !grid_y.is_multiple_of(stride) {
+            continue;
+        }
+        let analysis_x = (f64::from(grid_x) + 0.5) * trace.size;
+        let analysis_y = (f64::from(grid_y) + 0.5) * trace.size;
+        let canvas_x = f64::from(left) + analysis_x * layer_scale;
+        let canvas_y = f64::from(top) + analysis_y * layer_scale;
+        if canvas_x < roi[0] || canvas_y < roi[1] || canvas_x >= roi[2] || canvas_y >= roi[3] {
+            continue;
+        }
+        let owner = base_owner.get_pixel(
+            (analysis_x as u32).min(base_owner.width() - 1),
+            (analysis_y as u32).min(base_owner.height() - 1),
+        )[0];
+        let owner_name = owner_names
+            .get(&owner)
+            .map(|name| short(name))
+            .unwrap_or_else(|| owner.to_string());
+        let (base_focus, candidate_focus) = trace
+            .focus
+            .get(index)
+            .copied()
+            .unwrap_or((f64::NAN, f64::NAN));
+        rows.push_str(&format!(
+            "{layer},{},{grid_x},{grid_y},{canvas_x:.0},{canvas_y:.0},{owner_name},{},{base_focus:.5},{candidate_focus:.5},{:.3},{:.3},{:.3},{:.3},{label}\n",
+            short(filename),
+            trace.fixed[index],
+            trace.agreement.get(index).copied().unwrap_or(f64::NAN),
+            trace.focus_term.get(index).copied().unwrap_or(f64::NAN),
+            trace.preference[index],
+            trace.disagreement[index],
+        ));
+    }
+    if rows.is_empty() {
+        return;
+    }
+    use std::io::Write;
+    let fresh = !std::path::Path::new(path).exists();
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("open ownership trace");
+    if fresh {
+        file.write_all(b"layer,file,gx,gy,canvas_x,canvas_y,base_owner,fixed,base_focus,candidate_focus,agreement,focus_term,preference,disagreement,label\n")
+            .expect("write ownership trace header");
+    }
+    file.write_all(rows.as_bytes())
+        .expect("write ownership trace");
+}
+
+/// Write what one streaming layer's ownership decision saw inside canvas ROIs
+/// (`RAW_EDITOR_LAYER_PROBE=<dir>;x0,y0,x1,y1[;x0,y0,x1,y1...]`, canvas pixels
+/// before the final crop): the canvas before the layer, the tone-adjusted
+/// candidate and the cells it took, as 8-bit PNGs at canvas resolution.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn write_layer_probe(
+    layer: usize,
+    filename: &str,
+    store: &StreamingMosaicStore,
+    sampler: &LayerSampler<'_>,
+    tone: &Field<3>,
+    region: (u32, u32, u32, u32),
+    decision: &GrayImage,
+    analysis: (u32, u32),
+) -> Result<(), String> {
+    let Ok(spec) = std::env::var("RAW_EDITOR_LAYER_PROBE") else {
+        return Ok(());
+    };
+    let mut parts = spec.split(';');
+    let Some(directory) = parts.next() else {
+        return Ok(());
+    };
+    let directory = PathBuf::from(directory);
+    let (left, right, top, bottom) = region;
+    let stem = std::path::Path::new(filename)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let to_u8 = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    for (roi_index, roi) in parts.enumerate() {
+        let roi = roi
+            .split(',')
+            .filter_map(|value| value.trim().parse::<u32>().ok())
+            .collect::<Vec<_>>();
+        if roi.len() != 4 {
+            continue;
+        }
+        let (x0, y0) = (roi[0].max(left), roi[1].max(top));
+        let (x1, y1) = (roi[2].min(right + 1), roi[3].min(bottom + 1));
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let (width, height) = (x1 - x0, y1 - y0);
+        let mut base = image::RgbImage::new(width, height);
+        for tile_row in y0 / store.tile_size..=(y1 - 1) / store.tile_size {
+            for tile_column in x0 / store.tile_size..=(x1 - 1) / store.tile_size {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    store.tile_extent(tile_column, tile_row);
+                let (tile, mask) = store.load_tile(tile_column, tile_row)?;
+                for y in y0.max(tile_top)..y1.min(tile_top + tile_height) {
+                    for x in x0.max(tile_left)..x1.min(tile_left + tile_width) {
+                        let (tile_x, tile_y) = (x - tile_left, y - tile_top);
+                        if mask.get_pixel(tile_x, tile_y)[0] == 0 {
+                            continue;
+                        }
+                        let pixel = tile.get_pixel(tile_x, tile_y);
+                        base.put_pixel(
+                            x - x0,
+                            y - y0,
+                            image::Rgb([to_u8(pixel[0]), to_u8(pixel[1]), to_u8(pixel[2])]),
+                        );
+                    }
+                }
+            }
+        }
+        let mut candidate = image::RgbImage::new(width, height);
+        let mut take = GrayImage::new(width, height);
+        for y in 0..height {
+            for x in 0..width {
+                let local_x = f64::from(x0 + x - left);
+                let local_y = f64::from(y0 + y - top);
+                let (analysis_x, analysis_y) = (local_x / sampler.scale, local_y / sampler.scale);
+                if let Some(pixel) = sampler.sample(local_x, local_y) {
+                    let pixel = adjusted(pixel, tone.at(analysis_x, analysis_y));
+                    candidate.put_pixel(
+                        x,
+                        y,
+                        image::Rgb([to_u8(pixel[0]), to_u8(pixel[1]), to_u8(pixel[2])]),
+                    );
+                }
+                let cell_x = ((analysis_x / f64::from(analysis.0.max(1)))
+                    * f64::from(decision.width())) as u32;
+                let cell_y = ((analysis_y / f64::from(analysis.1.max(1)))
+                    * f64::from(decision.height())) as u32;
+                let value = decision
+                    .get_pixel(
+                        cell_x.min(decision.width() - 1),
+                        cell_y.min(decision.height() - 1),
+                    )
+                    .0[0];
+                take.put_pixel(x, y, Luma([value]));
+            }
+        }
+        let prefix = directory.join(format!("roi{roi_index}-L{layer:03}-{stem}"));
+        for (suffix, result) in [
+            ("base", base.save(prefix.with_extension("base.png"))),
+            ("cand", candidate.save(prefix.with_extension("cand.png"))),
+            ("take", take.save(prefix.with_extension("take.png"))),
+        ] {
+            result.map_err(|error| format!("write layer probe {suffix}: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// Compare the composed output's detail with the sharpest frame on the
+/// soft-frame detail grid (`RAW_EDITOR_DETAIL_DEFICIT=<prefix>`): writes
+/// `<prefix>.csv` with every measured cell and `<prefix>.png`, one pixel per
+/// cell, grey where the output keeps at least 85 % of the sharpest kept frame,
+/// yellow from 70 %, red below, blue where no kept frame measured the cell.
+/// A red cell is blur that a better owner choice could still remove.
+pub(super) fn write_detail_deficit(
+    output: &Rgb32FImage,
+    crop: (u32, u32, u32, u32),
+    grid: &super::soft_frames::DetailGrid,
+    details: &[super::soft_frames::FrameDetail],
+    images: &[&ImageInfo],
+    skipped: &std::collections::HashSet<usize>,
+    prefix: &std::path::Path,
+) -> Result<(), String> {
+    let measured = super::soft_frames::measure_image_detail(output, (crop.0, crop.1), grid);
+    let count = grid.cell_count();
+    let mut best_kept = vec![(0.0f64, usize::MAX); count];
+    let mut best_all = vec![(0.0f64, usize::MAX); count];
+    for (frame, detail) in details.iter().enumerate() {
+        let kept = !skipped.contains(&images[frame].id);
+        for &(cell, value) in &detail.cells {
+            if value > best_all[cell].0 {
+                best_all[cell] = (value, frame);
+            }
+            if kept && value > best_kept[cell].0 {
+                best_kept[cell] = (value, frame);
+            }
+        }
+    }
+    let name = |frame: usize| {
+        images.get(frame).map_or_else(String::new, |info| {
+            std::path::Path::new(&info.filename)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+    };
+    let (columns, rows) = grid.cell_dimensions();
+    let mut map = image::RgbImage::from_pixel(columns as u32, rows as u32, image::Rgb([0, 0, 0]));
+    let mut csv = String::from(
+        "cell,canvas_x,canvas_y,output,best_kept,best_kept_frame,best_all,best_all_frame,ratio\n",
+    );
+    let mut rows_out = Vec::new();
+    for &(cell, value) in &measured {
+        let (centre_x, centre_y) = grid.cell_centre(cell);
+        let (kept, kept_frame) = best_kept[cell];
+        let (all, all_frame) = best_all[cell];
+        let ratio = if kept > 0.0 { value / kept } else { f64::NAN };
+        let colour = if !ratio.is_finite() {
+            [40, 80, 255]
+        } else if ratio >= 0.85 {
+            [110, 110, 110]
+        } else if ratio >= 0.7 {
+            [255, 210, 40]
+        } else {
+            [255, 40, 40]
+        };
+        map.put_pixel(
+            (cell % columns) as u32,
+            (cell / columns) as u32,
+            image::Rgb(colour),
+        );
+        csv.push_str(&format!(
+            "{cell},{centre_x:.0},{centre_y:.0},{value:.5},{kept:.5},{},{all:.5},{},{ratio:.3}\n",
+            name(kept_frame),
+            name(all_frame)
+        ));
+        rows_out.push((ratio, cell, centre_x, centre_y, value, kept, kept_frame));
+    }
+    std::fs::write(prefix.with_extension("csv"), csv)
+        .map_err(|error| format!("write detail deficit table: {error}"))?;
+    map.save(prefix.with_extension("png"))
+        .map_err(|error| format!("write detail deficit map: {error}"))?;
+    let finite = rows_out
+        .iter()
+        .filter(|row| row.0.is_finite())
+        .collect::<Vec<_>>();
+    let below = |limit: f64| finite.iter().filter(|row| row.0 < limit).count();
+    println!(
+        "  - Detail deficit: {} cells measured, output below 85% / 70% of the sharpest kept frame in {} / {}",
+        finite.len(),
+        below(0.85),
+        below(0.70)
+    );
+    let mut worst = finite;
+    worst.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for row in worst.iter().take(12) {
+        println!(
+            "    - cell {} at ({:.0}, {:.0}): output {:.3}, {} {:.3} (ratio {:.2})",
+            row.1,
+            row.2,
+            row.3,
+            row.4,
+            name(row.6),
+            row.5,
+            row.0
+        );
+    }
+    Ok(())
+}
+
+/// Write the final streaming owner plane as a colour-coded PNG (one colour per
+/// owner label, quarter resolution) with a JSON sidecar naming each label's
+/// source, so a region on the delivered canvas can be traced to its frame.
+pub(super) fn write_streaming_owner_map(
+    store: &StreamingMosaicStore,
+    crop: (u32, u32, u32, u32),
+    owner_names: &HashMap<u8, String>,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    const STEP: u32 = 4;
+    let (crop_left, crop_top, crop_width, crop_height) = crop;
+    let width = crop_width.div_ceil(STEP);
+    let height = crop_height.div_ceil(STEP);
+    let mut labels = vec![0u8; width as usize * height as usize];
+    for tile_row in 0..store.tile_rows {
+        for tile_column in 0..store.tile_columns {
+            let (tile_left, tile_top, tile_width, tile_height) =
+                store.tile_extent(tile_column, tile_row);
+            let owner = store.load_owner_tile(tile_column, tile_row);
+            for y in (0..tile_height).filter(|y| (tile_top + y).wrapping_sub(crop_top) % STEP == 0)
+            {
+                let canvas_y = tile_top + y;
+                if canvas_y < crop_top || canvas_y >= crop_top + crop_height {
+                    continue;
+                }
+                for x in 0..tile_width {
+                    let canvas_x = tile_left + x;
+                    if canvas_x < crop_left
+                        || canvas_x >= crop_left + crop_width
+                        || (canvas_x - crop_left) % STEP != 0
+                    {
+                        continue;
+                    }
+                    let index = ((canvas_y - crop_top) / STEP * width
+                        + (canvas_x - crop_left) / STEP) as usize;
+                    labels[index] = owner.get_pixel(x, y)[0];
+                }
+            }
+        }
+    }
+    let colour = |label: u8| {
+        if label == 0 {
+            return [0u8, 0, 0];
+        }
+        let hash = (u32::from(label)).wrapping_mul(2_654_435_761);
+        [
+            64 + (hash >> 24) as u8 % 192,
+            64 + (hash >> 16) as u8 % 192,
+            64 + (hash >> 8) as u8 % 192,
+        ]
+    };
+    let image = image::RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb(colour(labels[(y * width + x) as usize]))
+    });
+    image
+        .save(path)
+        .map_err(|error| format!("write owner map {}: {error}", path.display()))?;
+    let names = owner_names
+        .iter()
+        .map(|(label, name)| {
+            (
+                label.to_string(),
+                json!({"file": name, "rgb": colour(*label)}),
+            )
+        })
+        .collect::<serde_json::Map<_, _>>();
+    std::fs::write(
+        path.with_extension("json"),
+        serde_json::to_vec_pretty(&json!({"step": STEP, "crop": [crop_left, crop_top, crop_width, crop_height], "owners": names}))
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("write owner map names: {error}"))?;
+    println!("  - Owner map written to {}", path.display());
+    Ok(())
+}
+
+/// The detail repair cell by cell (`RAW_EDITOR_REPAIR_TRACE=<prefix>`):
+/// `<prefix>.csv` with every cell the pass looked at, and `<prefix>.png`, one
+/// pixel per repair-grid cell: grey where the canvas already held its
+/// sharpest source, green where a repair brought it within 80 %, yellow
+/// where a repair helped but fell short, red where the donor could not be
+/// aligned, magenta where it disagreed at low frequency, blue where it added
+/// too little detail.
+pub(super) fn write_repair_trace(
+    grid: &super::soft_frames::DetailGrid,
+    outcome: &super::RepairOutcome,
+    images: &[&ImageInfo],
+    prefix: &std::path::Path,
+) -> Result<(), String> {
+    use super::CellOutcome;
+    let name = |frame: usize| {
+        images.get(frame).map_or_else(String::new, |info| {
+            std::path::Path::new(&info.filename)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+    };
+    let (columns, rows) = grid.cell_dimensions();
+    let mut map = image::RgbImage::from_pixel(columns as u32, rows as u32, image::Rgb([0, 0, 0]));
+    for (cell, value) in outcome.detail_after.iter().enumerate() {
+        if value.is_finite() {
+            map.put_pixel(
+                (cell % columns) as u32,
+                (cell / columns) as u32,
+                image::Rgb([90, 90, 90]),
+            );
+        }
+    }
+    let mut csv = String::from("cell,canvas_x,canvas_y,best,donor,before,after,outcome,strain\n");
+    for cell in &outcome.cells {
+        let (centre_x, centre_y) = grid.cell_centre(cell.cell);
+        let colour = match cell.outcome {
+            CellOutcome::Repaired if cell.after >= super::REPAIR_DEFICIT_RATIO * cell.best => {
+                [40, 220, 60]
+            }
+            CellOutcome::Replaced if cell.after >= super::REPAIR_DEFICIT_RATIO * cell.best => {
+                [40, 220, 220]
+            }
+            CellOutcome::Repaired | CellOutcome::Replaced => [255, 210, 40],
+            CellOutcome::Unaligned => [255, 40, 40],
+            CellOutcome::Disagrees => [230, 40, 230],
+            CellOutcome::NoGain => [60, 110, 255],
+        };
+        map.put_pixel(
+            (cell.cell % columns) as u32,
+            (cell.cell / columns) as u32,
+            image::Rgb(colour),
+        );
+        csv.push_str(&format!(
+            "{},{centre_x:.0},{centre_y:.0},{:.5},{},{:.5},{:.5},{:?},{:.4}\n",
+            cell.cell,
+            cell.best,
+            name(cell.donor),
+            cell.before,
+            cell.after,
+            cell.outcome,
+            cell.strain
+        ));
+    }
+    std::fs::write(prefix.with_extension("csv"), csv)
+        .map_err(|error| format!("write repair trace: {error}"))?;
+    map.save(prefix.with_extension("png"))
+        .map_err(|error| format!("write repair map: {error}"))?;
+    // Every measured cell, `<prefix>.grid.csv`, to tune the soft-region
+    // report offline.
+    let mut before = outcome.detail_after.clone();
+    for cell in &outcome.cells {
+        before[cell.cell] = cell.before;
+    }
+    let mut grid_csv =
+        String::from("cell,canvas_x,canvas_y,before,after,best,best_frame,level,clipped\n");
+    for (cell, after) in outcome.detail_after.iter().enumerate() {
+        if !after.is_finite() {
+            continue;
+        }
+        let (centre_x, centre_y) = grid.cell_centre(cell);
+        let (best, frame) = outcome.best[cell];
+        grid_csv.push_str(&format!(
+            "{cell},{centre_x:.0},{centre_y:.0},{:.5},{after:.5},{best:.5},{},{:.4},{:.4}\n",
+            before[cell],
+            name(frame),
+            outcome.level[cell],
+            outcome.clipped[cell],
+        ));
+    }
+    std::fs::write(prefix.with_extension("grid.csv"), grid_csv)
+        .map_err(|error| format!("write repair grid: {error}"))?;
+    Ok(())
+}
+
+/// Images of one repair window (`RAW_EDITOR_REPAIR_PROBE=<dir>;x0,y0,x1,y1;...`,
+/// canvas rectangles): the canvas, the donor at its global pose and the donor
+/// after dense alignment, as 8-bit luma, plus the displacement at the window
+/// centre in the file name.
+pub(super) fn write_repair_probe(
+    window: (usize, usize, usize, usize),
+    info: &ImageInfo,
+    base: &super::Plane,
+    moving: &super::Plane,
+    margin: usize,
+    aligned: &super::Plane,
+    displacement: &super::Displacement,
+) {
+    let Ok(spec) = std::env::var("RAW_EDITOR_REPAIR_PROBE") else {
+        return;
+    };
+    let mut parts = spec.split(';');
+    let Some(directory) = parts.next() else {
+        return;
+    };
+    let (x0, y0, x1, y1) = window;
+    let hit = parts.any(|rect| {
+        let values = rect
+            .split(',')
+            .filter_map(|value| value.trim().parse::<usize>().ok())
+            .collect::<Vec<_>>();
+        values.len() == 4 && values[0] < x1 && values[2] > x0 && values[1] < y1 && values[3] > y0
+    });
+    if !hit {
+        return;
+    }
+    let _ = std::fs::create_dir_all(directory);
+    let to_image = |plane: &super::Plane, offset: usize| {
+        let (width, height) = (plane.width - 2 * offset, plane.height - 2 * offset);
+        image::GrayImage::from_fn(width as u32, height as u32, |x, y| {
+            let value = plane.values[(y as usize + offset) * plane.width + x as usize + offset];
+            image::Luma([if value.is_finite() {
+                (value.clamp(0.0, 1.0) * 255.0) as u8
+            } else {
+                0
+            }])
+        })
+    };
+    let stem = std::path::Path::new(&info.filename)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let [dx, dy] = displacement.at((x1 - x0) as f64 * 0.5, (y1 - y0) as f64 * 0.5);
+    let name = format!(
+        "{directory}/w{x0}_{y0}_{x1}_{y1}-{stem}-d{dx:+.0}_{dy:+.0}-m{:.2}",
+        displacement.matched_share
+    );
+    let _ = to_image(base, 0).save(format!("{name}.canvas.png"));
+    let _ = to_image(moving, margin).save(format!("{name}.donor.png"));
+    let _ = to_image(aligned, 0).save(format!("{name}.aligned.png"));
+}
+
+/// Output crops before the detail repair: the file prefix, and each crop
+/// with its rectangle `(x0, y0, x1, y1)`.
+pub(super) type RepairCrops = (String, Vec<((u32, u32, u32, u32), image::RgbImage)>);
+
+/// Colour crops of the output before the detail repair
+/// (`RAW_EDITOR_REPAIR_CROPS=<prefix>;x0,y0,x1,y1;...`, output pixels), for
+/// `write_repair_crops` to set beside the same crops after it.
+pub(super) fn repair_crops(output: &image::Rgb32FImage) -> Option<RepairCrops> {
+    let spec = std::env::var("RAW_EDITOR_REPAIR_CROPS").ok()?;
+    let mut parts = spec.split(';');
+    let prefix = parts.next()?.to_string();
+    let boxes = parts
+        .filter_map(|rect| {
+            let values = rect
+                .split(',')
+                .filter_map(|value| value.trim().parse::<u32>().ok())
+                .collect::<Vec<_>>();
+            (values.len() == 4 && values[2] > values[0] && values[3] > values[1])
+                .then(|| (values[0], values[1], values[2], values[3]))
+        })
+        .collect::<Vec<_>>();
+    Some((
+        prefix,
+        boxes
+            .into_iter()
+            .map(|rect| (rect, display_crop(output, rect)))
+            .collect(),
+    ))
+}
+
+/// An 8-bit copy of `rect` of the display-referred `output`.
+fn display_crop(
+    output: &image::Rgb32FImage,
+    (x0, y0, x1, y1): (u32, u32, u32, u32),
+) -> image::RgbImage {
+    let (x1, y1) = (x1.min(output.width()), y1.min(output.height()));
+    image::RgbImage::from_fn(x1.saturating_sub(x0), y1.saturating_sub(y0), |x, y| {
+        let pixel = output.get_pixel(x0 + x, y0 + y);
+        image::Rgb(std::array::from_fn(|channel| {
+            (pixel[channel].clamp(0.0, 1.0) * 255.0).round() as u8
+        }))
+    })
+}
+
+/// Writes `<prefix>-<x0>_<y0>.jpg` per crop: before the repair on the left,
+/// after it on the right.
+pub(super) fn write_repair_crops(
+    before: Option<RepairCrops>,
+    output: &image::Rgb32FImage,
+) -> Result<(), String> {
+    let Some((prefix, crops)) = before else {
+        return Ok(());
+    };
+    for (rect, left) in crops {
+        let right = display_crop(output, rect);
+        let mut sheet = image::RgbImage::from_pixel(
+            left.width() * 2 + 12,
+            left.height(),
+            image::Rgb([255, 255, 255]),
+        );
+        image::imageops::replace(&mut sheet, &left, 0, 0);
+        image::imageops::replace(&mut sheet, &right, i64::from(left.width()) + 12, 0);
+        let path = format!("{prefix}-{}_{}.jpg", rect.0, rect.1);
+        sheet
+            .save(&path)
+            .map_err(|error| format!("write repair crop {path}: {error}"))?;
+    }
+    Ok(())
+}

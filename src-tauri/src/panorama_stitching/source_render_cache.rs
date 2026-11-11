@@ -208,7 +208,7 @@ pub(super) fn source_render_cache_max_bytes() -> usize {
 /// intentionally run-local: it only prevents an image prepared with another
 /// exposure/gain policy from being reused in this run.
 pub(super) fn processing_fingerprint(
-    raw_exposure_reference: Option<f64>,
+    raw_exposure_reference: Option<&super::source_prep::RawExposureReference>,
     shared_raw_display_gain: Option<f32>,
     fixed_gain_env: Option<&str>,
     skip_raw_normalization: bool,
@@ -216,7 +216,9 @@ pub(super) fn processing_fingerprint(
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     // Bump when the post-decode processing sequence changes.
     1u8.hash(&mut hasher);
-    raw_exposure_reference.map(f64::to_bits).hash(&mut hasher);
+    raw_exposure_reference
+        .map(super::source_prep::RawExposureReference::fingerprint_entries)
+        .hash(&mut hasher);
     shared_raw_display_gain.map(f32::to_bits).hash(&mut hasher);
     fixed_gain_env.hash(&mut hasher);
     skip_raw_normalization.hash(&mut hasher);
@@ -362,22 +364,25 @@ mod tests {
 
     #[test]
     fn processing_fingerprint_separates_pixel_affecting_settings() {
-        let baseline = processing_fingerprint(Some(4.0), Some(1.1), None, false);
+        let camera = || ("NIKON CORPORATION".to_string(), "NIKON Z 7".to_string());
+        let four = super::super::source_prep::RawExposureReference::from_samples([(camera(), 4.0)]);
+        let five = super::super::source_prep::RawExposureReference::from_samples([(camera(), 5.0)]);
+        let baseline = processing_fingerprint(four.as_ref(), Some(1.1), None, false);
         assert_ne!(
             baseline,
-            processing_fingerprint(Some(5.0), Some(1.1), None, false)
+            processing_fingerprint(five.as_ref(), Some(1.1), None, false)
         );
         assert_ne!(
             baseline,
-            processing_fingerprint(Some(4.0), Some(1.2), None, false)
+            processing_fingerprint(four.as_ref(), Some(1.2), None, false)
         );
         assert_ne!(
             baseline,
-            processing_fingerprint(Some(4.0), Some(1.1), Some("1.4"), false)
+            processing_fingerprint(four.as_ref(), Some(1.1), Some("1.4"), false)
         );
         assert_ne!(
             baseline,
-            processing_fingerprint(Some(4.0), Some(1.1), None, true)
+            processing_fingerprint(four.as_ref(), Some(1.1), None, true)
         );
     }
 }

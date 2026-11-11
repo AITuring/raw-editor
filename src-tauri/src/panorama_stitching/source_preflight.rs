@@ -197,26 +197,24 @@ impl SourcePreflight {
         )
     }
 
-    pub(super) fn raw_exposure_reference(&self) -> Option<f64> {
-        let mut camera = None;
-        let mut exposures = Vec::with_capacity(self.entries.len());
+    /// Per-camera median RAW exposure (time × ISO / aperture²), matching
+    /// `source_prep::stack_raw_exposure_reference` without re-reading sources.
+    pub(super) fn raw_exposure_reference(
+        &self,
+    ) -> Option<super::source_prep::RawExposureReference> {
+        let mut samples = Vec::with_capacity(self.entries.len());
         for path in &self.paths {
             if !is_raw_file(path) {
                 return None;
             }
             let entry = self.record(path)?;
-            let identity = (
+            let camera = (
                 entry.exif.get("Make")?.clone(),
                 entry.exif.get("Model")?.clone(),
             );
-            if camera.as_ref().is_some_and(|camera| camera != &identity) {
-                return None;
-            }
-            camera = Some(identity);
-            exposures.push(entry.raw_exposure?);
+            samples.push((camera, entry.raw_exposure?));
         }
-        exposures.sort_by(f64::total_cmp);
-        exposures.get(exposures.len() / 2).copied()
+        super::source_prep::RawExposureReference::from_samples(samples)
     }
 }
 

@@ -62,22 +62,23 @@ use super::{
     VirtualTilePriorProposal, absolute_source_path, add_capture_sequence_bridges,
     apply_virtual_tile_prior_repair, build_focus_layer_warp,
     build_focus_stack_stitching_order_with_report, build_foreground_mask, build_stitching_order,
-    canonical_match_direction, capture_groups_form_singleton_scan, detect_foreground_range,
-    detect_vertical_edge_columns, ensure_focus_memory_available, excluded_source_records,
-    filter_flat_artwork_blurry_sources, find_alignment_features, find_top_alignment_features,
-    flat_artwork_overlap_render_order, focus_alignment_support, focus_anchor_render_frames,
-    focus_capture_groups_with_grouping, focus_overlap_components, focus_rescue_match_is_verified,
-    focus_source_order_group_compositor_order, focus_stack_cache_key_inputs_from_preflight,
-    focus_stack_source_digests, focus_station_binding_evidence, focus_station_topology,
-    focus_unstitched_sources_are_redundant, geometry_disconnected_user_error,
-    horizontal_edge_row_candidates, install_virtual_tile_match_planes, is_auxiliary_stitch_file,
-    is_generated_stitch_output, load_prepared_stack_source_with_preflight,
-    log_virtual_tile_candidate, match_image_pair, matrix3_row_major,
-    memory_safe_panorama_render_scale, native_photometric_pairs,
-    normalize_stack_raw_display_exposure, observe_singleton_scan,
+    canonical_match_direction, capture_groups_form_singleton_scan, composing_capture_gauge,
+    detect_foreground_range, detect_vertical_edge_columns, ensure_focus_memory_available,
+    excluded_source_records, filter_flat_artwork_blurry_sources, find_alignment_features,
+    find_top_alignment_features, flat_artwork_overlap_render_order, focus_alignment_support,
+    focus_anchor_render_frames, focus_capture_groups_with_grouping, focus_overlap_components,
+    focus_rescue_match_is_verified, focus_source_order_group_compositor_order,
+    focus_stack_cache_key_inputs_from_preflight, focus_stack_source_digests,
+    focus_station_binding_evidence, focus_station_topology, focus_unstitched_sources_are_redundant,
+    geometry_disconnected_user_error, horizontal_edge_row_candidates,
+    install_virtual_tile_match_planes, is_auxiliary_stitch_file, is_generated_stitch_output,
+    load_prepared_stack_source_with_preflight, log_virtual_tile_candidate, match_image_pair,
+    matrix3_row_major, memory_safe_panorama_render_scale, native_photometric_pairs,
+    normalize_stack_raw_display_exposure, oblique_frames, observe_singleton_scan,
     optimize_focus_stack_global_homographies_with_reference,
     order_focus_render_sources_by_capture_group, pairs_to_match_for_images_with_plan,
-    plan_virtual_tile_prior_repairs, populate_station_relation_candidate_geometry,
+    patch_guided_match, plan_virtual_tile_prior_repairs,
+    populate_station_relation_candidate_geometry, pose_predicted_pairs,
     prepare_focus_rescue_image_from_analysis, processing_fingerprint,
     raw_display_channel_percentile, record_residual_warp_for_station_relations,
     recover_focus_component_edges, refine_flat_artwork_tree_poses,
@@ -98,9 +99,52 @@ use super::{
 };
 #[cfg(test)]
 use super::{
-    acceptance_tests, pair_harness_disconnected_focus_geometry, source_raw_direct_pair_diagnostics,
-    source_raw_layer_pair_diagnostics, structural_oracle, write_alignment_cache,
+    acceptance_tests, median_canvas_scale, pair_harness_disconnected_focus_geometry,
+    source_raw_direct_pair_diagnostics, source_raw_layer_pair_diagnostics, structural_oracle,
+    write_alignment_cache,
 };
+
+/// A focus stack of at least this many aligned frames goes on without the
+/// frames that align with none of the others, when they are at most one in
+/// `MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR` of the selection.
+const MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED: usize = 20;
+const MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR: usize = 20;
+/// A focus stack whose sources are at least this share camera RAWs is a
+/// camera-RAW stack.
+const RAW_STACK_NUMERATOR: usize = 4;
+const RAW_STACK_DENOMINATOR: usize = 5;
+
+/// The first attempt of a scan that found frames aligning with none of the
+/// others, or frames shot far more obliquely than the rest, ends with this prefix followed by
+/// [`LeftOutFrames`] as JSON, and the scan is solved again without them.
+const RETRY_WITHOUT_FRAMES_PREFIX: &str = "\u{0}retry-without-frames:";
+/// An attempt whose Capture_Stations could not all be related ends with this,
+/// and the stack is composed again on its source poses by the streaming
+/// source-scan compositor instead of being refused.
+const RETRY_AS_SOURCE_SCAN: &str = "\u{0}retry-as-source-scan";
+
+/// Frames the first attempt of a scan found it should be solved without.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct LeftOutFrames {
+    unaligned: Vec<String>,
+    oblique: Vec<String>,
+}
+
+impl LeftOutFrames {
+    fn retry_error(self) -> String {
+        format!(
+            "{RETRY_WITHOUT_FRAMES_PREFIX}{}",
+            serde_json::to_string(&self).unwrap_or_default()
+        )
+    }
+
+    fn contains(&self, path: &str) -> bool {
+        self.unaligned
+            .iter()
+            .chain(&self.oblique)
+            .any(|left| left == path)
+    }
+}
 
 pub(crate) fn stitch_images_with_options<R: Runtime>(
     image_paths: Vec<String>,
@@ -113,10 +157,107 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let _run_scope = degradation::begin_run_scope_for_generation(run_generation).map_err(|_| {
         "image-stack run cancelled by a newer request before it started".to_string()
     })?;
-    let image_paths = image_paths
+    // Frames that align with nothing are skipped, but while they are part of
+    // the solve they still bend it, and so does a frame shot far more
+    // obliquely than the rest: with DSC_3910, DSC_3911 and DSC_6708 (aligned
+    // nowhere) and DSC_3842 (shot obliquely across 祁序1) in the selection,
+    // 祁序's canvas came out nearly rectangular and its inscription doubled
+    // at 1:1, though the first three were never rendered. The scan is
+    // therefore solved a second time without them, once.
+    // A stack whose Capture_Stations do not all relate (睡觉: 45 photos in
+    // 15 stations, 5 components after 33 minutes at 1:1) is composed again by
+    // the source-scan compositor on its source poses, as Photoshop would
+    // still produce an image; the result says so instead of failing.
+    let mut left_out: Option<LeftOutFrames> = None;
+    let mut as_source_scan = false;
+    loop {
+        let result = stitch_images_attempt(
+            image_paths.clone(),
+            app_handle.clone(),
+            alignment_mode,
+            blend_mode,
+            progress_event,
+            run_generation,
+            left_out.as_ref(),
+            as_source_scan,
+        );
+        let Err(message) = &result else {
+            return result;
+        };
+        if message == RETRY_AS_SOURCE_SCAN && !as_source_scan {
+            as_source_scan = true;
+            let message = "Some capture stations could not be related; composing the photos on their own positions instead";
+            println!("{message}");
+            let _ = app_handle.emit(progress_event, message);
+            continue;
+        }
+        let Some(json) = message.strip_prefix(RETRY_WITHOUT_FRAMES_PREFIX) else {
+            return result;
+        };
+        if left_out.is_some() {
+            return Err("the scan asked to be solved again twice".to_string());
+        }
+        let frames = serde_json::from_str::<LeftOutFrames>(json)
+            .map_err(|error| format!("unreadable list of left-out frames: {error}"))?;
+        let message = format!(
+            "Solving the scan again without {} frame(s) that align with none of the others and {} oblique frame(s)",
+            frames.unaligned.len(),
+            frames.oblique.len()
+        );
+        println!("{message}");
+        let _ = app_handle.emit(progress_event, message);
+        left_out = Some(frames);
+    }
+}
+
+/// One solve and render of `image_paths` without the frames in `left_out`,
+/// which the first attempt found the scan should be solved without; `None`
+/// on the first attempt.
+fn stitch_images_attempt<R: Runtime>(
+    image_paths: Vec<String>,
+    app_handle: AppHandle<R>,
+    alignment_mode: AlignmentMode,
+    blend_mode: BlendMode,
+    progress_event: &str,
+    run_generation: usize,
+    left_out: Option<&LeftOutFrames>,
+    as_source_scan: bool,
+) -> Result<StitchOutcome, String> {
+    let mut image_paths = image_paths
         .into_iter()
         .filter(|path| !is_generated_stitch_output(path) && !is_auxiliary_stitch_file(path))
+        .filter(|path| !left_out.is_some_and(|left_out| left_out.contains(path)))
         .collect::<Vec<_>>();
+    // A focus stack is processed in one order whatever order the photos were
+    // selected or dragged into (`captures::processing_order`): the bounded
+    // pairwise search, the pose solve and the render order all follow the
+    // input order, and the same 173 photos of 祁序 listed in another order
+    // aligned one frame fewer and anchored their canvas to another photo. The
+    // dialog shows the order used.
+    if blend_mode == BlendMode::FocusStack {
+        image_paths.sort();
+        image_paths.dedup();
+        crate::panorama_utils::captures::processing_order(&mut image_paths);
+    }
+    // A camera-RAW focus stack holds the photos as shot; a rendered image
+    // among them is an export, such as the 未标题 composites of 枫鹰雉鸡 saved
+    // next to its RAWs (up to 40669 x 21677 px), and is left out.
+    let raw_count = image_paths.iter().filter(|path| is_raw_file(path)).count();
+    let mut rendered_skipped = Vec::new();
+    if blend_mode == BlendMode::FocusStack
+        && raw_count * RAW_STACK_DENOMINATOR >= image_paths.len() * RAW_STACK_NUMERATOR
+        && raw_count < image_paths.len()
+    {
+        let (raws, rendered): (Vec<_>, Vec<_>) =
+            image_paths.into_iter().partition(|path| is_raw_file(path));
+        println!(
+            "  - Leaving {} rendered image(s) out of the camera-RAW stack: {}",
+            rendered.len(),
+            rendered.join(", ")
+        );
+        rendered_skipped = rendered;
+        image_paths = raws;
+    }
     // A PSD in this product is one flattened scan tile, not one focus plane.
     // The default UI blend mode is FocusStack, but routing a complete PSD set
     // through the singleton focus fallback creates hard source-owner blocks.
@@ -138,6 +279,33 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // Open a fresh degradation observation window for this run. Recording is
     // additive: no fallback decision below consults the ledger.
     degradation::reset_run_ledger();
+    if !rendered_skipped.is_empty() {
+        degradation::record_run_degradation(
+            degradation::STACK_RENDERED_SOURCES_SKIPPED,
+            serde_json::json!({ "paths": rendered_skipped }),
+        );
+    }
+    let first_attempt = left_out.is_none();
+    if as_source_scan {
+        degradation::record_run_degradation(
+            degradation::STACK_STATIONS_UNRELATED,
+            serde_json::json!({ "fallback": "source_scan" }),
+        );
+    }
+    if let Some(left_out) = left_out {
+        if !left_out.unaligned.is_empty() {
+            degradation::record_run_degradation(
+                degradation::SCAN_UNALIGNED_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": left_out.unaligned }),
+            );
+        }
+        if !left_out.oblique.is_empty() {
+            degradation::record_run_degradation(
+                degradation::SCAN_OBLIQUE_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": left_out.oblique }),
+            );
+        }
+    }
     // The Intra_Station_Registrar records one entry per registered frame
     // (需求 2.9); open its window alongside the ledger so a second run in the
     // same process cannot inherit the previous run's frames.
@@ -358,7 +526,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // gains.  Collect the inexpensive low-resolution percentile while the
     // preparation workers already have each developed frame in memory; the
     // rendering closure below applies one robust gain to every RAW.
-    let raw_exposure_reference = source_preflight
+    let raw_exposure_reference_by_camera = source_preflight
         .as_ref()
         .and_then(|preflight| preflight.raw_exposure_reference())
         .or_else(|| {
@@ -366,9 +534,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 .then(|| stack_raw_exposure_reference(&image_paths))
                 .flatten()
         });
-    if let Some(reference) = raw_exposure_reference {
-        println!("Shared RAW physical exposure reference: {reference:.6} (time × ISO / aperture²)");
+    if let Some(reference) = &raw_exposure_reference_by_camera {
+        println!(
+            "Shared RAW physical exposure reference (time × ISO / aperture², per camera): {}",
+            reference.describe()
+        );
     }
+    let raw_exposure_reference = raw_exposure_reference_by_camera.as_ref();
     let raw_display_highs = Mutex::new(Vec::<f32>::new());
 
     if let Some(recorder) = stack_report.as_ref() {
@@ -762,6 +934,68 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let matched_pair_count = Mutex::new(0);
     let pair_progress_step = (pairs_to_check.len() / 100).max(1);
 
+    // One candidate pair through the verified matcher, stored in the (i, j)
+    // key orientation.
+    let match_candidate_pair = |i: usize, j: usize| -> Option<MatchInfo> {
+        // Focus-stack matching is not perfectly symmetric: the ratio test and
+        // local NCC search are evaluated from source to target. Use a stable
+        // path-based direction, then convert back to the (i, j) key orientation.
+        // Otherwise changing import order can produce a different transform graph
+        // and expose defocus halos at object silhouettes. Keep panorama matching's
+        // established direction unchanged.
+        let (source_index, target_index, invert_for_storage) =
+            if blend_mode == BlendMode::FocusStack {
+                canonical_match_direction(&image_data, i, j)
+            } else {
+                (i, j, false)
+            };
+        let source_image = &image_data[source_index];
+        let target_image = &image_data[target_index];
+        let mut match_info = match_image_pair(
+            source_image,
+            target_image,
+            projection,
+            blend_mode,
+            alignment_mode,
+            scale_robust_alignment,
+            true,
+            false,
+        )?;
+        if blend_mode == BlendMode::FocusStack {
+            // Record the fit before it is rotated into the key orientation;
+            // see `MatchInfo::canonical_homography` (需求 14.6).
+            match_info.canonical_homography = Some(match_info.homography);
+        }
+        if invert_for_storage {
+            match_info.homography = match_info.homography.try_inverse()?;
+            match_info.points = match_info
+                .points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.candidate_points = match_info
+                .candidate_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.top_candidate_points = match_info
+                .top_candidate_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.dense_focus_points = match_info
+                .dense_focus_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.foreground_feature_points = match_info
+                .foreground_feature_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+        }
+        Some(match_info)
+    };
     let match_results: Vec<Option<((usize, usize), MatchInfo)>> = pairs_to_check
         .par_iter()
         .map(|&(i, j)| {
@@ -775,64 +1009,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 app_handle: &app_handle,
                 progress_event,
             };
-            // Focus-stack matching is not perfectly symmetric: the ratio test and
-            // local NCC search are evaluated from source to target. Use a stable
-            // path-based direction, then convert back to the (i, j) key orientation.
-            // Otherwise changing import order can produce a different transform graph
-            // and expose defocus halos at object silhouettes. Keep panorama matching's
-            // established direction unchanged.
-            let (source_index, target_index, invert_for_storage) =
-                if blend_mode == BlendMode::FocusStack {
-                    canonical_match_direction(&image_data, i, j)
-                } else {
-                    (i, j, false)
-                };
-            let source_image = &image_data[source_index];
-            let target_image = &image_data[target_index];
-            let mut match_info = match_image_pair(
-                source_image,
-                target_image,
-                projection,
-                blend_mode,
-                alignment_mode,
-                scale_robust_alignment,
-                true,
-                false,
-            )?;
-            if blend_mode == BlendMode::FocusStack {
-                // Record the fit before it is rotated into the key orientation;
-                // see `MatchInfo::canonical_homography` (需求 14.6).
-                match_info.canonical_homography = Some(match_info.homography);
-            }
-            if invert_for_storage {
-                match_info.homography = match_info.homography.try_inverse()?;
-                match_info.points = match_info
-                    .points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.candidate_points = match_info
-                    .candidate_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.top_candidate_points = match_info
-                    .top_candidate_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.dense_focus_points = match_info
-                    .dense_focus_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.foreground_feature_points = match_info
-                    .foreground_feature_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-            }
-            Some(((i, j), match_info))
+            Some(((i, j), match_candidate_pair(i, j)?))
         })
         .collect();
     ensure_focus_memory_available(rss_sampler.as_ref())?;
@@ -1090,7 +1267,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         .then(|| StackCompositorChoice::resolve(settings.stack_compositor.as_deref()));
     let defer_authoritative_station_solve =
         compositor_choice == Some(StackCompositorChoice::LayeredVirtualTile);
-    let (ordered_indices, mut global_homographies) = if blend_mode == BlendMode::FocusStack {
+    let solve_focus_poses = |pairwise_matches: &HashMap<(usize, usize), MatchInfo>| {
         // The default two-stage path uses source images only to group stations
         // and establish each station's local tile geometry.  Its authoritative
         // requirement-6/7 report is produced later from the fused tiles, so an
@@ -1124,9 +1301,82 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 ));
             }
         }
-        stitching_order
+        Ok(stitching_order)
+    };
+    let (ordered_indices, global_homographies) = if blend_mode == BlendMode::FocusStack {
+        solve_focus_poses(&pairwise_matches)?
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
+    };
+    // A large focus stack compares only candidate neighbours; frames the
+    // solved poses put over each other but that were never compared are
+    // matched now, and the poses are solved again with every pair that
+    // verifies (`pose_guided_pairs`).
+    let (ordered_indices, mut global_homographies) = if focus_stack
+        && scalable_stack
+        && projection == Projection::Planar
+        && !sequence_only
+    {
+        let attempted = pairs_to_check
+            .iter()
+            .copied()
+            .chain(pairwise_matches.keys().copied())
+            .collect::<HashSet<_>>();
+        let predicted = pose_predicted_pairs(&image_data, &global_homographies, &attempted);
+        // A pair the matcher does not verify, usually a thin strip of
+        // overlap, is measured by patches where the solved poses put it.
+        let found = predicted
+            .par_iter()
+            .filter_map(|&(i, j)| {
+                if degradation::run_generation_changed_for(run_generation) {
+                    return None;
+                }
+                if let Some(match_info) = match_candidate_pair(i, j) {
+                    return Some(((i, j), match_info, false));
+                }
+                let (source_index, target_index, invert_for_storage) =
+                    canonical_match_direction(&image_data, i, j);
+                let (source, target) = (&image_data[source_index], &image_data[target_index]);
+                let mut match_info = patch_guided_match(
+                    source,
+                    target,
+                    global_homographies.get(&source.id)?,
+                    global_homographies.get(&target.id)?,
+                )?;
+                match_info.canonical_homography = Some(match_info.homography);
+                if invert_for_storage {
+                    match_info.homography = match_info.homography.try_inverse()?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info.points.clone();
+                }
+                Some(((i, j), match_info, true))
+            })
+            .collect::<Vec<_>>();
+        let guided = found.iter().filter(|(_, _, guided)| *guided).count();
+        let message = format!(
+            "Matching {} pair(s) the solved poses overlap but the candidate search never compared: {} verified by features, {} by guided patches",
+            predicted.len(),
+            found.len() - guided,
+            guided
+        );
+        println!("{message}");
+        let _ = app_handle.emit(progress_event, message);
+        if found.is_empty() {
+            (ordered_indices, global_homographies)
+        } else {
+            pairwise_matches.extend(
+                found
+                    .into_iter()
+                    .map(|(key, match_info, _)| (key, match_info)),
+            );
+            solve_focus_poses(&pairwise_matches)?
+        }
+    } else {
+        (ordered_indices, global_homographies)
     };
     if blend_mode == BlendMode::Panorama && alignment_mode == AlignmentMode::FlatArtwork {
         if let Some(refined) =
@@ -1134,6 +1384,62 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         {
             global_homographies = refined;
         }
+    }
+    // Several captures of one artwork: the canvas takes the scale and
+    // orientation the composing capture has stitched alone (`capture_gauge`).
+    if blend_mode == BlendMode::FocusStack
+        && projection == Projection::Planar
+        && let Some((reference, reanchored)) =
+            composing_capture_gauge(&image_data, &global_homographies)
+    {
+        println!(
+            "  - Several captures: the canvas follows the composing capture, anchored to its median-scale frame {}",
+            Path::new(&image_data[reference].filename)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+        );
+        global_homographies = reanchored;
+    }
+    // Oblique frames of a large scan are solved again without, like the
+    // frames that align with nothing (`capture_gauge::oblique_frames`).
+    let oblique_paths = if focus_stack && scalable_stack && first_attempt {
+        let oblique = oblique_frames(&image_data, &global_homographies);
+        for &(index, ratio) in &oblique {
+            println!(
+                "  - Oblique frame {}: perspective spread {ratio:.2} times its capture's median",
+                image_data[index].filename
+            );
+        }
+        if !oblique.is_empty()
+            && image_data.len() >= MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED
+            && oblique.len() * MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR <= image_data.len()
+        {
+            oblique
+                .iter()
+                .map(|&(index, _)| image_data[index].filename.clone())
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    #[cfg(test)]
+    if blend_mode == BlendMode::FocusStack && !global_homographies.is_empty() {
+        let all = image_data
+            .iter()
+            .map(|image| image.id)
+            .collect::<HashSet<_>>();
+        println!(
+            "  - Canvas gauge: median canvas scale {:.3}, lowest-id source {:.3}",
+            median_canvas_scale(&image_data, &global_homographies, &all),
+            median_canvas_scale(
+                &image_data,
+                &global_homographies,
+                &HashSet::from([image_data[0].id])
+            ),
+        );
     }
     let focus_layer_warp = (blend_mode == BlendMode::FocusStack).then(|| {
         build_focus_layer_warp(
@@ -1327,6 +1633,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         .map(|(_, _, grouping)| grouping.isolated.len())
         .unwrap_or(0);
     let has_isolated_focus_sources = isolated_focus_source_count > 0;
+    // A selection from several folders (several captures, or parts of one
+    // put in folders of their own) is fused by the source-scan compositor on
+    // the global poses, which composes from the first capture and lets any
+    // other fill and lend detail (`panorama_utils::captures`). Its stations
+    // need not relate: 枫鹰雉鸡's head was shot at 1.4 times the magnification
+    // of its body, beyond what a station relation accepts.
+    let several_captures = crate::panorama_utils::captures::spans_several_folders(
+        &image_data.iter().collect::<Vec<_>>(),
+    );
     let focus_capture_groups = focus_station_grouping_outcome.map(|(groups, _, _)| groups);
     let focus_capture_group_ids = focus_capture_groups.as_ref().map(|groups| {
         let mut ids = HashMap::new();
@@ -1427,7 +1742,38 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         } else {
             "the bounded candidate search"
         };
-        if !redundant_focus_sources {
+        // A large scan goes on without the few frames that join it nowhere and
+        // says so: 祁序1 and 祁序2 each carry a frame or two shot obliquely
+        // past the edge of the work (DSC_3910, DSC_3911, DSC_6708), and
+        // refusing the whole selection for them left the user to find and
+        // remove them by hand.
+        let skippable_scan_sources = scalable_stack
+            && focus_stack
+            && stitched_images_info.len() >= MIN_SCAN_SOURCES_TO_SKIP_UNALIGNED
+            && unstitched_count * MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR <= image_data.len();
+        if skippable_scan_sources && !redundant_focus_sources {
+            let paths = image_data
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !stitched_indices.contains(index))
+                .map(|(_, image)| image.filename.clone())
+                .collect::<Vec<_>>();
+            if first_attempt {
+                return Err(LeftOutFrames {
+                    unaligned: paths,
+                    oblique: oblique_paths,
+                }
+                .retry_error());
+            }
+            println!(
+                "  - Continuing without {unstitched_count} frame(s) of the scan that align with none of the others"
+            );
+            degradation::record_run_degradation(
+                degradation::SCAN_UNALIGNED_SOURCES_SKIPPED,
+                serde_json::json!({ "paths": paths }),
+            );
+        }
+        if !redundant_focus_sources && !skippable_scan_sources {
             return Err(if scalable_stack && focus_stack {
                 format!(
                     "Focus-stack geometry was rejected after strict feature/RANSAC retries: {unstitched_count} image(s) have no verified overlap in {search_description}. No unsafe collage was rendered; select one contiguous scene or ensure each layer has enough visual overlap."
@@ -1442,6 +1788,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 )
             });
         }
+    }
+    if !oblique_paths.is_empty() {
+        return Err(LeftOutFrames {
+            unaligned: Vec::new(),
+            oblique: oblique_paths,
+        }
+        .retry_error());
     }
     println!(
         "Global homography calculation completed in {:.2?}\n",
@@ -1704,6 +2057,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 // treats later tiles as focus planes and leaves rectangular
                 // source ownership blocks.
                 true,
+                crate::panorama_utils::mosaic::MosaicToneFinish::ContentLevelling,
                 app_handle.clone(),
                 progress_event,
                 &mut load_render_image,
@@ -1783,13 +2137,27 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             let singleton_scan_detected = focus_capture_groups
                 .as_deref()
                 .is_some_and(capture_groups_form_singleton_scan);
+            // Test-only A/B switch: compose a single-folder bracketed stack
+            // with the streaming source-scan compositor several captures use.
+            #[cfg(test)]
+            let forced_source_scan =
+                as_source_scan || std::env::var_os("RAW_EDITOR_FORCE_SOURCE_SCAN").is_some();
+            #[cfg(not(test))]
+            let forced_source_scan = as_source_scan;
+            let several_captures = several_captures || forced_source_scan;
             let source_scan_legacy_fallback = settings.stack_compositor.is_none()
                 && configured_compositor == StackCompositorChoice::LayeredVirtualTile
-                && (has_isolated_focus_sources || singleton_scan_detected);
+                && (has_isolated_focus_sources || several_captures || singleton_scan_detected);
             let compositor_choice = if source_scan_legacy_fallback {
-                println!(
-                    "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
-                );
+                if several_captures {
+                    println!(
+                        "  - Sources from several folders: fusing them with the legacy focus compositor on their global poses"
+                    );
+                } else {
+                    println!(
+                        "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
+                    );
+                }
                 StackCompositorChoice::LegacySingleLayerMosaic
             } else {
                 configured_compositor
@@ -2082,11 +2450,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         ),
                         tile_infos.len(),
                     );
+                    let station_count = tile_infos.len();
                     let mut station_density_samples = vec![
                             super::output_density::StationDensitySamples::default();
                             tile_infos.len()
                         ];
                     for (group_index, tile) in tile_infos.iter_mut().enumerate() {
+                        let _ = app_handle.emit(
+                            progress_event,
+                            format!(
+                                "Fusing capture station {} of {station_count}",
+                                group_index + 1
+                            ),
+                        );
                         let (gray, coverage, density_samples) = render_virtual_tile_match_plane(
                             group_slices[group_index],
                             &station_render_homographies,
@@ -2140,6 +2516,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         );
                     }
 
+                    let _ = app_handle.emit(progress_event, "Relating capture stations...");
                     let (mut tile_relations, mut tile_relation_candidates) =
                         virtual_tile_measure_prior_relations(
                             &tile_infos,
@@ -2895,9 +3272,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     .to_string());
                             }
                             if component_count > 1 || solved.len() != tile_infos.len() {
-                                return Err(geometry_disconnected_user_error(
-                                    component_count.max(2),
-                                ));
+                                println!(
+                                    "  - {}",
+                                    geometry_disconnected_user_error(component_count.max(2))
+                                );
+                                return Err(RETRY_AS_SOURCE_SCAN.to_string());
                             }
                             density_closure_evidence = closure.clone();
                             tile_homographies = solved;
@@ -3055,6 +3434,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 key,
                                 FusionStage::Composition,
                                 || {
+                                    let _ = app_handle.emit(
+                                        progress_event,
+                                        format!(
+                                            "Composing capture station {} of {}",
+                                            group_index + 1,
+                                            group_slices.len()
+                                        ),
+                                    );
                                     stitching::focus_stack_stitcher_unfilled(
                                         group_slices[group_index],
                                         &station_render_homographies,
@@ -3239,6 +3626,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 Projection::Planar,
                                 Some(&tile_groups),
                                 false,
+                                crate::panorama_utils::mosaic::MosaicToneFinish::ContentLevelling,
                                 app_handle.clone(),
                                 progress_event,
                                 &mut |tile| {
@@ -4201,8 +4589,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             });
         }
     } else if let Some(recorder) = stack_report.as_ref() {
+        // Recorded as rejected, this refused every result of the streaming
+        // source-scan compositor in the image-stack dialog (祁序, 枫鹰雉鸡,
+        // 兰亭) while the acceptance harness, which writes its output whatever
+        // the outcome, showed them finished.
         degradation::record_run_degradation(
-            degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE,
+            degradation::QUALITY_GATE_NOT_APPLICABLE,
             serde_json::json!({
                 "verdict": "insufficient_evidence",
                 "reason": "quality_planes_unavailable",

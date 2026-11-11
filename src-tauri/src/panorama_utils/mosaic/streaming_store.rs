@@ -7,12 +7,13 @@
 use crate::panorama_utils::shared::ImageInfo;
 use image::GrayImage;
 use image::Luma;
+use image::Rgb;
 use image::Rgb32FImage;
 use rayon::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::{Field, LayerSampler, STREAMING_TILE_SIZE, adjusted};
+use super::{Field, LayerSampler, STREAMING_TILE_SIZE, adjusted, luma};
 
 pub(super) struct StreamingMosaicStore {
     pub(super) temp_dir: tempfile::TempDir,
@@ -231,6 +232,133 @@ impl StreamingMosaicStore {
             }
         }
         Ok((image, mask, owner))
+    }
+
+    /// [`Self::analysis_region`] with every analysis pixel the mean of the
+    /// covered canvas pixels in its `scale`×`scale` footprint instead of one
+    /// point sample. Coverage and owner stay those of the footprint centre.
+    ///
+    /// On a full-scale canvas an analysis pixel spans five or six native
+    /// pixels; a point sample there folds silk weave into a moiré that two
+    /// registered frames do not share.
+    pub(super) fn analysis_region_area_averaged(
+        &self,
+        left: u32,
+        top: u32,
+        scale: f64,
+        width: u32,
+        height: u32,
+    ) -> Result<(Rgb32FImage, GrayImage, GrayImage), String> {
+        let (mut image, mask, owner) = self.analysis_region(left, top, scale, width, height)?;
+        if width == 0 || height == 0 || !scale.is_finite() || scale <= 1.0 {
+            return Ok((image, mask, owner));
+        }
+        // Analysis pixel `i` is centred on canvas `left + i * scale`; its
+        // footprint is the canvas pixels nearest to that centre.
+        let bin = |offset: f64, length: u32| {
+            let index = (offset / scale).round();
+            (index >= 0.0 && index < f64::from(length)).then_some(index as usize)
+        };
+        let span = scale * 0.5;
+        let first_x = (f64::from(left) - span).ceil().max(0.0) as u32;
+        let first_y = (f64::from(top) - span).ceil().max(0.0) as u32;
+        let last_x = ((f64::from(left) + f64::from(width - 1) * scale + span).floor() as u32)
+            .min(self.width.saturating_sub(1));
+        let last_y = ((f64::from(top) + f64::from(height - 1) * scale + span).floor() as u32)
+            .min(self.height.saturating_sub(1));
+        if first_x > last_x || first_y > last_y {
+            return Ok((image, mask, owner));
+        }
+        let mut sums = vec![[0.0f64; 4]; width as usize * height as usize];
+        for tile_row in first_y / self.tile_size..=last_y / self.tile_size {
+            for tile_column in first_x / self.tile_size..=last_x / self.tile_size {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    self.tile_extent(tile_column, tile_row);
+                let (tile, tile_mask) = self.load_tile(tile_column, tile_row)?;
+                let y_start = first_y.max(tile_top);
+                let y_end = last_y.min(tile_top + tile_height - 1);
+                let x_start = first_x.max(tile_left);
+                let x_end = last_x.min(tile_left + tile_width - 1);
+                for y in y_start..=y_end {
+                    let Some(row) = bin(f64::from(y) - f64::from(top), height) else {
+                        continue;
+                    };
+                    for x in x_start..=x_end {
+                        let Some(column) = bin(f64::from(x) - f64::from(left), width) else {
+                            continue;
+                        };
+                        let (tile_x, tile_y) = (x - tile_left, y - tile_top);
+                        if tile_mask.get_pixel(tile_x, tile_y)[0] == 0 {
+                            continue;
+                        }
+                        let pixel = tile.get_pixel(tile_x, tile_y);
+                        let sum = &mut sums[row * width as usize + column];
+                        sum[0] += f64::from(pixel[0]);
+                        sum[1] += f64::from(pixel[1]);
+                        sum[2] += f64::from(pixel[2]);
+                        sum[3] += 1.0;
+                    }
+                }
+            }
+        }
+        for (index, sum) in sums.iter().enumerate() {
+            let (x, y) = (index as u32 % width, index as u32 / width);
+            if sum[3] > 0.0 && mask.get_pixel(x, y)[0] != 0 {
+                image.put_pixel(
+                    x,
+                    y,
+                    Rgb([
+                        (sum[0] / sum[3]) as f32,
+                        (sum[1] / sum[3]) as f32,
+                        (sum[2] / sum[3]) as f32,
+                    ]),
+                );
+            }
+        }
+        Ok((image, mask, owner))
+    }
+
+    /// Luma of the `width`×`height` canvas rectangle at (`left`, `top`) at
+    /// full canvas resolution, `NaN` where no source covers a pixel.
+    pub(super) fn luma_region(
+        &self,
+        left: u32,
+        top: u32,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<f32>, String> {
+        let mut values = vec![f32::NAN; width as usize * height as usize];
+        if width == 0 || height == 0 {
+            return Ok(values);
+        }
+        let right = (left + width).min(self.width);
+        let bottom = (top + height).min(self.height);
+        if left >= right || top >= bottom {
+            return Ok(values);
+        }
+        for tile_row in top / self.tile_size..=(bottom - 1) / self.tile_size {
+            for tile_column in left / self.tile_size..=(right - 1) / self.tile_size {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    self.tile_extent(tile_column, tile_row);
+                let (tile, mask) = self.load_tile(tile_column, tile_row)?;
+                let x_start = left.max(tile_left);
+                let x_end = right.min(tile_left + tile_width);
+                let y_start = top.max(tile_top);
+                let y_end = bottom.min(tile_top + tile_height);
+                for y in y_start..y_end {
+                    let row_start = (y - top) as usize * width as usize;
+                    for x in x_start..x_end {
+                        let (tile_x, tile_y) = (x - tile_left, y - tile_top);
+                        if mask.get_pixel(tile_x, tile_y)[0] == 0 {
+                            continue;
+                        }
+                        values[row_start + (x - left) as usize] =
+                            luma(*tile.get_pixel(tile_x, tile_y)) as f32;
+                    }
+                }
+            }
+        }
+        Ok(values)
     }
 
     pub(super) fn covered_bounds(&self) -> Result<Option<(u32, u32, u32, u32)>, String> {

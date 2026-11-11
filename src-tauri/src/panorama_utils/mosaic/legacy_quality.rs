@@ -40,13 +40,28 @@ struct Candidate {
     colour: Rgb<f32>,
 }
 
+/// A cell the focus-scan detail repair rewrote, in canvas pixels.
+pub(super) struct DetailRepairRegion {
+    /// `(x0, y0, x1, y1)`, half-open.
+    pub(super) canvas_rect: (u32, u32, u32, u32),
+    pub(super) donor_source_id: usize,
+    pub(super) donor_path: String,
+    pub(super) outcome: &'static str,
+}
+
 #[derive(Default)]
 pub(super) struct LegacyQualityCapture {
     cells: BTreeMap<(u32, u32), Vec<Candidate>>,
     sources: Vec<QualitySource>,
+    repairs: Vec<DetailRepairRegion>,
 }
 
 impl LegacyQualityCapture {
+    /// Record the regions the detail repair rewrote after ownership was final.
+    pub(super) fn record_detail_repairs(&mut self, regions: Vec<DetailRepairRegion>) {
+        self.repairs = regions;
+    }
+
     pub(super) fn observe(
         &mut self,
         owner: u8,
@@ -182,6 +197,7 @@ impl LegacyQualityCapture {
             delivered_pixels: len,
             unresolved_pixel_count: 0,
             world_origin: origin,
+            detail_repairs: Vec::new(),
             sources: self
                 .sources
                 .iter()
@@ -236,6 +252,25 @@ impl LegacyQualityCapture {
                 },
             report: native_report,
         };
+        result.report.detail_repairs = self
+            .repairs
+            .iter()
+            .filter_map(|region| {
+                let (x0, y0, x1, y1) = region.canvas_rect;
+                let left = x0.max(crop.0);
+                let top = y0.max(crop.1);
+                let right = x1.min(crop.0 + crop.2);
+                let bottom = y1.min(crop.1 + crop.3);
+                (left < right && top < bottom).then(|| {
+                    crate::panorama_utils::stack_pipeline::report::LegacyDetailRepairRecord {
+                        delivered_rect: (left - crop.0, top - crop.1, right - left, bottom - top),
+                        donor_source_id: region.donor_source_id,
+                        donor_path: region.donor_path.clone(),
+                        outcome: region.outcome.into(),
+                    }
+                })
+            })
+            .collect();
         let mut unknown_cells = BTreeMap::new();
         let mut by_cell = BTreeMap::new();
         for (cell, candidates) in self.cells {

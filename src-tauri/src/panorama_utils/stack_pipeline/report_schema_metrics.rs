@@ -747,6 +747,24 @@ pub(crate) struct LegacyNativeEvidenceReport {
     pub unresolved_pixel_count: u64,
     pub world_origin: (f64, f64),
     pub sources: Vec<LegacyNativeSourceRecord>,
+    /// Cells the focus-scan detail repair rewrote after ownership was final.
+    /// Their pixels carry the donor's detail through a dense local alignment
+    /// the registered owner model does not describe, so the owner plane is
+    /// not their provenance; each region names its donor instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail_repairs: Vec<LegacyDetailRepairRecord>,
+}
+
+/// One repaired cell in delivered-output pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct LegacyDetailRepairRecord {
+    /// `(x, y, width, height)` in delivered-output pixels.
+    pub delivered_rect: (u32, u32, u32, u32),
+    pub donor_source_id: usize,
+    pub donor_path: String,
+    /// `repaired` (donor detail on the canvas tone) or `replaced` (donor
+    /// pixels aligned to the surroundings).
+    pub outcome: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

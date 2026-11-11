@@ -142,6 +142,28 @@ impl LayerSampler<'_> {
         Some(source)
     }
 
+    /// The same layer mapping and residual field over another prefiltered
+    /// copy of the source, addressed by its own `source_divisor`.
+    pub(super) fn with_source<'b>(
+        &'b self,
+        source: &'b Rgb32FImage,
+        source_divisor: f64,
+    ) -> LayerSampler<'b> {
+        LayerSampler {
+            info: self.info,
+            source,
+            source_divisor,
+            inverse: self.inverse,
+            native_mapping: self.native_mapping,
+            projection: self.projection,
+            offset: self.offset,
+            left: self.left,
+            top: self.top,
+            scale: self.scale,
+            residual: self.residual.clone(),
+        }
+    }
+
     pub(super) fn sample(&self, x: f64, y: f64) -> Option<Rgb<f32>> {
         let source = self.source_point(x, y)?;
         self.sample_mapped_source(source)
@@ -151,8 +173,9 @@ impl LayerSampler<'_> {
     /// geometry is unchanged. Preserve the original pyramid centre, clamping
     /// and capture-border rules; support coordinates are not sampling positions.
     pub(super) fn sample_mapped_source(&self, source: Point2<f64>) -> Option<Rgb<f32>> {
-        // Each prefilter level represents the centre of a 2x2 source block.
-        // Retain the half-pixel offset to avoid a lens-dependent sampling shift.
+        // A prefiltered pixel `i` is centred on source coordinate
+        // `(i + 0.5) * divisor - 0.5`. Retain the half-pixel offset to avoid a
+        // lens-dependent sampling shift.
         let sx = ((source.x + 0.5) / self.source_divisor - 0.5)
             .clamp(0.0, self.source.width() as f64 - 1.0);
         let sy = ((source.y + 0.5) / self.source_divisor - 0.5)

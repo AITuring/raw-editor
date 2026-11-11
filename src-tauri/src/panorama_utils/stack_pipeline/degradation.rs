@@ -44,6 +44,19 @@ pub const INPUT_PIPELINE_VERSION_MISMATCH: &str = "input_pipeline_version_mismat
 pub const SOURCE_DECODE_FAILED: &str = "source_decode_failed";
 /// A Source_RAW satisfies the overlap evidence of no other source.
 pub const GROUPING_NO_OVERLAP_EVIDENCE: &str = "grouping_no_overlap_evidence";
+/// A few sources of a large scan could not be aligned with the rest and were
+/// left out of it (detail: their paths).
+pub const SCAN_UNALIGNED_SOURCES_SKIPPED: &str = "scan_unaligned_sources_skipped";
+/// Frames of a large scan shot far more obliquely than the rest of their
+/// capture were left out of it (detail: their paths).
+pub const SCAN_OBLIQUE_SOURCES_SKIPPED: &str = "scan_oblique_sources_skipped";
+/// Rendered images (exports) selected among the RAWs of a camera-RAW stack
+/// were left out of it (detail: their paths).
+pub const STACK_RENDERED_SOURCES_SKIPPED: &str = "stack_rendered_sources_skipped";
+/// The Capture_Stations of a layered stack did not all relate, so the stack
+/// was composed on its source poses by the source-scan compositor; focus
+/// layers are then fused frame by frame rather than per station.
+pub const STACK_STATIONS_UNRELATED: &str = "stack_stations_unrelated";
 /// Accumulated centre motion above 0.02 of the long side forced a split.
 pub const GROUPING_ACCUMULATED_MOTION: &str = "grouping_accumulated_motion";
 /// A candidate station exceeded 48 members and was split.
@@ -70,6 +83,10 @@ pub const FUSION_GRAPH_CUT_TIMEOUT: &str = "fusion_graph_cut_timeout";
 pub const FUSION_SINGLE_FRAME_DEGRADED: &str = "fusion_single_frame_degraded";
 /// A region whose every candidate is below the station P10 sharpness.
 pub const FUSION_LOW_SHARPNESS_REGION: &str = "fusion_low_sharpness_region";
+/// A focus-scan region that stays well below the detail around it after the
+/// detail repair: every source is soft there, or the sharper one could not be
+/// aligned. The detail lists the regions and the overview they are circled on.
+pub const SCAN_SOFT_REGION: &str = "scan_soft_region";
 
 // ---------------------------------------------------------------------------
 // Virtual_Tile cache stage
@@ -169,6 +186,11 @@ pub const OUTPUT_ALPHA_UNSUPPORTED: &str = "output_alpha_unsupported";
 pub const QUALITY_GATE_CRITERION_FAILED: &str = "quality_gate_criterion_failed";
 /// Measurable items < 8 or unmeasurable share > 20%.
 pub const QUALITY_GATE_INSUFFICIENT_EVIDENCE: &str = "quality_gate_insufficient_evidence";
+/// The compositor that rendered the result produces no Quality_Gate planes
+/// (the streaming source-scan compositor of scans and of several captures),
+/// so the gate did not run; that compositor verifies source ownership of
+/// every pixel and reports its soft regions instead.
+pub const QUALITY_GATE_NOT_APPLICABLE: &str = "quality_gate_not_applicable";
 /// Peak resident memory above the effective threshold.
 pub const MEMORY_THRESHOLD_EXCEEDED: &str = "memory_threshold_exceeded";
 /// The user cancelled the run.
@@ -415,6 +437,10 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     (INPUT_PIPELINE_VERSION_MISMATCH, Severity::Rejected),
     (SOURCE_DECODE_FAILED, Severity::Degraded),
     (GROUPING_NO_OVERLAP_EVIDENCE, Severity::Degraded),
+    (SCAN_UNALIGNED_SOURCES_SKIPPED, Severity::Degraded),
+    (SCAN_OBLIQUE_SOURCES_SKIPPED, Severity::Degraded),
+    (STACK_RENDERED_SOURCES_SKIPPED, Severity::Degraded),
+    (STACK_STATIONS_UNRELATED, Severity::Degraded),
     (GROUPING_ACCUMULATED_MOTION, Severity::Degraded),
     (GROUPING_MEMBER_LIMIT_SPLIT, Severity::Degraded),
     // Intra station registration and fusion
@@ -428,6 +454,7 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     (FUSION_GRAPH_CUT_TIMEOUT, Severity::Degraded),
     (FUSION_SINGLE_FRAME_DEGRADED, Severity::Degraded),
     (FUSION_LOW_SHARPNESS_REGION, Severity::Degraded),
+    (SCAN_SOFT_REGION, Severity::Degraded),
     // Virtual_Tile cache
     (CACHE_ENTRY_FIELD_MISSING, Severity::Degraded),
     (CACHE_ENTRY_DIMENSION_MISMATCH, Severity::Degraded),
@@ -481,6 +508,7 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
     // Quality_Gate and resources
     (QUALITY_GATE_CRITERION_FAILED, Severity::Rejected),
     (QUALITY_GATE_INSUFFICIENT_EVIDENCE, Severity::Rejected),
+    (QUALITY_GATE_NOT_APPLICABLE, Severity::Degraded),
     (MEMORY_THRESHOLD_EXCEEDED, Severity::Rejected),
     (RUN_CANCELLED_BY_USER, Severity::Rejected),
     (DIAGNOSTICS_WRITE_FAILED, Severity::Degraded),

@@ -57,6 +57,98 @@ pub(in crate::panorama_utils) fn downsample_rgb_half(image: &Rgb32FImage) -> Rgb
         .expect("half-resolution RGB buffer dimensions must match")
 }
 
+/// Catmull-Rom weight, the same cubic the layer samplers interpolate with.
+fn catmull_rom_weight(distance: f64) -> f64 {
+    let t = distance.abs();
+    if t < 1.0 {
+        (1.5 * t - 2.5) * t * t + 1.0
+    } else if t < 2.0 {
+        ((-0.5 * t + 2.5) * t - 4.0) * t + 2.0
+    } else {
+        0.0
+    }
+}
+
+/// First input index and normalised weights of every output sample along one
+/// axis of [`minify_rgb`].
+fn minify_taps(input_length: u32, output_length: u32, divisor: f64) -> Vec<(usize, Vec<f32>)> {
+    let support = 2.0 * divisor;
+    let last_input = i64::from(input_length.max(1)) - 1;
+    (0..output_length)
+        .map(|output| {
+            let centre = (f64::from(output) + 0.5) * divisor - 0.5;
+            let first = ((centre - support).ceil() as i64).clamp(0, last_input);
+            let last = ((centre + support).floor() as i64).clamp(first, last_input);
+            let mut weights = (first..=last)
+                .map(|input| catmull_rom_weight((input as f64 - centre) / divisor))
+                .collect::<Vec<_>>();
+            let sum = weights.iter().sum::<f64>();
+            if sum.abs() > 1e-12 {
+                weights.iter_mut().for_each(|weight| *weight /= sum);
+            }
+            (
+                first as usize,
+                weights.into_iter().map(|weight| weight as f32).collect(),
+            )
+        })
+        .collect()
+}
+
+/// Minify an RGB image by an exact, possibly fractional `divisor`.
+///
+/// The Catmull-Rom kernel is widened by the divisor, so this is an
+/// anti-aliasing prefilter rather than a point sample.  Output pixel `i` is
+/// centred on input coordinate `(i + 0.5) * divisor - 0.5`, the convention of
+/// [`downsample_rgb_half`] and the layer samplers, so a caller keeps
+/// addressing the result as `source / divisor`.
+pub(in crate::panorama_utils) fn minify_rgb(image: &Rgb32FImage, divisor: f64) -> Rgb32FImage {
+    let (width, height) = image.dimensions();
+    if !(divisor.is_finite() && divisor > 1.0) || width == 0 || height == 0 {
+        return image.clone();
+    }
+    let output_width = ((f64::from(width) / divisor).ceil() as u32).max(1);
+    let output_height = ((f64::from(height) / divisor).ceil() as u32).max(1);
+    let horizontal = minify_taps(width, output_width, divisor);
+    let vertical = minify_taps(height, output_height, divisor);
+    let source = image.as_raw();
+    let source_stride = width as usize * 3;
+    let output_stride = output_width as usize * 3;
+    let mut rows = vec![0.0f32; output_stride * height as usize];
+    rows.par_chunks_mut(output_stride)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let line = &source[y * source_stride..(y + 1) * source_stride];
+            for (x, (first, weights)) in horizontal.iter().enumerate() {
+                let mut sum = [0.0f32; 3];
+                for (tap, &weight) in weights.iter().enumerate() {
+                    let start = (first + tap) * 3;
+                    for channel in 0..3 {
+                        sum[channel] += line[start + channel] * weight;
+                    }
+                }
+                row[x * 3..x * 3 + 3].copy_from_slice(&sum);
+            }
+        });
+    let mut output = vec![0.0f32; output_stride * output_height as usize];
+    output
+        .par_chunks_mut(output_stride)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let (first, weights) = &vertical[y];
+            for (tap, &weight) in weights.iter().enumerate() {
+                let start = (first + tap) * output_stride;
+                for (value, &sample) in row.iter_mut().zip(&rows[start..start + output_stride]) {
+                    *value += sample * weight;
+                }
+            }
+            // The cubic's negative lobes may undershoot next to a black
+            // capture border; a channel is never negative.
+            row.iter_mut().for_each(|value| *value = value.max(0.0));
+        });
+    Rgb32FImage::from_raw(output_width, output_height, output)
+        .expect("minified RGB buffer dimensions must match")
+}
+
 pub(super) fn downsample_mask_half(mask: &GrayImage) -> GrayImage {
     let (source_width, source_height) = mask.dimensions();
     let target_width = source_width.div_ceil(2).max(1);

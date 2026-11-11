@@ -424,7 +424,8 @@ fn real_focus_pair_diagnostics_from_env() {
     let mut images = Vec::new();
     for (id, filename) in paths.iter().enumerate() {
         let prepared =
-            load_prepared_stack_source(filename, &settings, raw_exposure_reference).unwrap();
+            load_prepared_stack_source(filename, &settings, raw_exposure_reference.as_ref())
+                .unwrap();
         let (width, height) = prepared.image.dimensions();
         let (w, h, scale_factor) =
             processing::calculate_downscale_dimensions_capped(width, height, 2400);

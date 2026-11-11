@@ -29,6 +29,11 @@ export interface ZoomableImagePreviewSourceSize {
 
 export interface ZoomableImagePreviewHandle {
   fitToViewport(): void;
+  /**
+   * Zoom so the box `x, y, width, height` (fractions of the image, 0..1)
+   * fills about half of the viewport, centred.
+   */
+  zoomToRegion(x: number, y: number, width: number, height: number): void;
   zoomIn(): void;
   zoomOut(): void;
   zoomToActualSize(): void;
@@ -40,6 +45,11 @@ export interface ZoomableImagePreviewProps {
   children?: ReactNode;
   className?: string;
   detailSrc?: string | null;
+  /**
+   * Drawn over the image and moved with it; positioned in percent of the
+   * image. Interactive elements opt in with `pointer-events: auto`.
+   */
+  imageOverlay?: ReactNode;
   interactionSrc: string;
   labels: ZoomableImagePreviewLabels;
   sourceSize?: ZoomableImagePreviewSourceSize | null;
@@ -87,6 +97,7 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
       children,
       className,
       detailSrc = null,
+      imageOverlay,
       interactionSrc,
       labels,
       sourceSize = null,
@@ -96,6 +107,8 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
   ) {
     const viewportRef = useRef<HTMLDivElement | null>(null);
     const stageRef = useRef<HTMLDivElement | null>(null);
+    const overlayRef = useRef<HTMLDivElement | null>(null);
+    const overlayBoxRef = useRef<HTMLDivElement | null>(null);
     const imageRef = useRef<HTMLImageElement | null>(null);
     const screenPreviewRef = useRef<HTMLDivElement | null>(null);
     const zoomLabelRef = useRef<HTMLSpanElement | null>(null);
@@ -178,6 +191,7 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
         renderFrameRef.current = requestAnimationFrame(() => {
           renderFrameRef.current = null;
           const stage = stageRef.current;
+          const overlay = overlayRef.current;
           const screenPreview = screenPreviewRef.current;
           const transform = transformRef.current;
           if (!stage) return;
@@ -189,18 +203,22 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
           if (shouldAnimateNextFrameRef.current) {
             const transition = `transform ${TRANSFORM_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
             stage.style.transition = transition;
+            if (overlay) overlay.style.transition = transition;
             if (screenPreview) screenPreview.style.transition = transition;
             transitionTimerRef.current = window.setTimeout(() => {
               transitionTimerRef.current = null;
               if (stageRef.current) stageRef.current.style.transition = 'none';
+              if (overlayRef.current) overlayRef.current.style.transition = 'none';
               if (screenPreviewRef.current) screenPreviewRef.current.style.transition = 'none';
             }, TRANSFORM_ANIMATION_MS);
           } else {
             stage.style.transition = 'none';
+            if (overlay) overlay.style.transition = 'none';
             if (screenPreview) screenPreview.style.transition = 'none';
           }
 
           stage.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`;
+          if (overlay) overlay.style.transform = stage.style.transform;
           transformScreenPreview(transform);
           updateControls(transform);
         });
@@ -272,6 +290,10 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
         viewportHeight: viewport.clientHeight,
         viewportWidth: viewport.clientWidth,
       };
+      if (overlayBoxRef.current) {
+        overlayBoxRef.current.style.width = `${image.clientWidth}px`;
+        overlayBoxRef.current.style.height = `${image.clientHeight}px`;
+      }
       if (image.clientWidth > 0 && image.clientHeight > 0) {
         const sourceWidth = sourceSize?.width ?? (detailNaturalSizeRef.current.width || image.naturalWidth);
         const sourceHeight = sourceSize?.height ?? (detailNaturalSizeRef.current.height || image.naturalHeight);
@@ -329,6 +351,24 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
       [updateZoomFromCenter],
     );
 
+    const zoomToRegion = useCallback(
+      (x: number, y: number, width: number, height: number) => {
+        const geometry = geometryRef.current;
+        if (geometry.imageWidth <= 0 || geometry.imageHeight <= 0) return;
+        const regionWidth = Math.max(width * geometry.imageWidth, 1);
+        const regionHeight = Math.max(height * geometry.imageHeight, 1);
+        const scale = clampTransformScale(
+          0.5 * Math.min(geometry.viewportWidth / regionWidth, geometry.viewportHeight / regionHeight),
+          maxTransformScaleRef.current,
+        );
+        // The stage scales about its centre, where the image centre sits.
+        const centerX = (x + width / 2 - 0.5) * geometry.imageWidth;
+        const centerY = (y + height / 2 - 0.5) * geometry.imageHeight;
+        applyTransform({ scale, x: -centerX * scale, y: -centerY * scale }, true);
+      },
+      [applyTransform],
+    );
+
     const zoomToOneHundredPercent = useCallback(() => {
       updateZoomFromCenter(resolvePixelZoomScale(1, fitPixelZoomRef.current, maxTransformScaleRef.current));
     }, [updateZoomFromCenter]);
@@ -340,8 +380,9 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
         zoomIn: () => stepZoom(1),
         zoomOut: () => stepZoom(-1),
         zoomToActualSize: zoomToOneHundredPercent,
+        zoomToRegion,
       }),
-      [resetView, stepZoom, zoomToOneHundredPercent],
+      [resetView, stepZoom, zoomToOneHundredPercent, zoomToRegion],
     );
 
     useEffect(() => {
@@ -522,6 +563,16 @@ const ZoomableImagePreview = forwardRef<ZoomableImagePreviewHandle, ZoomableImag
           thumbnailUrl={interactionSrc}
           transformedOriginalUrl={null}
         />
+
+        <div
+          aria-hidden={imageOverlay ? undefined : true}
+          className="zoomable-image-preview__overlay pointer-events-none absolute inset-0 z-[5] flex origin-center items-center justify-center p-4 sm:p-6"
+          ref={overlayRef}
+        >
+          <div className="relative shrink-0" ref={overlayBoxRef}>
+            {imageOverlay}
+          </div>
+        </div>
 
         {children}
 

@@ -1,3 +1,4 @@
+pub(crate) mod captures;
 pub(crate) mod coordinates;
 pub(crate) mod focus_geometry;
 pub(crate) mod mosaic;

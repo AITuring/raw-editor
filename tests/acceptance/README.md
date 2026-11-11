@@ -78,6 +78,15 @@ needs a visual check of the preview and crops. Other datasets run the same way (
 records an intended, visually reviewed change that deviates from the old baseline (crashes, missing inputs and
 reference changes still fail). The baseline keeps only counts, digests and metric summaries.
 
+`qixu` and `fengying` replay what a user does in the image-stack dialog: whole folders selected
+together (`directories`), passed last photo first (`inputOrder: "reverse"`), stray files included.
+Each names the photos the stack must leave out by itself (`expectedSkipped`): for 祁序 the three frames
+that align with nothing (DSC_3910, DSC_3911, DSC_6708) and the oblique DSC_3842; for 枫鹰雉鸡 the six
+Photoshop exports (`未标题*.jpg`) among its RAWs. The runner fails when another photo is missing from
+the stitching order or one of these is stitched, so a regression in the skip rules, the capture choice or
+the order independence shows up as a failure or a changed digest. Both are protected 10% baselines
+(about 25 and 15 minutes); their 1:1 renders take 54 and 31 minutes and peak at about 13 and 24 GB.
+
 The equivalent manual command is below. Do not add `--exact` to the Rust filter because the test is
 nested under `panorama_stitching::acceptance_tests::focus_stack_fixture`. `RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG` requests a
 byte-for-byte comparison with the Photoshop file; the canvas differs from Photoshop's, so leave it unset

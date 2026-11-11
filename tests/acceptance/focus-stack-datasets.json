@@ -17,7 +17,10 @@
       "referenceAliases": ["DSC08854_FocusStack1.jpg"],
       "referenceBytes": 150622610,
       "referenceSha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
-      "referenceDimensions": { "width": 31065, "height": 11007 }
+      "referenceDimensions": {
+        "width": 31065,
+        "height": 11007
+      }
     },
     {
       "id": "mayuan-psd",
@@ -42,7 +45,12 @@
       "sourceAggregateSha256": "e0ba1b71572ec365f8e753e5c6d2bf0d7a77d5031748fc543923ba000838f4cd",
       "baseline": false,
       "referenceOutput": "DSC_3762_FocusStack.jpg",
-      "regressionSubsets": [{ "id": "langyuan-10", "first": 10 }]
+      "regressionSubsets": [
+        {
+          "id": "langyuan-10",
+          "first": 10
+        }
+      ]
     },
     {
       "id": "wenyuan",
@@ -54,7 +62,12 @@
       "sourceBytes": 6985740554,
       "sourceAggregateSha256": "eb76658a20b23be187e1e195e3331141765b6f776f82d9e168bd3a07ab8bd722",
       "baseline": false,
-      "regressionSubsets": [{ "id": "wenyuan-10", "first": 10 }]
+      "regressionSubsets": [
+        {
+          "id": "wenyuan-10",
+          "first": 10
+        }
+      ]
     },
     {
       "id": "qixu-1",
@@ -127,6 +140,41 @@
       "excludePatterns": [],
       "expectedSourceCount": 24,
       "baseline": false
+    },
+    {
+      "id": "qixu",
+      "label": "祁序1 + 祁序2（两次拍摄一起选）",
+      "directories": ["祁序1", "祁序2"],
+      "sourceExtensions": [".nef"],
+      "excludePatterns": [],
+      "expectedSourceCount": 173,
+      "sourceBytes": 10252922092,
+      "sourceAggregateSha256": "18ac9289a3b5e346c6bbc04559be7be43917df0967df847084b96b4ab3785300",
+      "inputOrder": "reverse",
+      "expectedSkipped": ["DSC_3842.NEF", "DSC_3910.NEF", "DSC_3911.NEF", "DSC_6708.NEF"],
+      "baseline": true,
+      "notes": "整个两个文件夹倒序传入，和在图库里从最后一张往前选一样；DSC_3910/3911/6708 和其它照片都对不上，DSC_3842 斜拍过整幅画，堆栈应自动跳过这 4 张。"
+    },
+    {
+      "id": "fengying",
+      "label": "枫鹰雉鸡（整个文件夹）",
+      "directories": ["枫鹰雉鸡", "枫鹰雉鸡/toubu", "枫鹰雉鸡/枫鹰底部"],
+      "sourceExtensions": [".arw", ".nef", ".jpg", ".jpeg"],
+      "excludePatterns": [],
+      "expectedSourceCount": 110,
+      "sourceBytes": 8468603302,
+      "sourceAggregateSha256": "87cc8d834246e08bdd8645487c3512074476f0d83f7dd6dee180fc0c4d2ee131",
+      "inputOrder": "reverse",
+      "expectedSkipped": [
+        "未标题-10-1.jpg",
+        "未标题-11 拷贝.jpg",
+        "未标题-12 拷贝.jpg",
+        "未标题-13-1.jpg",
+        "未标题-13.jpg",
+        "未标题-9.jpg"
+      ],
+      "baseline": true,
+      "notes": "画身、头部、底部三个文件夹一起倒序传入，含 6 张 PS 导出的“未标题”JPEG，堆栈应把它们留在外面。"
     }
   ]
 }

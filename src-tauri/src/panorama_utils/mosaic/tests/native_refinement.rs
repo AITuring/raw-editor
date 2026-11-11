@@ -250,10 +250,11 @@ fn streaming_intra_station_refinement_measures_across_tiles() {
     let mode = NativeRefineMode::IntraStation {
         anchor_long_side: 256,
     };
+    let identity = OwnerStations::identity();
     let mut sampler = layer_sampler(&shifted, &info, width, height);
     let outcome = refine_native_layer_streaming(
         &store,
-        Some(1),
+        Some((1, &identity)),
         &mut sampler,
         width,
         height,
@@ -274,7 +275,7 @@ fn streaming_intra_station_refinement_measures_across_tiles() {
     let mut foreign = layer_sampler(&shifted, &info, width, height);
     let ignored = refine_native_layer_streaming(
         &store,
-        Some(7),
+        Some((7, &identity)),
         &mut foreign,
         width,
         height,
@@ -284,6 +285,27 @@ fn streaming_intra_station_refinement_measures_across_tiles() {
     .expect("streaming native refinement");
     assert_eq!(ignored.accepted_control_points, 0);
     assert_eq!(ignored.evaluated_control_points, 0);
+    // A panorama transition labels the same pixels by source (label 1 here
+    // belongs to station 7). The bracket of station 7 must find them; a
+    // label-equals-station test found none and every bracket of 祁序 failed
+    // with zero inlier coverage.
+    let mut source_labels = OwnerStations::identity();
+    source_labels.record(1, 7);
+    let mut bracket = layer_sampler(&shifted, &info, width, height);
+    let resolved = refine_native_layer_streaming(
+        &store,
+        Some((7, &source_labels)),
+        &mut bracket,
+        width,
+        height,
+        (0, width - 1, 0, height - 1),
+        mode,
+    )
+    .expect("streaming native refinement");
+    assert_eq!(
+        resolved.accepted_control_points,
+        outcome.accepted_control_points
+    );
 }
 
 #[test]

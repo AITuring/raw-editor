@@ -190,6 +190,12 @@ pub async fn process_image_stack(
                 // a later save from consulting another run's global ledger.
                 let degradation_ledger =
                     crate::panorama_utils::stack_pipeline::degradation::run_ledger_snapshot();
+                let soft_regions = soft_region_notice(&degradation_ledger);
+                let skipped_sources = skipped_sources_notice(&degradation_ledger);
+                let stations_unrelated = degradation_ledger.entries().iter().any(|entry| {
+                    entry.reason
+                        == crate::panorama_utils::stack_pipeline::degradation::STACK_STATIONS_UNRELATED
+                });
                 let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
                 if !outcome_decision.permits_final_output() {
                     // The composed pixels remain available only as diagnostic
@@ -259,6 +265,11 @@ pub async fn process_image_stack(
                         "requestId": request_id,
                         "resultId": result_id,
                         "result": outcome_decision.as_identifier(),
+                        "softRegions": soft_regions,
+                        "skippedSources": skipped_sources,
+                        // The stations did not all relate and the photos were
+                        // composed on their own positions instead.
+                        "stationsUnrelated": stations_unrelated,
                     }),
                 );
                 Ok(())
@@ -286,6 +297,66 @@ pub async fn process_image_stack(
 
 #[cfg(test)]
 mod tests;
+
+/// Paths of the sources a stack went on without: rendered images among the
+/// RAWs, and frames of a scan that aligned with none of the others or were shot
+/// far more obliquely than the rest.
+fn skipped_sources_notice(
+    ledger: &crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+) -> serde_json::Value {
+    use crate::panorama_utils::stack_pipeline::degradation::{
+        SCAN_OBLIQUE_SOURCES_SKIPPED, SCAN_UNALIGNED_SOURCES_SKIPPED,
+        STACK_RENDERED_SOURCES_SKIPPED,
+    };
+    let paths = ledger
+        .entries()
+        .iter()
+        .filter(|entry| {
+            entry.reason == SCAN_UNALIGNED_SOURCES_SKIPPED
+                || entry.reason == SCAN_OBLIQUE_SOURCES_SKIPPED
+                || entry.reason == STACK_RENDERED_SOURCES_SKIPPED
+        })
+        .filter_map(|entry| {
+            entry
+                .detail
+                .get("paths")
+                .and_then(serde_json::Value::as_array)
+        })
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>();
+    serde_json::Value::Array(paths)
+}
+
+/// The soft regions a focus scan reported for this run (`scan_soft_region`),
+/// for the result view: their boxes in result pixels, how many lack a sharp
+/// source, and the overview they are circled on. `Null` when there are none.
+fn soft_region_notice(
+    ledger: &crate::panorama_utils::stack_pipeline::degradation::DegradationLedger,
+) -> serde_json::Value {
+    use crate::panorama_utils::stack_pipeline::degradation::SCAN_SOFT_REGION;
+    let Some(entry) = ledger
+        .entries()
+        .iter()
+        .rev()
+        .find(|entry| entry.reason == SCAN_SOFT_REGION)
+    else {
+        return serde_json::Value::Null;
+    };
+    let detail = &entry.detail;
+    let regions = detail
+        .get("regions")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    serde_json::json!({
+        "count": regions.len(),
+        "sourcesSoft": detail.get("sources_soft").cloned().unwrap_or(serde_json::Value::Null),
+        "outputSize": detail.get("output_size").cloned().unwrap_or(serde_json::Value::Null),
+        "overviewPath": detail.get("overview").cloned().unwrap_or(serde_json::Value::Null),
+        "regions": regions,
+    })
+}
 
 /// 需求 10.10: the notices of saving the current result in `output_format`
 /// with `bit_depth` (fewer than 16 bits per channel, or transparency the

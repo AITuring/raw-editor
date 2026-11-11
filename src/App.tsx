@@ -318,6 +318,7 @@ function App() {
         resultId: null,
         lastSavedPath: null,
         resultSize: null,
+        softRegions: null,
         sourcePaths: paths,
         blendMode: 'focus',
         alignmentMode: 'auto',

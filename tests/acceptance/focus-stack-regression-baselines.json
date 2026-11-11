@@ -2,6 +2,63 @@
   "schemaVersion": 1,
   "baselines": [
     {
+      "dataset": "fengying",
+      "subset": null,
+      "scale": 0.1,
+      "previewEdge": 1200,
+      "previewOnly": true,
+      "output": {
+        "width": 4054,
+        "height": 3360
+      },
+      "inputs": 110,
+      "orderedInputs": 104,
+      "streamedSources": 104,
+      "lendingSources": null,
+      "ownershipVerified": true,
+      "selectedPath": "legacy_single_layer_mosaic",
+      "stationCount": 74,
+      "qualityGate": "insufficient_evidence",
+      "toneStatus": "not_run",
+      "nativeAcceptance": "passed-or-not-applicable",
+      "digests": {
+        "preview": "96f3e913e61093f211ad16c6e21ffd9a83ac3d2055fb1870d3d6cde95aed3c74",
+        "crops": {
+          "top-left": "0e1e4900abbdca38bd6f831b129846c75bfcc5d5b893009aa22113a6402cb605",
+          "top-center": "1798c901df0e0eed2e0f4da9036510a65f0dc38c9f84a7d3f5af3fb7ddfae9a3",
+          "top-right": "0877af02dcc8f16a3fc883c83dc766fbe038229e94312021f88ce8355094b7d7",
+          "bottom-left": "ab65aababd53c25dcff9ce8b2e847e4243b5729b4042a8b8afd79430385cdcd2",
+          "bottom-center": "327e83162d896370d3a8cdaf3971e459913f7abb503dea21870c078c08f2fe7b",
+          "bottom-right": "403454364890c16260b1760018edb889d298d59241e48106b3429a1deef9fbd0"
+        },
+        "appJpeg": null
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 528,
+          "sharpnessMedian": 0.0952425544022395,
+          "sharpnessP10": 0.031719431993635486,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.06563006029996081
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.12792060118300075
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.07198976007138577
+            }
+          ]
+        },
+        "reference": null
+      },
+      "recordedAt": "2026-11-09",
+      "commit": "06ca0f87"
+    },
+    {
       "dataset": "lanting",
       "subset": null,
       "scale": 0.1,
@@ -327,6 +384,63 @@
       },
       "recordedAt": "2026-10-28",
       "commit": "36895af9"
+    },
+    {
+      "dataset": "qixu",
+      "subset": null,
+      "scale": 0.1,
+      "previewEdge": 1200,
+      "previewOnly": true,
+      "output": {
+        "width": 4427,
+        "height": 2017
+      },
+      "inputs": 173,
+      "orderedInputs": 169,
+      "streamedSources": 126,
+      "lendingSources": 43,
+      "ownershipVerified": true,
+      "selectedPath": "layered_virtual_tile",
+      "stationCount": 85,
+      "qualityGate": "not_run",
+      "toneStatus": "not_run",
+      "nativeAcceptance": "passed-or-not-applicable",
+      "digests": {
+        "preview": "392f896a0f3c3be537edcfd41a44515d0b9de20476086668b670d8638994db92",
+        "crops": {
+          "top-left": "5f1ce00db6a5033c6f8bda3bd255d8370630a4068a5a8053bafd58513ad31b13",
+          "top-center": "6f09a2183ce3b7d20bdae32fc7f73645e06639876dc079ad762e322e8088b80c",
+          "top-right": "24171e96065bbf948eeadf66d4f34be8a60887eb3141a0fbbda05f26d5aff10e",
+          "bottom-left": "a025feb2a0d7ad13efe5d7cd24f9eb3879eaa9af50feb5860317fb400e14c248",
+          "bottom-center": "cf19df16ebb7dca629bbe9bc7a1826809a0a77adb2978d1f0e8621e5dd1cb9bd",
+          "bottom-right": "b52cfe1814099b77f9a4fbb5b15c336c06ec4f5cce2937de0194b7b5db7ddf62"
+        },
+        "appJpeg": null
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 391,
+          "sharpnessMedian": 0.04271581653042151,
+          "sharpnessP10": 0.022424540629249194,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.043158662843021556
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.039817083970710355
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.04341676200549664
+            }
+          ]
+        },
+        "reference": null
+      },
+      "recordedAt": "2026-11-09",
+      "commit": "06ca0f87"
     }
   ]
 }

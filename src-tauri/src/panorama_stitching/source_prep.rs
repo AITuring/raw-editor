@@ -290,33 +290,99 @@ pub(super) fn stack_raw_exposure_from_bytes(bytes: &[u8]) -> Option<f64> {
     (time > 0.0 && aperture > 0.0 && iso > 0 && exposure.is_finite()).then_some(exposure)
 }
 
-pub(super) fn stack_raw_exposure_reference(paths: &[String]) -> Option<f64> {
-    let mut exposures = Vec::with_capacity(paths.len());
-    let mut camera = None;
+/// The camera a RAW was taken with: its EXIF make and model.
+fn raw_camera(path: &str, bytes: &[u8]) -> Option<(String, String)> {
+    let metadata = crate::exif_processing::read_exif_data_from_bytes(path, bytes);
+    Some((
+        metadata.get("Make")?.clone(),
+        metadata.get("Model")?.clone(),
+    ))
+}
+
+/// The median photon exposure of every camera in a RAW stack. Each frame is
+/// brought to its own camera's median: time × ISO / aperture² compares frames
+/// of one camera exactly, while two cameras differ by their sensitivity, so
+/// what is left between cameras is the overlap-measured tone's to settle.
+/// 枫鹰雉鸡 mixes 1/2 s and 1/8 s frames of one Sony with a single Nikon
+/// overview; requiring one camera left all of them unnormalised.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct RawExposureReference {
+    by_camera: HashMap<(String, String), (f64, usize)>,
+}
+
+impl RawExposureReference {
+    /// Per-camera medians of `(camera, exposure)` samples; `None` when empty.
+    pub(super) fn from_samples(
+        samples: impl IntoIterator<Item = ((String, String), f64)>,
+    ) -> Option<Self> {
+        let mut exposures = HashMap::<(String, String), Vec<f64>>::new();
+        for (camera, exposure) in samples {
+            exposures.entry(camera).or_default().push(exposure);
+        }
+        let by_camera = exposures
+            .into_iter()
+            .map(|(camera, mut values)| {
+                values.sort_by(f64::total_cmp);
+                (camera, (values[values.len() / 2], values.len()))
+            })
+            .collect::<HashMap<_, _>>();
+        (!by_camera.is_empty()).then_some(Self { by_camera })
+    }
+
+    fn exposure_for_camera(&self, camera: &(String, String)) -> Option<f64> {
+        self.by_camera.get(camera).map(|&(exposure, _)| exposure)
+    }
+
+    fn exposure_for(&self, path: &str, bytes: &[u8]) -> Option<f64> {
+        self.exposure_for_camera(&raw_camera(path, bytes)?)
+    }
+
+    /// Stable value for processing cache keys: cameras sorted, exposure bits.
+    pub(super) fn fingerprint_entries(&self) -> Vec<(&str, &str, u64, usize)> {
+        let mut entries = self
+            .by_camera
+            .iter()
+            .map(|((make, model), &(exposure, frames))| {
+                (make.as_str(), model.as_str(), exposure.to_bits(), frames)
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+        entries
+    }
+
+    /// One line per camera for the run log.
+    pub(super) fn describe(&self) -> String {
+        let mut cameras = self
+            .by_camera
+            .iter()
+            .map(|((make, model), (exposure, frames))| {
+                format!("{make} {model} {exposure:.6} ({frames} frame(s))")
+            })
+            .collect::<Vec<_>>();
+        cameras.sort();
+        cameras.join(", ")
+    }
+}
+
+pub(super) fn stack_raw_exposure_reference(paths: &[String]) -> Option<RawExposureReference> {
+    let mut samples = Vec::with_capacity(paths.len());
     for path in paths {
         if !is_raw_file(path) {
             return None;
         }
         let bytes = read_file_mapped(Path::new(path)).ok()?;
-        let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
-        let identity = (
-            metadata.get("Make")?.clone(),
-            metadata.get("Model")?.clone(),
-        );
-        if camera.as_ref().is_some_and(|camera| camera != &identity) {
-            return None;
-        }
-        camera = Some(identity);
-        exposures.push(stack_raw_exposure_from_bytes(&bytes)?);
+        samples.push((
+            raw_camera(path, &bytes)?,
+            stack_raw_exposure_from_bytes(&bytes)?,
+        ));
     }
-    exposures.sort_by(f64::total_cmp);
-    exposures.get(exposures.len() / 2).copied()
+    RawExposureReference::from_samples(samples)
 }
 
 pub(super) fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
+    raw_exposure_reference: Option<&RawExposureReference>,
 ) -> Result<PreparedStackSource, String> {
     load_prepared_stack_source_with_preflight(filename, settings, raw_exposure_reference, None)
 }
@@ -324,7 +390,7 @@ pub(super) fn load_prepared_stack_source(
 pub(super) fn load_prepared_stack_source_with_preflight(
     filename: &str,
     settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
+    raw_exposure_reference: Option<&RawExposureReference>,
     preflight: Option<&SourcePreflightRecord>,
 ) -> Result<PreparedStackSource, String> {
     let mapped_file_data = if preflight.is_none() {
@@ -379,8 +445,14 @@ pub(super) fn load_prepared_stack_source_with_preflight(
         let source_exposure = preflight
             .and_then(|record| record.raw_exposure)
             .or_else(|| stack_raw_exposure_from_bytes(file_data));
-        if let Some(reference) = raw_exposure_reference
-            && let Some(exposure) = source_exposure
+        if let Some(reference) = raw_exposure_reference.and_then(|reference| match preflight {
+            Some(record) => Some((
+                record.exif.get("Make")?.clone(),
+                record.exif.get("Model")?.clone(),
+            ))
+            .and_then(|camera| reference.exposure_for_camera(&camera)),
+            None => reference.exposure_for(filename, file_data),
+        }) && let Some(exposure) = source_exposure
         {
             let gain = (reference / exposure) as f32;
             if gain.is_finite() && gain > 0.0 {

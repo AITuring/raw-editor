@@ -289,7 +289,7 @@ fn real_saved_capture_station_from_env() {
             .find(|s| s["id"].as_u64().unwrap() as usize == id)
             .unwrap();
         let path = source["filename"].as_str().unwrap().to_string();
-        let prepared = load_prepared_stack_source(&path, &settings, exposure).unwrap();
+        let prepared = load_prepared_stack_source(&path, &settings, exposure.as_ref()).unwrap();
         if production_normalization {
             let raw = is_raw_file(&path);
             let high = raw
@@ -386,7 +386,7 @@ fn real_saved_capture_station_from_env() {
     }
     let references = images.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
-        load_prepared_stack_source(&info.filename, &settings, exposure).map(|p| {
+        load_prepared_stack_source(&info.filename, &settings, exposure.as_ref()).map(|p| {
             let mut rendered = p.image.to_rgb32f();
             if production_normalization && is_raw_file(&info.filename) {
                 if let Some(gain) = shared_display_gain {
@@ -465,7 +465,7 @@ fn real_saved_capture_station_from_env() {
         },
         "normalization": {
             "pixel_loader": "load_prepared_stack_source",
-            "physical_exposure_reference": exposure,
+            "physical_exposure_reference": exposure.as_ref().map(|reference| reference.describe()),
             "production_normalization_requested": production_normalization,
             "preparation_source_count": preparation_ids.len(),
             "source_display_highs": source_display_highs,
@@ -924,4 +924,53 @@ fn real_focus_stack_alignment_cache_contract() {
         bytes.len(),
         cache_path.display()
     );
+}
+
+/// Writes every source of `RAW_EDITOR_PREPARED_DUMP_PATHS` (colon separated)
+/// as the stitcher prepares it (decoded, exposure-normalised, lens-corrected)
+/// in grey at `RAW_EDITOR_PREPARED_DUMP_SCALE` (default 0.25) to
+/// `RAW_EDITOR_PREPARED_DUMP_DIR/<stem>.png`, so pose residuals can be
+/// measured offline on the geometry the global poses refer to.
+#[test]
+#[ignore = "dumps prepared real sources for offline pose diagnostics"]
+fn dump_prepared_sources_from_env() {
+    let paths = std::env::var("RAW_EDITOR_PREPARED_DUMP_PATHS")
+        .expect("RAW_EDITOR_PREPARED_DUMP_PATHS is required")
+        .split(':')
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let directory = PathBuf::from(
+        std::env::var_os("RAW_EDITOR_PREPARED_DUMP_DIR")
+            .expect("RAW_EDITOR_PREPARED_DUMP_DIR is required"),
+    );
+    let scale = std::env::var("RAW_EDITOR_PREPARED_DUMP_SCALE")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(0.25);
+    fs::create_dir_all(&directory).unwrap();
+    crate::sidecar_storage::initialize(
+        PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
+    )
+    .unwrap();
+    let settings = AppSettings::default();
+    let exposure = stack_raw_exposure_reference(&paths);
+    paths.par_iter().for_each(|path| {
+        let stem = Path::new(path)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let target = directory.join(format!("{stem}.png"));
+        if target.exists() {
+            return;
+        }
+        let prepared = load_prepared_stack_source(path, &settings, exposure.as_ref()).unwrap();
+        let grey = prepared.image.to_luma8();
+        let width = ((f64::from(grey.width()) * scale).round() as u32).max(1);
+        let height = ((f64::from(grey.height()) * scale).round() as u32).max(1);
+        image::imageops::resize(&grey, width, height, image::imageops::FilterType::Triangle)
+            .save(&target)
+            .unwrap();
+        println!("dumped {stem} {}x{}", grey.width(), grey.height());
+    });
 }

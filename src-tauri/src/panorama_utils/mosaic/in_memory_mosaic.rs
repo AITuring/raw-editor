@@ -15,7 +15,6 @@ use super::super::stack_pipeline::station_degradation::record_run_entries;
 use super::super::stack_pipeline::station_degradation::record_run_group_join_rejection;
 use super::super::stack_pipeline::station_degradation::station_plan_entries;
 use super::super::stitching::Projection;
-use super::super::stitching::downsample_rgb_half;
 use super::super::stitching::output_bounds;
 use super::super::stitching::pixel_aligned_canvas;
 use super::super::stitching::transformed_image_region;
@@ -23,7 +22,6 @@ use crate::panorama_utils::shared::ImageInfo;
 use image::GrayImage;
 use image::Rgb32FImage;
 use nalgebra::Matrix3;
-use nalgebra::Point3;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -35,10 +33,10 @@ use tauri::Runtime;
 use super::diagnostics;
 use super::{
     ANALYSIS_LONG_SIDE, Field, GRID_STEP, LONG_SEQUENCE_SELECTION_LONG_SIDE, LayerSampler,
-    MosaicCoverageObservation, NativeRefineMode, STREAMING_CANVAS_MIN_PIXELS, adjusted,
-    detail_preserving_mosaic_streaming, intra_station_frame_record, ownership,
-    ownership_with_long_side, refine_layer, refine_native_layer, station_member_median_sharpness,
-    tone_field,
+    MosaicCoverageObservation, MosaicToneFinish, NativeRefineMode, STREAMING_CANVAS_MIN_PIXELS,
+    adjusted, detail_preserving_mosaic_streaming, intra_station_frame_record, ownership,
+    ownership_with_long_side, planar_canvas_scale, prefilter_minified_source, refine_layer,
+    refine_native_layer, station_member_median_sharpness, tone_field,
 };
 
 pub(super) fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
@@ -60,12 +58,14 @@ pub(super) fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u3
     found.then_some((min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn detail_preserving_mosaic<R: Runtime, F>(
     images: &[&ImageInfo],
     homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     capture_group_ids: Option<&HashMap<usize, u8>>,
     sequence_gap_aware: bool,
+    tone_finish: MosaicToneFinish,
     app: AppHandle<R>,
     event: &str,
     load: &mut F,
@@ -79,6 +79,7 @@ where
         projection,
         capture_group_ids,
         sequence_gap_aware,
+        tone_finish,
         app,
         event,
         load,
@@ -87,12 +88,14 @@ where
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn detail_preserving_mosaic_observed<R: Runtime, F>(
     images: &[&ImageInfo],
     homographies: &HashMap<usize, Matrix3<f64>>,
     projection: Projection,
     capture_group_ids: Option<&HashMap<usize, u8>>,
     sequence_gap_aware: bool,
+    tone_finish: MosaicToneFinish,
     app: AppHandle<R>,
     event: &str,
     load: &mut F,
@@ -127,6 +130,7 @@ where
             projection,
             capture_group_ids,
             sequence_gap_aware,
+            tone_finish,
             app,
             event,
             load,
@@ -206,28 +210,15 @@ where
                 images.len()
             ),
         );
-        let mut source = load(info)?;
+        let source = load(info)?;
         let transform = &homographies[&info.id];
-        let mut source_divisor = 1.0;
-        if projection == Projection::Planar {
-            let center = Point3::new(info.width as f64 * 0.5, info.height as f64 * 0.5, 1.0);
-            let c = transform * center;
-            let dx = transform * (center + nalgebra::Vector3::new(1.0, 0.0, 0.0));
-            let dy = transform * (center + nalgebra::Vector3::new(0.0, 1.0, 0.0));
-            let sx = (dx.x / dx.z - c.x / c.z).hypot(dx.y / dx.z - c.y / c.z);
-            let sy = (dy.x / dy.z - c.x / c.z).hypot(dy.y / dy.z - c.y / c.z);
-            let scale = sx.min(sy);
-            // Prefilter a telephoto tile before minification. Otherwise weave
-            // aliases into false sharpness and defeats native focus selection.
-            while scale.is_finite()
-                && scale > 0.0
-                && scale * source_divisor < 0.67
-                && source.width().min(source.height()) > 8
-            {
-                source = downsample_rgb_half(&source);
-                source_divisor *= 2.0;
-            }
-        }
+        // Prefilter a telephoto tile before minification. Otherwise weave
+        // aliases into false sharpness and defeats native focus selection.
+        let (source, source_divisor) = if projection == Projection::Planar {
+            prefilter_minified_source(source, planar_canvas_scale(info, transform))
+        } else {
+            (source, 1.0)
+        };
         let inverse = transform
             .try_inverse()
             .ok_or("The stack contains a non-invertible alignment.")?;
