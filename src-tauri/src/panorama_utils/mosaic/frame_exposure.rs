@@ -291,6 +291,17 @@ pub(super) fn solve_frame_exposures(
             ];
         }
     }
+    // Test-only A/B (`RAW_EDITOR_FRAME_EXPOSURE_LUMA_ONLY`): one luma plane
+    // per frame applied to all channels, keeping every frame's RGB ratios.
+    #[cfg(test)]
+    if std::env::var_os("RAW_EDITOR_FRAME_EXPOSURE_LUMA_ONLY").is_some() {
+        for exposure in &mut frames {
+            let [r, g, b] = exposure.planes;
+            let luma: [f64; 3] =
+                std::array::from_fn(|term| 0.2126 * r[term] + 0.7152 * g[term] + 0.0722 * b[term]);
+            exposure.planes = [luma; 3];
+        }
+    }
     frames
 }
 

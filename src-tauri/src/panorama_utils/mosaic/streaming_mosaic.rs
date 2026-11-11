@@ -196,6 +196,15 @@ where
             .map(|info| info.id)
             .zip(gains)
             .collect::<HashMap<_, _>>();
+        // Test-only A/B (`RAW_EDITOR_SKIP_FRAME_EXPOSURE`): keep the
+        // per-layer overlap tone instead of the joint exposure planes.
+        #[cfg(test)]
+        let gains = if std::env::var_os("RAW_EDITOR_SKIP_FRAME_EXPOSURE").is_some() {
+            println!("  - Focus scan: joint frame exposure skipped (test A/B)");
+            HashMap::new()
+        } else {
+            gains
+        };
         // The composition decisions compare the composing capture's frames
         // only; the repair grid keeps every frame.
         for (detail, info) in details.iter_mut().zip(images) {
