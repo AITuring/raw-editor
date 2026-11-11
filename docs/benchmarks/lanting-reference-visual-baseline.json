@@ -1,0 +1,64 @@
+{
+  "reference_path": "/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg",
+  "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+  "reference_dimensions": [
+    31065,
+    11007
+  ],
+  "reference_role": "user-confirmed substantially acceptable visual target; read-only",
+  "candidate_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/run/lanting-s1-v51-owner-diagnostics.app.jpg",
+  "candidate_dimensions": [
+    31085,
+    11011
+  ],
+  "comparison_preview": "output/acceptance/lanting-reference-visual-baseline/reference-vs-current-overview.jpg",
+  "comparison_order": "reference on top, current framed candidate below",
+  "observations": [
+    "The reference itself contains a visible brightness transition in the upper hanging rail, so an overview impression of seam severity is not a regression finding.",
+    "At aligned overview resolution the current wall and rail are substantially darker than the reference, while mean artwork brightness is close.",
+    "v30 preview already contains stepped black upper borders and lower background blocks; those were not introduced by the v50 framing candidate.",
+    "Native crop alignment, color pipeline comparison and source-specific attribution remain pending."
+  ],
+  "acceptance_rule": "Use reference for visual framing, seamlessness, and content comparison; do not treat it as a source image or modify it. Keep existing Quality Gate and owner/source evidence independently.",
+  "pending": [
+    "align native top and bottom regions to the reference, including local warp",
+    "separate reference tonal treatment from algorithm regression using v30 and current source regions",
+    "test bounded correction only after same-content evidence"
+  ],
+  "overview_registration": {
+    "method": "grayscale 512x182 translation search, central artwork, average absolute difference",
+    "best_translation_pixels_at_512": [
+      0,
+      0
+    ],
+    "note": "overview alignment only; native local warp still pending"
+  },
+  "overview_zone_luminance_8bit": {
+    "top_wall": {
+      "reference_mean": 104.68,
+      "current_mean": 74.05,
+      "mean_abs_difference": 30.63
+    },
+    "rail": {
+      "reference_mean": 149.84,
+      "current_mean": 104.2,
+      "mean_abs_difference": 46.49
+    },
+    "artwork": {
+      "reference_mean": 73.5,
+      "current_mean": 71.74,
+      "mean_abs_difference": 9.25
+    },
+    "bottom_frame": {
+      "reference_mean": 65.68,
+      "current_mean": 78.12,
+      "mean_abs_difference": 14.74
+    }
+  },
+  "historical_comparison": {
+    "v30_preview": "output/acceptance/real-materials-v30-default-cache/lanting/run/lanting-s1-v30-default.preview.jpg",
+    "v30_observation": "stepped black top border and bottom background blocks already present before v48 alpha and v50 framing",
+    "v49_tone_ab": "docs/benchmarks/lanting-v49-tone-and-framing-audit.json",
+    "v49_observation": "disabling global low-frequency illumination raised upper background means by about 0.027-0.037 normalized but increased the largest 20-pixel seam from 0.00429 to 0.03739; therefore simple disabling would worsen seam"
+  }
+}

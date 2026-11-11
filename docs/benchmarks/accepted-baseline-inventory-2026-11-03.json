@@ -1,0 +1,2146 @@
+{
+  "schema": 1,
+  "base_head": "a0dc5f9c9dd49cf050868411b526770268c9bb88",
+  "scope": "Per-file inventory of pre-existing uncommitted work; exclude means exclude from stack commit, not delete. Package adaptation is done only in the temporary Git index.",
+  "counts": {
+    "exclude": 131,
+    "keep": 66,
+    "adapt": 1,
+    "test-only": 39
+  },
+  "files": [
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/lanting-detail-1.jpg",
+      "sha256": "fc336d10fb9cd5bf34804d2b746428a0e598ea113c5ba4045e43ab4689a84e69",
+      "bytes": 2107163,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/lanting-detail-2.jpg",
+      "sha256": "965843cfdee6d2eab440978331e923c98e17967ded41b1a0d37fcb21f9f29254",
+      "bytes": 2128428,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/lanting-detail-3.jpg",
+      "sha256": "6d76c11220885678a1e8d9db1c7cf769fcbde256a3f5ef45538f8becca465c7b",
+      "bytes": 2300751,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/lanting-detail-map.jpg",
+      "sha256": "62ca6e016a3886d7269892e15ae88abc27d33d8d4e80a84230957c6443228490",
+      "bytes": 561647,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/lanting-overview.jpg",
+      "sha256": "6d7304c9ffe870a3253b1db3aaf1371f85ae7f54e2a9ae86403d7210a2c5339f",
+      "bytes": 1757557,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-1-detail-1.jpg",
+      "sha256": "287c679bd95ebd9119e8449bdaa4f4b31fd6468e3b829fbfde71d51375e7521c",
+      "bytes": 2637684,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-1-detail-2.jpg",
+      "sha256": "a11e12ec98573bdd7751ebf344a7ebaedb90acdd1c885a2ec716954e27165fc3",
+      "bytes": 2350117,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-1-detail-3.jpg",
+      "sha256": "89b76a43c87852ed19b4e52785823a633e36165532b524f86e17a365c926ee70",
+      "bytes": 2576169,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-1-detail-map.jpg",
+      "sha256": "009d7c7d547e969b4815cb50f69bf5b6ab3562e86a39e16144b32dd947eee4e7",
+      "bytes": 346431,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-1-overview.jpg",
+      "sha256": "aa736a89c1aafe7851cdef442b04923bf7d949b6e018da5be76e1f41704fb35d",
+      "bytes": 1375912,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-2-detail-1.jpg",
+      "sha256": "597f43d452a131bdfcaffcd2dd9790e977d35a726f235910a959cebc46e5e3e8",
+      "bytes": 2286602,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-2-detail-2.jpg",
+      "sha256": "f4a8401d12d620a5b1070a27a08e10a4b5f28983ad5d5db0a21a88f06a5e8ef3",
+      "bytes": 2081517,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-2-detail-3.jpg",
+      "sha256": "86bd3dceb4ff01fa9c287502de3d4df25d30e633fbcced1d9cfa8c2162ddaf71",
+      "bytes": 1730856,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-2-detail-map.jpg",
+      "sha256": "7b63c17d50ed1491f3044428cd330d049ddd2f1ef0d7f00a6fa4d38408b4f147",
+      "bytes": 637532,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-10-30/qixu-2-overview.jpg",
+      "sha256": "ac8352e026d9eb016aef2064e088fb04c4cac57742799290dbd28ea11633bf42",
+      "bytes": 1606419,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/lt-mount-versions.jpg",
+      "sha256": "11caee2203ed39fe336b33668944d2e746c9451346879a48d7c990d38b4a07bd",
+      "bytes": 1073911,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/lt-v1-p17-a.jpg",
+      "sha256": "4c6abdd6bd8c6d90da5bf323ded98a92f2e3d993af17997aec49ee22a829784a",
+      "bytes": 205806,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/lt-v1-p17-b.jpg",
+      "sha256": "94e51f028d7d45dc8c33c340a67fe298750c54f2c3aa2aab71b90554fbc9d932",
+      "bytes": 196210,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi0-p19.jpg",
+      "sha256": "250261c4036588b87de6e4d12edb341c2c1b71985da2ca59f49d0d0e51901196",
+      "bytes": 831277,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi0-tiles.jpg",
+      "sha256": "74fe87badc4ea92190c1477a1be8668306eb8e6dbb520e743048b514e180b2a7",
+      "bytes": 245326,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi0.jpg",
+      "sha256": "96006fce06e982ebbff6336278f73766267c41897cd660a327d0a307d4944af2",
+      "bytes": 863701,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi1-tiles.jpg",
+      "sha256": "236fe95d84d324769ee5562f69268983b6cd877c5a5b22cc73a344dff9b1278e",
+      "bytes": 331632,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi3-p17.jpg",
+      "sha256": "1ceb3ece901c78f52de28465b90697916343acdf6fd80511679f8896fc63f54b",
+      "bytes": 648052,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi3-p19.jpg",
+      "sha256": "c5424716cc600957ffc726d10345f7f8b613fed5588e7472f0cd49f415250436",
+      "bytes": 518303,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/probe-roi3-p20.jpg",
+      "sha256": "fc843c509872b269a724ed0512f440c1274ff6c468411cb0ffbaac372b99f4a9",
+      "bytes": 515621,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-band-a.jpg",
+      "sha256": "3446c7ba23c7a26eb98785d71926ce147258dc26ece2e66b14851b310b02d95e",
+      "bytes": 263923,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-band-b.jpg",
+      "sha256": "9cd4fa9df53723dedb3a6ec8b8a1cc5b7afd4248d79bc128c2a3f997fd86ed5b",
+      "bytes": 285679,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-band-c.jpg",
+      "sha256": "7dddb476f00d0865bb3b11a0eb211078ec9d6ebb734ccffbface9ead06ac70e8",
+      "bytes": 305512,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-q2-locate.jpg",
+      "sha256": "f47acf8f364d8c3672e947cc5ea1c99b9e89966b5e182f48608f0f92e93305aa",
+      "bytes": 98088,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-shot-1to1-before-after.jpg",
+      "sha256": "3332cd7cf5efb3ac751b9cbcd69d2a064f1190cdd043cd680dc36c4321b84c63",
+      "bytes": 496113,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-shot-1to1-p9-p10.jpg",
+      "sha256": "f99e5d8e639c3be940750702db9be9df56c564b1ca46b18482c3f86080568b05",
+      "bytes": 497517,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-shot-before-after.jpg",
+      "sha256": "572be4a36bba61a157c4913fb4cbcaaf1609658295b3fae15d69e0cf4572888f",
+      "bytes": 950403,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q1-shot-p9-p10.jpg",
+      "sha256": "d21c42d8b81a58dc54b4e1351c33671dd3c076a942dab2152b15c2d0abc0e8a2",
+      "bytes": 947998,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c1-p15-p16.jpg",
+      "sha256": "ec60605df90abee8dbab36a7f1e93cf23e88eb9f215b135db633b9a7fd3c5002",
+      "bytes": 271394,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c1-p15-p19.jpg",
+      "sha256": "451679488e6f534e8cf9913dd3dfcad8d4ebf299c663c374624e5252a714f9bb",
+      "bytes": 442775,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c1-p15-p20.jpg",
+      "sha256": "1e0cbc1736eb9a329bfe2656d135e2446fb954f36c6619ff116f2c13532ee83d",
+      "bytes": 442891,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c2-p15-p16.jpg",
+      "sha256": "0bf6071a4ca2cd57d1e6f30bbf9b952d455026ef6ff9b6af460adfebe8258fbb",
+      "bytes": 272507,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c2-p15-p19.jpg",
+      "sha256": "31153d83d5c3eeee5ec033981187f2cd45af56b33360476707afde977d5c2e58",
+      "bytes": 432666,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c2-p15-p20.jpg",
+      "sha256": "307121619498223824f4b60ace1d17fd87d5b2a25df973b26d4959b1198f1142",
+      "bytes": 433150,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-c3-p15-p16.jpg",
+      "sha256": "da5a66bef62a4bfc767bd0bfb799dc7b36979ac7b6cc2c2cd4319910fdb12aad",
+      "bytes": 293453,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-left-box-before-after.jpg",
+      "sha256": "192ddefe3171771948cf8a8b1c71b7ca832c948edffa9d966c05135c1e426cf0",
+      "bytes": 598783,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-left-box-p11-p14.jpg",
+      "sha256": "41137886dca3401d609066fdf1f54f549158ec1150da404c297b1781b8b3e22a",
+      "bytes": 619705,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-left-box-p11-p15.jpg",
+      "sha256": "79857bd3257c8eb404ae5586b68c29aad74e31532b2008338dc1d473142b73af",
+      "bytes": 625179,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-left-box-p11-p16.jpg",
+      "sha256": "7dae711f07efd2e1fa64a514a523698720855763f8b238a1bc3695bc527c8332",
+      "bytes": 592878,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-leftbox-p10-p11.jpg",
+      "sha256": "4db2664951a63efc6f85eef99d22b6408cd2295aed968bb9ee34a2433fb67342",
+      "bytes": 611790,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-leftbox-p9-p10.jpg",
+      "sha256": "f3342925a0f2dbfe905922c2cff4601fa8a3651e335601c0bbb6fa72bbcae57a",
+      "bytes": 595310,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-midbox-p10-p11.jpg",
+      "sha256": "e5d811bb96cef3df799810b60113af08f4e5c7e7b0913eec57fbae561f606087",
+      "bytes": 606862,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-midbox-p9-p10.jpg",
+      "sha256": "80d09bb3482a8cc8f09dceaf904f185371de4c35d0fcb2a61b2a464f98627ad5",
+      "bytes": 600692,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-middle-box-before-after.jpg",
+      "sha256": "4f7eb407e59d33a04a2d77e59401d0dd04eb5c6c5ab702fab69ec033770eb031",
+      "bytes": 601164,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-middle-box-p11-p14.jpg",
+      "sha256": "9ad7ec1e82d094654d0860e564098f6ffdb2aba7335edff8aeade09827419cba",
+      "bytes": 611281,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-middle-box-p11-p15.jpg",
+      "sha256": "942c58ba232d104d3811f8ceeabcf731b8f706f4bced91889f79c95a9e46ab09",
+      "bytes": 607094,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-middle-box-p11-p16.jpg",
+      "sha256": "34e49725ee25250c501073182c33991ee2280c5c42a4caa650cf3ae321ccb632",
+      "bytes": 580802,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-midright-1to1-p11-p14-p15.jpg",
+      "sha256": "03e21fc3673fd6dfc9f8abd3593bad284b6cde240f16ee726e8baf67afc4a46e",
+      "bytes": 986643,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-midright-1to1-p14-p15-p16.jpg",
+      "sha256": "a97151d4fcff73a259d4e0b31d2eb2d28f18c707d7c3372457d4325a14b4b042",
+      "bytes": 961125,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-midright-p15-p19.jpg",
+      "sha256": "c800167b7effb1c576ff0bb943113fa936bddb2f3e3f295bee2e67c37210bdb6",
+      "bytes": 973212,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-roi3-p17-p19.jpg",
+      "sha256": "38d042bf5a7e370c9256418e57df187c9276f21b990a8fff1863cec5bbabcea4",
+      "bytes": 400203,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-roi3-p17-p20.jpg",
+      "sha256": "a8e54028668f01b698d0e060b167713a92b8252e1e9e463c47eef382805191fb",
+      "bytes": 407269,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-roi3-wide.jpg",
+      "sha256": "9666c97cef535157eb8b5fb9980334f16bc727be2a763a1147d9ad7f842813de",
+      "bytes": 985748,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-soft-a-p15-p20.jpg",
+      "sha256": "e439f1dc91fdea0d3ded7ac58c10ec137d88bb9f358303de22d90383657dd173",
+      "bytes": 398661,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-soft-b-p15-p20.jpg",
+      "sha256": "5e47bce48980be3d6d495dbd22ad8bedc953295c919e5ca9b021cb5ce5cd7ba6",
+      "bytes": 366726,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-a-1to1.jpg",
+      "sha256": "65332472593a8042b72f593ec9141babcd7eba1745b78e5477a59a2bed4b7e62",
+      "bytes": 313230,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-a-owners-p17.jpg",
+      "sha256": "ce015b2d704be3692f50b6a0978b2cf754862aa90444e8530a73a0715f4fddc6",
+      "bytes": 228141,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-a-owners-p20.jpg",
+      "sha256": "7f1e91c3a6179047c1b06418aa39d56efd8f757a412eb3ea6ea6ea545198e08c",
+      "bytes": 215772,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-a.jpg",
+      "sha256": "20907e7abee5fc2ebc989054003441b3a15b81b8f8f062c552fcc449b6bd5805",
+      "bytes": 532955,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-b-1to1.jpg",
+      "sha256": "554c3a2b722fb9456279b4c7af80ca3fce450cb8be9bef250ad9dfb8efc7015c",
+      "bytes": 308666,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-01/q2-struct-b.jpg",
+      "sha256": "5717c56e73d118a8403c5b620dd67b71f80c76fc8913340aab66163984f052ab",
+      "bytes": 513551,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/boat-owner-p20.jpg",
+      "sha256": "72e89ccfb31d1560d45f84ddf4e9cd5c685a78d7b37b3b1c3bbf49febfabccb3",
+      "bytes": 63808,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/boat-owner-p21.jpg",
+      "sha256": "848fbc25326912367bfe205f40f09ff55878d09cd8cd1c252fd583d77d7aee57",
+      "bytes": 64799,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/commit-msg.txt",
+      "sha256": "f20bd1d6d9ae81a8dfeb0aa70790fcf2b9ccc46f37745fc2033302a9be316598",
+      "bytes": 2941,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/joint-j1-preview.jpg",
+      "sha256": "fd990f10bf15f6c5830514c061a124c82cf5afc05680f2c8f75c8c25301ea4ab",
+      "bytes": 113055,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/lt-mount-v1-committed-final.jpg",
+      "sha256": "1785be91bbf329162953846e1e3b51ebba3a2838ab214f7a3bb7d1401fa52175",
+      "bytes": 787464,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q1-boat-2x.jpg",
+      "sha256": "38441e0f89766d63c580d551f503831254b10741c5481e3acd999ab8eb009c2c",
+      "bytes": 405548,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q1-shot-1to1.jpg",
+      "sha256": "6c1d91927f8f082426f61c97ab31f10a29e7de694f1caee4631acc775af9bbe6",
+      "bytes": 386731,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q1-shot-region.jpg",
+      "sha256": "42c1e595c29bde1a78bfede005aa05913fe83072de62ccfb8cf747f97be597b9",
+      "bytes": 881913,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q1-weave-band-1to1.jpg",
+      "sha256": "f8454d59a491db82fcefba2a838df43a32eddff3b53a2a9f54f7e52571848dbe",
+      "bytes": 246166,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q2-defocused-frame-1to1.jpg",
+      "sha256": "f5bf11b5351cc34b7369c414d7a276678aa37b0a46780c49f7f13f86cd38067d",
+      "bytes": 271281,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q2-left-box.jpg",
+      "sha256": "451b8e322a2f54f35cd89ffe9a29b10293f4b067ef2de50cc87ca5de0c0e132c",
+      "bytes": 623767,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q2-middle-1to1.jpg",
+      "sha256": "7c0b42125236a75cc0fd4194f94c255463280155e66a7236d36eca54997716f5",
+      "bytes": 653219,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q2-middle-box.jpg",
+      "sha256": "dc92338f48e8b20243523243b75c872fb0444e280a11e3e2db1c3535b62bb832",
+      "bytes": 613037,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/q2-residual-soft.jpg",
+      "sha256": "1f6e7dd220d5259631418d77f55ef6f507f6e3d2cc79faae28512ae465885f33",
+      "bytes": 177689,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r1-disagree-a.jpg",
+      "sha256": "f3d12e8f9fd7846251288e052120db70928f7b9be9e983df50267ef0c5a93cc0",
+      "bytes": 264235,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r1-repaired-a.jpg",
+      "sha256": "b095729a940ad39f37d691a0be1877b531d22d71a89e1e34d85bff03253de3be",
+      "bytes": 250576,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r1-repaired-b.jpg",
+      "sha256": "61677507d7d83ad95390014e14bcb1256bb5197c653f89e52bf56211439f1d6b",
+      "bytes": 260703,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r1-repaired-c.jpg",
+      "sha256": "67c5e20d0e1863f63c8e879a03448bc698803d82e9dceb32e9ee72c29d25872f",
+      "bytes": 282437,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r4-a.jpg",
+      "sha256": "c6b5410855b832a1f11d0efcedfd33b8f24eb91b234af4cf4e4c3cfdc8d6df4c",
+      "bytes": 374389,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r4-disagree-a.jpg",
+      "sha256": "7de26657f46ab71ee107e25bd7b81e95bde13407d6bdf769310be0715b6a8eca",
+      "bytes": 260201,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/r4-roi3.jpg",
+      "sha256": "a8585d2ec8bd7f1f64bf15f578d8de4b8cc6ecd317033e21b96b21966fb45fd2",
+      "bytes": 281680,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/祁序1-overview.jpg",
+      "sha256": "0189ceed98d6b57bb35d50909b0bfaa6cf5e734e62a8be097b14b8acd5ce2ad9",
+      "bytes": 150259,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-scan-quality-2026-11-02/祁序2-overview.jpg",
+      "sha256": "85efcb76df382f502aff281ebae868e1c7453c6daed2b365f134959d8dcf0059",
+      "bytes": 355538,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/build_exp.sh",
+      "sha256": "09dd224fa8bb4f1c3cbed86676006baa3b6df92773dcd3be2886c0c3e57669ab",
+      "bytes": 896,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/clusters.py",
+      "sha256": "f311c3bba3cc5c5cea8a1879c85a4a7cb80356aa80bf24a3eefc402e77f25a7b",
+      "bytes": 1396,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/deficit_compare.py",
+      "sha256": "49af6e440cbf7ca874f3611da8add0d3faa5501066d5e0f2d6c55af64b93afa0",
+      "bytes": 4766,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/dense_compare.py",
+      "sha256": "48d35128afa451addfa025ced6b52ca05976fca2d198959cf1bc9706d51ca7a1",
+      "bytes": 6673,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/gated_clusters.py",
+      "sha256": "de447a427ba927bdd6f14f55a9ce8427a341736e78cc9e7791b90eaa6ae37a3a",
+      "bytes": 1186,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/lowfreq_diff.py",
+      "sha256": "233405acd5dcfd3e030cd2c9011493450f8e199aa0682e37148e6a761b8c61be",
+      "bytes": 2705,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/missed_interior.py",
+      "sha256": "a91f1380dc8d1224af0ec2749ae73ef3f69980b25788f36f553f551b4480bc29",
+      "bytes": 2431,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/new_warnings.py",
+      "sha256": "79ee5e2db1fb37a20746774191a1fb13f1f027666b5c1fba53b631aa3c7f2d1e",
+      "bytes": 1727,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/owner_spot.py",
+      "sha256": "7b408a3f1098e4df4d9ef712ee270e778f32e59a4976477a1de5e9465e56e7ba",
+      "bytes": 2866,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/pair_crops.py",
+      "sha256": "b816528315164f4ba29cdb014a907fbb5ab17d6ac6180ad42998843c9276d0a5",
+      "bytes": 1711,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/pair_shifts.py",
+      "sha256": "d944782a43bf15cdca66892d26cad6be9a7c1cc07fbaec647e97b93e8ebe0651",
+      "bytes": 2313,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/probe_sheet.py",
+      "sha256": "58092fae5398f956c566c363dbf548f73ef505a37121109f28fd9922898e2562",
+      "bytes": 2707,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".agents/artifacts/qixu-tools/run_variant.sh",
+      "sha256": "2f8184b3c255dbdaa15d441c7fb77fa808b8bbaf210e3d7b7a4edf4d194015a7",
+      "bytes": 2449,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": ".vscode/settings.json",
+      "sha256": "2ac108a9cae907889bfd3e4d0f60a5ff35c2196b2b2ef8a18308e69ed4447f1c",
+      "bytes": 319,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "brightness-review.html",
+      "sha256": "077afbecabbd5038329ba8d3b180a7f8058ed446908c8e1136202c933c039ffb",
+      "bytes": 512,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "brightness-review.jpg",
+      "sha256": "c704cce60884a59e932c2ea007f7ab6678667cc218b9ce96e6118377dbe9f600",
+      "bytes": 202740,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "docs/adaptive-brightness.md",
+      "sha256": "18d2293e6f867cafc522a4b9db74bce7fab85355895767e48882da90c96de126",
+      "bytes": 3698,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v15-acceptance.json",
+      "sha256": "28ae77d157def26861937d4ea1e22c2a4462f99ac640e438db1e64657337326f",
+      "bytes": 30519,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v16-acceptance.json",
+      "sha256": "b97f99fa9107817136553baf519d1db76d19d117d1052d9a87f61711855bef73",
+      "bytes": 293223,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v17-native-acceptance.json",
+      "sha256": "9bd237aa6b7fe161964fbb90f716dc6575cbf53f46eb2b85149ae3d66f02109e",
+      "bytes": 223424,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v18-export-acceptance.json",
+      "sha256": "777dde259684a0eba9f81a3ca1a419516a78a22c73c5d0e00a1014f271a5e446",
+      "bytes": 63542,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v19-registration-acceptance.json",
+      "sha256": "adf5c332802acbcf23bf8c3b1fa7dd03b76d3539c24b5a4d1c43d5cc93cbe2f4",
+      "bytes": 39556,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v20-purpose-acceptance.json",
+      "sha256": "7067093713e39a5bc01b00b0c0211c6e8233ce04fcd086813c55fbc691bb1dc0",
+      "bytes": 92214,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v21-holes-diagnostic-acceptance.json",
+      "sha256": "1f1a7edf69e7d8e584314caa938227eeb1aca55a9197fca31d867c6a316ef22f",
+      "bytes": 15446,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v22-owner-support-acceptance.json",
+      "sha256": "e9223de0e1bf186d4ab9b6ab9403fe478840e36a8e32fba8a793de2ae9e5168e",
+      "bytes": 63433,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v24-paired-stage-diagnostic.json",
+      "sha256": "0ddbd1fc66301ec3cf5ef6accf2c1dfde715938541cc1ff50b9d3d7aab61780e",
+      "bytes": 2201,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v25-focus-candidates.json",
+      "sha256": "f09a81c84ee3a8982e025dd53c3a15bdbabca41ee22fe74f9aad61009233ba03",
+      "bytes": 2252,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v26-candidate-metrics.json",
+      "sha256": "a14c142b6508f2d27090dc46da987233cdfa32f11208557b7735f76db2d8c89d",
+      "bytes": 1868,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v27-subpixel-stability.json",
+      "sha256": "7d10c43963df024aa3d7e9284066317ad18e4ad91e66d6a6476869d20fceeedd",
+      "bytes": 2530,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/benchmarks/sleeping-9-v28-final-acceptance.json",
+      "sha256": "e1eafc9427951f1105210d28f4fd09c58cd33ab25b78088784e65c2380cd8b09",
+      "bytes": 3591,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/focus-stack-open-source-comparison.md",
+      "sha256": "5570c7368294120b248e1e8e3454ea42f95c52a7401fc88f9ea41f09efb5be37",
+      "bytes": 22113,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "docs/focus-stack-performance-optimization.md",
+      "sha256": "03596073d501067e926e989a410ff5a25a939042e68ed087792549ca0ba4146a",
+      "bytes": 240729,
+      "category": "keep",
+      "scope": "Historical evidence/documentation, not executable product inputs",
+      "entry": "documentation",
+      "evidence": "v28 final acceptance; old failed diagnostics retained"
+    },
+    {
+      "path": "package.json",
+      "sha256": "74b389da73b5da1c730621a7e9e690e90c212f4ee1177bc583d77d096ebf2186",
+      "bytes": 6216,
+      "category": "adapt",
+      "scope": "Keep only focus-stack-regression:check in the stack baseline; preserve brightness scripts in the working tree.",
+      "entry": "npm scripts",
+      "evidence": "focus-stack-regression:check"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "sha256": "a200caba2170d1173155a53940339c62ef093b0162d08091b21bdf338cda1649",
+      "bytes": 4108,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/Cargo.toml",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties/intra_station_registration.txt",
+      "sha256": "d2910136f588b6e31556fbf855677ee447d763ec8ebba91b816f4e3d6dc480f1",
+      "bytes": 16031,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties/intra_station_registration.txt",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties/quality_gate_checks.txt",
+      "sha256": "20225f3f16f2e2464d75c2b711c9b7d029ed37925fb74bb78b0afbc472ede18d",
+      "bytes": 15872,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/proptest-regressions/panorama_utils/stack_pipeline/properties/quality_gate_checks.txt",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tiff_writers.rs",
+      "sha256": "07722ff510bdccc799c0884e1cc1b628bdf6204a5e39de93ee330d4b1b86d592",
+      "bytes": 13547,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/export_processing/tiff_writers.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tiff_writers_tests.rs",
+      "sha256": "25c3eb128f7ed17d5d46518e680c5e6a9e41485d406d2a6a1531c5c346dbdf09",
+      "bytes": 6651,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/export_processing/tiff_writers_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack.rs",
+      "sha256": "2782b8bb8cb02292fc9bef0933be7e408e1e17f34c7d23c0ad2aa5b3dd36c638",
+      "bytes": 15491,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/image_stack.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_encoding.rs",
+      "sha256": "69392431a212e2a5e4bfbc4a34defe4f8174589774de6a4346ad0ddeb98f17c1",
+      "bytes": 12820,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/image_stack/output_encoding.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_encoding_tests.rs",
+      "sha256": "2b8ff1b6782329305ec4de3024386640ea48ac16f88fbab8def119801da692a8",
+      "bytes": 3223,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/image_stack/output_encoding_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_validation.rs",
+      "sha256": "6eeccc458cd370af238f2f12db876b0d2b0c4ba41ebb46aa49efdc0bb9c891b7",
+      "bytes": 9233,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/image_stack/output_validation.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_validation_tests.rs",
+      "sha256": "cea6d1856d7c418b3db437f7240c78407a8c6cdd263b1424693589bf95d370ad",
+      "bytes": 5887,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/image_stack/output_validation_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_writer.rs",
+      "sha256": "3c26d3c3ea4ef7d945e66004bfcbc087d68dc603531b58f157349fbb7ae4a57c",
+      "bytes": 8001,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/image_stack/output_writer.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/test_output.rs",
+      "sha256": "afcae8bcac4183dfb7bd37e7f106e3499f040841daa33a88e1ff49d0d8b1798c",
+      "bytes": 4808,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/image_stack/test_output.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/image_stack/tests.rs",
+      "sha256": "ba470713f54a503bb914ad57659f034db206ce24efb88dfbce0986fb1714cfa4",
+      "bytes": 36095,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/image_stack/tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_capture_groups.rs",
+      "sha256": "bd35844f19cfeb563ef6839aaac09de0bff8382f602ba90d8dd8f40d0a0b44fc",
+      "bytes": 24513,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_capture_groups.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_feature_pairs.rs",
+      "sha256": "d4ddedd88b3aee80a773e2d322b14fb3b7e2c328c1d2a8c522046641a3177ad7",
+      "bytes": 10588,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_feature_pairs.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_closure_refine.rs",
+      "sha256": "16ca545395b6e8d2065f90afdab42496f3cc5723275bcf7f2d213c797077a8a2",
+      "bytes": 36366,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_station_closure_refine.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_solver.rs",
+      "sha256": "e589d4bf10396ebf0eb7b1f45820170816efe74762020c2e30280aebc0a2f01a",
+      "bytes": 40647,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_station_solver.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching.rs",
+      "sha256": "a15f17a6993cbeec105a2cdfd9b9441a68b1a4d45507ddbe9091b16b7976f3fd",
+      "bytes": 38183,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
+      "sha256": "4d558007d1e26959ff02f2e965707df9301f920c0475f36e03cdf4ded1ea2f6f",
+      "bytes": 37468,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/closure_optimizer.rs",
+      "sha256": "0bb4b818b7488542eb3ebb7b71c60d903865a80abf149c78777fa276c8420c6a",
+      "bytes": 22064,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_stitching/alignment_tests/closure_optimizer.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/match_pairs.rs",
+      "sha256": "51b8e99a1fa2238fc0a29d2f5a76aad927cefbf92278e64938e5a14bf196ab3a",
+      "bytes": 7824,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_stitching/alignment_tests/match_pairs.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/native_fusion_cache.rs",
+      "sha256": "0538ee2c6da45a4295200f2ee0b5f06d1efb38d712e34d5e860bc24dfc8c4871",
+      "bytes": 23592,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/native_fusion_cache.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
+      "sha256": "093872cadb10e5a6b7b2c5fe1dccee01b100c87b006f3430eb3da19d2580a93c",
+      "bytes": 15585,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/output_density.rs",
+      "sha256": "449bf5e4774fab1dccd6b343d4c507ec85ac7a7e02faa766cd7a61b685db000e",
+      "bytes": 14943,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/output_density.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/run_control.rs",
+      "sha256": "40ec8e9c3fe5e2bc0870a554f9e800aa2a71665ad0d2c763c5e6da36625b1a67",
+      "bytes": 11125,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/run_control.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_preflight.rs",
+      "sha256": "14f9204791e1c3993d1465e55b77abb770c961f20c1426eedce7d99c3b2e2378",
+      "bytes": 10469,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/source_preflight.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_prep.rs",
+      "sha256": "3ac5e2ee10b95eb791dbd932befd16740a1932e087a9c6c1aeff5b09207c7dd1",
+      "bytes": 23848,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/source_prep.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_render_cache.rs",
+      "sha256": "33c1a910136b269ac682e48ebe2da92138e1921cd2c6d767e94d78770eb54600",
+      "bytes": 10278,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/source_render_cache.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "sha256": "16b19c1692eececad2abe2a65a107666b826f804024c350dea5f26d04f669409",
+      "bytes": 224995,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/tile_payload.rs",
+      "sha256": "a8f415a3a7f6a6b5d565b3c40194905fe740750b91d62b6bfa7b61890a564255",
+      "bytes": 6930,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/tile_payload.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/tile_payload_tests.rs",
+      "sha256": "95148b92ce817cbe999be13f37893cdd08bb6ff2773c6f49ad23cced31c24db3",
+      "bytes": 18640,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_stitching/tile_payload_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
+      "sha256": "eda0217c6e4be4658a063900261b403b2c645f59cf15492189041fb6cc1d8c5a",
+      "bytes": 28400,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_control_points.rs",
+      "sha256": "d3942655172341f946e5e29adde4b5e04424633c95bbae289f698296d4865ead",
+      "bytes": 36009,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/mosaic/native_control_points.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_control_points_tests.rs",
+      "sha256": "191bba5ca6ff2cd4f3cc4e9d9018e52dab33a576a3538b9364cc7d0227f2b562",
+      "bytes": 7049,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/mosaic/native_control_points_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_prefilter_oracle_tests.rs",
+      "sha256": "cda998a83eb39c25109f81cb94ba03d39c34e397017d3ca60f24e546ff3c0f52",
+      "bytes": 14970,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/mosaic/native_prefilter_oracle_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_prefilter_tests.rs",
+      "sha256": "75af7968dd1875e700c6fa77ae9cab04cb429c24b8d233310feed12f0d090b70",
+      "bytes": 9165,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/mosaic/native_prefilter_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/sampling.rs",
+      "sha256": "1eac500d323800f02cde188ec3d561e1392f717f9e26ed701639dc1765608e02",
+      "bytes": 6480,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/mosaic/sampling.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/station_registration.rs",
+      "sha256": "d28a7a3996f5c81fa9262e23df7a0d717fcc5b4707bd56a97017141d73a6139d",
+      "bytes": 5658,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/mosaic/station_registration.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/compositor/tests.rs",
+      "sha256": "421021b6e2fe8a2fb276b078d54e30a4ee5027844d95158cf3f1029b03d1010d",
+      "bytes": 26307,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/compositor/tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/degradation.rs",
+      "sha256": "647d943a42a01e6ed19beb97b09ebf6a0a68cdbbac634f240e1a5ec9f356d439",
+      "bytes": 37423,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/degradation.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/confidence.rs",
+      "sha256": "58ebd051fd36cae6723b70fddb5d4faf0b47453b74b843b162cdc70249809bf7",
+      "bytes": 9416,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/confidence.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/intra_station.rs",
+      "sha256": "ce3f18c3416f09a8025e478ac11fcb8f9f56b9f5426a69872a3124b04b76ed4d",
+      "bytes": 40639,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/intra_station.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/intra_station/tests.rs",
+      "sha256": "9024000b5afb1ea3f81846e67f6595306d1bad760cdc765cdfd388f4a86e8b39",
+      "bytes": 24978,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/intra_station/tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/intra_station_registration.rs",
+      "sha256": "2726d329e223b606cd2f21f9f0de4308eb98342a677150858746345534ea224f",
+      "bytes": 37185,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/properties/intra_station_registration.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/quality_gate_checks.rs",
+      "sha256": "a38f88d54f87821150f698b9ce18ff92479a7fac54ee0ccc247e7a7a958e819d",
+      "bytes": 41846,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/properties/quality_gate_checks.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/tile_compositor.rs",
+      "sha256": "da94460ad1c6c2b29a7f20291d2fb1b5578c1b48ec350289ac66e46b518bb198",
+      "bytes": 22765,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/properties/tile_compositor.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate.rs",
+      "sha256": "1ed13eb446bad8db7a8d509f2feb1bb56fcfeae552b9b6f4376b8fbcb67ea7a3",
+      "bytes": 4108,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/roi_geometry.rs",
+      "sha256": "ca38f6465fda8d4983e0dbac431340c7573da2f638b71b57448e27ddb91ea5ec",
+      "bytes": 19161,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/roi_geometry.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "sha256": "49ece9cb9ab4a3ca6863bbb1f42babc05cfdab8c6cc44c5deac7695940ea42e4",
+      "bytes": 28527,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+      "sha256": "58fe59aba5a876aacbfb592c0866e86d95a15cbd03e8c9f1356c0aa6937c4b1e",
+      "bytes": 28999,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/coverage.rs",
+      "sha256": "598456959308c69297b6cb89e8592f58c02e20f8dbf84f5e3356cd3689477124",
+      "bytes": 16543,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/coverage.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criteria.rs",
+      "sha256": "84c37c4d9f27c8e7ee9ff379984a33771951ef555ab11292433bdab505f3be6d",
+      "bytes": 23162,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criteria.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criterion_rois.rs",
+      "sha256": "805296ff4bf6c1d1cae4acf3641cfdb1444f9927e2c51dccb9da58dae3963f9f",
+      "bytes": 12919,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criterion_rois.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/focus_candidate_capture.rs",
+      "sha256": "478b3b5aba07b077973b458f0f497f08f011b2dbb466914668d951bd5f0f3f4a",
+      "bytes": 7906,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/focus_candidate_capture.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+      "sha256": "45bde1a9704804755449b3981800c598238506cfd630d777d5ff0c9566a72bd9",
+      "bytes": 38415,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
+      "sha256": "d58dac31f8db4bef18a706762cecc92b2bcf3db35aa8e8216f01d08d058c942e",
+      "bytes": 29274,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
+      "sha256": "15f1d5839bdbff31da89fd3c2df64773245162bd639ae5e392e17074fffe8ee6",
+      "bytes": 23741,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture_tests.rs",
+      "sha256": "bee89169825052296723ecccf2268396d2f1ee37bdeec21bb689e5093087b205",
+      "bytes": 15468,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence.rs",
+      "sha256": "9f510035def1ee927e485000c62cc3918c2e2eedbb865a11f1374882ef3f3c5b",
+      "bytes": 14284,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence_tests.rs",
+      "sha256": "24eb8d5d8f9a33403aeb2f317a64ba58eeb8e6d3c5f91caa26df776ad6a4c2ee",
+      "bytes": 14744,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests.rs",
+      "sha256": "7d145412fb6884524ade0bc32e484996a154c1ed553ac12e4e4377b51f7a33e6",
+      "bytes": 5628,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/boundary_alignment.rs",
+      "sha256": "f2912399f36fbd09f549e99d805203119d175179b2f3ddc4a20a435a6bc5c1ed",
+      "bytes": 12022,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/boundary_alignment.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/coverage_evidence.rs",
+      "sha256": "8c1cb40a7d749352dbfafa3eed30db4d841b2ebfc724eab971649b3650cb4196",
+      "bytes": 5706,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/coverage_evidence.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/criterion_rois.rs",
+      "sha256": "112a3f818408daf085b721b21037544576922825d3ceea36da1e7713a963e917",
+      "bytes": 6733,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/criterion_rois.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/gate_outcomes.rs",
+      "sha256": "a4b495ced61fd35d56b586d82b247f4d2e1ece9931bf1210bc27f80fd521ce98",
+      "bytes": 15475,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/gate_outcomes.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/reference_sampling.rs",
+      "sha256": "72b63cfd6fbaf5003817bfa833aeaca27335baffbeff57c0ad651504b2768b44",
+      "bytes": 18732,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/reference_sampling.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report.rs",
+      "sha256": "f072a530c5eef89aaa2cc493a1bfe17eace6e94beafa101c719608f53cdc074c",
+      "bytes": 24804,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_document.rs",
+      "sha256": "1157c519eb10d523190918c7c3ef70ca1b2b5af2aa2dcbeb849a0f0457073931",
+      "bytes": 4042,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_document.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
+      "sha256": "5bd898d51073fd37b868f4b0e7209644532bb306ea623ec03722bce202293dd6",
+      "bytes": 7948,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_output_rewrite_tests.rs",
+      "sha256": "c48c9a07f689aa8f5ff5762a86d18d4182fbdb570f64327f17dfe214df85d7bf",
+      "bytes": 5338,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_output_rewrite_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_recorder.rs",
+      "sha256": "06cdab6b79a8549fd59d789b43dd0f6093bcbfda4dad24fdf049806e857331ff",
+      "bytes": 17377,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_recorder.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_core.rs",
+      "sha256": "7d7488f0e512fc094c644e6fa3bccc123fa766e28cb75b3754561c482c61ef8d",
+      "bytes": 15354,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_core.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_metrics.rs",
+      "sha256": "8e1026fad219b3cd054c569e4656428a9a4d679c625151068a6dbd6b32208780",
+      "bytes": 29403,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_metrics.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_solver.rs",
+      "sha256": "7053b376b01197e7be181668da4a727fa968ec7b0ef2cb11c4b9cf7150f7a2a3",
+      "bytes": 31441,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_solver.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
+      "sha256": "704b1dd21b192ef63d58141364a1e1880eec5a534564b08e95a1fd19b1e8ee26",
+      "bytes": 2744,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/capture_station.rs",
+      "sha256": "6903f88970fe37c85b98a72f1521b6d3771cf48bb41cbbf939a39b1c80494f1c",
+      "bytes": 22196,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stack_pipeline/test_support/capture_station.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "sha256": "1aa7495c9012a7b3370fdf022a9ea179b061d5535c893aad6e9f1161672eb369",
+      "bytes": 24475,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/canvas_maps.rs",
+      "sha256": "2ec9d1f9e31601a935d5b870cb46f4a5c9c88039f24aabc461e7ffc292b73d5c",
+      "bytes": 12817,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/canvas_maps.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_layers.rs",
+      "sha256": "3932cd47249e48fc28deb68ebf02847cb298ba125bb0fa952da2a8320532a60c",
+      "bytes": 24220,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/focus_layers.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
+      "sha256": "788f32dd1ddf8e2aeabb88a9c22ba1147a5c41b41cc3c5920fcd2cffab60beb1",
+      "bytes": 25368,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+      "sha256": "fbe2ccd4dc2caa02918576eefdd2f75073619a95c40b7a145f6898b25fb2b5f7",
+      "bytes": 17561,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry.rs",
+      "sha256": "7e2610ae210a5eaa414524314e3324f7af19b419f1f99d4722c9fa73764ed5fc",
+      "bytes": 4860,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/native_owner_geometry.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry_tests.rs",
+      "sha256": "e611e2d3ce9a1a39371e08f1ffdc7fe6da5b714f8fb93a0cfcb91aa25da1ec89",
+      "bytes": 15499,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stitching/native_owner_geometry_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
+      "sha256": "4b7ea0e4b2c8a85361fc198e2871ad8eb7cbfd8d5170c5af3740d6bbf0b5e1e1",
+      "bytes": 25435,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_point_trace_tests.rs",
+      "sha256": "e6f0315fb122c76f1fc1c218f64012b51c1f7fafdffc9ffba24ea9b3f1dd958a",
+      "bytes": 12642,
+      "category": "test-only",
+      "scope": "Rust acceptance/test support; research diagnostics stay cfg(test)",
+      "entry": "src-tauri/src/panorama_utils/stitching/native_point_trace_tests.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+      "sha256": "d6a4066b1309d0ab3b29040a9abb8af3ae2d73b3728920de9941bca3acc7e0ad",
+      "bytes": 72255,
+      "category": "keep",
+      "scope": "Accepted Rust pipeline and report/export dependencies; mixed files retain cfg(test) boundaries",
+      "entry": "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+      "evidence": "v28 497-source manifest; release library suite; same9 native acceptance"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "20bc6f5a8489680a6d1dbfdeaedc72f089cb193353ea711b5a4a41a96053931c",
+      "bytes": 40076,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/components/panel/MainLibrary.tsx",
+      "sha256": "6c28b0e51b03897a2e43981d56f595807b6f43ee7a1e1e8391a949355db48ad2",
+      "bytes": 41821,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/components/panel/editor/EditorToolbar.tsx",
+      "sha256": "49e24bbf10c6eb83237ec65c21f83c3fe0a4036154415a02472f178cf8922d1f",
+      "bytes": 9341,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/components/views/BrightnessToolView.tsx",
+      "sha256": "3f2d0bdbd6c053dd351eeb0007f31f7f613e7adc02c8271f3cce361005b58c7c",
+      "bytes": 36553,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/de.json",
+      "sha256": "04f40bc01a89decedc8ab56a5311d638ae1c67a40ad0a76c611f209a34fdec25",
+      "bytes": 94789,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/en.json",
+      "sha256": "bb32d741caf2c8d4e237426ddd48d58a6f6d3952e4d322f4543a1b7b825756ab",
+      "bytes": 91111,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/es.json",
+      "sha256": "ecd84358bab163ff83271eefe866cdf0b2bb04b98cdf1e18284e8390d93afe84",
+      "bytes": 100318,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/fr.json",
+      "sha256": "c97300ea3c122889fdd5ed6b5d4c5760c5c2fbd2076cf829bad2a8bac67f1a5b",
+      "bytes": 103182,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/it.json",
+      "sha256": "71e33c7563992acbedcd9216803274a4ac78db2c07663c5d63e63bf63c825783",
+      "bytes": 99160,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/ja.json",
+      "sha256": "2063fbd16e4b75fae3ee5399da3bda3e3096f26cafe04773f593c2924ca7d309",
+      "bytes": 104945,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/ko.json",
+      "sha256": "33dd73e9ddc0f06eeb0daa6f71acc8af8e9d69e4b35d9c053852f1d92a908b18",
+      "bytes": 97584,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/pl.json",
+      "sha256": "b7b570b83378fd9d6cc9b69184b3a89cbf02208f39523b87d291c299f7c0f18d",
+      "bytes": 100386,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/pt.json",
+      "sha256": "1ed755cf0d3cd5a26a472624c0574dabe8fbb9423935f88647b8804015860c55",
+      "bytes": 99220,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/ru.json",
+      "sha256": "7d7859a321233e777b7479ed2894b310ef0a79d46e8ef579934d4edb8f41d455",
+      "bytes": 137207,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/zh-CN.json",
+      "sha256": "51326eb28e55ebcf275881890f9cfb4b7c776e49c27284e3cd043d23b1d70c9c",
+      "bytes": 89431,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/i18n/locales/zh-TW.json",
+      "sha256": "219db4fef9a7b3f7be18bea2d8bc42fe79192b3eecafdb5569e4700edb89701d",
+      "bytes": 87652,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/styles.css",
+      "sha256": "81496227b9ab1fefd2cbe33e1969cdef86b58157972634a2bb97a8dcbc53a5e0",
+      "bytes": 632,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/styles/app/app-surfaces.css",
+      "sha256": "3a78a4bdfbdeabade40b4186e700da89d2fe266ef773a5f8582ed667ac72535e",
+      "bytes": 9550,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/styles/app/brightness-tool.css",
+      "sha256": "e9871981fda95cb811f2acbd088e493b6dd55f6d08eafcacec0c72205db10a9c",
+      "bytes": 12691,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/utils/adaptiveBrightness.ts",
+      "sha256": "395ce4c0d49a33b0269343442e0fa832d078176bc723b72436382bba962b22f0",
+      "bytes": 6181,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/utils/brightnessMap.ts",
+      "sha256": "ac610d086d4cf0c321e4be0b6b66f4f5c0b6711348f7ffed484b264a5c129c51",
+      "bytes": 14576,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "src/utils/seamCandidates.ts",
+      "sha256": "0fd5986510d99116c05777c936f50100ab5ca5e52ab2cc42e16088b45110357d",
+      "bytes": 5339,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "tests/acceptance/focus-stack-datasets.json",
+      "sha256": "0c232c21d91629c8b9cd62896a43766711f080936e9b303389bf3b71af018d42",
+      "bytes": 4410,
+      "category": "test-only",
+      "scope": "Dataset and acceptance harness; native rejection remains a hard failure",
+      "entry": "tests/acceptance/focus-stack-datasets.json",
+      "evidence": "Node contracts and dataset hash verification"
+    },
+    {
+      "path": "tests/adaptive-brightness.mjs",
+      "sha256": "4eb6eddc06f649ed67af2493dc03217af2aecf55192b39ca0c2de1afe8574507",
+      "bytes": 3087,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "tests/brightness-map.mjs",
+      "sha256": "499d4c7104053a16541bb3aba755edf3e562dbf03779c873d80cd046c7c37ac0",
+      "bytes": 8356,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    },
+    {
+      "path": "tests/focus-stack-datasets-contract.mjs",
+      "sha256": "c749f478345f21ce15934e3a7bbbdb35c2e1d63625768e8697fcbc72eddff641",
+      "bytes": 5828,
+      "category": "test-only",
+      "scope": "Dataset and acceptance harness; native rejection remains a hard failure",
+      "entry": "tests/focus-stack-datasets-contract.mjs",
+      "evidence": "Node contracts and dataset hash verification"
+    },
+    {
+      "path": "tests/focus-stack-regression-verdict.mjs",
+      "sha256": "c56dca826267daefa37adab02da6b4e49f15ce7db7015176ecd67efe876ccf57",
+      "bytes": 5963,
+      "category": "test-only",
+      "scope": "Dataset and acceptance harness; native rejection remains a hard failure",
+      "entry": "tests/focus-stack-regression-verdict.mjs",
+      "evidence": "Node contracts and dataset hash verification"
+    },
+    {
+      "path": "tests/focus-stack-regression.mjs",
+      "sha256": "0b748d3fd688d0aa7134aa944b539c817ab9d7196dd5ee6b388523d76983f14a",
+      "bytes": 23937,
+      "category": "test-only",
+      "scope": "Dataset and acceptance harness; native rejection remains a hard failure",
+      "entry": "tests/focus-stack-regression.mjs",
+      "evidence": "Node contracts and dataset hash verification"
+    },
+    {
+      "path": "tests/seam-candidates.mjs",
+      "sha256": "437ef49d536ca7e445ffc067ffedbc035cb3103509eb354000cc01b75e171e7a",
+      "bytes": 1910,
+      "category": "exclude",
+      "scope": "Preserved outside stack baseline; never deleted or overwritten by baseline creation",
+      "entry": "independent frontend/brightness work or local artifacts/settings",
+      "evidence": "pre-edit archive and hashes; frontend integration checks where applicable"
+    }
+  ]
+}

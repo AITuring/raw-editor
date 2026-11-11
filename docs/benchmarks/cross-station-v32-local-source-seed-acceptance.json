@@ -1,0 +1,2708 @@
+{
+  "date": "2026-11-04",
+  "status": "partial_geometry_not_accepted",
+  "implemented": [
+    "station-local source match seed geometry",
+    "flat candidate attempt history and correct measured/unmeasured diagnostics"
+  ],
+  "cross_material_geometry_complete": false,
+  "quality_gate_changed": false,
+  "owner_selection_changed": false,
+  "binary_sha256": "36a5cc87887871ded7b75ee50b1afdfc002931a231e671e1372c28aa35c8dd68",
+  "source_file_count": 500,
+  "changed_source_paths_from_v31": [
+    "src-tauri/src/panorama_stitching/alignment_tests/virtual_tile_source_seeds.rs",
+    "src-tauri/src/panorama_stitching/alignment_tests.rs",
+    "src-tauri/src/panorama_stitching/stitch_images.rs",
+    "src-tauri/src/panorama_stitching/virtual_tile_direct_match.rs",
+    "src-tauri/src/panorama_stitching/virtual_tile_global_search.rs",
+    "src-tauri/src/panorama_stitching/virtual_tile_guided_match.rs",
+    "src-tauri/src/panorama_stitching/virtual_tile_relations.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/report_schema_solver.rs",
+    "src-tauri/src/panorama_virtual_tile_tests/global_search.rs",
+    "src-tauri/src/panorama_virtual_tile_tests.rs"
+  ],
+  "tests": {
+    "targeted": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1061 filtered out; finished in 0.00s",
+    "full": "test result: ok. 1024 passed; 0 failed; 40 ignored; 0 measured; 0 filtered out; finished in 129.87s",
+    "production_check": 0,
+    "format_check": 0,
+    "quality_contract": 0,
+    "dataset_contract": 0,
+    "regression_contract": 0
+  },
+  "baseline_protection": {
+    "head": "a0dc5f9c9dd49cf050868411b526770268c9bb88",
+    "accepted_v28_commit": "504d904ff77781ac13e57f52c13fef8024b6c961",
+    "accepted_v31_binary_sha256": "88ce505d644b203eb7283cd0a81f83b1b268f0e5f51cf387a264444fb1f04abc",
+    "index_empty": true,
+    "existing_uncommitted_files_checked": 259,
+    "unclassified_changes": [],
+    "concurrent_changes_preserved": [
+      {
+        "path": "package.json",
+        "before_sha256": "df2ddea907af9854ba2f355733d1380b414ac2f2383e6f343613f2f0bdf6f74a",
+        "observed_sha256": "1597c2cfccb76da76d8e98ad5a2da40bb3b43ff00187ef36547a7b8e7ec240a1",
+        "mtime_ns": 1793759823226496302,
+        "classification": "Concurrent change observed; not edited by this task; preserved; not included in Rust change validation",
+        "final_observed_sha256": "1597c2cfccb76da76d8e98ad5a2da40bb3b43ff00187ef36547a7b8e7ec240a1"
+      },
+      {
+        "path": "src/components/views/BrightnessToolView.tsx",
+        "before_sha256": "da3c2ef651a41d4cf8885297431d9cb46dfd487acead34110d45240ea383c161",
+        "observed_sha256": "e3a97cd30a1003726a1d8c93f70239cb1afb658f8a4b4cb006b43bf9e79cb793",
+        "mtime_ns": 1793761540775837400,
+        "classification": "Concurrent change observed; not edited by this task; preserved; not included in Rust change validation",
+        "final_observed_sha256": "e3a97cd30a1003726a1d8c93f70239cb1afb658f8a4b4cb006b43bf9e79cb793"
+      },
+      {
+        "path": "src/utils/seamCandidates.ts",
+        "before_sha256": "bccfa5fc6b0c6c30b4a705591377ba4ca3fe5df28645a4f2f7a7cb53a191900b",
+        "observed_sha256": "b05badbe16fbc4463872384ea5c79f213133dbf6dcd07574f9cc8647517752e8",
+        "mtime_ns": 1793759823156975241,
+        "classification": "Concurrent change observed; not edited by this task; preserved; not included in Rust change validation",
+        "final_observed_sha256": "b05badbe16fbc4463872384ea5c79f213133dbf6dcd07574f9cc8647517752e8"
+      }
+    ],
+    "concurrent_new_files_preserved": [
+      {
+        "path": "native-seam-check.html",
+        "observed_sha256": "5c51081b7bea69fa6b98310ac11948fa2f921975b106fdb7c4bb3e0d82c5a91f",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      },
+      {
+        "path": "public/native-seam-check.png",
+        "observed_sha256": "81ae25de2af9cb6ce8df739dda309b80de3447e873ebec505046840d940de9c8",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      },
+      {
+        "path": "src/native-seam-check.tsx",
+        "observed_sha256": "545a322d5db87c6f1da4d7c6732331ca8843c1fae7a3b22963693d815a6f783b",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      },
+      {
+        "path": "src/utils/nativeSeamProfile.ts",
+        "observed_sha256": "cfc6c996da885461f9f315b423e984c6eda43389bf7732e1a5c8a370f68eb407",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      },
+      {
+        "path": "tests/native-seam-profile-real.mjs",
+        "observed_sha256": "0d2dc4935359b94d629b6f1d7f385ff685abbaf68faaa71fb2854e038fbc9b8e",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      },
+      {
+        "path": "tests/native-seam-profile.mjs",
+        "observed_sha256": "edf843a5540bc4de2f5c9a8610d695f7f3c62803401bfe2124858694201d591f",
+        "classification": "Concurrent new file; preserved; outside this Rust validation"
+      }
+    ],
+    "frontend_concurrent_changes_included_in_validation": false
+  },
+  "geometry": {
+    "langyuan-10": {
+      "status": "rejected",
+      "baseline_report": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/langyuan-10/run/langyuan-10-s1-v32-baseline-stack-reports/stack-report-0a466337-4d10-4516-ae1d-9b4489f07a58.json",
+      "candidate_report": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/candidate/langyuan-10/run/langyuan-10-s1-v32-local-source-seed-stack-reports/stack-report-13489522-c060-4f95-9fbe-25a292d2ce08.json",
+      "baseline_report_sha256": "d8992e28740e1430df4f400511c24b2879239b7b74c20734ce8185c079ae64ce",
+      "candidate_report_sha256": "96a415620fd5b32b63fb1390de1fda27b93afcbe38d63b14e0bbaf1832f2bf7d",
+      "before_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9958670336,
+        "wall_seconds": 238.50737987505272,
+        "user_seconds": 1146.837131,
+        "system_seconds": 22.154014,
+        "child_exit_code": 101
+      },
+      "after_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9544400896,
+        "wall_seconds": 276.65624170796946,
+        "user_seconds": 1500.3389,
+        "system_seconds": 29.237767,
+        "child_exit_code": 101
+      },
+      "components_before": 3,
+      "components_after": 3,
+      "accepted_before": 0,
+      "accepted_after": 0,
+      "accepted_relations_unchanged": true,
+      "unmeasured_before": 3,
+      "unmeasured_after": 0,
+      "rejected_by_reason": {
+        "station_relation_edge_orientation_mismatch": 1,
+        "station_relation_edge_strength_mismatch": 1,
+        "station_relation_photometric_mismatch": 1,
+        "station_relation_scale_out_of_range": 3
+      },
+      "rejected_by_failure_stage": {
+        "measured_relation_not_accepted": 3
+      },
+      "quality_gate": {
+        "verdict": "not_run",
+        "roi_count": 0
+      },
+      "closure": {
+        "status": "not_run",
+        "spanning_tree_edges": 0,
+        "participating_constraints": 0,
+        "constraint_weights": [],
+        "iterations": 0,
+        "residual_median_px": 0.0,
+        "residual_p95_px": 0.0,
+        "max_direct_pair_p95_px": 0.0,
+        "balanced_retry_attempted": false,
+        "balanced_retry_accepted": false,
+        "before_retry_max_direct_pair_p95_px": null,
+        "max_corner_correction_px": 0.0,
+        "clamped_stations": 0,
+        "fallback_reason": null,
+        "offending_pair": null,
+        "geometry_model": "homography",
+        "global_before_residual_median_px": null,
+        "global_before_residual_p95_px": null,
+        "nonlinear_validation": [],
+        "rejected_nonlinear_constraints": [],
+        "nonlinear_initialization_constraints": 0,
+        "nonlinear_refit_passes": 0
+      },
+      "before_attempt_counts": [
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 471,
+          "bidirectional": 482
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 275,
+          "bidirectional": 287
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 31,
+          "bidirectional": 31
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "prior_free_features",
+          "fitted_inliers": 504,
+          "bidirectional": 516
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 4
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 5
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 5
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 4
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 5
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 6
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "prior_free_features",
+          "fitted_inliers": 265,
+          "bidirectional": 271
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 4
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 14
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        }
+      ],
+      "after_attempts": [
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 482,
+          "fitted_inliers": 471,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 583,
+              "median_error_px": 0.9978976582927924,
+              "scale_ratio": 0.9142010613258976,
+              "spatial_support": 0.3476649909956816,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 267,
+              "holdout_count": 316,
+              "holdout_median_error_px": 0.883046278683124,
+              "holdout_spatial_support": 0.32944465561719544,
+              "sample_local_scale_range": [
+                0.912299627993417,
+                0.9164529149507503
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9114846149814443,
+                0.917820248461236
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 1,
+          "seed": "prior_free_features",
+          "model_fitted": true,
+          "bidirectional": 516,
+          "fitted_inliers": 504,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 593,
+              "median_error_px": 1.2096995820926568,
+              "scale_ratio": 0.9133979626037517,
+              "spatial_support": 0.34564520463877496,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 288,
+              "holdout_count": 305,
+              "holdout_median_error_px": 1.2722536905669908,
+              "holdout_spatial_support": 0.3155620945363978,
+              "sample_local_scale_range": [
+                0.9116275439577823,
+                0.9157294794959132
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9109711591543931,
+                0.9170006082021428
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 2,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 489,
+          "fitted_inliers": 479,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 489,
+              "median_error_px": 1.0694420516781047,
+              "scale_ratio": 0.9127190604533041,
+              "spatial_support": 0.5491421369356241,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 233,
+              "holdout_count": 256,
+              "holdout_median_error_px": 1.1774103136220333,
+              "holdout_spatial_support": 0.5123120254311267,
+              "sample_local_scale_range": [
+                0.9063016357136531,
+                0.9192781165331204
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9059606959758304,
+                0.9194391285029462
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 3,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 492,
+          "fitted_inliers": 475,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 837,
+              "median_error_px": 2.1895542883053656,
+              "scale_ratio": 0.9132885791787876,
+              "spatial_support": 0.3524818567715245,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 432,
+              "holdout_count": 405,
+              "holdout_median_error_px": 1.2225345653544621,
+              "holdout_spatial_support": 0.3348638349539739,
+              "sample_local_scale_range": [
+                0.9116023522842177,
+                0.9148920463251601
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9111180815721027,
+                0.9154977406954766
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 4,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 504,
+          "fitted_inliers": 491,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 644,
+              "median_error_px": 1.102039636118371,
+              "scale_ratio": 0.9139391735821054,
+              "spatial_support": 0.34988438058087423,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 299,
+              "holdout_count": 345,
+              "holdout_median_error_px": 1.227553267227924,
+              "holdout_spatial_support": 0.3410514237377646,
+              "sample_local_scale_range": [
+                0.9118605710981624,
+                0.9167625405871732
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9109156000546831,
+                0.9162294075338114
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 5,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 566,
+          "fitted_inliers": 542,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 823,
+              "median_error_px": 1.514211421262887,
+              "scale_ratio": 0.9136254326707953,
+              "spatial_support": 0.37322011777789876,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 424,
+              "holdout_count": 399,
+              "holdout_median_error_px": 1.1910294004905582,
+              "holdout_spatial_support": 0.3486045428963919,
+              "sample_local_scale_range": [
+                0.912827150964038,
+                0.9145102787116631
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9112632165887027,
+                0.9153940856918826
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 6,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 4,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 7,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 5,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 8,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 5,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 9,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 4,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 10,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 11,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 5,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 12,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 3,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 13,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 6,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 287,
+          "fitted_inliers": 275,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 143,
+              "median_error_px": 1.1162734323920767,
+              "scale_ratio": 0.9135095467343819,
+              "spatial_support": 0.3379283762609993,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 69,
+              "holdout_count": 74,
+              "holdout_median_error_px": 1.2111831166186855,
+              "holdout_spatial_support": 0.2282702432787751,
+              "sample_local_scale_range": [
+                0.911486001607624,
+                0.9182628094835731
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9114289357320231,
+                0.918004437229377
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 1,
+          "seed": "prior_free_features",
+          "model_fitted": true,
+          "bidirectional": 271,
+          "fitted_inliers": 265,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 247,
+              "median_error_px": 0.8781424284517081,
+              "scale_ratio": 0.9084079954299304,
+              "spatial_support": 0.2756803626119672,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 132,
+              "holdout_count": 115,
+              "holdout_median_error_px": 0.8853156225590524,
+              "holdout_spatial_support": 0.2515268240942332,
+              "sample_local_scale_range": [
+                0.9039913397248494,
+                0.9131108799101786
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9042223290565031,
+                0.9128750459533996
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 2,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 282,
+          "fitted_inliers": 276,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 257,
+              "median_error_px": 0.8867581423248595,
+              "scale_ratio": 0.9080151003667492,
+              "spatial_support": 0.26381266620886534,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 141,
+              "holdout_count": 116,
+              "holdout_median_error_px": 1.0114013643032227,
+              "holdout_spatial_support": 0.24506944980933065,
+              "sample_local_scale_range": [
+                0.9041129444016441,
+                0.912779230016006
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9045219818515823,
+                0.9123069068090577
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 3,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 272,
+          "fitted_inliers": 261,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 275,
+              "median_error_px": 0.9223125519025791,
+              "scale_ratio": 0.9082102610883949,
+              "spatial_support": 0.279531632660657,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 144,
+              "holdout_count": 131,
+              "holdout_median_error_px": 0.9329420952137156,
+              "holdout_spatial_support": 0.26751704968952766,
+              "sample_local_scale_range": [
+                0.904047551746082,
+                0.9123140038607673
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9044213372269438,
+                0.9121513996540052
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 4,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 301,
+          "fitted_inliers": 295,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 138,
+              "median_error_px": 1.0384284907920571,
+              "scale_ratio": 0.9134648055742915,
+              "spatial_support": 0.32376560476999,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 64,
+              "holdout_count": 74,
+              "holdout_median_error_px": 1.0073981985288236,
+              "holdout_spatial_support": 0.23421520773827545,
+              "sample_local_scale_range": [
+                0.9113964219058851,
+                0.9181705526009333
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9119583548078727,
+                0.9173893825348362
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 5,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 301,
+          "fitted_inliers": 285,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 180,
+              "median_error_px": 0.8501957966472952,
+              "scale_ratio": 0.9105980466427154,
+              "spatial_support": 0.2741324950398183,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 1,
+              "canonical_target": 0,
+              "holdout_fit_count": 77,
+              "holdout_count": 103,
+              "holdout_median_error_px": 0.8868312885059348,
+              "holdout_spatial_support": 0.26009949768049945,
+              "sample_local_scale_range": [
+                0.9068531512046311,
+                0.9176251984622853
+              ],
+              "holdout_scale_at_sample_range": [
+                0.9069764908384574,
+                0.9177704027885494
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 6,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 7,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 8,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 9,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 10,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 0,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 11,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 12,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 4,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 13,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 14,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 31,
+          "fitted_inliers": 31,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 36,
+              "median_error_px": 1.149642982000021,
+              "scale_ratio": 0.8273056928922075,
+              "spatial_support": 0.3360126376434512,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range",
+                "station_relation_photometric_mismatch",
+                "station_relation_edge_strength_mismatch",
+                "station_relation_edge_orientation_mismatch"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 0,
+              "holdout_fit_count": 26,
+              "holdout_count": 10,
+              "holdout_median_error_px": 2.0359017222644913,
+              "holdout_spatial_support": 0.27536654289792367,
+              "sample_local_scale_range": [
+                0.8224414684486624,
+                0.8332400768027387
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8213782430148239,
+                0.8323976682145183
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 1,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 2,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 0,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 3,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 4,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 5,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 0,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 6,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 0,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 7,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 0,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 8,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        }
+      ],
+      "same_native_planes": true,
+      "planes": [
+        {
+          "file": "station-000.coverage.png",
+          "before_sha256": "121ed04e7185abb6788b9c36ee5f8a1ebd4729ebcfa6b57469bed47c9c70dfac",
+          "after_sha256": "121ed04e7185abb6788b9c36ee5f8a1ebd4729ebcfa6b57469bed47c9c70dfac",
+          "same": true
+        },
+        {
+          "file": "station-000.gray.png",
+          "before_sha256": "695ed11116eac1d1b6c8fffc4938e4f86dfb3ecc48d4beae8b20c93478053f21",
+          "after_sha256": "695ed11116eac1d1b6c8fffc4938e4f86dfb3ecc48d4beae8b20c93478053f21",
+          "same": true
+        },
+        {
+          "file": "station-000.quality.png",
+          "before_sha256": "241aa577248f78b53a9a3f6fddd7ec585f8dc22f4dce36b4b6c795da127ca4ab",
+          "after_sha256": "241aa577248f78b53a9a3f6fddd7ec585f8dc22f4dce36b4b6c795da127ca4ab",
+          "same": true
+        },
+        {
+          "file": "station-001.coverage.png",
+          "before_sha256": "ec09ea7cd20253b51654f062369e966c03950372696727746f31fd0c2d7f6b34",
+          "after_sha256": "ec09ea7cd20253b51654f062369e966c03950372696727746f31fd0c2d7f6b34",
+          "same": true
+        },
+        {
+          "file": "station-001.gray.png",
+          "before_sha256": "422a484fb70d26cf064df4af5de115ea97741f7442d12376fc6aeb60c640592c",
+          "after_sha256": "422a484fb70d26cf064df4af5de115ea97741f7442d12376fc6aeb60c640592c",
+          "same": true
+        },
+        {
+          "file": "station-001.quality.png",
+          "before_sha256": "4589c62dc3bb8b781f1248c453d2cf3d176841cfdce727c6f8f41b694c63e8eb",
+          "after_sha256": "4589c62dc3bb8b781f1248c453d2cf3d176841cfdce727c6f8f41b694c63e8eb",
+          "same": true
+        },
+        {
+          "file": "station-002.coverage.png",
+          "before_sha256": "faf878c5a5aff37108f44bbcd5a555719a4e325c02d3d72978bd3dfe5085094a",
+          "after_sha256": "faf878c5a5aff37108f44bbcd5a555719a4e325c02d3d72978bd3dfe5085094a",
+          "same": true
+        },
+        {
+          "file": "station-002.gray.png",
+          "before_sha256": "fadba579cce899fe5c0be7253ec973c62ba0b9168fc7f6c03e0fbeedcb54e986",
+          "after_sha256": "fadba579cce899fe5c0be7253ec973c62ba0b9168fc7f6c03e0fbeedcb54e986",
+          "same": true
+        },
+        {
+          "file": "station-002.quality.png",
+          "before_sha256": "52ac286fc88c8e9a573cf8655e01fdce51b1ac84de51692879f706c213886f0c",
+          "after_sha256": "52ac286fc88c8e9a573cf8655e01fdce51b1ac84de51692879f706c213886f0c",
+          "same": true
+        }
+      ],
+      "inputs_unchanged": true,
+      "output_written": false
+    },
+    "wenyuan-10": {
+      "status": "rejected",
+      "baseline_report": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/wenyuan-10/run/wenyuan-10-s1-v32-baseline-stack-reports/stack-report-fcc28aff-6854-4aa1-bcd6-ed934d11cf1d.json",
+      "candidate_report": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/candidate/wenyuan-10/run/wenyuan-10-s1-v32-local-source-seed-stack-reports/stack-report-08e22965-5f91-4cdd-8812-fd69377ccb49.json",
+      "baseline_report_sha256": "b3ada30e6bb9a77116ad7b76c4eb2e1c298df9782f01bb92ac43f12f0e289bba",
+      "candidate_report_sha256": "01b6bbba0126b69b3e687926e9db11cc47d4ff683559bb0395a83bcdb2667938",
+      "before_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9212608512,
+        "wall_seconds": 267.57104208297096,
+        "user_seconds": 1235.237971,
+        "system_seconds": 29.711148,
+        "child_exit_code": 101
+      },
+      "after_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 8355823616,
+        "wall_seconds": 319.7937107079197,
+        "user_seconds": 1590.046881,
+        "system_seconds": 35.581146,
+        "child_exit_code": 101
+      },
+      "components_before": 2,
+      "components_after": 2,
+      "accepted_before": 1,
+      "accepted_after": 1,
+      "accepted_relations_unchanged": true,
+      "unmeasured_before": 2,
+      "unmeasured_after": 0,
+      "rejected_by_reason": {
+        "station_relation_scale_out_of_range": 2
+      },
+      "rejected_by_failure_stage": {
+        "measured_relation_not_accepted": 2
+      },
+      "quality_gate": {
+        "verdict": "not_run",
+        "roi_count": 0
+      },
+      "closure": {
+        "status": "not_run",
+        "spanning_tree_edges": 0,
+        "participating_constraints": 1,
+        "constraint_weights": [],
+        "iterations": 0,
+        "residual_median_px": 0.0,
+        "residual_p95_px": 0.0,
+        "max_direct_pair_p95_px": 0.0,
+        "balanced_retry_attempted": false,
+        "balanced_retry_accepted": false,
+        "before_retry_max_direct_pair_p95_px": null,
+        "max_corner_correction_px": 0.0,
+        "clamped_stations": 0,
+        "fallback_reason": null,
+        "offending_pair": null,
+        "geometry_model": "homography",
+        "global_before_residual_median_px": null,
+        "global_before_residual_p95_px": null,
+        "nonlinear_validation": [],
+        "rejected_nonlinear_constraints": [],
+        "nonlinear_initialization_constraints": 0,
+        "nonlinear_refit_passes": 0
+      },
+      "before_attempt_counts": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 452,
+          "bidirectional": 452
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 603,
+          "bidirectional": 612
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "rendering_prior",
+          "fitted_inliers": 541,
+          "bidirectional": 544
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "prior_free_features",
+          "fitted_inliers": 616,
+          "bidirectional": 624
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 4
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 5
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 6
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "prior_free_features",
+          "fitted_inliers": 563,
+          "bidirectional": 564
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "source_pairwise_match",
+          "fitted_inliers": 0,
+          "bidirectional": 0
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 519,
+          "bidirectional": 523
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 3
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 2
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "seed": "global_coverage_similarity",
+          "fitted_inliers": 0,
+          "bidirectional": 1
+        }
+      ],
+      "after_attempts": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 452,
+          "fitted_inliers": 452,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 414,
+              "median_error_px": 2.9514620505538227,
+              "scale_ratio": 1.0001454714349294,
+              "spatial_support": 0.6399004816777111,
+              "rejection_reasons": [],
+              "canonical_source": 0,
+              "canonical_target": 1,
+              "holdout_fit_count": 201,
+              "holdout_count": 213,
+              "holdout_median_error_px": 1.188540403784072,
+              "holdout_spatial_support": 0.5699364972652772,
+              "sample_local_scale_range": [
+                0.9953362095267848,
+                1.003828214088081
+              ],
+              "holdout_scale_at_sample_range": [
+                0.990587450029455,
+                1.0079058397879372
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 612,
+          "fitted_inliers": 603,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 397,
+              "median_error_px": 0.691858110794346,
+              "scale_ratio": 1.1158170128664633,
+              "spatial_support": 0.26475993419017385,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 183,
+              "holdout_count": 214,
+              "holdout_median_error_px": 0.7966395677083357,
+              "holdout_spatial_support": 0.24929863899513685,
+              "sample_local_scale_range": [
+                1.107144635101702,
+                1.124050984793483
+              ],
+              "holdout_scale_at_sample_range": [
+                1.1072068225389915,
+                1.1241776811713897
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 1,
+          "seed": "prior_free_features",
+          "model_fitted": true,
+          "bidirectional": 624,
+          "fitted_inliers": 616,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 258,
+              "median_error_px": 0.8036065173288555,
+              "scale_ratio": 1.1218969526650264,
+              "spatial_support": 0.2985722191477587,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 143,
+              "holdout_count": 115,
+              "holdout_median_error_px": 0.9003257057186445,
+              "holdout_spatial_support": 0.27729083665338644,
+              "sample_local_scale_range": [
+                1.1183095973723254,
+                1.1346412060171243
+              ],
+              "holdout_scale_at_sample_range": [
+                1.1183403848378388,
+                1.1341687242205563
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 2,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 613,
+          "fitted_inliers": 608,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 431,
+              "median_error_px": 0.6465191455979008,
+              "scale_ratio": 1.1183288118640684,
+              "spatial_support": 0.2720723430657965,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 186,
+              "holdout_count": 245,
+              "holdout_median_error_px": 0.6851371585555244,
+              "holdout_spatial_support": 0.266696817362221,
+              "sample_local_scale_range": [
+                1.110137782568891,
+                1.1277757452126906
+              ],
+              "holdout_scale_at_sample_range": [
+                1.1097044165848315,
+                1.1280582670585801
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 3,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 624,
+          "fitted_inliers": 622,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 412,
+              "median_error_px": 0.6808994368085998,
+              "scale_ratio": 1.1176440708094217,
+              "spatial_support": 0.2987668921223126,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 186,
+              "holdout_count": 226,
+              "holdout_median_error_px": 0.7053729374316918,
+              "holdout_spatial_support": 0.28338021796252855,
+              "sample_local_scale_range": [
+                1.1081320811445217,
+                1.1270027213340537
+              ],
+              "holdout_scale_at_sample_range": [
+                1.1080050457261161,
+                1.1273535234694634
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 4,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 615,
+          "fitted_inliers": 615,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 391,
+              "median_error_px": 1.2234492806094555,
+              "scale_ratio": 1.1146527522504626,
+              "spatial_support": 0.2725174401928439,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 170,
+              "holdout_count": 221,
+              "holdout_median_error_px": 0.8404462981717375,
+              "holdout_spatial_support": 0.265890233187286,
+              "sample_local_scale_range": [
+                1.107176968594179,
+                1.1236858559959566
+              ],
+              "holdout_scale_at_sample_range": [
+                1.107285868093209,
+                1.1246751585373107
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 5,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 625,
+          "fitted_inliers": 624,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 414,
+              "median_error_px": 0.9509166070815397,
+              "scale_ratio": 1.119005060887584,
+              "spatial_support": 0.25799056039216445,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 0,
+              "canonical_target": 2,
+              "holdout_fit_count": 191,
+              "holdout_count": 223,
+              "holdout_median_error_px": 0.6811548656157524,
+              "holdout_spatial_support": 0.2486300782390839,
+              "sample_local_scale_range": [
+                1.110367703413885,
+                1.127827500634081
+              ],
+              "holdout_scale_at_sample_range": [
+                1.1098816774816502,
+                1.1269682156125511
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 6,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 4,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 7,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 8,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 9,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 5,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 10,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 11,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 6,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 12,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 3,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "ordinal": 13,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 0,
+          "seed": "rendering_prior",
+          "model_fitted": true,
+          "bidirectional": 544,
+          "fitted_inliers": 541,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 445,
+              "median_error_px": 1.1346876696669579,
+              "scale_ratio": 0.8920511248577376,
+              "spatial_support": 0.32602479391337974,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 219,
+              "holdout_count": 226,
+              "holdout_median_error_px": 0.9956110203596186,
+              "holdout_spatial_support": 0.2981877722841543,
+              "sample_local_scale_range": [
+                0.8872925561862712,
+                0.8987919854760457
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8865605277022808,
+                0.899410959779026
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 1,
+          "seed": "prior_free_features",
+          "model_fitted": true,
+          "bidirectional": 564,
+          "fitted_inliers": 563,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 326,
+              "median_error_px": 1.3007497741020357,
+              "scale_ratio": 0.8899079371721749,
+              "spatial_support": 0.26914615757085036,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 145,
+              "holdout_count": 181,
+              "holdout_median_error_px": 1.1045099650756003,
+              "holdout_spatial_support": 0.23131059002672782,
+              "sample_local_scale_range": [
+                0.8840989962380121,
+                0.8937592256812267
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8834203156667428,
+                0.8944591361664876
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 2,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 553,
+          "fitted_inliers": 552,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 342,
+              "median_error_px": 1.096946372028359,
+              "scale_ratio": 0.8893384542391711,
+              "spatial_support": 0.2308263498461865,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 155,
+              "holdout_count": 187,
+              "holdout_median_error_px": 1.2763146480651588,
+              "holdout_spatial_support": 0.20571037394107078,
+              "sample_local_scale_range": [
+                0.884561764753732,
+                0.8925187352967866
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8841806800744703,
+                0.8928129783642273
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 3,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 553,
+          "fitted_inliers": 549,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 424,
+              "median_error_px": 0.9107158634624167,
+              "scale_ratio": 0.8919864046399967,
+              "spatial_support": 0.3243965191204288,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 216,
+              "holdout_count": 208,
+              "holdout_median_error_px": 1.0064688772921435,
+              "holdout_spatial_support": 0.28680550949560285,
+              "sample_local_scale_range": [
+                0.886269566169484,
+                0.8989448357039039
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8859860168891855,
+                0.8993213262543841
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 4,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 536,
+          "fitted_inliers": 533,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 314,
+              "median_error_px": 1.3614294832957794,
+              "scale_ratio": 0.8902136086172305,
+              "spatial_support": 0.27107109642016736,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 136,
+              "holdout_count": 178,
+              "holdout_median_error_px": 1.1239255050687524,
+              "holdout_spatial_support": 0.23566648983358374,
+              "sample_local_scale_range": [
+                0.8852152677476578,
+                0.8942008359977327
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8838687885821017,
+                0.8950110549851615
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 5,
+          "seed": "source_pairwise_match",
+          "model_fitted": true,
+          "bidirectional": 553,
+          "fitted_inliers": 551,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 414,
+              "median_error_px": 1.2134813446524502,
+              "scale_ratio": 0.8928284659913654,
+              "spatial_support": 0.3057652161930973,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 220,
+              "holdout_count": 194,
+              "holdout_median_error_px": 1.1506252740564327,
+              "holdout_spatial_support": 0.2766225055558492,
+              "sample_local_scale_range": [
+                0.8884930826493129,
+                0.8979086249783519
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8869912666607811,
+                0.8996984989980331
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 6,
+          "seed": "global_coverage_similarity",
+          "model_fitted": true,
+          "bidirectional": 523,
+          "fitted_inliers": 519,
+          "failure_stage": "fitted",
+          "measurement_factor": 1,
+          "selected_hypotheses": [
+            {
+              "model": "projective",
+              "selected": true,
+              "inliers": 421,
+              "median_error_px": 0.9525462983474836,
+              "scale_ratio": 0.8914550135683871,
+              "spatial_support": 0.3267682413564274,
+              "rejection_reasons": [
+                "station_relation_scale_out_of_range"
+              ],
+              "canonical_source": 2,
+              "canonical_target": 1,
+              "holdout_fit_count": 181,
+              "holdout_count": 240,
+              "holdout_median_error_px": 1.0877497897893007,
+              "holdout_spatial_support": 0.3060269726176266,
+              "sample_local_scale_range": [
+                0.8867155665474066,
+                0.8985674018669924
+              ],
+              "holdout_scale_at_sample_range": [
+                0.8863207145200784,
+                0.8992316927830172
+              ]
+            }
+          ]
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 7,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 3,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 8,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 3,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 9,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 10,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 11,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 12,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 2,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "ordinal": 13,
+          "seed": "global_coverage_similarity",
+          "model_fitted": false,
+          "bidirectional": 1,
+          "fitted_inliers": 0,
+          "failure_stage": "polished_fit_failed",
+          "measurement_factor": 4,
+          "selected_hypotheses": []
+        }
+      ],
+      "same_native_planes": true,
+      "planes": [
+        {
+          "file": "station-000.coverage.png",
+          "before_sha256": "dc6d9ddcb62a5fceaf8886af20e50bf78b8b204267916b49e91017134bcad9ec",
+          "after_sha256": "dc6d9ddcb62a5fceaf8886af20e50bf78b8b204267916b49e91017134bcad9ec",
+          "same": true
+        },
+        {
+          "file": "station-000.gray.png",
+          "before_sha256": "2f690754199d0c8a58f881c51df19f4a17a1e6cfae858de5eef5f3b1c51e43b8",
+          "after_sha256": "2f690754199d0c8a58f881c51df19f4a17a1e6cfae858de5eef5f3b1c51e43b8",
+          "same": true
+        },
+        {
+          "file": "station-000.quality.png",
+          "before_sha256": "ebc1d89fe299bdb0b7cca589efd8ae1ed076ca408006aec2aa2b2b09a6a04408",
+          "after_sha256": "ebc1d89fe299bdb0b7cca589efd8ae1ed076ca408006aec2aa2b2b09a6a04408",
+          "same": true
+        },
+        {
+          "file": "station-001.coverage.png",
+          "before_sha256": "66cd4cdddd5415e2efec219cb4a1e22b99924767fdd86c081f45f440336f17d5",
+          "after_sha256": "66cd4cdddd5415e2efec219cb4a1e22b99924767fdd86c081f45f440336f17d5",
+          "same": true
+        },
+        {
+          "file": "station-001.gray.png",
+          "before_sha256": "a8feace23a235584d92dae3d94cf591733d83e0b773e9a9b5efd2d6faa4944c0",
+          "after_sha256": "a8feace23a235584d92dae3d94cf591733d83e0b773e9a9b5efd2d6faa4944c0",
+          "same": true
+        },
+        {
+          "file": "station-001.quality.png",
+          "before_sha256": "9bf9b2b74ca8bd1f656d8b9533a9657425059d972b7f785f012d21097db4bbcc",
+          "after_sha256": "9bf9b2b74ca8bd1f656d8b9533a9657425059d972b7f785f012d21097db4bbcc",
+          "same": true
+        },
+        {
+          "file": "station-002.coverage.png",
+          "before_sha256": "72bd8901108bd0a9b14242dae28201349d9e0f38f8caa357a587132b4a8a291e",
+          "after_sha256": "72bd8901108bd0a9b14242dae28201349d9e0f38f8caa357a587132b4a8a291e",
+          "same": true
+        },
+        {
+          "file": "station-002.gray.png",
+          "before_sha256": "309adca1455059fbcdd33ebc61e7553251c1f15c78a39eb8bf3ec9f743d160b6",
+          "after_sha256": "309adca1455059fbcdd33ebc61e7553251c1f15c78a39eb8bf3ec9f743d160b6",
+          "same": true
+        },
+        {
+          "file": "station-002.quality.png",
+          "before_sha256": "210f6e1e4e4e8e084a50600dedb0127933449e6c283e31d1a9e73bd492c56386",
+          "after_sha256": "210f6e1e4e4e8e084a50600dedb0127933449e6c283e31d1a9e73bd492c56386",
+          "same": true
+        }
+      ],
+      "inputs_unchanged": true,
+      "output_written": false
+    }
+  },
+  "source_frame_audit": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/source-frame-audit.json",
+  "source_frame_audit_sha256": "f606d32604718bdd647ff10584e1d2c1bfeebb0d4cdaf99a4c14b751e1110057",
+  "nine_nef_regression": {
+    "cold": {
+      "status": "pass",
+      "report_path": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/cold/run/sleeping-9-6479-s1-v32-regression-cold-stack-reports/stack-report-b88fa64d-c3f9-4b46-b04a-65a7cdb750ea.json",
+      "report_sha256": "9dae7036f9d41745d50ddec02f9cbbb11d8bd113f6ec8fd478c3955d492df129",
+      "execution_sha256": "e4a90f4e2d430c590d0e34d2fa1025d94af454aac35bc0bafbde95f4b9e3120e",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9497214976,
+        "wall_seconds": 395.37249804101884,
+        "user_seconds": 1790.979526,
+        "system_seconds": 51.790068,
+        "child_exit_code": 0
+      },
+      "quality_gate": {
+        "verdict": "pass",
+        "roi_count": 8
+      },
+      "same_non_timing_sections_as_v31": {
+        "input": true,
+        "grouping": true,
+        "topology": true,
+        "station_relations": true,
+        "closure": true,
+        "intra_station": true,
+        "fusion": true,
+        "residual_warp": true,
+        "tone": true,
+        "composition": true,
+        "quality_gate": true,
+        "virtual_tiles": true
+      },
+      "raw_decodes": 18,
+      "native_fusions": 6,
+      "source_cache_hits": 113,
+      "native_cache_hits": 15,
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "same_gate_policy": true,
+        "same_quality_results": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true
+      }
+    },
+    "hot": {
+      "status": "pass",
+      "report_path": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32/hot/run/sleeping-9-6479-s1-v32-regression-hot-stack-reports/stack-report-c2f56ef1-045d-400d-87c0-14bace53d4bc.json",
+      "report_sha256": "eafa7a54c264628ed632ae2b14901dc03ffd74fdc20dea1808009a74d44e1e42",
+      "execution_sha256": "4e3b7a95f76d7c4f4730e7f720c3b1912c904eb27facde9b09da4d0cc6ae872e",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 8276754432,
+        "wall_seconds": 392.8129910000134,
+        "user_seconds": 1843.977818,
+        "system_seconds": 47.829918,
+        "child_exit_code": 0
+      },
+      "quality_gate": {
+        "verdict": "pass",
+        "roi_count": 8
+      },
+      "same_non_timing_sections_as_v31": {
+        "input": true,
+        "grouping": true,
+        "topology": true,
+        "station_relations": true,
+        "closure": true,
+        "intra_station": true,
+        "fusion": true,
+        "residual_warp": true,
+        "tone": true,
+        "composition": true,
+        "quality_gate": true,
+        "virtual_tiles": true
+      },
+      "raw_decodes": 18,
+      "native_fusions": 6,
+      "source_cache_hits": 113,
+      "native_cache_hits": 15,
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "same_gate_policy": true,
+        "same_quality_results": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true,
+        "cold_hot_business_equal": true
+      }
+    }
+  },
+  "evidence_directory": "/Users/dp/Desktop/raw-editor/output/acceptance/cross-station-v32",
+  "visual_scope": "No cross-material TIFF produced when rejected. Nine-NEF native 1:1 prior visual evidence remains bound to identical TIFF SHA; no new manual visual pass claimed."
+}

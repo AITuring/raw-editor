@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "phase": "v24_paired_stage_diagnostic",
+  "status": "paired_diagnostic_complete",
+  "full_quality_acceptance": false,
+  "original_strict_RGBA_invariant": "failed_preserved",
+  "same_frozen_binary": "b618d119e686d29db12b6de1a385cdebecd129be4394edb7d9e0b324071726fd",
+  "source_snapshot_matches": true,
+  "point_count": 90,
+  "opaque_control_count": 24,
+  "control_changed_counts_by_stage": [
+    0,
+    0,
+    0,
+    17,
+    17
+  ],
+  "output_hash_reproduction": {
+    "capture": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "nearest": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605"
+  },
+  "source_binding_ROIs_per_run": 8,
+  "targeted_tests": {
+    "native_owner_passed": 10
+  },
+  "evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/build.json",
+      "sha256": "96e387f0c96c53d5985e1131cbad8db98ad15329eebd730cdb5dfe4f51e04a0e"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/paired-stage-analysis.json",
+      "sha256": "a1cd60d00ab593022f97125f5a72de4f4829e9b853b62160f1c5ce6c1874cddf"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/capture/execution.json",
+      "sha256": "ad0e2833009c76da3ce58f4399fe3c456df61b61e52a12ba4b2c1676160cb22c"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/nearest/execution.json",
+      "sha256": "5b769d5edfa2516669d6cd3f8d192c1d5b6123a8fa3de18c67599e208df8cc8d"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/capture/source-visual-binding/manifest.json",
+      "sha256": "0f13a6feb83e5d96ea696bb457dfcc22267943e8405d3779ce99e268c28865a2"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v24-paired-stage/nearest/source-visual-binding/manifest.json",
+      "sha256": "844cc5c2f43db7ea30f609362d87971e23791c2408fd85e0533ae58fe2bb78cf"
+    }
+  ],
+  "next": "native all-valid-source candidate comparison for soft seals and stripe regions"
+}

@@ -1,0 +1,233 @@
+{
+  "schema": 1,
+  "status": "quality_and_budget_pass",
+  "scope": "Same9 native default-cache acceptance; performance is observed separately, not an unconditional speed pass",
+  "dataset": "sleeping-9-6479",
+  "scale": 1,
+  "source_default_bytes": 536870912,
+  "native_fusion_default_bytes": 1073741824,
+  "binary_sha256": "e50f6a4c9f77b49ed20e6a20a36976a2fa4b3e5259d0598cd55aa729ab29a72c",
+  "baseline_commit": "504d904ff77781ac13e57f52c13fef8024b6c961",
+  "source_code_changed": false,
+  "quality_gate_changed": false,
+  "phases": [
+    {
+      "phase": "cold",
+      "status": "quality_and_budget_pass",
+      "source_cache_bytes": 536870912,
+      "native_cache_bytes": 1073741824,
+      "wall_seconds": 1724.400303500006,
+      "raw_decode_count": 176,
+      "fusion_count": 21,
+      "fusion_seconds": 1366.4195555400001,
+      "peak_rss_bytes": 8449048576,
+      "source_cache": {
+        "max_bytes": 536870912,
+        "hits": 0,
+        "misses": 167,
+        "render_hits": 0,
+        "render_misses": 99,
+        "quality_gate_hits": 0,
+        "quality_gate_misses": 68,
+        "evictions": 0,
+        "oversized_bypasses": 167,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 0
+      },
+      "native_fusion_cache": {
+        "max_bytes": 1073741824,
+        "hits": 0,
+        "misses": 21,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 0,
+        "composition_misses": 18,
+        "fusion_count": 21,
+        "fusion_seconds": 1366.4195555400001,
+        "failed_fusions": 0,
+        "evictions": 19,
+        "invalidations": 1,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 1029928412,
+        "peak_entries": 1
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 32,
+        "evictions": 0,
+        "resident_bytes": 11010048,
+        "resident_entries": 32,
+        "peak_bytes": 11010048
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 176,
+        "raw_decode_count": 176,
+        "failed_count": 0
+      },
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "fixed_evidence_equal_to_v28": {
+        "input": true,
+        "grouping": true,
+        "intra_station": true,
+        "fusion": true,
+        "topology": true,
+        "station_relations": true,
+        "closure": true,
+        "residual_warp": true,
+        "tone": true,
+        "composition": true,
+        "quality_gate": true
+      },
+      "quality_business_equal_to_v28": false,
+      "degradation_reason_counts": {
+        "grouping_accumulated_motion": 4,
+        "fusion_low_sharpness_region": 21
+      },
+      "v28_degradation_reason_counts": {
+        "grouping_accumulated_motion": 4,
+        "fusion_low_sharpness_region": 6
+      },
+      "unique_degradation_evidence_equal": true,
+      "max_resident_virtual_tiles": 2,
+      "v28_max_resident_virtual_tiles": 4,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "comparison_to_v28_same_phase": {
+        "wall_percent": 299.9877470720842,
+        "raw_decode_delta": 109,
+        "fusion_delta": 15,
+        "rss_percent": -13.654210974872626
+      },
+      "analysis_sha256": "86b44ba5cffe5e24ba62435279ccd9b1f852a776bdde7ee9cb87d700d55588e5"
+    },
+    {
+      "phase": "hot",
+      "status": "quality_and_budget_pass",
+      "source_cache_bytes": 536870912,
+      "native_cache_bytes": 1073741824,
+      "wall_seconds": 1262.313995582983,
+      "raw_decode_count": 176,
+      "fusion_count": 21,
+      "fusion_seconds": 997.2399012479999,
+      "peak_rss_bytes": 8736735232,
+      "source_cache": {
+        "max_bytes": 536870912,
+        "hits": 0,
+        "misses": 167,
+        "render_hits": 0,
+        "render_misses": 99,
+        "quality_gate_hits": 0,
+        "quality_gate_misses": 68,
+        "evictions": 0,
+        "oversized_bypasses": 167,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 0
+      },
+      "native_fusion_cache": {
+        "max_bytes": 1073741824,
+        "hits": 0,
+        "misses": 21,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 0,
+        "composition_misses": 18,
+        "fusion_count": 21,
+        "fusion_seconds": 997.2399012479999,
+        "failed_fusions": 0,
+        "evictions": 19,
+        "invalidations": 1,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 1029928412,
+        "peak_entries": 1
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 32,
+        "evictions": 0,
+        "resident_bytes": 11010048,
+        "resident_entries": 32,
+        "peak_bytes": 11010048
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 176,
+        "raw_decode_count": 176,
+        "failed_count": 0
+      },
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "fixed_evidence_equal_to_v28": {
+        "input": true,
+        "grouping": true,
+        "intra_station": true,
+        "fusion": true,
+        "topology": true,
+        "station_relations": true,
+        "closure": true,
+        "residual_warp": true,
+        "tone": true,
+        "composition": true,
+        "quality_gate": true
+      },
+      "quality_business_equal_to_v28": false,
+      "degradation_reason_counts": {
+        "grouping_accumulated_motion": 4,
+        "fusion_low_sharpness_region": 21
+      },
+      "v28_degradation_reason_counts": {
+        "grouping_accumulated_motion": 4,
+        "fusion_low_sharpness_region": 6
+      },
+      "unique_degradation_evidence_equal": true,
+      "max_resident_virtual_tiles": 2,
+      "v28_max_resident_virtual_tiles": 4,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "comparison_to_v28_same_phase": {
+        "wall_percent": 180.937261980616,
+        "raw_decode_delta": 109,
+        "fusion_delta": 15,
+        "rss_percent": -15.572281955595525
+      },
+      "analysis_sha256": "e707ece31a24f5177fa1efe7a304d9fb3716d76de15fa7912f5da0a6c044c564"
+    }
+  ],
+  "cold_hot_business_equal": true,
+  "cold_hot_tiff_equal": true,
+  "output_equals_v28": true,
+  "visual_evidence": "Existing native 1:1 review bound to identical TIFF SHA; no new point capture in timed runs",
+  "source_owner_evidence": "Current Quality Gate reference/owner evidence and geometry/fusion report compared exactly; historical final owner census remains bound to unchanged output",
+  "cache_diagnosis": {
+    "calibrated_rgb32f_dimensions": [
+      8312,
+      5542
+    ],
+    "single_frame_bytes": 552781248,
+    "source_cache_can_hold_one_full_frame": false
+  },
+  "limits": [
+    "Independent processes; OS page cache not purged; hot need not be faster.",
+    "One cold/hot pair. Historical v28 timings are observations, not a fresh randomized same-load control.",
+    "Both source and native fusion budgets differ from v28; do not attribute all timing changes to source budget alone.",
+    "Existing content-inapplicable criteria and degraded entries are retained.",
+    "Same9 subset only; no full45 or universal sharpness claim."
+  ]
+}

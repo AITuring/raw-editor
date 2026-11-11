@@ -1,0 +1,97 @@
+{
+  "version": "v36",
+  "status": "partial_fix_real_acceptance_rejected",
+  "scope": "Bounded geometric overlap photometry retry; unchanged 120 samples and quality gates. No new nine-NEF run.",
+  "binary_sha256": "6481794a5444deab8face39a54d1689d1a567f044042518b2d759ecdd8af8c38",
+  "tests": "1036 passed, 0 failed, 41 ignored; targeted narrow overlap and exposure tests passed",
+  "first_attempt": "Sparse coverage regression failed; retained in first-attempt. Retry now restricted to geometric overlap width or height <=25% of target.",
+  "candidate_0_2": {
+    "scale_evidence": {
+      "contract_version": 1,
+      "passes": false,
+      "fit_count": 26,
+      "holdout_count": 10,
+      "holdout_median_error_px": 2.0359017222644913,
+      "holdout_spatial_support": 0.27536654289792367,
+      "region_counts": [
+        2,
+        5,
+        3,
+        0
+      ],
+      "region_median_error_px": [
+        2.0359017222644913,
+        1.4861736066546596,
+        2.1407989022877882,
+        null
+      ],
+      "grid_probe_count": 81,
+      "positive_jacobians": true,
+      "minimum_scale": 0.8169396486632,
+      "maximum_scale": 0.8710572286976341,
+      "scale_variation": 1.066244281475369,
+      "maximum_anisotropy": 1.0585693711924853,
+      "maximum_refit_scale_difference": 0.01018273752291221
+    },
+    "model": "projective",
+    "selected": true,
+    "inliers": 36,
+    "median_error_px": 1.149642982000021,
+    "scale_ratio": 0.8273056928922075,
+    "spatial_support": 0.3360126376434512,
+    "low_frequency_mean_relative_difference": 0.012707797372624847,
+    "edge_strength_ratio": 0.8287719044872054,
+    "median_edge_orientation_difference_degrees": 5.059282706784913,
+    "preserves_convex_orientation": true,
+    "rejection_reasons": [
+      "station_relation_scale_out_of_range"
+    ],
+    "canonical_source": 2,
+    "canonical_target": 0,
+    "source_to_target_transform": [
+      0.80795859328328,
+      -0.04728297988384337,
+      418.9793382130917,
+      0.03953006000204474,
+      0.793726516241887,
+      4971.427077792036,
+      1.8147041506596284e-06,
+      -4.648690561258328e-06,
+      0.9726892569997226
+    ],
+    "correspondence_count": 36,
+    "holdout_fit_count": 26,
+    "holdout_count": 10,
+    "holdout_median_error_px": 2.0359017222644913,
+    "holdout_spatial_support": 0.27536654289792367,
+    "holdout_transform": [
+      0.8313796233797114,
+      -0.04471540461779236,
+      429.24366324239037,
+      0.041275437032073585,
+      0.8205042480853038,
+      5110.5155230364635,
+      1.9487004573123145e-06,
+      -3.7343380210553275e-06,
+      1.0
+    ]
+  },
+  "quality_gate": "pass",
+  "roi_count": 8,
+  "closure": "no_constraints",
+  "usage": {
+    "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+    "max_rss_bytes": 9396682752,
+    "wall_seconds": 505.72814408293925,
+    "user_seconds": 2028.422553,
+    "system_seconds": 45.715496,
+    "child_exit_code": 101
+  },
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/langyuan-v36-overlap/candidate/langyuan-10/run/langyuan-10-s1-v36-overlap-stack-reports/stack-report-d232a113-b0f9-4ec5-9d03-f86f1a973414.json",
+  "output_sha256": "deb47e0577b839ba31b49e89932db35ff35071cba90e67e2ba636c84585e8ff8",
+  "output_equals_v35": true,
+  "input_preservation": true,
+  "v35_binary_preserved": true,
+  "v28_branch": "504d904ff77781ac13e57f52c13fef8024b6c961",
+  "remaining": "Independent geometric sample count/spatial distribution and scale-refit agreement still fail; no independent cycle. Nine-NEF candidate regression not rerun."
+}

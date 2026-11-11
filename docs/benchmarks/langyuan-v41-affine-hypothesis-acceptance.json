@@ -1,0 +1,473 @@
+{
+  "run": "langyuan-v41-affine-hypothesis",
+  "date": "2026-11-08",
+  "frozen_binary_sha256": "abe2b1c9018c8fca4a519704bf0b967da2196a00934cad4c9aa41d51c0237d4d",
+  "source_manifest_sha256": "8239fd4077c027b24ae9224211e5cbb73f3fa4617070da8f8f757d67d1a3f258",
+  "tests": {
+    "targeted": "pass",
+    "photometry": "pass",
+    "full": "pass",
+    "narrow_overlap_holdout": "pass",
+    "cross_scale_affine_proposal": "pass"
+  },
+  "langyuan10": {
+    "status": "rejected",
+    "quality_gate": "pass",
+    "roi_count": 8,
+    "closure": "no_constraints",
+    "station_relations_accepted": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "report_sha256": "0ebc40b1281bdb54849c102b70d78d2f04f7862c320f552b1490ba4b2065af21",
+    "wall_seconds": 372.98644524998963,
+    "max_rss_bytes": 12287049728,
+    "zero_two_hypotheses": [
+      {
+        "model": "projective",
+        "selected": true,
+        "inliers": 56,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 25,
+        "holdout_count": 31,
+        "region_counts": [
+          7,
+          10,
+          6,
+          8
+        ],
+        "region_median_error_px": [
+          1.074641312565643,
+          0.6349824698329245,
+          5.251293205488383,
+          0.594811665738302
+        ],
+        "holdout_median_error_px": 0.8169143283597894,
+        "maximum_refit_scale_difference": 0.021710967964379213,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "projective",
+        "selected": false,
+        "inliers": 52,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 23,
+        "holdout_count": 29,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "projective",
+        "selected": false,
+        "inliers": 43,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 15,
+        "holdout_count": 28,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "projective",
+        "selected": false,
+        "inliers": 43,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 16,
+        "holdout_count": 27,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "projective",
+        "selected": false,
+        "inliers": 39,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 14,
+        "holdout_count": 25,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 56,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 25,
+        "holdout_count": 31,
+        "region_counts": [
+          7,
+          10,
+          6,
+          8
+        ],
+        "region_median_error_px": [
+          1.358585735105891,
+          2.1217668572651363,
+          16.045753958599224,
+          1.0090070749438287
+        ],
+        "holdout_median_error_px": 1.358585735105891,
+        "maximum_refit_scale_difference": 9.55480296866984e-05,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 52,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 23,
+        "holdout_count": 29,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 43,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 15,
+        "holdout_count": 28,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 43,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 16,
+        "holdout_count": 27,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 39,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 14,
+        "holdout_count": 25,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "affine",
+        "selected": false,
+        "inliers": 37,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 11,
+        "holdout_count": 26,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      },
+      {
+        "model": "projective",
+        "selected": false,
+        "inliers": 37,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "fit_count": 11,
+        "holdout_count": 26,
+        "region_counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "region_median_error_px": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "holdout_median_error_px": null,
+        "maximum_refit_scale_difference": null,
+        "scale_evidence_passes": false
+      }
+    ]
+  },
+  "nine_nef": {
+    "cold": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true
+      },
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 334.9461912920233,
+      "max_rss_bytes": 11966660608,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    "hot": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true,
+        "cold_hot_business_equal": true
+      },
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 334.7683054169174,
+      "max_rss_bytes": 12460277760,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    }
+  },
+  "harness_notes": [
+    "The first v40 attempt lacked wrapper; second pointed to v39 binary; both archived and excluded.",
+    "The first v41 attempt lacked executable wrapper permission; archived and excluded."
+  ],
+  "conclusion": "N4.4 remains open: independent 0-2 model evidence fails existing region error and/or scale refit gates. No threshold changed.",
+  "prior_phases": {
+    "langyuan-v39-match-reasons": {
+      "status": "rejected",
+      "closure": "no_constraints",
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "selected_model": "projective",
+      "fit_count": 40,
+      "holdout_count": 16,
+      "region_counts": [
+        2,
+        7,
+        6,
+        1
+      ],
+      "region_median_error_px": [
+        2.8834180725600427,
+        1.6965064141341433,
+        6.69953835465548,
+        3.7715073925228464
+      ],
+      "maximum_refit_scale_difference": 0.02965225179532438,
+      "report_sha256": "285e53fa515767550160651672ff0c6e0da292608b3b577ed326939711387d8e"
+    },
+    "langyuan-v40-stratified-holdout": {
+      "status": "rejected",
+      "closure": "no_constraints",
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "selected_model": "projective",
+      "fit_count": 25,
+      "holdout_count": 31,
+      "region_counts": [
+        7,
+        10,
+        6,
+        8
+      ],
+      "region_median_error_px": [
+        1.074641312565643,
+        0.6349824698329245,
+        5.251293205488383,
+        0.594811665738302
+      ],
+      "maximum_refit_scale_difference": 0.021710967964379213,
+      "report_sha256": "6e7416fecc7805dbd305d8ea76952cf609b01bbeb9bdc9633b93519c9dd09f5b"
+    }
+  },
+  "matching_rejections_0_2": {
+    "phase": "independent_native_grid",
+    "probes": 1061,
+    "source_coverage": 191,
+    "target_coverage": 439,
+    "forward_correlation": 399,
+    "forward_boundary": 6,
+    "reverse_correlation": 2,
+    "measured_coverage": 1,
+    "accepted": 23
+  }
+}

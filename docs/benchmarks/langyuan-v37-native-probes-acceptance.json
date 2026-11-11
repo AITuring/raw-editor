@@ -1,0 +1,452 @@
+{
+  "version": "v37",
+  "status": "geometry_fix_not_accepted",
+  "implementation": "For sparse coarse seeds in narrow geometric overlap, add at most 2048 independent native probe locations at >=32px spacing, deduplicate against seed probes; keep coverage, round-trip, fit, scale holdout and quality gates unchanged. Grid proposals are not accepted correspondences.",
+  "tests": "1037 passed; 0 failed; 41 ignored; native grid and photometry targeted tests passed",
+  "binary_sha256": "4f61e0a308c40285e9c12abf3e99f4f1e72ab571c7f71d185e313c723b8024f1",
+  "langyuan": {
+    "status": "rejected",
+    "quality_gate": "pass",
+    "roi_count": 8,
+    "closure": "no_constraints",
+    "accepted_relations": 2,
+    "hypotheses_0_2": [
+      {
+        "scale_evidence": {
+          "contract_version": 1,
+          "passes": false,
+          "fit_count": 26,
+          "holdout_count": 10,
+          "holdout_median_error_px": 2.0359017222644913,
+          "holdout_spatial_support": 0.27536654289792367,
+          "region_counts": [
+            2,
+            5,
+            3,
+            0
+          ],
+          "region_median_error_px": [
+            2.0359017222644913,
+            1.4861736066546596,
+            2.1407989022877882,
+            null
+          ],
+          "grid_probe_count": 81,
+          "positive_jacobians": true,
+          "minimum_scale": 0.8169396486632,
+          "maximum_scale": 0.8710572286976341,
+          "scale_variation": 1.066244281475369,
+          "maximum_anisotropy": 1.0585693711924853,
+          "maximum_refit_scale_difference": 0.01018273752291221
+        },
+        "model": "projective",
+        "selected": true,
+        "inliers": 36,
+        "median_error_px": 1.149642982000021,
+        "scale_ratio": 0.8273056928922075,
+        "spatial_support": 0.3360126376434512,
+        "low_frequency_mean_relative_difference": 0.012707797372624847,
+        "edge_strength_ratio": 0.8287719044872054,
+        "median_edge_orientation_difference_degrees": 5.059282706784913,
+        "preserves_convex_orientation": true,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "canonical_source": 2,
+        "canonical_target": 0,
+        "source_to_target_transform": [
+          0.80795859328328,
+          -0.04728297988384337,
+          418.9793382130917,
+          0.03953006000204474,
+          0.793726516241887,
+          4971.427077792036,
+          1.8147041506596284e-06,
+          -4.648690561258328e-06,
+          0.9726892569997226
+        ],
+        "correspondence_count": 36,
+        "holdout_fit_count": 26,
+        "holdout_count": 10,
+        "holdout_median_error_px": 2.0359017222644913,
+        "holdout_spatial_support": 0.27536654289792367,
+        "holdout_transform": [
+          0.8313796233797114,
+          -0.04471540461779236,
+          429.24366324239037,
+          0.041275437032073585,
+          0.8205042480853038,
+          5110.5155230364635,
+          1.9487004573123145e-06,
+          -3.7343380210553275e-06,
+          1.0
+        ]
+      },
+      {
+        "scale_evidence": {
+          "contract_version": 1,
+          "passes": false,
+          "fit_count": 22,
+          "holdout_count": 9,
+          "holdout_median_error_px": null,
+          "holdout_spatial_support": null,
+          "region_counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "region_median_error_px": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "grid_probe_count": 0,
+          "positive_jacobians": false,
+          "minimum_scale": null,
+          "maximum_scale": null,
+          "scale_variation": null,
+          "maximum_anisotropy": null,
+          "maximum_refit_scale_difference": null
+        },
+        "model": "projective",
+        "selected": false,
+        "inliers": 31,
+        "median_error_px": 0.842483686686375,
+        "scale_ratio": 0.8260502368038501,
+        "spatial_support": 0.32441984839324745,
+        "low_frequency_mean_relative_difference": 0.01265643998814414,
+        "edge_strength_ratio": 0.8408634555842484,
+        "median_edge_orientation_difference_degrees": 7.1601060304971025,
+        "preserves_convex_orientation": true,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "canonical_source": 2,
+        "canonical_target": 0,
+        "source_to_target_transform": [
+          0.7926015638406408,
+          -0.055056442089050334,
+          417.616725487303,
+          0.0375587772646921,
+          0.7659525914507869,
+          4891.769861201449,
+          1.5558376568984197e-06,
+          -7.025767817793028e-06,
+          0.9569678746246923
+        ],
+        "correspondence_count": 31,
+        "holdout_fit_count": 22,
+        "holdout_count": 9,
+        "holdout_median_error_px": null,
+        "holdout_spatial_support": null,
+        "holdout_transform": null
+      },
+      {
+        "scale_evidence": {
+          "contract_version": 1,
+          "passes": false,
+          "fit_count": 24,
+          "holdout_count": 5,
+          "holdout_median_error_px": 1.3068170275763156,
+          "holdout_spatial_support": 0.11359662757069507,
+          "region_counts": [
+            1,
+            2,
+            0,
+            2
+          ],
+          "region_median_error_px": [
+            1.3495472787892562,
+            1.3068170275763156,
+            null,
+            2.5255685379333883
+          ],
+          "grid_probe_count": 81,
+          "positive_jacobians": true,
+          "minimum_scale": 0.8190819914579625,
+          "maximum_scale": 0.870017050600036,
+          "scale_variation": 1.0621855439055732,
+          "maximum_anisotropy": 1.0601108238511459,
+          "maximum_refit_scale_difference": 0.004092228969200473
+        },
+        "model": "projective",
+        "selected": false,
+        "inliers": 29,
+        "median_error_px": 0.6660456390094175,
+        "scale_ratio": 0.8272110429208667,
+        "spatial_support": 0.23419414359586624,
+        "low_frequency_mean_relative_difference": 0.013155625717864711,
+        "edge_strength_ratio": 0.8303242290029633,
+        "median_edge_orientation_difference_degrees": 5.282691643017824,
+        "preserves_convex_orientation": true,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "canonical_source": 2,
+        "canonical_target": 0,
+        "source_to_target_transform": [
+          0.8030198901232581,
+          -0.046242316516423174,
+          425.454311183796,
+          0.03702048405253565,
+          0.7902126371570377,
+          4963.840482114254,
+          1.3752016328380963e-06,
+          -4.831137409285645e-06,
+          0.9710764843607178
+        ],
+        "correspondence_count": 29,
+        "holdout_fit_count": 24,
+        "holdout_count": 5,
+        "holdout_median_error_px": 1.3068170275763156,
+        "holdout_spatial_support": 0.11359662757069507,
+        "holdout_transform": [
+          0.8254530392936738,
+          -0.04523355129889072,
+          440.72555028527177,
+          0.037174591957991124,
+          0.8121483219902005,
+          5111.978129426953,
+          1.2299072288747106e-06,
+          -4.785519798159365e-06,
+          1.0
+        ]
+      },
+      {
+        "scale_evidence": {
+          "contract_version": 1,
+          "passes": false,
+          "fit_count": 20,
+          "holdout_count": 13,
+          "holdout_median_error_px": null,
+          "holdout_spatial_support": null,
+          "region_counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "region_median_error_px": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "grid_probe_count": 0,
+          "positive_jacobians": false,
+          "minimum_scale": null,
+          "maximum_scale": null,
+          "scale_variation": null,
+          "maximum_anisotropy": null,
+          "maximum_refit_scale_difference": null
+        },
+        "model": "projective",
+        "selected": false,
+        "inliers": 33,
+        "median_error_px": 1.6347945012881875,
+        "scale_ratio": 0.8263672546251706,
+        "spatial_support": 0.2638603440014138,
+        "low_frequency_mean_relative_difference": 0.013275216274928642,
+        "edge_strength_ratio": 0.7958826850820384,
+        "median_edge_orientation_difference_degrees": 5.30823036551353,
+        "preserves_convex_orientation": true,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "canonical_source": 2,
+        "canonical_target": 0,
+        "source_to_target_transform": [
+          0.7572442518418884,
+          -0.07642444986345212,
+          405.7057742212366,
+          0.03469007891942129,
+          0.6999410200303096,
+          4687.93011043546,
+          1.3586769898700526e-06,
+          -1.2808141116365802e-05,
+          0.9166195981337795
+        ],
+        "correspondence_count": 33,
+        "holdout_fit_count": 20,
+        "holdout_count": 13,
+        "holdout_median_error_px": null,
+        "holdout_spatial_support": null,
+        "holdout_transform": null
+      },
+      {
+        "scale_evidence": {
+          "contract_version": 1,
+          "passes": false,
+          "fit_count": 22,
+          "holdout_count": 13,
+          "holdout_median_error_px": null,
+          "holdout_spatial_support": null,
+          "region_counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "region_median_error_px": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "grid_probe_count": 0,
+          "positive_jacobians": false,
+          "minimum_scale": null,
+          "maximum_scale": null,
+          "scale_variation": null,
+          "maximum_anisotropy": null,
+          "maximum_refit_scale_difference": null
+        },
+        "model": "projective",
+        "selected": false,
+        "inliers": 35,
+        "median_error_px": 1.9328858670738702,
+        "scale_ratio": 0.8252076886069419,
+        "spatial_support": 0.2502739729758168,
+        "low_frequency_mean_relative_difference": 0.013450737849622002,
+        "edge_strength_ratio": 0.8272937098232264,
+        "median_edge_orientation_difference_degrees": 6.035670210913527,
+        "preserves_convex_orientation": true,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "canonical_source": 2,
+        "canonical_target": 0,
+        "source_to_target_transform": [
+          0.7920334944494491,
+          -0.047970479289296736,
+          430.92225955752025,
+          0.03343082382881637,
+          0.7728918592842307,
+          4925.593180971091,
+          8.648763057305696e-07,
+          -5.96162260207189e-06,
+          0.9630484226100826
+        ],
+        "correspondence_count": 35,
+        "holdout_fit_count": 22,
+        "holdout_count": 13,
+        "holdout_median_error_px": null,
+        "holdout_spatial_support": null,
+        "holdout_transform": null
+      }
+    ],
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/langyuan-v37-native-probes/candidate/langyuan-10/run/langyuan-10-s1-v37-native-probes-stack-reports/stack-report-a78e002e-2688-4605-9b78-dbd78bc5267b.json",
+    "output_sha256": "deb47e0577b839ba31b49e89932db35ff35071cba90e67e2ba636c84585e8ff8",
+    "usage": {
+      "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+      "max_rss_bytes": 10906009600,
+      "wall_seconds": 431.55490995792206,
+      "user_seconds": 2009.180353,
+      "system_seconds": 47.927019,
+      "child_exit_code": 101
+    },
+    "inputs_unchanged": true
+  },
+  "positive_control": {
+    "cold": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true
+      },
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 10037919744,
+        "wall_seconds": 413.4409295419464,
+        "user_seconds": 1930.834897,
+        "system_seconds": 43.163701,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "raw_decodes": 18,
+      "fusion_count": 6,
+      "source_hits": 113,
+      "native_hits": 15
+    },
+    "hot": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true,
+        "cold_hot_business_equal": true
+      },
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9583984640,
+        "wall_seconds": 400.7055789170554,
+        "user_seconds": 1955.671984,
+        "system_seconds": 36.710529,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "quality_gate": "pass",
+      "roi_count": 8,
+      "raw_decodes": 18,
+      "fusion_count": 6,
+      "source_hits": 113,
+      "native_hits": 15
+    }
+  },
+  "preservation": {
+    "prior_binaries": {
+      "cross-station-v35-final": true,
+      "langyuan-v36-overlap": true
+    },
+    "v28_branch": "504d904ff77781ac13e57f52c13fef8024b6c961",
+    "candidate_sources_match_build": true
+  },
+  "remaining": "Selected 0-2 remains 36 points, 10 holdout, quadrants 2/5/3/0 and scale-refit disagreement 1.0183%. New candidates do not satisfy existing evidence gates. Need per-stage probe rejection and hypothesis selection audit; do not mark independent closure fixed."
+}

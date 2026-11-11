@@ -1,5 +1,7 @@
 # Requirements Document
 
+> [项目进度与任务总览](../../../docs/project-progress.md#stack) 是当前任务状态的唯一入口；本文维护技术合同，保留原需求/设计编号，本次文档整合不更改算法或验收门槛。
+
 ## Introduction
 
 本特性在 RAW Editor 现有拼图/景深合成链路（`panorama_stitching.rs`、`panorama_utils/stitching.rs`、
@@ -313,7 +315,7 @@
    Stack_Report 中记录被丢弃证据的数量与所属 Capture_Station。
 3. WHEN 一个 Candidate_Adjacency 通过 RANSAC 拟合，THE Station_Pose_Solver SHALL 在接受该
    Station_Relation 之前要求内点数量不少于 24、内点重投影误差中位数不超过 3.0 个世界坐标原生像素，
-   且两个 Capture_Station 之间的尺度比落在 `[0.95, 1.05]` 范围内。
+   且两个 Capture_Station 之间的尺度比落在兼容范围 `[0.95, 1.05]` 内，或满足下文 6.11 的有界原生倍率契约。
 4. THE Station_Pose_Solver SHALL 把内点空间支持比例定义为内点外接凸包面积与重叠区域面积之比，
    并要求被接受的 Station_Relation 的该比例不低于 20%。
 5. IF 一个 Candidate_Adjacency 的内点空间支持比例低于 20%，THEN THE Station_Pose_Solver SHALL 拒绝
@@ -334,12 +336,13 @@
    补偿后的低频均值差仍须 ≤ 20%，
    补偿后的边缘强度比仍须在 `[0.7, 1.4]` 内。此补偿仅用于几何验证，不修改所有权或交付像素。
 9. IF 一个 Candidate_Adjacency 的内点数量少于 24、内点重投影误差中位数超过 3.0 个世界坐标原生像素、
-   尺度比落在 `[0.95, 1.05]` 之外，或拟合单应性使 Virtual_Tile 四角投影成非凸四边形，THEN THE
+   尺度比不满足 6.3/6.11 的适用契约，或拟合单应性使 Virtual_Tile 四角投影成非凸四边形，THEN THE
    Station_Pose_Solver SHALL 拒绝该 Candidate_Adjacency、不写入任何位姿参数，并在 Stack_Report 中以
    稳定的机器可读标识符记录对应拒绝原因。
 10. WHEN 机位位姿求解结束，THE Station_Pose_Solver SHALL 在 Stack_Report 中记录每个被接受
     Station_Relation 的机位对、内点数量、内点空间支持比例、尺度比和内点重投影误差中位数，
     以及被拒绝 Candidate_Adjacency 的数量与各拒绝原因标识符的计数。
+11. 对超出兼容范围的 Virtual_Tile 原生关系，允许 `bounded_native_magnification_v1`：9×9 原生网格尺度在 `[0.8,1.25]`、max/min ≤1.10、各向异性 ≤1.10；空间棋盘格 fit/test 各≥24，留出双向误差中位数≤3px、covered support≥20%，四区域各≥6且中位误差≤3px，refit尺度最大相对差≤1%。全部 Jacobian 必须为正。该扩展不适用于 Source_RAW 权威关系，不改变 6.4–6.10 的其他约束、修复增量边界或最终 Quality Gate。原生坐标、真实倍率及新增验证证据须进入报告；细则见 `docs/focus-stack-variable-magnification.md`。
 
 ### Requirement 7: 鲁棒闭环联合优化
 
@@ -475,6 +478,10 @@
    且该 ROI 内 Local_Scale 不低于 0.95 的像素比例不小于 99%。
 4. THE Quality_Gate SHALL 以最终输出的非透明像素计数作为总有效像素数，以全部 Source_RAW 投影到世界
    坐标后的唯一覆盖面积（重叠区域只计一次）作为基准，并要求该计数不低于基准的 0.98 倍。
+   对校准原生路径，唯一覆盖域 SHALL 由完整原生逆映射和原始传感器 footprint 独立定义，校准 padding
+   不属于来源域；分子 SHALL 只计该域内的非透明输出，域外像素不得补偿域内缺失。域的定义不得依赖
+   输出 alpha、owner 空洞或亮度。报告 SHALL 保留旧矩形并集/全部非透明计数和新域内缺失/域外覆盖，
+   缺失采样元数据时 SHALL 记录证据不足；0.98 门槛不变。
 5. THE Quality_Gate SHALL 把满足以下全部条件的 ROI 判定为倾斜边 ROI：含至少 1 条长度不小于 128 个
    原生像素的直线边、该边与最近像素轴夹角在 3 度至 15 度之间、边两侧低频亮度对比度不小于满量程的
    20%、边两侧各 32 个原生像素内不存在其他满足上述对比度条件的边。

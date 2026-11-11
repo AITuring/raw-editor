@@ -1,0 +1,2532 @@
+{
+  "schema": 1,
+  "created_at_utc": "2026-11-02T13:26:18.506566+00:00",
+  "phase": "v20-purpose-release-native-cold-hot",
+  "scope": "Same-nine native scale=1 performance-only cold/hot versus frozen v19; third independent capture is complete, bound to identical TIFF, and selected-owner pairs reviewed. Capture timing is excluded from performance comparisons; complete native quality remains unaccepted.",
+  "status": {
+    "execution": "cold_and_hot_completed",
+    "performance_equivalence": "pass",
+    "observed_wall_and_rss_reduction_vs_v19": true,
+    "reported_quality_gate": "pass_both_runs",
+    "artifact_contract": "pass_both_runs",
+    "degradation": "degraded_both_runs",
+    "full_native_visual_acceptance": false,
+    "complete_native_quality_acceptance": false,
+    "final_output_source_attribution": "confirmed_v20_capture_final_QG_input_owner_census",
+    "independent_capture": "completed_and_bound",
+    "source_visual_review": "eight_bounded_selected_owner_pairs_reviewed"
+  },
+  "build": {
+    "binary": "/private/tmp/raw-editor-v20-purpose-release-binary",
+    "sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+    "profile": "release",
+    "evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/build.json",
+      "sha256": "4a3b1670abbe8febf9321a664af59ca3651c7224d16faf845a7de5c07c8ef910"
+    },
+    "validation": {
+      "cargo_fmt": "pass",
+      "cargo_check": "pass",
+      "native_control_points": 18,
+      "tile_payload": 5,
+      "source_visual_capture": 7,
+      "intra_station": 25,
+      "full_library": {
+        "passed": 995,
+        "failed": 0,
+        "ignored": 40,
+        "seconds": 159.59
+      },
+      "runner_tests": 8,
+      "dataset_contract": "pass; actual local fixtures"
+    }
+  },
+  "configuration": {
+    "subset": "sleeping-9-6479",
+    "scale": 1,
+    "source_count": 9,
+    "coverage_alpha": true,
+    "preview_only": false,
+    "source_cache_max_bytes": 2400000000,
+    "native_fusion_cache_max_bytes": 4294967296,
+    "stitch_quality_rss_gate_bytes": 25769803776,
+    "thresholds_changed": false,
+    "cold_hot_processes": "fresh process and run-local caches per phase; filesystem/OS page cache not purged",
+    "performance_capture_enabled": false,
+    "profile": "release",
+    "prefilter_policy": "area_2x2_spacing_2"
+  },
+  "input_integrity": {
+    "sources": [
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "sha256_before": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+        "sha256_after": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "sha256_before": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+        "sha256_after": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "sha256_before": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+        "sha256_after": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "sha256_before": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+        "sha256_after": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "sha256_before": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+        "sha256_after": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "sha256_before": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+        "sha256_after": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "sha256_before": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+        "sha256_after": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "sha256_before": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+        "sha256_after": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+        "decoded": true
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "sha256_before": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+        "sha256_after": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+        "decoded": true
+      }
+    ],
+    "scope": "Saved per-run hashes compared; separate final verification reread all nine NEF inputs and checked frozen Rust source/binary manifests. Benchmark generation itself only read evidence JSON.",
+    "final_verification": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/final-input-source-verification.json",
+      "sha256": "9cc44e4ad56bac8e24e8cfe45a22a2708f7d896b1a2cb88b67da444ac619a9b3"
+    },
+    "final_verification_result": {
+      "verified_at_utc": "2026-11-02T13:49:59.015711+00:00",
+      "sources": [
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+          "bytes": 57222728,
+          "sha256": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+          "v19_sha256": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+          "bytes": 57310152,
+          "sha256": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+          "v19_sha256": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+          "bytes": 57330421,
+          "sha256": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+          "v19_sha256": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+          "bytes": 57184738,
+          "sha256": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+          "v19_sha256": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+          "bytes": 57058613,
+          "sha256": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+          "v19_sha256": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "bytes": 56523359,
+          "sha256": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+          "v19_sha256": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+          "bytes": 56997262,
+          "sha256": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+          "v19_sha256": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+          "bytes": 57022157,
+          "sha256": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+          "v19_sha256": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+          "unchanged": true
+        },
+        {
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+          "bytes": 56616395,
+          "sha256": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+          "v19_sha256": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+          "unchanged": true
+        }
+      ],
+      "source_identity_unchanged_from_v19": true,
+      "rust_source_matches_frozen_build_manifest": true,
+      "frozen_binary_sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+      "binary_matches_manifest": true
+    }
+  },
+  "common_registration": {
+    "status_counts": {
+      "anchor": 3,
+      "local": 6
+    },
+    "frames": [
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "transform": [
+          0.9994421311177972,
+          0.004239439742029612,
+          24.440677670767975,
+          -0.0028961860857738718,
+          0.9999856010387338,
+          -23.317193969181687,
+          1.5479527935836194e-07,
+          2.0603832790870357e-07,
+          1.0
+        ],
+        "inliers": 1028,
+        "inlier_area_coverage": 0.21217750257997936,
+        "control_point_spacing_px": 95.00571428571429,
+        "rejected_control_point_ratio": 0.7877786952931461,
+        "median_symmetric_error_px": 0.5762215285808054,
+        "global_median_symmetric_error_px": 1.5662455107677085,
+        "global_baseline_samples": 918,
+        "local_baseline_samples": 268,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8511153668200437,
+        "focal_plane_ratio_after": 0.9890960256228081,
+        "status": "local",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "transform": [
+          0.9987139388819298,
+          5.351546516126757e-06,
+          102.43033653373625,
+          0.0007100537826744695,
+          1.0000848810423348,
+          10.376019858804531,
+          -1.72343356507902e-08,
+          2.453848954857959e-07,
+          1.0
+        ],
+        "inliers": 2765,
+        "inlier_area_coverage": 0.5808823529411765,
+        "control_point_spacing_px": 94.89142857142858,
+        "rejected_control_point_ratio": 0.4191176470588235,
+        "median_symmetric_error_px": 0.4419417382415922,
+        "global_median_symmetric_error_px": 1.0606601717798212,
+        "global_baseline_samples": 2662,
+        "local_baseline_samples": 1578,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8612480031991169,
+        "focal_plane_ratio_after": 0.9897110444421711,
+        "status": "local",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 1
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "transform": [
+          1.0010807514988234,
+          0.002443385903810586,
+          -96.54267479018742,
+          -0.0024433859038105825,
+          1.0010807514988238,
+          -87.4284540839561,
+          -1.0576468939087529e-22,
+          4.237751771725731e-22,
+          1.0
+        ],
+        "inliers": 2270,
+        "inlier_area_coverage": 0.48421501706484643,
+        "control_point_spacing_px": 95.26857142857143,
+        "rejected_control_point_ratio": 0.5082322357019065,
+        "median_symmetric_error_px": 0.5038911092686593,
+        "global_median_symmetric_error_px": 1.25,
+        "global_baseline_samples": 2228,
+        "local_baseline_samples": 1006,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8506124988763701,
+        "focal_plane_ratio_after": 0.9893540835262504,
+        "status": "local",
+        "station_index": 1
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "transform": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "transform": [
+          1.002560084496446,
+          -0.004309279936305694,
+          -34.42994897024522,
+          0.006128278532145933,
+          1.0027128485884014,
+          -241.43066115227055,
+          2.2171894826109436e-07,
+          2.6520236183929256e-07,
+          1.0
+        ],
+        "inliers": 2453,
+        "inlier_area_coverage": 0.5247058823529411,
+        "control_point_spacing_px": 95.36,
+        "rejected_control_point_ratio": 0.4748447869835153,
+        "median_symmetric_error_px": 0.4759858191164943,
+        "global_median_symmetric_error_px": 1.2562344526401112,
+        "global_baseline_samples": 2362,
+        "local_baseline_samples": 1210,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8144742336158163,
+        "focal_plane_ratio_after": 0.9879070900358342,
+        "status": "local",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "transform": [
+          1.0019452648837217,
+          -0.008056465270326468,
+          12.28705976953104,
+          0.010638148659694903,
+          1.0021014628451859,
+          -319.20130577441995,
+          2.9784040617966264e-07,
+          4.3980722704149156e-07,
+          1.0
+        ],
+        "inliers": 2226,
+        "inlier_area_coverage": 0.46433041301627037,
+        "control_point_spacing_px": 95.47428571428571,
+        "rejected_control_point_ratio": 0.5322546753519647,
+        "median_symmetric_error_px": 0.3801726581436387,
+        "global_median_symmetric_error_px": 1.286953767623375,
+        "global_baseline_samples": 2154,
+        "local_baseline_samples": 1081,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8125911392768487,
+        "focal_plane_ratio_after": 0.9878822481555044,
+        "status": "local",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "transform": [
+          1.0007345427482464,
+          -0.0006046425256306457,
+          233.90254110955948,
+          0.001690037444513819,
+          1.002759484816487,
+          -267.2946367193209,
+          -8.58721086211998e-08,
+          3.697983523554337e-07,
+          1.0
+        ],
+        "inliers": 2312,
+        "inlier_area_coverage": 0.4914965986394558,
+        "control_point_spacing_px": 95.18857142857142,
+        "rejected_control_point_ratio": 0.5085034013605443,
+        "median_symmetric_error_px": 0.4419417382415922,
+        "global_median_symmetric_error_px": 1.6770509831248424,
+        "global_baseline_samples": 2261,
+        "local_baseline_samples": 1289,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.711428516031546,
+        "focal_plane_ratio_after": 0.9853506792838128,
+        "status": "local",
+        "station_index": 2
+      }
+    ],
+    "source_participation_scope": "Station registration and report evidence; separate final per-RAW contribution now established by independent v20 capture owner census."
+  },
+  "common_geometry": {
+    "closure": {
+      "status": "converged",
+      "iterations": 4,
+      "participating_constraints": 3,
+      "max_direct_pair_p95_px": 1.3685809081403442,
+      "residual_median_px": 0.4880825020393004,
+      "residual_p95_px": 1.287012288811409,
+      "geometry_model": "homography"
+    },
+    "output_density": {
+      "status": "applied",
+      "factor": 1.095703125,
+      "pixel_count_multiplier": 1.2005653381347656,
+      "canvas_pixels": 107247492,
+      "output_plane_lower_bound_bytes": 1930454856,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 9,
+      "sample_count": 400740,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 20485,
+      "worst_station_index": 2,
+      "worst_source_id": 2,
+      "worst_station_point": [
+        6849.0,
+        481.0
+      ],
+      "direct_pair_p95_output_px": 1.499558377864713,
+      "residual_median_output_px": 0.5347935227422803,
+      "max_corner_correction_output_px": 8.577635711633832,
+      "minimum_scale": 0.9132925352645311,
+      "p01_scale": 0.928699326032602,
+      "median_scale": 0.9936412294767434,
+      "bypass_reason": null
+    },
+    "canvas": {
+      "width": 15897,
+      "height": 6720,
+      "long_side_limit": 262144
+    },
+    "full_geometry_and_virtual_tiles_equal": true,
+    "proof_scope": "compared saved report sections plus exact TIFF bytes; sampled local-scale contract remains sampled_native_jacobian_not_full_pixel_proof"
+  },
+  "common_quality": {
+    "verdict": "pass",
+    "dense_roi_count": 8,
+    "station_owner_evidence_roi_count": 8,
+    "raw_owner_evidence_roi_count": 0,
+    "criteria": [
+      {
+        "name": "local_scale_median",
+        "verdict": "pass",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "local_scale_pixel_ratio",
+        "verdict": "pass",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "effective_pixel_count",
+        "verdict": "pass",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "mtf50_normalized",
+        "verdict": "not_applicable",
+        "threshold": 0.93,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 512,
+        "eligible_count": 1,
+        "measurable_count": 1,
+        "rejected_content_count": 511,
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 433,
+          "slanted_edge_line_fit_residual_exceeded": 25,
+          "slanted_edge_too_short": 53
+        },
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_slanted_edge_search_256_512",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 24
+      },
+      {
+        "name": "gradient_energy_normalized",
+        "verdict": "pass",
+        "threshold": 0.95,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "noise_sigma_ratio",
+        "verdict": "pass",
+        "threshold": 0.85,
+        "threshold_min": 0.85,
+        "threshold_max": 1.15,
+        "diagnostic": false,
+        "candidate_count": 45,
+        "eligible_count": 24,
+        "measurable_count": 24,
+        "rejected_content_count": 21,
+        "rejected_content_reasons": {
+          "roi_not_flat": 21
+        },
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_flat_patch_search_128",
+        "unvisited_candidate_count": 211,
+        "reference_roi_limit": 24
+      },
+      {
+        "name": "roi_delta_e00",
+        "verdict": "pass",
+        "threshold": 2.0,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "boundary_stroke_alignment",
+        "verdict": "not_applicable",
+        "threshold": 1.5,
+        "threshold_min": null,
+        "threshold_max": 3.0,
+        "diagnostic": false,
+        "candidate_count": 372,
+        "eligible_count": 0,
+        "measurable_count": 0,
+        "rejected_content_count": 372,
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 372
+        },
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "station_boundary_streaming_candidates",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      },
+      {
+        "name": "owner_sharpness_coverage",
+        "verdict": "pass",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "selection_mode": "",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0
+      }
+    ],
+    "degradation_result": "degraded",
+    "degradation_reason_counts": {
+      "grouping_accumulated_motion": 4,
+      "fusion_low_sharpness_region": 6
+    },
+    "owner_reverse_lookup_failures": {
+      "compositor_owner_zero": 0,
+      "station_missing": 0,
+      "transform_failed": 0,
+      "out_of_bounds": 0,
+      "raw_owner_unresolved": 0,
+      "snapped_to_footprint": 5723,
+      "evidence_missing": 0,
+      "footprint_uncovered_nontransparent": 71451,
+      "footprint_brightness_ratio": 1.0017239005859995
+    },
+    "interpretation": "QG pass coexists with MTF/boundary N/A and degraded. No thresholds were relaxed."
+  },
+  "output_contract": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 6720,
+    "icc": "sRGB",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 15897,
+    "written": true
+  },
+  "common_tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+  "common_tiff_bytes": 854628326,
+  "runs": {
+    "v19_cold": {
+      "status": "pass",
+      "binary_sha256": "e4dce3a0ef48313a7bf1bd4deb2301119e61cf91ca54c1fc492bb239f6681c9a",
+      "profile": "release",
+      "capture_enabled": false,
+      "performance_only": true,
+      "exit_code": 0,
+      "binary_unchanged": true,
+      "execution": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/execution.json",
+        "sha256": "f6db5471a21b1dbdf991fc88a7eecb9acb9e417adab06bea71367945c4b2b9e1"
+      },
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold-stack-reports/stack-report-3e6e9b6a-cf35-4237-86ab-82b1f2d0bb41.json",
+        "sha256": "1c855c6fd277a29b3009aa1b5a08911bcad656cbd2bae93e64580f1a4b75c96c"
+      },
+      "harness_summary": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold.summary.json",
+        "sha256": "7c51ef566e5090cffa485f4a48a05a88b4d34b0124c3bdc84fc9d1e68c37145c"
+      },
+      "native_log": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold.log",
+        "sha256": "53c7f37c1a2d112907889f3f323595f32a8d5bf940fcfac3c0ed90ba2c872a24"
+      },
+      "tiff": {
+        "status": "observed",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold.tiff",
+        "sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "hash_recomputed_now": false,
+        "bytes": 854628326,
+        "mtime_ns": 1793619986727335148,
+        "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json",
+        "evidence_scope": "prior verification SHA plus current size; original mtime not recorded"
+      },
+      "performance": {
+        "execution_wall_seconds": 422.61039450007956,
+        "runner_stitch_seconds": 401.92,
+        "runner_elapsed_seconds": 422.389,
+        "report": {
+          "stage_seconds": {
+            "preflight_seconds": 0.179322208,
+            "prepare_seconds": 14.522545083,
+            "matching_seconds": 1.7192764170000001,
+            "ordering_seconds": 0.189099,
+            "render_seconds": 401.919903833,
+            "total_seconds": 418.561728166
+          },
+          "pairs": {
+            "base_pairs": 36,
+            "retrieval_pairs": 0,
+            "candidate_pairs": 36,
+            "verified_pairs": 34,
+            "rescue_pairs": 0
+          },
+          "source_preflight": {
+            "source_count": 9,
+            "stat_count": 9,
+            "file_map_count": 9,
+            "hash_count": 9,
+            "exif_parse_count": 9,
+            "preflight_reuse_count": 85,
+            "raw_decode_count": 85,
+            "failed_count": 0
+          },
+          "quality_roi_cache": {
+            "hits": 0,
+            "misses": 33,
+            "evictions": 0,
+            "resident_bytes": 14155776,
+            "resident_entries": 33,
+            "peak_bytes": 14155776
+          },
+          "source_render_cache": {
+            "max_bytes": 2400000000,
+            "hits": 68,
+            "misses": 76,
+            "render_hits": 13,
+            "render_misses": 59,
+            "quality_gate_hits": 55,
+            "quality_gate_misses": 17,
+            "evictions": 72,
+            "oversized_bypasses": 0,
+            "resident_bytes": 2211124992,
+            "resident_entries": 4,
+            "peak_bytes": 2211124992
+          },
+          "native_fusion_cache": {
+            "max_bytes": 4294967296,
+            "hits": 15,
+            "misses": 6,
+            "matching_hits": 0,
+            "matching_misses": 3,
+            "composition_hits": 15,
+            "composition_misses": 3,
+            "fusion_count": 6,
+            "fusion_seconds": 236.43360199900002,
+            "failed_fusions": 0,
+            "evictions": 0,
+            "invalidations": 3,
+            "oversized_bypasses": 0,
+            "unattributed_bypasses": 0,
+            "state_snapshot_bypasses": 0,
+            "resident_bytes": 0,
+            "resident_entries": 0,
+            "peak_bytes": 2948607844,
+            "peak_entries": 3
+          }
+        },
+        "qg_timing": {
+          "decode_seconds": 7.911541876,
+          "reference_resampling_seconds": 20.483738665999997,
+          "local_scale_seconds": 0.000343792,
+          "slanted_edge_mtf_seconds": 7.442913874,
+          "gradient_seconds": 0.097512793,
+          "noise_seconds": 0.14291624599999997,
+          "delta_e_seconds": 0.0023262079999999997,
+          "roi_sampling_seconds": 20.759660501000003,
+          "boundary_seconds": 0.201922959,
+          "effective_coverage_seconds": 0.016157083,
+          "owner_source_decode_count": 13,
+          "roi_reference_count": 33,
+          "station_owner_evidence_roi_count": 8,
+          "raw_owner_evidence_roi_count": 0,
+          "boundary_sample_count": 0,
+          "roi_cache_hits": 0,
+          "roi_cache_misses": 33,
+          "roi_cache_evictions": 0,
+          "roi_cache_resident_bytes": 14155776,
+          "roi_cache_peak_bytes": 14155776
+        },
+        "graph_cut_seconds": [
+          37.239998083,
+          18.463570583,
+          52.597736167
+        ],
+        "sampled_rss_bytes": 12900909056,
+        "os_native_child": {
+          "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+          "max_rss_bytes": 12920078336,
+          "wall_seconds": 421.85196720797103,
+          "user_seconds": 2539.625994,
+          "system_seconds": 40.673402,
+          "child_exit_code": 0
+        }
+      },
+      "tile_payload_measurement_scope": "not_recorded_in_this_v19_schema; absence is not zero",
+      "run_invariants": {
+        "status": "pass",
+        "checked_count": 42,
+        "detail": "See comparison evidence runs.v19_cold.invariants; exact expected/observed values retained there."
+      }
+    },
+    "v19_hot": {
+      "status": "pass",
+      "binary_sha256": "e4dce3a0ef48313a7bf1bd4deb2301119e61cf91ca54c1fc492bb239f6681c9a",
+      "profile": "release",
+      "capture_enabled": false,
+      "performance_only": true,
+      "exit_code": 0,
+      "binary_unchanged": true,
+      "execution": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/execution.json",
+        "sha256": "00ee93eaddf65e994f1abebd2e048c409bbd511ed5cafd9811364acf76ba80ff"
+      },
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot-stack-reports/stack-report-a7a7a989-982a-4a1f-bfc4-28c99f28c553.json",
+        "sha256": "32c94f57f69aab2f9f2cc52f1b8e448acbf86ef5b8e5cd3cc6925d5732b617b4"
+      },
+      "harness_summary": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot.summary.json",
+        "sha256": "b63b1ebaf5039518742c6e66aa6fe902cdb6ed5ac3bc8d99051e53074881f01d"
+      },
+      "native_log": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot.log",
+        "sha256": "945e56b1eee511d79c25c9f6ebf9de7543dec09439e04ba26e46b187e125aaef"
+      },
+      "tiff": {
+        "status": "observed",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot.tiff",
+        "sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "hash_recomputed_now": false,
+        "bytes": 854628326,
+        "mtime_ns": 1793620459058140220,
+        "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json",
+        "evidence_scope": "prior verification SHA plus current size; original mtime not recorded"
+      },
+      "performance": {
+        "execution_wall_seconds": 412.73525595793035,
+        "runner_stitch_seconds": 394.97,
+        "runner_elapsed_seconds": 412.592,
+        "report": {
+          "stage_seconds": {
+            "preflight_seconds": 0.176540834,
+            "prepare_seconds": 12.727227625,
+            "matching_seconds": 1.759991125,
+            "ordering_seconds": 0.1763655,
+            "render_seconds": 394.968736416,
+            "total_seconds": 409.841383958
+          },
+          "pairs": {
+            "base_pairs": 36,
+            "retrieval_pairs": 0,
+            "candidate_pairs": 36,
+            "verified_pairs": 34,
+            "rescue_pairs": 0
+          },
+          "source_preflight": {
+            "source_count": 9,
+            "stat_count": 9,
+            "file_map_count": 9,
+            "hash_count": 9,
+            "exif_parse_count": 9,
+            "preflight_reuse_count": 85,
+            "raw_decode_count": 85,
+            "failed_count": 0
+          },
+          "quality_roi_cache": {
+            "hits": 0,
+            "misses": 33,
+            "evictions": 0,
+            "resident_bytes": 14155776,
+            "resident_entries": 33,
+            "peak_bytes": 14155776
+          },
+          "source_render_cache": {
+            "max_bytes": 2400000000,
+            "hits": 68,
+            "misses": 76,
+            "render_hits": 13,
+            "render_misses": 59,
+            "quality_gate_hits": 55,
+            "quality_gate_misses": 17,
+            "evictions": 72,
+            "oversized_bypasses": 0,
+            "resident_bytes": 2211124992,
+            "resident_entries": 4,
+            "peak_bytes": 2211124992
+          },
+          "native_fusion_cache": {
+            "max_bytes": 4294967296,
+            "hits": 15,
+            "misses": 6,
+            "matching_hits": 0,
+            "matching_misses": 3,
+            "composition_hits": 15,
+            "composition_misses": 3,
+            "fusion_count": 6,
+            "fusion_seconds": 234.434630082,
+            "failed_fusions": 0,
+            "evictions": 0,
+            "invalidations": 3,
+            "oversized_bypasses": 0,
+            "unattributed_bypasses": 0,
+            "state_snapshot_bypasses": 0,
+            "resident_bytes": 0,
+            "resident_entries": 0,
+            "peak_bytes": 2948607844,
+            "peak_entries": 3
+          }
+        },
+        "qg_timing": {
+          "decode_seconds": 7.769614874000001,
+          "reference_resampling_seconds": 19.518618826999994,
+          "local_scale_seconds": 0.000332833,
+          "slanted_edge_mtf_seconds": 7.4479005019999995,
+          "gradient_seconds": 0.09766108399999998,
+          "noise_seconds": 0.138009791,
+          "delta_e_seconds": 0.0023971670000000004,
+          "roi_sampling_seconds": 19.773326122999997,
+          "boundary_seconds": 0.181665416,
+          "effective_coverage_seconds": 0.012459042,
+          "owner_source_decode_count": 13,
+          "roi_reference_count": 33,
+          "station_owner_evidence_roi_count": 8,
+          "raw_owner_evidence_roi_count": 0,
+          "boundary_sample_count": 0,
+          "roi_cache_hits": 0,
+          "roi_cache_misses": 33,
+          "roi_cache_evictions": 0,
+          "roi_cache_resident_bytes": 14155776,
+          "roi_cache_peak_bytes": 14155776
+        },
+        "graph_cut_seconds": [
+          36.934778,
+          18.192371916,
+          52.086245291
+        ],
+        "sampled_rss_bytes": 12401688576,
+        "os_native_child": {
+          "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+          "max_rss_bytes": 12425183232,
+          "wall_seconds": 412.561307416996,
+          "user_seconds": 2537.63977,
+          "system_seconds": 31.470512,
+          "child_exit_code": 0
+        }
+      },
+      "tile_payload_measurement_scope": "not_recorded_in_this_v19_schema; absence is not zero",
+      "run_invariants": {
+        "status": "pass",
+        "checked_count": 42,
+        "detail": "See comparison evidence runs.v19_hot.invariants; exact expected/observed values retained there."
+      }
+    },
+    "v20_cold": {
+      "status": "pass",
+      "binary_sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+      "profile": "release",
+      "capture_enabled": false,
+      "performance_only": true,
+      "exit_code": 0,
+      "binary_unchanged": true,
+      "execution": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/execution.json",
+        "sha256": "37a3bcf4a9f394159293119d14bcb26799c22cb27cba286a63d484831e1b3bea"
+      },
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/run/sleeping-9-6479-s1-v20-purpose-release-cold-stack-reports/stack-report-cdc6ad1a-14db-4d7f-93b9-4543d5e35fbe.json",
+        "sha256": "70b67985f179f8863861be46c646896d0e1e8ad0fd4d48a17d322a9dae3ca99d"
+      },
+      "harness_summary": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/run/sleeping-9-6479-s1-v20-purpose-release-cold.summary.json",
+        "sha256": "e18eba6ee3d9efa6ebc760476a557f36fdf25982df0a6bd9d6cd952a5049ea88"
+      },
+      "native_log": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/run/sleeping-9-6479-s1-v20-purpose-release-cold.log",
+        "sha256": "05593d96607764c8241ba0f073f2af8995cd7636b1467b58c808f538c68bfaa9"
+      },
+      "tiff": {
+        "status": "observed",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/run/sleeping-9-6479-s1-v20-purpose-release-cold.tiff",
+        "sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "hash_recomputed_now": true,
+        "bytes": 854628326,
+        "mtime_ns": 1793624044987329778,
+        "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/cold/tiff-sha256.json",
+        "evidence_scope": "SHA computed now; stat-bound exclusive sidecar"
+      },
+      "performance": {
+        "execution_wall_seconds": 370.144676207914,
+        "runner_stitch_seconds": 351.76,
+        "runner_elapsed_seconds": 369.961,
+        "report": {
+          "stage_seconds": {
+            "preflight_seconds": 0.31217625,
+            "prepare_seconds": 12.548685541,
+            "matching_seconds": 1.655651,
+            "ordering_seconds": 0.17734125,
+            "render_seconds": 351.760724167,
+            "total_seconds": 366.4857105
+          },
+          "pairs": {
+            "base_pairs": 36,
+            "retrieval_pairs": 0,
+            "candidate_pairs": 36,
+            "verified_pairs": 34,
+            "rescue_pairs": 0
+          },
+          "source_preflight": {
+            "source_count": 9,
+            "stat_count": 9,
+            "file_map_count": 9,
+            "hash_count": 9,
+            "exif_parse_count": 9,
+            "preflight_reuse_count": 67,
+            "raw_decode_count": 67,
+            "failed_count": 0
+          },
+          "quality_roi_cache": {
+            "hits": 0,
+            "misses": 33,
+            "evictions": 0,
+            "resident_bytes": 14155776,
+            "resident_entries": 33,
+            "peak_bytes": 14155776
+          },
+          "source_render_cache": {
+            "max_bytes": 2400000000,
+            "hits": 68,
+            "misses": 58,
+            "render_hits": 13,
+            "render_misses": 41,
+            "quality_gate_hits": 55,
+            "quality_gate_misses": 17,
+            "evictions": 54,
+            "oversized_bypasses": 0,
+            "resident_bytes": 2211124992,
+            "resident_entries": 4,
+            "peak_bytes": 2211124992
+          },
+          "native_fusion_cache": {
+            "max_bytes": 4294967296,
+            "hits": 15,
+            "misses": 6,
+            "matching_hits": 0,
+            "matching_misses": 3,
+            "composition_hits": 15,
+            "composition_misses": 3,
+            "fusion_count": 6,
+            "fusion_seconds": 213.370828541,
+            "failed_fusions": 0,
+            "evictions": 0,
+            "invalidations": 3,
+            "oversized_bypasses": 0,
+            "unattributed_bypasses": 0,
+            "state_snapshot_bypasses": 0,
+            "resident_bytes": 0,
+            "resident_entries": 0,
+            "peak_bytes": 2948607844,
+            "peak_entries": 3
+          },
+          "tile_payload": {
+            "raster_only_requests": 6,
+            "owner_sampling_requests": 12,
+            "owner_payload_build_requests": 12,
+            "owner_source_load_requests": 36,
+            "raster_only_payload_skips": 6
+          }
+        },
+        "qg_timing": {
+          "decode_seconds": 7.734550498,
+          "reference_resampling_seconds": 19.282265541,
+          "local_scale_seconds": 0.000334456,
+          "slanted_edge_mtf_seconds": 7.391834459,
+          "gradient_seconds": 0.10171145699999999,
+          "noise_seconds": 0.147988499,
+          "delta_e_seconds": 0.002323291,
+          "roi_sampling_seconds": 19.537961207999995,
+          "boundary_seconds": 0.181817542,
+          "effective_coverage_seconds": 0.012552208,
+          "owner_source_decode_count": 13,
+          "roi_reference_count": 33,
+          "station_owner_evidence_roi_count": 8,
+          "raw_owner_evidence_roi_count": 0,
+          "boundary_sample_count": 0,
+          "roi_cache_hits": 0,
+          "roi_cache_misses": 33,
+          "roi_cache_evictions": 0,
+          "roi_cache_resident_bytes": 14155776,
+          "roi_cache_peak_bytes": 14155776
+        },
+        "graph_cut_seconds": [
+          34.150527916,
+          16.589011709,
+          47.315513625
+        ],
+        "sampled_rss_bytes": 12121784320,
+        "os_native_child": {
+          "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+          "max_rss_bytes": 12132499456,
+          "wall_seconds": 369.4219359579729,
+          "user_seconds": 2188.220683,
+          "system_seconds": 30.29966,
+          "child_exit_code": 0
+        }
+      },
+      "tile_payload_measurement_scope": "observed request counts; owner loads may hit cache and are not RAW decode counts",
+      "run_invariants": {
+        "status": "pass",
+        "checked_count": 53,
+        "detail": "See comparison evidence runs.v20_cold.invariants; exact expected/observed values retained there."
+      }
+    },
+    "v20_hot": {
+      "status": "pass",
+      "binary_sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+      "profile": "release",
+      "capture_enabled": false,
+      "performance_only": true,
+      "exit_code": 0,
+      "binary_unchanged": true,
+      "execution": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/execution.json",
+        "sha256": "e481a1ea993d788177b083215646fcb8dda9968c09780f1bfd2d73fd179dff05"
+      },
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/run/sleeping-9-6479-s1-v20-purpose-release-hot-stack-reports/stack-report-7cd2b12d-7270-4cf5-a6be-c9ef4df6d4f9.json",
+        "sha256": "31d290be38eb35720d5b3df705c5515d9bc8487b03f7451260aa2329c08c6874"
+      },
+      "harness_summary": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/run/sleeping-9-6479-s1-v20-purpose-release-hot.summary.json",
+        "sha256": "4c0c23a619af4b1262ba04fc942665754f25afb071cfc579b04679e5acf04ca5"
+      },
+      "native_log": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/run/sleeping-9-6479-s1-v20-purpose-release-hot.log",
+        "sha256": "1b1b4b31446d7ce6bed13a541cf8d0b36d1f6c3839e15d48d4f65eede13ee866"
+      },
+      "tiff": {
+        "status": "observed",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/run/sleeping-9-6479-s1-v20-purpose-release-hot.tiff",
+        "sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "hash_recomputed_now": true,
+        "bytes": 854628326,
+        "mtime_ns": 1793624886502171844,
+        "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/hot/tiff-sha256.json",
+        "evidence_scope": "SHA computed now; stat-bound exclusive sidecar"
+      },
+      "performance": {
+        "execution_wall_seconds": 369.95152958401013,
+        "runner_stitch_seconds": 349.26,
+        "runner_elapsed_seconds": 369.704,
+        "report": {
+          "stage_seconds": {
+            "preflight_seconds": 0.1885565,
+            "prepare_seconds": 15.073716542,
+            "matching_seconds": 2.186182667,
+            "ordering_seconds": 0.192616833,
+            "render_seconds": 349.26391575,
+            "total_seconds": 366.934561583
+          },
+          "pairs": {
+            "base_pairs": 36,
+            "retrieval_pairs": 0,
+            "candidate_pairs": 36,
+            "verified_pairs": 34,
+            "rescue_pairs": 0
+          },
+          "source_preflight": {
+            "source_count": 9,
+            "stat_count": 9,
+            "file_map_count": 9,
+            "hash_count": 9,
+            "exif_parse_count": 9,
+            "preflight_reuse_count": 67,
+            "raw_decode_count": 67,
+            "failed_count": 0
+          },
+          "quality_roi_cache": {
+            "hits": 0,
+            "misses": 33,
+            "evictions": 0,
+            "resident_bytes": 14155776,
+            "resident_entries": 33,
+            "peak_bytes": 14155776
+          },
+          "source_render_cache": {
+            "max_bytes": 2400000000,
+            "hits": 68,
+            "misses": 58,
+            "render_hits": 13,
+            "render_misses": 41,
+            "quality_gate_hits": 55,
+            "quality_gate_misses": 17,
+            "evictions": 54,
+            "oversized_bypasses": 0,
+            "resident_bytes": 2211124992,
+            "resident_entries": 4,
+            "peak_bytes": 2211124992
+          },
+          "native_fusion_cache": {
+            "max_bytes": 4294967296,
+            "hits": 15,
+            "misses": 6,
+            "matching_hits": 0,
+            "matching_misses": 3,
+            "composition_hits": 15,
+            "composition_misses": 3,
+            "fusion_count": 6,
+            "fusion_seconds": 212.483939292,
+            "failed_fusions": 0,
+            "evictions": 0,
+            "invalidations": 3,
+            "oversized_bypasses": 0,
+            "unattributed_bypasses": 0,
+            "state_snapshot_bypasses": 0,
+            "resident_bytes": 0,
+            "resident_entries": 0,
+            "peak_bytes": 2948607844,
+            "peak_entries": 3
+          },
+          "tile_payload": {
+            "raster_only_requests": 6,
+            "owner_sampling_requests": 12,
+            "owner_payload_build_requests": 12,
+            "owner_source_load_requests": 36,
+            "raster_only_payload_skips": 6
+          }
+        },
+        "qg_timing": {
+          "decode_seconds": 7.795495375000002,
+          "reference_resampling_seconds": 19.643608206999996,
+          "local_scale_seconds": 0.000340832,
+          "slanted_edge_mtf_seconds": 7.394598625,
+          "gradient_seconds": 0.095912373,
+          "noise_seconds": 0.14823445600000004,
+          "delta_e_seconds": 0.002365002,
+          "roi_sampling_seconds": 19.896397708999995,
+          "boundary_seconds": 0.181494833,
+          "effective_coverage_seconds": 0.012475625,
+          "owner_source_decode_count": 13,
+          "roi_reference_count": 33,
+          "station_owner_evidence_roi_count": 8,
+          "raw_owner_evidence_roi_count": 0,
+          "boundary_sample_count": 0,
+          "roi_cache_hits": 0,
+          "roi_cache_misses": 33,
+          "roi_cache_evictions": 0,
+          "roi_cache_resident_bytes": 14155776,
+          "roi_cache_peak_bytes": 14155776
+        },
+        "graph_cut_seconds": [
+          33.511359,
+          16.267831,
+          47.011637542
+        ],
+        "sampled_rss_bytes": 11676205056,
+        "os_native_child": {
+          "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+          "max_rss_bytes": 11792138240,
+          "wall_seconds": 369.73026958305854,
+          "user_seconds": 2198.375612,
+          "system_seconds": 29.063721,
+          "child_exit_code": 0
+        }
+      },
+      "tile_payload_measurement_scope": "observed request counts; owner loads may hit cache and are not RAW decode counts",
+      "run_invariants": {
+        "status": "pass",
+        "checked_count": 53,
+        "detail": "See comparison evidence runs.v20_hot.invariants; exact expected/observed values retained there."
+      }
+    }
+  },
+  "comparisons": {
+    "v19_to_v20_cold": {
+      "equivalence_status": "pass",
+      "observed_performance_deltas": {
+        "os_native_child.wall_seconds": {
+          "before": 421.85196720797103,
+          "after": 369.4219359579729,
+          "delta": -52.43003124999814,
+          "percent": -12.428537810788587,
+          "status": "observed"
+        },
+        "os_native_child.max_rss_bytes": {
+          "before": 12920078336,
+          "after": 12132499456,
+          "delta": -787578880,
+          "percent": -6.095774805060749,
+          "status": "observed"
+        },
+        "sampled_rss_bytes": {
+          "before": 12900909056,
+          "after": 12121784320,
+          "delta": -779124736,
+          "percent": -6.039301049391099,
+          "status": "observed"
+        },
+        "report.stage_seconds.total_seconds": {
+          "before": 418.561728166,
+          "after": 366.4857105,
+          "delta": -52.07601766600004,
+          "percent": -12.441657744051282,
+          "status": "observed"
+        },
+        "report.stage_seconds.render_seconds": {
+          "before": 401.919903833,
+          "after": 351.760724167,
+          "delta": -50.159179666,
+          "percent": -12.479894423651494,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_count": {
+          "before": 6,
+          "after": 6,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_seconds": {
+          "before": 236.43360199900002,
+          "after": 213.370828541,
+          "delta": -23.06277345800001,
+          "percent": -9.754439835543149,
+          "status": "observed"
+        },
+        "report.source_preflight.raw_decode_count": {
+          "before": 85,
+          "after": 67,
+          "delta": -18,
+          "percent": -21.176470588235297,
+          "status": "observed"
+        },
+        "report.source_render_cache.misses": {
+          "before": 76,
+          "after": 58,
+          "delta": -18,
+          "percent": -23.684210526315784,
+          "status": "observed"
+        },
+        "report.source_render_cache.render_misses": {
+          "before": 59,
+          "after": 41,
+          "delta": -18,
+          "percent": -30.508474576271183,
+          "status": "observed"
+        },
+        "report.source_render_cache.quality_gate_misses": {
+          "before": 17,
+          "after": 17,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.evictions": {
+          "before": 72,
+          "after": 54,
+          "delta": -18,
+          "percent": -25.0,
+          "status": "observed"
+        }
+      },
+      "causal_scope": "combined payload-purpose and prefilter-support/mapping change, not an isolated sub-change benchmark",
+      "statistical_scope": "one cold/hot run per version; no OS-cache purge, randomized repeats, or confidence interval",
+      "equivalence_checks": {
+        "sources": "pass",
+        "geometry": "pass",
+        "virtual_tiles": "pass",
+        "grouping": "pass",
+        "topology": "pass",
+        "input": "pass",
+        "virtual_tile_cache": "pass",
+        "quality_gate_without_timing": "pass",
+        "owner_evidence": "pass",
+        "output_contract": "pass",
+        "tone": "pass",
+        "degradation": "pass",
+        "memory_budget": "pass",
+        "tiff_sha256": "pass"
+      },
+      "equivalence_hashes": "common_equivalence_evidence; before/after match these hashes in every pair"
+    },
+    "v19_to_v20_hot": {
+      "equivalence_status": "pass",
+      "observed_performance_deltas": {
+        "os_native_child.wall_seconds": {
+          "before": 412.561307416996,
+          "after": 369.73026958305854,
+          "delta": -42.831037833937444,
+          "percent": -10.38173892314288,
+          "status": "observed"
+        },
+        "os_native_child.max_rss_bytes": {
+          "before": 12425183232,
+          "after": 11792138240,
+          "delta": -633044992,
+          "percent": -5.094854379045666,
+          "status": "observed"
+        },
+        "sampled_rss_bytes": {
+          "before": 12401688576,
+          "after": 11676205056,
+          "delta": -725483520,
+          "percent": -5.849876938564402,
+          "status": "observed"
+        },
+        "report.stage_seconds.total_seconds": {
+          "before": 409.841383958,
+          "after": 366.934561583,
+          "delta": -42.90682237499999,
+          "percent": -10.469128803107164,
+          "status": "observed"
+        },
+        "report.stage_seconds.render_seconds": {
+          "before": 394.968736416,
+          "after": 349.26391575,
+          "delta": -45.70482066599999,
+          "percent": -11.571756559957569,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_count": {
+          "before": 6,
+          "after": 6,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_seconds": {
+          "before": 234.434630082,
+          "after": 212.483939292,
+          "delta": -21.95069079000001,
+          "percent": -9.363245857628687,
+          "status": "observed"
+        },
+        "report.source_preflight.raw_decode_count": {
+          "before": 85,
+          "after": 67,
+          "delta": -18,
+          "percent": -21.176470588235297,
+          "status": "observed"
+        },
+        "report.source_render_cache.misses": {
+          "before": 76,
+          "after": 58,
+          "delta": -18,
+          "percent": -23.684210526315784,
+          "status": "observed"
+        },
+        "report.source_render_cache.render_misses": {
+          "before": 59,
+          "after": 41,
+          "delta": -18,
+          "percent": -30.508474576271183,
+          "status": "observed"
+        },
+        "report.source_render_cache.quality_gate_misses": {
+          "before": 17,
+          "after": 17,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.evictions": {
+          "before": 72,
+          "after": 54,
+          "delta": -18,
+          "percent": -25.0,
+          "status": "observed"
+        }
+      },
+      "causal_scope": "combined payload-purpose and prefilter-support/mapping change, not an isolated sub-change benchmark",
+      "statistical_scope": "one cold/hot run per version; no OS-cache purge, randomized repeats, or confidence interval",
+      "equivalence_checks": {
+        "sources": "pass",
+        "geometry": "pass",
+        "virtual_tiles": "pass",
+        "grouping": "pass",
+        "topology": "pass",
+        "input": "pass",
+        "virtual_tile_cache": "pass",
+        "quality_gate_without_timing": "pass",
+        "owner_evidence": "pass",
+        "output_contract": "pass",
+        "tone": "pass",
+        "degradation": "pass",
+        "memory_budget": "pass",
+        "tiff_sha256": "pass"
+      },
+      "equivalence_hashes": "common_equivalence_evidence; before/after match these hashes in every pair"
+    },
+    "v20_cold_to_hot": {
+      "equivalence_status": "pass",
+      "observed_performance_deltas": {
+        "os_native_child.wall_seconds": {
+          "before": 369.4219359579729,
+          "after": 369.73026958305854,
+          "delta": 0.3083336250856519,
+          "percent": 0.08346381063866204,
+          "status": "observed"
+        },
+        "os_native_child.max_rss_bytes": {
+          "before": 12132499456,
+          "after": 11792138240,
+          "delta": -340361216,
+          "percent": -2.8053676592722065,
+          "status": "observed"
+        },
+        "sampled_rss_bytes": {
+          "before": 12121784320,
+          "after": 11676205056,
+          "delta": -445579264,
+          "percent": -3.6758554040994484,
+          "status": "observed"
+        },
+        "report.stage_seconds.total_seconds": {
+          "before": 366.4857105,
+          "after": 366.934561583,
+          "delta": 0.4488510830000223,
+          "percent": 0.12247437489107948,
+          "status": "observed"
+        },
+        "report.stage_seconds.render_seconds": {
+          "before": 351.760724167,
+          "after": 349.26391575,
+          "delta": -2.4968084169999543,
+          "percent": -0.7098030693769464,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_count": {
+          "before": 6,
+          "after": 6,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.native_fusion_cache.fusion_seconds": {
+          "before": 213.370828541,
+          "after": 212.483939292,
+          "delta": -0.8868892490000064,
+          "percent": -0.41565628022557366,
+          "status": "observed"
+        },
+        "report.source_preflight.raw_decode_count": {
+          "before": 67,
+          "after": 67,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.misses": {
+          "before": 58,
+          "after": 58,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.render_misses": {
+          "before": 41,
+          "after": 41,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.quality_gate_misses": {
+          "before": 17,
+          "after": 17,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        },
+        "report.source_render_cache.evictions": {
+          "before": 54,
+          "after": 54,
+          "delta": 0,
+          "percent": 0.0,
+          "status": "observed"
+        }
+      },
+      "causal_scope": "combined payload-purpose and prefilter-support/mapping change, not an isolated sub-change benchmark",
+      "statistical_scope": "one cold/hot run per version; no OS-cache purge, randomized repeats, or confidence interval",
+      "equivalence_checks": {
+        "sources": "pass",
+        "geometry": "pass",
+        "virtual_tiles": "pass",
+        "grouping": "pass",
+        "topology": "pass",
+        "input": "pass",
+        "virtual_tile_cache": "pass",
+        "quality_gate_without_timing": "pass",
+        "owner_evidence": "pass",
+        "output_contract": "pass",
+        "tone": "pass",
+        "degradation": "pass",
+        "memory_budget": "pass",
+        "tiff_sha256": "pass"
+      },
+      "equivalence_hashes": "common_equivalence_evidence; before/after match these hashes in every pair"
+    }
+  },
+  "measurement_scopes": {
+    "fusion_seconds": "NativeFusionCache fusion wrapper accumulated time; fusion_count remains six.",
+    "graph_cut_seconds": "StationFusion internal accumulated clock elapsed, not pure graph-cut kernel and not the full render/fusion wrapper.",
+    "os_native_child": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child including export; wall is distinct from npm/execution and pipeline timings.",
+    "sampled_rss_bytes": "Stack_Report sampler scope; do not substitute for OS process maximum RSS.",
+    "tile_payload": "v20 observed raster_requests/skips 6/6, owner_sampling/builds 12/12, owner_source_load_requests 36; v19 absent, not zero.",
+    "raw_decode_reduction": "85 -> 67 in both phases: 9 prepare + source misses 76 -> 58. Render misses 59 -> 41; QG misses remain 17 and QG loader count remains 13.",
+    "causality": "Observed combined candidate; cannot assign all elapsed/RSS change to payload or CPU optimization alone."
+  },
+  "visual_limitations": {
+    "status": "full_visual_acceptance_not_passed",
+    "equivalent_TIFF_retains_known_v19_findings": true,
+    "soft_seals_and_regionally_varying_texture": "unresolved; source-matched and best-focus cause/preservation not established",
+    "confirmed_unique_alpha_zero_pixels_in_checked_spans": 63,
+    "alpha_spans": [
+      {
+        "canvas_y": 522,
+        "canvas_x_inclusive": [
+          9345,
+          9348
+        ],
+        "pixels": 4,
+        "alpha_u16": 0
+      },
+      {
+        "canvas_y": 523,
+        "canvas_x_inclusive": [
+          9389,
+          9398
+        ],
+        "pixels": 10,
+        "alpha_u16": 0
+      },
+      {
+        "canvas_y": 524,
+        "canvas_x_inclusive": [
+          9434,
+          9447
+        ],
+        "pixels": 14,
+        "alpha_u16": 0
+      },
+      {
+        "canvas_y": 525,
+        "canvas_x_inclusive": [
+          9478,
+          9497
+        ],
+        "pixels": 20,
+        "alpha_u16": 0
+      },
+      {
+        "canvas_y": 526,
+        "canvas_x_inclusive": [
+          9523,
+          9533
+        ],
+        "pixels": 11,
+        "alpha_u16": 0
+      },
+      {
+        "canvas_y": 6459,
+        "canvas_x_inclusive": [
+          15645,
+          15648
+        ],
+        "pixels": 4,
+        "alpha_u16": 0
+      }
+    ],
+    "root_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/root-review.json",
+      "sha256": "76d170af325038b3f117ef867cbf709fc2fa9808f114fbaaba44e64e48bf84d7"
+    },
+    "independent_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/independent-review.json",
+      "sha256": "1e5d4034b1c70f98b9be170708912c3d959b85dea61990aa628ed6f72d8e30c3"
+    },
+    "whole_image_hole_or_sharpness_census": false,
+    "qg_context_caveat": "Upper holes in expanded qg-roi-08 context are outside its central 256px QG measurement ROI.",
+    "exported_window_review_counts": {
+      "available": 30,
+      "root": 18,
+      "independent": 15,
+      "unique_across_both": 30,
+      "overlap": [
+        "qg-roi-03",
+        "qg-roi-04",
+        "upper-coverage-step"
+      ],
+      "not_in_saved_reviews": []
+    },
+    "all_exported_windows_reviewed": true,
+    "selected_owner_source_review": "eight ROI pairs completed; left seal softness present in both sides; best focus across candidates remains unestablished",
+    "exported_window_coverage_scope": "30/30 archived native windows sampled; this does not establish full native visual quality or all-source best focus."
+  },
+  "independent_capture": {
+    "status": "completed_bound_and_bounded_selected_owner_reviewed",
+    "execution_scope": "third separate full native run, excluded from cold/hot performance",
+    "capture_to_hot_equivalence": "pass",
+    "capture_to_hot_checks": {
+      "sources": "pass",
+      "geometry": "pass",
+      "virtual_tiles": "pass",
+      "grouping": "pass",
+      "topology": "pass",
+      "input": "pass",
+      "virtual_tile_cache": "pass",
+      "quality_gate_without_timing": "pass",
+      "owner_evidence": "pass",
+      "output_contract": "pass",
+      "tone": "pass",
+      "degradation": "pass",
+      "memory_budget": "pass",
+      "tiff_sha256": "pass"
+    },
+    "execution": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/execution.json",
+      "sha256": "512eb9f07b254f1687c39ed85d8465266f050624af2b35fd5d549215ad932952",
+      "bytes": 2746
+    },
+    "report": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/run/sleeping-9-6479-s1-v20-purpose-release-capture-stack-reports/stack-report-37f52467-4b3b-46f3-a402-389f67d95bd3.json",
+      "sha256": "3a333db11450177a951695bbd81c156628687899af3fce7165039aa69909f72b",
+      "bytes": 1998784
+    },
+    "native_log": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/run/sleeping-9-6479-s1-v20-purpose-release-capture.log",
+      "sha256": "fb8c1c3db8698c6f21839e94fe1fd00bceaa6eef54bcd800b21ce794a0c1de40",
+      "bytes": 64340
+    },
+    "latest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual/process-18928/latest.json",
+      "sha256": "3acfe78512befee1a6078298e09fff28a126f9982925150510dbe9f6b1afd54f",
+      "bytes": 479
+    },
+    "final_iteration_metadata": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual/process-18928/iteration-0001/metadata.json",
+      "sha256": "2a2c51641b5e8f4f1f45c1d6f9a0a43c7c8aa9cc9ff707d68171ca28b56738ed",
+      "bytes": 19000
+    },
+    "binary_sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+    "profile": "release",
+    "debug_assertions": false,
+    "offline_TIFF_binding": "bound",
+    "binding_manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/manifest.json",
+      "sha256": "152c4f493472de49ea08f42f85bb99ecdfcb4404672070af0fc467ccc1132faa"
+    },
+    "raw_capture_modified": false,
+    "final_iteration": 1,
+    "tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+    "same_tiff_as_v19_and_v20_performance_pair": true,
+    "capture_output_to_TIFF_exact_all_rois": true,
+    "captured_rois": 8,
+    "captured_station_ids": [
+      0,
+      1,
+      2
+    ],
+    "mapped_ROI_pixel_records": 524288,
+    "mapped_ROI_pixel_records_are_unique_output_pixels": false,
+    "overlap_note": "ROI00 and ROI01 overlap by 128 x 256 pixels; do not call 524288 ROI pixel records unique or independent output pixels.",
+    "every_roi_contains_multiple_actual_owners": true,
+    "validity_counts_per_roi": {
+      "1": 65536
+    },
+    "final_output_source_owner_counts": {
+      "covered_owner_zero_pixels": 0,
+      "covered_pixels": 97858218,
+      "owners": [
+        {
+          "owner": 1,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+          "pixels": 21070008
+        },
+        {
+          "owner": 2,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "pixels": 9462041
+        },
+        {
+          "owner": 3,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+          "pixels": 4119355
+        },
+        {
+          "owner": 4,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+          "pixels": 8983597
+        },
+        {
+          "owner": 5,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+          "pixels": 2570459
+        },
+        {
+          "owner": 6,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+          "pixels": 17787899
+        },
+        {
+          "owner": 7,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+          "pixels": 10601413
+        },
+        {
+          "owner": 8,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+          "pixels": 11893911
+        },
+        {
+          "owner": 9,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+          "pixels": 11369535
+        }
+      ],
+      "scope": "actual final QG input owner plane, coverage != 0 only",
+      "uncovered_pixels": 8969622
+    },
+    "source_loader_calls_added": 0,
+    "diagnostic_run_counters": {
+      "raw_decode_count": 67,
+      "fusion_count": 6
+    },
+    "diagnostic_only_performance_excluded": {
+      "os_native_child": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 11460018176,
+        "wall_seconds": 366.48578983393963,
+        "user_seconds": 2191.51593,
+        "system_seconds": 25.611464,
+        "child_exit_code": 0
+      },
+      "stage_seconds": {
+        "preflight_seconds": 0.197708875,
+        "prepare_seconds": 12.596423458,
+        "matching_seconds": 1.527755666,
+        "ordering_seconds": 0.176407,
+        "render_seconds": 349.273408292,
+        "total_seconds": 363.799860083
+      },
+      "reason": "includes capture PNG/f32/XY/JSON I/O and owner census; not an additional performance sample"
+    },
+    "roi_binding_summary": [
+      {
+        "number": 0,
+        "station_id": 0,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 256,
+          "y": 128
+        },
+        "world_origin": [
+          148.0,
+          79.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "1": 52227,
+          "3": 7018,
+          "2": 6291
+        },
+        "exact": true
+      },
+      {
+        "number": 1,
+        "station_id": 0,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 384,
+          "y": 128
+        },
+        "world_origin": [
+          276.0,
+          79.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "1": 55706,
+          "2": 5686,
+          "3": 4144
+        },
+        "exact": true
+      },
+      {
+        "number": 2,
+        "station_id": 0,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 1280,
+          "y": 1664
+        },
+        "world_origin": [
+          1172.0,
+          1615.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "1": 56598,
+          "3": 5930,
+          "2": 3008
+        },
+        "exact": true
+      },
+      {
+        "number": 3,
+        "station_id": 0,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 6528,
+          "y": 4608
+        },
+        "world_origin": [
+          6420.0,
+          4559.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "3": 9096,
+          "2": 48874,
+          "1": 7566
+        },
+        "exact": true
+      },
+      {
+        "number": 4,
+        "station_id": 1,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 128,
+          "y": 640
+        },
+        "world_origin": [
+          20.0,
+          591.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "5": 23098,
+          "4": 42438
+        },
+        "exact": true
+      },
+      {
+        "number": 5,
+        "station_id": 2,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 10496,
+          "y": 3072
+        },
+        "world_origin": [
+          10388.0,
+          3023.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "6": 40419,
+          "7": 23536,
+          "8": 1581
+        },
+        "exact": true
+      },
+      {
+        "number": 6,
+        "station_id": 2,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 15360,
+          "y": 6400
+        },
+        "world_origin": [
+          15252.0,
+          6351.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "6": 59220,
+          "7": 5272,
+          "8": 767,
+          "9": 277
+        },
+        "exact": true
+      },
+      {
+        "number": 7,
+        "station_id": 2,
+        "canvas_roi": {
+          "height": 256,
+          "width": 256,
+          "x": 9216,
+          "y": 640
+        },
+        "world_origin": [
+          9108.0,
+          591.0
+        ],
+        "validity_counts": {
+          "1": 65536
+        },
+        "mapped_coordinate_count": 65536,
+        "covered_roi_owner_counts": {
+          "9": 62179,
+          "8": 817,
+          "7": 1395,
+          "6": 1145
+        },
+        "exact": true
+      }
+    ],
+    "source_visual_review": "completed_for_all_eight_selected_owner_pairs",
+    "root_source_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/root-source-review.json",
+      "sha256": "df05257d8e8c2141858d09e0193a076b80b4ad6f6619b176527f0aa986a2b00e"
+    },
+    "independent_source_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/independent-source-review.json",
+      "sha256": "bd4b334947ed5105b335806e2995aa1e9091997003809b24ca9ac3b38ed3c121"
+    },
+    "source_visual_review_scope": {
+      "root_rois": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "independent_rois": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "native_dimensions": [
+        256,
+        256
+      ],
+      "resize": "none",
+      "reference": "selected actual owner post-tone QG reference, not all focus candidates"
+    },
+    "output_reference_differences": {
+      "evidence": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/output-reference-differences.json",
+        "sha256": "bd4eca38b138784dbcec43806bcc38270899a51542b2acb696798739bbd59516"
+      },
+      "domain": "existing QG display-referred RGB32F before u16 quantization; selected-owner warped/tone reference, not all focus candidates",
+      "no_quality_threshold_added": true,
+      "rows": [
+        {
+          "roi": 0,
+          "station": 0,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 256,
+            "y": 128
+          },
+          "changed_rgb_channels": 194952,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 2.6909637805753544e-05,
+          "root_mean_square_rgb_difference": 5.581490870758924e-05,
+          "p99_absolute_rgb_difference": 0.00023430585861206055,
+          "maximum_absolute_rgb_difference": 0.0003126859664916992,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "1": 52227,
+            "3": 7018,
+            "2": 6291
+          }
+        },
+        {
+          "roi": 1,
+          "station": 0,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 384,
+            "y": 128
+          },
+          "changed_rgb_channels": 169704,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 2.7252802586493394e-06,
+          "root_mean_square_rgb_difference": 7.987533813666879e-06,
+          "p99_absolute_rgb_difference": 4.285573959350586e-05,
+          "maximum_absolute_rgb_difference": 8.374452590942383e-05,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "1": 55706,
+            "2": 5686,
+            "3": 4144
+          }
+        },
+        {
+          "roi": 2,
+          "station": 0,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 1280,
+            "y": 1664
+          },
+          "changed_rgb_channels": 99431,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 2.1669378232521316e-07,
+          "root_mean_square_rgb_difference": 3.492707481300239e-07,
+          "p99_absolute_rgb_difference": 8.344650268554688e-07,
+          "maximum_absolute_rgb_difference": 1.1324882507324219e-06,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "1": 56598,
+            "3": 5930,
+            "2": 3008
+          }
+        },
+        {
+          "roi": 3,
+          "station": 0,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 6528,
+            "y": 4608
+          },
+          "changed_rgb_channels": 249,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 6.002665031701326e-11,
+          "root_mean_square_rgb_difference": 1.765525770385645e-09,
+          "p99_absolute_rgb_difference": 0.0,
+          "maximum_absolute_rgb_difference": 5.960464477539063e-08,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "3": 9096,
+            "2": 48874,
+            "1": 7566
+          }
+        },
+        {
+          "roi": 4,
+          "station": 1,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 128,
+            "y": 640
+          },
+          "changed_rgb_channels": 166757,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 5.156841628680316e-06,
+          "root_mean_square_rgb_difference": 1.4181588271527952e-05,
+          "p99_absolute_rgb_difference": 6.538629531860352e-05,
+          "maximum_absolute_rgb_difference": 0.00014138221740722656,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "5": 23098,
+            "4": 42438
+          }
+        },
+        {
+          "roi": 5,
+          "station": 2,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 10496,
+            "y": 3072
+          },
+          "changed_rgb_channels": 0,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 0.0,
+          "root_mean_square_rgb_difference": 0.0,
+          "p99_absolute_rgb_difference": 0.0,
+          "maximum_absolute_rgb_difference": 0.0,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "6": 40419,
+            "7": 23536,
+            "8": 1581
+          }
+        },
+        {
+          "roi": 6,
+          "station": 2,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 15360,
+            "y": 6400
+          },
+          "changed_rgb_channels": 0,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 0.0,
+          "root_mean_square_rgb_difference": 0.0,
+          "p99_absolute_rgb_difference": 0.0,
+          "maximum_absolute_rgb_difference": 0.0,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "6": 59220,
+            "7": 5272,
+            "8": 767,
+            "9": 277
+          }
+        },
+        {
+          "roi": 7,
+          "station": 2,
+          "canvas_roi": {
+            "height": 256,
+            "width": 256,
+            "x": 9216,
+            "y": 640
+          },
+          "changed_rgb_channels": 147933,
+          "channel_count": 196608,
+          "mean_absolute_rgb_difference": 0.0001795591452567654,
+          "root_mean_square_rgb_difference": 0.0004191558384280291,
+          "p99_absolute_rgb_difference": 0.0018504559993743896,
+          "maximum_absolute_rgb_difference": 0.0030503571033477783,
+          "mapped_coordinate_count": 65536,
+          "owners": {
+            "9": 62179,
+            "8": 817,
+            "7": 1395,
+            "6": 1145
+          }
+        }
+      ],
+      "distinct_from_zero_output_to_TIFF_binding_error": true
+    },
+    "review_summary": {
+      "left_seal": "visibly soft in both output and selected-owner reference; no best-focus claim",
+      "all_eight_windows": "no confirmed new double edge/break/hard seam in these bounded observations",
+      "byte_identical_output_reference_rois": [
+        5,
+        6
+      ],
+      "other_rois_have_float_differences": true,
+      "previous_alpha_holes_in_exact_dense_rois": false
+    },
+    "source_best_focus_acceptance": "not_established",
+    "whole_image_visual_acceptance": "not_passed",
+    "previous_alpha_holes_repaired": false,
+    "extractor_scope_note": "comparison-final-bound validates saved binder proof, current small evidence hashes and TIFF stat-bound saved SHA; offline_binding_status=bound and final_iteration=1. No TIFF rehash or pixel-binding rerun in this archival extraction; raw latest.final_iteration remains null and is not edited.",
+    "required_binding": {
+      "profile": "release",
+      "debug_assertions": false,
+      "captured_rois": 8,
+      "full_run_success": true,
+      "latest_complete_without_later_failure": true,
+      "exact_output_RGB_alpha_TIFF_match": true
+    },
+    "offline_binding_validation": {
+      "status": "bound",
+      "manifest_path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/manifest.json",
+      "manifest_sha256": "152c4f493472de49ea08f42f85bb99ecdfcb4404672070af0fc467ccc1132faa",
+      "final_iteration": 1,
+      "tiff_rehashed": false,
+      "scope": "saved binder proof plus current small evidence hashes and TIFF stat-bound saved SHA; pixel binding is not rerun",
+      "profile": "release",
+      "verified_roi_count": 8,
+      "tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+      "tiff_hash_evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/tiff-sha256.json"
+    },
+    "raw_latest_final_iteration": null,
+    "final_comparison_capture_status": "pass",
+    "final_comparison_errors": []
+  },
+  "evidence_index": {
+    "comparison": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/comparison-cold-hot.json",
+      "sha256": "0bb7e131a0da76f2299d72408d82114b31d2117415033f86b7d1b5771f3f0308"
+    },
+    "comparison_generated_at_utc": "2026-11-02T13:19:41.415289+00:00",
+    "extractor": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/compare-v19.py",
+      "sha256_at_comparison": "0a09425f48e56803d72036ae080552bd73d804a1cb0ccb0a22e1b280100eb917"
+    },
+    "v19_benchmark": {
+      "path": "/Users/dp/Desktop/raw-editor/docs/benchmarks/sleeping-9-v19-registration-acceptance.json",
+      "sha256": "adf5c332802acbcf23bf8c3b1fa7dd03b76d3539c24b5a4d1c43d5cc93cbe2f4"
+    },
+    "documentation": "/Users/dp/Desktop/raw-editor/docs/focus-stack-performance-optimization.md",
+    "final_comparison": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/comparison-final-bound.json",
+      "sha256": "fe59aebb43c097e68342bf3ea3a3056b78ff1e15b19cf72126e90cd7a4bedb72"
+    },
+    "final_comparison_generated_at_utc": "2026-11-02T14:14:47.198093+00:00",
+    "binding_manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/manifest.json",
+      "sha256": "152c4f493472de49ea08f42f85bb99ecdfcb4404672070af0fc467ccc1132faa"
+    },
+    "final_input_source_verification": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/final-input-source-verification.json",
+      "sha256": "9cc44e4ad56bac8e24e8cfe45a22a2708f7d896b1a2cb88b67da444ac619a9b3"
+    },
+    "final_extractor": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/compare-v19.py",
+      "sha256_at_comparison": "9e10e2acedd356727205095c9d58396f70b434902b52cd83ad208461190d4d16"
+    }
+  },
+  "limitations": [
+    "One cold/hot pair per version; no statistical confidence interval or population-wide performance claim.",
+    "Cold/hot are order labels; new processes do not imply a purged OS/filesystem cache.",
+    "Four identical TIFFs prove reproducible output identity for this fixture, including existing defects, not best focus or complete visual quality.",
+    "Nine means NEF inputs. Criterion inventory is checked by names/schema; no hardcoded criterion-count pass claim.",
+    "Old missing payload counters are unobserved, never zero.",
+    "Report source hashes and archived TIFF hashes retain their recorded evidence scope; no new RAW decoding or real TIFF reading was done to write this benchmark.",
+    "Final input owner census is confirmed in v20 independent capture; it is not retroactive archival proof of the absent v19 owner plane.",
+    "Eight selected-owner pairs are bound and reviewed, but overlap and contain bounded content only; source best focus and whole-output visual quality remain unestablished.",
+    "Confirmed 63 alpha-zero hole pixels are outside the eight exact dense QG ROIs and remain unresolved."
+  ],
+  "common_equivalence_evidence": {
+    "sources": {
+      "json_sha256": "e0b634a54a12cf2a6c8a46f855f683d29abea67932d2147a15dc8b1d786114e3",
+      "changed_leaf_count": 0
+    },
+    "geometry": {
+      "json_sha256": "78ff517d3bfa53a3687cd40b51d06e9b42c9543b0f6d06cf8da35209bcce946a",
+      "changed_leaf_count": 0
+    },
+    "virtual_tiles": {
+      "json_sha256": "b410fe8db6239b55a0f89cf84cb74df63b4846e2003eaf228677f354c1f3ae8c",
+      "changed_leaf_count": 0
+    },
+    "grouping": {
+      "json_sha256": "8028b8db3f6a8ab6def7761bd5fa784a3a6a5e769a7805be51bea7bd2944534b",
+      "changed_leaf_count": 0
+    },
+    "topology": {
+      "json_sha256": "a50f50f8d6942d59056655817b21900e8259b8850365b692c77697d182bb4f21",
+      "changed_leaf_count": 0
+    },
+    "input": {
+      "json_sha256": "0b6adfb1aab9272c7e71debd2f965d548204d7a234ced0bb72ba133d565bea21",
+      "changed_leaf_count": 0
+    },
+    "virtual_tile_cache": {
+      "json_sha256": "80809c3bb6c8bd60987f78b2887948b77b040588399d60710272fc02c9d0d5a6",
+      "changed_leaf_count": 0
+    },
+    "quality_gate_without_timing": {
+      "json_sha256": "2c09222d3eed0a21d21694dad4b68a2c8622d0b995a4d72b6f94a4e2b4f04540",
+      "changed_leaf_count": 0
+    },
+    "owner_evidence": {
+      "json_sha256": "2ec4ab15173fb9ff9a5786dc6802da78916f44fe86f46705c17469f3f3f647c1",
+      "changed_leaf_count": 0
+    },
+    "output_contract": {
+      "json_sha256": "0d15e08b6e97a2e1a285a76ef9ae5b404f05672aa03137760aaaa350bcb7eeae",
+      "changed_leaf_count": 0
+    },
+    "tone": {
+      "json_sha256": "3b87bed56d502cc368493a7e757361a6ca4fa9c4262f6fb92696ef0656fa21f3",
+      "changed_leaf_count": 0
+    },
+    "degradation": {
+      "json_sha256": "9a40395c7c2115b88f69bdbfbf3c7eeac5bc0adad2a32d205c32491a15e301f5",
+      "changed_leaf_count": 0
+    },
+    "memory_budget": {
+      "json_sha256": "50bbe8d490b25c6b2c7c7a0410d2062bd0ec871e3c2dc5521f9eb673b848c15b",
+      "changed_leaf_count": 0
+    },
+    "tiff_sha256": {
+      "json_sha256": "c58476de385d0ed1ec6f789898cc8e5b702fa6d6aa21a40146f831ca3f4b1434",
+      "changed_leaf_count": 0,
+      "value": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605"
+    }
+  },
+  "updated_at_utc": "2026-11-02T14:22:04.805546+00:00",
+  "source_attribution": {
+    "status": "confirmed_for_final_v20_capture_QG_input_plane",
+    "census": {
+      "covered_owner_zero_pixels": 0,
+      "covered_pixels": 97858218,
+      "owners": [
+        {
+          "owner": 1,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+          "pixels": 21070008
+        },
+        {
+          "owner": 2,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "pixels": 9462041
+        },
+        {
+          "owner": 3,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+          "pixels": 4119355
+        },
+        {
+          "owner": 4,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+          "pixels": 8983597
+        },
+        {
+          "owner": 5,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+          "pixels": 2570459
+        },
+        {
+          "owner": 6,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+          "pixels": 17787899
+        },
+        {
+          "owner": 7,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+          "pixels": 10601413
+        },
+        {
+          "owner": 8,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+          "pixels": 11893911
+        },
+        {
+          "owner": 9,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+          "pixels": 11369535
+        }
+      ],
+      "scope": "actual final QG input owner plane, coverage != 0 only",
+      "uncovered_pixels": 8969622
+    },
+    "target_source": {
+      "owner": 2,
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+      "pixels": 9462041
+    },
+    "target_fraction_of_covered_pixels": 0.09669132744681698,
+    "final_iteration": 1,
+    "metadata": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual/process-18928/iteration-0001/metadata.json",
+      "sha256": "2a2c51641b5e8f4f1f45c1d6f9a0a43c7c8aa9cc9ff707d68171ca28b56738ed",
+      "bytes": 19000
+    },
+    "binding_manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/manifest.json",
+      "sha256": "152c4f493472de49ea08f42f85bb99ecdfcb4404672070af0fc467ccc1132faa"
+    },
+    "not_station_diagnostic_count": true,
+    "does_not_rewrite_missing_v19_owner_plane": true
+  },
+  "archive_tools_validation": {
+    "passed": 10,
+    "source": "root execution confirmation; documents update did not rerun tests",
+    "test_file": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/test-acceptance-tools.py",
+    "test_file_sha256": "d87d79a9642d3f07a265b74bf79105967470d0388c1cedd2b4e8e236da094249",
+    "real_TIFF_rehashed_by_final_archive": false,
+    "pixel_binding_rerun_by_final_archive": false
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "status": "candidate_capture_and_bounded_visual_review_complete",
+  "full_quality_acceptance": false,
+  "build_sha256": "e50f6a4c9f77b49ed20e6a20a36976a2fa4b3e5259d0598cd55aa729ab29a72c",
+  "source_snapshot_matches": true,
+  "world_origin": [
+    -108,
+    -49
+  ],
+  "window_count": 3,
+  "source_count": 9,
+  "source_loader_calls": 9,
+  "candidate_records": 27,
+  "supported_source_windows": 16,
+  "viewed_images": 19,
+  "common_support_pixels": [
+    45764,
+    45392,
+    0
+  ],
+  "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+  "output_identical_to_v22": true,
+  "quality_gate_verdict": "pass",
+  "quality_gate_roi_count": 8,
+  "diagnostic_wall_seconds": 619.133036416024,
+  "performance_comparable": false,
+  "targeted_tests_passed": 1,
+  "evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/build.json",
+      "sha256": "d4b1522b583d950176033eb382452fcdbb87d5c31589c776dfb6033cb2bf293f"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/request.json",
+      "sha256": "2042e4fe8e4e068155f271ba53f9652f688312fa2bd17c6bc3d955446c6e18be"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/candidate-verification.json",
+      "sha256": "37d39fadf8fa51350eb502d9b8c22a19442596b0d5cb0ab59dbd65e0f57cc8ba"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/visual-review.json",
+      "sha256": "8678a307122ffc02a768a34dba18e231d876ac3e6ba7238edf207cdbf009625c"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/capture/focus-candidates/manifest.json",
+      "sha256": "c304a7c77eeb6d11ac76438c86b2789d559ac446cb2ee5c79e42ee813c60756b"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v25-focus-candidates/capture/execution.json",
+      "sha256": "df4f61003525692ee8ea97c747b42d250405ca3c8129dbbd778992c8c2ba1c72"
+    }
+  ],
+  "next": "Separate local alignment, periodic texture and source sharpness before changing ownership."
+}

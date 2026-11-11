@@ -1,0 +1,154 @@
+{
+  "phase": "v43-scoped-local-consensus",
+  "date": "2026-11-08",
+  "frozen_binary_sha256": "10d732b6384bd825fe8cb9f40236e6d5dbd6d6d130cc4929857b445e7991a2db",
+  "build_manifest_sha256": "9c03056823e2fdf1397dd6b8cf13917f252e9e111eaecfc84e9d38731ba5bea5",
+  "tests": {
+    "full_suite": "1040 passed, 0 failed, 41 ignored",
+    "local_consensus_targeted": "pass",
+    "native_probe_targeted": "pass"
+  },
+  "langyuan10": {
+    "status": "rejected",
+    "selected_path": "layered_virtual_tile",
+    "quality_gate_verdict": "not_run",
+    "quality_gate_roi_count": 0,
+    "reason": "output_pixel_closure_limit_exceeded",
+    "report_sha256": "5c193b41382f6bdaf33cde112d9a9d353e41c71f50fad690c41532b91f2e8793",
+    "pair_0_2": {
+      "bidirectional_count": 58,
+      "selected_model": "projective",
+      "inliers": 64,
+      "fit_count": 31,
+      "holdout_count": 33,
+      "region_counts": [
+        8,
+        11,
+        6,
+        8
+      ],
+      "region_median_error_px": [
+        1.2342402010346463,
+        0.4548681044594191,
+        2.182955197655229,
+        1.426880538403667
+      ],
+      "max_refit_scale_difference": 0.0012233214582271223,
+      "bounded_scale_evidence_passes": true,
+      "rejection_reasons": []
+    },
+    "closure": {
+      "status": "converged",
+      "max_direct_pair_p95_native_px": 2.5259575151691487,
+      "nonlinear_validation": [
+        {
+          "left": 0,
+          "right": 1,
+          "count": 29,
+          "median_px": 0.957804039720533,
+          "p95_px": 1.7240378862143277
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "count": 13,
+          "median_px": 1.0485884299954038,
+          "p95_px": 1.9796957702294926
+        },
+        {
+          "left": 1,
+          "right": 2,
+          "count": 117,
+          "median_px": 0.9886117696957786,
+          "p95_px": 2.5259575151691487
+        }
+      ]
+    },
+    "output_density": {
+      "factor": 1.24707,
+      "direct_pair_p95_output_px": 3.150047,
+      "median_output_px": 1.243385,
+      "corner_output_px": 26.489501,
+      "limit_output_px": 3.0
+    },
+    "wall_seconds": 167.23576120799407,
+    "peak_rss_bytes": 11745230848
+  },
+  "nine_nef": {
+    "cold": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true
+      },
+      "quality_gate_verdict": "pass",
+      "roi_count": 8,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 351.57712999987416,
+      "peak_rss_bytes": 11703222272
+    },
+    "hot": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true,
+        "cold_hot_business_equal": true
+      },
+      "quality_gate_verdict": "pass",
+      "roi_count": 8,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 340.272077166941,
+      "peak_rss_bytes": 11841142784
+    }
+  },
+  "previous_v42_regression": "Unscoped local consensus altered 9 NEF TIFF/coverage baseline; rejected and superseded by narrow-overlap plus cross-scale scope.",
+  "conclusion": "Left narrow-overlap matching, four-region holdout and 1% scale refit now pass, but output-pixel closure remains over the unchanged 3px gate. Langyuan full acceptance remains rejected; N4.4 open."
+}

@@ -1,0 +1,172 @@
+{
+  "scope": "same_frozen_v52_binary_native_45_jpeg_owner_correction_ab",
+  "status": "diagnostic_comparison_complete_not_quality_accepted",
+  "quality_gate": "insufficient_evidence",
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "source_unchanged": true,
+    "same_45_inputs": true,
+    "legacy_path": true,
+    "source_coverage_measured": true,
+    "source_coverage_bounded": true,
+    "source_owner_bounded": true,
+    "source_owner_matches_coverage": true,
+    "output_written_matches_file": true,
+    "owner_toggle_changes_output": true,
+    "framed_canvas": true,
+    "source_derived_crop": true,
+    "diagnostic_maps_written": true,
+    "quality_gate_not_relabelled": true,
+    "alpha_preserved": true,
+    "source_coverage_matches_v50": true,
+    "source_owner_matches_v50": true
+  },
+  "candidate_output_sha256": "ec394585ba15ea890354cad9a55c6db25e88a0fd63eda0f8e276cdf481d2a3cd",
+  "photometry": {
+    "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+    "reference_unchanged": true,
+    "resolution": [
+      512,
+      182
+    ],
+    "zones_xyxy": {
+      "wall": [
+        100,
+        480,
+        2,
+        16
+      ],
+      "rail": [
+        180,
+        490,
+        16,
+        33
+      ],
+      "artwork": [
+        40,
+        470,
+        35,
+        158
+      ],
+      "bottom_frame": [
+        40,
+        470,
+        158,
+        178
+      ]
+    },
+    "candidates": {
+      "baseline": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v51-owner-diagnostics/lanting/run/lanting-s1-v51-owner-diagnostics.app.jpg",
+        "sha256": "c3ad128bd407d3c22f6b74f81a8a5461797a3d7315491759721d2154bbcf7b74",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 74.04887218045113,
+            "mean_absolute_difference": 30.630451127819548,
+            "p90_absolute_difference": 41
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 104.1988614800759,
+            "mean_absolute_difference": 46.48747628083491,
+            "p90_absolute_difference": 70
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 71.74422386084326,
+            "mean_absolute_difference": 9.246625070901873,
+            "p90_absolute_difference": 18
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 78.12058139534884,
+            "mean_absolute_difference": 14.738720930232558,
+            "p90_absolute_difference": 30
+          }
+        }
+      },
+      "skip_owner": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v53-native-owner-ab/lanting/run/lanting-s1-v53-native-owner-ab.app.jpg",
+        "sha256": "86441694faaad5769d3f0485a3915012d5618f6cef13e44bfa8f82514328c310",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 80.19436090225564,
+            "mean_absolute_difference": 24.484962406015036,
+            "p90_absolute_difference": 34
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 111.24478178368122,
+            "mean_absolute_difference": 40.62713472485768,
+            "p90_absolute_difference": 61
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.73480809226697,
+            "mean_absolute_difference": 8.15968992248062,
+            "p90_absolute_difference": 17
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 73.20872093023256,
+            "mean_absolute_difference": 11.170348837209302,
+            "p90_absolute_difference": 22
+          }
+        }
+      }
+    },
+    "limits": "overview metrics only; reflection, local geometry and source selection differ; not a quality gate verdict"
+  },
+  "boundary_indicators": {
+    "metrics": {
+      "baseline": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.003955436720142591,
+          "p90_abs_boundary_delta": 0.007774474153297739
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.01344734402852052,
+          "p90_abs_boundary_delta": 0.018356862745098013
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.07100099821746882,
+          "p90_abs_boundary_delta": 0.2846363636363636
+        }
+      },
+      "skip_owner": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.005790338680926932,
+          "p90_abs_boundary_delta": 0.0079165062388592
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.013336399286987488,
+          "p90_abs_boundary_delta": 0.01680606060606049
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.02254456327985739,
+          "p90_abs_boundary_delta": 0.1909980035650623
+        }
+      }
+    },
+    "limits": "cross-boundary content differs; diagnostic seam indicator only"
+  },
+  "default_code_changed": false,
+  "nine_nef_baseline": "not rerun: no production code change; prior accepted baseline preserved",
+  "interpretation": [
+    "Skipping owner correction improves reference grayscale difference in all four overview zones.",
+    "Bottom boundary indicator improves, but top wall boundary indicator worsens slightly.",
+    "Owner median correction estimates exposure from different source contents and requires overlap evidence before selective application.",
+    "Default remains unchanged until a bounded correction passes native regional and source evidence validation."
+  ],
+  "next": "implement overlap-supported owner gain with explicit insufficient-evidence fallback and preserve source detail and existing quality gates"
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "phase": "v26_offline_candidate_metrics",
+  "status": "bounded_diagnostics_complete",
+  "full_quality_acceptance": false,
+  "production_algorithm_changed": false,
+  "raw_runs_added": 0,
+  "input_pngs_verified": 8,
+  "synthetic_checks_passed": 6,
+  "evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/analyze.py",
+      "sha256": "6da4c813ae1f2b3a445a3b6980669942f1ad434bb9b4f1552f5372ca9d6b414b"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/metrics.json",
+      "sha256": "d53d68485985fe8f66584a80bcc32590ec0949b78e79c9b9b4de662ccd0a7bb3"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/phase-check.py",
+      "sha256": "b5a02370d448b2c207a0383c85d421fcf1a94be99bb8123e3f8a8750f734ac6b"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/phase-check.json",
+      "sha256": "b63821f294cdf8719f3150e081174eba753e3c65c02e41105bceaed381dc726b"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/test-metrics.py",
+      "sha256": "05ddf43e4674e6561c2b1b92bfeaaccd00dde36fddf4eebf20a3266db2bd7f1e"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v26-candidate-metrics/self-tests.json",
+      "sha256": "b48734a02f1270c31224e0bc8f36b03cf29f1733e38e3a5df359da02f58f8b5e"
+    }
+  ],
+  "conclusion": "Current red-edge owner is narrowest within its station. Cross-station alternative has local displacement. Strong stripe has matching frequency and near phase in another source, insufficient to label artifact. Do not automatically replace owners or suppress periodic texture."
+}

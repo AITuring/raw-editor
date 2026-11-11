@@ -1,0 +1,108 @@
+{
+  "phase": "LanTing 45 legacy source-union alpha contract",
+  "date": "2026-11-09",
+  "binary_sha256": "36f478b272b8e0569ab2f97d1cfcd8315a4464db402773ad6c020832291058e3",
+  "source_manifest_path": "output/acceptance/lanting-v48-alpha/build.json",
+  "run_analysis_path": "output/acceptance/lanting-v48-alpha/lanting/analysis.json",
+  "run_analysis_sha256": "baba491f0794889f183f365560ba04ddd6440e5b9b6fa2d55312868bb0da03c6",
+  "status": "alpha_contract_accepted_not_quality_accepted",
+  "regression_exit_code": 1,
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "source_unchanged": true,
+    "same_45_inputs": true,
+    "legacy_path": true,
+    "source_coverage_measured": true,
+    "source_coverage_bounded": true,
+    "source_owner_bounded": true,
+    "source_owner_matches_coverage": true,
+    "output_written_matches_file": true,
+    "tiff_changed_from_v47_rgb": true,
+    "same_canvas_as_v47": true,
+    "quality_gate_not_relabelled": true,
+    "alpha_preserved": true,
+    "source_coverage_matches_v47": true,
+    "source_owner_matches_v47": true
+  },
+  "input_count": 45,
+  "inputs_and_reference_unchanged": true,
+  "canvas": {
+    "width": 33814,
+    "height": 13851,
+    "long_side_limit": 262144
+  },
+  "source_covered_pixels": 421256167,
+  "source_owned_pixels": 421256167,
+  "source_output_pixels": 468357714,
+  "output": {
+    "tiff_sha256": "ab664b17193e94c653f2a6e501d8a1fac1922ef5433c9441186c36ea50f36c32",
+    "alpha_preserved": true,
+    "tiff_extra_samples": [
+      2
+    ],
+    "artifact_validation": "pass",
+    "bit_depth": 16,
+    "icc": "sRGB"
+  },
+  "independent_libtiff_scan": {
+    "alpha_zero_pixels": 47101547,
+    "alpha_opaque_pixels": 421256167,
+    "alpha_other_pixels": 0,
+    "rgb_sha256_v47": "a2de0826207523a6dc8c5649a3c358586e324f8072182dfde73ce2c013812e43",
+    "rgb_sha256_v48": "a2de0826207523a6dc8c5649a3c358586e324f8072182dfde73ce2c013812e43",
+    "audit_source_path": "output/acceptance/lanting-v48-alpha/tiff-audit.c"
+  },
+  "resources": {
+    "memory_threshold_bytes": 25769803776,
+    "memory_threshold_source": "default",
+    "physical_memory_bytes": 34359738368,
+    "peak_rss_bytes": 11443290112,
+    "rss_sample_count": 598,
+    "memory_threshold_exceeded": false,
+    "max_resident_virtual_tiles": 1,
+    "network_requests": 0,
+    "worker_threads": 10,
+    "random_seed_source": "site_constants_without_run_seed"
+  },
+  "quality_gate_verdict": "insufficient_evidence",
+  "visual_review": {
+    "status": "not_accepted",
+    "preview_alpha_path": "output/acceptance/lanting-v48-alpha/lanting/preview-alpha.png",
+    "preview_white_path": "output/acceptance/lanting-v48-alpha/lanting/preview-white.png",
+    "observed": "Stepped physical coverage outline, upper exposure blocks, lower frame/tone discontinuity remain."
+  },
+  "nine_nef_regression": {
+    "cold": {
+      "status": "pass",
+      "checks_all_pass": true,
+      "analysis_path": "output/acceptance/lanting-v48-alpha/cold/analysis.json",
+      "analysis_sha256": "474a039e324f04cab30ab0346466e6ebb22be2747d8cb115e383b41fc21a3044",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 333.5322592498269,
+      "max_rss_bytes": 11398004736
+    },
+    "hot": {
+      "status": "pass",
+      "checks_all_pass": true,
+      "analysis_path": "output/acceptance/lanting-v48-alpha/hot/analysis.json",
+      "analysis_sha256": "275a1c15890c7ccb66d60b9f99ad32dbad9c794457ed197fca731d2e811f970c",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 344.7342462078668,
+      "max_rss_bytes": 11665588224
+    }
+  },
+  "conclusion": "Alpha output contract is verified; overall LanTing quality remains unaccepted.",
+  "tests": {
+    "targeted_streaming_mask_crop": "pass",
+    "release_binary_build": "pass",
+    "cargo_test_lib": "1043 passed; 0 failed; 42 ignored",
+    "cargo_fmt_check": "pass",
+    "git_diff_check": "pass"
+  }
+}

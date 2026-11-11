@@ -1,0 +1,59 @@
+{
+  "scope": "read_only_frozen_v30_lanting_45_legacy_run",
+  "binary_sha256": "e50f6a4c9f77b49ed20e6a20a36976a2fa4b3e5259d0598cd55aa729ab29a72c",
+  "checks": {
+    "all_45_inputs_match_frozen_sha256": true,
+    "reference_unchanged": true,
+    "report_matches_analysis_sha256": true,
+    "tiff_matches_analysis_sha256": true,
+    "report_and_file_agree_on_written_output": true,
+    "report_input_count_45": true,
+    "legacy_path_selected": true,
+    "visual_review_binds_same_tiff": true
+  },
+  "observed": {
+    "analysis_status": "rejected",
+    "quality_gate_verdict": "insufficient_evidence",
+    "quality_gate_roi_count": 0,
+    "canvas": {
+      "width": 33821,
+      "height": 13852,
+      "long_side_limit": 262144
+    },
+    "output": {
+      "alpha_preserved": false,
+      "artifact_validation": "pass",
+      "artifact_validation_error": null,
+      "bit_depth": 16,
+      "format": "TIFF",
+      "height": 13852,
+      "icc": "sRGB",
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/real-materials-v30-default-cache/lanting/run/lanting-s1-v30-default.tiff",
+      "preview": {
+        "path": "",
+        "max_roi_delta_e": 0.0
+      },
+      "result_id": "native-fixture-0ef0cde8-5cac-4df9-9531-adb98b1425cd",
+      "tiff_extra_samples": [],
+      "width": 33821,
+      "written": true
+    },
+    "composition_opaque_pixels": 0,
+    "composition_union_projected_pixels": 0,
+    "tiff_bytes": 2810953822,
+    "visual_verdict": "not_visually_accepted",
+    "visual_observations": [
+      "Artwork spans the overview; surrounding frame and background remain in the canvas.",
+      "Stepped black outer borders remain in the raster.",
+      "Vertical tonal discontinuities and frame/background discontinuities are visible, especially near the lower left and lower right.",
+      "This visual inspection does not establish universal sharpness or compliant alpha/owner evidence."
+    ]
+  },
+  "limits": [
+    "Legacy shifted-mosaic streaming stores coverage and owner internally but returns RGB only.",
+    "Composition zero counters are unmeasured on this path, not observed empty coverage.",
+    "TIFF has no alpha sample; source coverage and ownership cannot be verified from RGB alone.",
+    "A written TIFF with artifact_validation=pass does not turn insufficient_evidence into a Quality Gate pass.",
+    "The bound visual review rejected the overview; native 1:1 crop acceptance is still needed."
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "phase": "LanTing bounded source-derived publication frame candidate",
+  "date": "2026-11-10",
+  "binary_sha256": "902c662962af9b209cc54ceb786136b87d3934062769fae1e67d7fd4dcb5afd8",
+  "default": {
+    "status": "default_contract_accepted_not_quality_accepted",
+    "analysis_path": "output/acceptance/lanting-v50-framed/lanting-default/analysis.json",
+    "checks_all_pass": true,
+    "tiff_sha256": "ab664b17193e94c653f2a6e501d8a1fac1922ef5433c9441186c36ea50f36c32",
+    "same_tiff_as_v48": true,
+    "canvas": [
+      33814,
+      13851
+    ],
+    "quality_gate_verdict": "insufficient_evidence"
+  },
+  "framed": {
+    "status": "framing_candidate_not_quality_accepted",
+    "analysis_path": "output/acceptance/lanting-v50-framed/lanting/analysis.json",
+    "checks_all_pass": true,
+    "tiff_sha256": "548e124639aec0cc28aa0cff08aa1e4e65e77ebd79d3ba524e0c443f2835aba7",
+    "canvas": [
+      31085,
+      11011
+    ],
+    "source_covered_pixels": 421256167,
+    "source_owned_pixels": 421256167,
+    "source_union_bbox_pixels": 468357714,
+    "publication_crop": {
+      "x": 2608,
+      "y": 874,
+      "width": 31085,
+      "height": 11011,
+      "covered_pixels_excluded": 78979232
+    },
+    "alpha_preserved": true,
+    "tiff_extra_samples": [
+      2
+    ],
+    "artifact_validation": "pass",
+    "quality_gate_verdict": "insufficient_evidence",
+    "preview_path": "output/acceptance/lanting-v50-framed/lanting/preview.png",
+    "peak_rss_bytes": 9810821120,
+    "memory_threshold_bytes": 25769803776,
+    "reference_side_by_side_path": "output/acceptance/lanting-v50-framed/lanting/reference-side-by-side.png",
+    "native_crops": {
+      "top": "output/acceptance/lanting-v50-framed/lanting/top-native-crop.png",
+      "bottom": "output/acceptance/lanting-v50-framed/lanting/bottom-native-crop.png",
+      "reference_bottom": "output/acceptance/lanting-v50-framed/lanting/reference-bottom-native-crop.png"
+    }
+  },
+  "independent_libtiff_crop_comparison": {
+    "source": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v48-alpha/lanting/run/lanting-s1-v48-alpha.tiff",
+    "candidate": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v50-framed/lanting/run/lanting-s1-v50-framed.tiff",
+    "rgb_channel_differences": 0,
+    "alpha_differences": 0,
+    "published_nonopaque_pixels": 0,
+    "audit_source": "output/acceptance/lanting-v50-framed/compare-crop.c"
+  },
+  "reference": {
+    "sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+    "dimensions": [
+      31065,
+      11007
+    ],
+    "read_only": true
+  },
+  "nine_nef_regression": {
+    "cold": {
+      "status": "pass",
+      "checks_all_pass": true,
+      "analysis_path": "output/acceptance/lanting-v50-framed/cold/analysis.json",
+      "analysis_sha256": "7bdbc0a94b0ba08cb1536d5c5d93c065b4e528e4081ae9a341324ab9d3fe4dbc",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 531.7611804171465,
+      "max_rss_bytes": 11753996288
+    },
+    "hot": {
+      "status": "pass",
+      "checks_all_pass": true,
+      "analysis_path": "output/acceptance/lanting-v50-framed/hot/analysis.json",
+      "analysis_sha256": "d99445f18339f65addbeefd8f2e5b58e247cfef4d51e6f1eb1f2eb95d549e3b0",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 481.3629547918681,
+      "max_rss_bytes": 9392177152
+    }
+  },
+  "tests": {
+    "targeted_rectangle": "pass",
+    "release_build": "pass",
+    "full_lib": "1044 passed; 0 failed; 42 ignored",
+    "fmt_check": "pass",
+    "git_diff_check": "pass"
+  },
+  "conclusion": "Optional framing candidate is bounded and pixel-identical to a crop of full-union TIFF; default remains byte-identical to v48. Quality Gate and tone/seam acceptance remain open."
+}

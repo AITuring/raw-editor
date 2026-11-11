@@ -1,5 +1,7 @@
 # Design Document
 
+> [项目进度与任务总览](../../../docs/project-progress.md#stack) 是当前任务状态的唯一入口；本文维护技术合同，保留原需求/设计编号，本次文档整合不更改算法或验收门槛。
+
 ## Overview
 
 本设计把当前混在一条 mosaic 流程里的「机位内焦平面选择」与「机位间几何拼接」拆成两层，
@@ -825,10 +827,17 @@ Local_Scale(p) = sqrt(|det J|)
 
 #### 有效像素总量（需求 11.4）
 
-分子 = 最终输出非透明像素计数。
-分母 = 全部 Source_RAW 按求解位姿投影到世界坐标后的**唯一覆盖面积**：
-用与输出画布同尺寸的位图，对每个源图的投影四边形做扫描线填充置位，最后计数置位像素
-（重叠只计一次）。判据：分子 ≥ 0.98 × 分母。
+校准原生路径：在每个输出像素中心，使用完整output→residual→station refinement→SourceSamplingMap
+逆映射判定是否至少有一个Source_RAW的有效传感器footprint支持该点。分母为该独立来源域的像素数，
+分子为该域与最终非透明输出的交集。校准padding不计为传感器覆盖，域外不透明像素不得补偿域内空洞；
+域的判定不读取输出alpha、ownership或亮度。并行按行归约整数计数，不分配整幅域位图，也不额外解码RAW。
+有校准来源却缺少其他来源的原生采样映射时返回证据不足，不用较有利的旧分母兜底。
+
+纯旧采样路径保留既有矩形投影并集：逐扫描线合并区间，等价于位图填充但无需整幅位图。
+两条路径均要求分子 ≥ 0.98 × 分母。`effective_source_domain`记录物理域方法、source_count、旧矩形并集、
+全部非透明像素、域内覆盖/缺失和域外不透明计数。Quality_Gate criterion的effective_output/projected字段
+保存实际判据分子/分母；CompositionReport仍保留历史全部alpha及矩形并集语义，避免改变旧报告含义。
+9张基线按相同TIFF、其余质量结果、旧分子/分母和来源证据复验，不覆盖冻结的旧报告。
 
 #### 倾斜边 ROI 判定与 MTF50（需求 11.5/11.6）
 
@@ -1103,6 +1112,10 @@ RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR=<临时目录>
 
 ### Stack_Report 的 JSON schema
 
+顶层 `performance` 是已落地的运行观测字段，始终序列化；下面的空对象仅简写其子结构，
+完整字段由 `report_schema_metrics.rs::PerformanceReport` 定义。它记录阶段耗时、pair 数、
+SourcePreflight 和受限缓存/payload 统计，不参与放宽 Quality Gate 判定或覆盖失败原因。
+
 顶层字段固定，缺省值显式写出（便于需求 15.9 在不读 RAW 的条件下断言结构）：
 
 ```json
@@ -1267,6 +1280,16 @@ RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR=<临时目录>
     "narrow_overlaps": [{ "left": 0, "right": 1, "overlap_width_px": 0 }],
     "integer_translation_tiles": 0,
     "final_sharpen_amount": 0.0
+  },
+
+  "performance": {
+    "stage_seconds": {},
+    "pairs": {},
+    "source_preflight": {},
+    "quality_roi_cache": {},
+    "source_render_cache": {},
+    "native_fusion_cache": {},
+    "tile_payload": {}
   },
 
   "quality_gate": {
@@ -2704,3 +2727,7 @@ flowchart LR
 种子帧和候选帧使用同一 Catmull-Rom 核，质量参考也使用相同核，以免核差异偏置细节/噪声比较。
 批次显示增益基于每帧最大 RGB 通道的 97 分位和批次最高保留值确定，不再用中位帧亮度；
 它排除少量灯光/反光，同时保护较亮机位的颜色比例，避免色调匹配前发生额外裁切。
+
+### v34 跨机位倍率扩展
+
+按2026-11-04授权，几何兼容范围之外增加有证据的原生倍率契约，详见 `docs/focus-stack-variable-magnification.md` 与需求6.11。旧尺度常量继续用于兼容路径和修复增量；不得全局扩大。最终 Quality Gate、owner/source 路径和输出采样规划不变。

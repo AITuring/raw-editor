@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "status": "passed_for_user_confirmed_scope",
+  "user_confirmed_scope": "按原性能目标和既有质量门禁验收",
+  "dataset": "sleeping-9-6479",
+  "scale": 1,
+  "input_count": 9,
+  "output_dimensions": [
+    15897,
+    6720
+  ],
+  "output_format": "RGBA16 TIFF sRGB unassociated alpha",
+  "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+  "binary_sha256": "e50f6a4c9f77b49ed20e6a20a36976a2fa4b3e5259d0598cd55aa729ab29a72c",
+  "tests": {
+    "release_library_passed": 1017,
+    "failed": 0,
+    "ignored": 40,
+    "production_check_exit": 0
+  },
+  "dataset_contract": {
+    "datasets": 11,
+    "hash_inputs": true,
+    "log_sha256": "2f4d6e24725b0c23c25b465eeb50296bc105292db0785385a444f0e77d8541d8"
+  },
+  "cold_hot_business_equal": true,
+  "quality_gate": "pass",
+  "roi_count": 8,
+  "source_owner_covered_pixels": 97858771,
+  "source_owner_zero_pixels": 0,
+  "all9sources_contribute": true,
+  "performance": {
+    "baseline": {
+      "native_wall_seconds": 652.6840297090821,
+      "execution_wall_seconds": 653.5011948329629,
+      "raw_decode_count": 85,
+      "fusion_count": 6,
+      "fusion_seconds": 302.18168916700006,
+      "os_peak_rss_bytes": 9960488960,
+      "sampled_peak_rss_bytes": 9943465984,
+      "user_cpu_seconds": 2530.194567,
+      "system_cpu_seconds": 93.239265
+    },
+    "cold": {
+      "native_wall_seconds": 431.11328187491745,
+      "execution_wall_seconds": 431.8010169999907,
+      "raw_decode_count": 67,
+      "fusion_count": 6,
+      "fusion_seconds": 243.62124566699998,
+      "os_peak_rss_bytes": 9785131008,
+      "sampled_peak_rss_bytes": 9689808896,
+      "user_cpu_seconds": 2208.363268,
+      "system_cpu_seconds": 56.246128
+    },
+    "hot": {
+      "native_wall_seconds": 449.32238133298233,
+      "execution_wall_seconds": 449.50278087495826,
+      "raw_decode_count": 67,
+      "fusion_count": 6,
+      "fusion_seconds": 248.182474458,
+      "os_peak_rss_bytes": 10348183552,
+      "sampled_peak_rss_bytes": 10276241408,
+      "user_cpu_seconds": 2153.316583,
+      "system_cpu_seconds": 65.098157
+    }
+  },
+  "observed_changes_vs_sequential_control": {
+    "cold": {
+      "wall_percent": -33.94762821650843,
+      "raw_percent": -21.176470588235297,
+      "os_rss_percent": -1.760535579168998
+    },
+    "hot": {
+      "wall_percent": -31.157748484629423,
+      "raw_percent": -21.176470588235297,
+      "os_rss_percent": 3.8923249004835903
+    }
+  },
+  "limits": [
+    "One cold/hot pair; OS page cache not purged.",
+    "MTF and boundary remain content-not-applicable; not measured sharpness passes.",
+    "Grouping/low-sharpness degradation retained.",
+    "Soft source regions and coherent weave not automatically repaired or reclassified.",
+    "Scope is same9 continuous subset, not all45 disconnected NEFs or other datasets.",
+    "Controlled acceptance profile:2.4GB source cache and4GiB native cache; not a performance guarantee for default512MiB source budget."
+  ],
+  "old_strict_RGBA_diagnostic": "failed_preserved; not an original performance acceptance requirement for a separately evidenced coverage repair",
+  "full_image_best_focus_proven": false,
+  "acceptance_report": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v28-final-acceptance/final-acceptance.json",
+    "sha256": "c55c28ae4169b67d9b9da79a8128048e2cde2c52054718f0a5421d80d1f8b79e"
+  },
+  "overview_review": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v28-final-acceptance/visual/overview-review.json",
+  "historical_records_modified": false
+}

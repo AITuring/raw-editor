@@ -1,0 +1,1010 @@
+{
+  "schema": 1,
+  "created_at": "2026-11-02T12:06:51.786494+00:00",
+  "phase": "v19-registration-prefilter-release",
+  "scope": "Frozen native registration repair, whole-nine cold/hot QG and TIFF artifact observations, plus completed sampled visual review with confirmed small alpha holes; final per-RAW output attribution and full visual acceptance remain incomplete.",
+  "status": {
+    "execution": "cold_and_hot_completed",
+    "registration_support_6484": "local_in_both_runs_under_unchanged_gates",
+    "reported_quality_gate": "pass_both_runs",
+    "artifact_contract": "pass_both_runs",
+    "degradation": "degraded_both_runs",
+    "performance_improvement_over_v18": false,
+    "complete_native_quality_acceptance": false,
+    "visual_review": "sampled_review_completed_full_visual_acceptance_not_passed",
+    "final_output_source_attribution": "pending"
+  },
+  "build": {
+    "binary": "/private/tmp/raw-editor-v19-prefilter-release-binary",
+    "sha256": "e4dce3a0ef48313a7bf1bd4deb2301119e61cf91ca54c1fc492bb239f6681c9a",
+    "profile": "release",
+    "manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/build.json",
+      "sha256": "244855c48b3f42e55cadffd8df3fede9117ef92003d45a7bb69db43841302195"
+    },
+    "full_library_tests": {
+      "passed": 977,
+      "failed": 0,
+      "ignored": 40,
+      "seconds": 108.91
+    },
+    "runner_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "cargo_check": "pass",
+    "cargo_fmt": "pass",
+    "dataset_contract": "pass",
+    "later_payload_cpu_capture_changes_included": false
+  },
+  "configuration": {
+    "dataset": "sleeping",
+    "subset": "sleeping-9-6479",
+    "input_count": 9,
+    "source_names": [
+      "DSC_6479.NEF",
+      "DSC_6480.NEF",
+      "DSC_6481.NEF",
+      "DSC_6482.NEF",
+      "DSC_6483.NEF",
+      "DSC_6484.NEF",
+      "DSC_6485.NEF",
+      "DSC_6486.NEF",
+      "DSC_6487.NEF"
+    ],
+    "scale": 1,
+    "prepared_source_dimensions": [
+      8312,
+      5542
+    ],
+    "selected_path": "layered_virtual_tile",
+    "source_render_cache_max_bytes": 2400000000,
+    "native_fusion_cache_max_bytes": 4294967296,
+    "coverage_alpha": true,
+    "preview_only": false,
+    "memory_threshold_bytes": 25769803776,
+    "cache_policy": "Each run is a new process; OS cache was not purged; previous diagnostics read the inputs.",
+    "source_visual_capture_enabled": false
+  },
+  "input_integrity": {
+    "sources_rehashed_after_runs": 9,
+    "all_source_hashes_unchanged": true,
+    "evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json",
+      "sha256": "89410720fc756982b92674011013668993ab11e8452de5b974786889885c9e7c"
+    },
+    "raw_files_reread_by_this_summary_writer": false
+  },
+  "common_registration": {
+    "status_counts": {
+      "anchor": 3,
+      "local": 6
+    },
+    "frames": [
+      {
+        "station_index": 0,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "status": "anchor",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "median_symmetric_error_px": 0.0
+      },
+      {
+        "station_index": 0,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "status": "local",
+        "inliers": 1028,
+        "inlier_area_coverage": 0.21217750257997936,
+        "control_point_spacing_px": 95.00571428571429,
+        "median_symmetric_error_px": 0.5762215285808054
+      },
+      {
+        "station_index": 0,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "status": "local",
+        "inliers": 2765,
+        "inlier_area_coverage": 0.5808823529411765,
+        "control_point_spacing_px": 94.89142857142858,
+        "median_symmetric_error_px": 0.4419417382415922
+      },
+      {
+        "station_index": 1,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "status": "anchor",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "median_symmetric_error_px": 0.0
+      },
+      {
+        "station_index": 1,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "status": "local",
+        "inliers": 2270,
+        "inlier_area_coverage": 0.48421501706484643,
+        "control_point_spacing_px": 95.26857142857143,
+        "median_symmetric_error_px": 0.5038911092686593
+      },
+      {
+        "station_index": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "status": "anchor",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "median_symmetric_error_px": 0.0
+      },
+      {
+        "station_index": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "status": "local",
+        "inliers": 2453,
+        "inlier_area_coverage": 0.5247058823529411,
+        "control_point_spacing_px": 95.36,
+        "median_symmetric_error_px": 0.4759858191164943
+      },
+      {
+        "station_index": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "status": "local",
+        "inliers": 2226,
+        "inlier_area_coverage": 0.46433041301627037,
+        "control_point_spacing_px": 95.47428571428571,
+        "median_symmetric_error_px": 0.3801726581436387
+      },
+      {
+        "station_index": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "status": "local",
+        "inliers": 2312,
+        "inlier_area_coverage": 0.4914965986394558,
+        "control_point_spacing_px": 95.18857142857142,
+        "median_symmetric_error_px": 0.4419417382415922
+      }
+    ],
+    "density_effective_source_count": 9,
+    "source_count_scope": "Sources retained in geometry/density evidence; not a per-RAW final TIFF pixel census."
+  },
+  "common_quality": {
+    "verdict": "pass",
+    "roi_count": 8,
+    "station_owner_evidence_roi_count": 8,
+    "raw_owner_evidence_roi_count": 0,
+    "criteria": [
+      {
+        "name": "local_scale_median",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "measured_range": {
+          "minimum": 1.0450645225106472,
+          "maximum": 1.095703125000007
+        }
+      },
+      {
+        "name": "local_scale_pixel_ratio",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "measured_range": {
+          "minimum": 1.0,
+          "maximum": 1.0
+        }
+      },
+      {
+        "name": "effective_pixel_count",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "",
+        "measured_range": {
+          "minimum": 0.9925915476217246,
+          "maximum": 0.9925915476217246
+        }
+      },
+      {
+        "name": "mtf50_normalized",
+        "verdict": "not_applicable",
+        "diagnostic": false,
+        "candidate_count": 512,
+        "eligible_count": 1,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 511,
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 433,
+          "slanted_edge_line_fit_residual_exceeded": 25,
+          "slanted_edge_too_short": 53
+        },
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_slanted_edge_search_256_512",
+        "measured_range": {
+          "minimum": 1.0000021694779606,
+          "maximum": 1.0000021694779606
+        }
+      },
+      {
+        "name": "gradient_energy_normalized",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "measured_range": {
+          "minimum": 0.99999376757652,
+          "maximum": 1.0003228121424372
+        }
+      },
+      {
+        "name": "noise_sigma_ratio",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 45,
+        "eligible_count": 24,
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 21,
+        "rejected_content_reasons": {
+          "roi_not_flat": 21
+        },
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_flat_patch_search_128",
+        "measured_range": {
+          "minimum": 0.9982964018334503,
+          "maximum": 1.0
+        }
+      },
+      {
+        "name": "roi_delta_e00",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "measured_range": {
+          "minimum": 0.0,
+          "maximum": 0.01646073541790025
+        }
+      },
+      {
+        "name": "boundary_stroke_alignment",
+        "verdict": "not_applicable",
+        "diagnostic": false,
+        "candidate_count": 372,
+        "eligible_count": 0,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 372,
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 372
+        },
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "station_boundary_streaming_candidates",
+        "measured_range": {
+          "minimum": null,
+          "maximum": null
+        }
+      },
+      {
+        "name": "owner_sharpness_coverage",
+        "verdict": "pass",
+        "diagnostic": false,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "selection_mode": "",
+        "measured_range": {
+          "minimum": 0.9980761734232476,
+          "maximum": 0.9980761734232476
+        }
+      }
+    ],
+    "criteria_count_is_not_an_acceptance_condition": true,
+    "tone_status": "applied",
+    "closure": {
+      "status": "converged",
+      "participating_constraints": 3,
+      "iterations": 4,
+      "residual_median_px": 0.4880825020393004,
+      "residual_p95_px": 1.287012288811409,
+      "max_direct_pair_p95_px": 1.3685809081403442,
+      "max_corner_correction_px": 7.828430453398434
+    },
+    "density": {
+      "status": "applied",
+      "factor": 1.095703125,
+      "pixel_count_multiplier": 1.2005653381347656,
+      "canvas_pixels": 107247492,
+      "output_plane_lower_bound_bytes": 1930454856,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 9,
+      "sample_count": 400740,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 20485,
+      "worst_station_index": 2,
+      "worst_source_id": 2,
+      "worst_station_point": [
+        6849.0,
+        481.0
+      ],
+      "direct_pair_p95_output_px": 1.499558377864713,
+      "residual_median_output_px": 0.5347935227422803,
+      "max_corner_correction_output_px": 8.577635711633832,
+      "minimum_scale": 0.9132925352645311,
+      "p01_scale": 0.928699326032602,
+      "median_scale": 0.9936412294767434,
+      "bypass_reason": null
+    },
+    "degradation": {
+      "result": "degraded",
+      "reason_counts": {
+        "grouping_accumulated_motion": 4,
+        "fusion_low_sharpness_region": 6
+      }
+    }
+  },
+  "source_attribution": {
+    "status": "pending_final_output_census",
+    "target": "DSC_6484.NEF",
+    "station_diagnostic_owned_pixels": 13840540,
+    "station_diagnostic_evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/experiments/normalized-prefilter/station.diagnostic.json",
+      "sha256": "0556cc36b6e2ba1e3bfc3a799649e485898d122a66beea4b8d5962ad8668eb76"
+    },
+    "station_diagnostic_is_final_tiff_attribution": false,
+    "formal_report_all_per_raw_virtual_tile_owned_pixels_zero": true,
+    "formal_report_provenance_counts_usable_for_final_raw_attribution": false,
+    "final_output_owned_pixels": null,
+    "roi_owner_path_scope": "ROI origin/descriptor; station-level references may contain multiple actual RAW owners.",
+    "follow_up_v20_capture": {
+      "phase": "v20 independent capture, not original v19 owner-plane evidence",
+      "benchmark": "/Users/dp/Desktop/raw-editor/docs/benchmarks/sleeping-9-v20-purpose-acceptance.json",
+      "binding_manifest": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/manifest.json",
+        "sha256": "152c4f493472de49ea08f42f85bb99ecdfcb4404672070af0fc467ccc1132faa"
+      },
+      "same_final_TIFF_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+      "target_source": "DSC_6484.NEF",
+      "final_coverage_owned_pixels": 9462041,
+      "total_covered_pixels": 97858218,
+      "source_best_focus_acceptance": "not_established"
+    }
+  },
+  "runs": {
+    "cold": {
+      "run_id": "3e6e9b6a-cf35-4237-86ab-82b1f2d0bb41",
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold-stack-reports/stack-report-3e6e9b6a-cf35-4237-86ab-82b1f2d0bb41.json",
+        "sha256": "1c855c6fd277a29b3009aa1b5a08911bcad656cbd2bae93e64580f1a4b75c96c"
+      },
+      "execution_manifest": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/execution.json",
+        "sha256": "f6db5471a21b1dbdf991fc88a7eecb9acb9e417adab06bea71367945c4b2b9e1"
+      },
+      "execution": {
+        "binary": "/private/tmp/raw-editor-v19-prefilter-release-binary",
+        "sha256": "e4dce3a0ef48313a7bf1bd4deb2301119e61cf91ca54c1fc492bb239f6681c9a",
+        "exit_code": 0,
+        "binary_unchanged": true,
+        "wall_seconds": 422.61039450007956,
+        "cache_policy": "new process; run-local caches start empty; OS cache not purged; prior diagnostics read inputs"
+      },
+      "native_process_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 12920078336,
+        "wall_seconds": 421.85196720797103,
+        "user_seconds": 2539.625994,
+        "system_seconds": 40.673402,
+        "child_exit_code": 0,
+        "log_line": 501
+      },
+      "pipeline_seconds": {
+        "preflight_seconds": 0.179322208,
+        "prepare_seconds": 14.522545083,
+        "matching_seconds": 1.7192764170000001,
+        "ordering_seconds": 0.189099,
+        "render_seconds": 401.919903833,
+        "total_seconds": 418.561728166
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 85,
+        "raw_decode_count": 85,
+        "failed_count": 0
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 68,
+        "misses": 76,
+        "render_hits": 13,
+        "render_misses": 59,
+        "quality_gate_hits": 55,
+        "quality_gate_misses": 17,
+        "evictions": 72,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 236.43360199900002,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 33,
+        "evictions": 0,
+        "resident_bytes": 14155776,
+        "resident_entries": 33,
+        "peak_bytes": 14155776
+      },
+      "quality_timing": {
+        "decode_seconds": 7.911541876,
+        "reference_resampling_seconds": 20.483738665999997,
+        "local_scale_seconds": 0.000343792,
+        "slanted_edge_mtf_seconds": 7.442913874,
+        "gradient_seconds": 0.097512793,
+        "noise_seconds": 0.14291624599999997,
+        "delta_e_seconds": 0.0023262079999999997,
+        "roi_sampling_seconds": 20.759660501000003,
+        "boundary_seconds": 0.201922959,
+        "effective_coverage_seconds": 0.016157083,
+        "owner_source_decode_count": 13,
+        "roi_reference_count": 33,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 33,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 14155776,
+        "roi_cache_peak_bytes": 14155776
+      },
+      "sampled_resources": {
+        "peak_rss_bytes": 12900909056,
+        "rss_sample_count": 825,
+        "memory_threshold_bytes": 25769803776,
+        "memory_threshold_exceeded": false
+      },
+      "quality_gate_verdict": "pass",
+      "degradation_result": "degraded",
+      "output": {
+        "written": true,
+        "artifact_validation": "pass",
+        "artifact_validation_error": null,
+        "format": "TIFF",
+        "width": 15897,
+        "height": 6720,
+        "bit_depth": 16,
+        "icc": "sRGB",
+        "alpha_preserved": true,
+        "tiff_extra_samples": [
+          2
+        ],
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold/run/sleeping-9-6479-s1-v19-prefilter-release-cold.tiff",
+        "file_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "file_bytes": 854628326,
+        "hash_evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json"
+      }
+    },
+    "hot": {
+      "run_id": "a7a7a989-982a-4a1f-bfc4-28c99f28c553",
+      "report": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot-stack-reports/stack-report-a7a7a989-982a-4a1f-bfc4-28c99f28c553.json",
+        "sha256": "32c94f57f69aab2f9f2cc52f1b8e448acbf86ef5b8e5cd3cc6925d5732b617b4"
+      },
+      "execution_manifest": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/execution.json",
+        "sha256": "00ee93eaddf65e994f1abebd2e048c409bbd511ed5cafd9811364acf76ba80ff"
+      },
+      "execution": {
+        "binary": "/private/tmp/raw-editor-v19-prefilter-release-binary",
+        "sha256": "e4dce3a0ef48313a7bf1bd4deb2301119e61cf91ca54c1fc492bb239f6681c9a",
+        "exit_code": 0,
+        "binary_unchanged": true,
+        "wall_seconds": 412.73525595793035,
+        "cache_policy": "new process; run-local caches start empty; OS cache not purged; prior diagnostics read inputs"
+      },
+      "native_process_usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 12425183232,
+        "wall_seconds": 412.561307416996,
+        "user_seconds": 2537.63977,
+        "system_seconds": 31.470512,
+        "child_exit_code": 0,
+        "log_line": 501
+      },
+      "pipeline_seconds": {
+        "preflight_seconds": 0.176540834,
+        "prepare_seconds": 12.727227625,
+        "matching_seconds": 1.759991125,
+        "ordering_seconds": 0.1763655,
+        "render_seconds": 394.968736416,
+        "total_seconds": 409.841383958
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 85,
+        "raw_decode_count": 85,
+        "failed_count": 0
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 68,
+        "misses": 76,
+        "render_hits": 13,
+        "render_misses": 59,
+        "quality_gate_hits": 55,
+        "quality_gate_misses": 17,
+        "evictions": 72,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 234.434630082,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 33,
+        "evictions": 0,
+        "resident_bytes": 14155776,
+        "resident_entries": 33,
+        "peak_bytes": 14155776
+      },
+      "quality_timing": {
+        "decode_seconds": 7.769614874000001,
+        "reference_resampling_seconds": 19.518618826999994,
+        "local_scale_seconds": 0.000332833,
+        "slanted_edge_mtf_seconds": 7.4479005019999995,
+        "gradient_seconds": 0.09766108399999998,
+        "noise_seconds": 0.138009791,
+        "delta_e_seconds": 0.0023971670000000004,
+        "roi_sampling_seconds": 19.773326122999997,
+        "boundary_seconds": 0.181665416,
+        "effective_coverage_seconds": 0.012459042,
+        "owner_source_decode_count": 13,
+        "roi_reference_count": 33,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 33,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 14155776,
+        "roi_cache_peak_bytes": 14155776
+      },
+      "sampled_resources": {
+        "peak_rss_bytes": 12401688576,
+        "rss_sample_count": 808,
+        "memory_threshold_bytes": 25769803776,
+        "memory_threshold_exceeded": false
+      },
+      "quality_gate_verdict": "pass",
+      "degradation_result": "degraded",
+      "output": {
+        "written": true,
+        "artifact_validation": "pass",
+        "artifact_validation_error": null,
+        "format": "TIFF",
+        "width": 15897,
+        "height": 6720,
+        "bit_depth": 16,
+        "icc": "sRGB",
+        "alpha_preserved": true,
+        "tiff_extra_samples": [
+          2
+        ],
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/hot/run/sleeping-9-6479-s1-v19-prefilter-release-hot.tiff",
+        "file_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+        "file_bytes": 854628326,
+        "hash_evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json"
+      }
+    }
+  },
+  "cold_hot_consistency": {
+    "evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json",
+      "sha256": "89410720fc756982b92674011013668993ab11e8452de5b974786889885c9e7c"
+    },
+    "verified_fields": [
+      "intra_station",
+      "closure",
+      "composition",
+      "virtual_tiles",
+      "quality_gate.criteria",
+      "quality_gate.roi_count",
+      "quality_gate.roi_photometry",
+      "quality_gate.owner_reverse_lookup_failures",
+      "quality_gate.confidence_scores",
+      "quality_gate.unmeasurable",
+      "TIFF_bytes_identical"
+    ],
+    "field_check_results": {
+      "intra_station": true,
+      "closure": true,
+      "composition": true,
+      "virtual_tiles": true,
+      "quality_gate.criteria": true,
+      "quality_gate.roi_count": true,
+      "quality_gate.roi_photometry": true,
+      "quality_gate.owner_reverse_lookup_failures": true,
+      "quality_gate.confidence_scores": true,
+      "quality_gate.unmeasurable": true,
+      "TIFF_bytes_identical": true
+    },
+    "tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+    "all_reports_identical_claimed": false,
+    "report_timing_expected_to_differ": true
+  },
+  "baseline_v18": {
+    "binary_sha256": "7263f27b9a9395dc7cc405602b36734e455b14d564b47dd5cd6bb233589adff9",
+    "report_path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified-stack-reports/stack-report-6c497474-e6c3-456b-8cb4-3beb3de4b16d.json",
+    "kind": "single native export regression; not a controlled simultaneous prefilter-only A/B",
+    "effective_source_count": 8,
+    "fusion_count": 6,
+    "fusion_seconds": 171.290323833,
+    "raw_decode_count": 70,
+    "pipeline_seconds": 348.986939625,
+    "os_wall_seconds": 353.5214722920209,
+    "os_peak_rss_bytes": 11333681152
+  },
+  "performance_change_vs_v18": {
+    "cold": {
+      "fusion_seconds": {
+        "v18": 171.290323833,
+        "v19": 236.43360199900002,
+        "difference": 65.14327816600002,
+        "percent_change": 38.03091541207642
+      },
+      "raw_decode_count": {
+        "v18": 70,
+        "v19": 85,
+        "difference": 15,
+        "percent_change": 21.42857142857142
+      },
+      "pipeline_seconds": {
+        "v18": 348.986939625,
+        "v19": 418.561728166,
+        "difference": 69.57478854100003,
+        "percent_change": 19.936215554588046
+      },
+      "os_wall_seconds": {
+        "v18": 353.5214722920209,
+        "v19": 421.85196720797103,
+        "difference": 68.33049491595011,
+        "percent_change": 19.32852747894951
+      },
+      "os_peak_rss_bytes": {
+        "v18": 11333681152,
+        "v19": 12920078336,
+        "difference": 1586397184,
+        "percent_change": 13.997192639569334
+      }
+    },
+    "hot": {
+      "fusion_seconds": {
+        "v18": 171.290323833,
+        "v19": 234.434630082,
+        "difference": 63.14430624900001,
+        "percent_change": 36.86390733347129
+      },
+      "raw_decode_count": {
+        "v18": 70,
+        "v19": 85,
+        "difference": 15,
+        "percent_change": 21.42857142857142
+      },
+      "pipeline_seconds": {
+        "v18": 348.986939625,
+        "v19": 409.841383958,
+        "difference": 60.854444333000004,
+        "percent_change": 17.437456083138937
+      },
+      "os_wall_seconds": {
+        "v18": 353.5214722920209,
+        "v19": 412.561307416996,
+        "difference": 59.03983512497507,
+        "percent_change": 16.70049480790976
+      },
+      "os_peak_rss_bytes": {
+        "v18": 11333681152,
+        "v19": 12425183232,
+        "difference": 1091502080,
+        "percent_change": 9.630605143743498
+      }
+    }
+  },
+  "performance_interpretation": [
+    "No performance improvement over v18 is established; fusion remains six, RAW decodes increase from 70 to 85.",
+    "Nine effective sources replace eight; density and final canvas change, so all cost increases cannot be attributed to prefilter alone.",
+    "StationFusion graph_cut_seconds uses cumulative elapsed time, not pure graph-cut kernel timing.",
+    "QG owner_source_decode_count, source cache QG misses, and SourcePreflight RAW decode counters have distinct scopes.",
+    "Sampled pipeline RSS and OS child maximum RSS including export remain separate."
+  ],
+  "visual_review": {
+    "status": "sampled_review_completed_full_visual_acceptance_not_passed",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual",
+    "final_manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/manifest.json",
+      "sha256": "e705caefa5e242242bded7f9cee9a1c630f5336f75d8a500214230c849675e65"
+    },
+    "root_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/root-review.json",
+      "sha256": "76d170af325038b3f117ef867cbf709fc2fa9808f114fbaaba44e64e48bf84d7"
+    },
+    "independent_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/independent-review.json",
+      "sha256": "1e5d4034b1c70f98b9be170708912c3d959b85dea61990aa628ed6f72d8e30c3"
+    },
+    "source_tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+    "reuse_v18_visual_acceptance": false,
+    "cold_hot_same_tiff_allows_same_coordinate_review": true,
+    "reviewed_window_counts": {
+      "available": 30,
+      "root": 18,
+      "independent": 15,
+      "unique_across_both": 30,
+      "overlap": [
+        "qg-roi-03",
+        "qg-roi-04",
+        "upper-coverage-step"
+      ],
+      "not_in_saved_reviews": []
+    },
+    "overview_resized": true,
+    "native_crop_resampling": "none",
+    "native_png_bit_depth": 16,
+    "screen_display_precision_not_proven": true,
+    "positive_sample_observation": "Inspected rail joints, center rail, central stool foot and shoe outlines are continuous without a confirmed large displacement double contour; bounded windows only.",
+    "open_visual_findings": [
+      "Large left, small left and right seal strokes are visibly soft; source-matched sharpness and cause have not been established.",
+      "Weave clarity, horizontal bands and faint paper/ink marks vary by region; output-only inspection does not prove best focus.",
+      "Small separated alpha-zero spans were confirmed below the upper exterior boundary and near the lower-right boundary; they must not be dismissed as only the external coverage silhouette."
+    ],
+    "confirmed_alpha_holes": {
+      "coordinate_system": "zero-based native final TIFF canvas; x endpoints inclusive",
+      "unique_pixels_in_checked_spans": 63,
+      "upper_unique_pixels": 59,
+      "lower_right_unique_pixels": 4,
+      "spans": [
+        {
+          "canvas_y": 522,
+          "canvas_x_inclusive": [
+            9345,
+            9348
+          ],
+          "alpha_u16": 0,
+          "pixels": 4,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-08.png",
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/upper-coverage-step.png"
+          ]
+        },
+        {
+          "canvas_y": 523,
+          "canvas_x_inclusive": [
+            9389,
+            9398
+          ],
+          "alpha_u16": 0,
+          "pixels": 10,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-08.png",
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/upper-coverage-step.png"
+          ]
+        },
+        {
+          "canvas_y": 524,
+          "canvas_x_inclusive": [
+            9434,
+            9447
+          ],
+          "alpha_u16": 0,
+          "pixels": 14,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-08.png",
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/upper-coverage-step.png"
+          ]
+        },
+        {
+          "canvas_y": 525,
+          "canvas_x_inclusive": [
+            9478,
+            9497
+          ],
+          "alpha_u16": 0,
+          "pixels": 20,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-08.png",
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/upper-coverage-step.png"
+          ]
+        },
+        {
+          "canvas_y": 526,
+          "canvas_x_inclusive": [
+            9523,
+            9533
+          ],
+          "alpha_u16": 0,
+          "pixels": 11,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-08.png",
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/upper-coverage-step.png"
+          ]
+        },
+        {
+          "canvas_y": 6459,
+          "canvas_x_inclusive": [
+            15645,
+            15648
+          ],
+          "alpha_u16": 0,
+          "pixels": 4,
+          "evidence_pngs": [
+            "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/qg-roi-07.png"
+          ]
+        }
+      ],
+      "alpha_verification": "independent review decoded original RGBA16 PNG alpha; neighbouring checked alpha values were 65535; no new TIFF or RAW decode",
+      "duplicate_evidence_not_double_counted": true,
+      "qg_context_caveat": "Upper holes in qg-roi-08 are at context local y=138..142, outside the central 256px QG ROI starting at local y=256.",
+      "whole_image_hole_census": "not_performed",
+      "cause": "pending_coverage_owner_trace"
+    },
+    "boundary_content_not_applicable_preserved": true,
+    "source_reference_comparison": "pending; next capture compares selected owners, not all-candidate best focus",
+    "full_native_visual_acceptance": false,
+    "final_output_source_attribution": "pending",
+    "all_exported_windows_reviewed": true,
+    "follow_up_v20_selected_owner_review": {
+      "status": "eight_bounded_pairs_reviewed",
+      "root_review": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/root-source-review.json",
+        "sha256": "df05257d8e8c2141858d09e0193a076b80b4ad6f6619b176527f0aa986a2b00e"
+      },
+      "independent_review": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/capture/source-visual-binding/independent-source-review.json",
+        "sha256": "bd4b334947ed5105b335806e2995aa1e9091997003809b24ca9ac3b38ed3c121"
+      },
+      "best_focus": "not_established"
+    },
+    "exported_window_coverage_scope": "All 30 exported native samples actually viewed across both reviewers; not whole-image pixel coverage or all-source focus proof."
+  },
+  "next_stage": {
+    "payload_purpose_split": "v20 same-nine cold/hot performance equivalence completed; see v20 benchmark",
+    "cpu_optimization": "v20 combined-candidate performance equivalence completed; not isolated causal timing",
+    "read_only_qg_source_capture": "v20 complete; eight ROI final TIFF binding and final owner census recorded separately",
+    "v20_build": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v20-purpose/build.json",
+      "sha256": "4a3b1670abbe8febf9321a664af59ca3651c7224d16faf845a7de5c07c8ef910"
+    },
+    "v20_binary_sha256": "08f33e2d9c964fd5a09f1b67e36d2c571d9f73693f7eb8214ded52bbada010a6",
+    "v20_real_measurements": "cold/hot completed; independent capture excluded from performance pair",
+    "visual_defect_followup": "Trace the six confirmed alpha-zero spans through coverage/owner writes; compare soft regions to mapped selected owner sources, then focus candidates if needed."
+  },
+  "evidence_index": {
+    "summary": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/summary.json",
+      "sha256": "83bee8f43f384b1ef044092502d96cb2d06b0209eb34e9562f0fc4eb0405193c"
+    },
+    "verification": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/cold-hot-verification.json",
+      "sha256": "89410720fc756982b92674011013668993ab11e8452de5b974786889885c9e7c"
+    },
+    "documentation": "/Users/dp/Desktop/raw-editor/docs/focus-stack-performance-optimization.md",
+    "visual_manifest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/manifest.json",
+      "sha256": "e705caefa5e242242bded7f9cee9a1c630f5336f75d8a500214230c849675e65"
+    },
+    "visual_root_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/root-review.json",
+      "sha256": "76d170af325038b3f117ef867cbf709fc2fa9808f114fbaaba44e64e48bf84d7"
+    },
+    "visual_independent_review": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v19-registration/prefilter-release/visual/independent-review.json",
+      "sha256": "1e5d4034b1c70f98b9be170708912c3d959b85dea61990aa628ed6f72d8e30c3"
+    }
+  },
+  "limitations": [
+    "MTF has only one measurable sample out of 512 candidates and remains not_applicable.",
+    "Boundary has zero measurable samples out of 372 and remains not_applicable.",
+    "Degradation retains grouping motion and low-sharpness regions.",
+    "Native sampled visual review is complete but full visual acceptance is not passed: soft seals/source-reference comparisons and confirmed separated alpha-zero holes remain open.",
+    "Only checked native windows and six alpha spans are covered; no whole-image sharpness or hole-census claim.",
+    "Final per-source output owner census remains pending; station-local ownership is not final TIFF attribution.",
+    "v20 implementation/unit validation does not retroactively change the frozen v19 report, TIFF, or acceptance.",
+    "No overall all-gates-passed claim is made."
+  ],
+  "updated_at": "2026-11-02T14:04:31.715026+00:00"
+}

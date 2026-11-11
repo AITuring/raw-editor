@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "created_at_utc": "2026-11-02T16:55:48.250978+00:00",
+  "phase": "v21-bounded-native-hole-diagnosis",
+  "status": {
+    "execution": "completed",
+    "v20_output_and_report_equivalence": "pass",
+    "source_visual_binding": "bound_eight_rois",
+    "point_binding": "bound_89_points",
+    "observed_hole_failure_chain": "identified_for_63_requested_pixels",
+    "holes_repaired": false,
+    "full_native_quality_acceptance": false,
+    "performance_comparable": false
+  },
+  "build": {
+    "binary": "/private/tmp/raw-editor-v21-trace-release-binary",
+    "sha256": "83a74b2eef821d4f326641bf6ea430b74bdc70064604e937a9f83fe5a1df1aa0",
+    "profile": "release",
+    "validation": {
+      "cargo_fmt": "pass",
+      "cargo_check": "pass",
+      "native_point_trace": 4,
+      "full_library": {
+        "passed": 999,
+        "failed": 0,
+        "ignored": 40,
+        "seconds": 157.22
+      }
+    }
+  },
+  "configuration": {
+    "subset": "sleeping-9-6479",
+    "scale": 1,
+    "source_render_cache_max_bytes": 2400000000,
+    "native_fusion_cache_max_bytes": 4294967296,
+    "coverage_alpha": true,
+    "preview_only": false,
+    "clean_raw_editor_environment": true,
+    "quality_thresholds_changed": false,
+    "rss_gate_changed": false,
+    "capture_enabled": true
+  },
+  "point_input": {
+    "sha256": "6ca08aad4c67c719d3e38cdc5808c6131d504d8d65cf9b0c3aae8706f7bb68bb",
+    "count": 89,
+    "roles": {
+      "known_hole": 63,
+      "opaque_control": 24,
+      "outside_coverage_control": 2
+    },
+    "reference_canvas_origin": [
+      -108.0,
+      -49.0
+    ],
+    "maximum": 128
+  },
+  "equivalence": {
+    "evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/comparison-to-v20.json",
+      "sha256": "e28e99b9f02ed817e47ac8b51a117700cfe550d7f08481329362bda71675e3a1"
+    },
+    "check_count": 14,
+    "checks": {
+      "sources": "pass",
+      "geometry": "pass",
+      "virtual_tiles": "pass",
+      "grouping": "pass",
+      "topology": "pass",
+      "input": "pass",
+      "virtual_tile_cache": "pass",
+      "quality_gate_without_timing": "pass",
+      "owner_evidence": "pass",
+      "output_contract": "pass",
+      "tone": "pass",
+      "degradation": "pass",
+      "memory_budget": "pass",
+      "tiff_sha256": "pass"
+    },
+    "tiff_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+    "tiff_bytes": 854628326,
+    "tiff_dimensions": [
+      15897,
+      6720
+    ],
+    "new_tiff_hash_computed_by_this_extraction": false
+  },
+  "bindings": {
+    "source_visual": {
+      "evidence": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/source-visual-binding/manifest.json",
+        "sha256": "bda080058594a8c5c7651c1a440cdd0588b197c5d5f000022157d0ef48e59a82"
+      },
+      "status": "bound",
+      "roi_count": 8,
+      "final_qg_iteration": 1
+    },
+    "point_trace": {
+      "evidence": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/point-trace-binding/summary.json",
+        "sha256": "4f257195ca06baac6dd8568b6adbb4dde7022617addb667b5976ee0d711304a7"
+      },
+      "status": "bound",
+      "exact_count": 89,
+      "bound_compositor_iteration": 1,
+      "raw_final_iteration": null
+    },
+    "process_id": 45969,
+    "independent_iteration_counters": true,
+    "role_results": {
+      "known_hole": {
+        "count": 63,
+        "exact_trace_tiff_count": 63,
+        "alpha_zero_count": 63,
+        "alpha_opaque_count": 0,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 63,
+        "compositor_station_owner_counts": {
+          "0": 63
+        }
+      },
+      "opaque_control": {
+        "count": 24,
+        "exact_trace_tiff_count": 24,
+        "alpha_zero_count": 0,
+        "alpha_opaque_count": 24,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 24,
+        "compositor_station_owner_counts": {
+          "1": 24
+        }
+      },
+      "outside_coverage_control": {
+        "count": 2,
+        "exact_trace_tiff_count": 2,
+        "alpha_zero_count": 2,
+        "alpha_opaque_count": 0,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 2,
+        "compositor_station_owner_counts": {
+          "0": 2
+        }
+      }
+    }
+  },
+  "diagnosis": {
+    "active_compositor_station_owner": 1,
+    "active_topology_station_id": 2,
+    "station_actual_status_counts": [
+      {
+        "compositor_station_owner": 1,
+        "topology_station_id": 2,
+        "by_role": {
+          "known_hole": {
+            "native_sample_returned_none": 63
+          },
+          "opaque_control": {
+            "mask_written": 24
+          },
+          "outside_coverage_control": {
+            "native_sample_returned_none": 2
+          }
+        }
+      },
+      {
+        "compositor_station_owner": 2,
+        "topology_station_id": 0,
+        "by_role": {
+          "known_hole": {
+            "outside_station_bbox": 63
+          },
+          "opaque_control": {
+            "outside_station_bbox": 24
+          },
+          "outside_coverage_control": {
+            "outside_station_bbox": 2
+          }
+        }
+      },
+      {
+        "compositor_station_owner": 3,
+        "topology_station_id": 1,
+        "by_role": {
+          "known_hole": {
+            "outside_station_bbox": 63
+          },
+          "opaque_control": {
+            "outside_station_bbox": 24
+          },
+          "outside_coverage_control": {
+            "outside_station_bbox": 2
+          }
+        }
+      }
+    ],
+    "failed_to_valid_source": [
+      {
+        "failed_source": "DSC_6482.NEF",
+        "valid_alternative_source": "DSC_6479.NEF",
+        "failed_local_owner": 4,
+        "valid_local_owner": 1,
+        "point_count": 4
+      },
+      {
+        "failed_source": "DSC_6482.NEF",
+        "valid_alternative_source": "DSC_6480.NEF",
+        "failed_local_owner": 4,
+        "valid_local_owner": 3,
+        "point_count": 59
+      }
+    ],
+    "black_threshold_reached_for_holes": 0,
+    "valid_alternative_is_repaired_pixel": false,
+    "opaque_selected_source_counts": {
+      "DSC_6480.NEF": 10,
+      "DSC_6482.NEF": 12,
+      "DSC_6479.NEF": 2
+    },
+    "external_controls_all_nine_local_owners_zero": true,
+    "all_holes_still_alpha_zero": true
+  },
+  "quality": {
+    "reported_verdict": "pass",
+    "roi_count": 8,
+    "criteria": [
+      {
+        "name": "local_scale_median",
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "local_scale_pixel_ratio",
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "effective_pixel_count",
+        "verdict": "pass",
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "mtf50_normalized",
+        "verdict": "not_applicable",
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 512,
+        "eligible_count": 1,
+        "rejected_content_count": 511,
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 433,
+          "slanted_edge_line_fit_residual_exceeded": 25,
+          "slanted_edge_too_short": 53
+        },
+        "threshold": 0.93,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "gradient_energy_normalized",
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 0.95,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "noise_sigma_ratio",
+        "verdict": "pass",
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "candidate_count": 45,
+        "eligible_count": 24,
+        "rejected_content_count": 21,
+        "rejected_content_reasons": {
+          "roi_not_flat": 21
+        },
+        "threshold": 0.85,
+        "threshold_min": 0.85,
+        "threshold_max": 1.15
+      },
+      {
+        "name": "roi_delta_e00",
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 2.0,
+        "threshold_min": null,
+        "threshold_max": null
+      },
+      {
+        "name": "boundary_stroke_alignment",
+        "verdict": "not_applicable",
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "candidate_count": 372,
+        "eligible_count": 0,
+        "rejected_content_count": 372,
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 372
+        },
+        "threshold": 1.5,
+        "threshold_min": null,
+        "threshold_max": 3.0
+      },
+      {
+        "name": "owner_sharpness_coverage",
+        "verdict": "pass",
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null
+      }
+    ],
+    "technical_unmeasurable": [],
+    "degradation_result": "degraded",
+    "degradation_reason_counts": {
+      "grouping_accumulated_motion": 4,
+      "fusion_low_sharpness_region": 6
+    }
+  },
+  "diagnostic_performance_observations_only": {
+    "raw_decode_count": 67,
+    "fusion_count": 6,
+    "fusion_seconds": 211.509005001,
+    "pipeline_seconds": 361.673883625,
+    "native_child": {
+      "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+      "max_rss_bytes": 11925143552,
+      "wall_seconds": 364.39886854193173,
+      "user_seconds": 2191.052393,
+      "system_seconds": 27.544722,
+      "child_exit_code": 0
+    },
+    "sampled_peak_rss_bytes": 11876253696,
+    "includes_trace_and_capture_io": true,
+    "no_speed_or_rss_improvement_claim": true
+  },
+  "final_QG_source_owner_census": {
+    "covered_owner_zero_pixels": 0,
+    "covered_pixels": 97858218,
+    "owners": [
+      {
+        "owner": 1,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "pixels": 21070008
+      },
+      {
+        "owner": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "pixels": 9462041
+      },
+      {
+        "owner": 3,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "pixels": 4119355
+      },
+      {
+        "owner": 4,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "pixels": 8983597
+      },
+      {
+        "owner": 5,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "pixels": 2570459
+      },
+      {
+        "owner": 6,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "pixels": 17787899
+      },
+      {
+        "owner": 7,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "pixels": 10601413
+      },
+      {
+        "owner": 8,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "pixels": 11893911
+      },
+      {
+        "owner": 9,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "pixels": 11369535
+      }
+    ],
+    "scope": "actual final QG input owner plane, coverage != 0 only",
+    "uncovered_pixels": 8969622
+  },
+  "next_step": "Separate frozen shared geometric resolver candidate; targeted regression plus same-nine native TIFF/QG/controls/source evidence and visual acceptance. No repair acceptance yet.",
+  "evidence": {
+    "build": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/build.json",
+      "sha256": "2dbe3449f426378a9d21315b0f8a985fbf8d35634dfaa6f5dd11203979646304"
+    },
+    "execution": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/execution.json",
+      "sha256": "1975592640626fda32319822a3ee705b94da54ea5c36e7c7c622eefa45942287"
+    },
+    "comparison": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/comparison-to-v20.json",
+      "sha256": "e28e99b9f02ed817e47ac8b51a117700cfe550d7f08481329362bda71675e3a1"
+    },
+    "point_binding": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/point-trace-binding/summary.json",
+      "sha256": "4f257195ca06baac6dd8568b6adbb4dde7022617addb667b5976ee0d711304a7"
+    },
+    "source_binding": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/source-visual-binding/manifest.json",
+      "sha256": "bda080058594a8c5c7651c1a440cdd0588b197c5d5f000022157d0ef48e59a82"
+    },
+    "trace": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/point-trace/process-45969/iteration-0001/trace.json",
+      "sha256": "a3b255e621ed5fe7120c5de51665bec8a7c700a1365509764b3fae104af5b80c"
+    },
+    "latest": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/point-trace/process-45969/latest.json",
+      "sha256": "688aeb0ba46952b63270a631f9a212543f7e4f22c19e4788574c8e4f28c73ff1"
+    },
+    "alpha_evidence": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/points-evidence.json",
+      "sha256": "80edce109c904c42023e7f0325f52f9e09f8df39bfa02be4b7364d576a58a568"
+    },
+    "report": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/trace/run/sleeping-9-6479-s1-v21-holes-release-trace-stack-reports/stack-report-12e5ad8c-ca95-409e-9054-fc6e34df2d68.json",
+      "sha256": "155a14526295e6847afffc102a48d71955dcb054773dd133dd5d75b55c9a05cc"
+    }
+  },
+  "limitations": [
+    "Not a full-image hole census or proof of every possible cause.",
+    "Diagnostic valid alternatives were sampled read-only and were not selected/written by this frozen binary.",
+    "Compositor station owner, local legend owner and final global RAW owner remain separate.",
+    "No production black threshold or coverage mask was changed.",
+    "A shared geometric resolver candidate is separate future work requiring another frozen build and acceptance."
+  ],
+  "diagnosis_evidence": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v21-holes/hole-diagnosis.json",
+    "sha256": "029c0d96f2d08dbd7087aba6747de2bf9e2b10fac71b7beac6576bf808ef7f6b"
+  }
+}

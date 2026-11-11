@@ -1,0 +1,392 @@
+{
+  "schema": 1,
+  "status": "attempts_completed_with_recorded_verdicts",
+  "scope": "Native scale=1 default-cache cross-material attempts, not blanket quality acceptance",
+  "baseline_commit": "504d904ff77781ac13e57f52c13fef8024b6c961",
+  "quality_gate_changed": false,
+  "source_code_changed": false,
+  "source_cache_override": null,
+  "native_fusion_cache_override": null,
+  "rows": [
+    {
+      "dataset": "langyuan",
+      "subset": "langyuan-10",
+      "input_count": 10,
+      "scale": 1,
+      "status": "rejected",
+      "harness_exit_code": 1,
+      "selected_path": "layered_virtual_tile",
+      "station_count": 3,
+      "connected_components": 3,
+      "closure_status": "not_run",
+      "accepted_relation_count": 0,
+      "candidate_relation_count": 3,
+      "relation_unmeasured_count": 3,
+      "relation_rejected_by_reason": {
+        "station_relation_edge_orientation_mismatch": 1,
+        "station_relation_edge_strength_mismatch": 1,
+        "station_relation_photometric_mismatch": 1,
+        "station_relation_scale_out_of_range": 3
+      },
+      "relation_rejected_by_failure_stage": {
+        "polished_fit_failed": 3
+      },
+      "candidate_support": [
+        {
+          "left": 1,
+          "right": 2,
+          "failure_stage": "polished_fit_failed",
+          "model_fitted": false,
+          "bidirectional_match_count": 6,
+          "occupied_grid_cells": 1
+        },
+        {
+          "left": 0,
+          "right": 1,
+          "failure_stage": "polished_fit_failed",
+          "model_fitted": false,
+          "bidirectional_match_count": 14,
+          "occupied_grid_cells": 1
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "failure_stage": "polished_fit_failed",
+          "model_fitted": false,
+          "bidirectional_match_count": 2,
+          "occupied_grid_cells": 4
+        }
+      ],
+      "quality_gate": "not_run",
+      "roi_count": 0,
+      "criterion_verdicts": {},
+      "degradation_reasons": {
+        "grouping_accumulated_motion": 1,
+        "fusion_low_sharpness_region": 2,
+        "station_relation_scale_out_of_range": 3,
+        "station_relation_photometric_mismatch": 1,
+        "station_relation_edge_strength_mismatch": 1,
+        "station_relation_edge_orientation_mismatch": 1,
+        "geometry_disconnected": 1
+      },
+      "harness_failures": [
+        "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/real-materials-v30-default-cache/langyuan-10/run/langyuan-10-s1-v30-default.log",
+        "no focus-stack result line in the log",
+        "acceptance metrics were not written",
+        "full-resolution TIFF is missing or empty",
+        "the Stack_Report has no verified TIFF export at the requested path",
+        "verified TIFF dimensions do not match the rendered result",
+        "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])"
+      ],
+      "summary_verdict": "failed",
+      "output_written": false,
+      "output_dimensions": [
+        0,
+        0
+      ],
+      "output_artifact_validation": "not_run",
+      "output_sha256": null,
+      "raw_decode_count": 20,
+      "native_fusion_cache_fusion_count": 0,
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 10568269824,
+        "wall_seconds": 191.79539283295162,
+        "user_seconds": 1144.429647,
+        "system_seconds": 13.848689,
+        "child_exit_code": 101
+      },
+      "input_hashes_unchanged": true,
+      "reference_present": true,
+      "reference_unchanged": true,
+      "report_sha256": "5dc1b549d4aaecd537fd07a7f8daa1bde03c7de03d287f6dc6428ea3fabaa6c1",
+      "analysis_sha256": "f3c8127df14b6974f701311943ffddcf6a75cd8332eb5416cf6611016ae98353",
+      "legacy_behavior_observations": {
+        "orderedInputs": null,
+        "streamedSources": null,
+        "ownershipVerified": false,
+        "artifactContract": "fail",
+        "metrics": null
+      },
+      "source_scan": {
+        "singleton_station_count": 0,
+        "multi_frame_station_count": 3,
+        "singleton_ratio": 0.0,
+        "detected": false,
+        "isolated_source_count": 0
+      },
+      "source_render_cache": {
+        "max_bytes": 0,
+        "hits": 0,
+        "misses": 0,
+        "render_hits": 0,
+        "render_misses": 0,
+        "quality_gate_hits": 0,
+        "quality_gate_misses": 0,
+        "evictions": 0,
+        "oversized_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 0
+      },
+      "reference_metrics_are_quality_gate": false
+    },
+    {
+      "dataset": "wenyuan",
+      "subset": "wenyuan-10",
+      "input_count": 10,
+      "scale": 1,
+      "status": "rejected",
+      "harness_exit_code": 1,
+      "selected_path": "layered_virtual_tile",
+      "station_count": 3,
+      "connected_components": 2,
+      "closure_status": "not_run",
+      "accepted_relation_count": 1,
+      "candidate_relation_count": 3,
+      "relation_unmeasured_count": 2,
+      "relation_rejected_by_reason": {
+        "station_relation_scale_out_of_range": 2
+      },
+      "relation_rejected_by_failure_stage": {
+        "polished_fit_failed": 2
+      },
+      "candidate_support": [
+        {
+          "left": 0,
+          "right": 1,
+          "failure_stage": "fitted",
+          "model_fitted": true,
+          "bidirectional_match_count": 452,
+          "occupied_grid_cells": 32
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "failure_stage": "polished_fit_failed",
+          "model_fitted": false,
+          "bidirectional_match_count": 2,
+          "occupied_grid_cells": 0
+        },
+        {
+          "left": 1,
+          "right": 2,
+          "failure_stage": "polished_fit_failed",
+          "model_fitted": false,
+          "bidirectional_match_count": 1,
+          "occupied_grid_cells": 0
+        }
+      ],
+      "quality_gate": "not_run",
+      "roi_count": 0,
+      "criterion_verdicts": {},
+      "degradation_reasons": {
+        "grouping_accumulated_motion": 3,
+        "fusion_low_sharpness_region": 3,
+        "station_relation_scale_out_of_range": 2,
+        "geometry_disconnected": 1
+      },
+      "harness_failures": [
+        "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/real-materials-v30-default-cache/wenyuan-10/run/wenyuan-10-s1-v30-default.log",
+        "no focus-stack result line in the log",
+        "acceptance metrics were not written",
+        "full-resolution TIFF is missing or empty",
+        "the Stack_Report has no verified TIFF export at the requested path",
+        "verified TIFF dimensions do not match the rendered result",
+        "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])"
+      ],
+      "summary_verdict": "failed",
+      "output_written": false,
+      "output_dimensions": [
+        0,
+        0
+      ],
+      "output_artifact_validation": "not_run",
+      "output_sha256": null,
+      "raw_decode_count": 20,
+      "native_fusion_cache_fusion_count": 0,
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9267986432,
+        "wall_seconds": 212.491898208973,
+        "user_seconds": 1249.375992,
+        "system_seconds": 20.705381,
+        "child_exit_code": 101
+      },
+      "input_hashes_unchanged": true,
+      "reference_present": false,
+      "reference_unchanged": true,
+      "report_sha256": "1c160bb49ed6767c3430cd903b1afcad92d593be3156dc0b5ebb66237e8077e4",
+      "analysis_sha256": "d9f1f2005a6b2ad3d9e746c3748bf3a19714f071e4047b063c3ccccf9546ec70",
+      "legacy_behavior_observations": {
+        "orderedInputs": null,
+        "streamedSources": null,
+        "ownershipVerified": false,
+        "artifactContract": "fail",
+        "metrics": null
+      },
+      "source_scan": {
+        "singleton_station_count": 0,
+        "multi_frame_station_count": 3,
+        "singleton_ratio": 0.0,
+        "detected": false,
+        "isolated_source_count": 0
+      },
+      "source_render_cache": {
+        "max_bytes": 0,
+        "hits": 0,
+        "misses": 0,
+        "render_hits": 0,
+        "render_misses": 0,
+        "quality_gate_hits": 0,
+        "quality_gate_misses": 0,
+        "evictions": 0,
+        "oversized_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 0
+      },
+      "reference_metrics_are_quality_gate": false
+    },
+    {
+      "dataset": "lanting",
+      "subset": null,
+      "input_count": 45,
+      "scale": 1,
+      "status": "rejected",
+      "harness_exit_code": 1,
+      "selected_path": "legacy_single_layer_mosaic",
+      "station_count": 44,
+      "connected_components": 0,
+      "closure_status": "not_run",
+      "accepted_relation_count": 0,
+      "candidate_relation_count": 0,
+      "relation_unmeasured_count": 0,
+      "relation_rejected_by_reason": {},
+      "relation_rejected_by_failure_stage": {},
+      "candidate_support": [],
+      "quality_gate": "insufficient_evidence",
+      "roi_count": 0,
+      "criterion_verdicts": {},
+      "degradation_reasons": {
+        "topology_index_ambiguous": 11,
+        "intra_station_local_baseline_indeterminate": 1,
+        "intra_station_registration_failed": 1,
+        "quality_gate_insufficient_evidence": 1
+      },
+      "harness_failures": [
+        "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])"
+      ],
+      "summary_verdict": "failed",
+      "output_written": true,
+      "output_dimensions": [
+        33821,
+        13852
+      ],
+      "output_artifact_validation": "pass",
+      "output_sha256": "aba9a18cdbfc729a85ab340c4945c2efcbf4bf95a9a44d900c648241808552ab",
+      "raw_decode_count": 0,
+      "native_fusion_cache_fusion_count": 0,
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 9887711232,
+        "wall_seconds": 341.94544191705063,
+        "user_seconds": 673.618908,
+        "system_seconds": 40.701897,
+        "child_exit_code": 0
+      },
+      "input_hashes_unchanged": true,
+      "reference_present": true,
+      "reference_unchanged": true,
+      "report_sha256": "18a8fcd28db69467f8e6ce9308949e54057d260cc54e5c2be86b8245008f79aa",
+      "analysis_sha256": "0e3771a20a511649d2d4ab47432af90b4b19fe7759c01b3f290d9bc3f9018ff2",
+      "legacy_behavior_observations": {
+        "orderedInputs": 45,
+        "streamedSources": 45,
+        "ownershipVerified": true,
+        "artifactContract": "fail",
+        "metrics": {
+          "self": {
+            "contentTiles": 1102,
+            "sharpnessMedian": 0.17067507776966187,
+            "sharpnessP10": 0.03674901815543032,
+            "thirds": [
+              {
+                "band": "left",
+                "sharpnessMedian": 0.17482506692511007
+              },
+              {
+                "band": "center",
+                "sharpnessMedian": 0.16669996361041414
+              },
+              {
+                "band": "right",
+                "sharpnessMedian": 0.1751922596032684
+              }
+            ]
+          },
+          "reference": {
+            "file": "DSC08854_FocusStack.jpg",
+            "inliers": 381,
+            "localScale": 0.9990093698912639,
+            "contentTiles": 937,
+            "ratioMedian": 1.110673164133306,
+            "ratioP05": 0.8571062965784398,
+            "ratioP10": 0.9159311748092455,
+            "softTileFraction": 0.012806830309498399,
+            "lowContrastFraction": 0.0010672358591248667,
+            "thirds": [
+              {
+                "band": "left",
+                "ratioMedian": 1.1316114879094623,
+                "ratioP10": 0.9462101980900965
+              },
+              {
+                "band": "center",
+                "ratioMedian": 1.0969155006889737,
+                "ratioP10": 0.8837775013931692
+              },
+              {
+                "band": "right",
+                "ratioMedian": 1.1081081156350197,
+                "ratioP10": 0.9556363044280002
+              }
+            ]
+          }
+        }
+      },
+      "source_scan": {
+        "singleton_station_count": 43,
+        "multi_frame_station_count": 1,
+        "singleton_ratio": 0.9772727272727273,
+        "detected": true,
+        "isolated_source_count": 0
+      },
+      "source_render_cache": {
+        "max_bytes": 536870912,
+        "hits": 0,
+        "misses": 45,
+        "render_hits": 0,
+        "render_misses": 45,
+        "quality_gate_hits": 0,
+        "quality_gate_misses": 0,
+        "evictions": 0,
+        "oversized_bypasses": 45,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 0
+      },
+      "reference_metrics_are_quality_gate": false
+    }
+  ],
+  "full_dataset_expansion": {
+    "langyuan_84": "not_run_until_subset_geometry_and_quality_pass",
+    "wenyuan_126": "not_run_until_subset_geometry_and_quality_pass"
+  },
+  "limitations": [
+    "A successful legacy renderer is not a layered Quality Gate pass.",
+    "No baseline is not a pass; actual rejection and nonzero exits remain failures.",
+    "Single cross-material runs are not cold/hot performance claims.",
+    "raw_decode_count counts RAW decoding (JPEG run reports zero); native_fusion_cache_fusion_count excludes other analysis-stage fusion work."
+  ]
+}

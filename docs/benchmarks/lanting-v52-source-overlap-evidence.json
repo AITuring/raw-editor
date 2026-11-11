@@ -1,0 +1,66 @@
+{
+  "scope": "lanting_45_jpeg_native_source_overlap_diagnostics",
+  "status": "diagnostic_contract_accepted_not_quality_accepted",
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "source_unchanged": true,
+    "same_45_inputs": true,
+    "legacy_path": true,
+    "source_coverage_measured": true,
+    "source_coverage_bounded": true,
+    "source_owner_bounded": true,
+    "source_owner_matches_coverage": true,
+    "output_written_matches_file": true,
+    "same_tiff_as_v50_framed": true,
+    "framed_canvas": true,
+    "source_derived_crop": true,
+    "diagnostic_maps_written": true,
+    "quality_gate_not_relabelled": true,
+    "alpha_preserved": true,
+    "source_coverage_matches_v50": true,
+    "source_owner_matches_v50": true
+  },
+  "quality_gate": "insufficient_evidence",
+  "output_sha256": "548e124639aec0cc28aa0cff08aa1e4e65e77ebd79d3ba524e0c443f2835aba7",
+  "selected_pairs": {
+    "12->22": {
+      "base_owner": 12,
+      "candidate_owner": 22,
+      "mean_absolute_luma_difference": 0.009945643950760998,
+      "mean_candidate_minus_base_luma": -0.0011642878726953936,
+      "overlap_samples": 6737,
+      "same_content_fraction_of_textured": 0.11450956757571192,
+      "same_content_quadrants": [
+        0,
+        238,
+        0,
+        522
+      ],
+      "same_content_samples": 760,
+      "textured_samples": 6637
+    },
+    "17->26": {
+      "base_owner": 17,
+      "candidate_owner": 26,
+      "mean_absolute_luma_difference": 0.0,
+      "mean_candidate_minus_base_luma": 0.0,
+      "overlap_samples": 1479,
+      "same_content_fraction_of_textured": 0.0,
+      "same_content_quadrants": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "same_content_samples": 0,
+      "textured_samples": 515
+    }
+  },
+  "interpretation": {
+    "top_12_to_22": "760 high-correlation same-content patches, near-zero signed mean but only two of four local quadrants; no gain change justified",
+    "bottom_17_to_26": "1479 overlapping sampled positions but zero high-correlation same-content patches; photometric inference rejected"
+  },
+  "diagnostic_file": "output/acceptance/lanting-v52-overlap-diagnostics/lanting/diagnostics/source-overlap.json"
+}

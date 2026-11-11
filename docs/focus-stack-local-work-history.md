@@ -1,5 +1,7 @@
 # 合并 v1 前的本地工作记录（归档）
 
+> [返回项目进度与任务总览](project-progress.md#documents) · 历史记录。下文“当前”“运行中”“下一步”及勾选状态仅代表其记录日期，不作为当前待办或最新验收结论；原失败和证据保持原样。
+
 2026-10-28 合并时保留自本地快照 `a4f27d09`。以下内容是历史记录，不代表当前任务状态或验收结论；当前计划见 `.kiro/specs/layered-camera-group-focus-stitching/tasks.md`。
 
 # Implementation Plan: 分层机位组景深与拼接改造

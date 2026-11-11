@@ -1,0 +1,474 @@
+{
+  "date": "2026-11-09",
+  "scope": "PF.6 fixed 9 NEF scale=1, default 512MiB/1GiB, frozen v34/v35 binaries, eight independent sequential processes in ABBA+BAAB order, OS page cache not purged",
+  "plan": {
+    "order": [
+      "v34",
+      "v35",
+      "v35",
+      "v34"
+    ],
+    "binary_sha256": {
+      "v34": "f0b24b58e7e505bce98636b45f8da2cbfe14d4f400efee31c79da76d7d865552",
+      "v35": "392f410cf9d43e2dfe3dc8a4c399fbe9997f15ae495e023dc08c4a602a3f331a"
+    },
+    "runner_sha256": "0b748d3fd688d0aa7134aa944b539c817ab9d7196dd5ee6b388523d76983f14a",
+    "manifest_sha256": "0c232c21d91629c8b9cd62896a43766711f080936e9b303389bf3b71af018d42",
+    "wrapper_sha256": "76c74af66c0594468e77bba82922c368784e4b03a0bf6d3849e663bbc53cb8f4",
+    "baseline_output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "cache_policy": "Separate processes and output dirs; OS page cache not purged; default 512MiB/1GiB budgets"
+  },
+  "historical_original_runs": {
+    "v34": {
+      "cold": {
+        "wall_seconds": 401.5906292919535,
+        "cpu_seconds": 1866.471483,
+        "fusion_seconds": 254.915394292,
+        "source_backing_io_seconds": 30.899706088999988,
+        "native_backing_io_seconds": 10.778183788000002
+      },
+      "hot": {
+        "wall_seconds": 376.2317140419036,
+        "cpu_seconds": 1873.3478209999998,
+        "fusion_seconds": 233.333213581,
+        "source_backing_io_seconds": 30.093679126000012,
+        "native_backing_io_seconds": 10.276535542
+      }
+    },
+    "v35": {
+      "cold": {
+        "wall_seconds": 532.1481398750329,
+        "cpu_seconds": 1947.63319,
+        "fusion_seconds": 325.44355358400003,
+        "source_backing_io_seconds": 38.042648627,
+        "native_backing_io_seconds": 12.565656126
+      },
+      "hot": {
+        "wall_seconds": 677.4052065000869,
+        "cpu_seconds": 1942.945921,
+        "fusion_seconds": 409.227664125,
+        "source_backing_io_seconds": 43.39113654300001,
+        "native_backing_io_seconds": 23.344805455000003
+      }
+    }
+  },
+  "runs": [
+    {
+      "index": 1,
+      "version": "v34",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "afa996a6bfe00ea9142ed696d5481779b691555acc78508109827a112ec99666",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 451.85472783399746,
+      "user_seconds": 1863.740569,
+      "system_seconds": 36.933896,
+      "cpu_seconds": 1900.674465,
+      "effective_cpu_parallelism": 4.206383928106802,
+      "peak_rss_bytes": 9560424448,
+      "load1_mean": 20.30994183084239,
+      "load1_min": 7.3857421875,
+      "load1_max": 29.072265625,
+      "render_seconds": 427.15621275,
+      "prepare_seconds": 16.559087375,
+      "fusion_seconds": 277.39324087600005,
+      "source_backing_io_seconds": 34.833681995000006,
+      "native_backing_io_seconds": 10.425266293,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 2,
+      "version": "v35",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "ef208ed7af9522551f79a40dad1d98a3e24435c47263fbd355b02fe3e9874964",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 497.46695300005376,
+      "user_seconds": 1878.267916,
+      "system_seconds": 58.939881,
+      "cpu_seconds": 1937.207797,
+      "effective_cpu_parallelism": 3.8941436919927237,
+      "peak_rss_bytes": 9539469312,
+      "load1_mean": 24.982099609375,
+      "load1_min": 9.75439453125,
+      "load1_max": 39.4462890625,
+      "render_seconds": 471.369940667,
+      "prepare_seconds": 20.68729825,
+      "fusion_seconds": 318.80430854200006,
+      "source_backing_io_seconds": 33.067998829000025,
+      "native_backing_io_seconds": 12.033443585,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 3,
+      "version": "v35",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "d3b0d899785ad64e9e22fccb19b3869bc9563a56b93e69b959c0e35dd395f01a",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 394.8405035829637,
+      "user_seconds": 1871.351353,
+      "system_seconds": 24.772517,
+      "cpu_seconds": 1896.1238700000001,
+      "effective_cpu_parallelism": 4.802252688854621,
+      "peak_rss_bytes": 12289064960,
+      "load1_mean": 15.9755126953125,
+      "load1_min": 6.88330078125,
+      "load1_max": 25.98046875,
+      "render_seconds": 376.751479542,
+      "prepare_seconds": 12.594177625,
+      "fusion_seconds": 256.413913375,
+      "source_backing_io_seconds": 27.477249591000003,
+      "native_backing_io_seconds": 8.936046042000001,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 4,
+      "version": "v34",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "d98c60142e29e903146ef6c5aa80f1a6ed4fdf90d15ad698dd85d32cbaf0eaac",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 471.4369949589018,
+      "user_seconds": 1878.973298,
+      "system_seconds": 29.332887,
+      "cpu_seconds": 1908.3061850000001,
+      "effective_cpu_parallelism": 4.047849883241258,
+      "peak_rss_bytes": 11644485632,
+      "load1_mean": 20.875172932942707,
+      "load1_min": 6.412109375,
+      "load1_max": 32.80615234375,
+      "render_seconds": 452.416328042,
+      "prepare_seconds": 13.355039,
+      "fusion_seconds": 315.438599625,
+      "source_backing_io_seconds": 30.070897620000004,
+      "native_backing_io_seconds": 10.267312376,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 5,
+      "version": "v35",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "d7c8ce0cc4f04773e15661c4a6bf637cb0d18807e8a8033112155ff15d859a2e",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 354.75918995798565,
+      "user_seconds": 1822.158924,
+      "system_seconds": 24.049862,
+      "cpu_seconds": 1846.2087860000001,
+      "effective_cpu_parallelism": 5.204118281526823,
+      "peak_rss_bytes": 11913986048,
+      "load1_mean": 18.42914496527778,
+      "load1_min": 7.33935546875,
+      "load1_max": 38.91845703125,
+      "render_seconds": 336.030642125,
+      "prepare_seconds": 13.22361825,
+      "fusion_seconds": 221.479970457,
+      "source_backing_io_seconds": 26.596699502000003,
+      "native_backing_io_seconds": 8.88812704,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 6,
+      "version": "v34",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "04ea5133d0f43206cce6c9afd26f08f82f7d26fe3b35534b6979af5ea44cf63f",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 359.02646650001407,
+      "user_seconds": 1822.627558,
+      "system_seconds": 25.332669,
+      "cpu_seconds": 1847.9602269999998,
+      "effective_cpu_parallelism": 5.147142061739695,
+      "peak_rss_bytes": 11702419456,
+      "load1_mean": 15.2943115234375,
+      "load1_min": 7.53955078125,
+      "load1_max": 23.7216796875,
+      "render_seconds": 342.20644125,
+      "prepare_seconds": 11.891876125,
+      "fusion_seconds": 218.39855962500002,
+      "source_backing_io_seconds": 28.872475956000006,
+      "native_backing_io_seconds": 9.683610751,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 7,
+      "version": "v34",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "a5a69b936061946d9dc2caf69686423f0a17d4235d05964fcb4ad24875cb9255",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 350.47366416617297,
+      "user_seconds": 1845.213324,
+      "system_seconds": 24.225446,
+      "cpu_seconds": 1869.43877,
+      "effective_cpu_parallelism": 5.334034939394555,
+      "peak_rss_bytes": 11417059328,
+      "load1_mean": 12.428534613715279,
+      "load1_min": 6.53369140625,
+      "load1_max": 17.33642578125,
+      "render_seconds": 332.119702917,
+      "prepare_seconds": 12.954559167,
+      "fusion_seconds": 217.32117024999997,
+      "source_backing_io_seconds": 27.718518334000002,
+      "native_backing_io_seconds": 8.810281876,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    },
+    {
+      "index": 8,
+      "version": "v35",
+      "status": "pass",
+      "checks": {
+        "exit_zero": true,
+        "summary_clean": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "tiff_v28_equal": true,
+        "binary_unchanged": true,
+        "inputs_unchanged": true
+      },
+      "report_sha256": "79a030ad22cb93b44c92abcba6f9292e2fcb7728c43bebc425da46946e4441d3",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "wall_seconds": 343.0940854169894,
+      "user_seconds": 1852.470755,
+      "system_seconds": 22.53693,
+      "cpu_seconds": 1875.007685,
+      "effective_cpu_parallelism": 5.464995651910335,
+      "peak_rss_bytes": 11227480064,
+      "load1_mean": 11.341978236607142,
+      "load1_min": 6.576171875,
+      "load1_max": 16.1875,
+      "render_seconds": 325.898804292,
+      "prepare_seconds": 11.860640959,
+      "fusion_seconds": 213.431223958,
+      "source_backing_io_seconds": 26.754441997,
+      "native_backing_io_seconds": 8.78524054,
+      "source_backing_read_bytes": 62464281024,
+      "source_backing_write_bytes": 4975031232,
+      "native_backing_read_bytes": 14510316600,
+      "native_backing_write_bytes": 5804126640,
+      "raw_decode_count": 18,
+      "fusion_count": 6
+    }
+  ],
+  "aggregate": {
+    "v34": {
+      "count": 4,
+      "mean": {
+        "wall_seconds": 408.19796336477157,
+        "cpu_seconds": 1881.59491175,
+        "effective_cpu_parallelism": 4.683852703120578,
+        "fusion_seconds": 257.137892594,
+        "source_backing_io_seconds": 30.373893476250004,
+        "native_backing_io_seconds": 9.796617824,
+        "load1_mean": 17.22699022523447,
+        "render_seconds": 388.47467123975
+      },
+      "median": {
+        "wall_seconds": 405.44059716700576,
+        "cpu_seconds": 1885.0566175,
+        "effective_cpu_parallelism": 4.676762994923248,
+        "fusion_seconds": 247.89590025050003,
+        "source_backing_io_seconds": 29.471686788000007,
+        "native_backing_io_seconds": 9.9754615635,
+        "load1_mean": 17.802126677139945,
+        "render_seconds": 384.681327
+      },
+      "range": {
+        "wall_seconds": [
+          350.47366416617297,
+          471.4369949589018
+        ],
+        "cpu_seconds": [
+          1847.9602269999998,
+          1908.3061850000001
+        ],
+        "effective_cpu_parallelism": [
+          4.047849883241258,
+          5.334034939394555
+        ],
+        "fusion_seconds": [
+          217.32117024999997,
+          315.438599625
+        ],
+        "source_backing_io_seconds": [
+          27.718518334000002,
+          34.833681995000006
+        ],
+        "native_backing_io_seconds": [
+          8.810281876,
+          10.425266293
+        ],
+        "load1_mean": [
+          12.428534613715279,
+          20.875172932942707
+        ],
+        "render_seconds": [
+          332.119702917,
+          452.416328042
+        ]
+      }
+    },
+    "v35": {
+      "count": 4,
+      "mean": {
+        "wall_seconds": 397.54018298949813,
+        "cpu_seconds": 1888.6370345,
+        "effective_cpu_parallelism": 4.841377578571126,
+        "fusion_seconds": 252.53235408300003,
+        "source_backing_io_seconds": 28.474097479750007,
+        "native_backing_io_seconds": 9.660714301750001,
+        "load1_mean": 17.682183876643105,
+        "render_seconds": 377.5127166565
+      },
+      "median": {
+        "wall_seconds": 374.7998467704747,
+        "cpu_seconds": 1885.5657775,
+        "effective_cpu_parallelism": 5.003185485190722,
+        "fusion_seconds": 238.94694191600001,
+        "source_backing_io_seconds": 27.115845794000002,
+        "native_backing_io_seconds": 8.912086541,
+        "load1_mean": 17.202328830295137,
+        "render_seconds": 356.3910608335
+      },
+      "range": {
+        "wall_seconds": [
+          343.0940854169894,
+          497.46695300005376
+        ],
+        "cpu_seconds": [
+          1846.2087860000001,
+          1937.207797
+        ],
+        "effective_cpu_parallelism": [
+          3.8941436919927237,
+          5.464995651910335
+        ],
+        "fusion_seconds": [
+          213.431223958,
+          318.80430854200006
+        ],
+        "source_backing_io_seconds": [
+          26.596699502000003,
+          33.067998829000025
+        ],
+        "native_backing_io_seconds": [
+          8.78524054,
+          12.033443585
+        ],
+        "load1_mean": [
+          11.341978236607142,
+          24.982099609375
+        ],
+        "render_seconds": [
+          325.898804292,
+          471.369940667
+        ]
+      }
+    },
+    "v35_minus_v34_mean_wall_seconds": -10.657780375273433,
+    "v35_minus_v34_mean_cpu_seconds": 7.04212275000009,
+    "v35_minus_v34_mean_fusion_seconds": -4.605538510999963,
+    "first_block_mean_wall_difference_v35_minus_v34": -15.492133104940876,
+    "second_block_mean_wall_difference_v35_minus_v34": -5.823427645605989,
+    "load1_mean_vs_wall_correlation_descriptive": 0.8965896936412673
+  },
+  "interpretation": [
+    "Original v35 532/677s slow runs remain immutable historical observations.",
+    "The eight-run crossover did not reproduce a stable version-specific v35 slowdown; both versions overlap substantially in wall time and produce identical v28 TIFF SHA-256.",
+    "CPU time and backing IO changed far less than wall time; effective parallelism and observed load varied strongly. Load average includes the benchmark itself and does not establish causality.",
+    "Fusion seconds are nested in render time and backing IO may overlap; these timings are not additive attribution components.",
+    "This is a fixed-material and same-host observation, not proof that v35 is faster or that all workloads lack regressions."
+  ]
+}

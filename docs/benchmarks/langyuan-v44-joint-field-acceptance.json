@@ -1,0 +1,238 @@
+{
+  "phase": "v44-joint-field",
+  "date": "2026-11-09",
+  "frozen_binary_sha256": "441fdb668d7c7fb1eaf87f5cb9b49c892a988f1d80848df105cf17f9d587ba2d",
+  "build_manifest_sha256": "01cf438880269c9131d06051060ee89c868d490814a542060d72ed70238d047f",
+  "implementation": "For cross-scale relations with a projected overlap correction budget below one 64px joint field cell, use a 0.01 smoothness field; all independent native and output-pixel gates remain unchanged. Other relations use 0.001.",
+  "tests": {
+    "targeted": "pass",
+    "photometry": "pass",
+    "full_suite": "1040 passed, 0 failed, 42 ignored",
+    "saved_real_joint_replay": "pass"
+  },
+  "langyuan10": {
+    "first": {
+      "status": "quality_accepted",
+      "exit_code": 0,
+      "quality_gate_verdict": "pass",
+      "quality_gate_roi_count": 8,
+      "station_owner_evidence_roi_count": 8,
+      "closure_status": "converged",
+      "closure_max_direct_pair_p95_native_px": 2.3959313776626043,
+      "closure_validation": [
+        {
+          "left": 0,
+          "right": 1,
+          "count": 29,
+          "median_px": 0.9419025515289948,
+          "p95_px": 1.6396654324348903
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "count": 13,
+          "median_px": 1.0260390212375288,
+          "p95_px": 2.2287500095304633
+        },
+        {
+          "left": 1,
+          "right": 2,
+          "count": 117,
+          "median_px": 0.8170223478716853,
+          "p95_px": 2.3959313776626043
+        }
+      ],
+      "output_density_factor": 1.2470703125,
+      "output_direct_pair_p95_px": 2.9878948918702597,
+      "output_residual_median_px": 1.0705136111952749,
+      "output_corner_correction_px": 26.452376987580333,
+      "output_written": true,
+      "output_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+      "report_sha256": "d0cc9126f78117636d04c776a546d9ed205ccf1f18303471de085cf242419847",
+      "wall_seconds": 385.7777960419189,
+      "peak_rss_bytes": 11664687104,
+      "inputs_unchanged": true,
+      "pair_0_2": {
+        "model": "projective",
+        "inliers": 64,
+        "fit_count": 31,
+        "holdout_count": 33,
+        "region_counts": [
+          8,
+          11,
+          6,
+          8
+        ],
+        "region_median_error_px": [
+          1.2342402010346463,
+          0.4548681044594191,
+          2.182955197655229,
+          1.426880538403667
+        ],
+        "maximum_refit_scale_difference": 0.0012233214582271223,
+        "scale_evidence_passes": true
+      }
+    },
+    "repeat": {
+      "status": "quality_accepted",
+      "exit_code": 0,
+      "quality_gate_verdict": "pass",
+      "quality_gate_roi_count": 8,
+      "station_owner_evidence_roi_count": 8,
+      "closure_status": "converged",
+      "closure_max_direct_pair_p95_native_px": 2.3959313776626043,
+      "closure_validation": [
+        {
+          "left": 0,
+          "right": 1,
+          "count": 29,
+          "median_px": 0.9419025515289948,
+          "p95_px": 1.6396654324348903
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "count": 13,
+          "median_px": 1.0260390212375288,
+          "p95_px": 2.2287500095304633
+        },
+        {
+          "left": 1,
+          "right": 2,
+          "count": 117,
+          "median_px": 0.8170223478716853,
+          "p95_px": 2.3959313776626043
+        }
+      ],
+      "output_density_factor": 1.2470703125,
+      "output_direct_pair_p95_px": 2.9878948918702597,
+      "output_residual_median_px": 1.0705136111952749,
+      "output_corner_correction_px": 26.452376987580333,
+      "output_written": true,
+      "output_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+      "report_sha256": "f9ceb382ed70fcc62ad56c7c8b253fc1764ebd668d3c1f1f1a1f4100145a1ce3",
+      "wall_seconds": 565.1117971250787,
+      "peak_rss_bytes": 9671507968,
+      "inputs_unchanged": true,
+      "pair_0_2": {
+        "model": "projective",
+        "inliers": 64,
+        "fit_count": 31,
+        "holdout_count": 33,
+        "region_counts": [
+          8,
+          11,
+          6,
+          8
+        ],
+        "region_median_error_px": [
+          1.2342402010346463,
+          0.4548681044594191,
+          2.182955197655229,
+          1.426880538403667
+        ],
+        "maximum_refit_scale_difference": 0.0012233214582271223,
+        "scale_evidence_passes": true
+      }
+    }
+  },
+  "nine_nef": {
+    "cold": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true
+      },
+      "quality_gate_verdict": "pass",
+      "roi_count": 8,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 379.92774020903744,
+      "peak_rss_bytes": 11140874240
+    },
+    "hot": {
+      "status": "pass",
+      "checks": {
+        "harness_exit_zero": true,
+        "harness_failures_empty": true,
+        "binary_unchanged": true,
+        "source_default": true,
+        "native_default": true,
+        "source_budget": true,
+        "native_budget": true,
+        "quality_gate_pass": true,
+        "roi_count_8": true,
+        "station_owner_evidence_8": true,
+        "same_gate_policy": true,
+        "other_quality_results_unchanged": true,
+        "coverage_audit_consistent": true,
+        "tiff_same_as_v28": true,
+        "native_rgba16": true,
+        "rss_gate": true,
+        "network_zero": true,
+        "composition_legacy_counts_and_geometry_unchanged": true,
+        "bounded_backing": true,
+        "backing_no_failures": true,
+        "raw_decodes_reduced": true,
+        "native_fusions_reduced": true,
+        "source_reuse": true,
+        "native_reuse": true,
+        "cold_hot_business_equal": true
+      },
+      "quality_gate_verdict": "pass",
+      "roi_count": 8,
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decode_count": 18,
+      "fusion_count": 6,
+      "wall_seconds": 567.1053983748425,
+      "peak_rss_bytes": 8535441408
+    }
+  },
+  "visual_review": {
+    "whole_preview": "inspected",
+    "top_center": "inspected",
+    "bottom_center": "inspected",
+    "obvious_break_or_duplicate_contour": "none_observed_at_reviewed_scale"
+  },
+  "conclusion": "Langyuan 10 independent 0-2 geometry, three-edge closure, output-pixel closure, Quality Gate and native TIFF pass twice with identical TIFF SHA-256. Nine NEF cold/hot baseline remains intact. Wenyuan 10 also retains its v35 TIFF SHA-256 and passes Quality Gate and closure.",
+  "wenyuan10": {
+    "status": "quality_accepted",
+    "quality_gate_verdict": "pass",
+    "roi_count": 8,
+    "station_owner_evidence_roi_count": 8,
+    "closure_status": "converged",
+    "max_direct_pair_p95_native_px": 1.8107380418453356,
+    "direct_pair_p95_output_px": 2.1361050337394194,
+    "tiff_written": true,
+    "tiff_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+    "same_tiff_sha256_as_v35": true,
+    "report_sha256": "4b918447ffd5969c0a0ad00f6b56b7b1f5e9e147c9936b94f1fa103142a573b5",
+    "wall_seconds": 474.8641190829221,
+    "peak_rss_bytes": 10144481280,
+    "inputs_unchanged": true,
+    "v35_tiff_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b"
+  }
+}

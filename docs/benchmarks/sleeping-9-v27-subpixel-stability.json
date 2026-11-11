@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "status": "subpixel_multi_region_validation_and_decision_complete",
+  "decision": "retain_current_owner_rules",
+  "production_owner_rule_changed": false,
+  "periodicity_penalty_added": false,
+  "full_quality_acceptance": false,
+  "raw_runs_added": 0,
+  "input_verified_png_count": 8,
+  "red_disjoint_segments": 3,
+  "texture_disjoint_blocks": 4,
+  "lowpass_sizes": [
+    7,
+    9
+  ],
+  "search_resolution_pixels": 0.015625,
+  "resolution_is_accuracy": false,
+  "reason": "No alternative has stable improvement across measured red segments, both edges and lowpass settings. Texture alternatives have inconsistent local alignment. Do not generalize one-region gains.",
+  "limits": [
+    "Three disjoint portions of one red stroke, not three independent artworks/edges.",
+    "Four disjoint texture quadrants still share one scene.",
+    "1/64px search resolution is not an accuracy guarantee.",
+    "Bilinear diagnostic resampling can change edge widths; raw width retained and synthetic bias checked.",
+    "Periodic texture can bias NCC; reciprocal closure and held-out grids do not prove true geometry.",
+    "Conservative diagnostic screens are not new production/QG thresholds."
+  ],
+  "evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/analyze.py",
+      "sha256": "c7bd99621f947e44380a2dd827c1990aac9cbb5158fe416a3368500ff69e1e84"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/protocol.json",
+      "sha256": "fef2a70e430d485ffa25ad24230bbaf89e230a6340fd152becbdea37a78b944f"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/results.json",
+      "sha256": "1ec0ff2cd9b9922ac714e2936b109f8c464845ee1d7553ccbae025ca98e31dc3"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/self-tests.json",
+      "sha256": "902ef6d98d1a6feb2f791f9085c5b56df5d4d39284ea396bd9547ad54229c425"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/check-opposite-edge.py",
+      "sha256": "2106be4b9f763c26934771bf9cc0c16d172bddaee0699be1794e15f36e19341c"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v27-subpixel-stability/opposite-edge.json",
+      "sha256": "6b57d586008993aaeafb0c3f5b485965c2339f98bbab271de9407efdb85a6529"
+    }
+  ]
+}

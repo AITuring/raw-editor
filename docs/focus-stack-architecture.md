@@ -1,7 +1,9 @@
 # Focus Stack 当前架构与拆分边界
 
+> [返回项目进度与任务总览](project-progress.md#n1) · 专项文档。本文维护架构与模块职责；N0–N9当前状态统一在总览，历史行数/回归数字只对应其注明版本。
+
 本文只描述当前工作区可见的生产入口、模块职责和后续拆分边界。模块拆分以
-`.kiro/specs/layered-camera-group-focus-stitching/tasks.md` 的 N0–N9 为准；未接入生产的研究模块不算作
+[项目进度与任务总览](project-progress.md#stack) 的 N0–N9 为准；未接入生产的研究模块不算作
 当前架构的一部分。
 
 本文按 `v1` 分支 2026-10-29 的 N1-10 代码基线修订（长文件拆分合并之后）。全部 facade、子模块、行数与职责见

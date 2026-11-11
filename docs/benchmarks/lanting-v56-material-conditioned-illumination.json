@@ -1,0 +1,876 @@
+{
+  "scope": "flat_artwork_material_conditioned_illumination_native_lanting45",
+  "status": "whole_image_tone_regression_improved_legacy_quality_not_accepted",
+  "checks": {
+    "real_45_contracts": true,
+    "reference_unchanged": true,
+    "reference_mae_improved_all_four_zones": true,
+    "output_file_matches_report": true,
+    "source_manifest_matches": true,
+    "full_library_pass": true,
+    "nine_cold_pass": true,
+    "nine_hot_pass": true,
+    "same_owner_png_as_v54": true,
+    "same_coverage_png_as_v54": true
+  },
+  "binary_sha256": "7c41843cf59702c4f9e9b13e7b0ad5fac28d2cc130844b5fd4285eeed4b858a6",
+  "changed_rust_paths_from_v54": [
+    "src-tauri/src/panorama_utils/mosaic/streaming_illumination.rs",
+    "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs"
+  ],
+  "lanting_usage": {
+    "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+    "max_rss_bytes": 10121494528,
+    "wall_seconds": 466.2936176250223,
+    "user_seconds": 698.464212,
+    "system_seconds": 49.627067,
+    "child_exit_code": 0
+  },
+  "output_sha256": "8f7a4d9d79de797dbab9cb0b26b4e1776f984d945f945be456e54a5469904f9f",
+  "quality_gate": "insufficient_evidence",
+  "quality_gate_thresholds_changed": false,
+  "photometry": {
+    "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+    "reference_unchanged": true,
+    "resolution": [
+      512,
+      182
+    ],
+    "zones_xyxy": {
+      "wall": [
+        100,
+        480,
+        2,
+        16
+      ],
+      "rail": [
+        180,
+        490,
+        16,
+        33
+      ],
+      "artwork": [
+        40,
+        470,
+        35,
+        158
+      ],
+      "bottom_frame": [
+        40,
+        470,
+        158,
+        178
+      ]
+    },
+    "candidates": {
+      "former_v54": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v54-evidence-gain/lanting/run/lanting-s1-v54-evidence-gain.app.jpg",
+        "sha256": "98728a1485b48fce26795641a63e37585a6bbf9444bfcf88b98a3bb2a44da1b9",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 80.19436090225564,
+            "mean_absolute_difference": 24.484962406015036,
+            "p90_absolute_difference": 34
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 111.24478178368122,
+            "mean_absolute_difference": 40.62713472485768,
+            "p90_absolute_difference": 61
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.73136698808848,
+            "mean_absolute_difference": 8.159614293817357,
+            "p90_absolute_difference": 17
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 73.20872093023256,
+            "mean_absolute_difference": 11.170348837209302,
+            "p90_absolute_difference": 22
+          }
+        }
+      },
+      "tone_only": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v55-tone-isolation/lanting/run/lanting-s1-v55-tone-isolation.app.jpg",
+        "sha256": "33dedcdf4c55d84275f6a82b4582de4fb90d0d207a376481476d4aaad994020d",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 110.20507518796992,
+            "mean_absolute_difference": 7.193045112781955,
+            "p90_absolute_difference": 13
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 158.09070208728653,
+            "mean_absolute_difference": 12.11100569259962,
+            "p90_absolute_difference": 33
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.55717526942712,
+            "mean_absolute_difference": 4.61041784836453,
+            "p90_absolute_difference": 9
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 68.63325581395348,
+            "mean_absolute_difference": 6.278372093023256,
+            "p90_absolute_difference": 11
+          }
+        }
+      },
+      "reference": {
+        "path": "/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg",
+        "sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 104.67932330827068,
+            "mean_absolute_difference": 0.0,
+            "p90_absolute_difference": 0
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 149.8381404174573,
+            "mean_absolute_difference": 0.0,
+            "p90_absolute_difference": 0
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 73.50153148043108,
+            "mean_absolute_difference": 0.0,
+            "p90_absolute_difference": 0
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 65.67976744186046,
+            "mean_absolute_difference": 0.0,
+            "p90_absolute_difference": 0
+          }
+        }
+      },
+      "evidence_gain": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v56-material-guard/lanting/run/lanting-s1-v56-material-guard.app.jpg",
+        "sha256": "72581a3d7e924723eb013b68fb948907f489bb4ffca242728d9f7de059ceb29d",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 104.93815789473685,
+            "mean_absolute_difference": 5.415977443609022,
+            "p90_absolute_difference": 10
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 155.37267552182163,
+            "mean_absolute_difference": 12.305313092979127,
+            "p90_absolute_difference": 32
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.88600869729628,
+            "mean_absolute_difference": 4.917092077897523,
+            "p90_absolute_difference": 10
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 71.27186046511628,
+            "mean_absolute_difference": 7.630232558139535,
+            "p90_absolute_difference": 14
+          }
+        }
+      },
+      "baseline": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v51-owner-diagnostics/lanting/run/lanting-s1-v51-owner-diagnostics.app.jpg",
+        "sha256": "c3ad128bd407d3c22f6b74f81a8a5461797a3d7315491759721d2154bbcf7b74",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 74.04887218045113,
+            "mean_absolute_difference": 30.630451127819548,
+            "p90_absolute_difference": 41
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 104.1988614800759,
+            "mean_absolute_difference": 46.48747628083491,
+            "p90_absolute_difference": 70
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 71.74422386084326,
+            "mean_absolute_difference": 9.246625070901873,
+            "p90_absolute_difference": 18
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 78.12058139534884,
+            "mean_absolute_difference": 14.738720930232558,
+            "p90_absolute_difference": 30
+          }
+        }
+      },
+      "skip_owner": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v53-native-owner-ab/lanting/run/lanting-s1-v53-native-owner-ab.app.jpg",
+        "sha256": "86441694faaad5769d3f0485a3915012d5618f6cef13e44bfa8f82514328c310",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 80.19436090225564,
+            "mean_absolute_difference": 24.484962406015036,
+            "p90_absolute_difference": 34
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 111.24478178368122,
+            "mean_absolute_difference": 40.62713472485768,
+            "p90_absolute_difference": 61
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.73480809226697,
+            "mean_absolute_difference": 8.15968992248062,
+            "p90_absolute_difference": 17
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 73.20872093023256,
+            "mean_absolute_difference": 11.170348837209302,
+            "p90_absolute_difference": 22
+          }
+        }
+      }
+    },
+    "limits": "overview metrics only; reflection, local geometry and source selection differ; not a quality gate verdict"
+  },
+  "rgb_diagnostics": {
+    "candidates": {
+      "former_v54": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            91.22443609022557,
+            78.36278195488721,
+            63.623684210526314
+          ],
+          "rgb_mae": [
+            25.304135338345866,
+            25.031954887218046,
+            19.650751879699246
+          ],
+          "mean_chromaticity_error": 0.006508336826454994
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            114.98026565464896,
+            110.54762808349146,
+            107.80721062618596
+          ],
+          "rgb_mae": [
+            39.44838709677419,
+            41.25332068311195,
+            41.45066413662239
+          ],
+          "mean_chromaticity_error": 0.007299522247889041
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            88.42140291170354,
+            72.99171866137266,
+            60.55072792588391
+          ],
+          "rgb_mae": [
+            11.026091888825865,
+            7.310493477027793,
+            6.459746643978067
+          ],
+          "mean_chromaticity_error": 0.00908421084958761
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            85.39383720930232,
+            70.71337209302325,
+            57.974767441860465
+          ],
+          "rgb_mae": [
+            14.437558139534884,
+            10.062441860465116,
+            8.775930232558139
+          ],
+          "mean_chromaticity_error": 0.010834443792955287
+        }
+      },
+      "tone_only": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            124.87236842105263,
+            107.525,
+            86.92048872180452
+          ],
+          "rgb_mae": [
+            9.97048872180451,
+            5.828383458646616,
+            5.690413533834587
+          ],
+          "mean_chromaticity_error": 0.005828098264350438
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            163.2709677419355,
+            157.0045540796964,
+            153.23111954459202
+          ],
+          "rgb_mae": [
+            12.930360531309297,
+            11.620303605313094,
+            14.272675521821633
+          ],
+          "mean_chromaticity_error": 0.00688414458596951
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            88.50896199659671,
+            72.60928341841559,
+            60.32953299300435
+          ],
+          "rgb_mae": [
+            7.435337492909813,
+            3.5886367933446777,
+            3.5352807714123653
+          ],
+          "mean_chromaticity_error": 0.009014966358352618
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            80.16046511627907,
+            66.35813953488372,
+            54.30046511627907
+          ],
+          "rgb_mae": [
+            8.704418604651163,
+            5.551627906976744,
+            5.243720930232558
+          ],
+          "mean_chromaticity_error": 0.01102037489904774
+        }
+      },
+      "reference": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "rgb_mae": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mean_chromaticity_error": 0.0
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "rgb_mae": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mean_chromaticity_error": 0.0
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "rgb_mae": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mean_chromaticity_error": 0.0
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "rgb_mae": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mean_chromaticity_error": 0.0
+        }
+      },
+      "evidence_gain": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            118.83176691729324,
+            102.78477443609023,
+            82.61898496240602
+          ],
+          "rgb_mae": [
+            7.624624060150376,
+            4.532518796992481,
+            4.633646616541354
+          ],
+          "mean_chromaticity_error": 0.005848453746549567
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            160.22998102466792,
+            154.41138519924098,
+            150.85692599620492
+          ],
+          "rgb_mae": [
+            12.89203036053131,
+            11.9,
+            14.646489563567362
+          ],
+          "mean_chromaticity_error": 0.006876824934672457
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            88.96799016827377,
+            72.9299489506523,
+            60.44225751559841
+          ],
+          "rgb_mae": [
+            7.841614671960673,
+            4.014274910190962,
+            3.764208735110607
+          ],
+          "mean_chromaticity_error": 0.009195281225625187
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            83.29790697674419,
+            68.77209302325582,
+            56.06837209302326
+          ],
+          "rgb_mae": [
+            10.587674418604651,
+            6.645581395348837,
+            5.846046511627907
+          ],
+          "mean_chromaticity_error": 0.011472675040865592
+        }
+      },
+      "baseline": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            86.09962406015038,
+            72.10263157894737,
+            55.6015037593985
+          ],
+          "rgb_mae": [
+            30.428947368421053,
+            31.292105263157893,
+            27.672556390977444
+          ],
+          "mean_chromaticity_error": 0.013250071238714963
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            110.96318785578748,
+            103.20759013282732,
+            95.33244781783681
+          ],
+          "rgb_mae": [
+            42.82599620493359,
+            47.35313092979127,
+            51.403225806451616
+          ],
+          "mean_chromaticity_error": 0.01413709693761351
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            84.63157496691245,
+            69.04401588201928,
+            55.33280393269049
+          ],
+          "rgb_mae": [
+            9.865910380034032,
+            9.339610512384194,
+            9.286292304783514
+          ],
+          "mean_chromaticity_error": 0.013973610838732218
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            91.90732558139536,
+            75.3089534883721,
+            60.132209302325585
+          ],
+          "rgb_mae": [
+            18.906627906976745,
+            13.668720930232558,
+            11.159883720930232
+          ],
+          "mean_chromaticity_error": 0.016455979949477197
+        }
+      },
+      "skip_owner": {
+        "wall": {
+          "reference_rgb_mean": [
+            116.52857142857142,
+            103.39473684210526,
+            83.27406015037594
+          ],
+          "candidate_rgb_mean": [
+            91.22443609022557,
+            78.36278195488721,
+            63.623684210526314
+          ],
+          "rgb_mae": [
+            25.304135338345866,
+            25.031954887218046,
+            19.650751879699246
+          ],
+          "mean_chromaticity_error": 0.006508336826454994
+        },
+        "rail": {
+          "reference_rgb_mean": [
+            153.33567362428843,
+            149.67722960151804,
+            144.86584440227705
+          ],
+          "candidate_rgb_mean": [
+            114.98026565464896,
+            110.54762808349146,
+            107.80721062618596
+          ],
+          "rgb_mae": [
+            39.44838709677419,
+            41.25332068311195,
+            41.45066413662239
+          ],
+          "mean_chromaticity_error": 0.007299471989940587
+        },
+        "artwork": {
+          "reference_rgb_mean": [
+            83.47498581962564,
+            71.83463792777462,
+            59.679826054074496
+          ],
+          "candidate_rgb_mean": [
+            88.42733976176972,
+            72.99527320854604,
+            60.55299678578181
+          ],
+          "rgb_mae": [
+            11.021667612024958,
+            7.311665721308376,
+            6.459708829646436
+          ],
+          "mean_chromaticity_error": 0.00908213675481657
+        },
+        "bottom_frame": {
+          "reference_rgb_mean": [
+            74.39581395348837,
+            64.47697674418605,
+            52.91767441860465
+          ],
+          "candidate_rgb_mean": [
+            85.39383720930232,
+            70.71337209302325,
+            57.974767441860465
+          ],
+          "rgb_mae": [
+            14.437558139534884,
+            10.062441860465116,
+            8.775930232558139
+          ],
+          "mean_chromaticity_error": 0.010834443792955287
+        }
+      }
+    },
+    "limits": "fixed overview regions; code-value/chromaticity diagnostics, not perceptual Quality Gate"
+  },
+  "boundary_diagnostics": {
+    "metrics": {
+      "former_v54": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.005790338680926932,
+          "p90_abs_boundary_delta": 0.0079165062388592
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.013336399286987488,
+          "p90_abs_boundary_delta": 0.01680606060606049
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.02254456327985739,
+          "p90_abs_boundary_delta": 0.1909980035650623
+        }
+      },
+      "tone_only": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.009980606060606079,
+          "p90_abs_boundary_delta": 0.013260392156862755
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.018253048128342164,
+          "p90_abs_boundary_delta": 0.02375229946524071
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.023486417112299457,
+          "p90_abs_boundary_delta": 0.15189768270944742
+        }
+      },
+      "reference": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.0076681639928698475,
+          "p90_abs_boundary_delta": 0.011556791443850356
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.01073736185383245,
+          "p90_abs_boundary_delta": 0.01718616755793223
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.00927604278074866,
+          "p90_abs_boundary_delta": 0.01639928698752229
+        }
+      },
+      "evidence_gain": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.006206916221033837,
+          "p90_abs_boundary_delta": 0.013337468805704078
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.018200356506238857,
+          "p90_abs_boundary_delta": 0.02663664884135475
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.027938930481283444,
+          "p90_abs_boundary_delta": 0.15408434937611407
+        }
+      },
+      "baseline": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.003955436720142591,
+          "p90_abs_boundary_delta": 0.007774474153297739
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.01344734402852052,
+          "p90_abs_boundary_delta": 0.018356862745098013
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.07100099821746882,
+          "p90_abs_boundary_delta": 0.2846363636363636
+        }
+      },
+      "skip_owner": {
+        "wall": {
+          "count": 40,
+          "median_abs_boundary_delta": 0.005790338680926932,
+          "p90_abs_boundary_delta": 0.0079165062388592
+        },
+        "rail": {
+          "count": 50,
+          "median_abs_boundary_delta": 0.013336399286987488,
+          "p90_abs_boundary_delta": 0.01680606060606049
+        },
+        "bottom": {
+          "count": 20,
+          "median_abs_boundary_delta": 0.02254456327985739,
+          "p90_abs_boundary_delta": 0.1909980035650623
+        }
+      }
+    },
+    "limits": "cross-boundary content differs; diagnostic seam indicator only"
+  },
+  "nine": {
+    "cold": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 10819649536,
+        "wall_seconds": 353.7063857920002,
+        "user_seconds": 1858.760822,
+        "system_seconds": 28.913768,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "native_fusions": 6
+    },
+    "hot": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 10868588544,
+        "wall_seconds": 436.58238054206595,
+        "user_seconds": 1860.409825,
+        "system_seconds": 39.40098,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "native_fusions": 6
+    }
+  },
+  "visual_review": {
+    "reference": "user-confirmed DSC08854_FocusStack.jpg; read-only",
+    "findings": [
+      "Whole-image wall/rail brightness restored relative to user-rejected v54; paper/ink broad tonal hierarchy closer to reference.",
+      "Top, bottom and artwork TIFF crops reviewed, including native-sized top and artwork crops: no added halo or stroke break observed.",
+      "Rail boundary diagnostic worsens relative to v54; artwork/bottom chromaticity diagnostics do not improve. Reflection and local source differences remain."
+    ],
+    "limits": "This is a correction of the dominant tone regression, not whole legacy Quality Gate acceptance. Prior v54 regional criteria did not establish user visual acceptance. Explicit publication framing remains required for this candidate."
+  },
+  "full_library": {
+    "passed": 1048,
+    "failed": 0,
+    "ignored": 42
+  },
+  "v55_isolation": {
+    "binary_sha256": "9d572c227244c3c2d7af2baaa09a29708c4c9150ccde2f9d8da6692e70e0e536",
+    "same_binary_as_v54": true,
+    "analysis_checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "source_unchanged": true,
+      "same_45_inputs": true,
+      "legacy_path": true,
+      "source_coverage_measured": true,
+      "source_coverage_bounded": true,
+      "source_owner_bounded": true,
+      "source_owner_matches_coverage": true,
+      "output_written_matches_file": true,
+      "evidence_gain_changes_output": true,
+      "framed_canvas": true,
+      "source_derived_crop": true,
+      "diagnostic_maps_written": true,
+      "quality_gate_not_relabelled": true,
+      "alpha_preserved": true,
+      "source_coverage_matches_v50": true,
+      "source_owner_matches_v50": true
+    },
+    "workspace_source_check_note": "v55 source_unchanged is false because v56 source was developed concurrently. v55 used a copied, hash-verified frozen v54 binary and its original source manifest; input/reference/binary checks passed. Not labelled a fresh build of the concurrently edited workspace."
+  },
+  "artifact_directory": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v56-material-guard"
+}

@@ -1,0 +1,131 @@
+{
+  "scope": "rejected_matched_tone_candidates",
+  "v57": {
+    "status": "rejected_geometry_feedback",
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "source_unchanged": true,
+      "same_45_inputs": true,
+      "legacy_path": true,
+      "source_coverage_measured": true,
+      "source_coverage_bounded": true,
+      "source_owner_bounded": true,
+      "source_owner_matches_coverage": true,
+      "output_written_matches_file": true,
+      "evidence_gain_changes_output": true,
+      "framed_canvas": false,
+      "source_derived_crop": false,
+      "diagnostic_maps_written": true,
+      "quality_gate_not_relabelled": true,
+      "alpha_preserved": true,
+      "source_coverage_matches_v50": false,
+      "source_owner_matches_v50": false
+    },
+    "composition": {
+      "canvas": {
+        "width": 31084,
+        "height": 11012,
+        "long_side_limit": 262144
+      },
+      "opaque_pixels": 0,
+      "union_projected_pixels": 0,
+      "source_coverage_status": "measured_source_union_legacy_mosaic",
+      "source_covered_pixels": 421261628,
+      "source_owned_pixels": 421261628,
+      "source_output_pixels": 468371565,
+      "publication_crop": {
+        "x": 2610,
+        "y": 874,
+        "width": 31084,
+        "height": 11012,
+        "covered_pixels_excluded": 78964620
+      },
+      "narrow_overlaps": [],
+      "integer_translation_tiles": 0,
+      "final_sharpen_amount": 0.0,
+      "path_selection": {
+        "configured_path": null,
+        "selected_path": "legacy_single_layer_mosaic",
+        "use_virtual_tiles": false,
+        "fallback_reason": "singleton_source_scan"
+      },
+      "output_density": {
+        "status": "not_run",
+        "factor": 1.0,
+        "pixel_count_multiplier": 1.0,
+        "canvas_pixels": 0,
+        "output_plane_lower_bound_bytes": 0,
+        "target_minimum_scale": 1.0,
+        "probe_step_px": 0,
+        "sampling_contract": "",
+        "source_count": 0,
+        "sample_count": 0,
+        "invalid_probe_count": 0,
+        "boundary_probe_count": 0,
+        "worst_station_index": null,
+        "worst_source_id": null,
+        "worst_station_point": null,
+        "direct_pair_p95_output_px": null,
+        "residual_median_output_px": null,
+        "max_corner_correction_output_px": null,
+        "minimum_scale": null,
+        "p01_scale": null,
+        "median_scale": null,
+        "bypass_reason": null
+      }
+    },
+    "output_sha256": "db6ba47c843759fef181bd180241607b73d82f12626399660174275b0ffcc90e",
+    "library_tests_passed": 1050
+  },
+  "v58": {
+    "status": "rejected_visual_and_boundary_regression",
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "source_unchanged": true,
+      "same_45_inputs": true,
+      "legacy_path": true,
+      "source_coverage_measured": true,
+      "source_coverage_bounded": true,
+      "source_owner_bounded": true,
+      "source_owner_matches_coverage": true,
+      "output_written_matches_file": true,
+      "evidence_gain_changes_output": true,
+      "framed_canvas": true,
+      "source_derived_crop": true,
+      "diagnostic_maps_written": true,
+      "quality_gate_not_relabelled": true,
+      "alpha_preserved": true,
+      "source_coverage_matches_v50": true,
+      "source_owner_matches_v50": true
+    },
+    "output_sha256": "1c19114b12d08b49d00e49282e786561a1fd0804992d392442609ab71f23678c",
+    "library_tests_passed": 1051,
+    "v56_suspects": 149,
+    "v58_suspects": 180,
+    "histogram_v56": {
+      "width": 31085,
+      "height": 11011,
+      "pixels": 342276935,
+      "black_pixels": 15349,
+      "white_pixels": 2,
+      "any_channel_clipped": 358,
+      "transparent_pixels": 0
+    },
+    "histogram_v58": {
+      "width": 31085,
+      "height": 11011,
+      "pixels": 342276935,
+      "black_pixels": 15337,
+      "white_pixels": 2416,
+      "any_channel_clipped": 6121,
+      "transparent_pixels": 0
+    }
+  },
+  "quality_gate_thresholds_changed": false,
+  "nine_nef_candidate_runs": "not run on rejected candidates; prior v56 baseline preserved",
+  "next": "independent heldout improvement gate, preserve baseline in unmeasured regions, smooth only correction field"
+}

@@ -1,0 +1,1996 @@
+{
+  "schema": 1,
+  "base_head": "a0dc5f9c9dd49cf050868411b526770268c9bb88",
+  "scope": "Accepted Rust source baseline; no claim of cross-dataset or frontend acceptance",
+  "binary_sha256": "e50f6a4c9f77b49ed20e6a20a36976a2fa4b3e5259d0598cd55aa729ab29a72c",
+  "source_manifest": [
+    {
+      "path": "src-tauri/src/adjustment_utils.rs",
+      "sha256": "735d92d5d5b8bf12daafe34d78bbeb007fa0312f42ccbdbf3b3045e8d3b54642"
+    },
+    {
+      "path": "src-tauri/src/ai_commands.rs",
+      "sha256": "8ab1dc65c88fb68c8f7e0386213f660dad23a56e84fab0714ca6d28071e595b4"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/denoise.rs",
+      "sha256": "92e78918b4aedcb6315016ad6953ef820e19c8d0517f39eef134b65fe5d0b156"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/lama_inpainting.rs",
+      "sha256": "20e464dc02d9b487c1629b5ffead44be92047de9502b6c6d91890d38238c11b8"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/mask_parameters.rs",
+      "sha256": "da8faf0f1dcf920b829a00952bfd63e6cca34db7a8e3901ad8f12dc33cd56ec9"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/model_files.rs",
+      "sha256": "bf66515462eecc2c5b48feaa360a6afa2d03120a53152a89c39d46e91a545019"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/model_sessions.rs",
+      "sha256": "60748e458a2416863fa7a368feb84c873a1daaf8d4946a462e47d1c2bace4e8c"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/sam.rs",
+      "sha256": "8d4b18b4fbaff14630521ee2816c8514b450e2ecdfa0d8588e937e36627264ec"
+    },
+    {
+      "path": "src-tauri/src/ai_processing/segmentation.rs",
+      "sha256": "b3e3cfc4dfdd431be602546bdefc06df245c9fdc0c152d7f65cb3cc947b83c72"
+    },
+    {
+      "path": "src-tauri/src/ai_processing.rs",
+      "sha256": "a674809717bf5faf6ae69b591ac8c332a87592e76bdf3c6ec88abf824a6eb02b"
+    },
+    {
+      "path": "src-tauri/src/android_integration.rs",
+      "sha256": "c96e3c395b474ce67bc351e84dc26a9a5c58dabd0e241031e8b1dbddec8bfa48"
+    },
+    {
+      "path": "src-tauri/src/app_settings.rs",
+      "sha256": "0b151694a6baec603661dc908dd65f341003b0534139f64a12dd670c05bd7b22"
+    },
+    {
+      "path": "src-tauri/src/app_state.rs",
+      "sha256": "065bbe4ea55e12b6be3c6715047929cb860523d4b4b64357d43527d47b92c024"
+    },
+    {
+      "path": "src-tauri/src/cache_utils.rs",
+      "sha256": "d2237b48da01410f612283ce835388345748198b2d9586eb7d84bcebb428a5f8"
+    },
+    {
+      "path": "src-tauri/src/color_management.rs",
+      "sha256": "f1b3a853f3c12355fdedbc54163c757eb901962846b399ffbade0277583d75a6"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis/axis_consensus.rs",
+      "sha256": "6820c6c6b7f2dc03c56068f63f8ac94102e86425c3cefa06b9baabc3ccb444a8"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis/straighten.rs",
+      "sha256": "794de7fe8880d5346f8c8f23bbdb1512f93719171463eb6a552d336f7292385d"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis/structural_lines.rs",
+      "sha256": "e5dd127952d9d0cea9af556791dd733133e88ec65a736836eb4ad37a84b501de"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis/tests.rs",
+      "sha256": "c398e3895694ff0a78b436cd439643ce61fbc945a684b9beb64140ff15d5e7c8"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis/upright.rs",
+      "sha256": "70e40cd4c2287e5f7a18752cb84d5a396aed6d0ec17e940f6db796839036c21c"
+    },
+    {
+      "path": "src-tauri/src/crop_analysis.rs",
+      "sha256": "2d9339c68a7deb5560134f1d5b99d306d4a4a5b481f29784504be5705da8e02f"
+    },
+    {
+      "path": "src-tauri/src/culling.rs",
+      "sha256": "cbbd99cb334ab45f90d7834e3f51626ab9c50b19d4435a89419daad8506fbe33"
+    },
+    {
+      "path": "src-tauri/src/denoising/block_matching.rs",
+      "sha256": "f033c5ca111d29c12c778f0b17a8e029448669bc6095f856393195355837a69b"
+    },
+    {
+      "path": "src-tauri/src/denoising/bm3d.rs",
+      "sha256": "4bfbd6532eebb297d7f59bda91abbce1e6ab90e06252a358dcca0a72f501b382"
+    },
+    {
+      "path": "src-tauri/src/denoising/pipeline.rs",
+      "sha256": "fb7a6e24e927881d69cae14fb8fe2b92e336fcf87fa6b713216df93f0f5d1a8e"
+    },
+    {
+      "path": "src-tauri/src/denoising/tests.rs",
+      "sha256": "923e5336ed0ff8a498a1c8dd6ee7b35e89b00aba06bfe19f97fb7c47e738c181"
+    },
+    {
+      "path": "src-tauri/src/denoising/transforms.rs",
+      "sha256": "236525f85be439f08b45697026eb790aee2558031b46c4c41844b7b00f5b7ee1"
+    },
+    {
+      "path": "src-tauri/src/denoising.rs",
+      "sha256": "7e42c48072425d3dfd1fe2d5536f44b5fecf91867be5290155b12924675694f7"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/exif_sidecar.rs",
+      "sha256": "c24ce117f359055663c934b5e1d832b81cfdb9e5460189aaaa80d98d5d74ad2e"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/exif_values.rs",
+      "sha256": "cf75343b1fb24fea7cb492bc7a5441c0528f459691cc43f2c6e952d44f451af0"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/export_metadata.rs",
+      "sha256": "7f2eae55b590c7b306aeef6c36c5d21adae7960efa4cabde61c61c8b6ef55c23"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/metadata_read.rs",
+      "sha256": "0f0a90a7e80b19f75910683588856380ef822e44879dd3f955f00ad165f2203d"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/sidecar.rs",
+      "sha256": "17cad9f7dfe9bbb350135cdbbdbd3378154fe5e29df9b7caf92c3db2787da865"
+    },
+    {
+      "path": "src-tauri/src/exif_processing/tests.rs",
+      "sha256": "1eded61323877d62a29b564a6e0e6366dee5ebdad5066ca67848790acf0860b6"
+    },
+    {
+      "path": "src-tauri/src/exif_processing.rs",
+      "sha256": "819fd3fe2e0a90be2f7ea16f845b7f73b9141ba14c9f34f3e09ec01cb57738c5"
+    },
+    {
+      "path": "src-tauri/src/export_processing/batch_export.rs",
+      "sha256": "9b8aab4eaea9a4d153d9ec61ed730780114bb50ef39835388913d0e4a33166c4"
+    },
+    {
+      "path": "src-tauri/src/export_processing/batch_geometry.rs",
+      "sha256": "353359717aeeef47e6309ef3dc12d6f35732c4f833d66d3fea4eec11635f258a"
+    },
+    {
+      "path": "src-tauri/src/export_processing/batch_geometry_preview.rs",
+      "sha256": "08fabdcd475354911907247f0c89645bb13c5d735bb62fc426ef59e596d5e3b6"
+    },
+    {
+      "path": "src-tauri/src/export_processing/content_orientation.rs",
+      "sha256": "51cddcc9fc4cb417f269683b91b3b68ef727581d7ad71ff58d3b4a5f6a5a1a7b"
+    },
+    {
+      "path": "src-tauri/src/export_processing/encode_bytes.rs",
+      "sha256": "68d9bbf22e8b0d3d582974d4557fdc9fcca59789cb7397f8de23ba88e4756262"
+    },
+    {
+      "path": "src-tauri/src/export_processing/export_render.rs",
+      "sha256": "9c2323a8f9abd03befdf7b8162784267d8390333a5354e24a63b767d1fb2708b"
+    },
+    {
+      "path": "src-tauri/src/export_processing/file_output.rs",
+      "sha256": "7399694633bdc0cba1fa653751b8ef213ff226e897be7bd11ed9a6c003c76664"
+    },
+    {
+      "path": "src-tauri/src/export_processing/masks_and_lut.rs",
+      "sha256": "ae587178493d30c9a79bb42963aebdc921e5fe3c0d56ecf68ac2a7ddd549c7be"
+    },
+    {
+      "path": "src-tauri/src/export_processing/settings.rs",
+      "sha256": "191f9109fca8bf1bcf174a708c453c08b41c3073d36d60dfc50c7aceca980ed6"
+    },
+    {
+      "path": "src-tauri/src/export_processing/streaming_encoders.rs",
+      "sha256": "374c0a25c7183519700186ce365b7a9c01a3d38fd22c02ed57776712de4af18f"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tasks.rs",
+      "sha256": "b7d7b3e9b049d98bbf2793173b96f0591fa5978104a3e9cd9030cabd72eb119a"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/batch_jobs.rs",
+      "sha256": "1512fcecaa047b3d1772745e7fb1a9da5c8c82a988f328c0c7d2deca91a10dfb"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/bounded_webp.rs",
+      "sha256": "bda49bb6c1798d11d2b52ab593913387a4ecf4ab9d8549ed3aa9a2892bc2b129"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/encoded_formats.rs",
+      "sha256": "9913324f5e8d1876ec230d311925491de39e15fc809bf9e8b21e7e0dfccd87f6"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
+      "sha256": "e40fcbc8e25a6b2d3b337f6734691bf4717b998de7f8870a0537a4c31866fe93"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/streaming_metadata.rs",
+      "sha256": "e400d7e30fed0cbddb971bf6bdbe4e11b925395b1845c0ad760e93c3c64790d8"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/streaming_output.rs",
+      "sha256": "35ea3ac4b6077761fcfa7b6a29ab9c86959d66d2a0c6e9f7f25573bd78521954"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests/watermarking.rs",
+      "sha256": "15fb05c57bfb2951615108370280ed74f35a1bd98a7a8864456391988245d497"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tests.rs",
+      "sha256": "31323a0dba57e44080d4d45d3163c25fffd8e2e0ad7d87338a7f12947e019982"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tiff_streaming.rs",
+      "sha256": "51954f1abc8c584146999388d7780d4308212c5aecb2cebc942846e2d70d3160"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tiff_writers.rs",
+      "sha256": "07722ff510bdccc799c0884e1cc1b628bdf6204a5e39de93ee330d4b1b86d592"
+    },
+    {
+      "path": "src-tauri/src/export_processing/tiff_writers_tests.rs",
+      "sha256": "25c3eb128f7ed17d5d46518e680c5e6a9e41485d406d2a6a1531c5c346dbdf09"
+    },
+    {
+      "path": "src-tauri/src/export_processing/watermark.rs",
+      "sha256": "55d1873c1f1d2a2375ed49854f2c5c728d7ba4a4aef9386cb648b06b0aa0727e"
+    },
+    {
+      "path": "src-tauri/src/export_processing/webp_output.rs",
+      "sha256": "3da1efcb9fb141f86a76f78b158708475de43b2706ad2da6570552b35ec98e49"
+    },
+    {
+      "path": "src-tauri/src/export_processing.rs",
+      "sha256": "df76366c0ad15d82fafe504f6d6ecdd01a047441b1914e6ee97e87e2d0a8b9c8"
+    },
+    {
+      "path": "src-tauri/src/file_management/albums.rs",
+      "sha256": "b07960d74ff7a0d709045ffb07dd7c6c870573a27596232aaad7993f6a978cf9"
+    },
+    {
+      "path": "src-tauri/src/file_management/file_operations.rs",
+      "sha256": "75a3737910c05d1a26dc18cc99601a9fa4d9b596219647352b072048303674cb"
+    },
+    {
+      "path": "src-tauri/src/file_management/folder_tree.rs",
+      "sha256": "62c135239afc8146d00ee44433aa5c3fa6ca1b51ef20215597d90cd300254688"
+    },
+    {
+      "path": "src-tauri/src/file_management/importing.rs",
+      "sha256": "a159bc0e79e29a730964c569287fbf9b85899767a485d5f46882a62c5e8b383f"
+    },
+    {
+      "path": "src-tauri/src/file_management/listing.rs",
+      "sha256": "44b1f805087b96a33e806dc174aa26efbfbe6d3cae6897f829014febdd82ed7b"
+    },
+    {
+      "path": "src-tauri/src/file_management/metadata.rs",
+      "sha256": "9c2c5462accb68158c0a7476f25130c44829c6b9e63defdb3e1c974d551e52fb"
+    },
+    {
+      "path": "src-tauri/src/file_management/presets.rs",
+      "sha256": "5652fc65996bfb12fa40bb52f360b5c01a34b627db7b5bc21026332d1f1f666b"
+    },
+    {
+      "path": "src-tauri/src/file_management/sidecar_edits.rs",
+      "sha256": "b41421272ade0d2bdfb8c1d728d7e689e6d4dc38b8302dd3de30fb29c4d67879"
+    },
+    {
+      "path": "src-tauri/src/file_management/thumbnail_queue.rs",
+      "sha256": "f99427cd03ca04b8d04677b94a011c281c696ca1750264687673666b9edbd56b"
+    },
+    {
+      "path": "src-tauri/src/file_management/thumbnail_render.rs",
+      "sha256": "035e6ee4332b78d5572e5a5ec1e0fdb25feca72d8e68fc3065a3a315b910ddad"
+    },
+    {
+      "path": "src-tauri/src/file_management/xmp_sync.rs",
+      "sha256": "0fb7bef34a57aa2c991832cfe9189f6c826d97855edca4844092620a77e917d2"
+    },
+    {
+      "path": "src-tauri/src/file_management.rs",
+      "sha256": "0508aa3b4c6f10d10bb3fd236957b3867ca06504ee004bf74f20437f6195c214"
+    },
+    {
+      "path": "src-tauri/src/formats.rs",
+      "sha256": "18f19215f1353415f610dd4077bc7af03d6e0bba6cbadaeba415bc7a9810a472"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/context.rs",
+      "sha256": "a483d56eef090fc6feb27f74ed45460e7962e1c22e7e2f7d785f4ff3b2cc67b7"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/processor/pipelines.rs",
+      "sha256": "e30eb6ba6ac536a22093bc011fdb6d075386907044489d8ea5967767317fe062"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/processor/tiled_run.rs",
+      "sha256": "c9c17e881e13bf7e8024073409ee5b28c992cc67f35eff5cdeed66f0236a6cb4"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/processor.rs",
+      "sha256": "da126c59740207b8dbfcfb0f5be6d9e32ce0422411eb736d8e639b05bab7cd14"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/render.rs",
+      "sha256": "33ccd825907675c3fa6adcfea797d0b66f7b91f103b47c9adabb2fffc24ec36c"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/shader_tests.rs",
+      "sha256": "80c3a213187f51587f7c802baba21bb71a6252dc0cd08bc3d7435b07ebdfa89f"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing/texture_io.rs",
+      "sha256": "3d3c6437ac6d7ed2d747cf126e931c623257a56ca12f00bb756b7cddfa1dd7e9"
+    },
+    {
+      "path": "src-tauri/src/gpu_processing.rs",
+      "sha256": "ab2fef8e216c2149734f59a5cde4ea2ee456e08dc04bc7a4566d3460c72d51bd"
+    },
+    {
+      "path": "src-tauri/src/hdr_deghosting.rs",
+      "sha256": "a9a40bd29d849669696aab55274184133a554294484c992f903fb5e43b9f5db4"
+    },
+    {
+      "path": "src-tauri/src/image_loader/color_profile_tests.rs",
+      "sha256": "f0b8867d3248859476a8c09ca742a278a2d7031c7044b785800f2c5ab61df23a"
+    },
+    {
+      "path": "src-tauri/src/image_loader/patch_compositing.rs",
+      "sha256": "9deb461377898900758f329315b8e7c9988454f40c76193033ad8d26a5aa3b61"
+    },
+    {
+      "path": "src-tauri/src/image_loader/source_decode.rs",
+      "sha256": "3dce42a34a2077fdcb8c94ebcaf813fdcf240f3f579e79087d5a36ca096ca82f"
+    },
+    {
+      "path": "src-tauri/src/image_loader.rs",
+      "sha256": "19d283a7a85c837f4df5f5982836569d3eee12ed9d39f4ea788033d614e1cff1"
+    },
+    {
+      "path": "src-tauri/src/image_processing/adjustment_parsing.rs",
+      "sha256": "59a699a2820e9cb03626886d21995ce1efd1bcfb7f8107c27c79c5c79db476d5"
+    },
+    {
+      "path": "src-tauri/src/image_processing/adjustments.rs",
+      "sha256": "9c38b4402a3853e780261a72cb7ab142c6ff8d18a202fb181b5ae7f13a88a7e5"
+    },
+    {
+      "path": "src-tauri/src/image_processing/auto_adjust.rs",
+      "sha256": "d258aba8c38cb562473b5692a6e9e07450c1091cf00db6031e0eeb3e4beb9e6f"
+    },
+    {
+      "path": "src-tauri/src/image_processing/auto_white_balance_tests.rs",
+      "sha256": "64ff5750293bdc3ce6560214514fe8e4a4b3cd04e33be89c4d03fc78b7837dac"
+    },
+    {
+      "path": "src-tauri/src/image_processing/color_transfer_tests.rs",
+      "sha256": "b6f41d6f25bfc21b2877317f8436f1b6360735721ab86a867ed505d71a9c16b0"
+    },
+    {
+      "path": "src-tauri/src/image_processing/color_transforms.rs",
+      "sha256": "48f5ea8b32831ba7c185fd64e301c38a9dcf342f3c46f5f072ef4cdb30940d26"
+    },
+    {
+      "path": "src-tauri/src/image_processing/downscale.rs",
+      "sha256": "1e46731b235eeae5d529b07fa97b82adbad675189a6694a366ac396bb4e10c5c"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_ops.rs",
+      "sha256": "37378dd07d9358914b0bb79dc1d1fdbf6287728f1a9cf64bce8351f74a8625f4"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_params.rs",
+      "sha256": "ac32f1e5dc098ab2a328d77357d1eec7c089ea89e9fc112a4f301c4ee56057c4"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_projection.rs",
+      "sha256": "1b36fc7bf67aaebbf58d1cf6e5c2ced8875b35085f30f408e866b721bc6fbb65"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_sampling.rs",
+      "sha256": "3862a3b41bc0e6108e127454cf572b97dcb534257bb524c44ce25c4214446c29"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
+      "sha256": "d4e932bdde3edc0f060d429b4c30187b536b5fd6e2035820973d69ea743e265d"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_warp.rs",
+      "sha256": "42df5b2c4229c47c1aed3ba45f4ce3897a31d9e97298ac97c75c4f84ed86630f"
+    },
+    {
+      "path": "src-tauri/src/image_processing/geometry_warp_rows.rs",
+      "sha256": "0b183738d7aa0266570649d35c5b7798f81242e9758dfbbb0ecbbc19e190263e"
+    },
+    {
+      "path": "src-tauri/src/image_processing/raw_enhance.rs",
+      "sha256": "56a4e21aa1bf77a0d46b466d4fce998d378461ba953435170554142ba5de5ba0"
+    },
+    {
+      "path": "src-tauri/src/image_processing/raw_enhancement_tests.rs",
+      "sha256": "b50bc08bbda143ea8533f17c0c236ec37edce02d10035b91dceb46bbdf23fdf9"
+    },
+    {
+      "path": "src-tauri/src/image_processing/scopes.rs",
+      "sha256": "e1bee2c8905f344e9a2ad3594fbcfbb7cf94e8d4b1cef6efbb0d42464fe2ea65"
+    },
+    {
+      "path": "src-tauri/src/image_processing/sidecar.rs",
+      "sha256": "621f1ba33bdb79bf2a841e68fe48df5b36c5bdd70725881fcf6d73c57c8cee38"
+    },
+    {
+      "path": "src-tauri/src/image_processing.rs",
+      "sha256": "eae67296be93b407f39329cb3195ade6dedac95ced7d712d86a2f89d43e6f64c"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_encoding.rs",
+      "sha256": "69392431a212e2a5e4bfbc4a34defe4f8174589774de6a4346ad0ddeb98f17c1"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_encoding_tests.rs",
+      "sha256": "2b8ff1b6782329305ec4de3024386640ea48ac16f88fbab8def119801da692a8"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_format.rs",
+      "sha256": "e2f3ea27a615f10e93218e5a5e3eab062ebb3a082b20faab7ac15d35afc56466"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_validation.rs",
+      "sha256": "6eeccc458cd370af238f2f12db876b0d2b0c4ba41ebb46aa49efdc0bb9c891b7"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_validation_tests.rs",
+      "sha256": "cea6d1856d7c418b3db437f7240c78407a8c6cdd263b1424693589bf95d370ad"
+    },
+    {
+      "path": "src-tauri/src/image_stack/output_writer.rs",
+      "sha256": "3c26d3c3ea4ef7d945e66004bfcbc087d68dc603531b58f157349fbb7ae4a57c"
+    },
+    {
+      "path": "src-tauri/src/image_stack/preview_files.rs",
+      "sha256": "dde1855e2068b539fe4994a6585aaccbae6578db6c5baec6bb05c479b4b23e3e"
+    },
+    {
+      "path": "src-tauri/src/image_stack/test_output.rs",
+      "sha256": "afcae8bcac4183dfb7bd37e7f106e3499f040841daa33a88e1ff49d0d8b1798c"
+    },
+    {
+      "path": "src-tauri/src/image_stack/tests.rs",
+      "sha256": "ba470713f54a503bb914ad57659f034db206ce24efb88dfbce0986fb1714cfa4"
+    },
+    {
+      "path": "src-tauri/src/image_stack.rs",
+      "sha256": "2782b8bb8cb02292fc9bef0933be7e408e1e17f34c7d23c0ad2aa5b3dd36c638"
+    },
+    {
+      "path": "src-tauri/src/inpainting.rs",
+      "sha256": "c25f6719c3315eb5e4c64c734e57d6ff3180ae5993ca51c54c765add466d2e10"
+    },
+    {
+      "path": "src-tauri/src/launch_request.rs",
+      "sha256": "469b251d25c0c2ecc4c105949c82712fcc07d9db5bd3895a060353f98a4fac9b"
+    },
+    {
+      "path": "src-tauri/src/lens_blur/bokeh.rs",
+      "sha256": "174d93e23375526686a4696b458e3845e03abfac89ee48df8272d0a7c6690db5"
+    },
+    {
+      "path": "src-tauri/src/lens_blur/coc_field.rs",
+      "sha256": "8d893aef9f437059231237e2073a92d6851663d5ace16bbdee7acb5208fddb57"
+    },
+    {
+      "path": "src-tauri/src/lens_blur/render.rs",
+      "sha256": "3ee663fe927216bfb361779b3e8cabb4064408750b2669407f8fedb66f90d3f6"
+    },
+    {
+      "path": "src-tauri/src/lens_blur.rs",
+      "sha256": "cdb081412033a1d1803050a3769db7cb592008eb377ed13b2d9766d02634ad58"
+    },
+    {
+      "path": "src-tauri/src/lens_correction/lens_profile.rs",
+      "sha256": "b562471c9fcd04d3a878ab4461285d31dc7b8f592f0c0efca20385718222ff9e"
+    },
+    {
+      "path": "src-tauri/src/lens_correction/lens_search.rs",
+      "sha256": "131defbc2b687492d3195e5329b45af2e84bd8ea78b2925b93e0b9e9398d70df"
+    },
+    {
+      "path": "src-tauri/src/lens_correction/lensfun_db.rs",
+      "sha256": "4e123a6c49545f32b11eb117803ace06e11b3d839042bf428bbea62b2ef80354"
+    },
+    {
+      "path": "src-tauri/src/lens_correction/stack_calibration.rs",
+      "sha256": "329e2cd522b84794faa818344e25ef2346f5256091eb89f8e720c72d44f7f5cb"
+    },
+    {
+      "path": "src-tauri/src/lens_correction/tests.rs",
+      "sha256": "d3c57289edb0e17a1c07e35b9e51e7570e53067104b5fe5274ef248e8f0ecb9e"
+    },
+    {
+      "path": "src-tauri/src/lens_correction.rs",
+      "sha256": "2b0dc62f609461c8acaf8080ee1cc201d43608d8152db5e886d367b12b11a344"
+    },
+    {
+      "path": "src-tauri/src/lib/geometry_previews.rs",
+      "sha256": "59001eab40cd96e74976c5e26ef0a1104fad82bdaf12215d3f437a76a810e216"
+    },
+    {
+      "path": "src-tauri/src/lib/logging.rs",
+      "sha256": "83198df62f0c6d1a494b6330fe7d179ba2f07186e04eb8b6d86685b6a17ff9e8"
+    },
+    {
+      "path": "src-tauri/src/lib/merged_outputs.rs",
+      "sha256": "6a87bde754d575e28474264eae8f35d239d53984b5eac53a836995715551d011"
+    },
+    {
+      "path": "src-tauri/src/lib/native_preview_display_tests.rs",
+      "sha256": "9b40791d52ff00b7c0ccda6ad38f9369be1d1884790a12dc91b5db8f7cf14200"
+    },
+    {
+      "path": "src-tauri/src/lib/preview_cache.rs",
+      "sha256": "04e124403b3b172e33dc3b5a87de882aaadc34b73c22db9da1afbf20bd81994d"
+    },
+    {
+      "path": "src-tauri/src/lib/preview_commands.rs",
+      "sha256": "d3af10ed18dab92b73d1245bce0bfbf3f6f80033d97b95f24707d46c538ed8a5"
+    },
+    {
+      "path": "src-tauri/src/lib/preview_worker.rs",
+      "sha256": "252266189065df1ae209eb7ab5b32bd59336afb48a0544c9aa391240c6d7f6d2"
+    },
+    {
+      "path": "src-tauri/src/lib/transformed_image_sharing_tests.rs",
+      "sha256": "234fe1867b7cfe7c3174b4822ada2fa309bc6fe94447c7f1a259782dac0e1982"
+    },
+    {
+      "path": "src-tauri/src/lib/window_state.rs",
+      "sha256": "02814fb0c28c11e8347768062fbc07ae172cc781526d051aa8f18aacb2455562"
+    },
+    {
+      "path": "src-tauri/src/lib.rs",
+      "sha256": "8b8234bb594ffe175219502a46125c3056472938f5b1762a44ef09839a6311e9"
+    },
+    {
+      "path": "src-tauri/src/lut_processing.rs",
+      "sha256": "83293e20026f6063f0ba9207374c21806c7c102738e7fa61ce6d7fcdab688f70"
+    },
+    {
+      "path": "src-tauri/src/main.rs",
+      "sha256": "6068ae4febf40e9a283f9f1daa1ff860ff6f321da46b245d9a3ff6631bfd85ed"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/ai_masks.rs",
+      "sha256": "1048ab9f60760914d5a0b34ec372536e29d2afde05e6110cf8b8de1123039830"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/composition.rs",
+      "sha256": "acb7edb15c099de712a8218131bb229656bb7c9e43e0131e1bad1ec9f3565d75"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/grow_feather.rs",
+      "sha256": "242d3e9715165cfced229a21938c138bb76788eac1937a9b2d9cf98d441b402f"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/parameters.rs",
+      "sha256": "d470a5cb73d18c516612821be05e2f7fe5416f43b81ff6674e0c3f8b832a5ec9"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/range_masks.rs",
+      "sha256": "f4f2b3ae090db0e4d0d98e8e65e2be94bff9605ab133d9eb35dabe0f7b77c244"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/shape_masks.rs",
+      "sha256": "e4e3a9135904be97acaaa80cbc24da481010d5e57a1ca1b762f0bb2d6830f104"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/tests/composition_and_cache.rs",
+      "sha256": "431edb001e98b80240c8d91e97c7ea64ae0e4c89260619bf82276fbb22f2728a"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
+      "sha256": "021f12a60de9e5b88b2a652e94c35cdfadb7277e9bf1b726727dac833a8947b9"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/tests/scratch_bounds.rs",
+      "sha256": "49763808be57a2509e01a3e2e34a6c13c2ba82a20da4e58e9831a5a655d258b6"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/tests/tiled_parity.rs",
+      "sha256": "3f0c018aecbc4222888490afbc18b57da4c6dd87ab61a8c41ad186f2c94c0953"
+    },
+    {
+      "path": "src-tauri/src/mask_generation/tests.rs",
+      "sha256": "009e763cba61896ddc7463471966e21bbad1d452103b1f5bb5383a40c969b58d"
+    },
+    {
+      "path": "src-tauri/src/mask_generation.rs",
+      "sha256": "ef67f7648999b48fb62d00b30394f7df5aa5126c351d94d1b03ae5627d832607"
+    },
+    {
+      "path": "src-tauri/src/multi_exposure.rs",
+      "sha256": "a613d33be1a2f40db28f8a33bf87e67c0748007914328214ce67602a28ef4901"
+    },
+    {
+      "path": "src-tauri/src/negative_conversion.rs",
+      "sha256": "bbdaf7d6fbb02ea8e41d82e7256857c059ab75b12be81615e89590de839e5139"
+    },
+    {
+      "path": "src-tauri/src/panorama_acceptance_metrics.rs",
+      "sha256": "0a85f1eb2be87c154815fe3bd182a5f92bdf66ccf0ce3a403c1dd488553d4a60"
+    },
+    {
+      "path": "src-tauri/src/panorama_capture_groups.rs",
+      "sha256": "bd35844f19cfeb563ef6839aaac09de0bff8382f602ba90d8dd8f40d0a0b44fc"
+    },
+    {
+      "path": "src-tauri/src/panorama_feature_pairs.rs",
+      "sha256": "d4ddedd88b3aee80a773e2d322b14fb3b7e2c328c1d2a8c522046641a3177ad7"
+    },
+    {
+      "path": "src-tauri/src/panorama_focus_feature_prep.rs",
+      "sha256": "29f09da78da094739dc8f3eb0be56f582764487c112b6ddc7791761aecea4a05"
+    },
+    {
+      "path": "src-tauri/src/panorama_match_candidates.rs",
+      "sha256": "878177fa0ca4345176df5dab40ff08424ef57854cd57de9b136c0efbf6947d18"
+    },
+    {
+      "path": "src-tauri/src/panorama_match_contract.rs",
+      "sha256": "061078e50a7abad5bd5f68015163443c8fbebd9d55cd25f443e6a5bc19112184"
+    },
+    {
+      "path": "src-tauri/src/panorama_match_focus_rescue.rs",
+      "sha256": "5c3aff722ddad55349ad37befb2430f3cb43c64bf63f83ea24e16b61f917378b"
+    },
+    {
+      "path": "src-tauri/src/panorama_match_geometry.rs",
+      "sha256": "7f00d38443fa58b5cb590cec15d61cf8e22746e495a517cb00d5afde6a03a223"
+    },
+    {
+      "path": "src-tauri/src/panorama_match_result.rs",
+      "sha256": "5a988af23d953aa9b46cbe0d01cdcb1ce26fbaf97d40c7b49eaa50ea12d6e168"
+    },
+    {
+      "path": "src-tauri/src/panorama_reference_acceptance.rs",
+      "sha256": "8387913248707967f10e4dcb325c8736dd8305ec62b2fc0db071ccc79bafe3aa"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_closure.rs",
+      "sha256": "8ba908e9da7f6e5a7a63ab63ccb4259e51b5085dd5d1e210ac41b8617561803d"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_closure_gate.rs",
+      "sha256": "bad477a8c6e3eb87a56ef781ea7de7c070bebb0b91e89b75a4df72ce7d47f992"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_closure_refine.rs",
+      "sha256": "16ca545395b6e8d2065f90afdab42496f3cc5723275bcf7f2d213c797077a8a2"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_grouping.rs",
+      "sha256": "b3f9d420df2eaf20ebe345a6b837734c94da06641c1c72f95e671ee0e9b90d3d"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_pose_seed.rs",
+      "sha256": "f386961f3727499e71b2f6a018e9f5108404c2f060b521e3a8ab975059b70fa9"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_relation_gate.rs",
+      "sha256": "e6427d8889d0802578707e3f74642fb372fffeac950b6e2d48a074cf2ee5a650"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_residual.rs",
+      "sha256": "5f8ebc2f8bff6b9037a5745d5c43afb872cc700dd2d68f0551f7667edb121394"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_solve_entry.rs",
+      "sha256": "f0f08a5aeab5158b73a59c0bb2f2281e822c64a1ec6c707836c07d043d8829d7"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_solver.rs",
+      "sha256": "e589d4bf10396ebf0eb7b1f45820170816efe74762020c2e30280aebc0a2f01a"
+    },
+    {
+      "path": "src-tauri/src/panorama_station_topology.rs",
+      "sha256": "f93eefb4ac4061884afc7ead3c39ed214f111890f54c37b06864557ce7339489"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/entry_point_fixtures.rs",
+      "sha256": "8f54cbd55337c6a801fcd8998c3ba0b2f54d11f4149f25c258e64b69ed561153"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
+      "sha256": "4d558007d1e26959ff02f2e965707df9301f920c0475f36e03cdf4ded1ea2f6f"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/native_capture.rs",
+      "sha256": "51241140e5bcc95af0a9a1ac1770f5dbdf2b73beaccae376bec607d4a10171e6"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
+      "sha256": "50f80ae522009b5b3512e972614d291fd4a9319a1f4c31313dab632948d75741"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
+      "sha256": "654e1086c7c88526633c54d2c5692ac5bf2e3bda757bb65e9ba2e17fc513cc86"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
+      "sha256": "2af53bba32807da6b09e4aef7dd7dab5742e70444d1325ab6431c3cecb73a1cd"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/acceptance_tests.rs",
+      "sha256": "3eb683a571c5140399ef1c2861dad2ad770ff306231bd4364cd985970d2ddb12"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_cache.rs",
+      "sha256": "b389c050c2cd828f9447b4d6b82af61202a8592072c9b527db89e132fecb1241"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/capture_grouping.rs",
+      "sha256": "73451e92c18a6a2ae927057e5c5f4f58213402132ac523bc4ee78f133d4de422"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/closure_optimizer.rs",
+      "sha256": "0bb4b818b7488542eb3ebb7b71c60d903865a80abf149c78777fa276c8420c6a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/edge_bands.rs",
+      "sha256": "a43e2cbb9db28a7ca8d55c32920c3d3489f92a72187c78cc09bd7411a7f6ec4a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/focus_scan_order.rs",
+      "sha256": "555cccb6a5b93ebaadffd8fb6754efc0196c528a6cb4b781c7be83ba89e2b5e1"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/group_pose_solver.rs",
+      "sha256": "bf325dc7f5642a285eabc6df3755d09fa31d7127276e916707334ff819fa8aa5"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/match_pairs.rs",
+      "sha256": "51b8e99a1fa2238fc0a29d2f5a76aad927cefbf92278e64938e5a14bf196ab3a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/relation_acceptance.rs",
+      "sha256": "4fd116591b70e4732be5e7eef553b147f572f537c90369f324a92192c62cf48d"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/render_ordering.rs",
+      "sha256": "4b3aa84e31e42eeb9e4b906ec539fbc3e0d2536ffe6048858c3761256b26349b"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/source_preparation.rs",
+      "sha256": "3c8a90faa3420b2ec9ae413a02668407d5f48f0d105ffc5125cc77b2e9ca5c4d"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/transform_models.rs",
+      "sha256": "bacd4e3dfa37ab8252bd309e84f93a6ecc6282c67de9aeb4f4921e4eeee5938e"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/virtual_tile_matching.rs",
+      "sha256": "d9d7d1e1c1468394704f439f41cb34ea87c8f78f5e10fbb286118ccd0eee6322"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/virtual_tile_measurements.rs",
+      "sha256": "1adce251934066eb96c0aaee039dc7ec5bfcc92da52dcd549e082af28f0de1c4"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/virtual_tile_residual_model.rs",
+      "sha256": "f7d8efef5ac2cac0fa5de7ee41a21eee79fab668a450e06cc4df5a9ef366968d"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests/virtual_tile_solver_flow.rs",
+      "sha256": "37a2b5a9cdf69929aa6b0191352278b3437a075be3e270dc33f906dcb8a91709"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/alignment_tests.rs",
+      "sha256": "e9cee3d7ca7c1eae612cadb3b9c804b78e87f96bac9f4bab255c102be21d55af"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/capture_sequence_bridges.rs",
+      "sha256": "0d7915ca1a1b3b3fdc024f6740a8a0c9efb8479c11e5ce74f4e736e26be28c96"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/determinism_test_access.rs",
+      "sha256": "74e9329d3d9247494168f0df11ad36ab7a5e932113d410c3ff4ef02a2d56c9ef"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/flat_artwork.rs",
+      "sha256": "1e4fa9a7b91a8c4e6ce5ca7de06f41738e4280662821e912230739175cee8f27"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_auto_order.rs",
+      "sha256": "f87e393ecce0ca98011c9d29c6e9ed465c82298d0ad1f2f623398ea12b80ec46"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_capture_geometry.rs",
+      "sha256": "c8c722278f326fdce24d5db5e2f07cc920f623822f8a59e274d5ea97e7b1e775"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_capture_spine.rs",
+      "sha256": "a478f7340583a18d4f625cb3128eb2aa3766b35463d0819eaf19c98a1504a767"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_component_recovery.rs",
+      "sha256": "5d976e19fd29a98d72616d6e9efa1c8ba294f62f907f03d91bcf65e41b7bbe67"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_global_observations.rs",
+      "sha256": "56d9229d0891effe886ae1c9049cf3336a93328248bfb89f9f16e98f2eaa2a0c"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_global_solver.rs",
+      "sha256": "e35240f114b9c722a770ff10ffdd2dd445f27ecc7bf90a1c3712da8668f43aca"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_layer_warp.rs",
+      "sha256": "7b824a96cac7f580b54ad155ad0b75ae542255800fbca39e0ac468d89ee3165a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/focus_stack_order.rs",
+      "sha256": "01f593149ebe453fe100ead83a395656aa929fe8ecaafc577b238d15d802a424"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/grouping_test_access.rs",
+      "sha256": "52820eb572a1a49f91938e0cca61afb2a94e5aba9a8229c15eb0326cacff1ab9"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/horizontal_edge_bands.rs",
+      "sha256": "995210a9682203f7967d17b6321af1ec49168b4805d717802aeeced55f729dab"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/native_fusion_cache.rs",
+      "sha256": "0538ee2c6da45a4295200f2ee0b5f06d1efb38d712e34d5e860bc24dfc8c4871"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
+      "sha256": "093872cadb10e5a6b7b2c5fe1dccee01b100c87b006f3430eb3da19d2580a93c"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/options.rs",
+      "sha256": "37496bf3172c350557adb096b80ba802b3192bd3cddade5e42014bad1c33cd67"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/output_density.rs",
+      "sha256": "449bf5e4774fab1dccd6b343d4c507ec85ac7a7e02faa766cd7a61b685db000e"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/overlap_quality.rs",
+      "sha256": "45ad56deed137218f00c70f752a577ef121689472a7356ce861da1634b2bcbac"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/pair_matching.rs",
+      "sha256": "e0e70a1aca8d564f4bea3999d2eadbee0e63d285c8e8feffb94035d9351e2051"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/patch_refine.rs",
+      "sha256": "8c1fd8105b8d3d90f1d958d296a9ff7edf0032ac99c276f502d9351fbd28fcfa"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/run_control.rs",
+      "sha256": "40ec8e9c3fe5e2bc0870a554f9e800aa2a71665ad0d2c763c5e6da36625b1a67"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_preflight.rs",
+      "sha256": "14f9204791e1c3993d1465e55b77abb770c961f20c1426eedce7d99c3b2e2378"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_prep.rs",
+      "sha256": "3ac5e2ee10b95eb791dbd932befd16740a1932e087a9c6c1aeff5b09207c7dd1"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_raw_direct.rs",
+      "sha256": "d389aeea61d8d8590956ab6300b55b802a0172037dd5096f0129454a3f98ebde"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_raw_direct_basin.rs",
+      "sha256": "b21e84d544d28b935a832d38369463108db4b5e1b033d6da81a4aa1856e044ae"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_raw_direct_pairs.rs",
+      "sha256": "5e130328d5cb422d1b0b65a308d046ce0c390ce4d0272f422179e0ffed116b1c"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_raw_layer_diagnostics.rs",
+      "sha256": "c01c921494a01f28eacc26002e5940155f10233130879cf905e8e11c61ad10bf"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/source_render_cache.rs",
+      "sha256": "33c1a910136b269ac682e48ebe2da92138e1921cd2c6d767e94d78770eb54600"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/station_relation_test_access.rs",
+      "sha256": "5d0345fe4b31225bfaa3e565cd0eba27bb945a1fb718b02b688aeb31800d35c4"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "sha256": "16b19c1692eececad2abe2a65a107666b826f804024c350dea5f26d04f669409"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/stitching_order.rs",
+      "sha256": "82b65a5dbee74b0c2e035e26e481db0ce1a78488e931efee07df9be4521ade84"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/tile_payload.rs",
+      "sha256": "a8f415a3a7f6a6b5d565b3c40194905fe740750b91d62b6bfa7b61890a564255"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/tile_payload_tests.rs",
+      "sha256": "95148b92ce817cbe999be13f37893cdd08bb6ff2773c6f49ad23cced31c24db3"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/transform_math.rs",
+      "sha256": "ecb321abce6337b8a564976e28087e5a608bd024314132e9a4944904bf1e518d"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/transform_selection.rs",
+      "sha256": "0d54c80f2030fcaf8a98de61f1c0f437bc13ee9e4645d27caca1cf7b614868a2"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/vertical_edge_bands.rs",
+      "sha256": "f8a8f45cd2f01718379da5e68a58afab8168176df18dd32245da0bb2d91a0d36"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_direct_match.rs",
+      "sha256": "adf26afe5923d2dc863f99731ec013e33a48273f1a88e54c60185db4a43b7c59"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_geometry_repair.rs",
+      "sha256": "495b414f5f6d055cdea9e52fe52de16f53eea46061308070c28cc5db6801ad93"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_global_search.rs",
+      "sha256": "86c4042e37d7a8673708d37a89a9ebd38911016b93fbdcbf7fcc1b52b171dd99"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_guided_match.rs",
+      "sha256": "dbaaa8f909ba22ad648b97c74c5eeea292f4e59ce28f51a45bb118cb96320877"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_hypothesis.rs",
+      "sha256": "7939c2d38c6017960e7766f1a97e8171762def99be69bc47a6f704f6b87a9bde"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
+      "sha256": "eda0217c6e4be4658a063900261b403b2c645f59cf15492189041fb6cc1d8c5a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_polish.rs",
+      "sha256": "01dbe8042201d5d862c806e53ade23769711dbf11e5935ff1b351aea10a8a80a"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_pyramid_match.rs",
+      "sha256": "db6311e7d45b7075c72b038db86cd2889026371e87eb32d85d8a191159cbaf18"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_relations.rs",
+      "sha256": "2cc599c763baa035bbd2120fe0eb052572beccffd7b65349cbc028bba46e97b0"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_residual.rs",
+      "sha256": "3097694fe9dff8061010e0d04365a56c940c0d766156d806c411dc78ca508784"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching/virtual_tile_structure.rs",
+      "sha256": "806649fc01656d3841d4d060c89d4f976f63a71732926a3a564964272362ac8d"
+    },
+    {
+      "path": "src-tauri/src/panorama_stitching.rs",
+      "sha256": "a15f17a6993cbeec105a2cdfd9b9441a68b1a4d45507ddbe9091b16b7976f3fd"
+    },
+    {
+      "path": "src-tauri/src/panorama_structural_oracle/direction_solver.rs",
+      "sha256": "97b94f490e91279b3a51b2f72a321c77eefcbdb7e994f227a2dfe59a7b11b35e"
+    },
+    {
+      "path": "src-tauri/src/panorama_structural_oracle/edge_chains.rs",
+      "sha256": "f98b31bff2a2baa6c56800a225985abefa1e3d7e54cad349abafc80f097dc84f"
+    },
+    {
+      "path": "src-tauri/src/panorama_structural_oracle/structural_primitives.rs",
+      "sha256": "9aff3d4c5e0ca6369b006014e9c8cad8c5b82dc71058e708616b9a01cb24b2b7"
+    },
+    {
+      "path": "src-tauri/src/panorama_structural_oracle/tests.rs",
+      "sha256": "7775d8f693f0839723884217226031c390cbbf353117e87320cd51a025225571"
+    },
+    {
+      "path": "src-tauri/src/panorama_structural_oracle.rs",
+      "sha256": "42b30ffbdcde8764526d29feaab5a2acfba0f1df1d497acf9f8f82c844a48bbf"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/coordinates.rs",
+      "sha256": "58c4729ec6dd19d7c0dfcd7523952f5b3752c60fcf9aecc1605eb775d34121b4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/exact_regions.rs",
+      "sha256": "c13620e98860cd495b5a4f436e32bc8a60783d1aae4b6f7f084667a5a9fb747e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/exact_runs.rs",
+      "sha256": "ccb8330b6c38ec5f6abae961c6b7af8a30782e679f7ddf487a470575149386f8"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/region_solver.rs",
+      "sha256": "aeee71d170cd19c68282f94a283c4934d993f91268d84d2daef6f5f9c13feb0e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/snapshots.rs",
+      "sha256": "baf014d0027214150e8e87f289e61af9112a8fad19468d9296b3e0878e58813a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/tests.rs",
+      "sha256": "df969fdea779f9ecad00dcd0c985f9ae44872dc66930b04db8e23062ca16a839"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle/world_cells.rs",
+      "sha256": "0c8a925f7ac6897f96861850728311e7dd49a85edcf8bde2ffa978fcc627d177"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/final_world_owner_oracle.rs",
+      "sha256": "1ae14bdf2c0fb11f79c8710081a2313e10bdf9467f8f57c2b0264410cdfde045"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/focus_geometry.rs",
+      "sha256": "91c7ca016da169a7933dc28b39fe0539a9b135fddd30199c83146234330609dd"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mod.rs",
+      "sha256": "185041f9f11a34bb218f829aeda2f9c56bf29c1fad4d6e758f5ed5230b927725"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/focus_measure.rs",
+      "sha256": "d546a52c0830ccc7286fb2e7fd85a916d1ba6f1b9b47900f9b52d5bdf95d8aa7"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/in_memory_mosaic.rs",
+      "sha256": "6606abb8d9f25ad2604b355cfec8de915b636555382365277707bfbf3f24e080"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/intra_station_test_access.rs",
+      "sha256": "088715d0363795202e6ecea51548e9fa679a5970613ac8b0463c6107f643a6dc"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/layer_refine.rs",
+      "sha256": "10318468429343d818ded335a5491b28453fc1316f04b610401070b82b29bb43"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/layer_tone.rs",
+      "sha256": "484dfbfd52f1ff0c3fac575dabee1727f95a367dca4dc7d13d3b742130fd59d1"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_control_points.rs",
+      "sha256": "d3942655172341f946e5e29adde4b5e04424633c95bbae289f698296d4865ead"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_control_points_tests.rs",
+      "sha256": "191bba5ca6ff2cd4f3cc4e9d9018e52dab33a576a3538b9364cc7d0227f2b562"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_prefilter_oracle_tests.rs",
+      "sha256": "cda998a83eb39c25109f81cb94ba03d39c34e397017d3ca60f24e546ff3c0f52"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_prefilter_tests.rs",
+      "sha256": "75af7968dd1875e700c6fa77ae9cab04cb429c24b8d233310feed12f0d090b70"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/native_refine.rs",
+      "sha256": "ac4001f55765f56cf4035c9b6ec1f4f4f0f6ce784f45088d8f4b70d6f98990d4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/sampling.rs",
+      "sha256": "1eac500d323800f02cde188ec3d561e1392f717f9e26ed701639dc1765608e02"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
+      "sha256": "abf753c66f0e58fd0d922a8f8384175ec73a9abd2707949b8542ec5ffec5c97a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/station_registration.rs",
+      "sha256": "d28a7a3996f5c81fa9262e23df7a0d717fcc5b4707bd56a97017141d73a6139d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
+      "sha256": "0b19142dd8a01eab63c7a709a0f9daaa638bcba4a4ee5d4737a759730f81ee3d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_illumination.rs",
+      "sha256": "057c8090cc7310757e73e0e7aa5aa0e9502438ba1c5cda2b64cf8928b27d3474"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+      "sha256": "fba12e4ac333f18064c9b77e9ac67d712207573edfeadf0008a1cf663059ba53"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_store.rs",
+      "sha256": "31f3c4465484aaa30f929c5477863e00cc595c895295525eac35f9cda83de3b5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/tests/focus_ownership.rs",
+      "sha256": "9d7bd75cd569eb74c0e078735b453d24cee13c7aa22c8ba05ece7c0cba81de0e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/tests/native_refinement.rs",
+      "sha256": "765701de0cd49a0fb43a55c041a295c6edb2f14b31eb2dc247290a29e7dac455"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/tests/streaming_tiles.rs",
+      "sha256": "f33559f7c983a09779ff7e8f237f9ec70093561bbb8d465d8d0653c6cc793474"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
+      "sha256": "0a0a084d62d4367e596fb87fb65288d44f7ee2fcf2fb8e65350b2b7d958b780f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/tests.rs",
+      "sha256": "be2e73da6dcdba3035521f3247485df9d9c1ade210c3ce3b4bd0f6111dedb54b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic.rs",
+      "sha256": "9597ce587fba6b7d5358695aee22c42a8830907874cd47dbbdd6ddb86309334b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
+      "sha256": "a94cbff76bee573da206310741e6e787a2b903f1ddacc604068685797b410abb"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/owner_quality_oracle.rs",
+      "sha256": "ee643f0e0ab210e055877b8d7c3c1ab66e56a416de4e918333f525427f337031"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/photometric.rs",
+      "sha256": "01d689229a5586e52a5b35346b45753d2700dcea2093c4df3d34b0cbd4533c43"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/processing/features.rs",
+      "sha256": "851a65d98911c1607850883aa82ff645260ec6516ec9b60dbf8ab064c74cd5e6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/processing/homography.rs",
+      "sha256": "04d0483fa78d1e47c325b19785993059b8cf42931753fd0695fe51b992f5e78f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/processing/tests.rs",
+      "sha256": "76088b1888083d9b2d69ea14fcb75f1e364b293fb533ef018d5326dba951f405"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/processing.rs",
+      "sha256": "0440a4674d03212010d0d64feeeef577333bfd96807fb7b04beddb03b4c8be68"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/registration.rs",
+      "sha256": "83c4488226a6204fe7b724d93309c53f41b1a482cf21ba4cedbda2101305efb5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/render_geometry.rs",
+      "sha256": "0e77b481518d9e8ca751213075ad5f91ea6a88650fe7a2389ea773029289ab8c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/compositor.rs",
+      "sha256": "d608837b254311a96660d802a7c0f9f61a2bf887b393a3c042455cea3bd95c77"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/detail_render.rs",
+      "sha256": "dbac4f0b27914ceed6a054f3a50669249d4ad9ee99f6c6235a018abe7774cc7e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/homography_refine.rs",
+      "sha256": "41bb4cd591393c4f48bdb987e171290082ee3ddf46eb0158cc7981ceb2707136"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/low_frequency.rs",
+      "sha256": "cce2c6e0e836fbdf4a5882f7880cf033436b1ff9ef5f2a455d8829c46e3b34f9"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/mesh_correction.rs",
+      "sha256": "72c1b332ca07c71ddc52b819301baad9c8e68eac61e496e82a452e0c8da68043"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/ownership.rs",
+      "sha256": "34425aa3c32e22d2259c09176d634c4e7f0f77564262b8d568e628a6fbd24914"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic/tile_analysis.rs",
+      "sha256": "921077f489e4d27e9fa8f4c28a94f0b1f3643a8010aac468ace6de5ade6fe1b5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/scan_mosaic.rs",
+      "sha256": "237df8614b240840b38aee5ed04b79d187c9ac2521f9e10fbb6e124b39e3ca2f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/seam_cut.rs",
+      "sha256": "35df91d29e4a7e730fae0d53900090b05659c0702e0d9f407554f8ea6648de1a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/shared.rs",
+      "sha256": "76558134bd1a978e71cccd4c2eda4208b839f37484ac2755538b1585ef770eb2"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/compositor/tests.rs",
+      "sha256": "421021b6e2fe8a2fb276b078d54e30a4ee5027844d95158cf3f1029b03d1010d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/compositor.rs",
+      "sha256": "cfa72da28e6830c6be62bc40535c7308e5fd64ebf13786cf0fd76b27848234f3"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/degradation/tests.rs",
+      "sha256": "a398b11f0e0b9bc25de51a22050f6c9cbd42504d672b9a7989e1d3c46827a002"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/degradation.rs",
+      "sha256": "647d943a42a01e6ed19beb97b09ebf6a0a68cdbbac634f240e1a5ec9f356d439"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/determinism.rs",
+      "sha256": "1a1cbc6fe63b98c522bf1b349724e98493ad688de4aee6b60dd3eada8a8b9c9b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/diagnostics.rs",
+      "sha256": "49aedb38bc4772eee8d8738ca328e2b04635e7c842153932a75ac75696682e0a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/feature_provider.rs",
+      "sha256": "4f007d5698cab69f444bec0a10c47eaec071f72d4c7e1ef809804131bdba498a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/cell_metrics.rs",
+      "sha256": "a4614654daeacec7b11bb5a1e33300268e9e62ff9c4a4d344fe340cc8610dd10"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/confidence.rs",
+      "sha256": "58ebd051fd36cae6723b70fddb5d4faf0b47453b74b843b162cdc70249809bf7"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/content_regions.rs",
+      "sha256": "14ab4755cb1c685257e77d26a0bba843da1fea80796974f242cc19d8b0b27ba1"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
+      "sha256": "79d6f75beea3b61738cf145f1569c1fedfa325f659ae6c56dae882d9d65e6231"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/ownership_solver.rs",
+      "sha256": "b4c4a1c331b46de880ce6d1ac3dd77fd864ab89a2055bcbd8709ee7892064ab7"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/station_fusion.rs",
+      "sha256": "1cb2f210b64f673b73ba8ee694b11d6950b09ea0b3aa8d4f57b9d547372045b8"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/tests/graph_cut.rs",
+      "sha256": "afbcc24d7d94424dadeb86d9d1eb8d9ebdc8a12ea8840466df20bcdb28f0f5dd"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/tests/region_decisions.rs",
+      "sha256": "c36d4d784e44def796109f98b8d98c688ad55b8a81d51ae9aefa09e1e13b30e3"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/tests/sharpness_cells.rs",
+      "sha256": "871c242c648b8794ca93dacd2b51097bbae0c4a2125a5d5dad5b1a9ffb54f335"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/tests/station_ownership.rs",
+      "sha256": "61c6f826a1a53932bebed9205380668de3aae729b666b16862f91e8e13a2cdeb"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/tests.rs",
+      "sha256": "719dcdf92ce9ea2183b29dc6771ff1919668dfb7c717b2de9f88d624407f25b4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser.rs",
+      "sha256": "2374241bacf12a41ac1019e62c29ad0fe2c424318c352560364955053b6bdc59"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_pyramid.rs",
+      "sha256": "196b24114075253a7ffb8829f2b6cf5e89dec5cc1945c929c5e756b11f7fb2dc"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/intra_station/tests.rs",
+      "sha256": "9024000b5afb1ea3f81846e67f6595306d1bad760cdc765cdfd388f4a86e8b39"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/intra_station.rs",
+      "sha256": "ce3f18c3416f09a8025e478ac11fcb8f9f56b9f5426a69872a3124b04b76ed4d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/decomposition.rs",
+      "sha256": "0bcb994a34232eaa350a58f3ef5df7e13dc0e68713553dce530b00b35ed5ffd0"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/tests.rs",
+      "sha256": "7f2cb0b8c53dae5857d2304adfb116b3dfadb95531da74ebff162abb8f526392"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
+      "sha256": "afaac0c6ee746eaee29e13394f30858f24cc9cdc33d0aafb377ed462d188b0b0"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/line_layers.rs",
+      "sha256": "1d5d0058a70e90672a23fa0c2620015e5720a21c2c4dea6c11705455d24b247a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+      "sha256": "ff42b0056dc4e284a3eb3c0f0af466544672934da2033554287d6dbdc260c32b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
+      "sha256": "c636ea4e8180f7ac05ff8f7325ecd47f33261a4736d0e24d3892654a93ea3ac6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_verdict.rs",
+      "sha256": "25f46bf93fa4b9dd4fa8e0c91c0a2426cb75bf10c1c8685e56ac926031643019"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/capture_topology.rs",
+      "sha256": "2bbbc59281d24191392be123ab0e3f8dc509965a22e5c9ab244ed6d5766056ef"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/closure.rs",
+      "sha256": "63fcdc334874274717356f5f79cdd8e049ebd9219387678306f1da154b4ca121"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/graph_cut.rs",
+      "sha256": "dba25f63c20178d6497d513709f6a835d1e8951e5c36f78d2ab5df50794271be"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/grouping_invariance.rs",
+      "sha256": "66b1e7dba9e400d24b1ee9ed09430cbeadc06b71f7698da9f8b48faedc5c3e65"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/intra_station_registration.rs",
+      "sha256": "2726d329e223b606cd2f21f9f0de4308eb98342a677150858746345534ea224f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/ownership_cells.rs",
+      "sha256": "7c9e40f63ab44188e34f67cb32d87ec844c7fbbc6ed2b05ff1dd31f62f0fd9a2"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/quality_gate_checks.rs",
+      "sha256": "a38f88d54f87821150f698b9ce18ff92479a7fac54ee0ccc247e7a7a958e819d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/reproducibility.rs",
+      "sha256": "0211b1069b55a3478ff1a5c1beb54aa4e00457e697f59d117bbf5dd732a44205"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/run_outcome.rs",
+      "sha256": "c4b85555f54d5c5fb4c40359294c248241b17a4525a7ccc464f03c5658e14304"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/single_frame.rs",
+      "sha256": "0bd17b1e340b20ace44792d7d6cb576d4d67305cf1f8869590059357c09de2e7"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_anchor.rs",
+      "sha256": "a4002f83c4ad6d4c97c8ab204f2e433571bde7832426858d85d454308239e5f0"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_failures.rs",
+      "sha256": "0f343ab6f613f7b83370339cf717f36f796383cb389da712989fbbe300654312"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_membership.rs",
+      "sha256": "adba82b0fc93298a363c5be843efbbfc4db0eaae9a7df07f40ac64baf8b0707e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_ownership.rs",
+      "sha256": "793441ce17c0342e053d6f379e5716c1c6de1c5271cf6e2a890975803a2bbd18"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_pose_graph.rs",
+      "sha256": "c2880eeb588d56499111a44016f64a9097cd0d6b8879c6f6b5e9ad92277e1fb2"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/station_splits.rs",
+      "sha256": "3fa03b888614880122c6c41997a8c24fd44d7fd5f77001d988e31972a3687cb5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/tile_cache.rs",
+      "sha256": "ebae8c602e6150146c5bb228984b62ecdffb1a60b029c8fba418af756e95896b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/tile_compositor.rs",
+      "sha256": "da94460ad1c6c2b29a7f20291d2fb1b5578c1b48ec350289ac66e46b518bb198"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/tile_structure.rs",
+      "sha256": "27d26032b502932f6435027807a185c38ed5e2f795ee2974a4c0dbe992761ef4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/warp_tone.rs",
+      "sha256": "5be56f6ad7852c431244b9d9cbef6dfdd836dfb84a52f71a5a75c5ddce76e26e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
+      "sha256": "1a8fc7f74c62ebf1af87641bf4ffb1d80e543b4e84b81e6ab010ca4278a4e270"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/proxy.rs",
+      "sha256": "ec979a6f63ff0f2f45a3a7dba0f50a98a216cb93d9ec5058bbaaabe24b9402f5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/boundary_edge_tests.rs",
+      "sha256": "9ad804c6d1eebf98787a0aaedfd60aacc4417ce86e2bd8e33e7c62e9c1fac556"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/boundary_strokes.rs",
+      "sha256": "85d2c02b2fa005fe9e9d3bc850716cf9b31a6e855b4f27d56b8a9f3e41b0df8d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/gradient_tests.rs",
+      "sha256": "5e0bd2e267c95d568cfbcce267a2d394507882e88b0279a7aeb22bf8183fc72f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/pixel_metrics.rs",
+      "sha256": "94e9cce39ac46d8da37993eeb94884016b0449d1807b9a0a01f8f21472c4cc89"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate/roi_geometry.rs",
+      "sha256": "ca38f6465fda8d4983e0dbac431340c7573da2f638b71b57448e27ddb91ea5ec"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate.rs",
+      "sha256": "1ed13eb446bad8db7a8d509f2feb1bb56fcfeae552b9b6f4376b8fbcb67ea7a3"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+      "sha256": "58fe59aba5a876aacbfb592c0866e86d95a15cbd03e8c9f1356c0aa6937c4b1e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+      "sha256": "75188709fb27e996c8435f9e5826b9bb2bfbc0e27062ff8a5f4e4daccc8b92b8"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/coverage.rs",
+      "sha256": "598456959308c69297b6cb89e8592f58c02e20f8dbf84f5e3356cd3689477124"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criteria.rs",
+      "sha256": "84c37c4d9f27c8e7ee9ff379984a33771951ef555ab11292433bdab505f3be6d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/criterion_rois.rs",
+      "sha256": "805296ff4bf6c1d1cae4acf3641cfdb1444f9927e2c51dccb9da58dae3963f9f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/focus_candidate_capture.rs",
+      "sha256": "478b3b5aba07b077973b458f0f497f08f011b2dbb466914668d951bd5f0f3f4a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/research_diagnostics.rs",
+      "sha256": "bee8b1772e26cdc2659acc14b4d929b752245237c788db9c75bd9a89024ed363"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+      "sha256": "45bde1a9704804755449b3981800c598238506cfd630d777d5ff0c9566a72bd9"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
+      "sha256": "d58dac31f8db4bef18a706762cecc92b2bcf3db35aa8e8216f01d08d058c942e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
+      "sha256": "15f1d5839bdbff31da89fd3c2df64773245162bd639ae5e392e17074fffe8ee6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture_tests.rs",
+      "sha256": "bee89169825052296723ecccf2268396d2f1ee37bdeec21bb689e5093087b205"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence.rs",
+      "sha256": "9f510035def1ee927e485000c62cc3918c2e2eedbb865a11f1374882ef3f3c5b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence_tests.rs",
+      "sha256": "24eb8d5d8f9a33403aeb2f317a64ba58eeb8e6d3c5f91caa26df776ad6a4c2ee"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/boundary_alignment.rs",
+      "sha256": "f2912399f36fbd09f549e99d805203119d175179b2f3ddc4a20a435a6bc5c1ed"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/coverage_evidence.rs",
+      "sha256": "8c1cb40a7d749352dbfafa3eed30db4d841b2ebfc724eab971649b3650cb4196"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/criterion_rois.rs",
+      "sha256": "112a3f818408daf085b721b21037544576922825d3ceea36da1e7713a963e917"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/gate_outcomes.rs",
+      "sha256": "a4b495ced61fd35d56b586d82b247f4d2e1ece9931bf1210bc27f80fd521ce98"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/reference_sampling.rs",
+      "sha256": "72b63cfd6fbaf5003817bfa833aeaca27335baffbeff57c0ad651504b2768b44"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests/tone_owner_fidelity.rs",
+      "sha256": "7406a7d3c3349da45e86f7c6db5e5dc517e8105ea72fbb52981bbbf2bfec7f91"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tests.rs",
+      "sha256": "7d145412fb6884524ade0bc32e484996a154c1ed553ac12e4e4377b51f7a33e6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/tone_owner_oracle.rs",
+      "sha256": "6d38348e7c982c0715d78caaa731619a01145d59fb8ca68b3d8b3818fb22aca9"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "sha256": "49ece9cb9ab4a3ca6863bbb1f42babc05cfdab8c6cc44c5deac7695940ea42e4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report.rs",
+      "sha256": "f072a530c5eef89aaa2cc493a1bfe17eace6e94beafa101c719608f53cdc074c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_document.rs",
+      "sha256": "1157c519eb10d523190918c7c3ef70ca1b2b5af2aa2dcbeb849a0f0457073931"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
+      "sha256": "5bd898d51073fd37b868f4b0e7209644532bb306ea623ec03722bce202293dd6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_output_rewrite_tests.rs",
+      "sha256": "c48c9a07f689aa8f5ff5762a86d18d4182fbdb570f64327f17dfe214df85d7bf"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_recorder.rs",
+      "sha256": "06cdab6b79a8549fd59d789b43dd0f6093bcbfda4dad24fdf049806e857331ff"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_core.rs",
+      "sha256": "7d7488f0e512fc094c644e6fa3bccc123fa766e28cb75b3754561c482c61ef8d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_metrics.rs",
+      "sha256": "8e1026fad219b3cd054c569e4656428a9a4d679c625151068a6dbd6b32208780"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/report_schema_solver.rs",
+      "sha256": "7053b376b01197e7be181668da4a727fa968ec7b0ef2cb11c4b9cf7150f7a2a3"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/residual_warp/tests.rs",
+      "sha256": "80b04eb898b68ec69d735fc6869af2ea495af1d915b58f2dc8485afdd5722819"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/residual_warp/warp_region.rs",
+      "sha256": "85b6f6b6c28e08cf9b6c66cc84d2df8fc3f823ce4da38d3d7fa58f79ef7087ea"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/residual_warp.rs",
+      "sha256": "e98e4529b8c07605004ad11322a1c3ff455bea5d9226b303a6a438bd345e1ffc"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/resources.rs",
+      "sha256": "5c6bfe69ebff93ba72a59b28f5f03360e230dc8d30ebd644d6943b65903d4c18"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/station_degradation.rs",
+      "sha256": "52eff7e4837e7cae37bf360c6861298f2bc0d05b2ec45c14866a7754af40c81d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/station_seam.rs",
+      "sha256": "bd971eaa53bcdd684f931aa0862f57699ed14d052921cb053b1d8ffbf7e06892"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/artwork.rs",
+      "sha256": "9563755dc2e7cc1ad4f6b77ae17299033a1c40eae6c0f269d7dd9bf5c5ab9792"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/capture_station.rs",
+      "sha256": "6903f88970fe37c85b98a72f1521b6d3771cf48bb41cbbf939a39b1c80494f1c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/scan_grid.rs",
+      "sha256": "2af0179d933d7d049401ec697ca4cf6ee6b36398e20f9b7ef0e34fdbb22f0986"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/stack_report.rs",
+      "sha256": "7b35fa56733251fbf2e226aae85b8a7868dbfec67620c5f5d194d39431e1ad3d"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support/virtual_tiles.rs",
+      "sha256": "7146818a757c8ff46b73f3cffbd269a41143d74959f4e008ae7ad14a255a8d71"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
+      "sha256": "704b1dd21b192ef63d58141364a1e1880eec5a534564b08e95a1fd19b1e8ee26"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tile_source.rs",
+      "sha256": "218f9fafda9ce8fcf165a8696053db4ba30dcdb81bb9de8b9de2c1ed20e789b9"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/color_metrics.rs",
+      "sha256": "e1ee043dd09b7f8deef60274cb96ac2e9c20245815342668c3daccbc562666ba"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/harmonize.rs",
+      "sha256": "136520528d5d0087f4e12a17379c18e1c6ec222b532b77a9294b29e60506cc8f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/owner_oracle.rs",
+      "sha256": "eacbb3dca0e4130338b9091c772c3aee8e160e9b07c9657723b78db84c38f6f3"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/pair_evidence.rs",
+      "sha256": "acbe8f3faccabd57b7b33a771513d59bd1b34d80d03446d0d706d353e32b1a6b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/test_diagnostics.rs",
+      "sha256": "eddd7001db5bceb9c4d411e02c273aa452b41a07684b79a76798b9b2f85da139"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/tests.rs",
+      "sha256": "74080314359b1dccb2e2abae4df8126feb051604daeb5e6bc33dfffa7b300ebd"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/tone_tiles.rs",
+      "sha256": "c61ab0caf51f058a0687feee63cc44dffcdb87497bf5dab8a664281b8ab4577f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/transforms.rs",
+      "sha256": "fbd3d51a634173d6183817cd1d45cfef5ba873f47774d71582223d1a73a5f8de"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone.rs",
+      "sha256": "ea6bab2382483f9e8e31fc4f70e3bc4b73dfee40098140098ac0a7b3699ae7dd"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone_local.rs",
+      "sha256": "50c08ace3220dcdde6b33a57f89cfcb26f060a54e19c08a2a88ae26ab0e2fa20"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/topology.rs",
+      "sha256": "1a05b7e24a5d5a9a179a91157a24214c489c893eb070ff7a64f74b756d57b835"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/cache_files.rs",
+      "sha256": "c1fc7c7731e665c86cfd90a776e4a5adcb74b80dd556b10e7789e32dd660bfbe"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/cache_key.rs",
+      "sha256": "c64c8eef3a286d28ccb01444ca298c5f445135ff9e01573b3ee62bb26ec135a5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/leases.rs",
+      "sha256": "8aaf8b224aff007b4198824a8c78a6ae8d25bd30394ea95bf06de2fcf4a4fad9"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/payload_io.rs",
+      "sha256": "6ada6132dfd1de36d4d09362d3dcefbadb17e3c2163b34c00352d21638fb0a10"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/store.rs",
+      "sha256": "964ef25a591f9f3a1487c6a671a9a6e73462fd695361496f15bfa3dd54b83157"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/test_access.rs",
+      "sha256": "3950f855bc24dc71dfd8754999ecbc1376225426f73cc99f4842f54c42ec0461"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile/tests.rs",
+      "sha256": "26f8fb98c99c64dd3260c6ddedbafaf147d4aa44b809c5d94f96e5c9f4fcce4f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/virtual_tile.rs",
+      "sha256": "3899b5f20914359fa3c548a4581920483eabca7d4af3a0e5a4b1e2f65df94fd8"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/canvas_fill.rs",
+      "sha256": "56581e54a43424835b0f3b6a7a8cc8d1831481d7ef0e9423e51ac7a8b052bb0f"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/canvas_maps.rs",
+      "sha256": "2ec9d1f9e31601a935d5b870cb46f4a5c9c88039f24aabc461e7ffc292b73d5c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/exposure.rs",
+      "sha256": "38e4a928ed33b2a8560f4eae451394acc5f05fd99a2e52f6c021a2faab718604"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/filters.rs",
+      "sha256": "0e0a2487e199c4b9576050ea5cb373e2693ecf93b97492f87390498aa9b4920b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
+      "sha256": "f59a7e3bde16ac82282eb9d16a86bf03a7b1e13aecfd1a0e70e40e3f9a2eab28"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
+      "sha256": "8914f7ab6c6036f5769c9e68d78aeebdf4da2031cd19ad51ec45f67dffffa298"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_analysis.rs",
+      "sha256": "84c99cc59e7da0b82161e0228005b60e556bd428f2737eece5fe8d5d0bb3598b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_color.rs",
+      "sha256": "47b5fb3412b98506f92ba6435eab1d01ec65a815bc699cc96fd9f23c0680fc37"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_decision.rs",
+      "sha256": "7a9986d0820affc3e0184a6825c9790543b7c6b38350ab39b5974256e3a46c33"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_foreground.rs",
+      "sha256": "8f313ea6d815e0b444c0e5a3d225f97b58381554718f8053c5846b36410afce6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_fusion_test_access.rs",
+      "sha256": "a6e24c94edb990e1369bd65f3f96ab713ff06954bc593616020a3bffef443173"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_layers.rs",
+      "sha256": "3932cd47249e48fc28deb68ebf02847cb298ba125bb0fa952da2a8320532a60c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_masks.rs",
+      "sha256": "f59075b59d29f65eb9450d2007a32d53de3f08a1252a96957acec38052c7244c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_seam_blend.rs",
+      "sha256": "119555ac616144811ce3eb4922c2653792c76b6e5d96fc5604a1c9088b3f9f7c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
+      "sha256": "788f32dd1ddf8e2aeabb88a9c22ba1147a5c41b41cc3c5920fcd2cffab60beb1"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
+      "sha256": "23da686f236dca70052869192213953b15800f513449138831242947f95a0387"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
+      "sha256": "46de7b3c47e219bac8c138b9343b6b5012df8cbe7555b4c3ce5c80a4c6afdc9e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/interpolation_tests/focus_fusion.rs",
+      "sha256": "3513caf9b424132ccf669ea50bc9e94a822fae9881b0510132862503b534cf3a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/interpolation_tests/geometry_sampling.rs",
+      "sha256": "f248359cd8ab4665f726bb7fb4f9c29b4aaf0867798fe0bdc264621d78c715f5"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/interpolation_tests/panorama_blending.rs",
+      "sha256": "e565c9958ca7c7eac16433bf070f30a60e25055504de86572b7ac7e8d773059e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/interpolation_tests/station_seams.rs",
+      "sha256": "de9d33bc9df170866fb5c3d54d831fa07bfa753627f07fb2f1dfc263237c9f07"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/interpolation_tests.rs",
+      "sha256": "9ba87736a1e1d61989902c8218847aa62b656f4408e8f515116ea11d14338011"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+      "sha256": "fbe2ccd4dc2caa02918576eefdd2f75073619a95c40b7a145f6898b25fb2b5f7"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry.rs",
+      "sha256": "7e2610ae210a5eaa414524314e3324f7af19b419f1f99d4722c9fa73764ed5fc"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry_tests.rs",
+      "sha256": "e611e2d3ce9a1a39371e08f1ffdc7fe6da5b714f8fb93a0cfcb91aa25da1ec89"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
+      "sha256": "4b7ea0e4b2c8a85361fc198e2871ad8eb7cbfd8d5170c5af3740d6bbf0b5e1e1"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/native_point_trace_tests.rs",
+      "sha256": "e6f0315fb122c76f1fc1c218f64012b51c1f7fafdffc9ffba24ea9b3f1dd958a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/panorama_seam_band.rs",
+      "sha256": "bf9074024dbac5bbf72d62932d2f30d6c82b924c17bee25a204c5694dcf5f5ca"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+      "sha256": "7b2d26b4c14cb363915288577b5c875cf31a11cee08a26102461e6ae612b7129"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/sampling.rs",
+      "sha256": "e5fc5aacd2107db32f92268e53e3f1493915627be6846b2817d350fdc47f1e9e"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
+      "sha256": "109ca054d96f425d38a12bbb60275879acf91a8d08b1d8ac8cc76a94cac9ce18"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/score_noise_probes.rs",
+      "sha256": "aa4868682e6f28a6b140c28f340727fad689e1e766db1a2d8a3cdec76244b9be"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/seam_path.rs",
+      "sha256": "7fbdd8729ac57943ea583e3e42a75e8ec8a7731f1e4fced4e050e328cbeb432a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_degradation_wiring_tests.rs",
+      "sha256": "df685ef2e87ee3086b972f1f4de2c9b3b44e377033477e469c9c9fe66eead60b"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
+      "sha256": "4fe03775f8c71d74342b4e21c5ad385de8b90fdea67c3e3de0e884bbc1acfefb"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_seam_diagnostics.rs",
+      "sha256": "0e066b4a367e888fdbb7436380440b1fde1b86abb6aaf343b58863b7bf31bb9a"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_seam_plan.rs",
+      "sha256": "2e8968032c1651817455e8e622e5c0eb1e88b82f581fc5031fdc2bd0e880e9df"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
+      "sha256": "3e28903c6a355c6f39bf5479df92d71379d10682f7ee9d89e284ccfd7acf9fb4"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/station_stroke_match.rs",
+      "sha256": "4a6b12862ef7c2fa5a17b71b4aecd7f8ff4b295b8266a65735082be8685153f6"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/test_tone_capture.rs",
+      "sha256": "76ad814dc4779ea0dc1fadb38cfe83ae97c07e64ca50f9d7947e77924f031a9c"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+      "sha256": "d6a4066b1309d0ab3b29040a9abb8af3ae2d73b3728920de9941bca3acc7e0ad"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/virtual_tiles.rs",
+      "sha256": "b82827791f4b100d0a4b68756a9740244654e50b0894226efc254eacb692d337"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "sha256": "1aa7495c9012a7b3370fdf022a9ea179b061d5535c893aad6e9f1161672eb369"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/coverage_measurements.rs",
+      "sha256": "896331c34d3146d3576aba16ba5b6405148def8b08347d85420425dfc3b09da9"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/fine_polish.rs",
+      "sha256": "cb058ed39324f1e2f793eefa633d880d8cc396a702a535eccd0ef7f4feaec5e8"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/global_search.rs",
+      "sha256": "c274d2852d5039998931d32d93db2e106be6063f2ff31e8754650af959cb1005"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/hypothesis_selection.rs",
+      "sha256": "254f260d80fe8c0b8eae161adc58ef373bd92b5cca6f054bfb21bd0f0dc07b2a"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/match_pyramid.rs",
+      "sha256": "b9a2d51e19b6e1d9b7e62d41efe321989a4650ceb57017efd9bff49d0ed5ffae"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/prior_repair_planning.rs",
+      "sha256": "9c1b413fe3853959b3cf77b32ebaee72ecd2c6a65a5f6d54c5ca431de8bae42c"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/raw_correlation.rs",
+      "sha256": "3737600ffa078fe50153ff0f5203b927e0448495c024aa8b31c2188df2e4d07b"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/raw_direct_refinement.rs",
+      "sha256": "2c339ee655f9bfea844e2e5db3d745d20e6f968d2981785ad800e4157efecf45"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/raw_independent_support.rs",
+      "sha256": "af4d7afc3ed17b6652fef1a7c57823fa0cf908b5054f74282f64a84c92310545"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/residual_correction.rs",
+      "sha256": "92375e447a37bb51774cb4ecca8792f426844d873426bb91aee581a0837dc6ec"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/scan_grid_closure.rs",
+      "sha256": "e3598862ed0dd57b6a4e39d75cc53ce2d1978a7f4c433cccb620e124b05847e4"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests/station_records.rs",
+      "sha256": "fb3507374c6ef62941152c870870cdf236466060b0d3db1e578767733bae685d"
+    },
+    {
+      "path": "src-tauri/src/panorama_virtual_tile_tests.rs",
+      "sha256": "772f0eacbb2c8d6ca29afda1aaf64351ab8792170ac32306ba94dae5fdb9e06f"
+    },
+    {
+      "path": "src-tauri/src/preset_converter.rs",
+      "sha256": "15f5f0e75630b6c6a9f0ee752730f46ca6d9146f2b75ed2bf578eb0b7fe5ed06"
+    },
+    {
+      "path": "src-tauri/src/preview_protocol.rs",
+      "sha256": "e79b665f6aa541fec746d9abac6590a795bba3bf07e0afe79e1db62edd4efd57"
+    },
+    {
+      "path": "src-tauri/src/psd_loader.rs",
+      "sha256": "676668695549a47e62cbf519bc6aa29bf6e2354f762e65ab22a12eefdc8d9e4c"
+    },
+    {
+      "path": "src-tauri/src/raw_processing.rs",
+      "sha256": "d058e15063cd2b4ec4044a53bdee6241b4c0c9e80798e412cfa9ebc8661f82dd"
+    },
+    {
+      "path": "src-tauri/src/raw_processing_acceptance/fixture_run.rs",
+      "sha256": "792bb7d9b7039cd194019d741aa26faba090decb984b06fa03cf55e0ebcf54c6"
+    },
+    {
+      "path": "src-tauri/src/raw_processing_acceptance/node_probe.rs",
+      "sha256": "ea981c86a6b83774c3c13a936dc11af1000db6b3424685795201b9fe1e1b2f85"
+    },
+    {
+      "path": "src-tauri/src/raw_processing_acceptance/sampling.rs",
+      "sha256": "cf9aa233a5910c828bbd46d2933c7990e2ae894a3e0d5cd0a2e3445f699693c4"
+    },
+    {
+      "path": "src-tauri/src/raw_processing_acceptance/scenario_coverage.rs",
+      "sha256": "a94fbd9b01489b765067d9c77c9ed555ebdca083dd8c068d3b98eeffd68353b4"
+    },
+    {
+      "path": "src-tauri/src/raw_processing_acceptance.rs",
+      "sha256": "16fc4cd22e2cdc0325ae1dc1912df90742e600d986a9d7ce75bd4f35fee86dc5"
+    },
+    {
+      "path": "src-tauri/src/render_strategy.rs",
+      "sha256": "a02d4c045687a8af34b5d042d1f39c82f5f85eac688eb797891c08e3b5bcdc5e"
+    },
+    {
+      "path": "src-tauri/src/sidecar_storage.rs",
+      "sha256": "c2d5d84d05de5d1b52904b9c3b1aad84ebd076eca6cd00ade2f8a6ef73ac684f"
+    },
+    {
+      "path": "src-tauri/src/style_transfer/color_transfer.rs",
+      "sha256": "41c3c160d85ea4a0a1ad1b2ab4e694473d573783dcd1c3c21baf6228c9d75d97"
+    },
+    {
+      "path": "src-tauri/src/style_transfer/preview_source.rs",
+      "sha256": "2de33bf3fce173e2b58f3074f7bf53c23ab9537e879212c10ae418f1b333fc41"
+    },
+    {
+      "path": "src-tauri/src/style_transfer/styled_output.rs",
+      "sha256": "6fb7f3f3a6f3534c6d1e95107292e3dd9520e0b80019f0c90790570c57d09d65"
+    },
+    {
+      "path": "src-tauri/src/style_transfer/tests.rs",
+      "sha256": "4774f8e8a02790bbd216e88bae7e2a58fbfb7a0a63bc1ed74efb1f1649b32ff0"
+    },
+    {
+      "path": "src-tauri/src/style_transfer.rs",
+      "sha256": "ca8751c9c6373606fae6595db245028835ab59ac8dca70c84b2482c3409dcea4"
+    },
+    {
+      "path": "src-tauri/src/tagging.rs",
+      "sha256": "db40834a09481f506d3eba5df22dac96730cd87ee7ebc1b5f0a2067b97829410"
+    },
+    {
+      "path": "src-tauri/src/tagging_utils/candidates.rs",
+      "sha256": "8b4ff9746299dca8458bbf5ebf1322575d39d4cedb4a25411e09daacef8fe0a1"
+    },
+    {
+      "path": "src-tauri/src/tagging_utils/hierarchy.rs",
+      "sha256": "f5c4907e193f4fee934788401181856e4628620dd14585b9a580abc5928016a3"
+    },
+    {
+      "path": "src-tauri/src/tagging_utils/mod.rs",
+      "sha256": "277ffedc293ce4930af02451fcfa0e26df4f2e9770da30bc4e0c0a82ac9082b2"
+    },
+    {
+      "path": "src-tauri/src/window_customizer.rs",
+      "sha256": "1269cb9a46745aab44d75e8b1df38e1016f2d8baf3cfde33453d675fe2b3ff2d"
+    }
+  ]
+}

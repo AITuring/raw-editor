@@ -1,5 +1,7 @@
 # 源码布局：facade 与子模块
 
+> [返回项目进度与任务总览](project-progress.md#n1) · 专项文档。本文维护源码约定和生成的模块地图；拆分进度、例外与待办统一见总览N1/N2条目。
+
 2026-10-28/29 的两轮拆分把仓库里超过 1000 行的 Rust、TypeScript 与 CSS 文件拆成「facade + 同名目录下的子模块」。
 本文说明这套布局的约定、怎样验证拆分只移动了代码，以及每个 facade 下的模块地图和仍超过 1000 行的文件。
 Focus Stack 的阶段边界与验收证据见 [`focus-stack-architecture.md`](focus-stack-architecture.md)。

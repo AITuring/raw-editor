@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "date": "2026-11-03",
+  "status": "passed_with_recorded_nonblocking_format_debt",
+  "scope": "Accepted same9 stack baseline + current local macOS workspace integration; not full release or cross-dataset acceptance",
+  "baseline_commit": "504d904ff77781ac13e57f52c13fef8024b6c961",
+  "baseline_branch": "refs/heads/codex/accepted-stack-v28-baseline",
+  "current_branch": "v1",
+  "head_and_index_unchanged": true,
+  "rust_sources_match_accepted_manifest": 497,
+  "frontend_inputs_frozen_count": 295,
+  "source_drift": [],
+  "frontend_drift_since_desktop_build": [
+    "src/utils/seamCandidates.ts"
+  ],
+  "subsequent_frontend_validation": {
+    "path": "src/utils/seamCandidates.ts",
+    "before": "f468c0750712eb6f5d5452c8b4720c00def41489ba2a2c87f5f82d6167171fac",
+    "after": "f468c0750712eb6f5d5452c8b4720c00def41489ba2a2c87f5f82d6167171fac",
+    "stable_during_checks": true,
+    "checks": [
+      {
+        "name": "seam-candidates:check",
+        "exit_code": 0,
+        "seconds": 0.429
+      },
+      {
+        "name": "typecheck",
+        "exit_code": 0,
+        "seconds": 4.978
+      },
+      {
+        "name": "lint",
+        "exit_code": 0,
+        "seconds": 7.123
+      },
+      {
+        "name": "build",
+        "exit_code": 0,
+        "seconds": 2.618
+      }
+    ],
+    "scope": "Concurrent seam diagnostics update after desktop bundle; latest TS/Node/web build checked; no claim of new seam GUI acceptance"
+  },
+  "unverified_frontend_drift": [],
+  "pinned_toolchain_tests": {
+    "toolchain": "1.96.1",
+    "command": "cd src-tauri && cargo test --locked --offline --release --lib",
+    "exit_code": 0,
+    "passed": 1017,
+    "failed": 0,
+    "ignored": 40,
+    "test_seconds": 114.77
+  },
+  "desktop_smoke": "pass",
+  "acceptance_artifacts_reverified": 15,
+  "quality_gate_policy_changed": false,
+  "existing_locale_values_preserved": true,
+  "unrelated_changes_preserved": true,
+  "nonblocking_findings": [
+    "Full-repository Prettier reports 48 pre-existing formatting warnings; not autoformatted.",
+    "Production app compilation retains 187 warnings."
+  ],
+  "not_claimed": [
+    "Full-feature Clippy / full release CI",
+    "Windows/Linux build or release notarization",
+    "All editor features / all camera datasets",
+    "New real seam-detection acceptance",
+    "All metrics measurable or all degradation removed"
+  ],
+  "finished_at": "2026-11-03T08:07:16.947484+00:00",
+  "check_commands_passed": [
+    "typecheck",
+    "lint",
+    "color-contract:check",
+    "batch-geometry-preview:check",
+    "crop-transform:check",
+    "export-dialog:check",
+    "image-stack-preview:check",
+    "focus-stack-quality:check",
+    "focus-stack-datasets:check",
+    "focus-stack-regression:check",
+    "local-only:check",
+    "preview-transport:check",
+    "preview-resolution:check",
+    "render-strategy:check",
+    "style-transfer-compare:check",
+    "ui-token:check",
+    "watermark-contract:check",
+    "brightness-map:check",
+    "adaptive-brightness:check",
+    "seam-candidates:check",
+    "i18n:check",
+    "build"
+  ],
+  "evidence": "output/integration/2026-11-03-accepted-baseline/integration-result.json",
+  "evidence_sha256": "cd716c6ec650284a5924ff93654111fbee0db52c59cc6afae523ea913a1c8e00"
+}

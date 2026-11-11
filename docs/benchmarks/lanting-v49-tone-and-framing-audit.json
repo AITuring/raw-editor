@@ -1,0 +1,155 @@
+{
+  "phase": "LanTing 45 JPEG legacy tone and framing diagnostic",
+  "date": "2026-11-10",
+  "scale": 0.25,
+  "binary_sha256": "36f478b272b8e0569ab2f97d1cfcd8315a4464db402773ad6c020832291058e3",
+  "same_binary_and_original_45_inputs": true,
+  "reference_sha256_before_after": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+  "quality_gate_thresholds_changed": false,
+  "variants": {
+    "baseline": {
+      "toggle": null,
+      "analysis_path": "output/acceptance/lanting-v49-tone-ab/baseline/analysis.json",
+      "analysis_sha256": "d962f8d4335d6be0b4171e0c5ce200d20080b803889acacebf6f2f8f78558049",
+      "exit_code": 0,
+      "quality_gate_verdict": "insufficient_evidence",
+      "output_sha256": "1ffeab3414610e5e3b39735e80265f4d4bcf4cac04363ed954db53070e24f3f0",
+      "canvas": [
+        8454,
+        3463
+      ],
+      "source_covered_pixels": 26329993,
+      "source_output_pixels": 29276202,
+      "peak_rss_bytes": 9066676224,
+      "top_background_luma_range": 0.0376342058484293,
+      "top_background_largest_20px_step": [
+        0.0042877264400569826,
+        1112
+      ],
+      "upper_left_mean": 0.2954071734717416,
+      "upper_middle_mean": 0.28956171733948477,
+      "upper_right_mean": 0.2715932499038831,
+      "preview_white_path": "output/acceptance/lanting-v49-tone-ab/baseline/preview-white.png"
+    },
+    "skip_flat_tone": {
+      "toggle": "skip_flat_tone",
+      "analysis_path": "output/acceptance/lanting-v49-tone-ab/skip_flat_tone/analysis.json",
+      "analysis_sha256": "afb0506f6f15a39707c1dc55b429dcaf9cf665616ade6586ed62a957a7e4f452",
+      "exit_code": 0,
+      "quality_gate_verdict": "insufficient_evidence",
+      "output_sha256": "8c64f28dc07f7dffdca2263122def0fd2d7e0d76c7fb945c48fc37edb753c8e8",
+      "canvas": [
+        8454,
+        3463
+      ],
+      "source_covered_pixels": 26329969,
+      "source_output_pixels": 29276202,
+      "peak_rss_bytes": 9273819136,
+      "top_background_luma_range": 0.03828100202787765,
+      "top_background_largest_20px_step": [
+        0.004514021304023341,
+        1112
+      ],
+      "upper_left_mean": 0.2956618046905036,
+      "upper_middle_mean": 0.2898322308342945,
+      "upper_right_mean": 0.27187147128027683,
+      "preview_white_path": "output/acceptance/lanting-v49-tone-ab/skip_flat_tone/preview-white.png"
+    },
+    "skip_global_illumination": {
+      "toggle": "skip_global_illumination",
+      "analysis_path": "output/acceptance/lanting-v49-tone-ab/skip_global_illumination/analysis.json",
+      "analysis_sha256": "605a15e74437845326e1e02a20b95860aba8a833b14741c359cf243b75660071",
+      "exit_code": 0,
+      "quality_gate_verdict": "insufficient_evidence",
+      "output_sha256": "82f2a22eea974448d95848ea2242b645f321351e4f12eb2ec30b1181d60fd52e",
+      "canvas": [
+        8454,
+        3463
+      ],
+      "source_covered_pixels": 26329993,
+      "source_output_pixels": 29276202,
+      "peak_rss_bytes": 10345381888,
+      "top_background_luma_range": 0.04715905782843699,
+      "top_background_largest_20px_step": [
+        0.03739492638577918,
+        1113
+      ],
+      "upper_left_mean": 0.3242727976163014,
+      "upper_middle_mean": 0.3261975203383314,
+      "upper_right_mean": 0.2895446038446751,
+      "preview_white_path": "output/acceptance/lanting-v49-tone-ab/skip_global_illumination/preview-white.png"
+    },
+    "skip_owner_correction": {
+      "toggle": "skip_owner_correction",
+      "analysis_path": "output/acceptance/lanting-v49-tone-ab/skip_owner_correction/analysis.json",
+      "analysis_sha256": "d7ba89abbdd08906d046f533dce953bd9e26a5f628a0ddfffe04af6e166f97fc",
+      "exit_code": 0,
+      "quality_gate_verdict": "insufficient_evidence",
+      "output_sha256": "5bd97fc6acc9163b8f59af19576957efde087f25de03b608109fead9f4d6697e",
+      "canvas": [
+        8454,
+        3463
+      ],
+      "source_covered_pixels": 26329993,
+      "source_output_pixels": 29276202,
+      "peak_rss_bytes": 10141630464,
+      "top_background_luma_range": 0.04142525650013951,
+      "top_background_largest_20px_step": [
+        0.004756068932763369,
+        1112
+      ],
+      "upper_left_mean": 0.328899431064975,
+      "upper_middle_mean": 0.3226458639753941,
+      "upper_right_mean": 0.30284642852748944,
+      "preview_white_path": "output/acceptance/lanting-v49-tone-ab/skip_owner_correction/preview-white.png"
+    }
+  },
+  "preview_metric_contract": {
+    "top_band": "White-backed 2048x839 preview, x=300..1699, y=60..93, smoothed 17-column mean; largest absolute 20-column luma difference, diagnostic only.",
+    "largest_rectangle": "Alpha>127 on baseline 2048x839 preview, maximal axis-aligned all-covered rectangle."
+  },
+  "largest_full_coverage_rectangle_preview": {
+    "x0": 158,
+    "y0": 53,
+    "x1": 2040,
+    "y1": 720,
+    "area": 1255294,
+    "aspect_ratio": 2.8215892053973013,
+    "covered_preview_pixels": 1543607,
+    "covered_pixels_outside_rectangle": 288313
+  },
+  "reference": {
+    "path": "/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg",
+    "dimensions": [
+      31065,
+      11007
+    ],
+    "aspect_ratio": 2.8222949032433906,
+    "preview_path": "output/acceptance/lanting-v49-tone-ab/reference-preview.png",
+    "read_only": true
+  },
+  "diagnostic_crop_preview_path": "output/acceptance/lanting-v49-tone-ab/baseline/diagnostic-crop.png",
+  "conclusion": "All three tone stages reduce the measured upper background step; none removes stepped coverage. The alpha-derived rectangle has the reference aspect ratio and visually similar framing, but drops covered peripheral pixels and is diagnostic only. No production crop or tone change accepted.",
+  "native_tiff_alpha_scan": {
+    "source": "output/acceptance/lanting-v48-alpha/lanting/run/lanting-s1-v48-alpha.tiff",
+    "audit_source": "output/acceptance/lanting-v49-tone-ab/native-coverage-rect.c",
+    "canvas": [
+      33814,
+      13851
+    ],
+    "covered_pixels": 421256167,
+    "largest_full_coverage_rectangle": {
+      "x": 2608,
+      "y": 874,
+      "width": 31085,
+      "height": 11011,
+      "area": 342276935,
+      "aspect_ratio": 2.823086004904187
+    },
+    "covered_pixels_outside_rectangle": 78979232,
+    "reference_dimension_difference_px": [
+      20,
+      4
+    ]
+  }
+}

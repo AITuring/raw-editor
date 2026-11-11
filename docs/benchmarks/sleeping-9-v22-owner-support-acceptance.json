@@ -1,0 +1,1853 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-11-02T19:46:20.817379+00:00",
+  "phase": "v22-native-owner-geometry-support-fallback",
+  "status": {
+    "release_regression": "pass",
+    "executions": "cold_hot_capture_completed",
+    "repeat_business_and_tiff_identity": "pass",
+    "source_visual_binding": "bound_8_rois",
+    "point_trace_binding": "bound_89_points",
+    "known_holes_opaque_observed": 63,
+    "strict_repair_contract": "failed",
+    "strict_repair_failure": "ValueError: opaque control RGBA changed from frozen v21 TIFF",
+    "acceptance": "not_passed",
+    "covered_rgb_change_cause": "24-control post-first-write localization and code/report tone corroboration complete; all12194 pixel attribution not established",
+    "changed_region_visual_review": "complete_bounded_24_native_windows",
+    "full_native_quality_acceptance": false,
+    "bounded_component_evidence": "component_evidence_complete_strict_final_RGBA_failed",
+    "selected_owner_reference_visual_review": "complete_bounded_8_pairs_16_PNGs",
+    "final_input_binary_source_identity": "match"
+  },
+  "build": {
+    "binary": "/private/tmp/raw-editor-v22-owner-support-release-binary",
+    "sha256": "29f344a83bc403ae0f08a5ac88d65efb2641c0505e2db0fe0a1a597c7d74d359",
+    "profile": "release",
+    "built_at": "2026-11-02T18:54:16.893715+00:00",
+    "validation": {
+      "cargo_fmt": "pass",
+      "cargo_check": "pass",
+      "native_owner": 10,
+      "tile_payload": 7,
+      "source_visual": 13,
+      "native_point_trace": 4,
+      "full_library": {
+        "passed": 1016,
+        "failed": 0,
+        "ignored": 40,
+        "seconds": 158.7
+      }
+    },
+    "scope": "shared native owner geometry support fallback for RGB and RAW provenance; strict metadata dimensions; no quality/black threshold changes"
+  },
+  "configuration": {
+    "subset": "sleeping-9-6479",
+    "input_count": 9,
+    "source_names": [
+      "DSC_6479.NEF",
+      "DSC_6480.NEF",
+      "DSC_6481.NEF",
+      "DSC_6482.NEF",
+      "DSC_6483.NEF",
+      "DSC_6484.NEF",
+      "DSC_6485.NEF",
+      "DSC_6486.NEF",
+      "DSC_6487.NEF"
+    ],
+    "scale": 1,
+    "source_render_cache_max_bytes": 2400000000,
+    "native_fusion_cache_max_bytes": 4294967296,
+    "rss_gate_bytes": 25769803776,
+    "quality_thresholds_changed": false,
+    "coverage_alpha": true,
+    "performance_phases": [
+      "cold",
+      "hot"
+    ],
+    "diagnostics_only_phase": "capture",
+    "cold_hot_scope": "new processes, run-local caches empty; OS cache not purged; one pair, no statistical confidence"
+  },
+  "output": {
+    "dimensions": [
+      15897,
+      6720
+    ],
+    "world_origin": [
+      -108.0,
+      -49.0
+    ],
+    "bytes": 854628326,
+    "format": "TIFF",
+    "bit_depth": 16,
+    "extra_samples": [
+      2
+    ],
+    "baseline_v20_v21_sha256": "e16fd14781d86258cdeb7912abc43a3b230fa9935ec1488e0c1acda68901b605",
+    "v22_cold_hot_capture_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "new_sha_equals_old_not_required": true,
+    "new_tiff_hash_computed_by_this_extraction": false
+  },
+  "comparison_scope": {
+    "archive_status": "pass",
+    "archive_pass_is_not_strict_repair_acceptance": true,
+    "cross_version": {
+      "v20_to_v22_cold": {
+        "status": "pass",
+        "fixed_geometry_gate_policy": {
+          "input": "pass",
+          "grouping": "pass",
+          "topology": "pass",
+          "intra_station": "pass",
+          "closure": "pass",
+          "station_relations": "pass",
+          "residual_warp": "pass",
+          "virtual_tiles": "pass",
+          "virtual_tile_cache": "pass",
+          "composition.canvas": "pass",
+          "composition.output_density": "pass",
+          "composition.final_sharpen_amount": "pass",
+          "composition.path_selection": "pass",
+          "composition.integer_translation_tiles": "pass",
+          "composition.narrow_overlaps": "pass",
+          "composition.union_projected_pixels": "pass",
+          "fusion_without_timing": "pass",
+          "quality_gate_policy": "pass",
+          "memory_policy": "pass"
+        },
+        "quality_changed_leaf_count": 232
+      },
+      "v20_to_v22_hot": {
+        "status": "pass",
+        "fixed_geometry_gate_policy": {
+          "input": "pass",
+          "grouping": "pass",
+          "topology": "pass",
+          "intra_station": "pass",
+          "closure": "pass",
+          "station_relations": "pass",
+          "residual_warp": "pass",
+          "virtual_tiles": "pass",
+          "virtual_tile_cache": "pass",
+          "composition.canvas": "pass",
+          "composition.output_density": "pass",
+          "composition.final_sharpen_amount": "pass",
+          "composition.path_selection": "pass",
+          "composition.integer_translation_tiles": "pass",
+          "composition.narrow_overlaps": "pass",
+          "composition.union_projected_pixels": "pass",
+          "fusion_without_timing": "pass",
+          "quality_gate_policy": "pass",
+          "memory_policy": "pass"
+        },
+        "quality_changed_leaf_count": 232
+      },
+      "v21_trace_to_v22_capture": {
+        "status": "pass",
+        "fixed_geometry_gate_policy": {
+          "input": "pass",
+          "grouping": "pass",
+          "topology": "pass",
+          "intra_station": "pass",
+          "closure": "pass",
+          "station_relations": "pass",
+          "residual_warp": "pass",
+          "virtual_tiles": "pass",
+          "virtual_tile_cache": "pass",
+          "composition.canvas": "pass",
+          "composition.output_density": "pass",
+          "composition.final_sharpen_amount": "pass",
+          "composition.path_selection": "pass",
+          "composition.integer_translation_tiles": "pass",
+          "composition.narrow_overlaps": "pass",
+          "composition.union_projected_pixels": "pass",
+          "fusion_without_timing": "pass",
+          "quality_gate_policy": "pass",
+          "memory_policy": "pass"
+        },
+        "quality_changed_leaf_count": 232
+      }
+    },
+    "repeat": {
+      "cold_to_hot": "pass",
+      "hot_to_capture": "pass"
+    }
+  },
+  "bindings": {
+    "process_id": 69962,
+    "source_visual_status": "bound",
+    "source_roi_count": 8,
+    "source_roi_exact_count": 8,
+    "point_status": "bound",
+    "point_count": 89,
+    "exact_point_count": 89,
+    "bound_compositor_iteration": 1,
+    "bound_qg_iteration": 1,
+    "iteration_counters_independent": true,
+    "raw_final_iteration": null,
+    "raw_capture_modified": false,
+    "point_input_sha256": "6ca08aad4c67c719d3e38cdc5808c6131d504d8d65cf9b0c3aae8706f7bb68bb",
+    "qg_point_ledger": {
+      "bytes": 92771,
+      "input_sha256": "6ca08aad4c67c719d3e38cdc5808c6131d504d8d65cf9b0c3aae8706f7bb68bb",
+      "iteration": 1,
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/source-visual/process-69962/iteration-0001/point-evidence.json",
+      "point_count": 89,
+      "sha256": "7afdc65c4bdb53f78405dd71951d9426693f180c4d45cff1e387314a6faca6f4",
+      "source_loader_calls_added": 0,
+      "status": "captured"
+    },
+    "qg_point_ledger_errors": [],
+    "point_role_results": {
+      "known_hole": {
+        "count": 63,
+        "exact_trace_tiff_count": 63,
+        "alpha_zero_count": 0,
+        "alpha_opaque_count": 63,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 0,
+        "compositor_station_owner_counts": {
+          "1": 63
+        }
+      },
+      "opaque_control": {
+        "count": 24,
+        "exact_trace_tiff_count": 24,
+        "alpha_zero_count": 0,
+        "alpha_opaque_count": 24,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 24,
+        "compositor_station_owner_counts": {
+          "1": 24
+        }
+      },
+      "outside_coverage_control": {
+        "count": 2,
+        "exact_trace_tiff_count": 2,
+        "alpha_zero_count": 2,
+        "alpha_opaque_count": 0,
+        "alpha_other_count": 0,
+        "reference_role_alpha_unchanged_count": 2,
+        "compositor_station_owner_counts": {
+          "0": 2
+        }
+      }
+    },
+    "hole_source_observation": {
+      "source_counts": {
+        "DSC_6480.NEF": 59,
+        "DSC_6479.NEF": 4
+      },
+      "checks": {
+        "actual_fallback_true": 63,
+        "same_final_qg_source_path": 63,
+        "source_xy_within_1e_minus_7": 63,
+        "opaque_rgba_exact": 22,
+        "opaque_rgba_changed": 2
+      },
+      "maximum_prepared_source_xy_error_pixels": 0
+    },
+    "opaque_control_rgb_differences": [
+      {
+        "label": "span-00-opaque-left",
+        "canvas": [
+          9344,
+          522
+        ],
+        "before_rgba16": [
+          25436,
+          23059,
+          17284,
+          65535
+        ],
+        "after_rgba16": [
+          25437,
+          23059,
+          17284,
+          65535
+        ],
+        "delta_rgba16": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "label": "span-01-opaque-below",
+        "canvas": [
+          9393,
+          524
+        ],
+        "before_rgba16": [
+          26341,
+          24098,
+          20299,
+          65535
+        ],
+        "after_rgba16": [
+          26342,
+          24098,
+          20300,
+          65535
+        ],
+        "delta_rgba16": [
+          1,
+          0,
+          1,
+          0
+        ]
+      }
+    ],
+    "selected_owner_reference_is_best_focus_proof": false,
+    "component_checks": {
+      "status": "component_evidence_complete_strict_final_RGBA_failed",
+      "strict_final_RGBA_invariant": {
+        "status": "failed",
+        "identical_controls": 22,
+        "total_controls": 24,
+        "failures": [
+          {
+            "label": "span-00-opaque-left",
+            "reason": "opaque control RGBA changed from frozen v21 TIFF",
+            "delta_RGBA16": [
+              1,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "label": "span-01-opaque-below",
+            "reason": "opaque control RGBA changed from frozen v21 TIFF",
+            "delta_RGBA16": [
+              1,
+              0,
+              1,
+              0
+            ]
+          }
+        ]
+      },
+      "component_counts": {
+        "known_hole": 63,
+        "opaque_control": 24,
+        "outside_coverage_control": 2
+      },
+      "covered_render_to_actual_QG_RAW_owner_verified": 87,
+      "known_holes_fallback_source_QG_and_bound_TIFF_verified": 63,
+      "opaque_source_sample_and_first_write_exact": 24,
+      "negative_transparent_with_QG_RAW_owner_zero": 2,
+      "scope": "Bounded89point JSON evidence only. Does not establish all553newpixels or12194changedcoveredpixels, best focus, or whole-output visual quality. Original strict final-RGBA requirement remains failed."
+    }
+  },
+  "whole_tiff_difference": {
+    "dimensions": [
+      15897,
+      6720
+    ],
+    "counts": {
+      "total_pixels": 106827840,
+      "unchanged_rgba_pixels": 106815093,
+      "changed_rgba_pixels": 12747,
+      "changed_rgb_pixels": 12747,
+      "changed_alpha_pixels": 553,
+      "newly_covered_pixels": 553,
+      "previously_covered_lost_pixels": 0,
+      "changed_rgb_still_covered_pixels": 12194,
+      "changed_rgb_still_uncovered_pixels": 0,
+      "before_covered_pixels": 97858218,
+      "after_covered_pixels": 97858771,
+      "before_nonbinary_alpha_pixels": 0,
+      "after_nonbinary_alpha_pixels": 0,
+      "different_rgb_channels": 15034
+    },
+    "inclusive_canvas_bounding_boxes": {
+      "changed_rgba": [
+        118,
+        65,
+        15648,
+        6459
+      ],
+      "changed_rgb": [
+        118,
+        65,
+        15648,
+        6459
+      ],
+      "changed_alpha": [
+        118,
+        65,
+        15648,
+        6459
+      ],
+      "newly_covered": [
+        118,
+        65,
+        15648,
+        6459
+      ],
+      "previously_covered_lost": null,
+      "changed_rgb_still_covered": [
+        6933,
+        302,
+        9507,
+        4814
+      ]
+    },
+    "max_absolute_rgb_u16_difference": 65535,
+    "max_absolute_alpha_u16_difference": 65535,
+    "mean_absolute_rgb_u16_difference_all_pixels": 0.22391966987881312,
+    "pixel_payload_bytes_read": 1709245440,
+    "memory_bound": "two decoded RGBA16 rows plus bounded row/block copies and O(changed 256px tiles) counters; no full-image raster",
+    "changed_tile_counter_count": 29
+  },
+  "whole_tiff_difference_interpretation": {
+    "known_holes": 63,
+    "other_new_covered_pixels": 490,
+    "all_changes_limited_to_known_holes": false,
+    "old_covered_rgb_identical": false,
+    "old_30_visual_windows_blanket_reuse_allowed": false,
+    "cause_of_12194_old_covered_rgb_changes": "not individually established; bounded24 controls locate changed float RGB after first write, with native tone support/fit changes corroborated by code and reports",
+    "covered_pixel_max_absolute_rgb_u16_histogram": {
+      "1": 11988,
+      "2": 163,
+      "3": 42,
+      "4": 1
+    },
+    "max_covered_absolute_rgb_u16_difference": 4,
+    "maximum_covered_examples": [
+      {
+        "canvas": [
+          6949,
+          4372
+        ],
+        "before_rgba16": [
+          30031,
+          26545,
+          22308,
+          65535
+        ],
+        "after_rgba16": [
+          30028,
+          26546,
+          22312,
+          65535
+        ],
+        "delta_rgb": [
+          -3,
+          1,
+          4
+        ]
+      }
+    ]
+  },
+  "final_qg_owner_census": {
+    "covered_owner_zero_pixels": 0,
+    "covered_pixels": 97858771,
+    "owners": [
+      {
+        "owner": 1,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "pixels": 21070008
+      },
+      {
+        "owner": 2,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "pixels": 9462219
+      },
+      {
+        "owner": 3,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "pixels": 4119355
+      },
+      {
+        "owner": 4,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "pixels": 8983604
+      },
+      {
+        "owner": 5,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "pixels": 2570506
+      },
+      {
+        "owner": 6,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "pixels": 17787903
+      },
+      {
+        "owner": 7,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "pixels": 10601413
+      },
+      {
+        "owner": 8,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "pixels": 11894055
+      },
+      {
+        "owner": 9,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "pixels": 11369708
+      }
+    ],
+    "scope": "actual final QG input owner plane, coverage != 0 only",
+    "uncovered_pixels": 8969069
+  },
+  "quality_gate": {
+    "verdict": "pass",
+    "roi_count": 8,
+    "station_evidence_roi_count": 8,
+    "raw_evidence_roi_count": 0,
+    "criteria": [
+      {
+        "name": "local_scale_median",
+        "verdict": "pass",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "station_evidence_shared_roi",
+        "reference_roi_limit": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 1.0450645225106472,
+          "max": 1.095763012276397
+        }
+      },
+      {
+        "name": "local_scale_pixel_ratio",
+        "verdict": "pass",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "station_evidence_shared_roi",
+        "reference_roi_limit": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 1.0,
+          "max": 1.0
+        }
+      },
+      {
+        "name": "effective_pixel_count",
+        "verdict": "pass",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "",
+        "reference_roi_limit": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "effective_output_pixels": 97858771,
+        "effective_projected_pixels": 98588607,
+        "measured_range": {
+          "min": 0.9925971567891206,
+          "max": 0.9925971567891206
+        }
+      },
+      {
+        "name": "mtf50_normalized",
+        "verdict": "not_applicable",
+        "threshold": 0.93,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "station_slanted_edge_search_256_512",
+        "reference_roi_limit": 24,
+        "candidate_count": 512,
+        "eligible_count": 0,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 512,
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 436,
+          "slanted_edge_contrast_insufficient": 3,
+          "slanted_edge_line_fit_residual_exceeded": 25,
+          "slanted_edge_too_short": 48
+        },
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": null
+      },
+      {
+        "name": "gradient_energy_normalized",
+        "verdict": "pass",
+        "threshold": 0.95,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "station_evidence_shared_roi",
+        "reference_roi_limit": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 0.99999376757652,
+          "max": 1.0003228060608405
+        }
+      },
+      {
+        "name": "noise_sigma_ratio",
+        "verdict": "pass",
+        "threshold": 0.85,
+        "threshold_min": 0.85,
+        "threshold_max": 1.15,
+        "diagnostic": false,
+        "selection_mode": "station_flat_patch_search_128",
+        "reference_roi_limit": 24,
+        "candidate_count": 46,
+        "eligible_count": 24,
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 22,
+        "rejected_content_reasons": {
+          "roi_not_flat": 22
+        },
+        "unvisited_candidate_count": 210,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 0.9962109894146671,
+          "max": 1.0000060066156982
+        }
+      },
+      {
+        "name": "roi_delta_e00",
+        "verdict": "pass",
+        "threshold": 2.0,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "station_evidence_shared_roi",
+        "reference_roi_limit": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 0.0,
+          "max": 0.016459782588915492
+        }
+      },
+      {
+        "name": "boundary_stroke_alignment",
+        "verdict": "not_applicable",
+        "threshold": 1.5,
+        "threshold_min": null,
+        "threshold_max": 3.0,
+        "diagnostic": false,
+        "selection_mode": "station_boundary_streaming_candidates",
+        "reference_roi_limit": 0,
+        "candidate_count": 372,
+        "eligible_count": 0,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 372,
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 372
+        },
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": null
+      },
+      {
+        "name": "owner_sharpness_coverage",
+        "verdict": "pass",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "diagnostic": false,
+        "selection_mode": "",
+        "reference_roi_limit": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "unvisited_candidate_count": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unresolved_pixel_count": 0,
+        "measured_range": {
+          "min": 0.9980752432758931,
+          "max": 0.9980752432758931
+        }
+      }
+    ],
+    "owner_reverse_lookup": {
+      "compositor_owner_zero": 0,
+      "station_missing": 0,
+      "transform_failed": 0,
+      "out_of_bounds": 0,
+      "raw_owner_unresolved": 0,
+      "snapped_to_footprint": 5723,
+      "evidence_missing": 0,
+      "footprint_uncovered_nontransparent": 71451,
+      "footprint_brightness_ratio": 1.001723900508054
+    },
+    "baseline_mtf_eligible_measurable": 1,
+    "candidate_mtf_eligible_measurable": 0,
+    "mtf_candidate_count": 512,
+    "boundary_eligible_measurable": 0,
+    "boundary_candidate_count": 372,
+    "roi_locations_changed": true,
+    "identical_measurements_claimed": false
+  },
+  "geometry": {
+    "closure": {
+      "status": "converged",
+      "spanning_tree_edges": 2,
+      "participating_constraints": 3,
+      "constraint_weights": [],
+      "iterations": 4,
+      "residual_median_px": 0.4880825020393004,
+      "residual_p95_px": 1.287012288811409,
+      "max_direct_pair_p95_px": 1.3685809081403442,
+      "balanced_retry_attempted": true,
+      "balanced_retry_accepted": true,
+      "before_retry_max_direct_pair_p95_px": 3.511854452515588,
+      "max_corner_correction_px": 7.828430453398434,
+      "clamped_stations": 0,
+      "fallback_reason": null,
+      "offending_pair": null,
+      "geometry_model": "homography",
+      "global_before_residual_median_px": null,
+      "global_before_residual_p95_px": null,
+      "nonlinear_validation": [],
+      "rejected_nonlinear_constraints": [],
+      "nonlinear_initialization_constraints": 0,
+      "nonlinear_refit_passes": 0
+    },
+    "output_density": {
+      "status": "applied",
+      "factor": 1.095703125,
+      "pixel_count_multiplier": 1.2005653381347656,
+      "canvas_pixels": 107247492,
+      "output_plane_lower_bound_bytes": 1930454856,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 9,
+      "sample_count": 400740,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 20485,
+      "worst_station_index": 2,
+      "worst_source_id": 2,
+      "worst_station_point": [
+        6849.0,
+        481.0
+      ],
+      "direct_pair_p95_output_px": 1.499558377864713,
+      "residual_median_output_px": 0.5347935227422803,
+      "max_corner_correction_output_px": 8.577635711633832,
+      "minimum_scale": 0.9132925352645311,
+      "p01_scale": 0.928699326032602,
+      "median_scale": 0.9936412294767434,
+      "bypass_reason": null
+    },
+    "registration_frames": [
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "inliers": 1028,
+        "inlier_area_coverage": 0.21217750257997936,
+        "control_point_spacing_px": 95.00571428571429,
+        "rejected_control_point_ratio": 0.7877786952931461,
+        "median_symmetric_error_px": 0.5762215285808054,
+        "global_median_symmetric_error_px": 1.5662455107677085,
+        "global_baseline_samples": 918,
+        "local_baseline_samples": 268,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8511153668200437,
+        "focal_plane_ratio_after": 0.9890960256228081,
+        "status": "local",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "inliers": 2765,
+        "inlier_area_coverage": 0.5808823529411765,
+        "control_point_spacing_px": 94.89142857142858,
+        "rejected_control_point_ratio": 0.4191176470588235,
+        "median_symmetric_error_px": 0.4419417382415922,
+        "global_median_symmetric_error_px": 1.0606601717798212,
+        "global_baseline_samples": 2662,
+        "local_baseline_samples": 1578,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8612480031991169,
+        "focal_plane_ratio_after": 0.9897110444421711,
+        "status": "local",
+        "station_index": 0
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 1
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "inliers": 2270,
+        "inlier_area_coverage": 0.48421501706484643,
+        "control_point_spacing_px": 95.26857142857143,
+        "rejected_control_point_ratio": 0.5082322357019065,
+        "median_symmetric_error_px": 0.5038911092686593,
+        "global_median_symmetric_error_px": 1.25,
+        "global_baseline_samples": 2228,
+        "local_baseline_samples": 1006,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8506124988763701,
+        "focal_plane_ratio_after": 0.9893540835262504,
+        "status": "local",
+        "station_index": 1
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "inliers": 0,
+        "inlier_area_coverage": 1.0,
+        "control_point_spacing_px": 0.0,
+        "rejected_control_point_ratio": 0.0,
+        "median_symmetric_error_px": 0.0,
+        "global_median_symmetric_error_px": 0.0,
+        "global_baseline_samples": 0,
+        "local_baseline_samples": 0,
+        "local_field_verdict": "indeterminate",
+        "focal_plane_ratio_before": 1.0,
+        "focal_plane_ratio_after": 1.0,
+        "status": "anchor",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+        "inliers": 2453,
+        "inlier_area_coverage": 0.5247058823529411,
+        "control_point_spacing_px": 95.36,
+        "rejected_control_point_ratio": 0.4748447869835153,
+        "median_symmetric_error_px": 0.4759858191164943,
+        "global_median_symmetric_error_px": 1.2562344526401112,
+        "global_baseline_samples": 2362,
+        "local_baseline_samples": 1210,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8144742336158163,
+        "focal_plane_ratio_after": 0.9879070900358342,
+        "status": "local",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "inliers": 2226,
+        "inlier_area_coverage": 0.46433041301627037,
+        "control_point_spacing_px": 95.47428571428571,
+        "rejected_control_point_ratio": 0.5322546753519647,
+        "median_symmetric_error_px": 0.3801726581436387,
+        "global_median_symmetric_error_px": 1.286953767623375,
+        "global_baseline_samples": 2154,
+        "local_baseline_samples": 1081,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8125911392768487,
+        "focal_plane_ratio_after": 0.9878822481555044,
+        "status": "local",
+        "station_index": 2
+      },
+      {
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "inliers": 2312,
+        "inlier_area_coverage": 0.4914965986394558,
+        "control_point_spacing_px": 95.18857142857142,
+        "rejected_control_point_ratio": 0.5085034013605443,
+        "median_symmetric_error_px": 0.4419417382415922,
+        "global_median_symmetric_error_px": 1.6770509831248424,
+        "global_baseline_samples": 2261,
+        "local_baseline_samples": 1289,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.711428516031546,
+        "focal_plane_ratio_after": 0.9853506792838128,
+        "status": "local",
+        "station_index": 2
+      }
+    ]
+  },
+  "degradation": {
+    "result": "degraded",
+    "entry_reason_counts": {
+      "grouping_accumulated_motion": 4,
+      "fusion_low_sharpness_region": 6
+    }
+  },
+  "performance_observations": {
+    "v20_cold": {
+      "execution_wall_seconds": 370.144676207914,
+      "rust_child": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 12132499456,
+        "wall_seconds": 369.4219359579729,
+        "user_seconds": 2188.220683,
+        "system_seconds": 30.29966,
+        "child_exit_code": 0
+      },
+      "stage_seconds": {
+        "preflight_seconds": 0.31217625,
+        "prepare_seconds": 12.548685541,
+        "matching_seconds": 1.655651,
+        "ordering_seconds": 0.17734125,
+        "render_seconds": 351.760724167,
+        "total_seconds": 366.4857105
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 67,
+        "raw_decode_count": 67,
+        "failed_count": 0
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 33,
+        "evictions": 0,
+        "resident_bytes": 14155776,
+        "resident_entries": 33,
+        "peak_bytes": 14155776
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 68,
+        "misses": 58,
+        "render_hits": 13,
+        "render_misses": 41,
+        "quality_gate_hits": 55,
+        "quality_gate_misses": 17,
+        "evictions": 54,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 213.370828541,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "tile_payload": {
+        "raster_only_requests": 6,
+        "owner_sampling_requests": 12,
+        "owner_payload_build_requests": 12,
+        "owner_source_load_requests": 36,
+        "raster_only_payload_skips": 6
+      },
+      "quality_gate_timing": {
+        "decode_seconds": 7.734550498,
+        "reference_resampling_seconds": 19.282265541,
+        "local_scale_seconds": 0.000334456,
+        "slanted_edge_mtf_seconds": 7.391834459,
+        "gradient_seconds": 0.10171145699999999,
+        "noise_seconds": 0.147988499,
+        "delta_e_seconds": 0.002323291,
+        "roi_sampling_seconds": 19.537961207999995,
+        "boundary_seconds": 0.181817542,
+        "effective_coverage_seconds": 0.012552208,
+        "owner_source_decode_count": 13,
+        "roi_reference_count": 33,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 33,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 14155776,
+        "roi_cache_peak_bytes": 14155776
+      },
+      "sampled_rss_bytes": 12121784320
+    },
+    "v20_hot": {
+      "execution_wall_seconds": 369.95152958401013,
+      "rust_child": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 11792138240,
+        "wall_seconds": 369.73026958305854,
+        "user_seconds": 2198.375612,
+        "system_seconds": 29.063721,
+        "child_exit_code": 0
+      },
+      "stage_seconds": {
+        "preflight_seconds": 0.1885565,
+        "prepare_seconds": 15.073716542,
+        "matching_seconds": 2.186182667,
+        "ordering_seconds": 0.192616833,
+        "render_seconds": 349.26391575,
+        "total_seconds": 366.934561583
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 67,
+        "raw_decode_count": 67,
+        "failed_count": 0
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 33,
+        "evictions": 0,
+        "resident_bytes": 14155776,
+        "resident_entries": 33,
+        "peak_bytes": 14155776
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 68,
+        "misses": 58,
+        "render_hits": 13,
+        "render_misses": 41,
+        "quality_gate_hits": 55,
+        "quality_gate_misses": 17,
+        "evictions": 54,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 212.483939292,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "tile_payload": {
+        "raster_only_requests": 6,
+        "owner_sampling_requests": 12,
+        "owner_payload_build_requests": 12,
+        "owner_source_load_requests": 36,
+        "raster_only_payload_skips": 6
+      },
+      "quality_gate_timing": {
+        "decode_seconds": 7.795495375000002,
+        "reference_resampling_seconds": 19.643608206999996,
+        "local_scale_seconds": 0.000340832,
+        "slanted_edge_mtf_seconds": 7.394598625,
+        "gradient_seconds": 0.095912373,
+        "noise_seconds": 0.14823445600000004,
+        "delta_e_seconds": 0.002365002,
+        "roi_sampling_seconds": 19.896397708999995,
+        "boundary_seconds": 0.181494833,
+        "effective_coverage_seconds": 0.012475625,
+        "owner_source_decode_count": 13,
+        "roi_reference_count": 33,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 33,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 14155776,
+        "roi_cache_peak_bytes": 14155776
+      },
+      "sampled_rss_bytes": 11676205056
+    },
+    "v22_cold": {
+      "execution_wall_seconds": 379.42673662502784,
+      "rust_child": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 12115066880,
+        "wall_seconds": 378.7330586659955,
+        "user_seconds": 2188.743092,
+        "system_seconds": 35.044369,
+        "child_exit_code": 0
+      },
+      "stage_seconds": {
+        "preflight_seconds": 0.170915833,
+        "prepare_seconds": 12.761453125,
+        "matching_seconds": 1.595370833,
+        "ordering_seconds": 0.1775925,
+        "render_seconds": 361.240029292,
+        "total_seconds": 375.977950917
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 67,
+        "raw_decode_count": 67,
+        "failed_count": 0
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 32,
+        "evictions": 0,
+        "resident_bytes": 11010048,
+        "resident_entries": 32,
+        "peak_bytes": 11010048
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 64,
+        "misses": 58,
+        "render_hits": 13,
+        "render_misses": 41,
+        "quality_gate_hits": 51,
+        "quality_gate_misses": 17,
+        "evictions": 54,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 218.58430637400002,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "tile_payload": {
+        "raster_only_requests": 6,
+        "owner_sampling_requests": 12,
+        "owner_payload_build_requests": 12,
+        "owner_source_load_requests": 36,
+        "raster_only_payload_skips": 6
+      },
+      "quality_gate_timing": {
+        "decode_seconds": 6.278847291,
+        "reference_resampling_seconds": 18.805892874999994,
+        "local_scale_seconds": 0.00034,
+        "slanted_edge_mtf_seconds": 7.319992833000001,
+        "gradient_seconds": 0.09576416500000001,
+        "noise_seconds": 0.148052751,
+        "delta_e_seconds": 0.0023184560000000004,
+        "roi_sampling_seconds": 18.951883122999998,
+        "boundary_seconds": 0.183298042,
+        "effective_coverage_seconds": 0.012506,
+        "owner_source_decode_count": 14,
+        "roi_reference_count": 32,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 32,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 11010048,
+        "roi_cache_peak_bytes": 11010048
+      },
+      "sampled_rss_bytes": 11867013120
+    },
+    "v22_hot": {
+      "execution_wall_seconds": 364.3705070830183,
+      "rust_child": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+        "max_rss_bytes": 12432506880,
+        "wall_seconds": 364.19952333404217,
+        "user_seconds": 2190.721713,
+        "system_seconds": 24.549272,
+        "child_exit_code": 0
+      },
+      "stage_seconds": {
+        "preflight_seconds": 0.091229709,
+        "prepare_seconds": 11.99645975,
+        "matching_seconds": 1.708401667,
+        "ordering_seconds": 0.176911375,
+        "render_seconds": 347.46589275,
+        "total_seconds": 361.471291584
+      },
+      "source_preflight": {
+        "source_count": 9,
+        "stat_count": 9,
+        "file_map_count": 9,
+        "hash_count": 9,
+        "exif_parse_count": 9,
+        "preflight_reuse_count": 67,
+        "raw_decode_count": 67,
+        "failed_count": 0
+      },
+      "quality_roi_cache": {
+        "hits": 0,
+        "misses": 32,
+        "evictions": 0,
+        "resident_bytes": 11010048,
+        "resident_entries": 32,
+        "peak_bytes": 11010048
+      },
+      "source_render_cache": {
+        "max_bytes": 2400000000,
+        "hits": 64,
+        "misses": 58,
+        "render_hits": 13,
+        "render_misses": 41,
+        "quality_gate_hits": 51,
+        "quality_gate_misses": 17,
+        "evictions": 54,
+        "oversized_bypasses": 0,
+        "resident_bytes": 2211124992,
+        "resident_entries": 4,
+        "peak_bytes": 2211124992
+      },
+      "native_fusion_cache": {
+        "max_bytes": 4294967296,
+        "hits": 15,
+        "misses": 6,
+        "matching_hits": 0,
+        "matching_misses": 3,
+        "composition_hits": 15,
+        "composition_misses": 3,
+        "fusion_count": 6,
+        "fusion_seconds": 211.39081133399998,
+        "failed_fusions": 0,
+        "evictions": 0,
+        "invalidations": 3,
+        "oversized_bypasses": 0,
+        "unattributed_bypasses": 0,
+        "state_snapshot_bypasses": 0,
+        "resident_bytes": 0,
+        "resident_entries": 0,
+        "peak_bytes": 2948607844,
+        "peak_entries": 3
+      },
+      "tile_payload": {
+        "raster_only_requests": 6,
+        "owner_sampling_requests": 12,
+        "owner_payload_build_requests": 12,
+        "owner_source_load_requests": 36,
+        "raster_only_payload_skips": 6
+      },
+      "quality_gate_timing": {
+        "decode_seconds": 6.194109086,
+        "reference_resampling_seconds": 18.462814085,
+        "local_scale_seconds": 0.00033854299999999996,
+        "slanted_edge_mtf_seconds": 7.307087999999999,
+        "gradient_seconds": 0.10097900200000001,
+        "noise_seconds": 0.135716376,
+        "delta_e_seconds": 0.0023788760000000003,
+        "roi_sampling_seconds": 18.614226624999997,
+        "boundary_seconds": 0.182884042,
+        "effective_coverage_seconds": 0.012470375,
+        "owner_source_decode_count": 14,
+        "roi_reference_count": 32,
+        "station_owner_evidence_roi_count": 8,
+        "raw_owner_evidence_roi_count": 0,
+        "boundary_sample_count": 0,
+        "roi_cache_hits": 0,
+        "roi_cache_misses": 32,
+        "roi_cache_evictions": 0,
+        "roi_cache_resident_bytes": 11010048,
+        "roi_cache_peak_bytes": 11010048
+      },
+      "sampled_rss_bytes": 12390432768
+    }
+  },
+  "performance_deltas": {
+    "v20_to_v22_cold": {
+      "os_native_child.wall_seconds": {
+        "before": 369.4219359579729,
+        "after": 378.7330586659955,
+        "delta": 9.311122708022594,
+        "percent": 2.520457450334468,
+        "status": "observed"
+      },
+      "os_native_child.max_rss_bytes": {
+        "before": 12132499456,
+        "after": 12115066880,
+        "delta": -17432576,
+        "percent": -0.14368495183718633,
+        "status": "observed"
+      },
+      "execution_wall_seconds": {
+        "before": 370.144676207914,
+        "after": 379.42673662502784,
+        "delta": 9.282060417113826,
+        "percent": 2.5076844309115387,
+        "status": "observed"
+      }
+    },
+    "v20_to_v22_hot": {
+      "os_native_child.wall_seconds": {
+        "before": 369.73026958305854,
+        "after": 364.19952333404217,
+        "delta": -5.530746249016374,
+        "percent": -1.4958867866710857,
+        "status": "observed"
+      },
+      "os_native_child.max_rss_bytes": {
+        "before": 11792138240,
+        "after": 12432506880,
+        "delta": 640368640,
+        "percent": 5.4304709372199556,
+        "status": "observed"
+      },
+      "execution_wall_seconds": {
+        "before": 369.95152958401013,
+        "after": 364.3705070830183,
+        "delta": -5.581022500991821,
+        "percent": -1.508582085676835,
+        "status": "observed"
+      }
+    }
+  },
+  "performance_limitations": [
+    "Capture excluded from all speed/memory benefit comparisons.",
+    "Single cold/hot pair and changed QG ROI selection do not establish a repeatable performance gain.",
+    "StationFusion cumulative clock is not pure graph-cut kernel time; no such timing is used as total wall."
+  ],
+  "capture_observation_excluded_from_performance": {
+    "execution_wall_seconds": 367.53363833308686,
+    "rust_child": {
+      "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+      "max_rss_bytes": 12368412672,
+      "wall_seconds": 367.3594042909099,
+      "user_seconds": 2192.860915,
+      "system_seconds": 26.44533,
+      "child_exit_code": 0
+    },
+    "raw_decode_count": 67,
+    "fusion_count": 6
+  },
+  "visual": {
+    "status": "bounded_visual_review_complete_with_limitations",
+    "full_native_quality_acceptance": false,
+    "source_tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "export_manifest_raw_status_preserved": "exported_pending_visual_review",
+    "exported_windows": 24,
+    "fixed_768px_windows": 2,
+    "ranked_512px_windows": 22,
+    "changed_256px_tiles": 29,
+    "changed_512px_groups": 22,
+    "maximum_changed_windows": 24,
+    "omitted_ranked_windows": [],
+    "all_changed_tiles_fully_inside_exported_windows": true,
+    "changed_pixels_inside_exported_windows": 12747,
+    "changed_pixels_outside_exported_windows": 0,
+    "root_reviewed": 12,
+    "independent_reviewed": 12,
+    "reviewer_intersection": 0,
+    "unique_reviewed_windows": 24,
+    "reviewed_names": [
+      "changed-01-x9216-y512",
+      "changed-02-x6656-y4096",
+      "changed-03-x9216-y0",
+      "changed-04-x6656-y4608",
+      "changed-05-x8704-y512",
+      "changed-06-x8704-y0",
+      "changed-07-x7680-y0",
+      "changed-08-x11776-y512",
+      "changed-09-x1536-y0",
+      "changed-10-x15360-y4096",
+      "changed-11-x0-y1024",
+      "changed-12-x15360-y3072",
+      "changed-13-x15360-y3584",
+      "changed-14-x15360-y2560",
+      "changed-15-x15360-y512",
+      "changed-16-x1024-y0",
+      "changed-17-x15360-y4608",
+      "changed-18-x8192-y512",
+      "changed-19-x0-y6144",
+      "changed-20-x7168-y4096",
+      "changed-21-x15360-y6144",
+      "changed-22-x7168-y4608",
+      "right-edge-coverage",
+      "upper-coverage-step"
+    ],
+    "new_output_visual_view_complete": true,
+    "native_resampling": "none",
+    "pixel_format": "RGBA16 with production sRGB ICC",
+    "summary": "Former requested hole locations appear continuous; reviewed changed windows show no confirmed new isolated gaps, doubled strokes or rectangular seam. Existing soft red seals, horizontal weave/bright bands, near-white highlights and fine color edges remain.",
+    "limits": [
+      "Bounded changed-region sampling, not every output pixel or all RAW focus candidates.",
+      "All changed tiles fit the selected windows, but this does not mean each changed pixel was individually judged by eye.",
+      "Overlapping windows are not independent unique pixels.",
+      "Numeric differences up to 4/65535 are measured, not claimed visually resolved or accepted.",
+      "Original strict opaque-control final RGBA failure remains failed.",
+      "Prior 30-window review is not reused wholesale because previously covered RGB changed."
+    ],
+    "source_reference_review": {
+      "status": "bounded_actual_owner_visual_review_complete",
+      "pair_count": 8,
+      "PNG_view_count": 16,
+      "native_window_size": [
+        256,
+        256
+      ],
+      "stations": [
+        0,
+        1,
+        2
+      ],
+      "selected_owner_post_tone_reference_only": true,
+      "all_candidates_best_focus_verified": false,
+      "float_identical_pair_indices": [
+        3,
+        5,
+        6
+      ],
+      "largest_float_pair_channel_difference": 0.003050297498703003,
+      "summary": "8组中未辨出输出相对实际owner参考新增的明显重影、断纹或接缝；红笔软边和部分织纹柔和同时存在于参考。低对比底材窗口不能单独证明清晰度。数值比较与视觉观察分别保留。",
+      "limitations": [
+        "Only 8 bounded windows across 3 stations; no complete-canvas inspection.",
+        "The 63 repaired hole coordinates are validated by separate point evidence, not inferred from these windows.",
+        "No unselected RAW candidate comparison; no best-focus claim.",
+        "No Cargo, RAW decode, or full TIFF read in this review.",
+        "Strict v22 positive-control final RGBA invariant remains a separate failed result (22/24 identical); this review does not waive it."
+      ],
+      "roi_summaries": [
+        {
+          "roi": 0,
+          "station": 0,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 256,
+            "y": 128
+          },
+          "source_owner_counts": {
+            "1": 52227,
+            "3": 7018,
+            "2": 6291
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.0003126859664916992,
+            "mean_abs_channel_delta": 2.6909637805753544e-05,
+            "different_channel_count": 194952,
+            "channel_count": 196608,
+            "exact": false
+          }
+        },
+        {
+          "roi": 1,
+          "station": 0,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 384,
+            "y": 128
+          },
+          "source_owner_counts": {
+            "1": 55706,
+            "2": 5686,
+            "3": 4144
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 8.374452590942383e-05,
+            "mean_abs_channel_delta": 2.7252802586493394e-06,
+            "different_channel_count": 169704,
+            "channel_count": 196608,
+            "exact": false
+          }
+        },
+        {
+          "roi": 2,
+          "station": 0,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 1280,
+            "y": 1664
+          },
+          "source_owner_counts": {
+            "1": 56598,
+            "3": 5930,
+            "2": 3008
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 1.1324882507324219e-06,
+            "mean_abs_channel_delta": 2.1669378232521316e-07,
+            "different_channel_count": 99431,
+            "channel_count": 196608,
+            "exact": false
+          }
+        },
+        {
+          "roi": 3,
+          "station": 0,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 5760,
+            "y": 4608
+          },
+          "source_owner_counts": {
+            "2": 52726,
+            "3": 4729,
+            "1": 8081
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.0,
+            "mean_abs_channel_delta": 0.0,
+            "different_channel_count": 0,
+            "channel_count": 196608,
+            "exact": true
+          }
+        },
+        {
+          "roi": 4,
+          "station": 1,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 128,
+            "y": 640
+          },
+          "source_owner_counts": {
+            "5": 23098,
+            "4": 42438
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.00014138221740722656,
+            "mean_abs_channel_delta": 5.156841628680316e-06,
+            "different_channel_count": 166757,
+            "channel_count": 196608,
+            "exact": false
+          }
+        },
+        {
+          "roi": 5,
+          "station": 2,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 15360,
+            "y": 6400
+          },
+          "source_owner_counts": {
+            "6": 59220,
+            "7": 5272,
+            "8": 767,
+            "9": 277
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.0,
+            "mean_abs_channel_delta": 0.0,
+            "different_channel_count": 0,
+            "channel_count": 196608,
+            "exact": true
+          }
+        },
+        {
+          "roi": 6,
+          "station": 2,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 11008,
+            "y": 3072
+          },
+          "source_owner_counts": {
+            "7": 40727,
+            "6": 23806,
+            "8": 1003
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.0,
+            "mean_abs_channel_delta": 0.0,
+            "different_channel_count": 0,
+            "channel_count": 196608,
+            "exact": true
+          }
+        },
+        {
+          "roi": 7,
+          "station": 2,
+          "canvas": {
+            "height": 256,
+            "width": 256,
+            "x": 9216,
+            "y": 640
+          },
+          "source_owner_counts": {
+            "9": 62179,
+            "8": 817,
+            "7": 1395,
+            "6": 1145
+          },
+          "float_pair_comparison": {
+            "max_abs_channel_delta": 0.003050297498703003,
+            "mean_abs_channel_delta": 0.0001795545827008027,
+            "different_channel_count": 147933,
+            "channel_count": 196608,
+            "exact": false
+          }
+        }
+      ]
+    },
+    "next_steps": [
+      "Keep original final-RGBA identity contract failed; separate native source/first-write invariants from final post-tone pixel identity without adding post-hoc tolerance.",
+      "Before any pixel-identity pass, capture bounded immutable points after revisit/before tone, after tone and before quantization, including 24 controls and covered maximum-change point [6949,4372].",
+      "At fixed native world coordinates on soft red seals and horizontal bands, compare every geometrically supported focus candidate with masks and the selected owner; do not infer best focus from selected-owner fidelity.",
+      "Attribute representative groups among additional490 new covered pixels and12194 previously covered RGB changes; existing89-point evidence does not establish all of them."
+    ]
+  },
+  "evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/build.json",
+      "sha256": "3e01a6de2adc56d5511baa403784107c7d6a1147395ae26d9a6dd666c620ee44"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/comparison-final.json",
+      "sha256": "2cf185bc06922ca03d6c15f3872f1cf9f8a02036bf0a9b6727d7dc619b862136"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/whole-tiff-diff/summary.json",
+      "sha256": "f72b098a1591a20715da2d30ac8ba166214db20c5566349fd4e0d882f9873f44"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/repair-verification/summary.json",
+      "sha256": "2a8b6e720d1e21f4d307ab669fb81ed4a3e1f8d005e9bb95d3db8b8c3d484f0a"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/source-visual-binding/manifest.json",
+      "sha256": "fcaabc3239889d39b64c4c0380a54ea0a316005627de4fd88e01cebee6c96f97"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/point-trace-binding/summary.json",
+      "sha256": "06ab198692acc8e7ef0b5f6592bed1810424415ca1fa6abe9c41fb6f8c52eac0"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/cold/execution.json",
+      "sha256": "606c97ce8d11862de716b6c87eca1dc00179a0a9157608774ca6c2bdc4316ac6"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/cold/run/sleeping-9-6479-s1-v22-owner-support-release-cold-stack-reports/stack-report-a1827758-a897-4770-b6ac-a94bd8f2f1c4.json",
+      "sha256": "835c1c5ffd1f6635b2b8b32863c715cb20eb08ff827193a92845d614754d907e"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/hot/execution.json",
+      "sha256": "9bb69dd71af6bd5c3c5c4b1953d1e979410025e83e334c9acbfaa223428f25fc"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/hot/run/sleeping-9-6479-s1-v22-owner-support-release-hot-stack-reports/stack-report-688716cc-4460-4e4a-a19d-b15cfe6eae8d.json",
+      "sha256": "4d7dfd899e74a57ea3c0ed5e116e338813a21df7da3292735e23bd98cdc97d81"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/execution.json",
+      "sha256": "d5f491d7f34b8265381462d74ce81630b1bbafd7b5e2390c44906d2262f57baa"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/run/sleeping-9-6479-s1-v22-owner-support-release-capture-stack-reports/stack-report-80847313-4d38-4e87-9752-990d9973d834.json",
+      "sha256": "397f05ce0fec31f7eb545799960f235689242698c8b7934d10408028edf715a3"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/source-visual/process-69962/iteration-0001/metadata.json",
+      "sha256": "5771348dbcfbe77382c88edc4dbfd73aff6755ed15c2bdbc3423447a7e45f976"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/source-visual/process-69962/iteration-0001/point-evidence.json",
+      "sha256": "7afdc65c4bdb53f78405dd71951d9426693f180c4d45cff1e387314a6faca6f4"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/verify-repair-components.json",
+      "sha256": "9a0d4da53bf999d63a830200f9d3c05734914cad866b973dd0f744ecad0fedde"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/independent-control-stage-analysis.json",
+      "sha256": "374d833c56f574d66f61031be8f6943a37a4fd333730034e07ae575e3995ac46"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/covered-delta-analysis.json",
+      "sha256": "c808dbc78374aac3c9945d0d16377cdf7e5c3517dd4b148ac98362d6f3f1f98e"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/visual/manifest.json",
+      "sha256": "69648562836f1cc44da6d71e640e50531a20941c318468f1397ae265b8b827dd"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/visual/root-review.json",
+      "sha256": "366fc0c70853f5691f60cc5b45a86477a2a601fbdd2d626daa0989f56a12edd9"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/visual/independent-review.json",
+      "sha256": "261981effea749136177c55fdcc69353e880bccc4ff0dbc6b48b61c9c2f65888"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/capture/source-visual-binding/source-visual-review.json",
+      "sha256": "6d8cae800834b85073067e7ae9b923dc2b3ede75846a3c53573ac9eedbb08377"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v22-owner-support/final-input-source-verification.json",
+      "sha256": "523a370242e3f7cc3a7eff67f2dd04ec0e0da8b5d226238c841c3182cc0afc91"
+    }
+  ],
+  "control_stage_analysis": {
+    "scope": "24 requested opaque controls only; bound trace JSONs, no RAW/TIFF read",
+    "equal_counts": {
+      "sample_bits_equal": 24,
+      "write_bits_equal": 24,
+      "final_bits_equal": 7,
+      "rgba16_equal": 22,
+      "world_to_tile_equal": 24,
+      "source_path_equal": 24,
+      "local_owner_equal": 24,
+      "prepared_point_equal": 24,
+      "no_fallback": 24,
+      "final_station_owner_equal": 24
+    },
+    "max_abs_final_f32_delta": 1.5497207641601562e-06,
+    "max_abs_final_u16_delta": 1,
+    "conclusion": {
+      "established": "At all 24 control points actual native RGB and first write are bitwise unchanged; 17 final float control RGB values change after first write. Strict final RGBA16 has 22/24 identical controls and fails on two controls, by at most 1 u16 per channel.",
+      "attribution": "Final supported_spatial_affine tone model is applied in bothruns;native tone tiles call same sources.sample resolver, so newly valid sample/support changes fitted samplecounts+coefficients. Existing traces do not record per-point pre-tone value after revisit, so exact isolation of harmonizer stage is code-and-report corroborated rather than a separate measured stage capture.",
+      "scope": "24boundedcontrols;doesnotattributeevery12194changedcoveredpixel,norclaimwholeQG/visualacceptance"
+    },
+    "tone_fit_sample_deltas": [
+      {
+        "station": 2,
+        "old_samples": 51289,
+        "new_samples": 51302,
+        "samples_delta": 13
+      },
+      {
+        "station": 0,
+        "old_samples": 207914,
+        "new_samples": 207916,
+        "samples_delta": 2
+      },
+      {
+        "station": 1,
+        "old_samples": 207914,
+        "new_samples": 207916,
+        "samples_delta": 2
+      }
+    ],
+    "pre_tone_after_revisit_per_point_capture_available": false,
+    "post_hoc_numeric_tolerance_introduced": false
+  },
+  "updated_at_utc": "2026-11-02T19:54:30.191026+00:00",
+  "final_input_binary_source_verification": {
+    "scope": "post-run actual nine NEF bytes, frozen release binary, and recorded source snapshot; no RAW decoding",
+    "input_count": 9,
+    "all_input_identities_match": true,
+    "binary": {
+      "path": "/private/tmp/raw-editor-v22-owner-support-release-binary",
+      "sha256": "29f344a83bc403ae0f08a5ac88d65efb2641c0505e2db0fe0a1a597c7d74d359",
+      "matches": true
+    },
+    "recorded_source_count": 496,
+    "changed_sources": [],
+    "all_recorded_sources_match": true,
+    "rust_file_inventory_added": [],
+    "rust_file_inventory_removed": [],
+    "checks": {
+      "git_diff_check": "pass",
+      "cargo_fmt_check": "pass"
+    }
+  }
+}

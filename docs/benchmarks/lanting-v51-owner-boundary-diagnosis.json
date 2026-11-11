@@ -1,0 +1,167 @@
+{
+  "phase": "LanTing 45 real source-owner boundary diagnosis",
+  "date": "2026-11-10",
+  "binary_sha256": "5ca310cc5b964555c68456afc7bd1549a91d7e96222ecfd0a91d5bd800589db8",
+  "real_run": {
+    "analysis_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/analysis.json",
+    "analysis_sha256": "c7de6b3af94310b9ec51feb9fbfe34373c5331cd7985c226c79ed1f62a0cc6cd",
+    "status": "diagnostic_contract_accepted_not_quality_accepted",
+    "checks_all_pass": true,
+    "same_framed_tiff_as_v50": true,
+    "quality_gate_verdict": "insufficient_evidence",
+    "input_count": 45,
+    "reference_unchanged": true
+  },
+  "diagnostics": {
+    "metadata_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/diagnostics/metadata.json",
+    "coverage_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/diagnostics/coverage.png",
+    "owner_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/diagnostics/owner.png",
+    "owner_color_preview_path": "output/acceptance/lanting-v51-owner-diagnostics/lanting/diagnostics/owner-color.png",
+    "analysis_dimensions": [
+      2048,
+      839
+    ],
+    "source_union_crop": [
+      2,
+      1,
+      33814,
+      13851
+    ]
+  },
+  "top_boundary": {
+    "owner_left": 22,
+    "source_left": "DSC08875.jpg",
+    "owner_right": 12,
+    "source_right": "DSC08865.jpg",
+    "coverage_both_sides": true,
+    "analysis_x_at_y_65_75_85": [
+      1120,
+      1125,
+      1126
+    ]
+  },
+  "bottom_boundary": {
+    "owner_left": 26,
+    "source_left": "DSC08879.jpg",
+    "owner_right": 17,
+    "source_right": "DSC08870.jpg",
+    "analysis_x_at_y_700_735": [
+      1045,
+      1058
+    ]
+  },
+  "photometry_contract": "White-backed 2048x839 preview, owner change at each row; luma mean at 5..15 analysis pixels on each side. Descriptive only; ink and hardware content can confound.",
+  "ab_metrics": {
+    "baseline": {
+      "background_22_to_12": {
+        "count": 40,
+        "median_signed_delta": -0.004161711229946546,
+        "median_abs_delta": 0.004161711229946546,
+        "p90_abs_delta": 0.007681212121212089
+      },
+      "bar_22_to_12": {
+        "count": 50,
+        "median_signed_delta": 0.008846702317290539,
+        "median_abs_delta": 0.008860499108734404,
+        "p90_abs_delta": 0.015038360071301216
+      },
+      "ink_22_to_12": {
+        "count": 80,
+        "median_signed_delta": -0.04493358288770051,
+        "median_abs_delta": 0.04493358288770051,
+        "p90_abs_delta": 0.1450781461675579
+      },
+      "lower_26_to_17": {
+        "count": 60,
+        "median_signed_delta": 0.0022173618538324433,
+        "median_abs_delta": 0.013872442067736187,
+        "p90_abs_delta": 0.1270817112299465
+      }
+    },
+    "skip_flat_tone": {
+      "background_22_to_12": {
+        "count": 40,
+        "median_signed_delta": -0.004146274509803927,
+        "median_abs_delta": 0.004146274509803927,
+        "p90_abs_delta": 0.008010124777183603
+      },
+      "bar_22_to_12": {
+        "count": 50,
+        "median_signed_delta": 0.00838659536541883,
+        "median_abs_delta": 0.008424491978609588,
+        "p90_abs_delta": 0.014476934046345757
+      },
+      "ink_22_to_12": {
+        "count": 80,
+        "median_signed_delta": -0.04518905525846703,
+        "median_abs_delta": 0.04518905525846703,
+        "p90_abs_delta": 0.14507771836007127
+      },
+      "lower_26_to_17": {
+        "count": 60,
+        "median_signed_delta": 0.00246898395721925,
+        "median_abs_delta": 0.01617572192513369,
+        "p90_abs_delta": 0.12514901960784308
+      }
+    },
+    "skip_global_illumination": {
+      "background_22_to_12": {
+        "count": 40,
+        "median_signed_delta": -0.041048128342246,
+        "median_abs_delta": 0.041048128342246,
+        "p90_abs_delta": 0.04598816399286987
+      },
+      "bar_22_to_12": {
+        "count": 50,
+        "median_signed_delta": -0.05101055258467019,
+        "median_abs_delta": 0.05101055258467019,
+        "p90_abs_delta": 0.05320342245989307
+      },
+      "ink_22_to_12": {
+        "count": 80,
+        "median_signed_delta": -0.08912741532976827,
+        "median_abs_delta": 0.08912741532976827,
+        "p90_abs_delta": 0.16851536541889484
+      },
+      "lower_26_to_17": {
+        "count": 60,
+        "median_signed_delta": 0.0022173618538324433,
+        "median_abs_delta": 0.013425632798573974,
+        "p90_abs_delta": 0.09799016042780749
+      }
+    },
+    "skip_owner_correction": {
+      "background_22_to_12": {
+        "count": 40,
+        "median_signed_delta": -0.0043378609625668585,
+        "median_abs_delta": 0.0043378609625668585,
+        "p90_abs_delta": 0.009132905525846668
+      },
+      "bar_22_to_12": {
+        "count": 50,
+        "median_signed_delta": 0.010554509803921586,
+        "median_abs_delta": 0.010680142602495557,
+        "p90_abs_delta": 0.018019607843137275
+      },
+      "ink_22_to_12": {
+        "count": 80,
+        "median_signed_delta": -0.04960467023172907,
+        "median_abs_delta": 0.04960467023172907,
+        "p90_abs_delta": 0.16169782531194296
+      },
+      "lower_26_to_17": {
+        "count": 60,
+        "median_signed_delta": 0.0023080926916221045,
+        "median_abs_delta": 0.013006203208556149,
+        "p90_abs_delta": 0.06675821746880573
+      }
+    }
+  },
+  "offline_only_bottom_blend_preview": "output/acceptance/lanting-v51-owner-diagnostics/offline-bottom-owner-blend-framed.png",
+  "conclusion": "Top background owner boundary is strongly helped by existing whole-canvas smoothing. Bottom owner boundary overlaps physical frame/reflections; high-percentile gap increases with owner correction, but positional fade is not accepted as a production rule. No quality gate or threshold changed.",
+  "tests": {
+    "cargo_check_lib": "pass",
+    "full_lib": "1044 passed; 0 failed; 42 ignored",
+    "cargo_fmt_check": "pass"
+  }
+}

@@ -1,0 +1,1065 @@
+{
+  "scope": "user_prioritizes_painting_tone_blocks_real_reflections_allowed",
+  "status": "paper_tone_regression_completed_legacy_quality_pending",
+  "overall_quality_accepted": false,
+  "checks": {
+    "real_45_contracts": true,
+    "exact_tiff_as_source_overlap_control": true,
+    "actual_tiff_hash_matches": true,
+    "paper_step_improves": true,
+    "owner_boundary_no_worse_than_interior_p95": true,
+    "owner_boundary_no_worse_than_interior_max": true,
+    "paper_no_clipped_channels": true,
+    "regression_guard_pass": true,
+    "strict_guard_blocks_incomplete_quality": true,
+    "quality_verdict_not_relabelled": true,
+    "source_manifest_matches": true,
+    "full_library_pass": true,
+    "nine_cold_pass": true,
+    "nine_hot_pass": true
+  },
+  "binary_sha256": "3ec3bfb87c5ece05b0a246dae18af39575906e124548701a19698e31a28026aa",
+  "output_sha256": "230e48bbb964545adfce7bfa60f9a99e33e888d8abe22e0d78684bc458f7da0c",
+  "output": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 11011,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v60-paper-baseline/lanting/run/lanting-s1-v60-paper-baseline.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-4249e668-5870-4f9b-8cce-803fe80faf6d",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 31085,
+    "written": true
+  },
+  "source_coverage": {
+    "canvas": {
+      "width": 31085,
+      "height": 11011,
+      "long_side_limit": 262144
+    },
+    "opaque_pixels": 0,
+    "union_projected_pixels": 0,
+    "source_coverage_status": "measured_source_union_legacy_mosaic",
+    "source_covered_pixels": 421256167,
+    "source_owned_pixels": 421256167,
+    "source_output_pixels": 468357714,
+    "publication_crop": {
+      "x": 2608,
+      "y": 874,
+      "width": 31085,
+      "height": 11011,
+      "covered_pixels_excluded": 78979232
+    },
+    "narrow_overlaps": [],
+    "integer_translation_tiles": 0,
+    "final_sharpen_amount": 0.0,
+    "path_selection": {
+      "configured_path": null,
+      "selected_path": "legacy_single_layer_mosaic",
+      "use_virtual_tiles": false,
+      "fallback_reason": "singleton_source_scan"
+    },
+    "output_density": {
+      "status": "not_run",
+      "factor": 1.0,
+      "pixel_count_multiplier": 1.0,
+      "canvas_pixels": 0,
+      "output_plane_lower_bound_bytes": 0,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 0,
+      "sampling_contract": "",
+      "source_count": 0,
+      "sample_count": 0,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 0,
+      "worst_station_index": null,
+      "worst_source_id": null,
+      "worst_station_point": null,
+      "direct_pair_p95_output_px": null,
+      "residual_median_output_px": null,
+      "max_corner_correction_output_px": null,
+      "minimum_scale": null,
+      "p01_scale": null,
+      "median_scale": null,
+      "bypass_reason": null
+    }
+  },
+  "native_usage": {
+    "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+    "max_rss_bytes": 9733734400,
+    "wall_seconds": 336.0904029170051,
+    "user_seconds": 596.223563,
+    "system_seconds": 40.080062,
+    "child_exit_code": 0
+  },
+  "paper_audit": {
+    "paper_points": 1008,
+    "adjacent_comparisons": 1937,
+    "median_residual_rgb": [
+      7.0,
+      1.0,
+      2.0
+    ],
+    "median_adjacent_step": 1.0,
+    "p95_adjacent_step": 3.0,
+    "maximum_adjacent_step": 7.0,
+    "worst_points": [
+      {
+        "x": 552.0,
+        "y": 334.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -7.0,
+          -4.0,
+          -2.0
+        ],
+        "max_channel_step": 7.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 1368.0,
+        "y": 382.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          7.0,
+          6.0,
+          5.0
+        ],
+        "max_channel_step": 7.0,
+        "owner_pair": [
+          12,
+          21
+        ],
+        "crosses_owner": true
+      },
+      {
+        "x": 152.0,
+        "y": 478.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          4,
+          -7,
+          -3
+        ],
+        "max_channel_step": 7,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 136.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          3.0,
+          4.0,
+          6.5
+        ],
+        "max_channel_step": 6.5,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 520.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6,
+          -4,
+          -3
+        ],
+        "max_channel_step": 6,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 200.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -5.0,
+          -4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 1192.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -4.0,
+          -5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          12,
+          12
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 424.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          2.0,
+          5.0,
+          4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 168.0,
+        "y": 302.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -4.0,
+          -5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 168.0,
+        "y": 334.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -5.0,
+          -4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 1336.0,
+        "y": 382.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          5.0,
+          4.0,
+          4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          12,
+          21
+        ],
+        "crosses_owner": true
+      },
+      {
+        "x": 1400.0,
+        "y": 382.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          5.0,
+          4.0,
+          4.5
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          12,
+          12
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 200.0,
+        "y": 398.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -3.0,
+          -5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 776.0,
+        "y": 398.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          5.0,
+          4.0,
+          4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 760.0,
+        "y": 414.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          5.0,
+          2.0,
+          3.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          37,
+          29
+        ],
+        "crosses_owner": true
+      },
+      {
+        "x": 1448.0,
+        "y": 430.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -3.0,
+          -5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          21,
+          21
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 136.0,
+        "y": 462.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          4.5,
+          5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 168.0,
+        "y": 462.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          3.0,
+          -5.0,
+          -2.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 136.0,
+        "y": 494.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          2.0,
+          0.0,
+          5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 232.0,
+        "y": 494.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -3.0,
+          -3.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 648.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -3.0,
+          -4.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          39,
+          39
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 808.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -3.0,
+          -1.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          23,
+          23
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 136.0,
+        "y": 558.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          3.0,
+          3.0,
+          5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          43,
+          43
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 152.0,
+        "y": 574.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          -5.0,
+          -1.0,
+          -2.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          43,
+          35
+        ],
+        "crosses_owner": true
+      },
+      {
+        "x": 1096.0,
+        "y": 590.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -5.0,
+          -5.0,
+          -5.0
+        ],
+        "max_channel_step": 5.0,
+        "owner_pair": [
+          24,
+          24
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 520.0,
+        "y": 270.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.5,
+          -3.0,
+          -2.0
+        ],
+        "max_channel_step": 4.5,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 168.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -1.0,
+          -1.0
+        ],
+        "max_channel_step": 4.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 520.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -2.0,
+          -1.0
+        ],
+        "max_channel_step": 4.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 744.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          4.0,
+          2.5,
+          3.0
+        ],
+        "max_channel_step": 4.0,
+        "owner_pair": [
+          37,
+          37
+        ],
+        "crosses_owner": false
+      },
+      {
+        "x": 872.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -3.5,
+          -4.0,
+          -3.0
+        ],
+        "max_channel_step": 4.0,
+        "owner_pair": [
+          22,
+          22
+        ],
+        "crosses_owner": false
+      }
+    ],
+    "limits": "Paper estimator uses local luminance percentiles with ink/stamp rejection. Local shape, real stains and reference warp can still affect it; suspects require crop review. Hardware/reflections excluded per user scope.",
+    "source_boundary": {
+      "count": 314,
+      "median": 1.0,
+      "p95": 3.0,
+      "max": 7.0,
+      "above_6": 1
+    },
+    "source_interior": {
+      "count": 1623,
+      "median": 1.0,
+      "p95": 3,
+      "max": 7.0,
+      "above_6": 3
+    }
+  },
+  "v56_paper_audit": {
+    "paper_points": 1008,
+    "adjacent_comparisons": 1937,
+    "median_residual_rgb": [
+      6.0,
+      1.0,
+      1.0
+    ],
+    "median_adjacent_step": 2.0,
+    "p95_adjacent_step": 4.0,
+    "maximum_adjacent_step": 10.0,
+    "worst_points": [
+      {
+        "x": 440.0,
+        "y": 190.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          -7.0,
+          -10.0,
+          -7.0
+        ],
+        "max_channel_step": 10.0
+      },
+      {
+        "x": 152.0,
+        "y": 446.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          2.0,
+          10.0,
+          7.0
+        ],
+        "max_channel_step": 10.0
+      },
+      {
+        "x": 424.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          7.0,
+          9.0,
+          7.0
+        ],
+        "max_channel_step": 9.0
+      },
+      {
+        "x": 1736.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          8.0,
+          5.0,
+          5.0
+        ],
+        "max_channel_step": 8.0
+      },
+      {
+        "x": 1368.0,
+        "y": 382.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          8.0,
+          8.0,
+          6.0
+        ],
+        "max_channel_step": 8.0
+      },
+      {
+        "x": 216.0,
+        "y": 446.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          8.0,
+          5.0,
+          4.0
+        ],
+        "max_channel_step": 8.0
+      },
+      {
+        "x": 136.0,
+        "y": 462.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -2.0,
+          7.5,
+          7.0
+        ],
+        "max_channel_step": 7.5
+      },
+      {
+        "x": 440.0,
+        "y": 158.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          7.0,
+          6.0,
+          5.5
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 1400.0,
+        "y": 382.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          7.0,
+          7.0,
+          6.5
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 184.0,
+        "y": 446.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          7.0,
+          7.0,
+          5.0
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 232.0,
+        "y": 494.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -7.0,
+          -4.0,
+          -5.0
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 136.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          3.0,
+          4.0,
+          7.0
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 232.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -7.0,
+          -3.0,
+          -2.5
+        ],
+        "max_channel_step": 7.0
+      },
+      {
+        "x": 200.0,
+        "y": 142.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -6.0,
+          -5.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 1752.0,
+        "y": 158.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          6.0,
+          4.5,
+          6.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 456.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -4.0,
+          -6.0,
+          -4.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 520.0,
+        "y": 174.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6,
+          -3,
+          -3
+        ],
+        "max_channel_step": 6
+      },
+      {
+        "x": 520.0,
+        "y": 206.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -3.0,
+          -3.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 520.0,
+        "y": 238.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -3.0,
+          -3.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 520.0,
+        "y": 270.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -4.0,
+          -4.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 552.0,
+        "y": 334.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -4.0,
+          -1.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 568.0,
+        "y": 350.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          6.0,
+          4.0,
+          3.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 1352.0,
+        "y": 366.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -5.0,
+          -4.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 168.0,
+        "y": 462.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          3.0,
+          -6.0,
+          -4.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 152.0,
+        "y": 478.0,
+        "orientation": "horizontal",
+        "rgb_residual_step": [
+          3.0,
+          -6.0,
+          -4.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 232.0,
+        "y": 462.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -5.0,
+          -3.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 648.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -4.0,
+          -5.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 808.0,
+        "y": 526.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -4.0,
+          0.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 40.0,
+        "y": 558.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          -6.0,
+          -4.0,
+          -3.0
+        ],
+        "max_channel_step": 6.0
+      },
+      {
+        "x": 872.0,
+        "y": 590.0,
+        "orientation": "vertical",
+        "rgb_residual_step": [
+          6.0,
+          5.0,
+          5.0
+        ],
+        "max_channel_step": 6.0
+      }
+    ],
+    "limits": "Paper estimator uses local luminance percentiles with ink/stamp rejection. Local shape, real stains and reference warp can still affect it; suspects require crop review. Hardware/reflections excluded per user scope.",
+    "source_boundary": {
+      "count": 314,
+      "median": 2.0,
+      "p95": 4.0,
+      "max": 8.0,
+      "above_6": 1
+    },
+    "source_interior": {
+      "count": 1623,
+      "median": 2,
+      "p95": 4.0,
+      "max": 10.0,
+      "above_6": 12
+    }
+  },
+  "histogram": {
+    "width": 31085,
+    "height": 11011,
+    "pixels": 342276935,
+    "black_pixels": 15349,
+    "white_pixels": 0,
+    "any_channel_clipped": 3660,
+    "transparent_pixels": 0,
+    "paper_pixels": 259777345,
+    "paper_any_channel_clipped": 0
+  },
+  "regression_guard": {
+    "pass": true,
+    "failures": [],
+    "status": "regression_only_quality_pending",
+    "qualityPass": false,
+    "regressionOnly": true,
+    "contractSha": "de35c28e19f64df6d4c0fc32deba6b134f36a5780a08c88eb000ed41f9899717",
+    "reportSha": "c6a38ddebe3bab6a2db6b8f7dc20f0c0e0bd1d7cbdb017ba9dc6968e53f89712",
+    "outputSha": "230e48bbb964545adfce7bfa60f9a99e33e888d8abe22e0d78684bc458f7da0c"
+  },
+  "strict_quality_guard": {
+    "pass": false,
+    "failures": [
+      "legacy_quality_gate_not_passed"
+    ],
+    "status": "rejected",
+    "qualityPass": false,
+    "regressionOnly": false,
+    "contractSha": "de35c28e19f64df6d4c0fc32deba6b134f36a5780a08c88eb000ed41f9899717",
+    "reportSha": "c6a38ddebe3bab6a2db6b8f7dc20f0c0e0bd1d7cbdb017ba9dc6968e53f89712",
+    "outputSha": "230e48bbb964545adfce7bfa60f9a99e33e888d8abe22e0d78684bc458f7da0c"
+  },
+  "quality_gate": "insufficient_evidence",
+  "quality_gate_thresholds_changed": false,
+  "visual_review": {
+    "native_reference_comparison": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v60-paper-baseline/paper-native-reference-compare.jpg",
+    "reviewed_region": "Only source-boundary paper audit outlier above 6 code values: preview(1368,382), owner12/21; native 1500x1500 reference/TIFF crops inspected. No abrupt rectangular colour patch observed, with paper/ink contrast and ageing differences retained.",
+    "limits": [
+      "Paper overall remains slightly warmer than reference; median RGB residual recorded separately.",
+      "One paper-boundary diagnostic suspect remains, at the same maximum step as source-interior variation; this is not asserted as an all-pixel proof.",
+      "Hardware reflection differences are permitted by user and are not optimized away.",
+      "Legacy Quality Gate lacks quality planes and remains insufficient_evidence/0ROI; full acceptance stays blocked."
+    ]
+  },
+  "nine": {
+    "cold": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 9816293376,
+        "wall_seconds": 526.0429036249407,
+        "user_seconds": 1900.340701,
+        "system_seconds": 33.009984,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "fusion_count": 6
+    },
+    "hot": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 9898377216,
+        "wall_seconds": 535.0638310408685,
+        "user_seconds": 1931.767391,
+        "system_seconds": 34.739292999999996,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "fusion_count": 6
+    }
+  },
+  "rejected_candidates": {
+    "v57": "geometry/coverage feedback rejected",
+    "v58": "visual, boundary and clipping regression rejected",
+    "v59": "exact v56 TIFF; no effective output improvement, not credited as a visual optimization; experiment disabled by default"
+  },
+  "production_defaults": {
+    "canvas_material_normalization": false,
+    "matched_artwork_tone": false,
+    "source_overlap_tone": true,
+    "source_backed_residual_owner_gain": true
+  },
+  "guard_script_sha256": "758b1a4c485fe8bc0af0cf8093bd521e6c3781560df3e7ad3e2d46b28f55392b",
+  "guard_contract_sha256": "de35c28e19f64df6d4c0fc32deba6b134f36a5780a08c88eb000ed41f9899717",
+  "full_library": {
+    "passed": 1053,
+    "failed": 0,
+    "ignored": 42
+  }
+}

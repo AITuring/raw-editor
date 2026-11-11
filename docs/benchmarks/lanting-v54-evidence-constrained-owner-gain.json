@@ -1,0 +1,270 @@
+{
+  "scope": "bounded_owner_gain_native_lanting45_and_nine_nef_regression",
+  "status": "owner_gain_stage_accepted_legacy_quality_evidence_pending",
+  "checks": {
+    "reference_unchanged": true,
+    "reference_zone_mae_not_worse": true,
+    "top_wall_within_one_8bit_level": true,
+    "rail_not_worse": true,
+    "bottom_boundary_improved": true,
+    "evidence_nonempty": true,
+    "evidence_bounded": true,
+    "real_45_contract_checks": true,
+    "native_tiff_file_matches_report": true,
+    "nine_cold_pass": true,
+    "nine_hot_pass": true,
+    "full_library_pass": true,
+    "source_matches_frozen_binary_manifest": true
+  },
+  "binary_sha256": "9d572c227244c3c2d7af2baaa09a29708c4c9150ccde2f9d8da6692e70e0e536",
+  "owner_gain": {
+    "accepted_owner_cells": 358,
+    "candidate_pair_cells": 7417,
+    "cell_size_output_pixels": 512.0,
+    "dropped_cells": 0,
+    "max_gain": 1.08,
+    "method": "same_content_overlap_residual_gain",
+    "min_gain": 0.9259259259259258,
+    "samples": 31095,
+    "support_radius_output_pixels": 768.0,
+    "unsupported_gain": 1.0
+  },
+  "lanting_usage": {
+    "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+    "max_rss_bytes": 9662398464,
+    "wall_seconds": 439.27896029199474,
+    "user_seconds": 675.932313,
+    "system_seconds": 63.486554,
+    "child_exit_code": 0
+  },
+  "lanting_output_sha256": "f1712a186a5305065a7df3a01261e8fc20d343c2888db26faaad76f6c9bf1049",
+  "lanting_quality_gate": "insufficient_evidence",
+  "quality_gate_thresholds_changed": false,
+  "photometry": {
+    "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+    "reference_unchanged": true,
+    "resolution": [
+      512,
+      182
+    ],
+    "zones_xyxy": {
+      "wall": [
+        100,
+        480,
+        2,
+        16
+      ],
+      "rail": [
+        180,
+        490,
+        16,
+        33
+      ],
+      "artwork": [
+        40,
+        470,
+        35,
+        158
+      ],
+      "bottom_frame": [
+        40,
+        470,
+        158,
+        178
+      ]
+    },
+    "candidates": {
+      "evidence_gain": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v54-evidence-gain/lanting/run/lanting-s1-v54-evidence-gain.app.jpg",
+        "sha256": "98728a1485b48fce26795641a63e37585a6bbf9444bfcf88b98a3bb2a44da1b9",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 80.19436090225564,
+            "mean_absolute_difference": 24.484962406015036,
+            "p90_absolute_difference": 34
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 111.24478178368122,
+            "mean_absolute_difference": 40.62713472485768,
+            "p90_absolute_difference": 61
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.73136698808848,
+            "mean_absolute_difference": 8.159614293817357,
+            "p90_absolute_difference": 17
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 73.20872093023256,
+            "mean_absolute_difference": 11.170348837209302,
+            "p90_absolute_difference": 22
+          }
+        }
+      },
+      "baseline": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v51-owner-diagnostics/lanting/run/lanting-s1-v51-owner-diagnostics.app.jpg",
+        "sha256": "c3ad128bd407d3c22f6b74f81a8a5461797a3d7315491759721d2154bbcf7b74",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 74.04887218045113,
+            "mean_absolute_difference": 30.630451127819548,
+            "p90_absolute_difference": 41
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 104.1988614800759,
+            "mean_absolute_difference": 46.48747628083491,
+            "p90_absolute_difference": 70
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 71.74422386084326,
+            "mean_absolute_difference": 9.246625070901873,
+            "p90_absolute_difference": 18
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 78.12058139534884,
+            "mean_absolute_difference": 14.738720930232558,
+            "p90_absolute_difference": 30
+          }
+        }
+      },
+      "skip_owner": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v53-native-owner-ab/lanting/run/lanting-s1-v53-native-owner-ab.app.jpg",
+        "sha256": "86441694faaad5769d3f0485a3915012d5618f6cef13e44bfa8f82514328c310",
+        "zones": {
+          "wall": {
+            "reference_mean": 104.67932330827068,
+            "candidate_mean": 80.19436090225564,
+            "mean_absolute_difference": 24.484962406015036,
+            "p90_absolute_difference": 34
+          },
+          "rail": {
+            "reference_mean": 149.8381404174573,
+            "candidate_mean": 111.24478178368122,
+            "mean_absolute_difference": 40.62713472485768,
+            "p90_absolute_difference": 61
+          },
+          "artwork": {
+            "reference_mean": 73.50153148043108,
+            "candidate_mean": 75.73480809226697,
+            "mean_absolute_difference": 8.15968992248062,
+            "p90_absolute_difference": 17
+          },
+          "bottom_frame": {
+            "reference_mean": 65.67976744186046,
+            "candidate_mean": 73.20872093023256,
+            "mean_absolute_difference": 11.170348837209302,
+            "p90_absolute_difference": 22
+          }
+        }
+      }
+    },
+    "limits": "overview metrics only; reflection, local geometry and source selection differ; not a quality gate verdict"
+  },
+  "boundary_indicators": {
+    "evidence_gain": {
+      "wall": {
+        "count": 40,
+        "median_abs_boundary_delta": 0.005790338680926932,
+        "p90_abs_boundary_delta": 0.0079165062388592
+      },
+      "rail": {
+        "count": 50,
+        "median_abs_boundary_delta": 0.013336399286987488,
+        "p90_abs_boundary_delta": 0.01680606060606049
+      },
+      "bottom": {
+        "count": 20,
+        "median_abs_boundary_delta": 0.02254456327985739,
+        "p90_abs_boundary_delta": 0.1909980035650623
+      }
+    },
+    "baseline": {
+      "wall": {
+        "count": 40,
+        "median_abs_boundary_delta": 0.003955436720142591,
+        "p90_abs_boundary_delta": 0.007774474153297739
+      },
+      "rail": {
+        "count": 50,
+        "median_abs_boundary_delta": 0.01344734402852052,
+        "p90_abs_boundary_delta": 0.018356862745098013
+      },
+      "bottom": {
+        "count": 20,
+        "median_abs_boundary_delta": 0.07100099821746882,
+        "p90_abs_boundary_delta": 0.2846363636363636
+      }
+    },
+    "skip_owner": {
+      "wall": {
+        "count": 40,
+        "median_abs_boundary_delta": 0.005790338680926932,
+        "p90_abs_boundary_delta": 0.0079165062388592
+      },
+      "rail": {
+        "count": 50,
+        "median_abs_boundary_delta": 0.013336399286987488,
+        "p90_abs_boundary_delta": 0.01680606060606049
+      },
+      "bottom": {
+        "count": 20,
+        "median_abs_boundary_delta": 0.02254456327985739,
+        "p90_abs_boundary_delta": 0.1909980035650623
+      }
+    }
+  },
+  "nine": {
+    "cold": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 9212133376,
+        "wall_seconds": 396.93735233298503,
+        "user_seconds": 1817.137282,
+        "system_seconds": 47.827496,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "native_fusions": 6
+    },
+    "hot": {
+      "status": "pass",
+      "usage": {
+        "method": "Darwin getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+        "max_rss_bytes": 10382491648,
+        "wall_seconds": 390.78662058291957,
+        "user_seconds": 1849.342544,
+        "system_seconds": 43.702168,
+        "child_exit_code": 0
+      },
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "raw_decodes": 18,
+      "native_fusions": 6
+    }
+  },
+  "visual_review": {
+    "overview": "whole artwork, rail and frame preserved; bottom brightness band reduced; remaining reflection/source and framing differences prevent whole legacy acceptance",
+    "native_tiff_crops": [
+      "evidence-top-tiff-native.png",
+      "evidence-bottom-tiff-native.png",
+      "top-1to1.png",
+      "bottom-1to1.png"
+    ],
+    "finding": "No new halo or structural break observed in inspected top and bottom TIFF crops; reflection differences remain.",
+    "limits": "Regional diagnostic tolerance is not a modification of Quality Gate. Residual correction is small: the main improvement comes from rejecting unsupported owner-median gains. Only explicitly framed candidate was rendered; default source-union framing flag remains unchanged."
+  },
+  "full_library": {
+    "passed": 1047,
+    "failed": 0,
+    "ignored": 42
+  },
+  "artifacts": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v54-evidence-gain"
+}

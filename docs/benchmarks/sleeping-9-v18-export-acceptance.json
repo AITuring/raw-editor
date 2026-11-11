@@ -1,0 +1,1974 @@
+{
+  "schema": 1,
+  "created_at": "2026-11-02T09:25:38.933539+00:00",
+  "phase": "v18-export",
+  "scope": "P0 TIFF alpha declaration, post-export artifact gate, and output-only report preservation",
+  "status": {
+    "execution": "completed",
+    "export_phase": "pass",
+    "artifact_contract": "pass",
+    "complete_native_quality_acceptance": false,
+    "cold_hot_comparison_performed": false
+  },
+  "acceptance_checks": {
+    "formal_run_is_single_native_export_regression": true,
+    "runner_and_native_process_exit_zero": true,
+    "native_harness_passed": true,
+    "fixed_verified_binary_matches_build_execution_and_disk": true,
+    "required_checks_passed": true,
+    "exact_same_nine_sources": true,
+    "input_sha256_verified": true,
+    "selected_native_path_and_quality_gate_preserved": true,
+    "report_records_verified_native_export": true,
+    "pixel_evidence_is_for_formal_run": true,
+    "full_rgba_pixels_and_icc_exactly_preserved": true,
+    "actual_tiff_alpha_and_dimensions_verified": true,
+    "ten_semantic_fields_exactly_preserved": true,
+    "two_independent_decoder_checks_passed": true
+  },
+  "build": {
+    "binary": "/private/tmp/raw-editor-v18-verified-binary",
+    "sha256": "7263f27b9a9395dc7cc405602b36734e455b14d564b47dd5cd6bb233589adff9",
+    "profile": "release",
+    "target_source": "/Users/dp/Desktop/raw-editor/src-tauri/target/release/deps/raw_editor_lib-814fc09cbbd3d684",
+    "cargo_check": "pass",
+    "cargo_fmt": "pass",
+    "tiff_tests_before_report_rewrite": {
+      "passed": 19,
+      "failed": 0
+    },
+    "report_preservation_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "full_library_tests": {
+      "passed": 963,
+      "failed": 0,
+      "ignored": 40,
+      "seconds": 176.1
+    },
+    "runner_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "dataset_contract": "pass",
+    "new_rust_tests": 12
+  },
+  "tests": {
+    "cargo_check": "pass",
+    "cargo_fmt": "pass",
+    "tiff_tests_before_report_rewrite": {
+      "passed": 19,
+      "failed": 0
+    },
+    "report_preservation_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "full_library_tests": {
+      "passed": 963,
+      "failed": 0,
+      "ignored": 40,
+      "seconds": 176.1
+    },
+    "runner_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "dataset_contract": "pass",
+    "new_rust_tests": 12
+  },
+  "execution": {
+    "binary": "/private/tmp/raw-editor-v18-verified-binary",
+    "sha256": "7263f27b9a9395dc7cc405602b36734e455b14d564b47dd5cd6bb233589adff9",
+    "kind": "single-native-export-regression",
+    "scale": 1,
+    "subset": "sleeping-9-6479",
+    "source_render_cache_max_bytes": 2400000000,
+    "native_fusion_cache_max_bytes": 4294967296,
+    "coverage_alpha": true,
+    "preview_only": false,
+    "cold_hot_comparison": false,
+    "rss_gate_changed": false,
+    "wrapper_sha256": "9b0ef3a87dd519911ce122dd18b5d4e8d36c4190ee802b1e288fb22c96dfd0c9",
+    "command": [
+      "npm",
+      "run",
+      "focus-stack-regression",
+      "--",
+      "--dataset",
+      "sleeping",
+      "--subset",
+      "sleeping-9-6479",
+      "--scale",
+      "1",
+      "--write-output",
+      "--label",
+      "v18-export-verified",
+      "--out-dir",
+      "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run",
+      "--binary",
+      "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/native-process-wrapper.py"
+    ],
+    "started_at_epoch": 1793610850.708766,
+    "exit_code": 0,
+    "wall_seconds": 354.3536382500315,
+    "binary_unchanged": true
+  },
+  "binary_sha256_independently_verified": "7263f27b9a9395dc7cc405602b36734e455b14d564b47dd5cd6bb233589adff9",
+  "native_process_usage": {
+    "method": "Darwin getrusage(RUSAGE_CHILDREN), one fixed Rust child",
+    "max_rss_bytes": 11333681152,
+    "wall_seconds": 353.5214722920209,
+    "user_seconds": 1537.566552,
+    "system_seconds": 49.16081,
+    "child_exit_code": 0
+  },
+  "memory_scope": {
+    "process_rss": "Darwin RUSAGE_CHILDREN for exactly one fixed Rust child, including TIFF/JPEG export",
+    "report_rss": "Existing stitch/QG sampler stops before fixture TIFF/JPEG export",
+    "no_performance_speedup_claim": "Only one final regression run; do not infer new cold/hot gains from this phase."
+  },
+  "performance": {
+    "stage_seconds": {
+      "preflight_seconds": 0.234026584,
+      "prepare_seconds": 14.872589209000001,
+      "matching_seconds": 1.6409474579999999,
+      "ordering_seconds": 0.186752666,
+      "render_seconds": 332.011383333,
+      "total_seconds": 348.986939625
+    },
+    "pairs": {
+      "base_pairs": 36,
+      "retrieval_pairs": 0,
+      "candidate_pairs": 36,
+      "verified_pairs": 34,
+      "rescue_pairs": 0
+    },
+    "source_preflight": {
+      "source_count": 9,
+      "stat_count": 9,
+      "file_map_count": 9,
+      "hash_count": 9,
+      "exif_parse_count": 9,
+      "preflight_reuse_count": 70,
+      "raw_decode_count": 70,
+      "failed_count": 0
+    },
+    "quality_roi_cache": {
+      "hits": 0,
+      "misses": 32,
+      "evictions": 0,
+      "resident_bytes": 11010048,
+      "resident_entries": 32,
+      "peak_bytes": 11010048
+    },
+    "source_render_cache": {
+      "max_bytes": 2400000000,
+      "hits": 62,
+      "misses": 61,
+      "render_hits": 16,
+      "render_misses": 49,
+      "quality_gate_hits": 46,
+      "quality_gate_misses": 12,
+      "evictions": 57,
+      "oversized_bypasses": 0,
+      "resident_bytes": 2211124992,
+      "resident_entries": 4,
+      "peak_bytes": 2211124992
+    },
+    "native_fusion_cache": {
+      "max_bytes": 4294967296,
+      "hits": 15,
+      "misses": 6,
+      "matching_hits": 0,
+      "matching_misses": 3,
+      "composition_hits": 15,
+      "composition_misses": 3,
+      "fusion_count": 6,
+      "fusion_seconds": 171.290323833,
+      "failed_fusions": 0,
+      "evictions": 0,
+      "invalidations": 3,
+      "oversized_bypasses": 0,
+      "unattributed_bypasses": 0,
+      "state_snapshot_bypasses": 0,
+      "resident_bytes": 0,
+      "resident_entries": 0,
+      "peak_bytes": 2944716552,
+      "peak_entries": 3
+    }
+  },
+  "resources": {
+    "memory_threshold_bytes": 25769803776,
+    "memory_threshold_source": "default",
+    "physical_memory_bytes": 34359738368,
+    "peak_rss_bytes": 11325423616,
+    "rss_sample_count": 692,
+    "memory_threshold_exceeded": false,
+    "max_resident_virtual_tiles": 4,
+    "network_requests": 0,
+    "worker_threads": 10,
+    "random_seed_source": "site_constants_without_run_seed"
+  },
+  "runner_summary": {
+    "dataset": "sleeping",
+    "subset": "sleeping-9-6479",
+    "scale": 1,
+    "previewEdge": 1200,
+    "previewOnly": false,
+    "output": {
+      "width": 15701,
+      "height": 6585
+    },
+    "inputs": 9,
+    "orderedInputs": 9,
+    "streamedSources": null,
+    "ownershipVerified": false,
+    "selectedPath": "layered_virtual_tile",
+    "stationCount": 3,
+    "qualityGate": "pass",
+    "toneStatus": "applied",
+    "nativeAcceptance": "passed-or-not-applicable",
+    "artifactContract": "pass",
+    "verifiedExport": {
+      "alpha_preserved": true,
+      "artifact_validation": "pass",
+      "artifact_validation_error": null,
+      "bit_depth": 16,
+      "format": "TIFF",
+      "height": 6585,
+      "icc": "sRGB",
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff",
+      "preview": {
+        "path": "",
+        "max_roi_delta_e": 0
+      },
+      "result_id": "native-fixture-6c497474-e6c3-456b-8cb4-3beb3de4b16d",
+      "tiff_extra_samples": [
+        2
+      ],
+      "width": 15701,
+      "written": true
+    },
+    "stitchSeconds": 332.01,
+    "elapsedSeconds": 354.128,
+    "digests": {
+      "preview": "811ec9387b38a98b3883d68a5d66fc8b630082b0fe55c42856c651fd0a34544b",
+      "crops": {
+        "top-left": "107512c9b7b637f3a6e7f180d4e5abd5724df205c134b393a11ca0bc10342fdb",
+        "top-center": "7413cdc919fc9b0175e19c0719e49444eef2e0b2c54b58114b087a141fb0b071",
+        "top-right": "e6eadff70401f74ba54d82b7cf7bd9c30e8f12d9cf910bf62e3acaaee14fb82f",
+        "bottom-left": "9f71cd797d97e38e0c2943f4f8fc5121bf1644e476517a3d1fb69b5136896502",
+        "bottom-center": "4ea23a31121d1a96f91e1aff4807413931e0af2fc82f12af7e835a790f0d88cf",
+        "bottom-right": "e28fc9288a70cde1d7210db3440fa52d54612dbb8f8ef8c189155fcb01792c6f"
+      },
+      "appJpeg": "ea11d8c9b264ebb797dc9f25c76861c28cfc0603d5584557ee9042f3f4b3a6d6"
+    },
+    "metrics": {
+      "self": {
+        "contentTiles": 558,
+        "sharpnessMedian": 0.1680297728421945,
+        "sharpnessP10": 0.02968716992553263,
+        "thirds": [
+          {
+            "band": "left",
+            "sharpnessMedian": 0.13928280913628824
+          },
+          {
+            "band": "center",
+            "sharpnessMedian": 0.20881389890248575
+          },
+          {
+            "band": "right",
+            "sharpnessMedian": 0.14840017473087655
+          }
+        ]
+      },
+      "reference": null
+    }
+  },
+  "runner_failures": [],
+  "actual_output_report": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 6585,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-6c497474-e6c3-456b-8cb4-3beb3de4b16d",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 15701,
+    "written": true
+  },
+  "inputs": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+      "sha256_before": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+      "sha256_after": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+      "decoded": true,
+      "disk_sha256": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+      "sha256_before": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+      "sha256_after": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+      "decoded": true,
+      "disk_sha256": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+      "sha256_before": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+      "sha256_after": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+      "decoded": true,
+      "disk_sha256": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+      "sha256_before": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+      "sha256_after": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+      "decoded": true,
+      "disk_sha256": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+      "sha256_before": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+      "sha256_after": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+      "decoded": true,
+      "disk_sha256": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+      "sha256_before": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+      "sha256_after": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+      "decoded": true,
+      "disk_sha256": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+      "sha256_before": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+      "sha256_after": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+      "decoded": true,
+      "disk_sha256": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+      "sha256_before": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+      "sha256_after": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+      "decoded": true,
+      "disk_sha256": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+      "sha256_before": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+      "sha256_after": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+      "decoded": true,
+      "disk_sha256": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+      "matches_before_after_and_disk": true,
+      "matches_v17_source": true
+    }
+  ],
+  "quality_gate": {
+    "verdict": "pass",
+    "roi_count": 8,
+    "criteria": [
+      {
+        "name": "local_scale_median",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": 406.0,
+              "y": 132.0
+            },
+            "measured": 1.0820312499999847,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 278.0,
+              "y": 132.0
+            },
+            "measured": 1.0820312499999847,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 3478.0,
+              "y": 3076.0
+            },
+            "measured": 1.0793183594616966,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 22.0,
+              "y": 900.0
+            },
+            "measured": 1.0799907060372478,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF"
+          },
+          {
+            "world": {
+              "x": 11414.0,
+              "y": 1540.0
+            },
+            "measured": 1.0345510176254935,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF"
+          },
+          {
+            "world": {
+              "x": 10902.0,
+              "y": 4484.0
+            },
+            "measured": 1.0288091496615293,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 14998.0,
+              "y": 6276.0
+            },
+            "measured": 1.0323281588894468,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 9110.0,
+              "y": 516.0
+            },
+            "measured": 1.0344922691239213,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "local_scale_pixel_ratio",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": 406.0,
+              "y": 132.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 278.0,
+              "y": 132.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 3478.0,
+              "y": 3076.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 22.0,
+              "y": 900.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF"
+          },
+          {
+            "world": {
+              "x": 11414.0,
+              "y": 1540.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF"
+          },
+          {
+            "world": {
+              "x": 10902.0,
+              "y": 4484.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 14998.0,
+              "y": 6276.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 9110.0,
+              "y": 516.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "effective_pixel_count",
+        "threshold": 0.98,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [
+          {
+            "station_id": 0,
+            "numerator": 32065415,
+            "denominator": 54509520,
+            "value": 0.5882534830613074,
+            "textured_pixel_count": 0,
+            "excluded_flat_pixel_count": 0,
+            "textured_low_confidence_count": 0,
+            "flat_low_confidence_count": 0,
+            "textured_low_confidence_ratio": null,
+            "flat_low_confidence_ratio": null,
+            "textured_shortfall_count": 0,
+            "flat_shortfall_count": 0,
+            "textured_shortfall_ratio": null,
+            "flat_shortfall_ratio": null
+          },
+          {
+            "station_id": 1,
+            "numerator": 12357760,
+            "denominator": 55228551,
+            "value": 0.22375673046356043,
+            "textured_pixel_count": 0,
+            "excluded_flat_pixel_count": 0,
+            "textured_low_confidence_count": 0,
+            "flat_low_confidence_count": 0,
+            "textured_low_confidence_ratio": null,
+            "flat_low_confidence_ratio": null,
+            "textured_shortfall_count": 0,
+            "flat_shortfall_count": 0,
+            "textured_shortfall_ratio": null,
+            "flat_shortfall_ratio": null
+          },
+          {
+            "station_id": 2,
+            "numerator": 50694634,
+            "denominator": 53210211,
+            "value": 0.9527237920556263,
+            "textured_pixel_count": 0,
+            "excluded_flat_pixel_count": 0,
+            "textured_low_confidence_count": 0,
+            "flat_low_confidence_count": 0,
+            "textured_low_confidence_ratio": null,
+            "flat_low_confidence_ratio": null,
+            "textured_shortfall_count": 0,
+            "flat_shortfall_count": 0,
+            "textured_shortfall_ratio": null,
+            "flat_shortfall_ratio": null
+          }
+        ],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": -106.0,
+              "y": 4.0
+            },
+            "measured": 0.9929440886840589,
+            "owner_path": ""
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0,
+        "effective_output_pixels": 95117809,
+        "effective_projected_pixels": 95793721
+      },
+      {
+        "name": "mtf50_normalized",
+        "threshold": 0.93,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "candidate_count": 512,
+        "eligible_count": 0,
+        "rejected_content_count": 512,
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 418,
+          "slanted_edge_contrast_insufficient": 1,
+          "slanted_edge_line_fit_residual_exceeded": 26,
+          "slanted_edge_too_short": 67
+        },
+        "selection_mode": "station_slanted_edge_search_256_512",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 24,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "not_applicable",
+        "unmeasurable_reasons": {},
+        "measured": [],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "gradient_energy_normalized",
+        "threshold": 0.95,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": 406.0,
+              "y": 132.0
+            },
+            "measured": 0.9999999985240975,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 278.0,
+              "y": 132.0
+            },
+            "measured": 0.9999992521489995,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 3478.0,
+              "y": 3076.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 22.0,
+              "y": 900.0
+            },
+            "measured": 0.9999956084303925,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF"
+          },
+          {
+            "world": {
+              "x": 11414.0,
+              "y": 1540.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF"
+          },
+          {
+            "world": {
+              "x": 10902.0,
+              "y": 4484.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 14998.0,
+              "y": 6276.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 9110.0,
+              "y": 516.0
+            },
+            "measured": 1.000642937340679,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "noise_sigma_ratio",
+        "threshold": 0.85,
+        "threshold_min": 0.85,
+        "threshold_max": 1.15,
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "candidate_count": 43,
+        "eligible_count": 24,
+        "rejected_content_count": 19,
+        "rejected_content_reasons": {
+          "roi_not_flat": 19
+        },
+        "selection_mode": "station_flat_patch_search_128",
+        "unvisited_candidate_count": 213,
+        "reference_roi_limit": 24,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": 5718.0,
+              "y": 68.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 2454.0,
+              "y": 132.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 8022.0,
+              "y": 132.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 1494.0,
+              "y": 260.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 7062.0,
+              "y": 260.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 3798.0,
+              "y": 324.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 2966.0,
+              "y": 452.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 5398.0,
+              "y": 516.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 4758.0,
+              "y": 196.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 342.0,
+              "y": 2180.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF"
+          },
+          {
+            "world": {
+              "x": 854.0,
+              "y": 2820.0
+            },
+            "measured": 1.0000012679249783,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF"
+          },
+          {
+            "world": {
+              "x": 982.0,
+              "y": 3460.0
+            },
+            "measured": 1.0000005829444438,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF"
+          },
+          {
+            "world": {
+              "x": 1110.0,
+              "y": 4100.0
+            },
+            "measured": 1.000000159106503,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF"
+          },
+          {
+            "world": {
+              "x": 790.0,
+              "y": 4292.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF"
+          },
+          {
+            "world": {
+              "x": -42.0,
+              "y": 3844.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF"
+          },
+          {
+            "world": {
+              "x": 9302.0,
+              "y": 772.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF"
+          },
+          {
+            "world": {
+              "x": 10966.0,
+              "y": 836.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF"
+          },
+          {
+            "world": {
+              "x": 12694.0,
+              "y": 836.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF"
+          },
+          {
+            "world": {
+              "x": 10774.0,
+              "y": 580.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 9110.0,
+              "y": 516.0
+            },
+            "measured": 0.9967310445399093,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          },
+          {
+            "world": {
+              "x": 12630.0,
+              "y": 708.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          },
+          {
+            "world": {
+              "x": 9878.0,
+              "y": 772.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          },
+          {
+            "world": {
+              "x": 10006.0,
+              "y": 900.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          },
+          {
+            "world": {
+              "x": 12118.0,
+              "y": 964.0
+            },
+            "measured": 1.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "roi_delta_e00",
+        "threshold": 2.0,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "station_evidence_shared_roi",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": 406.0,
+              "y": 132.0
+            },
+            "measured": 2.2100922014177726e-05,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF"
+          },
+          {
+            "world": {
+              "x": 278.0,
+              "y": 132.0
+            },
+            "measured": 0.00011790866066596131,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 3478.0,
+              "y": 3076.0
+            },
+            "measured": 0.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF"
+          },
+          {
+            "world": {
+              "x": 22.0,
+              "y": 900.0
+            },
+            "measured": 0.0009709509158745402,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF"
+          },
+          {
+            "world": {
+              "x": 11414.0,
+              "y": 1540.0
+            },
+            "measured": 0.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF"
+          },
+          {
+            "world": {
+              "x": 10902.0,
+              "y": 4484.0
+            },
+            "measured": 0.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 14998.0,
+              "y": 6276.0
+            },
+            "measured": 0.0,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF"
+          },
+          {
+            "world": {
+              "x": 9110.0,
+              "y": 516.0
+            },
+            "measured": 0.03240213781421403,
+            "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF"
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "boundary_stroke_alignment",
+        "threshold": 1.5,
+        "threshold_min": null,
+        "threshold_max": 3.0,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "candidate_count": 388,
+        "eligible_count": 0,
+        "rejected_content_count": 388,
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 388
+        },
+        "selection_mode": "station_boundary_streaming_candidates",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [],
+        "verdict": "not_applicable",
+        "unmeasurable_reasons": {},
+        "measured": [],
+        "diagnostic": false,
+        "failed": [],
+        "shortfall_histogram": [],
+        "disagreement_veto_count": 0,
+        "unresolved_pixel_count": 0
+      },
+      {
+        "name": "owner_sharpness_coverage",
+        "threshold": 0.99,
+        "threshold_min": null,
+        "threshold_max": null,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "rejected_content_count": 0,
+        "rejected_content_reasons": {},
+        "selection_mode": "",
+        "unvisited_candidate_count": 0,
+        "reference_roi_limit": 0,
+        "content_not_applicable_count": 0,
+        "technical_unmeasurable_count": 0,
+        "station_statistics": [
+          {
+            "station_id": 0,
+            "numerator": 27187737,
+            "denominator": 27187737,
+            "value": 1.0,
+            "textured_pixel_count": 27187737,
+            "excluded_flat_pixel_count": 4877678,
+            "textured_low_confidence_count": 8227246,
+            "flat_low_confidence_count": 1411879,
+            "textured_low_confidence_ratio": 0.3026087092132751,
+            "flat_low_confidence_ratio": 0.2894571966415167,
+            "textured_shortfall_count": 0,
+            "flat_shortfall_count": 0,
+            "textured_shortfall_ratio": 0.0,
+            "flat_shortfall_ratio": 0.0
+          },
+          {
+            "station_id": 1,
+            "numerator": 443646,
+            "denominator": 443646,
+            "value": 1.0,
+            "textured_pixel_count": 443646,
+            "excluded_flat_pixel_count": 11914114,
+            "textured_low_confidence_count": 54541,
+            "flat_low_confidence_count": 3423061,
+            "textured_low_confidence_ratio": 0.12293810831158175,
+            "flat_low_confidence_ratio": 0.28731141904467256,
+            "textured_shortfall_count": 0,
+            "flat_shortfall_count": 0,
+            "textured_shortfall_ratio": 0.0,
+            "flat_shortfall_ratio": 0.0
+          },
+          {
+            "station_id": 2,
+            "numerator": 33715968,
+            "denominator": 33831711,
+            "value": 0.996578860584379,
+            "textured_pixel_count": 33831711,
+            "excluded_flat_pixel_count": 16862923,
+            "textured_low_confidence_count": 12445217,
+            "flat_low_confidence_count": 8004952,
+            "textured_low_confidence_ratio": 0.36785656510248627,
+            "flat_low_confidence_ratio": 0.47470726160583193,
+            "textured_shortfall_count": 115743,
+            "flat_shortfall_count": 40101,
+            "textured_shortfall_ratio": 0.0034211394156210425,
+            "flat_shortfall_ratio": 0.00237805746963323
+          }
+        ],
+        "verdict": "pass",
+        "unmeasurable_reasons": {},
+        "measured": [
+          {
+            "world": {
+              "x": -106.0,
+              "y": 4.0
+            },
+            "measured": 0.9981168699382429,
+            "owner_path": ""
+          }
+        ],
+        "diagnostic": false,
+        "failed": [],
+        "textured_pixel_count": 61463094,
+        "excluded_flat_pixel_count": 33654715,
+        "textured_low_confidence_ratio": 0.3372268242792984,
+        "flat_low_confidence_ratio": 0.3815183697143179,
+        "textured_shortfall_ratio": 0.0018831300617570602,
+        "flat_shortfall_ratio": 0.0011915418092234625,
+        "shortfall_histogram": [
+          0,
+          39112,
+          20743,
+          10135,
+          5965,
+          3554,
+          1377,
+          1082,
+          0,
+          256,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          33519
+        ],
+        "disagreement_veto_count": 115457,
+        "unresolved_pixel_count": 0
+      }
+    ],
+    "unmeasurable": [],
+    "confidence_scores": {
+      "textured_low_count": 20727004,
+      "both_scores_at_least_0_10": 20601306,
+      "winner_below_0_10": 0,
+      "single_candidate_count": 60195,
+      "winner_sum": 5788116.702656664,
+      "runner_up_sum": 5636738.403977953,
+      "winner_histogram": [
+        0,
+        0,
+        2141821,
+        3141396,
+        4294785,
+        3523336,
+        2630367,
+        1901020,
+        1365737,
+        840552,
+        524078,
+        258023,
+        89297,
+        15350,
+        1242,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "runner_up_histogram": [
+        60195,
+        65503,
+        2233009,
+        3379963,
+        4341333,
+        3473605,
+        2565184,
+        1816823,
+        1282799,
+        777236,
+        463353,
+        195889,
+        63155,
+        8021,
+        936,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "roi_photometry": [
+      {
+        "world": {
+          "x": 406.0,
+          "y": 132.0
+        },
+        "station_id": 0,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+        "output_mean_rgb": [
+          0.85453343,
+          0.7547429,
+          0.6927713
+        ],
+        "reference_mean_rgb": [
+          0.8545334,
+          0.754743,
+          0.69277126
+        ],
+        "channel_ratio": [
+          1.0000000697511022,
+          0.9999999210265662,
+          1.0000000860379876
+        ]
+      },
+      {
+        "world": {
+          "x": 278.0,
+          "y": 132.0
+        },
+        "station_id": 0,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "output_mean_rgb": [
+          0.8536231,
+          0.72282916,
+          0.66477925
+        ],
+        "reference_mean_rgb": [
+          0.85362226,
+          0.7228282,
+          0.6647774
+        ],
+        "channel_ratio": [
+          1.0000009775577188,
+          1.000001319365105,
+          1.0000027794927946
+        ]
+      },
+      {
+        "world": {
+          "x": 3478.0,
+          "y": 3076.0
+        },
+        "station_id": 0,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+        "output_mean_rgb": [
+          0.4095822,
+          0.3630661,
+          0.2986313
+        ],
+        "reference_mean_rgb": [
+          0.4095822,
+          0.3630661,
+          0.2986313
+        ],
+        "channel_ratio": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "world": {
+          "x": 22.0,
+          "y": 900.0
+        },
+        "station_id": 1,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+        "output_mean_rgb": [
+          0.892683,
+          0.8459588,
+          0.80136245
+        ],
+        "reference_mean_rgb": [
+          0.8926821,
+          0.84595305,
+          0.801361
+        ],
+        "channel_ratio": [
+          1.0000010683247067,
+          1.0000068344816084,
+          1.0000017851023835
+        ]
+      },
+      {
+        "world": {
+          "x": 11414.0,
+          "y": 1540.0
+        },
+        "station_id": 2,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+        "output_mean_rgb": [
+          0.38668162,
+          0.33694404,
+          0.26640728
+        ],
+        "reference_mean_rgb": [
+          0.38668162,
+          0.33694404,
+          0.26640728
+        ],
+        "channel_ratio": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "world": {
+          "x": 10902.0,
+          "y": 4484.0
+        },
+        "station_id": 2,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "output_mean_rgb": [
+          0.40516707,
+          0.36116144,
+          0.3008317
+        ],
+        "reference_mean_rgb": [
+          0.40516707,
+          0.36116144,
+          0.3008317
+        ],
+        "channel_ratio": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "world": {
+          "x": 14998.0,
+          "y": 6276.0
+        },
+        "station_id": 2,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+        "output_mean_rgb": [
+          0.7525419,
+          0.70645034,
+          0.6597493
+        ],
+        "reference_mean_rgb": [
+          0.7525419,
+          0.70645034,
+          0.6597493
+        ],
+        "channel_ratio": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "world": {
+          "x": 9110.0,
+          "y": 516.0
+        },
+        "station_id": 2,
+        "owner_path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+        "output_mean_rgb": [
+          0.30459458,
+          0.28325355,
+          0.2553819
+        ],
+        "reference_mean_rgb": [
+          0.30500343,
+          0.2836102,
+          0.2557016
+        ],
+        "channel_ratio": [
+          0.9986594968623393,
+          0.9987424838796353,
+          0.9987497555339081
+        ]
+      }
+    ],
+    "timing": {
+      "decode_seconds": 6.709782624000001,
+      "reference_resampling_seconds": 15.051086293999996,
+      "local_scale_seconds": 0.00035116800000000006,
+      "slanted_edge_mtf_seconds": 7.446181956,
+      "gradient_seconds": 0.16238729200000002,
+      "noise_seconds": 0.13245062400000004,
+      "delta_e_seconds": 0.002353792,
+      "roi_sampling_seconds": 15.264553374999998,
+      "boundary_seconds": 0.188508917,
+      "effective_coverage_seconds": 0.012702792,
+      "owner_source_decode_count": 14,
+      "roi_reference_count": 32,
+      "station_owner_evidence_roi_count": 8,
+      "raw_owner_evidence_roi_count": 0,
+      "boundary_sample_count": 0,
+      "roi_cache_hits": 0,
+      "roi_cache_misses": 32,
+      "roi_cache_evictions": 0,
+      "roi_cache_resident_bytes": 11010048,
+      "roi_cache_peak_bytes": 11010048
+    },
+    "owner_reverse_lookup_failures": {
+      "compositor_owner_zero": 0,
+      "station_missing": 0,
+      "transform_failed": 0,
+      "out_of_bounds": 0,
+      "raw_owner_unresolved": 0,
+      "snapped_to_footprint": 5391,
+      "evidence_missing": 0,
+      "footprint_uncovered_nontransparent": 69175,
+      "footprint_brightness_ratio": 1.0013874581113635
+    }
+  },
+  "source_and_registration": {
+    "input_count": 9,
+    "accepted_source_count": 8,
+    "failed_frames": [
+      {
+        "station_index": 0,
+        "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+        "inliers": 412,
+        "inlier_area_coverage": 0.0850361197110423,
+        "control_point_spacing_px": 95.00571428571429,
+        "rejected_control_point_ratio": 0.9149638802889577,
+        "median_symmetric_error_px": 0.5303300858899106,
+        "global_median_symmetric_error_px": 1.3287682265918312,
+        "global_baseline_samples": 381,
+        "local_baseline_samples": 117,
+        "local_field_verdict": "kept",
+        "focal_plane_ratio_before": 0.8457304963712223,
+        "focal_plane_ratio_after": 0.9885219112220359,
+        "status": "failed"
+      }
+    ],
+    "station_owner_evidence_roi_count": 8,
+    "source_owner_evidence_preserved": true
+  },
+  "degradation": {
+    "entries": [
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.029480971093231743,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.03341101544015824,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.02604932815165585,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 1,
+          "motion_ratio": 0.039789104352678066,
+          "position": 3
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 412,
+          "evaluated_control_points": 4845,
+          "inlier_area_coverage": 0.0850361197110423,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_rejected_from_group",
+        "severity": "degraded",
+        "detail": {
+          "error_above_limit": false,
+          "inlier_area_coverage": 0.0850361197110423,
+          "median_symmetric_error_px": 0.5303300858899106,
+          "minimum_inlier_area_coverage": 0.2,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "stage": "intra_station_group_join",
+          "station_index": 0,
+          "support_below_minimum": true,
+          "symmetric_error_limit_px": 83.12
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "excluded": [
+            {
+              "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+              "reason": "intra_station_registration_failed"
+            }
+          ],
+          "fused_frames": 2,
+          "member_count": 3,
+          "single_frame_path": null,
+          "stage": "intra_station_fusion",
+          "station_index": 0
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 2801
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 3083
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 2376
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 2376
+        }
+      },
+      {
+        "reason": "intra_station_rejected_from_group",
+        "severity": "degraded",
+        "detail": {
+          "error_above_limit": false,
+          "inlier_area_coverage": 0.0850361197110423,
+          "median_symmetric_error_px": 0.5303300858899106,
+          "minimum_inlier_area_coverage": 0.2,
+          "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "stage": "intra_station_group_join",
+          "station_index": 0,
+          "support_below_minimum": true,
+          "symmetric_error_limit_px": 83.12
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "excluded": [
+            {
+              "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+              "reason": "intra_station_registration_failed"
+            }
+          ],
+          "fused_frames": 2,
+          "member_count": 3,
+          "single_frame_path": null,
+          "stage": "intra_station_fusion",
+          "station_index": 0
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 2801
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 3083
+        }
+      }
+    ],
+    "result": "degraded"
+  },
+  "degradation_reason_counts": {
+    "grouping_accumulated_motion": 4,
+    "intra_station_registration_failed": 3,
+    "intra_station_rejected_from_group": 2,
+    "fusion_low_sharpness_region": 6
+  },
+  "comparison_to_v17": {
+    "reference_report": {
+      "path": "output/acceptance/sleeping-9-native-v17/cold.stack-report.json",
+      "bytes": 1972733,
+      "sha256": "77af1f4172562b2f9c31b666dd4a215b576c4350797e1bcacbf71c830f416334"
+    },
+    "semantic_rules": {
+      "unchanged_fields": [
+        "grouping",
+        "intra_station",
+        "virtual_tiles",
+        "station_relations",
+        "closure",
+        "residual_warp",
+        "tone",
+        "composition"
+      ],
+      "fusion": "Remove graph_cut_seconds from each fusion record only; retain every other value.",
+      "quality_gate": "Remove timing only; retain every other value.",
+      "numeric_tolerance": "none; exact JSON semantic hash with sorted keys"
+    },
+    "reference_semantic_sha256": {
+      "grouping": "8028b8db3f6a8ab6def7761bd5fa784a3a6a5e769a7805be51bea7bd2944534b",
+      "intra_station": "97a192e75dfc6449a200c43ee6ceb86f0eaee79b91dea3be7bbba55cc496c4a8",
+      "virtual_tiles": "b410fe8db6239b55a0f89cf84cb74df63b4846e2003eaf228677f354c1f3ae8c",
+      "station_relations": "ad4f40cddfa77fdbd1c1b3c3caffc0a15ea5f5f77cc5e65151de24a9a211f633",
+      "closure": "8c09df9e492aaca16e11ec8837faf24a4816c816a77942d330521253e691d472",
+      "residual_warp": "11dc9199a485e89a501cd9182471739cce5fd7d9e84aaa5fbc4bce978443a0d2",
+      "tone": "c4444bab26eeee8b0f4993f316a49110f277c01f526abc485cc4c2a5c4812aeb",
+      "composition": "611324eb50f27d49a0c1520d458bb4c3a9f109d9f3a0c9777a2575fc3055b217",
+      "fusion": "60f7c6b809d51c654903e608c39271eec04cae30bd8a9ea7353413c9221b7356",
+      "quality_gate": "5d6bd19fdd2d2f14f2cd48471fd49dc3ad4f9c2b961e12b79a121c169aa3c933"
+    },
+    "verified_semantic_sha256": {
+      "grouping": "8028b8db3f6a8ab6def7761bd5fa784a3a6a5e769a7805be51bea7bd2944534b",
+      "intra_station": "97a192e75dfc6449a200c43ee6ceb86f0eaee79b91dea3be7bbba55cc496c4a8",
+      "virtual_tiles": "b410fe8db6239b55a0f89cf84cb74df63b4846e2003eaf228677f354c1f3ae8c",
+      "station_relations": "ad4f40cddfa77fdbd1c1b3c3caffc0a15ea5f5f77cc5e65151de24a9a211f633",
+      "closure": "8c09df9e492aaca16e11ec8837faf24a4816c816a77942d330521253e691d472",
+      "residual_warp": "11dc9199a485e89a501cd9182471739cce5fd7d9e84aaa5fbc4bce978443a0d2",
+      "tone": "c4444bab26eeee8b0f4993f316a49110f277c01f526abc485cc4c2a5c4812aeb",
+      "composition": "611324eb50f27d49a0c1520d458bb4c3a9f109d9f3a0c9777a2575fc3055b217",
+      "fusion": "60f7c6b809d51c654903e608c39271eec04cae30bd8a9ea7353413c9221b7356",
+      "quality_gate": "5d6bd19fdd2d2f14f2cd48471fd49dc3ad4f9c2b961e12b79a121c169aa3c933"
+    },
+    "semantic_equality": {
+      "grouping": true,
+      "intra_station": true,
+      "virtual_tiles": true,
+      "station_relations": true,
+      "closure": true,
+      "residual_warp": true,
+      "tone": true,
+      "composition": true,
+      "fusion": true,
+      "quality_gate": true
+    },
+    "full_pixel_comparison": {
+      "schema": 1,
+      "status": "pass",
+      "scope": "standard TIFF only; BigTIFF covered by directed Rust tests",
+      "method": "Exact uncompressed contiguous unsigned RGBA16 strip payload in logical row order; matching endianness; 1MiB read buffer",
+      "old": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v17/cold.tiff",
+        "metadata": {
+          "width": 15701,
+          "height": 6585,
+          "bits_per_sample": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "samples_per_pixel": 4,
+          "photometric": 2,
+          "compression": 1,
+          "planar_configuration": 1,
+          "predictor": 1,
+          "fill_order": 1,
+          "orientation": 1,
+          "sample_format": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "extra_samples": null,
+          "byte_order": "II",
+          "rows_per_strip": 8,
+          "strip_count": 824,
+          "pixel_bytes": 827128680,
+          "file_bytes": 827135978,
+          "icc_bytes": 480,
+          "icc_sha256": "c56e1685d888f5edb92fe07f2750f387f8fe8e91b32ff8fb0b56bfbbb9458353"
+        },
+        "pixel_sha256": "913e68fc8e1faef4b922f6b9e78753778c51bd5d896594e708f615d0180acda3"
+      },
+      "new": {
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff",
+        "metadata": {
+          "width": 15701,
+          "height": 6585,
+          "bits_per_sample": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "samples_per_pixel": 4,
+          "photometric": 2,
+          "compression": 1,
+          "planar_configuration": 1,
+          "predictor": 1,
+          "fill_order": 1,
+          "orientation": 1,
+          "sample_format": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "extra_samples": [
+            2
+          ],
+          "byte_order": "II",
+          "rows_per_strip": 11,
+          "strip_count": 599,
+          "pixel_bytes": 827128680,
+          "file_bytes": 827134190,
+          "icc_bytes": 480,
+          "icc_sha256": "c56e1685d888f5edb92fe07f2750f387f8fe8e91b32ff8fb0b56bfbbb9458353"
+        },
+        "pixel_sha256": "913e68fc8e1faef4b922f6b9e78753778c51bd5d896594e708f615d0180acda3"
+      },
+      "all_rgba_samples_identical": true,
+      "icc_bytes_identical": true,
+      "new_alpha_declaration_valid": true,
+      "container_sha_comparison_used": false,
+      "limitations": [
+        "No arbitrary TIFF compression/predictor/planar/color conversion supported.",
+        "Pixel equality preserves all existing geometry, sharpness and coverage limitations; it is not a fresh quality pass."
+      ]
+    },
+    "cross_decoder_checks": {
+      "status": "pass",
+      "input": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff",
+      "scope": "Independent decoder metadata and alpha interpretation; full pixel equality is checked separately",
+      "checks": [
+        {
+          "tool": "sips",
+          "exit_code": 0,
+          "stdout": "/Users/dp/Desktop/raw-editor/output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff\n  pixelWidth: 15701\n  pixelHeight: 6585\n  bitsPerSample: 16\n  samplesPerPixel: 4\n  hasAlpha: yes\n  profile: sRGB\n",
+          "stderr": ""
+        },
+        {
+          "tool": "ffprobe",
+          "exit_code": 0,
+          "stdout": "{\n    \"programs\": [\n\n    ],\n    \"stream_groups\": [\n\n    ],\n    \"streams\": [\n        {\n            \"width\": 15701,\n            \"height\": 6585,\n            \"pix_fmt\": \"rgba64le\"\n        }\n    ]\n}\n",
+          "stderr": ""
+        }
+      ]
+    },
+    "visual_evidence_reuse": {
+      "basis": "Exact full RGBA sample and ICC equality, rather than equal TIFF container bytes.",
+      "allowed": true,
+      "v17_review": {
+        "path": "output/acceptance/sleeping-9-native-v17/visual/visual-review.json",
+        "bytes": 25602,
+        "sha256": "7c2c24e7416aa37a63f76a6576f1b3e575fe2d9a20214633c1f1e6ff8659fa3d"
+      },
+      "new_visual_inspection_claimed": false,
+      "limitations": "The existing 31-window review remains limited; this phase only repairs export metadata and evidence recording."
+    }
+  },
+  "excluded_first_run": {
+    "classification": {
+      "classification": "report-roundtrip-defect-reference",
+      "use_as_final_acceptance": false,
+      "export_alpha_and_full_pixel_comparison": "pass",
+      "report_preservation": "fail: 571 low-bit numeric changes after typed JSON rewrite",
+      "next": "RawValue-preserving output-only rewrite and fresh fixed-build real run"
+    },
+    "build": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/build.json",
+      "bytes": 585,
+      "sha256": "25588c896173d2b209ed645740a4514ae33e7c44e8149ab6fcf316b1a80fbeb2"
+    },
+    "execution": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/execution.json",
+      "bytes": 1108,
+      "sha256": "52edac19cbbebe83df8e860ac2eab98036347107a793a827b632c2a37209bbd6"
+    },
+    "report_roundtrip_difference": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/report-roundtrip-difference.json",
+      "bytes": 85987,
+      "sha256": "f8cb92ea3f59f7d94fae3ea4f9d2139362f12a18c609e6ef76e1bcb8b59f11f4"
+    },
+    "pixel_comparison": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/native-pixel-comparison.json",
+      "bytes": 2452,
+      "sha256": "c5c3de4c81cb6eff484e4ab726ee2f44074b407a5e118919a6bdf145b8e2956f"
+    },
+    "use_as_final_acceptance": false
+  },
+  "evidence": {
+    "build": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/build.json",
+      "bytes": 696,
+      "sha256": "3a8e706183ba3158576f014852dc390b507643734b508d4a14987809ad475bc4"
+    },
+    "execution": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/execution.json",
+      "bytes": 1138,
+      "sha256": "4d28d0c9a4b88120c84c3eb69e4852d75d046c0cea8326c9f9b429ac41579930"
+    },
+    "report": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified-stack-reports/stack-report-6c497474-e6c3-456b-8cb4-3beb3de4b16d.json",
+      "bytes": 1973009,
+      "sha256": "80f018d9a9276f534415d1a5829b8b5203fe975bd866ff718b4c4f86949f4bd0"
+    },
+    "runner_summary": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.summary.json",
+      "bytes": 2771,
+      "sha256": "846739c49e8846cb9b43929063cdc3800f6e3817e22f4ce3420bc2007958c448"
+    },
+    "native_log": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.log",
+      "bytes": 57409,
+      "sha256": "eb9ac68d61bef93db868691d7af8c93e8a44dc6856d748546e8c10b023072770"
+    },
+    "tiff": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/run/sleeping-9-6479-s1-v18-export-verified.tiff",
+      "bytes": 827134190,
+      "sha256": "b420ad7c4926e025f7ede6846031997a8fa33c37fe2181af92a76b0f723313c0"
+    },
+    "pixel_comparison": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/fullpixel-comparison.json",
+      "bytes": 2470,
+      "sha256": "1dd8350074b8e879f0bca91a442fe9353d7eca970761606b60c7679fb173005a"
+    },
+    "cross_decoder": {
+      "path": "output/acceptance/sleeping-9-native-v18-export/verified/cross-decoder.json",
+      "bytes": 970,
+      "sha256": "646f066c7cb9b6f99dfca08cda790225a30f62ddafa09d18b0d29a9198470c3e"
+    }
+  },
+  "remaining_work": [
+    {
+      "priority": "P0",
+      "issue": "DSC_6484.NEF is excluded by the original native spatial-support gate; only eight accepted sources.",
+      "next": "Diagnose native versus half-scale correspondence/support coordinates and restore the frame only with valid evidence; keep thresholds."
+    },
+    {
+      "priority": "P1",
+      "issue": "Native source cache evictions keep RAW decode count at 70.",
+      "next": "Optimize source requests and retention under the same explicit budget, then compare fixed-build cold/hot runs."
+    },
+    {
+      "priority": "P1",
+      "issue": "MTF and boundary remain content-inapplicable; degradation and limited low-sharpness mapping remain.",
+      "next": "Export final station-to-output mapping and compare soft seal regions to aligned best-focus RAW patches."
+    }
+  ],
+  "limitations": [
+    "Export phase pass is not a complete image-quality acceptance pass.",
+    "All original pixels and geometric/quality evidence must remain unchanged for this export-only phase.",
+    "The full-pixel verifier handles this standard uncompressed TIFF pair; BigTIFF is covered by directed Rust tests.",
+    "TIFF header/IFD validation itself does not decode every image pixel; the separate exact strip-payload comparison covers the full native sample array.",
+    "Single final regression run, without OS-cache purging or a new controlled cold/hot pair."
+  ]
+}
