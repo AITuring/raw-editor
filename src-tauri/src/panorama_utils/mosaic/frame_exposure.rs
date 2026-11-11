@@ -72,13 +72,23 @@ impl ExposureGrid {
 /// A frame's solved exposure: per channel, a log gain `a + b u + c v` over
 /// the frame's extent on the canvas (`u`, `v` in -1..1).
 #[derive(Clone, Copy, Debug)]
-pub(super) struct FrameExposure {
+pub(crate) struct FrameExposure {
     centre: (f64, f64),
     half: (f64, f64),
     planes: [[f64; 3]; 3],
 }
 
 impl FrameExposure {
+    /// A plane with explicit parameters (tests only).
+    #[cfg(test)]
+    pub(crate) fn with_planes(centre: (f64, f64), half: (f64, f64), planes: [[f64; 3]; 3]) -> Self {
+        Self {
+            centre,
+            half,
+            planes,
+        }
+    }
+
     fn identity() -> Self {
         Self {
             centre: (0.0, 0.0),
@@ -95,10 +105,21 @@ impl FrameExposure {
     }
 
     /// Log gain per channel at canvas position `point`.
-    fn log_gain_at(&self, point: (f64, f64)) -> [f64; 3] {
+    pub(crate) fn log_gain_at(&self, point: (f64, f64)) -> [f64; 3] {
         let (u, v) = self.local(point);
         self.planes
             .map(|[a, b, c]| (a + b * u + c * v).clamp(-MAX_LOG_GAIN, MAX_LOG_GAIN))
+    }
+
+    /// Hash every parameter, for caches keyed on the replayed tone.
+    pub(crate) fn hash_into(&self, hasher: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        for value in [self.centre.0, self.centre.1, self.half.0, self.half.1]
+            .into_iter()
+            .chain(self.planes.into_iter().flatten())
+        {
+            value.to_bits().hash(hasher);
+        }
     }
 
     /// Luma gain at the frame's centre (diagnostics).

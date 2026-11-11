@@ -803,6 +803,7 @@ where
                 capture_group_id,
                 &sampler,
                 &write_tone,
+                frame_gains.get(&info.id).copied(),
                 right,
                 bottom,
             );

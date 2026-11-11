@@ -68,6 +68,7 @@ impl LegacyQualityCapture {
         capture_station_id: u8,
         sampler: &LayerSampler<'_>,
         write_tone: &super::Field<3>,
+        frame_exposure: Option<super::frame_exposure::FrameExposure>,
         right: u32,
         bottom: u32,
     ) {
@@ -127,6 +128,7 @@ impl LegacyQualityCapture {
                     scale: sampler.scale,
                     offset: sampler.offset,
                     post_gain: None,
+                    frame_exposure,
                 }),
                 world_to_station: into_canvas,
                 station_to_world: to_world,
@@ -597,11 +599,15 @@ mod native_tests {
             ])
         });
         let info = info(&original);
-        for divisor in [1.0, 2.0] {
+        // 1 and 2: the power-of-two pyramid; 1.6: a focus scan resampled to
+        // the density it needs (`prefilter_minified_source`).
+        for divisor in [1.0, 2.0, 1.6] {
             let source = if divisor == 1.0 {
                 original.clone()
-            } else {
+            } else if divisor == 2.0 {
                 crate::panorama_utils::stitching::downsample_rgb_half(&original)
+            } else {
+                crate::panorama_utils::stitching::minify_rgb(&original, divisor)
             };
             let transform = Matrix3::new(1.05, 0.0, 3.0, 0.0, 1.05, 8.0, 0.0, 0.0, 1.0);
             let mut residual = super::super::Field::new(100, 100, 16.0);
@@ -625,6 +631,7 @@ mod native_tests {
                 7,
                 &sampler,
                 &super::super::Field::new(100, 100, 112.0),
+                None,
                 180,
                 140,
             );
@@ -736,6 +743,7 @@ mod native_tests {
             3,
             &sampler,
             &super::super::Field::new(32, 64, 112.0),
+            None,
             19,
             63,
         );

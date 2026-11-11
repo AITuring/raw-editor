@@ -713,12 +713,14 @@ pub(crate) fn prefilter_source_reference(
         .as_ref()
         .map(|n| n.source_prefilter_divisor)
         .unwrap_or(1.0);
-    if !divisor.is_finite()
-        || divisor < 1.0
-        || divisor > 65536.0
-        || divisor.log2().fract().abs() > 1e-12
-    {
+    if !divisor.is_finite() || divisor < 1.0 || divisor > 65536.0 {
         return Err("invalid native reference source prefilter divisor".into());
+    }
+    if divisor.log2().fract().abs() > 1e-12 {
+        // The streaming source-scan compositor resamples a minified source
+        // to the density it needs (`mosaic::prefilter_minified_source`);
+        // replay that exact resampling.
+        return Ok(super::super::stitching::minify_rgb(&image, divisor));
     }
     let mut level = 1.0;
     while level < divisor {
