@@ -35,7 +35,7 @@ use super::{
     ANALYSIS_LONG_SIDE, Field, GRID_STEP, LONG_SEQUENCE_SELECTION_LONG_SIDE, LayerSampler,
     MosaicCoverageObservation, MosaicToneFinish, NativeRefineMode, STREAMING_CANVAS_MIN_PIXELS,
     adjusted, detail_preserving_mosaic_streaming, intra_station_frame_record, ownership,
-    ownership_with_long_side, planar_canvas_scale, prefilter_minified_source, refine_layer,
+    ownership_with_long_side, planar_canvas_scale, pyramid_minified_source, refine_layer,
     refine_native_layer, station_member_median_sharpness, tone_field,
 };
 
@@ -215,7 +215,7 @@ where
         // Prefilter a telephoto tile before minification. Otherwise weave
         // aliases into false sharpness and defeats native focus selection.
         let (source, source_divisor) = if projection == Projection::Planar {
-            prefilter_minified_source(source, planar_canvas_scale(info, transform))
+            pyramid_minified_source(source, planar_canvas_scale(info, transform))
         } else {
             (source, 1.0)
         };

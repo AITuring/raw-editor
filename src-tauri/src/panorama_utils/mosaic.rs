@@ -362,6 +362,24 @@ fn prefilter_minified_source(source: Rgb32FImage, scale: f64) -> (Rgb32FImage, f
     (super::stitching::minify_rgb(&source, divisor), divisor)
 }
 
+/// The power-of-two prefilter every path except a focus scan keeps: halve
+/// the source while the warp would draw it below 0.67 canvas pixels per
+/// source pixel. Station tiles of a layered stack and FlatArtwork panoramas
+/// were measured and accepted with this pyramid (阆苑/文苑 10, 睡觉 9); the
+/// density resampling above changes their relation planes.
+fn pyramid_minified_source(mut source: Rgb32FImage, scale: f64) -> (Rgb32FImage, f64) {
+    let mut divisor = 1.0;
+    while scale.is_finite()
+        && scale > 0.0
+        && scale * divisor < 0.67
+        && source.width().min(source.height()) > 8
+    {
+        source = super::stitching::downsample_rgb_half(&source);
+        divisor *= 2.0;
+    }
+    (source, divisor)
+}
+
 /// A copy of a layer's (already canvas-prefiltered) source at the density of
 /// its analysis image, with the divisor its samplers address it by; `None`
 /// when the analysis image is no coarser than that source.

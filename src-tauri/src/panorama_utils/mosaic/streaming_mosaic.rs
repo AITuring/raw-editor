@@ -33,12 +33,12 @@ use super::{
     copy_streaming_owned_tile_region, copy_streaming_tile_region, detail_ratios, exposure_summary,
     fill_streaming_uncovered_tile_region, intra_station_frame_record,
     materialize_streaming_focus_output, measure_output_focus, median, planar_canvas_scale,
-    prefilter_minified_source, refine_layer_from_analysis, refine_native_layer_streaming,
-    repair_detail, repair_summary, report_soft_regions, sharpness_order,
-    smooth_streaming_low_frequency_illumination, soft_frames, soft_regions, solve_frame_exposures,
-    streaming_candidate_analysis, streaming_ownership_from_analysis, streaming_ownership_grid,
-    streaming_refinement_pair, streaming_seam_harmonization, streaming_tone_field_from_analysis,
-    survey_frames,
+    prefilter_minified_source, pyramid_minified_source, refine_layer_from_analysis,
+    refine_native_layer_streaming, repair_detail, repair_summary, report_soft_regions,
+    sharpness_order, smooth_streaming_low_frequency_illumination, soft_frames, soft_regions,
+    solve_frame_exposures, streaming_candidate_analysis, streaming_ownership_from_analysis,
+    streaming_ownership_grid, streaming_refinement_pair, streaming_seam_harmonization,
+    streaming_tone_field_from_analysis, survey_frames,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -364,8 +364,12 @@ where
                 },
             );
         }
-        let (source, source_divisor) = if projection == Projection::Planar {
+        // A focus scan resamples to the density it needs (its survey and
+        // repair sample the same way); every other run keeps the pyramid.
+        let (source, source_divisor) = if projection == Projection::Planar && focus_scan {
             prefilter_minified_source(source, planar_canvas_scale(info, transform))
+        } else if projection == Projection::Planar {
+            pyramid_minified_source(source, planar_canvas_scale(info, transform))
         } else {
             (source, 1.0)
         };
