@@ -2186,20 +2186,22 @@ fn stitch_images_attempt<R: Runtime>(
                 compositor_choice,
                 stack_report.as_deref(),
             );
-            let fallback_reason =
-                if source_scan_legacy_fallback {
-                    Some(match (singleton_scan_detected, has_isolated_focus_sources) {
+            let fallback_reason = if source_scan_legacy_fallback {
+                Some(match (singleton_scan_detected, has_isolated_focus_sources) {
                     (true, true) => "singleton_source_scan_with_isolated_source",
                     (true, false) => "singleton_source_scan",
                     (false, true) => "isolated_source",
+                    // A selection from several folders (or the test-only
+                    // forced source scan) composes on the global poses.
+                    (false, false) if several_captures => "several_captures",
                     (false, false) => unreachable!(
-                        "source_scan_legacy_fallback requires a singleton or isolated source"
+                        "source_scan_legacy_fallback requires a singleton scan, an isolated source or several captures"
                     ),
                 }
                 .to_string())
-                } else {
-                    None
-                };
+            } else {
+                None
+            };
             if let Some(recorder) = stack_report.as_deref() {
                 recorder.set_path_selection_observation(
                     settings
