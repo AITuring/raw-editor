@@ -70,9 +70,9 @@ use super::{
     match_image_pair, matrix3_row_major, memory_safe_panorama_render_scale,
     native_photometric_pairs, normalize_stack_raw_display_exposure, oblique_frames,
     optimize_focus_stack_global_homographies_with_reference,
-    order_focus_render_sources_by_capture_group, pairs_to_match_for_images,
+    order_focus_render_sources_by_capture_group, pairs_to_match_for_images, patch_guided_match,
     plan_virtual_tile_prior_repairs, populate_station_relation_candidate_geometry,
-    prepare_focus_rescue_image, raw_display_channel_percentile,
+    pose_predicted_pairs, prepare_focus_rescue_image, raw_display_channel_percentile,
     record_residual_warp_for_station_relations, recover_focus_component_edges,
     refine_flat_artwork_tree_poses, refine_virtual_tile_joint_geometry,
     render_virtual_tile_match_plane, replace_virtual_tile_candidate_record,
@@ -110,6 +110,10 @@ const RAW_STACK_DENOMINATOR: usize = 5;
 /// others, or frames shot far more obliquely than the rest, ends with this prefix followed by
 /// [`LeftOutFrames`] as JSON, and the scan is solved again without them.
 const RETRY_WITHOUT_FRAMES_PREFIX: &str = "\u{0}retry-without-frames:";
+/// An attempt whose Capture_Stations could not all be related ends with this,
+/// and the stack is composed again on its source poses by the streaming
+/// source-scan compositor instead of being refused.
+const RETRY_AS_SOURCE_SCAN: &str = "\u{0}retry-as-source-scan";
 
 /// Frames the first attempt of a scan found it should be solved without.
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -152,40 +156,50 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // 祁序's canvas came out nearly rectangular and its inscription doubled
     // at 1:1, though the first three were never rendered. The scan is
     // therefore solved a second time without them, once.
-    let first = stitch_images_attempt(
-        image_paths.clone(),
-        app_handle.clone(),
-        alignment_mode,
-        blend_mode,
-        progress_event,
-        run_generation,
-        None,
-    );
-    let left_out = match &first {
-        Err(message) => match message.strip_prefix(RETRY_WITHOUT_FRAMES_PREFIX) {
-            Some(json) => serde_json::from_str::<LeftOutFrames>(json)
-                .map_err(|error| format!("unreadable list of left-out frames: {error}"))?,
-            None => return first,
-        },
-        Ok(_) => return first,
-    };
-    drop(first);
-    let message = format!(
-        "Solving the scan again without {} frame(s) that align with none of the others and {} oblique frame(s)",
-        left_out.unaligned.len(),
-        left_out.oblique.len()
-    );
-    println!("{message}");
-    let _ = app_handle.emit(progress_event, message);
-    stitch_images_attempt(
-        image_paths,
-        app_handle,
-        alignment_mode,
-        blend_mode,
-        progress_event,
-        run_generation,
-        Some(&left_out),
-    )
+    // A stack whose Capture_Stations do not all relate (睡觉: 45 photos in
+    // 15 stations, 5 components after 33 minutes at 1:1) is composed again by
+    // the source-scan compositor on its source poses, as Photoshop would
+    // still produce an image; the result says so instead of failing.
+    let mut left_out: Option<LeftOutFrames> = None;
+    let mut as_source_scan = false;
+    loop {
+        let result = stitch_images_attempt(
+            image_paths.clone(),
+            app_handle.clone(),
+            alignment_mode,
+            blend_mode,
+            progress_event,
+            run_generation,
+            left_out.as_ref(),
+            as_source_scan,
+        );
+        let Err(message) = &result else {
+            return result;
+        };
+        if message == RETRY_AS_SOURCE_SCAN && !as_source_scan {
+            as_source_scan = true;
+            let message = "Some capture stations could not be related; composing the photos on their own positions instead";
+            println!("{message}");
+            let _ = app_handle.emit(progress_event, message);
+            continue;
+        }
+        let Some(json) = message.strip_prefix(RETRY_WITHOUT_FRAMES_PREFIX) else {
+            return result;
+        };
+        if left_out.is_some() {
+            return Err("the scan asked to be solved again twice".to_string());
+        }
+        let frames = serde_json::from_str::<LeftOutFrames>(json)
+            .map_err(|error| format!("unreadable list of left-out frames: {error}"))?;
+        let message = format!(
+            "Solving the scan again without {} frame(s) that align with none of the others and {} oblique frame(s)",
+            frames.unaligned.len(),
+            frames.oblique.len()
+        );
+        println!("{message}");
+        let _ = app_handle.emit(progress_event, message);
+        left_out = Some(frames);
+    }
 }
 
 /// One solve and render of `image_paths` without the frames in `left_out`,
@@ -199,6 +213,7 @@ fn stitch_images_attempt<R: Runtime>(
     progress_event: &str,
     run_generation: usize,
     left_out: Option<&LeftOutFrames>,
+    as_source_scan: bool,
 ) -> Result<StitchOutcome, String> {
     let mut image_paths = image_paths
         .into_iter()
@@ -263,6 +278,12 @@ fn stitch_images_attempt<R: Runtime>(
         );
     }
     let first_attempt = left_out.is_none();
+    if as_source_scan {
+        degradation::record_run_degradation(
+            degradation::STACK_STATIONS_UNRELATED,
+            serde_json::json!({ "fallback": "source_scan" }),
+        );
+    }
     if let Some(left_out) = left_out {
         if !left_out.unaligned.is_empty() {
             degradation::record_run_degradation(
@@ -842,6 +863,68 @@ fn stitch_images_attempt<R: Runtime>(
     let matched_pair_count = Mutex::new(0);
     let pair_progress_step = (pairs_to_check.len() / 100).max(1);
 
+    // One candidate pair through the verified matcher, stored in the (i, j)
+    // key orientation.
+    let match_candidate_pair = |i: usize, j: usize| -> Option<MatchInfo> {
+        // Focus-stack matching is not perfectly symmetric: the ratio test and
+        // local NCC search are evaluated from source to target. Use a stable
+        // path-based direction, then convert back to the (i, j) key orientation.
+        // Otherwise changing import order can produce a different transform graph
+        // and expose defocus halos at object silhouettes. Keep panorama matching's
+        // established direction unchanged.
+        let (source_index, target_index, invert_for_storage) =
+            if blend_mode == BlendMode::FocusStack {
+                canonical_match_direction(&image_data, i, j)
+            } else {
+                (i, j, false)
+            };
+        let source_image = &image_data[source_index];
+        let target_image = &image_data[target_index];
+        let mut match_info = match_image_pair(
+            source_image,
+            target_image,
+            projection,
+            blend_mode,
+            alignment_mode,
+            scale_robust_alignment,
+            true,
+            false,
+        )?;
+        if blend_mode == BlendMode::FocusStack {
+            // Record the fit before it is rotated into the key orientation;
+            // see `MatchInfo::canonical_homography` (需求 14.6).
+            match_info.canonical_homography = Some(match_info.homography);
+        }
+        if invert_for_storage {
+            match_info.homography = match_info.homography.try_inverse()?;
+            match_info.points = match_info
+                .points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.candidate_points = match_info
+                .candidate_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.top_candidate_points = match_info
+                .top_candidate_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.dense_focus_points = match_info
+                .dense_focus_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+            match_info.foreground_feature_points = match_info
+                .foreground_feature_points
+                .into_iter()
+                .map(|(source, target)| (target, source))
+                .collect();
+        }
+        Some(match_info)
+    };
     let match_results: Vec<Option<((usize, usize), MatchInfo)>> = pairs_to_check
         .par_iter()
         .map(|&(i, j)| {
@@ -855,64 +938,7 @@ fn stitch_images_attempt<R: Runtime>(
                 app_handle: &app_handle,
                 progress_event,
             };
-            // Focus-stack matching is not perfectly symmetric: the ratio test and
-            // local NCC search are evaluated from source to target. Use a stable
-            // path-based direction, then convert back to the (i, j) key orientation.
-            // Otherwise changing import order can produce a different transform graph
-            // and expose defocus halos at object silhouettes. Keep panorama matching's
-            // established direction unchanged.
-            let (source_index, target_index, invert_for_storage) =
-                if blend_mode == BlendMode::FocusStack {
-                    canonical_match_direction(&image_data, i, j)
-                } else {
-                    (i, j, false)
-                };
-            let source_image = &image_data[source_index];
-            let target_image = &image_data[target_index];
-            let mut match_info = match_image_pair(
-                source_image,
-                target_image,
-                projection,
-                blend_mode,
-                alignment_mode,
-                scale_robust_alignment,
-                true,
-                false,
-            )?;
-            if blend_mode == BlendMode::FocusStack {
-                // Record the fit before it is rotated into the key orientation;
-                // see `MatchInfo::canonical_homography` (需求 14.6).
-                match_info.canonical_homography = Some(match_info.homography);
-            }
-            if invert_for_storage {
-                match_info.homography = match_info.homography.try_inverse()?;
-                match_info.points = match_info
-                    .points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.candidate_points = match_info
-                    .candidate_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.top_candidate_points = match_info
-                    .top_candidate_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.dense_focus_points = match_info
-                    .dense_focus_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-                match_info.foreground_feature_points = match_info
-                    .foreground_feature_points
-                    .into_iter()
-                    .map(|(source, target)| (target, source))
-                    .collect();
-            }
-            Some(((i, j), match_info))
+            Some(((i, j), match_candidate_pair(i, j)?))
         })
         .collect();
     ensure_focus_memory_available(rss_sampler.as_ref())?;
@@ -1159,7 +1185,7 @@ fn stitch_images_attempt<R: Runtime>(
         .then(|| StackCompositorChoice::resolve(settings.stack_compositor.as_deref()));
     let defer_authoritative_station_solve =
         compositor_choice == Some(StackCompositorChoice::LayeredVirtualTile);
-    let (ordered_indices, mut global_homographies) = if blend_mode == BlendMode::FocusStack {
+    let solve_focus_poses = |pairwise_matches: &HashMap<(usize, usize), MatchInfo>| {
         // The default two-stage path uses source images only to group stations
         // and establish each station's local tile geometry.  Its authoritative
         // requirement-6/7 report is produced later from the fused tiles, so an
@@ -1193,9 +1219,82 @@ fn stitch_images_attempt<R: Runtime>(
                 ));
             }
         }
-        stitching_order
+        Ok(stitching_order)
+    };
+    let (ordered_indices, global_homographies) = if blend_mode == BlendMode::FocusStack {
+        solve_focus_poses(&pairwise_matches)?
     } else {
         build_stitching_order(&image_data, &pairwise_matches)
+    };
+    // A large focus stack compares only candidate neighbours; frames the
+    // solved poses put over each other but that were never compared are
+    // matched now, and the poses are solved again with every pair that
+    // verifies (`pose_guided_pairs`).
+    let (ordered_indices, mut global_homographies) = if focus_stack
+        && scalable_stack
+        && projection == Projection::Planar
+        && !sequence_only
+    {
+        let attempted = pairs_to_check
+            .iter()
+            .copied()
+            .chain(pairwise_matches.keys().copied())
+            .collect::<HashSet<_>>();
+        let predicted = pose_predicted_pairs(&image_data, &global_homographies, &attempted);
+        // A pair the matcher does not verify, usually a thin strip of
+        // overlap, is measured by patches where the solved poses put it.
+        let found = predicted
+            .par_iter()
+            .filter_map(|&(i, j)| {
+                if degradation::run_generation_changed_for(run_generation) {
+                    return None;
+                }
+                if let Some(match_info) = match_candidate_pair(i, j) {
+                    return Some(((i, j), match_info, false));
+                }
+                let (source_index, target_index, invert_for_storage) =
+                    canonical_match_direction(&image_data, i, j);
+                let (source, target) = (&image_data[source_index], &image_data[target_index]);
+                let mut match_info = patch_guided_match(
+                    source,
+                    target,
+                    global_homographies.get(&source.id)?,
+                    global_homographies.get(&target.id)?,
+                )?;
+                match_info.canonical_homography = Some(match_info.homography);
+                if invert_for_storage {
+                    match_info.homography = match_info.homography.try_inverse()?;
+                    match_info.points = match_info
+                        .points
+                        .into_iter()
+                        .map(|(source, target)| (target, source))
+                        .collect();
+                    match_info.candidate_points = match_info.points.clone();
+                }
+                Some(((i, j), match_info, true))
+            })
+            .collect::<Vec<_>>();
+        let guided = found.iter().filter(|(_, _, guided)| *guided).count();
+        let message = format!(
+            "Matching {} pair(s) the solved poses overlap but the candidate search never compared: {} verified by features, {} by guided patches",
+            predicted.len(),
+            found.len() - guided,
+            guided
+        );
+        println!("{message}");
+        let _ = app_handle.emit(progress_event, message);
+        if found.is_empty() {
+            (ordered_indices, global_homographies)
+        } else {
+            pairwise_matches.extend(
+                found
+                    .into_iter()
+                    .map(|(key, match_info, _)| (key, match_info)),
+            );
+            solve_focus_poses(&pairwise_matches)?
+        }
+    } else {
+        (ordered_indices, global_homographies)
     };
     if blend_mode == BlendMode::Panorama && alignment_mode == AlignmentMode::FlatArtwork {
         if let Some(refined) =
@@ -1878,6 +1977,14 @@ fn stitch_images_attempt<R: Runtime>(
             // route this source-backed shape through the proven global focus
             // compositor. An explicit persisted compositor still wins, so
             // comparison runs remain reproducible.
+            // Test-only A/B switch: compose a single-folder bracketed stack
+            // with the streaming source-scan compositor several captures use.
+            #[cfg(test)]
+            let forced_source_scan =
+                as_source_scan || std::env::var_os("RAW_EDITOR_FORCE_SOURCE_SCAN").is_some();
+            #[cfg(not(test))]
+            let forced_source_scan = as_source_scan;
+            let several_captures = several_captures || forced_source_scan;
             let source_scan_legacy_fallback = settings.stack_compositor.is_none()
                 && configured_compositor == StackCompositorChoice::LayeredVirtualTile
                 && (has_isolated_focus_sources
@@ -2113,7 +2220,15 @@ fn stitch_images_attempt<R: Runtime>(
                         ),
                         tile_infos.len(),
                     );
+                    let station_count = tile_infos.len();
                     for (group_index, tile) in tile_infos.iter_mut().enumerate() {
+                        let _ = app_handle.emit(
+                            progress_event,
+                            format!(
+                                "Fusing capture station {} of {station_count}",
+                                group_index + 1
+                            ),
+                        );
                         let (gray, coverage) = render_virtual_tile_match_plane(
                             group_slices[group_index],
                             &station_render_homographies,
@@ -2162,6 +2277,7 @@ fn stitch_images_attempt<R: Runtime>(
                         );
                     }
 
+                    let _ = app_handle.emit(progress_event, "Relating capture stations...");
                     let (mut tile_relations, mut tile_relation_candidates) =
                         virtual_tile_measure_prior_relations(
                             &tile_infos,
@@ -2914,9 +3030,11 @@ fn stitch_images_attempt<R: Runtime>(
                                     .to_string());
                             }
                             if component_count > 1 || solved.len() != tile_infos.len() {
-                                return Err(geometry_disconnected_user_error(
-                                    component_count.max(2),
-                                ));
+                                println!(
+                                    "  - {}",
+                                    geometry_disconnected_user_error(component_count.max(2))
+                                );
+                                return Err(RETRY_AS_SOURCE_SCAN.to_string());
                             }
                             tile_homographies = solved;
                             if closure.geometry_model != "bounded_station_field" {
@@ -2988,6 +3106,14 @@ fn stitch_images_attempt<R: Runtime>(
                         if let Some(cached) = rendered_tile_cache.get(&tile.id) {
                             return Ok(stitching::FocusTilePayload::from(cached.clone()));
                         }
+                        let _ = app_handle.emit(
+                            progress_event,
+                            format!(
+                                "Composing capture station {} of {}",
+                                group_index + 1,
+                                group_slices.len()
+                            ),
+                        );
                         let rendered = stitching::focus_stack_stitcher_unfilled(
                             group_slices[group_index],
                             &station_render_homographies,
@@ -4102,8 +4228,12 @@ fn stitch_images_attempt<R: Runtime>(
             });
         }
     } else if let Some(recorder) = stack_report.as_ref() {
+        // Recorded as rejected, this refused every result of the streaming
+        // source-scan compositor in the image-stack dialog (祁序, 枫鹰雉鸡,
+        // 兰亭) while the acceptance harness, which writes its output whatever
+        // the outcome, showed them finished.
         degradation::record_run_degradation(
-            degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE,
+            degradation::QUALITY_GATE_NOT_APPLICABLE,
             serde_json::json!({
                 "verdict": "insufficient_evidence",
                 "reason": "quality_planes_unavailable",

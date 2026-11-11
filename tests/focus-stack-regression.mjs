@@ -478,6 +478,9 @@ function main() {
     selectedPath: report?.selected_path ?? null,
     stationCount: report?.grouping?.station_count ?? null,
     qualityGate: report?.quality_gate?.verdict ?? null,
+    // What the image-stack dialog does with the result: `rejected` shows an
+    // error instead of the image, whatever the harness wrote.
+    outcome: report?.degradation?.result ?? null,
     toneStatus: report?.tone?.status ?? null,
     nativeAcceptance: log.nativeRejection ? `rejected: ${log.nativeRejection}` : 'passed-or-not-applicable',
     stitchSeconds: log.stitchSeconds,
@@ -488,6 +491,9 @@ function main() {
 
   const baselines = readBaselines();
   const baseline = baselines.baselines.find((entry) => baselineKey(entry) === baselineKey(summary));
+  if (summary.outcome === 'rejected' && baseline?.outcome !== 'rejected') {
+    failures.push('the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)');
+  }
   let verdict = 'no-baseline';
   if (log.nativeRejection) {
     notices.push(`layered native acceptance rejected the report: ${log.nativeRejection}`);

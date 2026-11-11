@@ -24,6 +24,7 @@ import {
   Layers3,
   Loader2,
   Move,
+  Plus,
   RefreshCw,
   Save,
   Scan,
@@ -31,9 +32,18 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { open } from '@tauri-apps/plugin-dialog';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
-import { getMessageTaskProgress } from '../../utils/taskProgress';
+import {
+  advanceStackProgress,
+  formatDuration,
+  initialStackProgress,
+  remainingSeconds,
+  stackStepCount,
+  stackStepNumber,
+} from '../../utils/stackProgress';
+import type { StackProgressState } from '../../utils/stackProgress';
 import { IMAGE_STACK_MAX_SOURCES } from '../../utils/imageStackPipeline';
 import type {
   ImageStackAlignmentMode,
@@ -43,6 +53,7 @@ import type {
 } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
 import ExportImageDialog from '../../features/export/ExportImageDialog';
+import { getSupportedImageTypes, normalizeExtensions, pathsFromSelection } from './BatchGeometryModal/utils';
 import type { ExportDialogSettings } from '../../features/export/exportDialog';
 
 interface ImageStackModalProps {
@@ -55,6 +66,7 @@ interface ImageStackModalProps {
   resultSize: ImageStackResultSize | null;
   softRegions?: ImageStackSoftRegions | null;
   skippedSources?: string[] | null;
+  stationsUnrelated?: boolean;
   sourceMetadata?: Record<string, unknown> | null;
   sourcePaths: string[];
   initialBlendMode: ImageStackBlendMode;
@@ -250,6 +262,7 @@ export default function ImageStackModal({
   resultSize,
   softRegions = null,
   skippedSources = null,
+  stationsUnrelated = false,
   sourceMetadata = null,
   sourcePaths,
   initialBlendMode,
@@ -272,6 +285,7 @@ export default function ImageStackModal({
   const [isMounted, setIsMounted] = useState(false);
   const [show, setShow] = useState(false);
   const [isPreviewFocused, setIsPreviewFocused] = useState(false);
+  const [addSourcesNotice, setAddSourcesNotice] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const sourcePanelRef = useRef<HTMLElement | null>(null);
   const sourceListRef = useRef<HTMLOListElement | null>(null);
@@ -292,6 +306,7 @@ export default function ImageStackModal({
     setIsExportDialogOpen(false);
     setSavedPath(null);
     setIsPreviewFocused(false);
+    setAddSourcesNotice(null);
     setIsMounted(true);
     const timer = window.setTimeout(() => setShow(true), 10);
     return () => window.clearTimeout(timer);
@@ -334,7 +349,47 @@ export default function ImageStackModal({
     () => ALIGNMENT_OPTIONS.find((option) => option.value === alignmentMode) || ALIGNMENT_OPTIONS[0],
     [alignmentMode],
   );
-  const stackProgress = useMemo(() => getMessageTaskProgress(progressMessage, 'panorama'), [progressMessage]);
+  // One forward-only bar for the whole run (`stackProgress`), with the
+  // step, the time spent and an estimate of the time left.
+  const [stackProgress, setStackProgress] = useState<StackProgressState>(() => initialStackProgress(Date.now()));
+  const [progressNow, setProgressNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (isProcessing) setStackProgress(initialStackProgress(Date.now()));
+  }, [isProcessing]);
+  useEffect(() => {
+    if (isProcessing) setStackProgress((current) => advanceStackProgress(current, progressMessage));
+  }, [isProcessing, progressMessage]);
+  useEffect(() => {
+    if (!isProcessing) return;
+    setProgressNow(Date.now());
+    const timer = window.setInterval(() => setProgressNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isProcessing]);
+  const progressElapsed = Math.max(0, (progressNow - stackProgress.startedAt) / 1000);
+  const progressRemaining = remainingSeconds(stackProgress, progressNow);
+  const progressLabel = [
+    t('modals.imageStack.progress.stepOf', {
+      step: stackStepNumber(stackProgress.plan, stackProgress.step),
+      total: stackStepCount(stackProgress.plan),
+    }),
+    t(`modals.imageStack.progress.steps.${stackProgress.step}` as never) as string,
+    stackProgress.count
+      ? t('modals.imageStack.progress.count', {
+          current: stackProgress.count.current,
+          total: stackProgress.count.total,
+        })
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const progressTiming = [
+    t('modals.imageStack.progress.elapsed', { time: formatDuration(progressElapsed) }),
+    progressRemaining === null
+      ? t('modals.imageStack.progress.estimating')
+      : progressRemaining < 90
+        ? t('modals.imageStack.progress.almostDone')
+        : t('modals.imageStack.progress.remaining', { minutes: Math.round(progressRemaining / 60) }),
+  ].join(' · ');
 
   const requestVisibleThumbnails = useCallback(() => {
     const panel = sourcePanelRef.current;
@@ -407,6 +462,60 @@ export default function ImageStackModal({
     },
     [isProcessing, onChange, orderedPaths],
   );
+
+  // Photos of one artwork are often spread over several folders (枫鹰雉鸡's
+  // body, head and bottom); more can be picked from anywhere and are appended.
+  const handleAddSources = async () => {
+    if (isProcessing || isSaving) return;
+    try {
+      const supportedTypes = await getSupportedImageTypes();
+      const rawExtensions = normalizeExtensions(supportedTypes.raw);
+      const allExtensions = normalizeExtensions([...supportedTypes.raw, ...supportedTypes.nonRaw]);
+      const selected = await open({
+        filters: [
+          { name: t('library.import.allSupportedImages'), extensions: allExtensions },
+          { name: 'RAW', extensions: rawExtensions },
+        ],
+        multiple: true,
+        title: t('modals.imageStack.addSourcesTitle'),
+      });
+      const picked = pathsFromSelection(selected);
+      if (picked.length === 0) return;
+      const next = [...orderedPaths];
+      const present = new Set(next);
+      let duplicates = 0;
+      let overLimit = 0;
+      for (const path of picked) {
+        if (present.has(path)) {
+          duplicates += 1;
+        } else if (next.length >= IMAGE_STACK_MAX_SOURCES) {
+          overLimit += 1;
+        } else {
+          present.add(path);
+          next.push(path);
+        }
+      }
+      const added = next.length - orderedPaths.length;
+      setAddSourcesNotice(
+        [
+          t('modals.imageStack.addSourcesAdded', { count: added }),
+          duplicates > 0 ? t('modals.imageStack.addSourcesDuplicates', { count: duplicates }) : null,
+          overLimit > 0
+            ? t('modals.imageStack.addSourcesOverLimit', { count: overLimit, max: IMAGE_STACK_MAX_SOURCES })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+      if (added === 0) return;
+      setOrderedPaths(next);
+      setSavedPath(null);
+      onChange();
+    } catch (pickError) {
+      console.error('Failed to add image stack sources:', pickError);
+      setAddSourcesNotice(pickError instanceof Error ? pickError.message : String(pickError));
+    }
+  };
 
   const handleProcess = () => {
     if (isProcessing || orderedPaths.length < 2 || orderedPaths.length > IMAGE_STACK_MAX_SOURCES) return;
@@ -535,6 +644,7 @@ export default function ImageStackModal({
                     resultSize={resultSize}
                     softRegions={softRegions}
                     skippedSources={skippedSources}
+                    stationsUnrelated={stationsUnrelated}
                     src={finalImageBase64}
                   />
                 ) : (
@@ -582,10 +692,20 @@ export default function ImageStackModal({
                 >
                   <TaskProgress
                     ariaLabel={t('modals.imageStack.processing')}
-                    indeterminate={stackProgress.value === null}
-                    label={progressMessage || t('modals.imageStack.processing')}
+                    label={progressLabel}
                     value={stackProgress.value}
                   />
+                  <p className="mt-1.5 flex items-center justify-between gap-3 text-[11px] text-white/70">
+                    <span>{progressTiming}</span>
+                    {stackProgress.resolving && (
+                      <span className="text-right">{t('modals.imageStack.progress.resolving')}</span>
+                    )}
+                  </p>
+                  {progressMessage && (
+                    <p className="mt-1 truncate text-[10px] text-white/45" title={progressMessage}>
+                      {progressMessage}
+                    </p>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -653,6 +773,21 @@ export default function ImageStackModal({
                     ))}
                   </ol>
                 </DndContext>
+
+                <button
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-color px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isProcessing || isSaving}
+                  onClick={() => void handleAddSources()}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={14} />
+                  {t('modals.imageStack.addSources')}
+                </button>
+                {addSourcesNotice && (
+                  <p className="mt-1.5 text-[11px] text-text-secondary" role="status">
+                    {addSourcesNotice}
+                  </p>
+                )}
 
                 <p className="mt-3 border-t border-border-color pt-3 text-[11px] leading-relaxed text-text-secondary">
                   {blendMode === 'focus'

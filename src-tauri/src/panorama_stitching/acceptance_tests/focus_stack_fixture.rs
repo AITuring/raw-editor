@@ -700,3 +700,52 @@ fn real_focus_stack_alignment_cache_contract() {
         cache_path.display()
     );
 }
+
+/// Writes every source of `RAW_EDITOR_PREPARED_DUMP_PATHS` (colon separated)
+/// as the stitcher prepares it (decoded, exposure-normalised, lens-corrected)
+/// in grey at `RAW_EDITOR_PREPARED_DUMP_SCALE` (default 0.25) to
+/// `RAW_EDITOR_PREPARED_DUMP_DIR/<stem>.png`, so pose residuals can be
+/// measured offline on the geometry the global poses refer to.
+#[test]
+#[ignore = "dumps prepared real sources for offline pose diagnostics"]
+fn dump_prepared_sources_from_env() {
+    let paths = std::env::var("RAW_EDITOR_PREPARED_DUMP_PATHS")
+        .expect("RAW_EDITOR_PREPARED_DUMP_PATHS is required")
+        .split(':')
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let directory = PathBuf::from(
+        std::env::var_os("RAW_EDITOR_PREPARED_DUMP_DIR")
+            .expect("RAW_EDITOR_PREPARED_DUMP_DIR is required"),
+    );
+    let scale = std::env::var("RAW_EDITOR_PREPARED_DUMP_SCALE")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(0.25);
+    fs::create_dir_all(&directory).unwrap();
+    crate::sidecar_storage::initialize(
+        PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
+    )
+    .unwrap();
+    let settings = AppSettings::default();
+    let exposure = stack_raw_exposure_reference(&paths);
+    paths.par_iter().for_each(|path| {
+        let stem = Path::new(path)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let target = directory.join(format!("{stem}.png"));
+        if target.exists() {
+            return;
+        }
+        let prepared = load_prepared_stack_source(path, &settings, exposure.as_ref()).unwrap();
+        let grey = prepared.image.to_luma8();
+        let width = ((f64::from(grey.width()) * scale).round() as u32).max(1);
+        let height = ((f64::from(grey.height()) * scale).round() as u32).max(1);
+        image::imageops::resize(&grey, width, height, image::imageops::FilterType::Triangle)
+            .save(&target)
+            .unwrap();
+        println!("dumped {stem} {}x{}", grey.width(), grey.height());
+    });
+}

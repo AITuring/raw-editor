@@ -67,6 +67,8 @@ export interface ImageStackSoftRegions {
   count: number;
   sourcesSoft: number;
   overviewPath: string | null;
+  /** The size of the result the region boxes are measured in. */
+  outputSize?: { width: number; height: number } | null;
   regions: ImageStackSoftRegion[];
 }
 
@@ -77,6 +79,8 @@ export interface ImageStackModalState {
   softRegions?: ImageStackSoftRegions | null;
   /** Photos a scan went on without because they aligned with none of the others. */
   skippedSources?: string[] | null;
+  /** The capture positions did not all relate; the photos were composed on their own positions. */
+  stationsUnrelated?: boolean;
   isOpen: boolean;
   isProcessing: boolean;
   progressMessage: string | null;

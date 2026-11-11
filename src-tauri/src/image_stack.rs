@@ -189,6 +189,10 @@ pub async fn process_image_stack(
                     crate::panorama_utils::stack_pipeline::degradation::run_ledger_snapshot();
                 let soft_regions = soft_region_notice(&degradation_ledger);
                 let skipped_sources = skipped_sources_notice(&degradation_ledger);
+                let stations_unrelated = degradation_ledger.entries().iter().any(|entry| {
+                    entry.reason
+                        == crate::panorama_utils::stack_pipeline::degradation::STACK_STATIONS_UNRELATED
+                });
                 let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
                 if !outcome_decision.permits_final_output() {
                     // The composed pixels remain available only as diagnostic
@@ -260,6 +264,9 @@ pub async fn process_image_stack(
                         "result": outcome_decision.as_identifier(),
                         "softRegions": soft_regions,
                         "skippedSources": skipped_sources,
+                        // The stations did not all relate and the photos were
+                        // composed on their own positions instead.
+                        "stationsUnrelated": stations_unrelated,
                     }),
                 );
                 Ok(())

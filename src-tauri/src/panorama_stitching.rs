@@ -378,6 +378,8 @@ use focus_stack_order::build_focus_stack_stitching_order;
 use focus_stack_order::build_focus_stack_stitching_order_with_report;
 
 mod capture_gauge;
+mod pose_guided_pairs;
+use pose_guided_pairs::{patch_guided_match, pose_predicted_pairs};
 
 #[cfg(test)]
 use capture_gauge::median_canvas_scale;

@@ -36,7 +36,13 @@ const parseImageStackSoftRegions = (payload: unknown): ImageStackSoftRegions | n
     regions.push({ x, y, width, height, kind });
   }
   if (regions.length === 0) return null;
+  const size = record.outputSize;
+  const outputSize =
+    Array.isArray(size) && size.length === 2 && isFiniteNumber(size[0]) && isFiniteNumber(size[1]) && size[0] > 0
+      ? { width: size[0], height: size[1] }
+      : null;
   return {
+    outputSize,
     count: regions.length,
     sourcesSoft: regions.filter((region) => region.kind === 'sources_soft').length,
     overviewPath:
@@ -389,6 +395,7 @@ export function useTauriListeners({
                 }
               : null;
           const softRegions = parseImageStackSoftRegions(event.payload?.softRegions);
+          const stationsUnrelated = event.payload?.stationsUnrelated === true;
           const skippedPayload: unknown = event.payload?.skippedSources;
           const skippedSources = Array.isArray(skippedPayload)
             ? skippedPayload.filter((path): path is string => typeof path === 'string')
@@ -439,6 +446,7 @@ export function useTauriListeners({
                 resultSize,
                 softRegions,
                 skippedSources,
+                stationsUnrelated,
                 ...(resolvedOrder ? { sourcePaths: resolvedOrder } : {}),
               },
             };

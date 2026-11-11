@@ -344,6 +344,7 @@ export default function AppModals(props: AppModalsProps) {
         resultSize={imageStackModalState.resultSize}
         softRegions={imageStackModalState.softRegions ?? null}
         skippedSources={imageStackModalState.skippedSources ?? null}
+        stationsUnrelated={imageStackModalState.stationsUnrelated ?? false}
         onClose={closeImageStackModal}
         onChange={() =>
           setUI((state) => ({
