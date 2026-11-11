@@ -105,6 +105,13 @@ fn missing_local_scale_never_supplies_unit_scale_to_mtf_or_gradient() {
         );
         assert!(criterion.measured.is_empty());
         assert!(criterion.failed.is_empty());
+        assert_eq!(criterion.candidate_count, report.roi_count);
+        assert_eq!(criterion.eligible_count, criterion.measurable_count);
+        assert_eq!(
+            criterion.rejected_content_count,
+            criterion.content_not_applicable_count
+        );
+        assert!(!criterion.selection_mode.is_empty());
     }
     assert_eq!(
         report
@@ -114,6 +121,74 @@ fn missing_local_scale_never_supplies_unit_scale_to_mtf_or_gradient() {
             .count(),
         2 * report.roi_count,
     );
+
+    // Scaling both sources and output preserves their relative Jacobian.
+    // Valid unit scale passes; actual geometric shrinkage must still fail.
+    let scaled_input = QualityGateInput {
+        acceptance_render_scale: 0.5,
+        ..input
+    };
+    let scaled_report = run_quality_gate(&scaled_input, &mut |_| Ok(output.clone()));
+    let scaled_ratio = scaled_report
+        .criteria
+        .iter()
+        .find(|criterion| criterion.name == "local_scale_pixel_ratio")
+        .expect("scaled local-pixel ratio criterion must be reported");
+    assert_eq!(scaled_ratio.verdict, QualityGateVerdict::Pass);
+    assert!(!scaled_ratio.diagnostic);
+
+    let mut shrunken_sources = sources.clone();
+    shrunken_sources[0].geometry.tile_to_world =
+        Matrix3::new(0.9, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 1.0);
+    shrunken_sources[0].dimensions = (2048, 2048);
+    let shrunken_input = QualityGateInput {
+        sources: &shrunken_sources,
+        ..scaled_input
+    };
+    let shrunken = run_quality_gate(&shrunken_input, &mut |_| {
+        Ok(Rgb32FImage::from_pixel(2048, 2048, Rgb([0.5; 3])))
+    });
+    let shrunken_ratio = shrunken
+        .criteria
+        .iter()
+        .find(|criterion| criterion.name == "local_scale_pixel_ratio")
+        .unwrap();
+    assert_eq!(shrunken_ratio.verdict, QualityGateVerdict::Fail);
+    assert!(!shrunken_ratio.failed.is_empty());
+    assert!(!shrunken_ratio.diagnostic);
+
+    // The production boundary repair path runs a second gate over the same
+    // owner ROIs.  The bounded cache must make that second pass independent
+    // of another complete source decode while keeping the report counters
+    // explicit.
+    // This fixture intentionally gives the reuse assertion enough room for
+    // every selected ROI; the byte-boundary eviction behavior is covered by
+    // the dedicated cache test.
+    let mut cache = QualityRoiCache::new(512 * 1024 * 1024);
+    let mut cached_decodes = 0;
+    let first = run_quality_gate_with_cache(
+        &input,
+        &mut |_| {
+            cached_decodes += 1;
+            Ok(output.clone())
+        },
+        &mut cache,
+    );
+    let second = run_quality_gate_with_cache(
+        &input,
+        &mut |_| {
+            cached_decodes += 1;
+            Ok(output.clone())
+        },
+        &mut cache,
+    );
+    assert_eq!(cached_decodes, 1);
+    assert!(first.timing.roi_cache_misses > 0);
+    assert_eq!(
+        second.timing.roi_cache_hits, second.roi_count,
+        "the repeated gate should reuse every retained ROI"
+    );
+    assert_eq!(second.timing.owner_source_decode_count, 0);
 }
 
 #[test]

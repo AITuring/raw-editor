@@ -107,6 +107,18 @@ fn large_stack_candidates_include_natural_filename_neighbors() {
 }
 
 #[test]
+fn large_stack_candidate_plan_separates_retrieval_promotions() {
+    let images = (0..100)
+        .map(|index| test_image(index, &format!("frame-{index}.jpg")))
+        .collect::<Vec<_>>();
+    let (pairs, plan) = pairs_to_match_for_images_with_plan(&images, BlendMode::Panorama);
+
+    assert_eq!(plan.final_pairs, pairs.len());
+    assert!(plan.base_pairs <= plan.final_pairs);
+    assert!(plan.retrieval_pairs <= plan.final_pairs);
+}
+
+#[test]
 fn medium_focus_stack_candidates_are_independent_of_upload_order() {
     let images = (0..45)
         .map(|index| test_image(index, &format!("upload-random-{index}.jpg")))

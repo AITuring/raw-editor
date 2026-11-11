@@ -96,6 +96,8 @@ fn quality_scale_uses_the_native_sampling_map_instead_of_the_seed_pose() {
                 station_id: 0,
             },
             native_registration: Some(quality_gate_runner::NativeReferenceMap {
+                mosaic_tone: None,
+                source_prefilter_divisor: 1.0,
                 world_to_station: Matrix3::identity(),
                 station_to_world: Matrix3::identity(),
                 station_origin: (0.0, 0.0),

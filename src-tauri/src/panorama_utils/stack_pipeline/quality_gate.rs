@@ -75,7 +75,7 @@ pub(crate) use roi_geometry::{
     EffectivePixelCoverage, LocalScaleMeasurement, OwnerRegions, QUALITY_ROI_MARGIN,
     QUALITY_ROI_MAX_COUNT, QUALITY_ROI_SIDE, QualityRoi, SourceGeometry, label_owner_regions,
     local_scale_with_mapper, map_world_to_source, map_world_to_source_with_inverse,
-    select_quality_rois,
+    select_quality_rois, station_level_roi_label, station_level_roi_station_id,
 };
 #[cfg(test)]
 pub(crate) use roi_geometry::{
@@ -84,10 +84,11 @@ pub(crate) use roi_geometry::{
 
 mod pixel_metrics;
 
+pub(crate) use pixel_metrics::detect_slanted_edge;
 #[cfg(test)]
 use pixel_metrics::metric_luminance;
 #[cfg(test)]
-pub(crate) use pixel_metrics::{FLAT_LOW_FREQUENCY_STD_MAX, detect_slanted_edge, noise_sigma};
+pub(crate) use pixel_metrics::{FLAT_LOW_FREQUENCY_STD_MAX, noise_sigma};
 pub(crate) use pixel_metrics::{
     flat_roi, noise_sigma_ratio, normalized_gradient_energy, roi_low_frequency_delta_e00,
     roi_mean_rgb, slanted_edge_mtf50,

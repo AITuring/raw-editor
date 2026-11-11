@@ -188,13 +188,23 @@ fn source_pairwise_seed_is_composed_in_station_tile_coordinates() {
     ]);
     let left_tile_to_world = translation(-35.0, 12.0);
     let right_tile_to_world = translation(80.0, -26.0);
+    let left_geometry = stitching::FocusVirtualTileGeometry {
+        width: left.width,
+        height: left.height,
+        tile_to_world: left_tile_to_world,
+    };
+    let right_geometry = stitching::FocusVirtualTileGeometry {
+        width: right.width,
+        height: right.height,
+        tile_to_world: right_tile_to_world,
+    };
     let proposals = virtual_tile_source_match_proposals(
         &[&left],
         &[&right],
         &matches,
         &source_to_world,
-        &left_tile_to_world,
-        &right_tile_to_world,
+        &left_geometry,
+        &right_geometry,
         1.0,
     );
     assert_eq!(proposals.len(), 1);
@@ -239,14 +249,24 @@ fn source_pairwise_seed_scales_full_resolution_match_into_render_coordinates() {
     ]);
     let left_tile_to_world = translation(-35.0, 12.0);
     let right_tile_to_world = translation(80.0, -26.0);
+    let left_geometry = stitching::FocusVirtualTileGeometry {
+        width: left.width,
+        height: left.height,
+        tile_to_world: left_tile_to_world,
+    };
+    let right_geometry = stitching::FocusVirtualTileGeometry {
+        width: right.width,
+        height: right.height,
+        tile_to_world: right_tile_to_world,
+    };
     let render_scale = 0.5;
     let proposals = virtual_tile_source_match_proposals(
         &[&left],
         &[&right],
         &matches,
         &source_to_world,
-        &left_tile_to_world,
-        &right_tile_to_world,
+        &left_geometry,
+        &right_geometry,
         render_scale,
     );
     assert_eq!(proposals.len(), 1);
@@ -301,14 +321,24 @@ fn source_pairwise_seed_requires_consensus_for_coarse_bridge() {
     ]);
     let left_tile_to_world = translation(-35.0, 12.0);
     let right_tile_to_world = translation(80.0, -26.0);
+    let left_geometry = stitching::FocusVirtualTileGeometry {
+        width: left.width,
+        height: left.height,
+        tile_to_world: left_tile_to_world,
+    };
+    let right_geometry = stitching::FocusVirtualTileGeometry {
+        width: right.width,
+        height: right.height,
+        tile_to_world: right_tile_to_world,
+    };
     assert!(
         virtual_tile_source_match_proposals(
             &[&left],
             &[&right],
             &matches,
             &source_to_world,
-            &left_tile_to_world,
-            &right_tile_to_world,
+            &left_geometry,
+            &right_geometry,
             1.0,
         )
         .is_empty(),
@@ -322,8 +352,8 @@ fn source_pairwise_seed_requires_consensus_for_coarse_bridge() {
             &[&right],
             &matches,
             &source_to_world,
-            &left_tile_to_world,
-            &right_tile_to_world,
+            &left_geometry,
+            &right_geometry,
             1.0,
         )
         .len(),

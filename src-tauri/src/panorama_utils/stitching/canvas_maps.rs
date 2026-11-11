@@ -91,6 +91,25 @@ pub(crate) struct OwnershipMap {
 }
 
 impl OwnershipMap {
+    /// Storage retained by this map, including spare vector/path capacity.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let mut bytes = std::mem::size_of::<Self>()
+            .saturating_add(
+                self.owners
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<u16>()),
+            )
+            .saturating_add(
+                self.legend
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<PathBuf>()),
+            );
+        for path in &self.legend {
+            bytes = bytes.saturating_add(path.capacity());
+        }
+        bytes
+    }
+
     pub(crate) fn new(
         width: u32,
         height: u32,
@@ -172,6 +191,10 @@ pub(crate) struct CoverageMask {
 }
 
 impl CoverageMask {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>().saturating_add(self.covered.capacity())
+    }
+
     pub(crate) fn from_gray(mask: GrayImage) -> Self {
         let (width, height) = mask.dimensions();
         Self {
@@ -265,6 +288,17 @@ pub(crate) enum ConfidenceMap {
 }
 
 impl ConfidenceMap {
+    /// Uniform confidence owns no pixel plane. Do not expand it to estimate
+    /// storage: the per-pixel variant accounts for its allocated capacity.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>().saturating_add(match self {
+            Self::Uniform { .. } => 0,
+            Self::PerPixel { values, .. } => {
+                values.capacity().saturating_mul(std::mem::size_of::<f32>())
+            }
+        })
+    }
+
     /// Placeholder map: every pixel reads 0.0 (需求 3.9 treats "no runner-up
     /// evidence" as zero confidence).
     #[cfg(test)]

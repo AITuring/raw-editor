@@ -1,6 +1,109 @@
 use super::*;
 
 #[test]
+#[ignore = "requires a saved native joint-production-input.json"]
+fn replay_saved_joint_smoothness_candidates() {
+    let path = std::env::var("RAW_EDITOR_JOINT_REPLAY_INPUT").unwrap();
+    let snapshot: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let number = |v: &serde_json::Value| v.as_f64().unwrap();
+    let poses = snapshot["poses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|rows| {
+            let r = rows.as_array().unwrap();
+            Matrix3::new(
+                number(&r[0][0]),
+                number(&r[0][1]),
+                number(&r[0][2]),
+                number(&r[1][0]),
+                number(&r[1][1]),
+                number(&r[1][2]),
+                number(&r[2][0]),
+                number(&r[2][1]),
+                number(&r[2][2]),
+            )
+        })
+        .collect::<Vec<_>>();
+    let dimensions = snapshot["dimensions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| (d[0].as_u64().unwrap() as u32, d[1].as_u64().unwrap() as u32))
+        .collect::<Vec<_>>();
+    let limits = snapshot["limits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(number)
+        .collect::<Vec<_>>();
+    let mut verified = vec![Vec::new(); poses.len()];
+    let relations = snapshot["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            let left = r["left"].as_u64().unwrap() as usize;
+            let right = r["right"].as_u64().unwrap() as usize;
+            for p in r["native_verified_points"].as_array().unwrap() {
+                let error = number(&p[4]);
+                verified[left].push(VerifiedSource {
+                    point: Point2::new(number(&p[0]), number(&p[1])),
+                    round_trip_error_px: error,
+                });
+                verified[right].push(VerifiedSource {
+                    point: Point2::new(number(&p[2]), number(&p[3])),
+                    round_trip_error_px: error,
+                });
+            }
+            Relation {
+                left,
+                right,
+                points: r["points"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|p| {
+                        (
+                            Point2::new(number(&p[0]), number(&p[1])),
+                            Point2::new(number(&p[2]), number(&p[3])),
+                        )
+                    })
+                    .collect(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let scale = dimensions.iter().map(|&(w, h)| w.max(h)).max().unwrap() as f64;
+    let proposal = projective_proposal(&poses, &relations, 0, scale).unwrap();
+    for smoothness in [0.004, 0.006, 0.008, 0.01, 0.02, 0.04, 0.08] {
+        let fit = fit_with_smoothness(&proposal, &dimensions, &relations, 0, smoothness).unwrap();
+        let bounded = materialize_for_output_lattice(
+            &proposal,
+            &fit,
+            &dimensions,
+            &poses,
+            &limits,
+            &relations,
+            &verified,
+        )
+        .unwrap();
+        eprintln!(
+            "JOINT_REPLAY smoothness={smoothness} validation={:?} corner={}",
+            bounded
+                .validation
+                .iter()
+                .map(|v| (v.left, v.right, v.p95))
+                .collect::<Vec<_>>(),
+            bounded.maximum_corner_motion
+        );
+        if smoothness == 0.01 {
+            assert!(bounded.validation.iter().all(|v| v.p95 * 1.247070 <= 3.0));
+        }
+    }
+}
+
+#[test]
 fn density_gauge_uses_a_feasible_common_pivot_without_relaxing_corner_limits() {
     let initial = Matrix3::new(0.96, 0.0, 0.0, 0.0, 0.96, 0.0, 0.0, 0.0, 1.0);
     let pose = Matrix3::new(0.96, 0.0, 100.0, 0.0, 0.96, 0.0, 0.0, 0.0, 1.0);
@@ -471,4 +574,37 @@ fn joint_fit_uses_validation_points_and_recovers_a_smooth_nonrigid_overlap() {
     );
     assert!(fit.fields[0].values.iter().all(|v| *v == [0.0; 2]));
     assert!(fit.fields[1].at(Point2::new(512.0, 256.0))[0].abs() > 1.0);
+}
+
+#[test]
+fn output_lattice_decomposition_does_not_spend_camera_budget_on_density() {
+    let pose = Matrix3::new(0.9, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 1.0);
+    let points = (128..896)
+        .step_by(32)
+        .flat_map(|x| {
+            (128..896).step_by(32).map(move |y| {
+                let p = Point2::new(x as f64, y as f64);
+                (p, p)
+            })
+        })
+        .collect::<Vec<_>>();
+    let relations = [Relation {
+        left: 0,
+        right: 1,
+        points,
+    }];
+    let initial = [pose; 2];
+    let sizes = [(1024, 1024); 2];
+    let fit = fit(&initial, &sizes, &relations, 0).unwrap();
+    let geometry =
+        decomposition::decompose_geometry(&initial, &fit.fields, &sizes, &initial, &[32.0; 2])
+            .unwrap();
+    let legacy = decompose(&initial, &fit.fields, &sizes, &initial, &[32.0; 2]).unwrap();
+    assert!(geometry.maximum_corner_motion < 1e-5);
+    assert!(legacy.maximum_corner_motion > 1.0 && legacy.maximum_corner_motion <= 32.0 + 1e-7);
+    for (p, old) in geometry.poses.iter().zip(&initial) {
+        for point in corners(sizes[0]) {
+            assert!((project(p, point).unwrap() - project(old, point).unwrap()).norm() < 1e-5);
+        }
+    }
 }

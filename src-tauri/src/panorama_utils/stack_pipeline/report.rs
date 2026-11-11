@@ -92,7 +92,100 @@ mod tests {
             value["resources"]["memory_threshold_bytes"],
             Value::from(MEMORY_THRESHOLD_DEFAULT_BYTES)
         );
+        assert_eq!(
+            value["performance"]["stage_seconds"]["total_seconds"],
+            Value::from(0.0)
+        );
+        assert_eq!(
+            value["performance"]["pairs"]["candidate_pairs"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_preflight"]["source_count"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_preflight"]["raw_decode_count"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["quality_roi_cache"]["resident_entries"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["quality_roi_cache"]["peak_bytes"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_render_cache"]["resident_entries"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_render_cache"]["max_bytes"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_render_cache"]["quality_gate_hits"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_render_cache"]["quality_gate_misses"],
+            Value::from(0)
+        );
+        assert_eq!(
+            value["performance"]["source_render_cache"]["oversized_bypasses"],
+            Value::from(0)
+        );
         assert_eq!(value["degradation"]["result"], Value::from("running"));
+    }
+
+    #[test]
+    fn recorder_publishes_stage_timing_and_pair_counts() {
+        let recorder = StackReportRecorder::isolated("stage-timing", None);
+        recorder.record_preflight_seconds(0.25);
+        recorder.record_prepare_seconds(1.5);
+        recorder.record_matching_seconds(2.5, 120, 37);
+        recorder.record_ordering_seconds(0.75);
+        recorder.record_render_seconds(4.0);
+
+        let report = recorder.snapshot();
+        assert_eq!(report.performance.stage_seconds.preflight_seconds, 0.25);
+        assert_eq!(report.performance.stage_seconds.prepare_seconds, 1.5);
+        assert_eq!(report.performance.stage_seconds.matching_seconds, 2.5);
+        assert_eq!(report.performance.stage_seconds.ordering_seconds, 0.75);
+        assert_eq!(report.performance.stage_seconds.render_seconds, 4.0);
+        assert_eq!(report.performance.pairs.candidate_pairs, 120);
+        assert_eq!(report.performance.pairs.verified_pairs, 37);
+        assert_eq!(report.performance.pairs.base_pairs, 0);
+        assert_eq!(report.performance.pairs.retrieval_pairs, 0);
+        assert_eq!(report.performance.pairs.rescue_pairs, 0);
+    }
+
+    #[test]
+    fn recorder_publishes_source_preflight_observation() {
+        let directory = tempfile::tempdir().expect("temporary report directory");
+        let recorder = StackReportRecorder::isolated(
+            "source-preflight-observation",
+            Some(directory.path().to_path_buf()),
+        )
+        .with_source_preflight_observation(Box::new(|| SourcePreflightReport {
+            source_count: 3,
+            stat_count: 3,
+            file_map_count: 3,
+            hash_count: 3,
+            exif_parse_count: 3,
+            preflight_reuse_count: 9,
+            raw_decode_count: 6,
+            failed_count: 0,
+        }));
+
+        let path = recorder.write_once().expect("report must be written");
+        let report: StackReport =
+            serde_json::from_str(&fs::read_to_string(path).expect("report must be readable"))
+                .expect("report must deserialize");
+        assert_eq!(report.performance.source_preflight.source_count, 3);
+        assert_eq!(report.performance.source_preflight.preflight_reuse_count, 9);
+        assert_eq!(report.performance.source_preflight.raw_decode_count, 6);
     }
 
     #[test]
@@ -240,6 +333,8 @@ mod tests {
             true,
             "sRGB".to_string(),
             &output_path,
+            (1024, 768),
+            Some(vec![2]),
         )
         .expect("update output metadata");
 
@@ -254,6 +349,12 @@ mod tests {
         assert!(parsed.output.alpha_preserved);
         assert_eq!(parsed.output.icc, "sRGB");
         assert_eq!(parsed.output.path, output_path.to_string_lossy());
+        assert_eq!((parsed.output.width, parsed.output.height), (1024, 768));
+        assert_eq!(parsed.output.tiff_extra_samples, Some(vec![2]));
+        assert_eq!(
+            parsed.output.artifact_validation,
+            OutputArtifactValidation::Pass
+        );
         assert!(
             !report_path
                 .with_file_name(".stack-report-stack-test-output.json.tmp")
@@ -268,9 +369,35 @@ mod tests {
             false,
             "none".to_string(),
             &directory.path().join("other.png"),
+            (1024, 768),
+            None,
         )
         .expect_err("a different result must not overwrite the report");
         assert!(error.contains("does not match"));
+    }
+
+    #[test]
+    fn legacy_output_reports_do_not_imply_artifact_validation() {
+        let mut value = default_report_value();
+        let output = value["output"].as_object_mut().unwrap();
+        for field in [
+            "width",
+            "height",
+            "tiff_extra_samples",
+            "artifact_validation",
+            "artifact_validation_error",
+        ] {
+            output.remove(field);
+        }
+        output.insert("written".into(), Value::Bool(true));
+        let parsed: StackReport = serde_json::from_value(value).unwrap();
+        assert!(parsed.output.written);
+        assert_eq!(
+            parsed.output.artifact_validation,
+            OutputArtifactValidation::NotRun
+        );
+        assert_eq!(parsed.output.tiff_extra_samples, None);
+        assert_eq!((parsed.output.width, parsed.output.height), (0, 0));
     }
 
     #[test]

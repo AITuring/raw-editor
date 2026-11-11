@@ -115,6 +115,7 @@ fn multi_hypothesis_holdout_key_prefers_measured_independent_support() {
     let relation = measured_relation(Matrix3::identity(), Vec::new());
     let measured = MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
+            scale_evidence: None,
             inliers: STATION_RELATION_MIN_INLIERS,
             median_error_px: 1.0,
             scale_ratio: 1.0,
@@ -270,6 +271,7 @@ fn multi_hypothesis_canonical_inversion_recovers_from_singular_and_is_order_stab
 #[test]
 fn station_relation_scale_endpoints_are_closed_without_relaxing_adjacent_values() {
     let passing = |scale_ratio| StationRelationMeasurements {
+        scale_evidence: None,
         inliers: STATION_RELATION_MIN_INLIERS,
         median_error_px: STATION_RELATION_MAX_MEDIAN_ERROR_PX,
         scale_ratio,

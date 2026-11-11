@@ -106,6 +106,9 @@ pub(super) struct LayerSampler<'a> {
     pub(super) source: &'a Rgb32FImage,
     pub(super) source_divisor: f64,
     pub(super) inverse: Matrix3<f64>,
+    /// Geometry is immutable during a measurement: the same target must return
+    /// the same source coordinate. Callers may reuse a resolved coordinate
+    /// between support validation and sampling instead of invoking this twice.
     pub(super) native_mapping: Option<&'a (dyn Fn(Point3<f64>) -> Option<Point2<f64>> + Sync)>,
     pub(super) projection: Projection,
     pub(super) offset: (f64, f64),
@@ -141,6 +144,13 @@ impl LayerSampler<'_> {
 
     pub(super) fn sample(&self, x: f64, y: f64) -> Option<Rgb<f32>> {
         let source = self.source_point(x, y)?;
+        self.sample_mapped_source(source)
+    }
+
+    /// Sample a coordinate returned by this sampler's `source_point` while its
+    /// geometry is unchanged. Preserve the original pyramid centre, clamping
+    /// and capture-border rules; support coordinates are not sampling positions.
+    pub(super) fn sample_mapped_source(&self, source: Point2<f64>) -> Option<Rgb<f32>> {
         // Each prefilter level represents the centre of a 2x2 source block.
         // Retain the half-pixel offset to avoid a lens-dependent sampling shift.
         let sx = ((source.x + 0.5) / self.source_divisor - 0.5)

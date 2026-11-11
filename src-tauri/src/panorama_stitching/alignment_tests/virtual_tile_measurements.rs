@@ -233,3 +233,27 @@ fn overlap_gradient_measurement_uses_the_registered_pixel_grid() {
         "{quality:?}"
     );
 }
+
+#[test]
+fn narrow_overlap_photometry_recovers_edge_strip_without_lowering_sample_gate() {
+    let mut tiles = synthetic_virtual_tiles(2);
+    let texture = |x: u32, y: u32| ((x * 17 + y * 31 + x * y % 97) % 180 + 30) as u8;
+    for tile in &mut tiles {
+        tile.width = 500;
+        tile.height = 400;
+        tile.scale_factor = 1.0;
+    }
+    tiles[0].alignment_image = GrayImage::from_fn(500, 400, |x, y| image::Luma([texture(x, y)]));
+    tiles[1].alignment_image = GrayImage::from_fn(500, 400, |x, y| {
+        image::Luma([texture(x, y.saturating_sub(385))])
+    });
+    let h = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 385.0, 0.0, 0.0, 1.0);
+    let q = focus_overlap_quality_measurements(&tiles[0], &tiles[1], &h).unwrap();
+    assert!(q.low_frequency_mean_relative_difference < 1e-8);
+    assert!((q.edge_strength_ratio - 1.0).abs() < 1e-8);
+    let disjoint = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 500.0, 0.0, 0.0, 1.0);
+    assert!(focus_overlap_quality_measurements(&tiles[0], &tiles[1], &disjoint).is_none());
+    // A one-row overlap cannot manufacture 120 distinct probe locations.
+    let tiny = Matrix3::new(1.0, 0.0, 498.0, 0.0, 1.0, 398.0, 0.0, 0.0, 1.0);
+    assert!(focus_overlap_quality_measurements(&tiles[0], &tiles[1], &tiny).is_none());
+}

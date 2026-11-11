@@ -7,6 +7,7 @@ use super::*;
 #[test]
 fn native_tone_evidence_does_not_relax_geometry_acceptance() {
     let actual = StationRelationMeasurements {
+        scale_evidence: None,
         inliers: 972,
         median_error_px: 2.266923987432463,
         scale_ratio: 1.0004691316830572,
@@ -38,6 +39,7 @@ fn native_tone_evidence_does_not_relax_geometry_acceptance() {
 #[test]
 fn station_relation_contract_accepts_every_literal_boundary() {
     let measurements = StationRelationMeasurements {
+        scale_evidence: None,
         inliers: STATION_RELATION_MIN_INLIERS,
         median_error_px: STATION_RELATION_MAX_MEDIAN_ERROR_PX,
         scale_ratio: STATION_RELATION_SCALE_RATIO_MIN,
@@ -62,6 +64,7 @@ fn station_relation_contract_accepts_every_literal_boundary() {
 #[test]
 fn station_relation_contract_records_one_identifier_per_failed_defect() {
     let accepted = StationRelationMeasurements {
+        scale_evidence: None,
         inliers: 24,
         median_error_px: 3.0,
         scale_ratio: 1.0,
@@ -137,6 +140,7 @@ fn station_relation_contract_records_one_identifier_per_failed_defect() {
     }
 
     let every_defect = StationRelationMeasurements {
+        scale_evidence: None,
         inliers: 0,
         median_error_px: f64::INFINITY,
         scale_ratio: 0.0,
@@ -166,6 +170,7 @@ fn residual_model_builder_uses_accepted_bidirectional_relation_evidence() {
         (tiles[1].id, Matrix3::identity()),
     ]);
     let accepted = [stack_report::AcceptedStationRelationRecord {
+        scale_evidence: None,
         left: 0,
         right: 1,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,
@@ -200,6 +205,7 @@ fn residual_model_builder_keeps_low_p95_relation_identity() {
         (tiles[1].id, Matrix3::identity()),
     ]);
     let accepted = [stack_report::AcceptedStationRelationRecord {
+        scale_evidence: None,
         left: 0,
         right: 1,
         evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,

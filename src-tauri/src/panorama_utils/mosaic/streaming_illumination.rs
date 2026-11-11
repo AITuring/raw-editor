@@ -20,9 +20,21 @@ use super::{
 pub(in crate::panorama_utils) fn smooth_streaming_low_frequency_illumination(
     output: &mut Rgb32FImage,
 ) {
+    smooth_streaming_illumination(output, false);
+}
+
+pub(super) fn smooth_artwork_low_frequency_illumination(output: &mut Rgb32FImage) {
+    smooth_streaming_illumination(output, true);
+}
+
+fn smooth_streaming_illumination(output: &mut Rgb32FImage, protect_materials: bool) {
     let scale = (output.width().max(output.height()) as f64
-        / STREAMING_HARMONIZATION_LONG_SIDE as f64)
-        .max(1.0);
+        / if protect_materials {
+            600.0
+        } else {
+            STREAMING_HARMONIZATION_LONG_SIDE as f64
+        })
+    .max(1.0);
     let width = (output.width() as f64 / scale).ceil().max(1.0) as u32;
     let height = (output.height() as f64 / scale).ceil().max(1.0) as u32;
     let analysis =
@@ -48,8 +60,17 @@ pub(in crate::panorama_utils) fn smooth_streaming_low_frequency_illumination(
             Rgb([pixel[0] / divisor, pixel[1] / divisor, pixel[2] / divisor])
         })
     };
-    let local_low = normalized_blur(STREAMING_ILLUMINATION_LOCAL_SIGMA);
-    let continuous_low = normalized_blur(STREAMING_ILLUMINATION_CONTINUOUS_SIGMA);
+    let local_low = normalized_blur(if protect_materials {
+        STREAMING_ILLUMINATION_LOCAL_SIGMA / 4.0
+    } else {
+        STREAMING_ILLUMINATION_LOCAL_SIGMA
+    });
+    let continuous_low = normalized_blur(if protect_materials {
+        STREAMING_ILLUMINATION_CONTINUOUS_SIGMA / 4.0
+    } else {
+        STREAMING_ILLUMINATION_CONTINUOUS_SIGMA
+    });
+    let material_reference = protect_materials.then(|| material_reference(&local_low, &valid));
     let gains = Rgb32FImage::from_fn(width, height, |x, y| {
         if valid.get_pixel(x, y)[0] == 0.0 {
             return Rgb([1.0; 3]);
@@ -58,6 +79,13 @@ pub(in crate::panorama_utils) fn smooth_streaming_low_frequency_illumination(
         let continuous_pixel = *continuous_low.get_pixel(x, y);
         let local = luma(local_pixel);
         let continuous = luma(continuous_pixel);
+        if protect_materials {
+            // A broad canvas mean mixes paper, wall and reflective hardware.
+            // Large differences from a local material are not exposure evidence.
+            // Retain only small scalar changes; preserve channel ratios.
+            let broad = f64::from(material_reference.as_ref().unwrap().get_pixel(x, y)[0]);
+            return Rgb([material_guarded_gain(local, broad); 3]);
+        }
         let luminance_gain = if local > 0.025 && continuous > 0.025 {
             (continuous / local).clamp(
                 STREAMING_ILLUMINATION_MIN_GAIN,
@@ -107,6 +135,142 @@ pub(in crate::panorama_utils) fn smooth_streaming_low_frequency_illumination(
                 }
             }
         });
+}
+
+fn material_guarded_gain(local: f64, broad: f64) -> f32 {
+    if !local.is_finite() || !broad.is_finite() || local <= 0.025 || broad <= 0.025 {
+        return 1.0;
+    }
+    let log_gain = (broad / local).ln();
+    let t = ((log_gain.abs() - 0.06) / 0.16).clamp(0.0, 1.0);
+    let confidence = 1.0 - t * t * (3.0 - 2.0 * t);
+    // Bright surfaces have few independent peers; edge pixels contaminate
+    // even a range-conditioned mean. Do not use this unsupported canvas
+    // estimate to darken them. Overlap-backed source gains remain separate.
+    let highlight = ((local - 0.35) / 0.20).clamp(0.0, 1.0);
+    let highlight = highlight * highlight * (3.0 - 2.0 * highlight);
+    let min_log = -0.10 + 0.09 * highlight;
+    (log_gain.clamp(min_log, 0.10) * confidence).exp() as f32
+}
+
+// Range-conditioned wide smoothing: hardware and paper never share a broad
+// target merely because they are neighbours. Three linear-time box passes
+// approximate a spatial Gaussian without a large per-pixel kernel.
+fn material_reference(
+    local: &Rgb32FImage,
+    valid: &image::ImageBuffer<Luma<f32>, Vec<f32>>,
+) -> image::ImageBuffer<Luma<f32>, Vec<f32>> {
+    let (w, h) = local.dimensions();
+    let guide =
+        image::ImageBuffer::from_fn(w, h, |x, y| Luma([luma(*local.get_pixel(x, y)) as f32]));
+    let mut sum = vec![0.0_f32; (w * h) as usize];
+    let mut total = vec![0.0_f32; (w * h) as usize];
+    for bin in 0..12 {
+        let centre = bin as f32 / 11.0;
+        let weight = image::ImageBuffer::from_fn(w, h, |x, y| {
+            Luma([
+                (1.0 - (guide.get_pixel(x, y)[0] - centre).abs() / 0.12).max(0.0)
+                    * valid.get_pixel(x, y)[0],
+            ])
+        });
+        let colour = image::ImageBuffer::from_fn(w, h, |x, y| {
+            Luma([guide.get_pixel(x, y)[0] * weight.get_pixel(x, y)[0]])
+        });
+        let mut support = weight.clone();
+        let mut colour = colour;
+        let radius = (160.0 * (w.max(h) as f64 / 600.0)).round().max(1.0) as u32;
+        for _ in 0..3 {
+            support = box_mean(&support, radius);
+            colour = box_mean(&colour, radius);
+        }
+        for i in 0..sum.len() {
+            if support.as_raw()[i] > 1e-5 {
+                let own_weight = weight.as_raw()[i];
+                sum[i] += own_weight * colour.as_raw()[i] / support.as_raw()[i];
+                total[i] += own_weight;
+            }
+        }
+    }
+    image::ImageBuffer::from_fn(w, h, |x, y| {
+        let i = (y * w + x) as usize;
+        Luma([if total[i] > 1e-5 {
+            sum[i] / total[i]
+        } else {
+            guide.get_pixel(x, y)[0]
+        }])
+    })
+}
+
+fn box_mean(
+    input: &image::ImageBuffer<Luma<f32>, Vec<f32>>,
+    radius: u32,
+) -> image::ImageBuffer<Luma<f32>, Vec<f32>> {
+    let (w, h) = input.dimensions();
+    let mut tmp = input.clone();
+    let mut output = input.clone();
+    for y in 0..h {
+        let mut prefix = vec![0.0_f64; w as usize + 1];
+        for x in 0..w {
+            prefix[x as usize + 1] = prefix[x as usize] + f64::from(input.get_pixel(x, y)[0]);
+        }
+        for x in 0..w {
+            let l = x.saturating_sub(radius);
+            let r = (x + radius + 1).min(w);
+            tmp.put_pixel(
+                x,
+                y,
+                Luma([((prefix[r as usize] - prefix[l as usize]) / f64::from(r - l)) as f32]),
+            );
+        }
+    }
+    for x in 0..w {
+        let mut prefix = vec![0.0_f64; h as usize + 1];
+        for y in 0..h {
+            prefix[y as usize + 1] = prefix[y as usize] + f64::from(tmp.get_pixel(x, y)[0]);
+        }
+        for y in 0..h {
+            let l = y.saturating_sub(radius);
+            let r = (y + radius + 1).min(h);
+            output.put_pixel(
+                x,
+                y,
+                Luma([((prefix[r as usize] - prefix[l as usize]) / f64::from(r - l)) as f32]),
+            );
+        }
+    }
+    output
+}
+
+#[cfg(test)]
+mod material_tests {
+    use super::*;
+    #[test]
+    fn artwork_filter_preserves_bright_hardware_and_small_exposure_correction() {
+        assert_eq!(material_guarded_gain(0.75, 0.30), 1.0);
+        assert_eq!(material_guarded_gain(0.20, 0.50), 1.0);
+        assert!((material_guarded_gain(0.30, 0.315) - 1.05).abs() < 1e-6);
+        let original = Rgb32FImage::from_fn(512, 256, |x, y| {
+            let level = if (90..130).contains(&y) {
+                0.75
+            } else if x < 256 {
+                0.30
+            } else {
+                0.33
+            };
+            Rgb([level, level * 0.9, level * 0.8])
+        });
+        let mut corrected = original.clone();
+        smooth_artwork_low_frequency_illumination(&mut corrected);
+        assert!(corrected.get_pixel(256, 110)[0] > 0.74);
+        let before = (original.get_pixel(230, 210)[0] - original.get_pixel(282, 210)[0]).abs();
+        let after = (corrected.get_pixel(230, 210)[0] - corrected.get_pixel(282, 210)[0]).abs();
+        assert!(
+            after < before,
+            "small same-material exposure step must soften"
+        );
+        let pixel = corrected.get_pixel(256, 110);
+        assert!((pixel[1] / pixel[0] - 0.9).abs() < 1e-6);
+    }
 }
 
 /// Correct source-sized exposure fields after ownership has selected the

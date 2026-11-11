@@ -467,6 +467,32 @@ fn explicit_legacy_selection_records_the_legacy_path_without_virtual_tiles() {
 }
 
 #[test]
+fn path_selection_observation_records_configured_path_and_fallback_reason() {
+    let recorder = StackReportRecorder::isolated("path-selection-observation", None);
+    recorder.set_path_selection_observation(
+        Some(SelectedPath::LayeredVirtualTile),
+        SelectedPath::LegacySingleLayerMosaic,
+        false,
+        Some("singleton_source_scan".to_string()),
+    );
+
+    let report = recorder.snapshot();
+    assert_eq!(
+        report.composition.path_selection.configured_path,
+        Some(SelectedPath::LayeredVirtualTile)
+    );
+    assert_eq!(
+        report.composition.path_selection.selected_path,
+        SelectedPath::LegacySingleLayerMosaic
+    );
+    assert!(!report.composition.path_selection.use_virtual_tiles);
+    assert_eq!(
+        report.composition.path_selection.fallback_reason.as_deref(),
+        Some("singleton_source_scan")
+    );
+}
+
+#[test]
 fn default_layered_entry_runs_group_tone_and_quality_gate_components() {
     // Exercise the same production component entry points selected by a
     // fresh install: the layered path, group Tone_Harmonizer and the
@@ -661,10 +687,11 @@ fn layered_compositor_rejects_an_oversized_canvas_before_loading_a_tile() {
     )]);
     let app = tauri::test::mock_app();
     let mut loads = 0usize;
-    let mut load = |_: &ImageInfo| -> Result<image::Rgb32FImage, String> {
-        loads += 1;
-        Ok(image::Rgb32FImage::new(8, 8))
-    };
+    let mut load =
+        |_: &ImageInfo, _: stitching::FocusTileLoadPurpose| -> Result<image::Rgb32FImage, String> {
+            loads += 1;
+            Ok(image::Rgb32FImage::new(8, 8))
+        };
     let result = stitching::layered_virtual_tile_compositor_with_ownership(
         &[&info],
         &homographies,

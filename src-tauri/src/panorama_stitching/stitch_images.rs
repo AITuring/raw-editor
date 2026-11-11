@@ -4,6 +4,9 @@
 //! rendering and output run in a fixed order. Splitting it into stages is a
 //! separate behaviour-checked refactor.
 
+use super::native_fusion_cache::{FusionStage, NativeFusionCache, native_fusion_cache_max_bytes};
+use super::native_fusion_key::NativeFusionSourceKey;
+use super::tile_payload;
 use crate::app_settings::load_settings_for_runtime;
 use crate::formats::is_psd_file;
 use crate::formats::is_raw_file;
@@ -29,12 +32,14 @@ use crate::panorama_utils::stitching::Projection;
 use image::DynamicImage;
 use image::GenericImageView;
 use image::GrayImage;
+#[cfg(test)]
 use image::Rgb32FImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use nalgebra::Point3;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -49,36 +54,39 @@ use tauri::Runtime;
 
 use super::{
     AlignmentMode, BlendMode, FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES, FocusRssGuard, ImageInfo,
-    MAX_RETAINED_STACK_PIXELS, MAX_STITCH_SOURCE_IMAGES, MatchInfo, PairMatchProgress,
-    SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES, SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES,
-    STATION_RELATION_MIN_INLIERS, STATION_RELATION_MIN_SPATIAL_SUPPORT, StationEvidence,
-    StitchOutcome, VIRTUAL_TILE_SEED_GLOBAL_COVERAGE, VIRTUAL_TILE_SEED_PRIOR_FREE,
-    VIRTUAL_TILE_SEED_SOURCE_MATCH, VirtualTileMatchPyramid, VirtualTilePriorProposal,
-    absolute_source_path, add_capture_sequence_bridges, apply_virtual_tile_prior_repair,
-    build_focus_layer_warp, build_focus_stack_stitching_order_with_report, build_foreground_mask,
-    build_stitching_order, canonical_match_direction, capture_groups_form_singleton_scan,
-    detect_foreground_range, detect_vertical_edge_columns, ensure_focus_memory_available,
-    excluded_source_records, filter_flat_artwork_blurry_sources, find_alignment_features,
-    find_top_alignment_features, flat_artwork_overlap_render_order, focus_alignment_support,
-    focus_anchor_render_frames, focus_capture_groups_with_grouping, focus_overlap_components,
-    focus_rescue_match_is_verified, focus_source_order_group_compositor_order,
-    focus_stack_cache_key_inputs, focus_stack_source_digests, focus_station_binding_evidence,
-    focus_station_topology, focus_unstitched_sources_are_redundant,
-    geometry_disconnected_user_error, horizontal_edge_row_candidates,
-    install_virtual_tile_match_planes, is_auxiliary_stitch_file, is_generated_stitch_output,
-    load_prepared_stack_source, log_virtual_tile_candidate, match_image_pair, matrix3_row_major,
+    MAX_STITCH_SOURCE_IMAGES, MatchInfo, PairMatchProgress, SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES,
+    SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES, STATION_RELATION_MIN_INLIERS,
+    STATION_RELATION_MIN_SPATIAL_SUPPORT, SourcePreflight, SourceRenderCache, SourceRenderCacheKey,
+    SourceRenderCacheStage, StationEvidence, StitchOutcome, VIRTUAL_TILE_SEED_GLOBAL_COVERAGE,
+    VIRTUAL_TILE_SEED_PRIOR_FREE, VIRTUAL_TILE_SEED_SOURCE_MATCH, VirtualTileMatchPyramid,
+    VirtualTilePriorProposal, absolute_source_path, add_capture_sequence_bridges,
+    apply_virtual_tile_prior_repair, build_focus_layer_warp,
+    build_focus_stack_stitching_order_with_report, build_foreground_mask, build_stitching_order,
+    canonical_match_direction, capture_groups_form_singleton_scan, detect_foreground_range,
+    detect_vertical_edge_columns, ensure_focus_memory_available, excluded_source_records,
+    filter_flat_artwork_blurry_sources, find_alignment_features, find_top_alignment_features,
+    flat_artwork_overlap_render_order, focus_alignment_support, focus_anchor_render_frames,
+    focus_capture_groups_with_grouping, focus_overlap_components, focus_rescue_match_is_verified,
+    focus_source_order_group_compositor_order, focus_stack_cache_key_inputs_from_preflight,
+    focus_stack_source_digests, focus_station_binding_evidence, focus_station_topology,
+    focus_unstitched_sources_are_redundant, geometry_disconnected_user_error,
+    horizontal_edge_row_candidates, install_virtual_tile_match_planes, is_auxiliary_stitch_file,
+    is_generated_stitch_output, load_prepared_stack_source_with_preflight,
+    log_virtual_tile_candidate, match_image_pair, matrix3_row_major,
     memory_safe_panorama_render_scale, native_photometric_pairs,
-    normalize_stack_raw_display_exposure, optimize_focus_stack_global_homographies_with_reference,
-    order_focus_render_sources_by_capture_group, pairs_to_match_for_images,
+    normalize_stack_raw_display_exposure, observe_singleton_scan,
+    optimize_focus_stack_global_homographies_with_reference,
+    order_focus_render_sources_by_capture_group, pairs_to_match_for_images_with_plan,
     plan_virtual_tile_prior_repairs, populate_station_relation_candidate_geometry,
-    prepare_focus_rescue_image, raw_display_channel_percentile,
-    record_residual_warp_for_station_relations, recover_focus_component_edges,
-    refine_flat_artwork_tree_poses, refine_virtual_tile_joint_geometry,
-    render_virtual_tile_match_plane, replace_virtual_tile_candidate_record,
-    scalable_alignment_budget, scalable_preparation_worker_count, scaled_render_image_info,
-    scaled_source_render_homographies, select_virtual_tile_relation_hypotheses,
-    select_virtual_tile_relation_hypothesis, selection_has_mixed_focal_lengths,
-    shared_stack_raw_display_gain, solve_virtual_tile_station_poses_with_report, source_digest_hex,
+    prepare_focus_rescue_image_from_analysis, processing_fingerprint,
+    raw_display_channel_percentile, record_residual_warp_for_station_relations,
+    recover_focus_component_edges, refine_flat_artwork_tree_poses,
+    refine_virtual_tile_joint_geometry, render_virtual_tile_match_plane,
+    replace_virtual_tile_candidate_record, scalable_alignment_budget,
+    scalable_preparation_worker_count, scaled_render_image_info, scaled_source_render_homographies,
+    select_virtual_tile_relation_hypotheses, select_virtual_tile_relation_hypothesis,
+    selection_has_mixed_focal_lengths, shared_stack_raw_display_gain,
+    solve_virtual_tile_station_poses_with_report, source_digest_hex, source_render_cache_max_bytes,
     source_to_render_rgb32f, stack_raw_exposure_reference, stack_requires_bounded_memory,
     station_graph_components_from_members, transformed_point, undecodable_source_paths,
     virtual_tile_authoritative_pairs, virtual_tile_global_similarity_proposals,
@@ -151,29 +159,20 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // the report receives exactly the topology used by the production station
     // relation candidate gate (需求 5.1 / 5.7).
     topology::reset_run_topology();
-    // Install the RANSAC seed of this run before any matching starts (需求 14.6).
-    // The focus stack path seeds from the Virtual_Tile `cache_key`, which binds
-    // the pipeline version, the sorted source paths and the sorted per-source
-    // content digests (需求 4.5), so the sampling sequence follows the input
-    // content rather than the wall clock or the thread count.  The panorama path
-    // keeps its site constants, and clearing here stops it from inheriting the
-    // seed of a preceding focus stack run in the same process.
-    // The same read-only pass also produces the `sha256_before` column of the
-    // Stack_Report (需求 4.8 / 12.8), so the sources are hashed once per run.
+    // Populated by SourcePreflight after the source-count gate below.  The
+    // recorder starts with empty digests so an invalid selection is rejected
+    // before it maps hundreds of files.
     let mut source_sha256_before = Vec::<String>::new();
-    if blend_mode == BlendMode::FocusStack {
-        let digests = focus_stack_cache_key_inputs(&image_paths);
-        determinism::set_run_random_seed(determinism::derive_run_seed_from_cache_key(
-            &digests.inputs.digest(),
-        ));
-        source_sha256_before = digests.sha256_before;
-    } else {
+    if blend_mode != BlendMode::FocusStack {
+        // A panorama run must never inherit the deterministic seed from a
+        // preceding focus-stack run, including when it is rejected early.
         determinism::clear_run_random_seed();
     }
     // Observation only: the Stack_Report records what a focus-stack run did and
     // is flushed on every terminating path (success, degraded output,
     // rejection, cancellation) by its drop guard, well inside the 30 s budget
     // of requirement 10.8.  No field written here feeds a decision yet.
+    let report_started = Instant::now();
     let stack_report = (blend_mode == BlendMode::FocusStack).then(|| {
         let recorder = stack_report::StackReportRecorder::new(
             crate::image_stack::STACK_PIPELINE_VERSION,
@@ -269,15 +268,56 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         ));
     }
 
+    let focus_stack = blend_mode == BlendMode::FocusStack;
+    let source_preflight = focus_stack.then(|| Arc::new(SourcePreflight::collect(&image_paths)));
+    // Install the RANSAC seed of this run before any matching starts (需求
+    // 14.6).  SourcePreflight is also the sole producer of the before-run
+    // digests, so the cache key and Stack_Report cannot hash the same source
+    // twice.
+    if let Some(preflight) = source_preflight.as_ref() {
+        let digests = focus_stack_cache_key_inputs_from_preflight(&image_paths, preflight);
+        determinism::set_run_random_seed(determinism::derive_run_seed_from_cache_key(
+            &digests.inputs.digest(),
+        ));
+        source_sha256_before = digests.sha256_before;
+        if let Some(recorder) = stack_report.as_ref() {
+            let preflight_for_report = Arc::clone(preflight);
+            recorder.install_source_preflight_observation(Box::new(move || {
+                let stats = preflight_for_report.stats();
+                stack_report::SourcePreflightReport {
+                    source_count: stats.source_count,
+                    stat_count: stats.stat_count,
+                    file_map_count: stats.file_map_count,
+                    hash_count: stats.hash_count,
+                    exif_parse_count: stats.exif_parse_count,
+                    preflight_reuse_count: stats.preflight_reuse_count,
+                    raw_decode_count: stats.raw_decode_count,
+                    failed_count: stats.failed_count,
+                }
+            }));
+            recorder.update(|report| {
+                for (source, digest) in report.input.sources.iter_mut().zip(&source_sha256_before) {
+                    source.sha256_before = digest.clone();
+                }
+            });
+        }
+    }
+
     let _ = app_handle.emit(progress_event, "Starting image alignment process...");
     println!(
         "Starting panorama stitching process for {} images...",
         image_paths.len()
     );
 
-    let focus_stack = blend_mode == BlendMode::FocusStack;
-    let scalable_stack = stack_requires_bounded_memory(&image_paths);
-    let mixed_focal_stack = !scalable_stack && selection_has_mixed_focal_lengths(&image_paths);
+    let scalable_stack = source_preflight.as_ref().map_or_else(
+        || stack_requires_bounded_memory(&image_paths),
+        |preflight| preflight.requires_bounded_memory(),
+    );
+    let mixed_focal_stack = !scalable_stack
+        && source_preflight.as_ref().map_or_else(
+            || selection_has_mixed_focal_lengths(&image_paths),
+            |preflight| preflight.has_mixed_focal_lengths(),
+        );
     let scale_robust_alignment = scalable_stack || mixed_focal_stack;
     let settings = load_settings_for_runtime(&app_handle).unwrap_or_default();
     // Diagnostics are opt-in through the persisted settings.  Creating the
@@ -318,14 +358,22 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // gains.  Collect the inexpensive low-resolution percentile while the
     // preparation workers already have each developed frame in memory; the
     // rendering closure below applies one robust gain to every RAW.
-    let raw_exposure_reference = focus_stack
-        .then(|| stack_raw_exposure_reference(&image_paths))
-        .flatten();
+    let raw_exposure_reference = source_preflight
+        .as_ref()
+        .and_then(|preflight| preflight.raw_exposure_reference())
+        .or_else(|| {
+            focus_stack
+                .then(|| stack_raw_exposure_reference(&image_paths))
+                .flatten()
+        });
     if let Some(reference) = raw_exposure_reference {
         println!("Shared RAW physical exposure reference: {reference:.6} (time × ISO / aperture²)");
     }
     let raw_display_highs = Mutex::new(Vec::<f32>::new());
 
+    if let Some(recorder) = stack_report.as_ref() {
+        recorder.record_preflight_seconds(report_started.elapsed().as_secs_f64());
+    }
     let start_time = Instant::now();
     let _ = app_handle.emit(progress_event, "Loading and preparing images...");
     let (alignment_max_dimension, alignment_max_features) =
@@ -351,8 +399,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
                 println!("  - Processing '{}'", filename);
-                let prepared_source =
-                    load_prepared_stack_source(filename, &settings, raw_exposure_reference)?;
+                let prepared_source = load_prepared_stack_source_with_preflight(
+                    filename,
+                    &settings,
+                    raw_exposure_reference,
+                    source_preflight
+                        .as_ref()
+                        .and_then(|preflight| preflight.record(filename)),
+                )?;
                 if degradation::run_generation_changed_for(run_generation) {
                     return Err("image-stack run cancelled by a newer request".to_string());
                 }
@@ -654,10 +708,27 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         );
     }
 
+    // Keep one bounded source cache for the whole run so the compositor and
+    // Quality_Gate can share a post-normalisation render without retaining an
+    // unbounded set of full-resolution RAWs.  Non-focus runs have no
+    // Quality_Gate consumer and use a zero-byte budget, preserving their
+    // historical loading behaviour while keeping the closure wiring uniform.
+    let source_render_cache = Arc::new(Mutex::new(SourceRenderCache::with_backing(
+        if focus_stack {
+            source_render_cache_max_bytes()
+        } else {
+            0
+        },
+        8 * 1024 * 1024 * 1024,
+    )));
+
     println!(
         "Image loading and feature detection completed in {:.2?}\n",
         start_time.elapsed()
     );
+    if let Some(recorder) = stack_report.as_ref() {
+        recorder.record_prepare_seconds(start_time.elapsed().as_secs_f64());
+    }
 
     let start_time = Instant::now();
     let exhaustive_search = !scalable_stack
@@ -683,10 +754,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     #[cfg(not(test))]
     let sequence_only = false;
 
-    let pairs_to_check = if sequence_only {
-        Vec::new()
+    let (pairs_to_check, candidate_pair_plan) = if sequence_only {
+        (Vec::new(), Default::default())
     } else {
-        pairs_to_match_for_images(&image_data, blend_mode)
+        pairs_to_match_for_images_with_plan(&image_data, blend_mode)
     };
     let matched_pair_count = Mutex::new(0);
     let pair_progress_step = (pairs_to_check.len() / 100).max(1);
@@ -780,6 +851,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     // never synthesized from filename order or a coarse NCC peak; if the full
     // feature/RANSAC matcher finds no evidence the stack stays disconnected and
     // is rejected instead of rendered as a duplicated collage.
+    let mut rescue_pair_count = 0usize;
     if scalable_stack && focus_stack && !sequence_only {
         // A disconnected focus stack gets a bounded, evidence-only retry. The
         // old retry examined only filename-window boundaries, which is exactly
@@ -857,10 +929,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 if !rescue_cache.contains_key(&source_index) {
                     rescue_cache.insert(
                         source_index,
-                        prepare_focus_rescue_image(
+                        prepare_focus_rescue_image_from_analysis(
                             &image_data[source_index],
-                            &settings,
-                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -868,10 +938,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 if !rescue_cache.contains_key(&target_index) {
                     rescue_cache.insert(
                         target_index,
-                        prepare_focus_rescue_image(
+                        prepare_focus_rescue_image_from_analysis(
                             &image_data[target_index],
-                            &settings,
-                            raw_exposure_reference,
                             &brief_pairs,
                         )?,
                     );
@@ -961,8 +1029,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             if added == 0 {
                 break;
             }
+            rescue_pair_count = rescue_pair_count.saturating_add(added);
         }
         let consensus_bridges = recover_focus_component_edges(&image_data, &mut pairwise_matches);
+        rescue_pair_count = rescue_pair_count.saturating_add(consensus_bridges);
         if consensus_bridges > 0 {
             println!(
                 "  - Recovered {consensus_bridges} component bridge(s) from multi-layer coarse consensus"
@@ -977,6 +1047,18 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         "Pairwise matching completed in {:.2?}\n",
         start_time.elapsed()
     );
+    if let Some(recorder) = stack_report.as_ref() {
+        recorder.record_matching_plan(
+            start_time.elapsed().as_secs_f64(),
+            stack_report::PairCountReport {
+                base_pairs: candidate_pair_plan.base_pairs,
+                retrieval_pairs: candidate_pair_plan.retrieval_pairs,
+                candidate_pairs: candidate_pair_plan.final_pairs,
+                verified_pairs: pairwise_matches.len(),
+                rescue_pairs: rescue_pair_count,
+            },
+        );
+    }
 
     if pairwise_matches.is_empty() {
         return Err(if scalable_stack && focus_stack {
@@ -1198,6 +1280,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         recorder.update(|report| {
             report.grouping.station_count = stations.len();
             report.grouping.stations = stations;
+            let scan = observe_singleton_scan(groups);
+            report.grouping.source_scan = stack_report::SourceScanObservation {
+                singleton_station_count: scan.singleton_station_count,
+                multi_frame_station_count: scan.multi_frame_station_count,
+                singleton_ratio: scan.singleton_ratio,
+                detected: scan.detected,
+                isolated_source_count: isolated.len(),
+            };
             report.grouping.isolated = isolated;
             report.grouping.splits = splits;
             if let Some(topology) = topology_report {
@@ -1232,9 +1322,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     #[cfg(not(test))]
     let source_raw_direct_diagnostics =
         Vec::<stack_report::SourceRawDirectPairDiagnosticRecord>::new();
-    let has_isolated_focus_sources = focus_station_grouping_outcome
+    let isolated_focus_source_count = focus_station_grouping_outcome
         .as_ref()
-        .is_some_and(|(_, _, grouping)| !grouping.isolated.is_empty());
+        .map(|(_, _, grouping)| grouping.isolated.len())
+        .unwrap_or(0);
+    let has_isolated_focus_sources = isolated_focus_source_count > 0;
     let focus_capture_groups = focus_station_grouping_outcome.map(|(groups, _, _)| groups);
     let focus_capture_group_ids = focus_capture_groups.as_ref().map(|groups| {
         let mut ids = HashMap::new();
@@ -1355,6 +1447,9 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         "Global homography calculation completed in {:.2?}\n",
         start_time.elapsed()
     );
+    if let Some(recorder) = stack_report.as_ref() {
+        recorder.record_ordering_seconds(start_time.elapsed().as_secs_f64());
+    }
 
     let (full_canvas_width, full_canvas_height) = if blend_mode == BlendMode::FocusStack {
         stitching::output_canvas_dimensions_with_focus_warp(
@@ -1465,8 +1560,47 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     let _ = app_handle.emit(progress_event, "Warping and blending images...");
     println!("Warping and blending images with progressive optimal seams...");
 
+    let mut native_fusion_cache =
+        NativeFusionCache::with_backing(native_fusion_cache_max_bytes(), 4 * 1024 * 1024 * 1024);
+    let mut tile_payload_stats = stack_report::TilePayloadReport::default();
+    let render_processing_fingerprint = || {
+        processing_fingerprint(
+            raw_exposure_reference,
+            shared_raw_display_gain,
+            std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                .ok()
+                .as_deref(),
+            std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_some(),
+        )
+    };
+    let source_render_cache_for_render = Arc::clone(&source_render_cache);
     let mut load_render_image = |image: &ImageInfo| {
-        ensure_focus_memory_available(rss_sampler.as_ref())?;
+        if degradation::run_generation_changed_for(run_generation) {
+            source_render_cache_for_render.lock().unwrap().clear();
+            return Err("image-stack run cancelled by a newer request".to_string());
+        }
+        if let Err(error) = ensure_focus_memory_available(rss_sampler.as_ref()) {
+            source_render_cache_for_render.lock().unwrap().clear();
+            return Err(error);
+        }
+        let processing_key_fingerprint = render_processing_fingerprint();
+        let cache_key = SourceRenderCacheKey {
+            path: image.filename.clone(),
+            sha256: source_preflight
+                .as_ref()
+                .and_then(|preflight| preflight.record(&image.filename))
+                .map(|record| record.sha256)
+                .unwrap_or_default(),
+            dimensions: image.dimensions(),
+            processing_fingerprint: processing_key_fingerprint,
+        };
+        if let Some(cached) = source_render_cache_for_render
+            .lock()
+            .unwrap()
+            .get(&cache_key, SourceRenderCacheStage::Render)
+        {
+            return Ok((*cached).clone());
+        }
         let mut rendered = if let Some(full_image) = retained_full_images.remove(&image.id) {
             if full_image.dimensions() == image.dimensions() {
                 Ok(full_image)
@@ -1479,8 +1613,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 ))
             }
         } else {
-            load_prepared_stack_source(&image.filename, &settings, raw_exposure_reference)
-                .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
+            load_prepared_stack_source_with_preflight(
+                &image.filename,
+                &settings,
+                raw_exposure_reference,
+                source_preflight
+                    .as_ref()
+                    .and_then(|preflight| preflight.record(&image.filename)),
+            )
+            .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
         }?;
         if is_raw_file(&image.filename) {
             if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
@@ -1502,7 +1643,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 normalize_stack_raw_display_exposure(&mut rendered);
             }
         }
-        Ok(rendered)
+        let rendered = Arc::new(rendered);
+        source_render_cache_for_render
+            .lock()
+            .unwrap()
+            .insert(cache_key, Arc::clone(&rendered));
+        Ok((*rendered).clone())
     };
     let sequence_gap_aware = blend_mode == BlendMode::FocusStack
         && pairwise_matches
@@ -1532,8 +1678,13 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     };
     // The output Coverage_Mask the export writes as alpha (需求 10.6).
     let mut output_coverage: Option<GrayImage> = None;
+    let mut legacy_coverage_observation: Option<
+        crate::panorama_utils::mosaic::MosaicCoverageObservation,
+    > = None;
     let mut quality_sources: Option<Vec<quality_gate_runner::QualitySource>> = None;
     let mut diagnostics_world_origin: Option<(f64, f64)> = None;
+    let mut legacy_quality_relations = None;
+    let mut legacy_native_evidence = None;
     let mut panorama = match blend_mode {
         // A flat artwork scan is a source mosaic, not a photographic panorama.
         // Keep one native source owner for each output pixel so the seam pass
@@ -1566,8 +1717,14 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             println!("Warping and blending PSD scan tiles with sharpness-aware ownership...");
             let mut load_scan_source = |image: &ImageInfo| {
                 ensure_focus_memory_available(rss_sampler.as_ref())?;
-                let prepared =
-                    load_prepared_stack_source(&image.filename, &settings, raw_exposure_reference)?;
+                let prepared = load_prepared_stack_source_with_preflight(
+                    &image.filename,
+                    &settings,
+                    raw_exposure_reference,
+                    source_preflight
+                        .as_ref()
+                        .and_then(|preflight| preflight.record(&image.filename)),
+                )?;
                 let valid = crate::panorama_utils::scan_mosaic::opaque_source_mask(
                     &prepared.image,
                     image.width,
@@ -1623,12 +1780,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             // route this source-backed shape through the proven global focus
             // compositor. An explicit persisted compositor still wins, so
             // comparison runs remain reproducible.
+            let singleton_scan_detected = focus_capture_groups
+                .as_deref()
+                .is_some_and(capture_groups_form_singleton_scan);
             let source_scan_legacy_fallback = settings.stack_compositor.is_none()
                 && configured_compositor == StackCompositorChoice::LayeredVirtualTile
-                && (has_isolated_focus_sources
-                    || focus_capture_groups
-                        .as_deref()
-                        .is_some_and(capture_groups_form_singleton_scan));
+                && (has_isolated_focus_sources || singleton_scan_detected);
             let compositor_choice = if source_scan_legacy_fallback {
                 println!(
                     "  - Singleton Capture_Station scan detected; preserving source global poses with the legacy focus compositor"
@@ -1661,8 +1818,50 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 compositor_choice,
                 stack_report.as_deref(),
             );
+            let fallback_reason =
+                if source_scan_legacy_fallback {
+                    Some(match (singleton_scan_detected, has_isolated_focus_sources) {
+                    (true, true) => "singleton_source_scan_with_isolated_source",
+                    (true, false) => "singleton_source_scan",
+                    (false, true) => "isolated_source",
+                    (false, false) => unreachable!(
+                        "source_scan_legacy_fallback requires a singleton or isolated source"
+                    ),
+                }
+                .to_string())
+                } else {
+                    None
+                };
+            if let Some(recorder) = stack_report.as_deref() {
+                recorder.set_path_selection_observation(
+                    settings
+                        .stack_compositor
+                        .as_deref()
+                        .and_then(StackCompositorChoice::from_identifier)
+                        .map(StackCompositorChoice::selected_path),
+                    path_selection.selected_path,
+                    path_selection.use_virtual_tiles,
+                    fallback_reason.clone(),
+                );
+            }
+            let scan_observation = focus_capture_groups
+                .as_deref()
+                .map(observe_singleton_scan)
+                .unwrap_or_default();
+            println!(
+                "  - Focus path observation: configured={}, stations={}, singleton_stations={}, multi_frame_stations={}, singleton_ratio={:.3}, isolated_sources={}, selected={}, use_virtual_tiles={}, fallback_reason={}",
+                configured_compositor.as_identifier(),
+                station_count.unwrap_or(0),
+                scan_observation.singleton_station_count,
+                scan_observation.multi_frame_station_count,
+                scan_observation.singleton_ratio,
+                isolated_focus_source_count,
+                path_selection.selected_path.as_identifier(),
+                path_selection.use_virtual_tiles,
+                fallback_reason.as_deref().unwrap_or("none"),
+            );
             if !path_selection.use_virtual_tiles {
-                stitching::focus_stack_stitcher(
+                stitching::focus_stack_stitcher_observed(
                     &render_images_info,
                     render_homographies,
                     projection,
@@ -1680,6 +1879,31 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     progress_event,
                     &mut load_render_image,
                 )
+                .map(|(image, mut observation)| {
+                    output_coverage = observation
+                        .as_mut()
+                        .and_then(|observation| observation.coverage.take());
+                    if let Some(mut native) = observation.as_mut().and_then(|o| o.quality.take()) {
+                        let source_pairs = pairwise_matches.iter().filter(|(_,info)| !info.sequence_bridge)
+                            .map(|(&(left,right),_)| (left.min(right),left.max(right)))
+                            .collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+                        let station_by_source = native.report.sources.iter().map(|source| (source.source_id,source.capture_station_id)).collect::<std::collections::BTreeMap<_,_>>();
+                        legacy_quality_relations = Some(source_pairs.iter().filter_map(|&(left,right)| {
+                            let left=*station_by_source.get(&left)?;let right=*station_by_source.get(&right)?;
+                            (left!=right).then_some((left.min(right),left.max(right)))
+                        }).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>());
+                        native.report.accepted_source_pairs=source_pairs;
+                        let coverage=output_coverage.as_ref().expect("observed native coverage").clone();
+                        quality_planes=Some((coverage,native.ownership,native.confidence,native.textured,native.shortfall,native.disagreement,native.unresolved,native.origin));
+                        owner_reverse_lookup_failures.evidence_missing=native.unresolved;
+                        confidence_scores=native.confidence_scores;
+                        legacy_native_evidence=Some(native.report);
+                        quality_sources=Some(native.sources);
+                        println!("  - Legacy native Quality_Gate evidence retained; unresolved pixels: {}",native.unresolved);
+                    }
+                    legacy_coverage_observation = observation;
+                    image
+                })
             } else {
                 let groups = focus_capture_groups.as_ref().expect("checked above");
                 // The focus grouping indices refer to the source list, while
@@ -1830,17 +2054,24 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         });
                     }
 
-                    // The production station-relation pass works on the actual
-                    // focus-fused Virtual_Tiles, not on rectangular source
-                    // buffers. Render one station at a time, keep only its
-                    // area-averaged Coverage_Mask planes, and discard the
-                    // fused pixels before moving to the next station. This
-                    // preserves source ownership and does not increase the
-                    // compositor's resident-tile set.
-                    //
-                    // Rendering priors may be repaired below, so every later
-                    // render (including the compositor's) reads these owned
-                    // copies rather than the source-stage poses.
+                    // Matching and composition share complete native station results.
+                    // Source snapshots are immutable for this run; geometry/warp and
+                    // processing settings are checked again on every cache access.
+                    let native_source_keys = group_slices
+                        .iter()
+                        .map(|group| {
+                            let mut digest = Sha256::new();
+                            for source in *group {
+                                if let Some(record) = source_preflight
+                                    .as_ref()
+                                    .and_then(|preflight| preflight.record(&source.filename))
+                                {
+                                    digest.update(record.sha256);
+                                }
+                            }
+                            NativeFusionSourceKey::new(group, digest.finalize().into())
+                        })
+                        .collect::<Vec<_>>();
                     let mut pyramid = VirtualTileMatchPyramid::new(
                         virtual_tile_pyramid_factors(
                             geometries
@@ -1851,8 +2082,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         ),
                         tile_infos.len(),
                     );
+                    let mut station_density_samples = vec![
+                            super::output_density::StationDensitySamples::default();
+                            tile_infos.len()
+                        ];
                     for (group_index, tile) in tile_infos.iter_mut().enumerate() {
-                        let (gray, coverage) = render_virtual_tile_match_plane(
+                        let (gray, coverage, density_samples) = render_virtual_tile_match_plane(
                             group_slices[group_index],
                             &station_render_homographies,
                             projection,
@@ -1862,7 +2097,12 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             app_handle.clone(),
                             progress_event,
                             &mut load_render_image,
+                            &mut native_fusion_cache,
+                            &native_source_keys[group_index],
+                            render_processing_fingerprint(),
+                            rss_sampler.as_ref(),
                         )?;
+                        station_density_samples[group_index] = density_samples;
                         install_virtual_tile_match_planes(
                             tile,
                             &mut pyramid,
@@ -1965,7 +2205,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     pyramid.solver_coverages(),
                                     &tile_homographies,
                                 );
-                                log_virtual_tile_candidate(&diagnostic, false);
+                                log_virtual_tile_candidate(&diagnostic);
                                 if let Some(selection) =
                                     selection.filter(|selection| selection.passes)
                                 {
@@ -2004,23 +2244,19 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             // Virtual_Tile matcher and shared final selector below
                             // remain the authority.
                             if !feature_relation_passed {
-                                let source_seeds = match (
-                                    tile_homographies.get(&tile_infos[left].id),
-                                    tile_homographies.get(&tile_infos[right].id),
-                                ) {
-                                    (Some(left_tile_to_world), Some(right_tile_to_world)) => {
-                                        virtual_tile_source_match_proposals(
-                                            group_slices[left],
-                                            group_slices[right],
-                                            &pairwise_matches,
-                                            &station_render_homographies,
-                                            left_tile_to_world,
-                                            right_tile_to_world,
-                                            render_scale,
-                                        )
-                                    }
-                                    _ => Vec::new(),
-                                };
+                                // Source poses and tile crops must share the same
+                                // station-local frame. Global placement contains the
+                                // uncertain cross-station prior and must not be
+                                // composed into this independent source-derived seed.
+                                let source_seeds = virtual_tile_source_match_proposals(
+                                    group_slices[left],
+                                    group_slices[right],
+                                    &pairwise_matches,
+                                    &station_render_homographies,
+                                    &geometries[left],
+                                    &geometries[right],
+                                    render_scale,
+                                );
                                 for source_seed in source_seeds {
                                     let (verified, mut diagnostic) =
                                         virtual_tile_pyramid_station_match(
@@ -2047,7 +2283,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         pyramid.solver_coverages(),
                                         &tile_homographies,
                                     );
-                                    log_virtual_tile_candidate(&diagnostic, false);
+                                    log_virtual_tile_candidate(&diagnostic);
                                     replace_virtual_tile_candidate_record(
                                         &mut tile_relation_candidates,
                                         diagnostic,
@@ -2137,7 +2373,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         pyramid.solver_coverages(),
                                         &tile_homographies,
                                     );
-                                    log_virtual_tile_candidate(&diagnostic, false);
+                                    log_virtual_tile_candidate(&diagnostic);
                                     replace_virtual_tile_candidate_record(
                                         &mut tile_relation_candidates,
                                         diagnostic,
@@ -2281,17 +2517,23 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             tile.width = geometry.width;
                             tile.height = geometry.height;
                             tile_homographies.insert(tile.id, geometry.tile_to_world);
-                            let (gray, coverage) = render_virtual_tile_match_plane(
-                                group_slices[station],
-                                &station_render_homographies,
-                                projection,
-                                station_focus_warp.as_ref(),
-                                station,
-                                geometry,
-                                app_handle.clone(),
-                                progress_event,
-                                &mut load_render_image,
-                            )?;
+                            let (gray, coverage, density_samples) =
+                                render_virtual_tile_match_plane(
+                                    group_slices[station],
+                                    &station_render_homographies,
+                                    projection,
+                                    station_focus_warp.as_ref(),
+                                    station,
+                                    geometry,
+                                    app_handle.clone(),
+                                    progress_event,
+                                    &mut load_render_image,
+                                    &mut native_fusion_cache,
+                                    &native_source_keys[station],
+                                    render_processing_fingerprint(),
+                                    rss_sampler.as_ref(),
+                                )?;
+                            station_density_samples[station] = density_samples;
                             install_virtual_tile_match_planes(
                                 tile,
                                 &mut pyramid,
@@ -2348,6 +2590,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                             }
                         }
                     }
+                    let mut density_closure_evidence = stack_report::ClosureReport::default();
                     if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
                         // Authoritative stage 4 starts only now: each ImageInfo
                         // is one focus-fused Virtual_Tile and every feature was
@@ -2656,6 +2899,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     component_count.max(2),
                                 ));
                             }
+                            density_closure_evidence = closure.clone();
                             tile_homographies = solved;
                             if closure.geometry_model != "bounded_station_field" {
                                 record_residual_warp_for_station_relations(
@@ -2688,6 +2932,94 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                         );
                     }
 
+                    // Select the output lattice only after independent station
+                    // evidence/closure have been finalized. Source/station-local
+                    // sampling and direct correspondence units remain unchanged.
+                    // A nonidentity world residual needs a coordinate adapter;
+                    // until that is available, explicitly bypass this path.
+                    if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
+                        let mut density = super::output_density::plan_output_density(
+                            &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
+                            &tile_homographies,
+                            &station_density_samples,
+                            residual_warp::run_model_snapshot().identity(),
+                        )?;
+                        if density.factor > 1.0 {
+                            let closure_validation = super::output_density::validate_output_closure(
+                                &mut density,
+                                &density_closure_evidence,
+                            );
+                            if let Some(recorder) = stack_report.as_ref() {
+                                recorder.update(|report| {
+                                    report.composition.output_density = density.clone()
+                                });
+                            }
+                            closure_validation?;
+                        }
+                        super::output_density::apply_output_density(
+                            &mut tile_homographies,
+                            density.factor,
+                        );
+                        let density_tile_refs = tile_infos.iter().collect::<Vec<_>>();
+                        let (density_width, density_height) = stitching::output_canvas_dimensions(
+                            &density_tile_refs,
+                            &tile_homographies,
+                            Projection::Planar,
+                        );
+                        density.canvas_pixels =
+                            u64::from(density_width) * u64::from(density_height);
+                        // RGB32F + coverage + owner distance + station owner +
+                        // source owner u16 + source boundary distance = 18 B/px.
+                        // This is a lower bound, not a replacement for RSS guard.
+                        density.output_plane_lower_bound_bytes =
+                            density.canvas_pixels.saturating_mul(18);
+                        if let Some(recorder) = stack_report.as_ref() {
+                            recorder.update(|report| {
+                                report.composition.output_density = density.clone()
+                            });
+                        }
+                        if density.factor > 1.0 {
+                            if let Some(error) = stack_pipeline::compositor::reject_oversized_canvas(
+                                u64::from(density_width),
+                                u64::from(density_height),
+                            ) {
+                                return Err(error);
+                            }
+                            if let Some(guard) = rss_sampler.as_ref() {
+                                let current_rss =
+                                    sysinfo::get_current_pid().ok().map_or(0, |pid| {
+                                        let mut system = sysinfo::System::new();
+                                        system.refresh_processes(
+                                            sysinfo::ProcessesToUpdate::Some(&[pid]),
+                                            true,
+                                        );
+                                        system.process(pid).map_or(0, |process| process.memory())
+                                    });
+                                if current_rss
+                                    .saturating_add(density.output_plane_lower_bound_bytes)
+                                    > guard.threshold_bytes
+                                {
+                                    degradation::record_run_degradation(
+                                        degradation::MEMORY_THRESHOLD_EXCEEDED,
+                                        serde_json::json!({"stage":"output_density", "factor":density.factor,
+                                            "current_rss_bytes":current_rss, "output_plane_lower_bound_bytes":density.output_plane_lower_bound_bytes,
+                                            "threshold_bytes":guard.threshold_bytes}),
+                                    );
+                                    return Err("memory threshold exceeded before output density allocation".into());
+                                }
+                            }
+                        }
+                        println!(
+                            "  - Output density: {} factor={:.6} samples={} bypass={}",
+                            density.status,
+                            density.factor,
+                            density.sample_count,
+                            density.bypass_reason.as_deref().unwrap_or("none")
+                        );
+                        // The compositor derives canvas/origin, tone and owner
+                        // maps from these poses and applies its existing canvas
+                        // and memory rejection before allocating output planes.
+                    }
                     let tile_refs = group_order
                         .iter()
                         .map(|&group_index| &tile_infos[group_index])
@@ -2695,216 +3027,176 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     let mut station_masks: Vec<Option<stitching::FocusStackTileMasks>> =
                         (0..tile_infos.len()).map(|_| None).collect();
                     let mut station_sampling_origins = vec![(0.0f64, 0.0f64); tile_infos.len()];
-                    // The layered compositor asks for the same fused station
-                    // during ownership, seam planning, and seam application.
-                    // Keep a bounded set of pose-finalized virtual tiles so
-                    // those passes do not rerun the full RAW station fusion.
-                    // A miss deliberately keeps the old streaming behaviour
-                    // once the pixel budget is reached.
-                    let mut rendered_tile_cache = HashMap::<usize, Rgb32FImage>::new();
-                    let mut rendered_tile_cache_pixels = 0u64;
-                    // Native acceptance tiles are large enough that the
-                    // reduced-render budget retains only the first few
-                    // stations.  The seam pass then has to fuse the later
-                    // stations again for every plan.  This run's native
-                    // station union is about 550M pixels; retaining it costs
-                    // roughly 6.6GB for RGB32F pixels and stays below the
-                    // existing process memory gate together with the masks.
-                    // Keep the smaller budget for reduced renders so their
-                    // bounded-memory contract remains unchanged.
-                    let rendered_tile_cache_budget = if render_scale >= 1.0 {
-                        600_000_000
-                    } else {
-                        MAX_RETAINED_STACK_PIXELS
-                    };
-                    let mut load_tile = |tile: &ImageInfo| {
-                        ensure_focus_memory_available(rss_sampler.as_ref())?;
-                        let group_index =
-                            tile_group_indices.get(&tile.id).copied().ok_or_else(|| {
-                                format!("Missing virtual tile provenance {}", tile.id)
-                            })?;
-                        if let Some(cached) = rendered_tile_cache.get(&tile.id) {
-                            return Ok(stitching::FocusTilePayload::from(cached.clone()));
-                        }
-                        let rendered = stitching::focus_stack_stitcher_unfilled(
-                            group_slices[group_index],
-                            &station_render_homographies,
-                            projection,
-                            station_focus_warp.as_ref(),
-                            None,
-                            group_index,
-                            false,
-                            app_handle.clone(),
-                            progress_event,
-                            &mut load_render_image,
-                        )?;
-                        let expected = geometries[group_index];
-                        let (rendered_width, rendered_height) = rendered.image.dimensions();
-                        if (rendered_width, rendered_height) != (expected.width, expected.height) {
-                            return Err(format!(
-                                "Virtual tile {} dimensions changed from {}x{} to {}x{}",
-                                group_index,
-                                expected.width,
-                                expected.height,
-                                rendered_width,
-                                rendered_height
-                            ));
-                        }
-                        // The render now also publishes the Coverage_Mask, the
-                        // Ownership_Map and the Sharpness_Confidence it built at
-                        // the focus selection's pixel write sites (需求 3.7 /
-                        // 3.9 / 3.11 / 4.6).  The Virtual_Tile_Store (task 5.3)
-                        // is what consumes the masks; the tile compositors below
-                        // still take pixels only, so hand them the same pixel
-                        // buffer as before.  The Focus_Fuser observations are
-                        // attached to their Capture_Station here, because this is
-                        // the first caller that knows which station was rendered
-                        // (需求 3.5 / 3.8 / 3.9).
-                        if let Some(masks) = rendered.masks.as_ref() {
-                            station_masks[group_index] = Some(masks.clone());
-                            station_sampling_origins[group_index] = rendered.sampling_origin;
-                            let mut fusion = masks.fusion.clone();
-                            fusion.station_index = group_index;
-                            focus_fuser::record_run_station(fusion);
-
-                            // Diagnostics are produced from the same masks and
-                            // source metadata that drive the compositor.  The
-                            // recorder is disabled by default, so these
-                            // closures do not allocate or run during ordinary
-                            // renders.
-                            let members = group_slices[group_index]
-                                .iter()
-                                .map(|source| source.filename.clone())
-                                .collect::<Vec<_>>();
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::Members,
-                                "json",
-                                || serde_json::to_vec(&members).unwrap_or_default(),
-                            );
-                            let transforms = group_slices[group_index]
-                                .iter()
-                                .map(|source| {
-                                    serde_json::json!({
-                                        "path": source.filename,
-                                        "width": source.width,
-                                        "height": source.height,
-                                    })
-                                })
-                                .collect::<Vec<_>>();
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::FrameTransforms,
-                                "json",
-                                || serde_json::to_vec(&transforms).unwrap_or_default(),
-                            );
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::ResidualField,
-                                "json",
-                                || {
-                                    serde_json::to_vec(&residual_warp::run_report_snapshot())
-                                        .unwrap_or_default()
-                                },
-                            );
-                            let ownership = masks.ownership.owners().to_vec();
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::OwnershipMap,
-                                "json",
-                                || serde_json::to_vec(&ownership).unwrap_or_default(),
-                            );
-                            let confidence = masks.confidence.to_row_major();
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::SharpnessConfidence,
-                                "json",
-                                || serde_json::to_vec(&confidence).unwrap_or_default(),
-                            );
-                            let coverage = masks.coverage.covered().to_vec();
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::CoverageMask,
-                                "json",
-                                || serde_json::to_vec(&coverage).unwrap_or_default(),
-                            );
-                            diagnostics_recorder.record(
-                                group_index,
-                                DiagnosticItem::ToneField,
-                                "json",
-                                || {
-                                    serde_json::to_vec(&tone::run_report_snapshot())
-                                        .unwrap_or_default()
-                                },
-                            );
-                        }
-                        let source_samples = if compositor_choice
-                            == StackCompositorChoice::LayeredVirtualTile
-                        {
-                            if let Some(masks) = rendered.masks.as_ref() {
-                                let owned_pixels = masks.ownership.owned_pixel_counts();
-                                let mut originals =
-                                    Vec::with_capacity(masks.ownership.legend().len());
-                                for (path, &owned) in
-                                    masks.ownership.legend().iter().zip(&owned_pixels)
-                                {
-                                    // A frame the intra-station registrar excluded
-                                    // keeps its legend slot but owns no pixel and
-                                    // has no source sampling. Nothing samples it,
-                                    // so it needs no original and no decode.
-                                    if owned == 0 {
-                                        originals.push(None);
-                                        continue;
-                                    }
-                                    let source = group_slices[group_index]
-                                        .iter()
-                                        .find(|source| Path::new(&source.filename) == path)
-                                        .ok_or_else(|| {
-                                            format!("Missing original for owner {}", path.display())
-                                        })?;
-                                    let refinement = masks
-                                        .source_refinements
-                                        .get(&source.id)
-                                        .filter(|refinement| refinement.source_sampling.is_some())
-                                        .cloned()
-                                        .ok_or_else(|| {
-                                            format!(
-                                                "Missing source sampling for {}",
-                                                path.display()
-                                            )
-                                        })?;
-                                    originals.push(Some(stitching::FocusTileSource {
-                                        image: load_render_image(source)?,
-                                        refinement,
-                                    }));
-                                }
-                                Some(stitching::FocusTileSources {
-                                    ownership: masks.ownership.clone(),
-                                    origin: rendered.sampling_origin,
-                                    originals,
-                                })
-                            } else {
-                                None
+                    // Complete cached results retain native owner/source evidence.
+                    // Current compositor payloads remain streaming and are separate
+                    // from the cache's conservative retained-byte budget.
+                    let mut load_tile =
+                        |tile: &ImageInfo, purpose: stitching::FocusTileLoadPurpose| {
+                            tile_payload::record_request(&mut tile_payload_stats, purpose);
+                            if let Some(recorder) = stack_report.as_ref() {
+                                recorder.update(|report| {
+                                    report.performance.tile_payload = tile_payload_stats
+                                });
                             }
-                        } else {
-                            None
+                            ensure_focus_memory_available(rss_sampler.as_ref())?;
+                            let group_index =
+                                tile_group_indices.get(&tile.id).copied().ok_or_else(|| {
+                                    format!("Missing virtual tile provenance {}", tile.id)
+                                })?;
+                            let key = native_source_keys[group_index].cache_key(
+                                &station_render_homographies,
+                                projection,
+                                station_focus_warp.as_ref(),
+                                group_index,
+                                render_processing_fingerprint(),
+                            );
+                            let rendered = native_fusion_cache.get_or_render(
+                                group_index,
+                                key,
+                                FusionStage::Composition,
+                                || {
+                                    stitching::focus_stack_stitcher_unfilled(
+                                        group_slices[group_index],
+                                        &station_render_homographies,
+                                        projection,
+                                        station_focus_warp.as_ref(),
+                                        None,
+                                        group_index,
+                                        false,
+                                        app_handle.clone(),
+                                        progress_event,
+                                        &mut load_render_image,
+                                    )
+                                },
+                            )?;
+                            ensure_focus_memory_available(rss_sampler.as_ref())?;
+                            let expected = geometries[group_index];
+                            let (rendered_width, rendered_height) = rendered.image.dimensions();
+                            if (rendered_width, rendered_height)
+                                != (expected.width, expected.height)
+                            {
+                                return Err(format!(
+                                    "Virtual tile {} dimensions changed from {}x{} to {}x{}",
+                                    group_index,
+                                    expected.width,
+                                    expected.height,
+                                    rendered_width,
+                                    rendered_height
+                                ));
+                            }
+                            // The render now also publishes the Coverage_Mask, the
+                            // Ownership_Map and the Sharpness_Confidence it built at
+                            // the focus selection's pixel write sites (需求 3.7 /
+                            // 3.9 / 3.11 / 4.6).  The Virtual_Tile_Store (task 5.3)
+                            // is what consumes the masks; the tile compositors below
+                            // still take pixels only, so hand them the same pixel
+                            // buffer as before.  The Focus_Fuser observations are
+                            // attached to their Capture_Station here, because this is
+                            // the first caller that knows which station was rendered
+                            // (需求 3.5 / 3.8 / 3.9).
+                            if let Some(masks) = rendered.masks.as_ref() {
+                                station_masks[group_index] = Some(masks.clone());
+                                station_sampling_origins[group_index] = rendered.sampling_origin;
+                                let mut fusion = masks.fusion.clone();
+                                fusion.station_index = group_index;
+                                focus_fuser::record_run_station(fusion);
+
+                                // Diagnostics are produced from the same masks and
+                                // source metadata that drive the compositor.  The
+                                // recorder is disabled by default, so these
+                                // closures do not allocate or run during ordinary
+                                // renders.
+                                let members = group_slices[group_index]
+                                    .iter()
+                                    .map(|source| source.filename.clone())
+                                    .collect::<Vec<_>>();
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::Members,
+                                    "json",
+                                    || serde_json::to_vec(&members).unwrap_or_default(),
+                                );
+                                let transforms = group_slices[group_index]
+                                    .iter()
+                                    .map(|source| {
+                                        serde_json::json!({
+                                            "path": source.filename,
+                                            "width": source.width,
+                                            "height": source.height,
+                                        })
+                                    })
+                                    .collect::<Vec<_>>();
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::FrameTransforms,
+                                    "json",
+                                    || serde_json::to_vec(&transforms).unwrap_or_default(),
+                                );
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::ResidualField,
+                                    "json",
+                                    || {
+                                        serde_json::to_vec(&residual_warp::run_report_snapshot())
+                                            .unwrap_or_default()
+                                    },
+                                );
+                                let ownership = masks.ownership.owners().to_vec();
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::OwnershipMap,
+                                    "json",
+                                    || serde_json::to_vec(&ownership).unwrap_or_default(),
+                                );
+                                let confidence = masks.confidence.to_row_major();
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::SharpnessConfidence,
+                                    "json",
+                                    || serde_json::to_vec(&confidence).unwrap_or_default(),
+                                );
+                                let coverage = masks.coverage.covered().to_vec();
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::CoverageMask,
+                                    "json",
+                                    || serde_json::to_vec(&coverage).unwrap_or_default(),
+                                );
+                                diagnostics_recorder.record(
+                                    group_index,
+                                    DiagnosticItem::ToneField,
+                                    "json",
+                                    || {
+                                        serde_json::to_vec(&tone::run_report_snapshot())
+                                            .unwrap_or_default()
+                                    },
+                                );
+                            }
+                            let source_samples =
+                                if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
+                                    let sources = tile_payload::load_owner_sources(
+                                        purpose,
+                                        rendered.masks.as_ref(),
+                                        rendered.sampling_origin,
+                                        group_slices[group_index],
+                                        &mut load_render_image,
+                                        &mut tile_payload_stats,
+                                    );
+                                    if let Some(recorder) = stack_report.as_ref() {
+                                        recorder.update(|report| {
+                                            report.performance.tile_payload = tile_payload_stats
+                                        });
+                                    }
+                                    sources?
+                                } else {
+                                    None
+                                };
+                            let image = rendered.image.clone();
+                            Ok(stitching::FocusTilePayload {
+                                image,
+                                sources: source_samples,
+                            })
                         };
-                        let image = rendered.into_image();
-                        let pixels =
-                            u64::from(image.width()).saturating_mul(u64::from(image.height()));
-                        if source_samples.is_none()
-                            && rendered_tile_cache_pixels.saturating_add(pixels)
-                                <= rendered_tile_cache_budget
-                        {
-                            rendered_tile_cache_pixels =
-                                rendered_tile_cache_pixels.saturating_add(pixels);
-                            rendered_tile_cache.insert(tile.id, image.clone());
-                        }
-                        Ok(stitching::FocusTilePayload {
-                            image,
-                            sources: source_samples,
-                        })
-                    };
                     if let Some(recorder) = stack_report.as_ref() {
                         let tiles = tile_infos
                             .iter()
@@ -2949,7 +3241,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 false,
                                 app_handle.clone(),
                                 progress_event,
-                                &mut |tile| load_tile(tile).map(|payload| payload.image),
+                                &mut |tile| {
+                                    load_tile(tile, stitching::FocusTileLoadPurpose::RasterOnly)
+                                        .map(|payload| payload.image)
+                                },
                             )
                         }
                         // Comparison: the image-space minimum-cost seam with a
@@ -2965,7 +3260,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 false,
                                 app_handle.clone(),
                                 progress_event,
-                                &mut |tile| load_tile(tile).map(|payload| payload.image),
+                                &mut |tile| {
+                                    load_tile(tile, stitching::FocusTileLoadPurpose::RasterOnly)
+                                        .map(|payload| payload.image)
+                                },
                             )
                         }
                         // Default (需求 15.1): hard source-interior ownership,
@@ -2988,11 +3286,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 progress_event,
                                 &mut load_tile,
                             )
-                            .map(|rendered| {
+                            .and_then(|rendered| {
                                 if let Some(recorder) = stack_report.as_ref() {
-                                    // The layered compositor decodes one full-size
-                                    // Virtual_Tile at a time; focus masks are retained
-                                    // separately and contain no pixel buffer.
+                                    // One streaming payload is active here. The
+                                    // run-level cache peak is added after composition.
                                     recorder.record_max_resident_virtual_tiles(1);
                                 }
                                 let (width, height) = rendered.coverage.dimensions();
@@ -3004,7 +3301,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                 let mut raw_sources = Vec::new();
                                 let mut raw_owner_ids = vec![Vec::new(); group_slices.len()];
                                 let mut next_owner = 1u16;
+                                let mut station_owner_slots = Vec::with_capacity(group_slices.len());
                                 for station in 0..group_slices.len() {
+                                    let masks = station_masks.get(station).and_then(Option::as_ref)
+                                        .ok_or_else(|| format!("Missing native owner masks for station {station}"))?;
+                                    let slots = tile_payload::validated_owner_slots(masks, group_slices[station])?;
                                     let station_to_world = tile_homographies
                                         .get(&tile_infos[station].id)
                                         .copied()
@@ -3012,7 +3313,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     let station_origin = station_sampling_origins
                                         .get(station)
                                         .copied()
-                                        .unwrap_or((0.0, 0.0));
+                                        .filter(|origin| origin.0.is_finite() && origin.1.is_finite())
+                                        .ok_or_else(|| format!("Missing or non-finite native sampling origin for station {station}"))?;
                                     let station_crop = Matrix3::new(
                                         1.0,
                                         0.0,
@@ -3024,38 +3326,18 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                         0.0,
                                         1.0,
                                     );
-                                    // The focus renderer may reorder a compact station before
-                                    // building its Ownership_Map (the sharpest valid frame is
-                                    // the anchor).  Quality-Gate owner ids must follow that
-                                    // published legend exactly; iterating the original grouping
-                                    // order here would attribute pixels from, for example,
-                                    // DSC_6483 to the DSC_6484 owner slot.  Keep a conservative
-                                    // fallback for an unattributed station, but use the mask
-                                    // legend whenever it exists.
-                                    let ordered_sources = station_masks
-                                        .get(station)
-                                        .and_then(Option::as_ref)
-                                        .map(|masks| {
-                                            masks
-                                                .ownership
-                                                .legend()
-                                                .iter()
-                                                .filter_map(|path| {
-                                                    group_slices[station]
-                                                        .iter()
-                                                        .find(|source| {
-                                                            PathBuf::from(&source.filename) == *path
-                                                        })
-                                                })
-                                                .collect::<Vec<_>>()
-                                        })
-                                        .filter(|sources| {
-                                            sources.len() == group_slices[station].len()
-                                        })
-                                        .unwrap_or_else(|| group_slices[station].iter().collect());
-                                    for (source_index, source) in ordered_sources.iter().enumerate() {
+                                    // Preserve every published legend slot, including zero-owned
+                                    // excluded members. Missing owned metadata is a contract error;
+                                    // capture-group order is never an attribution fallback.
+                                    for (source_index, slot) in slots.iter().enumerate() {
                                         let owner = next_owner;
                                         raw_owner_ids[station].push(owner);
+                                        next_owner = next_owner.checked_add(1)
+                                            .ok_or_else(|| "Native RAW owner identifiers exhausted".to_string())?;
+                                        let Some(source) = slot.member else {
+                                            // An absent zero-owned member retains its reserved ID.
+                                            continue;
+                                        };
                                         let native_displacement = station_masks
                                             .get(station)
                                             .and_then(Option::as_ref)
@@ -3108,6 +3390,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                                 })
                                                 .and_then(|refinement| {
                                                     Some(quality_gate_runner::NativeReferenceMap {
+                                                        mosaic_tone: None,
+                                                        source_prefilter_divisor: 1.0,
                                                         world_to_station: station_to_world
                                                             .try_inverse()?,
                                                         station_to_world,
@@ -3116,8 +3400,8 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                                     })
                                                 }),
                                         });
-                                        next_owner = next_owner.saturating_add(1);
                                     }
+                                    station_owner_slots.push(slots);
                                 }
                                 let mut ownership = rendered.ownership.owners().to_vec();
                                 let mut confidence = vec![f32::NAN; ownership.len()];
@@ -3208,83 +3492,32 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     let (mask_width, mask_height) = masks.ownership.dimensions();
                                     let rounded_x = local.x.round();
                                     let rounded_y = local.y.round();
-                                    let mut sampled = None;
                                     let mut rounded_has_owner = false;
                                     let mut footprint_has_uncovered = false;
-                                    if rounded_x.is_finite()
-                                        && rounded_y.is_finite()
-                                        && mask_width > 0
-                                        && mask_height > 0
-                                    {
-                                        // The compositor's bicubic sampler uses the
-                                        // source coordinate's floor as its anchor;
-                                        // rounding is only a diagnostic for whether
-                                        // that nearest pixel carried an owner.
+                                    if rounded_x.is_finite() && rounded_y.is_finite() && mask_width > 0 && mask_height > 0 {
+                                        if rounded_x >= 0.0 && rounded_y >= 0.0
+                                            && rounded_x < f64::from(mask_width) && rounded_y < f64::from(mask_height)
+                                        {
+                                            rounded_has_owner = masks.ownership.owner_at(rounded_x as u32, rounded_y as u32) != 0;
+                                        }
+                                        // Report-only bicubic support diagnostic. It no longer
+                                        // selects a RAW owner or any confidence/evidence cell.
                                         let floor_x = local.x.floor() as i64;
                                         let floor_y = local.y.floor() as i64;
-                                        let mut nearest_distance = f64::INFINITY;
                                         for dy in -1i64..=2 {
                                             for dx in -1i64..=2 {
-                                                let Some(px) = floor_x.checked_add(dx) else {
-                                                    continue;
-                                                };
-                                                let Some(py) = floor_y.checked_add(dy) else {
-                                                    continue;
-                                                };
-                                                if px < 0
-                                                    || py < 0
-                                                    || px >= i64::from(mask_width)
-                                                    || py >= i64::from(mask_height)
-                                                {
-                                                    continue;
-                                                }
-                                                let px = px as u32;
-                                                let py = py as u32;
-                                                if masks
-                                                    .coverage
-                                                    .covered()
-                                                    .get(
-                                                        py as usize * mask_width as usize
-                                                            + px as usize,
-                                                    )
-                                                    .copied()
-                                                    .unwrap_or(0)
-                                                    == 0
-                                                {
+                                                let (Some(px), Some(py)) = (floor_x.checked_add(dx), floor_y.checked_add(dy)) else { continue; };
+                                                if px < 0 || py < 0 || px >= i64::from(mask_width) || py >= i64::from(mask_height) { continue; }
+                                                if masks.coverage.covered().get(py as usize * mask_width as usize + px as usize).copied().unwrap_or(0) == 0 {
                                                     footprint_has_uncovered = true;
-                                                }
-                                                let raw_local = masks.ownership.owner_at(px, py);
-                                                let Some(raw_owner) = raw_local
-                                                    .checked_sub(1)
-                                                    .and_then(|raw_index| {
-                                                        raw_owner_ids.get(station).and_then(
-                                                            |owners| {
-                                                                owners
-                                                                    .get(usize::from(raw_index))
-                                                                    .copied()
-                                                            },
-                                                        )
-                                                    })
-                                                else {
-                                                    continue;
-                                                };
-                                                if f64::from(px) == rounded_x
-                                                    && f64::from(py) == rounded_y
-                                                {
-                                                    rounded_has_owner = true;
-                                                }
-                                                let distance = (f64::from(px) - local.x).mul_add(
-                                                    f64::from(px) - local.x,
-                                                    (f64::from(py) - local.y)
-                                                        * (f64::from(py) - local.y),
-                                                );
-                                                if distance < nearest_distance {
-                                                    nearest_distance = distance;
-                                                    sampled = Some((px, py, raw_owner, raw_local));
                                                 }
                                             }
                                         }
                                     }
+                                    let sampled = tile_payload::resolve_owner_evidence(
+                                        masks, &station_owner_slots[station], &raw_owner_ids[station],
+                                        station_sampling_origins[station], local,
+                                    );
                                     if footprint_has_uncovered
                                         && rendered
                                             .image
@@ -3295,7 +3528,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     {
                                         footprint_uncovered[index] = 1;
                                     }
-                                    let Some((sx, sy, raw_owner, _raw_local)) = sampled else {
+                                    let Some(sampled) = sampled else {
                                         *owner = 0;
                                         if covered_pixel(index) {
                                             unresolved_pixel_count += 1;
@@ -3317,22 +3550,20 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     if !rounded_has_owner {
                                         owner_reverse_lookup_failures.snapped_to_footprint += 1;
                                     }
-                                    *owner = raw_owner;
+                                    *owner = sampled.raw_owner;
                                     #[cfg(test)]
                                     if let Some(lookup) = owner_cell_lookup.as_mut() {
+                                        let (sx, sy) = sampled.geometry.evidence_pixel;
+                                        let raw_local = sampled.geometry.local_owner;
                                         let cell_size = masks.fusion.cell_size_px.max(1);
                                         let column = sx / cell_size;
                                         let row = sy / cell_size;
                                         let cell = (row * masks.fusion.grid.columns + column) as usize;
-                                        lookup[index] = Some((station, cell, _raw_local));
+                                        lookup[index] = Some((station, cell, raw_local));
                                     }
-                                    confidence[index] = masks.confidence.value_at(sx, sy);
-                                    textured[index] = masks
-                                        .textured
-                                        .get(sy as usize * mask_width as usize + sx as usize)
-                                        .copied()
-                                        .unwrap_or(0);
-                                    let evidence = masks.sharpness_evidence.at_pixel(sx, sy);
+                                    confidence[index] = sampled.confidence;
+                                    textured[index] = sampled.textured;
+                                    let evidence = sampled.sharpness;
                                     let shortfall = evidence.map_or(
                                         quality_gate_runner::OWNER_EVIDENCE_UNKNOWN,
                                         |evidence| {
@@ -3508,7 +3739,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                                     unresolved_pixel_count,
                                     rendered.sampling_origin,
                                 ));
-                                rendered.image
+                                Ok(rendered.image)
                             })
                         }
                     };
@@ -3573,7 +3804,37 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             }
         }
     }?;
-    ensure_focus_memory_available(rss_sampler.as_ref())?;
+    if let Err(error) = ensure_focus_memory_available(rss_sampler.as_ref()) {
+        source_render_cache.lock().unwrap().clear();
+        return Err(error);
+    }
+    // Cache-owned images are released before QG; its native source mappings
+    // remain in the existing station evidence and retain their own references.
+    native_fusion_cache.clear();
+    if let Some(recorder) = stack_report.as_ref() {
+        let fusion_stats = native_fusion_cache.stats();
+        recorder
+            .record_max_resident_virtual_tiles(fusion_stats.peak_memory_entries.saturating_add(1));
+        recorder.update(|stack| stack.performance.native_fusion_cache = fusion_stats);
+        let cache_stats = source_render_cache.lock().unwrap().stats();
+        recorder.update(|stack| {
+            stack.performance.source_render_cache = stack_report::SourceRenderCacheReport {
+                backing: cache_stats.backing,
+                max_bytes: cache_stats.max_bytes,
+                hits: cache_stats.hits,
+                misses: cache_stats.misses,
+                render_hits: cache_stats.render_hits,
+                render_misses: cache_stats.render_misses,
+                quality_gate_hits: cache_stats.quality_gate_hits,
+                quality_gate_misses: cache_stats.quality_gate_misses,
+                evictions: cache_stats.evictions,
+                oversized_bypasses: cache_stats.oversized_bypasses,
+                resident_bytes: cache_stats.resident_bytes,
+                resident_entries: cache_stats.resident_entries,
+                peak_bytes: cache_stats.peak_bytes,
+            };
+        });
+    }
     if let Some((
         coverage,
         mut ownership,
@@ -3587,56 +3848,110 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     {
         diagnostics_world_origin = Some(world_origin);
         let sources = quality_sources.take().unwrap_or_default();
-        let mut quality_loader =
-            |source: &quality_gate_runner::QualitySource| {
-                load_prepared_stack_source(&source.path, &settings, raw_exposure_reference).map(
-                    |prepared| {
-                        let mut rendered = source_to_render_rgb32f(
-                            prepared.image,
-                            source.dimensions.0,
-                            source.dimensions.1,
-                        );
-                        if is_raw_file(&source.path) {
-                            if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                                .ok()
-                                .and_then(|value| value.parse::<f32>().ok())
-                                .filter(|value| value.is_finite() && *value > 0.0)
-                            {
-                                rendered.as_mut().par_iter_mut().for_each(|channel| {
-                                    *channel = (*channel * gain).clamp(0.0, 1.0)
-                                });
-                            } else if let Some(gain) = shared_raw_display_gain {
-                                rendered.as_mut().par_iter_mut().for_each(|channel| {
-                                    *channel = (*channel * gain).clamp(0.0, 1.0)
-                                });
-                            } else if std::env::var_os(
-                                "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION",
-                            )
-                            .is_none()
-                            {
-                                normalize_stack_raw_display_exposure(&mut rendered);
-                            }
-                        }
-                        rendered
-                    },
-                )
+        let mut quality_roi_cache = quality_gate_runner::QualityRoiCache::new(
+            quality_gate_runner::QUALITY_ROI_CACHE_MAX_BYTES,
+        );
+        let source_render_cache_for_quality = Arc::clone(&source_render_cache);
+        let mut quality_loader = |source: &quality_gate_runner::QualitySource| {
+            if degradation::run_generation_changed_for(run_generation) {
+                source_render_cache_for_quality.lock().unwrap().clear();
+                return Err("image-stack run cancelled by a newer request".to_string());
+            }
+            if let Err(error) = ensure_focus_memory_available(rss_sampler.as_ref()) {
+                source_render_cache_for_quality.lock().unwrap().clear();
+                return Err(error);
+            }
+            let processing_key_fingerprint = processing_fingerprint(
+                raw_exposure_reference,
+                shared_raw_display_gain,
+                std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                    .ok()
+                    .as_deref(),
+                std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_some(),
+            );
+            let cache_key = SourceRenderCacheKey {
+                path: source.path.clone(),
+                sha256: source_preflight
+                    .as_ref()
+                    .and_then(|preflight| preflight.record(&source.path))
+                    .map(|record| record.sha256)
+                    .unwrap_or_default(),
+                dimensions: source.dimensions,
+                processing_fingerprint: processing_key_fingerprint,
             };
-        let residual = residual_warp::run_model_snapshot();
-        let accepted_station_relations = tone::run_topology_snapshot()
-            .map(|topology| {
-                topology
-                    .accepted
-                    .iter()
-                    .filter_map(|&(left_id, right_id)| {
-                        let left = topology.station_of(left_id)?;
-                        let right = topology.station_of(right_id)?;
-                        (left != right).then_some((left.min(right), left.max(right)))
-                    })
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>()
+            if let Some(cached) = source_render_cache_for_quality
+                .lock()
+                .unwrap()
+                .get(&cache_key, SourceRenderCacheStage::QualityGate)
+            {
+                return quality_gate_runner::prefilter_source_reference((*cached).clone(), source);
+            }
+            load_prepared_stack_source_with_preflight(
+                &source.path,
+                &settings,
+                raw_exposure_reference,
+                source_preflight
+                    .as_ref()
+                    .and_then(|preflight| preflight.record(&source.path)),
+            )
+            .map(|prepared| {
+                let mut rendered = source_to_render_rgb32f(
+                    prepared.image,
+                    source.dimensions.0,
+                    source.dimensions.1,
+                );
+                if is_raw_file(&source.path) {
+                    if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+                        .ok()
+                        .and_then(|value| value.parse::<f32>().ok())
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                    {
+                        rendered
+                            .as_mut()
+                            .par_iter_mut()
+                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+                    } else if let Some(gain) = shared_raw_display_gain {
+                        rendered
+                            .as_mut()
+                            .par_iter_mut()
+                            .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+                    } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
+                        .is_none()
+                    {
+                        normalize_stack_raw_display_exposure(&mut rendered);
+                    }
+                }
+                let rendered = Arc::new(rendered);
+                source_render_cache_for_quality
+                    .lock()
+                    .unwrap()
+                    .insert(cache_key, Arc::clone(&rendered));
+                quality_gate_runner::prefilter_source_reference((*rendered).clone(), source)
             })
-            .unwrap_or_default();
+            .and_then(|reference| reference)
+        };
+        let residual = if legacy_native_evidence.is_some() {
+            residual_warp::ResidualWarp::default()
+        } else {
+            residual_warp::run_model_snapshot()
+        };
+        let accepted_station_relations = legacy_quality_relations.unwrap_or_else(|| {
+            tone::run_topology_snapshot()
+                .map(|topology| {
+                    topology
+                        .accepted
+                        .iter()
+                        .filter_map(|&(left_id, right_id)| {
+                            let left = topology.station_of(left_id)?;
+                            let right = topology.station_of(right_id)?;
+                            (left != right).then_some((left.min(right), left.max(right)))
+                        })
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .into_iter()
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        });
         #[cfg(test)]
         if std::env::var_os("RAW_EDITOR_FOCUS_FINAL_WORLD_OWNER_ORACLE_DIR").is_some() {
             stitching::run_final_world_owner_oracle(
@@ -3671,7 +3986,11 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                 acceptance_render_scale: render_scale,
                 final_sharpen_amount: stitching::layered_final_sharpen_amount() as f64,
             };
-            let report = quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader);
+            let report = quality_gate_runner::run_quality_gate_with_cache(
+                &quality_input,
+                &mut quality_loader,
+                &mut quality_roi_cache,
+            );
             #[cfg(test)]
             acceptance_tests::capture_failed_native_boundaries(&quality_input, &report);
             report
@@ -3812,8 +4131,41 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
                     acceptance_render_scale: render_scale,
                     final_sharpen_amount: stitching::layered_final_sharpen_amount() as f64,
                 };
-                report = quality_gate_runner::run_quality_gate(&quality_input, &mut quality_loader);
+                report = quality_gate_runner::run_quality_gate_with_cache(
+                    &quality_input,
+                    &mut quality_loader,
+                    &mut quality_roi_cache,
+                );
             }
+        }
+        if let Some(recorder) = stack_report.as_ref() {
+            let cache_stats = quality_roi_cache.stats();
+            let source_cache_stats = source_render_cache.lock().unwrap().stats();
+            recorder.update(|stack| {
+                stack.performance.quality_roi_cache = stack_report::QualityRoiCacheReport {
+                    hits: cache_stats.hits,
+                    misses: cache_stats.misses,
+                    evictions: cache_stats.evictions,
+                    resident_bytes: cache_stats.resident_bytes,
+                    resident_entries: cache_stats.resident_entries,
+                    peak_bytes: cache_stats.peak_bytes,
+                };
+                stack.performance.source_render_cache = stack_report::SourceRenderCacheReport {
+                    backing: source_cache_stats.backing,
+                    max_bytes: source_cache_stats.max_bytes,
+                    hits: source_cache_stats.hits,
+                    misses: source_cache_stats.misses,
+                    render_hits: source_cache_stats.render_hits,
+                    render_misses: source_cache_stats.render_misses,
+                    quality_gate_hits: source_cache_stats.quality_gate_hits,
+                    quality_gate_misses: source_cache_stats.quality_gate_misses,
+                    evictions: source_cache_stats.evictions,
+                    oversized_bypasses: source_cache_stats.oversized_bypasses,
+                    resident_bytes: source_cache_stats.resident_bytes,
+                    resident_entries: source_cache_stats.resident_entries,
+                    peak_bytes: source_cache_stats.peak_bytes,
+                };
+            });
         }
         quality_gate_runner::record_gate_outcome(&report);
         let effective_pixel_counts = report
@@ -3821,6 +4173,15 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .iter()
             .find(|criterion| criterion.name == "effective_pixel_count")
             .and_then(|criterion| {
+                // Preserve CompositionReport's historical alpha/rectangle
+                // counters. The physical-domain intersection and denominator
+                // belong to the Quality_Gate criterion and its explicit audit.
+                if let Some(domain) = criterion.effective_source_domain.as_ref() {
+                    return Some((
+                        domain.all_output_nontransparent,
+                        domain.legacy_rectangular_union,
+                    ));
+                }
                 Some((
                     criterion.effective_output_pixels?,
                     criterion.effective_projected_pixels?,
@@ -3829,6 +4190,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
         if let Some(recorder) = stack_report.as_ref() {
             recorder.update(|stack| {
                 stack.quality_gate = report;
+                stack.quality_gate.legacy_native_evidence = legacy_native_evidence;
                 stack.quality_gate.confidence_scores = confidence_scores.clone();
                 stack.quality_gate.owner_reverse_lookup_failures =
                     owner_reverse_lookup_failures.clone();
@@ -3868,6 +4230,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
             .finish()
             .is_some_and(|sample| sample.threshold_exceeded)
     }) {
+        source_render_cache.lock().unwrap().clear();
         return Err("memory threshold exceeded during focus-stack run".to_string());
     }
     // The source-stage canvas places every station at its source-stage pose.
@@ -3886,17 +4249,47 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     };
 
     println!("Stitching completed in {:.2?}\n", start_time.elapsed());
+    if let Some(recorder) = stack_report.as_ref() {
+        recorder.record_render_seconds(start_time.elapsed().as_secs_f64());
+    }
 
     let _ = app_handle.emit(progress_event, "Finalizing image result...");
 
     // Only a mask of the delivered size can become the result alpha.
     let coverage = output_coverage.filter(|mask| mask.dimensions() == panorama.dimensions());
+    if legacy_coverage_observation.is_some() && coverage.is_none() {
+        return Err("The legacy source coverage does not match the delivered canvas.".into());
+    }
 
     if let Some(recorder) = stack_report.as_ref() {
         let (width, height) = panorama.dimensions();
         recorder.update(|report| {
             report.composition.canvas.width = u64::from(width);
             report.composition.canvas.height = u64::from(height);
+            if report.selected_path == stack_report::SelectedPath::LegacySingleLayerMosaic {
+                if let Some(observation) = legacy_coverage_observation.as_ref() {
+                    report.composition.source_coverage_status =
+                        Some("measured_source_union_legacy_mosaic".to_string());
+                    report.composition.source_covered_pixels =
+                        Some(observation.source_covered_pixels);
+                    report.composition.source_owned_pixels = observation.source_owned_pixels;
+                    report.composition.source_output_pixels = Some(observation.output_pixels);
+                    report.composition.publication_crop =
+                        observation.publication_crop.map(|(x, y, width, height)| {
+                            stack_report::LegacyPublicationCropReport {
+                                x,
+                                y,
+                                width,
+                                height,
+                                covered_pixels_excluded: observation.source_covered_pixels
+                                    - u64::from(width) * u64::from(height),
+                            }
+                        });
+                } else {
+                    report.composition.source_coverage_status =
+                        Some("unmeasured_legacy_rgb_mosaic".to_string());
+                }
+            }
             report.degradation.result = stack_report::StackRunResult::Success;
         });
         // Flush eagerly so the report exists before the result travels back to

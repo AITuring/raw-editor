@@ -16,8 +16,9 @@ use tauri::AppHandle;
 use tauri::Runtime;
 
 use super::{
-    CoverageMask, FocusSourceRefinement, NO_OWNER, OwnershipMap,
+    CoverageMask, FocusSourceRefinement, NO_OWNER, NativeOwnerGeometry, OwnershipMap,
     focus_tile_ownership_stitcher_with_finishing, get_high_quality_interpolated_pixel,
+    resolve_native_owner_geometry,
 };
 
 /// Decide whether a projected focus tile should replace the current owner at
@@ -64,7 +65,7 @@ where
         TileCompositorFinishing::LegacyOwnership,
         app_handle,
         progress_event,
-        load_image,
+        &mut |image, _purpose| load_image(image),
     )
     .map(LayeredOwnershipRender::into_image)
 }
@@ -106,7 +107,7 @@ where
         projection,
         app_handle,
         progress_event,
-        load_image,
+        &mut |image, _purpose| load_image(image),
     )
     .map(LayeredOwnershipRender::into_image)
 }
@@ -140,10 +141,19 @@ impl LayeredOwnershipRender {
 
 /// A station supplies geometry/ownership; delivered pixels can be sampled
 /// directly from its prepared originals, without filtering the fused raster
-/// a second time. Only one station's original buffers are resident here.
+/// a second time. Callers stream these payloads per station or seam pair.
 pub(crate) struct FocusTilePayload {
     pub(crate) image: Rgb32FImage,
     pub(crate) sources: Option<FocusTileSources>,
+}
+
+/// Whether this consumer needs only fused station pixels or also the original
+/// source buffers used by final owner sampling. This does not change fusion or
+/// its masks: raster-only callers simply have no use for the source payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FocusTileLoadPurpose {
+    RasterOnly,
+    OwnerSampling,
 }
 
 impl From<Rgb32FImage> for FocusTilePayload {
@@ -172,50 +182,39 @@ pub(crate) struct FocusTileSources {
 
 impl FocusTileSources {
     pub(super) fn sample(&self, point: Point2<f64>) -> Option<Rgb<f32>> {
-        let (width, height) = self.ownership.dimensions();
-        let mut selected = None;
-        let mut minimum_distance = f64::INFINITY;
-        let rounded = (point.x.round(), point.y.round());
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                let x = rounded.0 + f64::from(dx);
-                let y = rounded.1 + f64::from(dy);
-                if x < 0.0 || y < 0.0 || x >= f64::from(width) || y >= f64::from(height) {
-                    continue;
-                }
-                let owner = self.ownership.owner_at(x as u32, y as u32);
-                let Some(index) = owner.checked_sub(1) else {
-                    continue;
-                };
-                let distance = (x - point.x).powi(2) + (y - point.y).powi(2);
-                if distance < minimum_distance {
-                    minimum_distance = distance;
-                    selected = Some(usize::from(index));
-                }
-            }
-        }
-        let original = self.originals.get(selected?)?.as_ref()?;
-        let corrected = original.refinement.inverse_canvas_point(point);
-        let source = original
-            .refinement
-            .source_sampling
-            .as_ref()?
-            .source_point(Point3::new(
-                corrected.x + self.origin.0,
-                corrected.y + self.origin.1,
-                1.0,
-            ))?;
-        if source.x < 0.0
-            || source.y < 0.0
-            || source.x >= f64::from(original.image.width())
-            || source.y >= f64::from(original.image.height())
-        {
+        self.sample_with_geometry(point).map(|(rgb, _)| rgb)
+    }
+
+    /// Return the geometry that actually produced this RGB sample so bounded
+    /// diagnostics can retain it without resolving the owner a second time.
+    pub(super) fn sample_with_geometry(
+        &self,
+        point: Point2<f64>,
+    ) -> Option<(Rgb<f32>, NativeOwnerGeometry)> {
+        let resolved =
+            resolve_native_owner_geometry(point, &self.ownership, self.origin, |index| {
+                let original = self.originals[index]
+                    .as_ref()
+                    .expect("validated owned native source must be present");
+                (&original.refinement, original.image.dimensions())
+            })?;
+        // Test-only paired diagnostic: reproduce the former nearest-owner
+        // rejection while retaining identical stage instrumentation. Never
+        // enabled in production and never used as an acceptance workaround.
+        #[cfg(test)]
+        if resolved.used_fallback && diagnostic_nearest_only() {
             return None;
         }
-        Some(get_high_quality_interpolated_pixel(
-            &original.image,
-            source.x,
-            source.y,
+        let original = self.originals[usize::from(resolved.local_owner - 1)]
+            .as_ref()
+            .expect("resolved native source must be present");
+        Some((
+            get_high_quality_interpolated_pixel(
+                &original.image,
+                resolved.prepared_point.x,
+                resolved.prepared_point.y,
+            ),
+            resolved,
         ))
     }
 }
@@ -234,7 +233,7 @@ pub(crate) fn layered_virtual_tile_compositor_with_ownership<R: Runtime, F, T>(
     load_image: &mut F,
 ) -> Result<LayeredOwnershipRender, String>
 where
-    F: FnMut(&ImageInfo) -> Result<T, String>,
+    F: FnMut(&ImageInfo, FocusTileLoadPurpose) -> Result<T, String>,
     T: Into<FocusTilePayload>,
 {
     focus_tile_ownership_stitcher_with_finishing(
@@ -441,4 +440,12 @@ pub(super) fn tile_boundary_distance_world(
     // 0.625 operator deviation, hence the 0.375 lower scale bound.
     let scale = (a * d - b * c).abs() / norm * if nonrigid { 0.375 } else { 1.0 };
     (f64::from(distance.get_pixel(x, y)[0]) - 2.0).max(0.0) * scale
+}
+
+#[cfg(test)]
+fn diagnostic_nearest_only() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("RAW_EDITOR_DIAGNOSTIC_NATIVE_NEAREST_ONLY").as_deref() == Ok("1")
+    })
 }

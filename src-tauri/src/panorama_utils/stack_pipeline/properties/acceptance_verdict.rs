@@ -311,6 +311,7 @@ pub(super) fn stack_acceptance_baseline_report() -> StackReport {
         .collect();
     report.station_relations.accepted = (0..27)
         .map(|left| crate::panorama_utils::stack_pipeline::report::AcceptedStationRelationRecord {
+            scale_evidence: None,
             left,
             right: left + 1,
             evidence_kind: crate::panorama_utils::stack_pipeline::report::StationRelationEvidenceKind::VirtualTile,

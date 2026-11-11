@@ -47,10 +47,44 @@ fn streaming_covered_bounds_do_not_reduce_to_largest_rectangle() {
     store
         .save_tile(0, 0, &rgb, &mask)
         .expect("tile should be writable");
+    let owner = GrayImage::from_fn(12, 8, |x, y| {
+        Luma([u8::from(
+            (x == 1 && y == 6) || (x >= 4 && x <= 10 && y >= 1 && y <= 4),
+        )])
+    });
+    store.save_owner_tile(0, 0, &owner).unwrap();
     assert_eq!(
         store.covered_bounds().expect("coverage should be readable"),
         Some((1, 1, 10, 6))
     );
+    assert_eq!(store.covered_and_owned_pixel_counts(), (36, 29));
+    let cropped = store.materialize_coverage((1, 1, 10, 6));
+    assert_eq!(cropped.dimensions(), (10, 6));
+    assert_eq!(cropped.get_pixel(0, 5)[0], 255);
+    assert_eq!(cropped.get_pixel(0, 0)[0], 0);
+    assert_eq!(
+        cropped.as_raw().iter().filter(|&&value| value != 0).count(),
+        36
+    );
+    assert_eq!(
+        StreamingMosaicStore::largest_fully_covered_rect(&mask),
+        Some((4, 1, 7, 5))
+    );
+}
+
+#[test]
+fn publication_rectangle_never_includes_an_uncovered_pixel() {
+    let mask = GrayImage::from_fn(8, 6, |x, y| {
+        Luma([u8::from((1..7).contains(&x) && (1..5).contains(&y) && (x, y) != (3, 2)) * 255])
+    });
+    let (left, top, width, height) =
+        StreamingMosaicStore::largest_fully_covered_rect(&mask).unwrap();
+    assert!(width * height > 0);
+    for y in top..top + height {
+        for x in left..left + width {
+            assert_ne!(mask.get_pixel(x, y)[0], 0);
+        }
+    }
 }
 
 #[test]

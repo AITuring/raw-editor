@@ -17,6 +17,9 @@ use serde_json::{Value, json};
 
 use crate::panorama_utils::processing;
 
+#[path = "panorama_acceptance_metrics/registration_fallback.rs"]
+mod registration_fallback;
+
 type LumaF32 = ImageBuffer<Luma<f32>, Vec<f32>>;
 
 /// Tile edge in analysis pixels.
@@ -74,6 +77,8 @@ struct Registration {
     matches: usize,
     inliers: usize,
     local_scale: f64,
+    fallback_evidence: Option<Value>,
+    validated_output_region_analysis: Option<Vec<Point2<f64>>>,
 }
 
 /// Compute the metrics and write them as pretty JSON to `path`.
@@ -231,6 +236,20 @@ fn reference_metrics(
     let mapped = grid
         .par_iter()
         .map(|&rect| {
+            if let Some(region) = registration.validated_output_region_analysis.as_ref() {
+                let corners = [
+                    Point2::new(f64::from(rect.x0), f64::from(rect.y0)),
+                    Point2::new(f64::from(rect.x1), f64::from(rect.y0)),
+                    Point2::new(f64::from(rect.x1), f64::from(rect.y1)),
+                    Point2::new(f64::from(rect.x0), f64::from(rect.y1)),
+                ];
+                if !corners
+                    .iter()
+                    .all(|p| registration_fallback::region_contains(region, *p))
+                {
+                    return None;
+                }
+            }
             let target = map_rect(&analysis_to_reference, rect, reference_luma.dimensions())?;
             let output = region_stats(output_luma, rect)?;
             let reference = region_stats(&reference_luma, target)?;
@@ -308,6 +327,9 @@ fn reference_metrics(
             "matches": registration.matches,
             "inliers": registration.inliers,
             "local_scale": registration.local_scale,
+            "fallback_evidence": registration.fallback_evidence,
+            "validated_output_region_analysis": registration.validated_output_region_analysis.as_ref().map(|points|points.iter().map(|p|[p.x,p.y]).collect::<Vec<_>>()),
+            "metrics_restricted_to_validated_region":registration.validated_output_region_analysis.is_some(),
             "output_to_reference": registration
                 .output_to_reference
                 .transpose()
@@ -400,24 +422,31 @@ fn register_output_to_reference(
             )
         })
         .collect::<Vec<_>>();
-    let (ransac, inlier_indices) =
+    let (registration_homography, match_count, inlier_count, fallback_evidence) = if let Some((
+        ransac,
+        inlier_indices,
+    )) =
         processing::find_homography_ransac_points_stable_with_min_inliers(
             &points,
             REGISTRATION_INLIER_PX,
             REGISTRATION_MIN_INLIERS,
+        ) {
+        let inlier_points = inlier_indices
+            .iter()
+            .map(|&index| points[index])
+            .collect::<Vec<_>>();
+        (
+            processing::compute_homography(&inlier_points).unwrap_or(ransac),
+            points.len(),
+            inlier_indices.len(),
+            None,
         )
-        .ok_or_else(|| {
-            format!(
-                "reference registration failed: {} descriptor matches, fewer than {} inliers",
-                points.len(),
-                REGISTRATION_MIN_INLIERS
-            )
-        })?;
-    let inlier_points = inlier_indices
-        .iter()
-        .map(|&index| points[index])
-        .collect::<Vec<_>>();
-    let registration_homography = processing::compute_homography(&inlier_points).unwrap_or(ransac);
+    } else {
+        let (matrix, matches, inliers, evidence) =
+                registration_fallback::partial_reference_registration(&output_reg, &reference_features, reference, reference_reg.dimensions(), &pairs)
+                .map_err(|error| format!("reference registration failed: {} descriptor matches, fewer than {} inliers; {error}", points.len(), REGISTRATION_MIN_INLIERS))?;
+        (matrix, matches, inliers, Some(evidence))
+    };
     // registration pixels -> native pixels on both sides.
     let output_reg_to_analysis = scale_matrix(
         f64::from(output_width) / f64::from(output_reg_width),
@@ -442,11 +471,27 @@ fn register_output_to_reference(
     let local_scale = local_scale_at(&output_to_reference, center)
         .filter(|scale| scale.is_finite() && *scale > 1e-6)
         .ok_or_else(|| "reference registration has a degenerate local scale".to_string())?;
+    let validated_output_region_analysis = fallback_evidence
+        .as_ref()
+        .and_then(|evidence| evidence["validated_output_polygon_registration"].as_array())
+        .map(|points| {
+            points
+                .iter()
+                .filter_map(|point| {
+                    project(
+                        &output_reg_to_analysis,
+                        Point2::new(point[0].as_f64()?, point[1].as_f64()?),
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
     Ok(Registration {
         output_to_reference,
-        matches: points.len(),
-        inliers: inlier_indices.len(),
+        matches: match_count,
+        inliers: inlier_count,
         local_scale,
+        fallback_evidence,
+        validated_output_region_analysis,
     })
 }
 
@@ -734,4 +779,38 @@ mod tests {
         assert_eq!(summary["ordered"], 1);
         assert_eq!(summary["missing_from_order"], json!(["one.jpg"]));
     }
+}
+
+#[test]
+#[ignore = "requires explicit output and real reference paths"]
+fn real_reference_registration_from_env() {
+    let output = std::env::var("RAW_EDITOR_REFERENCE_REPLAY_OUTPUT").expect("output proxy");
+    let reference = std::env::var("RAW_EDITOR_REFERENCE_REPLAY_REFERENCE").expect("reference");
+    let destination = std::env::var("RAW_EDITOR_REFERENCE_REPLAY_RESULT").expect("result path");
+    let supplied_scale = std::env::var("RAW_EDITOR_REFERENCE_REPLAY_SCALE")
+        .ok()
+        .map(|value| value.parse::<f64>().unwrap());
+    let mut reader = ImageReader::open(output).unwrap();
+    reader.no_limits(); // Explicit, test-only native TIFF replay, like the PS reference reader.
+    let image = reader.decode().unwrap().to_luma16();
+    let (image, scale) = if let Some(scale) = supplied_scale {
+        (image, scale)
+    } else {
+        // Native TIFF replay follows the same two-stage luma/resize path as
+        // acceptance_metrics, avoiding external proxy filter/gamma differences.
+        let (w, h) = fit_long_side(image.width(), image.height(), DEFAULT_ANALYSIS_LONG_SIDE);
+        let scale = f64::from(w) / f64::from(image.width());
+        (resize_luma16(&image, w, h), scale)
+    };
+    let luma = luma16_to_f32(&image);
+    let reference = decode_reference_luma(Path::new(&reference)).unwrap();
+    let result = register_output_to_reference(&luma, scale, &reference);
+    let record = match &result {
+        Ok(value) => json!({"status":"pass","matches":value.matches,"inliers":value.inliers,
+            "local_scale":value.local_scale,"output_to_reference":value.output_to_reference.as_slice(),
+            "fallback_evidence":value.fallback_evidence}),
+        Err(error) => json!({"status":"fail","error":error}),
+    };
+    std::fs::write(destination, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
+    assert!(result.is_ok(), "{}", record);
 }

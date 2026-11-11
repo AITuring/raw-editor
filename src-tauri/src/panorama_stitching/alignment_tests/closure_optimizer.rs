@@ -55,6 +55,33 @@ fn closure_relation_samples_ignore_out_of_bounds_overlap_extrapolation() {
 }
 
 #[test]
+fn closure_balanced_retry_telemetry_is_backwards_compatible() {
+    let report = stack_report::ClosureReport {
+        balanced_retry_attempted: true,
+        balanced_retry_accepted: true,
+        before_retry_max_direct_pair_p95_px: Some(4.18925),
+        ..Default::default()
+    };
+    let mut encoded = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        serde_json::from_value::<stack_report::ClosureReport>(encoded.clone()).unwrap(),
+        report
+    );
+    let object = encoded.as_object_mut().unwrap();
+    for field in [
+        "balanced_retry_attempted",
+        "balanced_retry_accepted",
+        "before_retry_max_direct_pair_p95_px",
+    ] {
+        object.remove(field);
+    }
+    let legacy: stack_report::ClosureReport = serde_json::from_value(encoded).unwrap();
+    assert!(!legacy.balanced_retry_attempted);
+    assert!(!legacy.balanced_retry_accepted);
+    assert_eq!(legacy.before_retry_max_direct_pair_p95_px, None);
+}
+
+#[test]
 fn closure_residual_weight_is_exact_continuous_and_monotone() {
     assert_eq!(closure_residual_weight(0.0), 1.0);
     assert_eq!(closure_residual_weight(2.0), 1.0);
@@ -401,4 +428,173 @@ fn focus_group_projective_seed_keeps_large_residual_relation_in_closure_report()
         closure_residual_weight(large_residual.residual_px),
         "reported weights must use the same production M-estimator multiplier"
     );
+
+    let original_edges = edges.clone();
+    let protected = std::collections::BTreeSet::from([(0, 1), (1, 2)]);
+    let mut protected_report = stack_report::ClosureReport::default();
+    let protected_result = refine_focus_group_projective_tree_poses_with_report_protected(
+        &images,
+        &groups,
+        &edges,
+        &base_poses,
+        0,
+        1_000.0,
+        &station_topology,
+        2,
+        &protected,
+        &mut protected_report,
+    )
+    .unwrap();
+    assert_eq!(
+        protected_report.status,
+        stack_report::ClosureStatus::Unreliable
+    );
+    assert!(protected_report.max_direct_pair_p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX);
+    assert!(protected_report.balanced_retry_attempted);
+    assert!(!protected_report.balanced_retry_accepted);
+    assert!(
+        protected_report
+            .before_retry_max_direct_pair_p95_px
+            .is_some_and(|value| value > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+    );
+    assert_eq!(protected_result, base_poses);
+    assert_eq!(
+        edges, original_edges,
+        "a contradictory cycle must not be repaired by replacing direct evidence"
+    );
+}
+
+// Frozen direct Virtual_Tile measurements from the continuous nine-NEF
+// acceptance set. These are independent fitted relations, never composed
+// from the spanning tree being evaluated.
+#[test]
+fn closure_reconciles_nine_source_direct_relations_without_rewriting_evidence() {
+    let _scope = degradation::begin_run_scope();
+    let dimensions = [(4204, 2800), (4205, 2825), (4310, 2931)];
+    let images = dimensions
+        .iter()
+        .enumerate()
+        .map(|(index, &(width, height))| {
+            let mut image = focus_test_image(index, "frozen-station");
+            image.width = width;
+            image.height = height;
+            image
+        })
+        .collect::<Vec<_>>();
+    let groups = (0..3)
+        .map(|index| FocusCaptureGroup {
+            members: vec![index],
+            anchor: index,
+            local_to_anchor: HashMap::from([(index, Matrix3::identity())]),
+        })
+        .collect::<Vec<_>>();
+    let direct_01 = Matrix3::from_row_slice(&[
+        0.9988000864418181,
+        0.00017634524606939856,
+        -49.488326799623756,
+        -6.491946260586207e-05,
+        0.9981903540579469,
+        37.61623382393811,
+        0.0,
+        -0.0,
+        1.0,
+    ])
+    .try_inverse()
+    .unwrap();
+    let direct_02 = Matrix3::from_row_slice(&[
+        0.94956845881629,
+        0.020475259162372854,
+        3068.4978836987198,
+        0.019354315921857837,
+        0.9557928271468688,
+        183.23907833473763,
+        1.0741563054728558e-08,
+        2.210637741704831e-08,
+        1.0000374745151706,
+    ])
+    .try_inverse()
+    .unwrap();
+    let direct_12 = Matrix3::from_row_slice(&[
+        1.0501052879221628,
+        -0.02033504423161718,
+        -3275.661361581249,
+        -0.020767181416482677,
+        1.0430175081872481,
+        -86.61508997317091,
+        0.0,
+        0.0,
+        1.0,
+    ]);
+    let edges = vec![
+        (1.0, 0, 1, direct_01, 1, 0.8138741651368357),
+        (1.0, 1, 2, direct_12, 1, 0.6396504274573706),
+        (1.0, 0, 2, direct_02, 1, 1.0531387958310412),
+    ];
+    let seed1 = direct_01.try_inverse().unwrap();
+    let base = vec![
+        Matrix3::identity(),
+        seed1,
+        seed1 * direct_12.try_inverse().unwrap(),
+    ];
+    let topology = topology::StationTopology {
+        row: vec![0, 0, 0],
+        column: vec![1, 2, 0],
+        ..Default::default()
+    };
+    let protected = std::collections::BTreeSet::from([(0, 1), (1, 2)]);
+    let original_edges = edges.clone();
+    let initial_validation = closure_direct_pair_p95s(&images, &groups, &edges, &base);
+    assert!(
+        initial_validation
+            .iter()
+            .any(|pair| pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+    );
+    let mut report = stack_report::ClosureReport::default();
+    let poses = refine_focus_group_projective_tree_poses_with_report_protected(
+        &images,
+        &groups,
+        &edges,
+        &base,
+        0,
+        4310.0,
+        &topology,
+        1,
+        &protected,
+        &mut report,
+    )
+    .unwrap();
+    assert_eq!(
+        report.status,
+        stack_report::ClosureStatus::Converged,
+        "{report:?}"
+    );
+    assert!(report.balanced_retry_attempted);
+    assert!(report.balanced_retry_accepted);
+    assert!(
+        report
+            .before_retry_max_direct_pair_p95_px
+            .is_some_and(|value| value > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+    );
+    assert_eq!(
+        edges, original_edges,
+        "direct observations must remain unchanged"
+    );
+    let validation = closure_direct_pair_p95s(&images, &groups, &original_edges, &poses);
+    assert!(
+        validation
+            .iter()
+            .all(|pair| pair.p95_px <= CLOSURE_DIRECT_PAIR_P95_LIMIT_PX)
+    );
+    let independent_maximum = validation
+        .iter()
+        .map(|pair| pair.p95_px)
+        .fold(0.0, f64::max);
+    assert!((report.max_direct_pair_p95_px - independent_maximum).abs() < 1e-9);
+    assert!(
+        independent_maximum > 1.0,
+        "real direct residuals must not disappear through circular validation"
+    );
+    assert!(report.max_corner_correction_px <= CLOSURE_MAX_CORNER_CORRECTION_PX);
+    assert!(report.offending_pair.is_none());
+    assert!(report.fallback_reason.is_none());
 }

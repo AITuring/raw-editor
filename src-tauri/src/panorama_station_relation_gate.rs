@@ -27,6 +27,7 @@ use super::{
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct StationRelationMeasurements {
+    pub(super) scale_evidence: Option<stack_report::StationScaleEvidenceRecord>,
     pub(super) inliers: usize,
     pub(super) median_error_px: f64,
     pub(super) scale_ratio: f64,
@@ -35,6 +36,31 @@ pub(super) struct StationRelationMeasurements {
     pub(super) edge_strength_ratio: f64,
     pub(super) median_edge_orientation_difference_degrees: f64,
     pub(super) preserves_convex_orientation: bool,
+}
+
+/// Fail closed on missing/non-finite evidence. No other gate is waived.
+pub(super) fn bounded_native_scale_is_accepted(
+    e: &stack_report::StationScaleEvidenceRecord,
+) -> bool {
+    fn within(value: Option<f64>, low: f64, high: f64) -> bool {
+        value.is_some_and(|v| v.is_finite() && (low..=high).contains(&v))
+    }
+    e.contract_version == 1
+        && e.fit_count >= 24
+        && e.holdout_count >= 24
+        && within(e.holdout_median_error_px, 0.0, 3.0)
+        && within(e.holdout_spatial_support, 0.20, 1.0)
+        && e.region_counts.iter().all(|&n| n >= 6)
+        && e.region_median_error_px
+            .iter()
+            .all(|&v| within(v, 0.0, 3.0))
+        && e.grid_probe_count == 81
+        && e.positive_jacobians
+        && within(e.minimum_scale, 0.8, 1.25)
+        && within(e.maximum_scale, 0.8, 1.25)
+        && within(e.scale_variation, 1.0, 1.10)
+        && within(e.maximum_anisotropy, 1.0, 1.10)
+        && within(e.maximum_refit_scale_difference, 0.0, 0.01)
 }
 
 pub(super) fn station_relation_rejection_reasons(
@@ -50,8 +76,12 @@ pub(super) fn station_relation_rejection_reasons(
         reasons.push(degradation::STATION_RELATION_HIGH_REPROJECTION_ERROR);
     }
     if !measurements.scale_ratio.is_finite()
-        || !(STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+        || (!(STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
             .contains(&measurements.scale_ratio)
+            && !measurements
+                .scale_evidence
+                .as_ref()
+                .is_some_and(bounded_native_scale_is_accepted))
     {
         reasons.push(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE);
     }
@@ -477,6 +507,7 @@ pub(super) fn measure_station_relation_candidate(
     });
     Some(MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
+            scale_evidence: None,
             inliers,
             median_error_px,
             scale_ratio:

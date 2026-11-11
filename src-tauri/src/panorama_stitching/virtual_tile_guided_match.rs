@@ -272,6 +272,7 @@ pub(super) fn virtual_tile_descriptor_guided_station_match(
     stack_report::StationRelationCandidateRecord,
 ) {
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
+        previous_attempts: Vec::new(),
         left,
         right,
         left_tile: Default::default(),

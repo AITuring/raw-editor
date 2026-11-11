@@ -8,7 +8,6 @@ use crate::app_settings::AppSettings;
 use crate::file_management::read_file_mapped;
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_cpu_default_raw_processing;
-use crate::panorama_utils::processing;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
 use image::ColorType;
 use image::DynamicImage;
@@ -23,6 +22,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
+use super::source_preflight::SourcePreflightRecord;
 use super::{
     ImageInfo, build_foreground_mask, detect_foreground_range, detect_vertical_edge_columns,
     find_alignment_features, find_top_alignment_features, horizontal_edge_row_candidates,
@@ -318,16 +318,55 @@ pub(super) fn load_prepared_stack_source(
     settings: &AppSettings,
     raw_exposure_reference: Option<f64>,
 ) -> Result<PreparedStackSource, String> {
-    let file_data = read_file_mapped(Path::new(filename))
-        .map_err(|error| format!("Failed to read image {filename}: {error}"))?;
-    let focal_length_35mm = crate::exif_processing::focal_length_35mm_from_bytes(&file_data);
+    load_prepared_stack_source_with_preflight(filename, settings, raw_exposure_reference, None)
+}
+
+pub(super) fn load_prepared_stack_source_with_preflight(
+    filename: &str,
+    settings: &AppSettings,
+    raw_exposure_reference: Option<f64>,
+    preflight: Option<&SourcePreflightRecord>,
+) -> Result<PreparedStackSource, String> {
+    let mapped_file_data = if preflight.is_none() {
+        Some(
+            read_file_mapped(Path::new(filename))
+                .map_err(|error| format!("Failed to read image {filename}: {error}"))?,
+        )
+    } else {
+        None
+    };
+    let file_data = preflight
+        .map(|record| {
+            record
+                .counters
+                .preflight_reuse_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            &record.bytes[..]
+        })
+        .or_else(|| mapped_file_data.as_deref())
+        .expect("either preflight or mapped source bytes must exist");
+    let focal_length_35mm = preflight
+        .and_then(|record| record.focal_length_35mm)
+        .or_else(|| crate::exif_processing::focal_length_35mm_from_bytes(file_data));
+    if is_raw_file(filename) {
+        if let Some(record) = preflight {
+            record
+                .counters
+                .raw_decode_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
     let mut image = crate::image_loader::load_base_image_from_bytes(
         &file_data, filename, false, settings, None,
     )
     .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
     let mut source_footprint = None;
     if is_raw_file(filename) {
-        let mut metadata = crate::exif_processing::read_exif_data_from_bytes(filename, &file_data);
+        let mut metadata = preflight
+            .map(|record| record.exif.clone())
+            .unwrap_or_else(|| {
+                crate::exif_processing::read_exif_data_from_bytes(filename, file_data)
+            });
         // RAW metadata extraction otherwise copies the physical focal length
         // into this field. Use the actual EXIF value to detect sensor crop mode.
         if let Some(equivalent) = focal_length_35mm {
@@ -337,8 +376,11 @@ pub(super) fn load_prepared_stack_source(
         }
         let calibration =
             crate::lens_correction::stack_lens_calibration(&metadata, image.dimensions());
+        let source_exposure = preflight
+            .and_then(|record| record.raw_exposure)
+            .or_else(|| stack_raw_exposure_from_bytes(file_data));
         if let Some(reference) = raw_exposure_reference
-            && let Some(exposure) = stack_raw_exposure_from_bytes(&file_data)
+            && let Some(exposure) = source_exposure
         {
             let gain = (reference / exposure) as f32;
             if gain.is_finite() && gain > 0.0 {
@@ -471,32 +513,28 @@ pub(super) fn raw_display_channel_percentile(image: &DynamicImage) -> Option<f32
     samples.get(((samples.len() - 1) * 97) / 100).copied()
 }
 
-pub(super) fn prepare_focus_rescue_image(
+/// Rebuilds the strict rescue feature view from the already prepared
+/// alignment plane.  The first bounded-memory preparation pass has already
+/// decoded and downscaled this source to the same 2,400px cap used by rescue;
+/// reusing that plane avoids a second complete RAW decode for every source
+/// that enters the disconnected-component rescue queue.
+pub(super) fn prepare_focus_rescue_image_from_analysis(
     image: &ImageInfo,
-    settings: &AppSettings,
-    raw_exposure_reference: Option<f64>,
     brief_pairs: &[(nalgebra::Point2<i32>, nalgebra::Point2<i32>)],
 ) -> Result<ImageInfo, String> {
-    let prepared = load_prepared_stack_source(&image.filename, settings, raw_exposure_reference)?;
-    let (width, height) = prepared.image.dimensions();
-    let (new_width, new_height, scale_factor) =
-        processing::calculate_downscale_dimensions_capped(width, height, 2_400);
-    let alignment_image = prepared
-        .image
-        .resize_exact(new_width, new_height, image::imageops::FilterType::Triangle)
-        .to_luma8();
+    let alignment_image = image.alignment_image.clone();
     let foreground_range = detect_foreground_range(&alignment_image);
     Ok(ImageInfo {
         id: image.id,
         filename: image.filename.clone(),
-        width,
-        height,
+        width: image.width,
+        height: image.height,
         features: find_alignment_features(
             &alignment_image,
             brief_pairs,
             1_600,
             true,
-            prepared.focal_length_35mm,
+            image.focal_length_35mm,
         ),
         top_features: find_top_alignment_features(&alignment_image, brief_pairs, foreground_range),
         foreground_mask: build_foreground_mask(&alignment_image, foreground_range),
@@ -504,10 +542,10 @@ pub(super) fn prepare_focus_rescue_image(
         vertical_edge_columns: detect_vertical_edge_columns(&alignment_image, foreground_range),
         alignment_image,
         full_image: None,
-        scale_factor,
-        focal_length_35mm: prepared.focal_length_35mm,
-        source_footprint: prepared.source_footprint,
-        overview_reference: false,
+        scale_factor: image.scale_factor,
+        focal_length_35mm: image.focal_length_35mm,
+        source_footprint: image.source_footprint.clone(),
+        overview_reference: image.overview_reference,
         foreground_range,
     })
 }

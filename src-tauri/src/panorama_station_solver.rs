@@ -278,7 +278,7 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
                 coverages,
             )
         });
-        let Some(measured) = measure_station_relation_candidate(
+        let Some(mut measured) = measure_station_relation_candidate(
             match_info.inliers.max(anchor_points.len()),
             &quality_homography,
             &quality_points,
@@ -290,6 +290,16 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
         ) else {
             continue;
         };
+        if evidence_kind == StationRelationEvidenceKind::VirtualTile {
+            super::measure_virtual_tile_scale_evidence(
+                &mut measured.measurements,
+                &quality_homography,
+                &quality_points,
+                measurement_source_dimensions,
+                measurement_target_dimensions,
+                overlap_measure,
+            );
+        }
         candidates
             .entry(key)
             .or_default()
@@ -408,6 +418,7 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
         station_relations_report
             .accepted
             .push(stack_report::AcceptedStationRelationRecord {
+                scale_evidence: measurements.scale_evidence,
                 left: left_group,
                 right: right_group,
                 evidence_kind: match evidence_kind {
@@ -596,25 +607,87 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
         // The remaining graph must stay connected, so removing a former tree
         // edge is safe only when redundant accepted relations preserve a path.
         let mut closure_group_edges = group_edges.clone();
+        let mut last_offending_pair = None;
         let refined_group_poses = loop {
-            let refined = refine_focus_group_projective_tree_poses_with_report_protected(
-                images,
-                &groups,
-                &closure_group_edges,
-                &base_group_poses,
-                reference_group,
-                coordinate_scale,
-                &station_topology,
-                evidence_kind.minimum_independent_support(),
-                &tree_edge_pairs,
-                closure_report,
-            )
-            .unwrap_or_else(|| base_group_poses.clone());
+            // A rejected redundant edge can leave exactly a spanning tree.  Do
+            // not run the next closure pass through the generic no-constraints
+            // guard: that second pass would erase the direct-pair failure that
+            // caused the edge removal and misreport the run as if it had never
+            // had a closure candidate.  Preserve the original evidence as an
+            // explicit unreliable closure instead.
+            let refined = if last_offending_pair.is_some()
+                && closure_group_edges.len() <= groups.len().saturating_sub(1)
+            {
+                closure_report.status = stack_report::ClosureStatus::Unreliable;
+                closure_report.fallback_reason =
+                    Some(degradation::CLOSURE_UNRELIABLE_PAIR_P95.to_string());
+                closure_report.offending_pair = last_offending_pair;
+                closure_report.participating_constraints = closure_group_edges.len();
+                base_group_poses.clone()
+            } else {
+                refine_focus_group_projective_tree_poses_with_report_protected(
+                    images,
+                    &groups,
+                    &closure_group_edges,
+                    &base_group_poses,
+                    reference_group,
+                    coordinate_scale,
+                    &station_topology,
+                    evidence_kind.minimum_independent_support(),
+                    &tree_edge_pairs,
+                    closure_report,
+                )
+                .unwrap_or_else(|| base_group_poses.clone())
+            };
             let Some(offending) = closure_report.offending_pair else {
                 break refined;
             };
+            // Do not prune an independently measured native cycle before its
+            // joint pixel solve can run. Restrict this new path to bounded
+            // magnification evidence; legacy accepted geometry stays unchanged.
+            if last_offending_pair.is_none()
+                && evidence_kind == StationRelationEvidenceKind::VirtualTile
+                && reference_group == 0
+                && station_relations_report
+                    .accepted
+                    .iter()
+                    .any(|r| r.scale_evidence.is_some())
+            {
+                let mut candidate_closure = closure_report.clone();
+                let mut candidate_report = station_relations_report.clone();
+                let candidate_poses = images
+                    .iter()
+                    .zip(&base_group_poses)
+                    .map(|(image, pose)| (image.id, *pose))
+                    .collect::<HashMap<_, _>>();
+                let mut attempt = stack_report::NativeJointBeforePruneRecord {
+                    relation_count: candidate_report.accepted.len(),
+                    matrix_direct_pair_p95_px: closure_report.max_direct_pair_p95_px,
+                    accepted: false,
+                };
+                if let Some(solved) = super::refine_virtual_tile_joint_geometry(
+                    images,
+                    matches,
+                    &candidate_poses,
+                    &mut candidate_closure,
+                    &mut candidate_report,
+                ) {
+                    attempt.accepted = true;
+                    candidate_closure.native_joint_before_prune = Some(attempt);
+                    *closure_report = candidate_closure;
+                    *station_relations_report = candidate_report;
+                    *translation_geometry_verified = true;
+                    return solved;
+                }
+                closure_report.native_joint_before_prune = Some(attempt);
+            }
             let pair = (offending.left, offending.right);
             let canonical_pair = (pair.0.min(pair.1), pair.0.max(pair.1));
+            // A path-composed transform is only a pose proposal, never an
+            // independent direct measurement. Keep the original relation
+            // immutable so the direct-pair gate cannot validate a path
+            // against a synthetic edge produced from that same path.
+            last_offending_pair = Some(offending);
             if tree_edge_pairs.contains(&canonical_pair)
                 || closure_group_edges.len() <= groups.len().saturating_sub(1)
                 || !reject_global_closure_relation(

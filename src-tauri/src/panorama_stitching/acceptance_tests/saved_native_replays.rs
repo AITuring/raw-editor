@@ -175,6 +175,7 @@ fn real_saved_local_tone_from_env() {
                 continue;
             }
             let measurements = StationRelationMeasurements {
+                scale_evidence: None,
                 inliers: d["inliers"].as_u64().unwrap() as usize,
                 median_error_px: d["median_error_px"].as_f64().unwrap(),
                 scale_ratio: d["scale_ratio"].as_f64().unwrap(),
@@ -580,6 +581,7 @@ fn real_joint_geometry_from_saved_native_points() {
         report
             .accepted
             .push(stack_report::AcceptedStationRelationRecord {
+                scale_evidence: None,
                 left,
                 right,
                 evidence_kind: stack_report::StationRelationEvidenceKind::VirtualTile,

@@ -35,7 +35,8 @@ mod capture_station;
 
 pub use capture_station::{
     OVERSIZED_BRACKET_LARGEST_STEP_PX, OVERSIZED_BRACKET_SIDE, arb_anchor_candidates,
-    arb_intra_station_layer_pair, arb_intra_station_verdict_pair, arb_oversized_bracket,
+    arb_intra_station_coverage_pair, arb_intra_station_layer_pair, arb_intra_station_verdict_pair,
+    arb_oversized_bracket,
 };
 
 mod virtual_tiles;

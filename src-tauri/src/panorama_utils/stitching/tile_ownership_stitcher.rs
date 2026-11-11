@@ -35,10 +35,11 @@ use tauri::Emitter;
 use tauri::Runtime;
 
 use super::{
-    CoverageMask, ExposureCompensation, ExposureOverlap, FocusTilePayload, LayeredOwnershipRender,
-    NO_OWNER, OwnershipMap, TileCompositorFinishing, apply_exposure_compensation,
-    apply_station_seam_plans, box_blur_focus_map, build_station_seam_plans, crop_to_valid_bounds,
-    crop_to_valid_rectangle, estimate_overlap_exposure_compensation, focus_analysis_dimensions,
+    CoverageMask, ExposureCompensation, ExposureOverlap, FocusTileLoadPurpose, FocusTilePayload,
+    LayeredOwnershipRender, NO_OWNER, OwnershipMap, TileCompositorFinishing,
+    apply_exposure_compensation, apply_station_seam_plans, box_blur_focus_map,
+    build_station_seam_plans, crop_to_valid_bounds, crop_to_valid_rectangle,
+    estimate_overlap_exposure_compensation, focus_analysis_dimensions,
     focus_stack_pixel_is_canvas_like, focus_stack_pixel_is_tone_foreground,
     focus_tile_ownership_should_replace, get_high_quality_interpolated_pixel,
     harmonize_focus_background_tone_with_owners, layered_final_sharpen_amount, linear_samples,
@@ -63,9 +64,11 @@ pub(super) fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F, T>(
     load_image: &mut F,
 ) -> Result<LayeredOwnershipRender, String>
 where
-    F: FnMut(&ImageInfo) -> Result<T, String>,
+    F: FnMut(&ImageInfo, FocusTileLoadPurpose) -> Result<T, String>,
     T: Into<FocusTilePayload>,
 {
+    #[cfg(test)]
+    let mut point_trace = super::native_point_trace::PointTrace::from_env();
     let mut residual_model = residual_warp::run_model_snapshot();
     if images.is_empty() {
         return Ok(LayeredOwnershipRender {
@@ -106,6 +109,10 @@ where
     }
     let (offset_x, out_width) = pixel_aligned_canvas(min_x, max_x);
     let (offset_y, out_height) = pixel_aligned_canvas(min_y, max_y);
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.set_canvas([out_width, out_height], [-offset_x, -offset_y]);
+    }
     // 需求 10.11: an unsupported canvas is rejected before any buffer exists.
     if finishing == TileCompositorFinishing::LayeredVirtualTile
         && let Some(rejection) =
@@ -186,7 +193,9 @@ where
     {
         let mut previews = Vec::with_capacity(images.len());
         for image_info in images {
-            let image = load_image(image_info)?.into().image;
+            let image = load_image(image_info, FocusTileLoadPurpose::RasterOnly)?
+                .into()
+                .image;
             let longest = image.width().max(image.height()).max(1);
             let scale = (1536.0 / longest as f64).min(1.0);
             let preview_width = ((image.width() as f64 * scale).round() as u32).max(2);
@@ -266,7 +275,8 @@ where
                 image_info.filename
             )
         })?;
-        let loaded: FocusTilePayload = load_image(image_info)?.into();
+        let loaded: FocusTilePayload =
+            load_image(image_info, FocusTileLoadPurpose::OwnerSampling)?.into();
         let tile = loaded.image;
         let originals = loaded.sources;
         all_have_native_sources &= originals.is_some();
@@ -646,6 +656,28 @@ where
         });
         let image_width = tile.width() as f64;
         let image_height = tile.height() as f64;
+        #[cfg(test)]
+        let station_trace = point_trace.as_ref().map(|trace| {
+            trace.station(
+                serde_json::json!({
+                    "image_id": image_info.id, "filename": image_info.filename,
+                    "station_order_index": index, "compositor_station_owner": index + 1,
+                    "topology_station_id": tone_station,
+                    "tile_dimensions": tile.dimensions(), "native_sources_present": originals.is_some(),
+                    "raster_bounds_inclusive": [left, right, top, bottom],
+                    "tile_to_world_column_major": homography.as_slice(),
+                    "world_to_tile_column_major": inverse.as_slice(),
+                    "residual_region_count": residual_model.regions.len(),
+                    "line_layer_report_count": residual_model.line_layers.reports.len(),
+                }),
+                [left, right, top, bottom],
+                [tile.width(), tile.height()],
+                originals.as_ref(),
+                |target| map_target_to_source_with_residual(
+                    &inverse, target, image_info, projection, &residual_model,
+                ),
+            )
+        });
         panorama
             .as_mut()
             .par_chunks_mut(row_stride)
@@ -660,7 +692,18 @@ where
             .for_each(
                 |(y, rows)| {
                     let (((((row, quality_row), mask_row), owner_row), source_owner_row), boundary_row) = rows;
+                    #[cfg(test)]
+                    let trace_row = station_trace.as_ref().and_then(|trace| trace.row(y as u32));
                     for x in left..=right {
+                        #[cfg(test)]
+                        let mut traced = trace_row.and_then(|trace| trace.pixel(x, || {
+                            let start = x as usize * 3;
+                            serde_json::json!({
+                                "coverage": mask_row[x as usize],
+                                "station_owner": source_owner_row[x as usize],
+                                "rgb": [row[start], row[start + 1], row[start + 2]],
+                            })
+                        }));
                         let target = Point3::new(x as f64 - offset_x, y as f64 - offset_y, 1.0);
                         let Some(source) = map_target_to_source_with_residual(
                             &inverse,
@@ -669,13 +712,21 @@ where
                             projection,
                             &residual_model,
                         ) else {
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() { trace.reject("world_to_tile_returned_none"); }
                             continue;
                         };
+                        #[cfg(test)]
+                        if let Some(trace) = traced.as_mut() {
+                            trace.record("world_to_tile", serde_json::json!([source.x, source.y]));
+                        }
                         if source.x < 0.0
                             || source.y < 0.0
                             || source.x >= image_width
                             || source.y >= image_height
                         {
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() { trace.reject("outside_tile_rectangle"); }
                             continue;
                         }
                         let edge_distance = source
@@ -697,7 +748,14 @@ where
                             quality,
                             candidate_owner,
                         ) };
+                        #[cfg(test)]
+                        if let Some(trace) = traced.as_mut() {
+                            trace.record("owner_selected", serde_json::json!(selected));
+                            trace.record("candidate_quality", serde_json::json!(quality));
+                        }
                         if !selected {
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() { trace.reject("owner_not_selected"); }
                             continue;
                         }
                         #[cfg(test)]
@@ -706,12 +764,35 @@ where
                         #[cfg(test)]
                         full_resolution_samples.fetch_add(1, Ordering::Relaxed);
                         let mut color = if let Some(originals) = originals.as_ref() {
-                            let Some(color) = originals.sample(source) else {
+                            #[cfg(not(test))]
+                            let sampled = originals.sample(source);
+                            #[cfg(test)]
+                            let sampled = if let Some(trace) = traced.as_mut() {
+                                let resolved = originals.sample_with_geometry(source);
+                                trace.native_resolution(resolved.as_ref().map(|(_, geometry)| geometry), originals);
+                                resolved.map(|(rgb, _)| rgb)
+                            } else {
+                                originals.sample(source)
+                            };
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() {
+                                trace.record("sampler", serde_json::json!("native_originals"));
+                                trace.sample(sampled);
+                            }
+                            let Some(color) = sampled else {
+                                #[cfg(test)]
+                                if let Some(trace) = traced.as_mut() { trace.reject("native_sample_returned_none"); }
                                 continue;
                             };
                             color
                         } else {
-                            get_high_quality_interpolated_pixel(&tile, source.x, source.y)
+                            let color = get_high_quality_interpolated_pixel(&tile, source.x, source.y);
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() {
+                                trace.record("sampler", serde_json::json!("fused_raster"));
+                                trace.sample(Some(color));
+                            }
+                            color
                         };
                         if let Some(model) = photo_model {
                             let preview_x = source.x * model.preview_width as f64 / image_width;
@@ -722,7 +803,14 @@ where
                         // not let them affect the retained ownership or seam.
                         // Exact covered black samples are recovered only after
                         // seam planning below.
+                        #[cfg(test)]
+                        if let Some(trace) = traced.as_mut() {
+                            trace.record("black_filter_input_rgb", serde_json::json!(color.0));
+                            trace.record("black_filter_le_1e_minus_6", serde_json::json!(color[0].max(color[1]).max(color[2]) <= 1e-6));
+                        }
                         if color[0].max(color[1]).max(color[2]) <= 1e-6 {
+                            #[cfg(test)]
+                            if let Some(trace) = traced.as_mut() { trace.reject("black_filter_rejected"); }
                             continue;
                         }
                         color = apply_exposure_compensation(color, &exposure, x, y as u32);
@@ -744,6 +832,8 @@ where
                             let quality_ratio =
                                 f32::from(quality) / f32::from((*quality_slot).max(1));
                             if seam.is_none() && luma_delta > 0.075 && quality_ratio < 1.35 {
+                                #[cfg(test)]
+                                if let Some(trace) = traced.as_mut() { trace.reject("luma_quality_rejected"); }
                                 continue;
                             }
                             // Interior distance chooses the sharper source, but a
@@ -777,9 +867,25 @@ where
                         mask_row[x as usize] = 255;
                         owner_row[x as usize] = candidate_owner;
                         source_owner_row[x as usize] = (index + 1).min(u16::MAX as usize) as u16;
+                        #[cfg(test)]
+                        if let Some(trace) = traced.as_mut() { trace.written(color, source_owner_row[x as usize]); }
                     }
                 },
             );
+        #[cfg(test)]
+        if let (Some(trace), Some(station)) = (point_trace.as_mut(), station_trace) {
+            trace.push_station(station);
+        }
+    }
+
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.stage(
+            "before_seam_revisit",
+            &panorama,
+            &panorama_mask,
+            &source_owner_ids,
+        );
     }
 
     // The default layered compositor has already selected a source for every
@@ -804,7 +910,7 @@ where
                 out_height,
                 &residual_model,
                 &source_owner_ids,
-                load_image,
+                &mut |image| load_image(image, FocusTileLoadPurpose::RasterOnly),
             )?;
             let changed = apply_station_seam_plans(
                 &plans,
@@ -817,7 +923,7 @@ where
                 offset_x,
                 offset_y,
                 &residual_model,
-                load_image,
+                &mut |image| load_image(image, FocusTileLoadPurpose::OwnerSampling),
             )?;
             if !plans.is_empty() {
                 println!(
@@ -831,6 +937,16 @@ where
             Ok(())
         })();
         seam_result?;
+    }
+
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.stage(
+            "after_seam_revisit",
+            &panorama,
+            &panorama_mask,
+            &source_owner_ids,
+        );
     }
 
     // Solve a low-frequency consensus from all candidate tiles. The high
@@ -1101,7 +1217,8 @@ where
             let inverse = homography
                 .try_inverse()
                 .ok_or_else(|| "non-invertible revisit pose".to_string())?;
-            let loaded: FocusTilePayload = load_image(image_info)?.into();
+            let loaded: FocusTilePayload =
+                load_image(image_info, FocusTileLoadPurpose::OwnerSampling)?.into();
             let originals = loaded.sources.ok_or_else(|| {
                 "native ownership revisit lost its original RAW payload".to_string()
             })?;
@@ -1201,6 +1318,16 @@ where
         }
     }
 
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.stage(
+            "before_tone_harmonizer",
+            &panorama,
+            &panorama_mask,
+            &source_owner_ids,
+        );
+    }
+
     // Detail ownership is already final at this point. Correct only the
     // remaining owner-level tone difference using selected virtual-tile
     // regions at once; doing this after the consensus pass removes residual
@@ -1225,6 +1352,16 @@ where
             tone_report.boundary_delta_e.max
         );
     }
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.stage(
+            "after_tone_harmonizer",
+            &panorama,
+            &panorama_mask,
+            &source_owner_ids,
+        );
+    }
+
     let empty_foreground = GrayImage::new(out_width, out_height);
     if switches.owner_tone_harmonization {
         if !switches.skip_owner_tone_harmonization {
@@ -1265,6 +1402,16 @@ where
     };
     if final_sharpen_amount > 0.0 {
         sharpen_focus_tile_detail(&mut panorama, &panorama_mask, final_sharpen_amount);
+    }
+
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.stage(
+            "after_finishing_before_crop",
+            &panorama,
+            &panorama_mask,
+            &source_owner_ids,
+        );
     }
 
     let panorama_dimensions = panorama.dimensions();
@@ -1350,7 +1497,7 @@ where
         .iter()
         .map(|image| PathBuf::from(&image.filename))
         .collect::<Vec<_>>();
-    Ok(LayeredOwnershipRender {
+    let rendered = LayeredOwnershipRender {
         image: cropped,
         coverage: CoverageMask::from_gray(coverage_gray),
         ownership: OwnershipMap::new(crop_width, crop_height, cropped_owners, legend)?,
@@ -1359,5 +1506,10 @@ where
         full_resolution_samples: full_resolution_samples.load(Ordering::Relaxed),
         #[cfg(test)]
         full_resolution_sample_counts: cropped_sample_counts,
-    })
+    };
+    #[cfg(test)]
+    if let Some(trace) = point_trace.as_mut() {
+        trace.complete(&rendered);
+    }
+    Ok(rendered)
 }

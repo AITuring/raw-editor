@@ -338,6 +338,23 @@ pub(crate) fn decompose(
     initial: &[Matrix3<f64>],
     limits: &[f64],
 ) -> Option<Decomposition> {
+    native_density_gauge(
+        decompose_geometry(proposal, fields, dimensions, initial, limits)?,
+        dimensions,
+        initial,
+        limits,
+    )
+}
+
+/// Keep camera corrections separate from the output lattice. Magnification
+/// runs already plan density from the complete native source Jacobian later.
+pub(super) fn decompose_geometry(
+    proposal: &[Matrix3<f64>],
+    fields: &[StationField],
+    dimensions: &[(u32, u32)],
+    initial: &[Matrix3<f64>],
+    limits: &[f64],
+) -> Option<Decomposition> {
     let count = proposal.len();
     if [fields.len(), dimensions.len(), initial.len(), limits.len()]
         .iter()
@@ -479,5 +496,5 @@ pub(crate) fn decompose(
     if cost > crate::panorama_utils::stack_pipeline::residual_warp::RESIDUAL_WARP_MAX_NODE_DISPLACEMENT_PX {
         return None;
     }
-    native_density_gauge(result, dimensions, initial, limits)
+    Some(result)
 }

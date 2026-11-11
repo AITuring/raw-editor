@@ -153,4 +153,75 @@ fn round_trip_gate_uses_the_existing_matcher() {
         Point2::new(48.0, 48.0),
     );
     assert!(result.is_some());
+    let (diagnostic, reason) = verify_round_trip_match_diagnostic(
+        &source,
+        &target,
+        &identity,
+        &identity,
+        Point2::new(48.0, 48.0),
+        9,
+        PatchMatchGates::LEGACY,
+    );
+    assert_eq!(reason, "accepted");
+    assert_eq!(diagnostic.unwrap().forward, result.unwrap().forward);
+    let flat = GrayImage::from_pixel(96, 96, image::Luma([120]));
+    let (rejected, reason) = verify_round_trip_match_diagnostic(
+        &flat,
+        &flat,
+        &identity,
+        &identity,
+        Point2::new(48.0, 48.0),
+        9,
+        PatchMatchGates::LEGACY,
+    );
+    assert!(rejected.is_none());
+    assert_eq!(reason, "forward_unmeasurable");
+}
+
+#[test]
+fn local_consensus_recovers_only_agreeing_native_texture() {
+    let source = GrayImage::from_fn(144, 144, |x, y| {
+        image::Luma([((x.wrapping_mul(13) ^ y.wrapping_mul(7)) & 255) as u8])
+    });
+    let target = GrayImage::from_fn(144, 144, |x, y| {
+        if (x as i32 - 72).abs() <= 24 && (y as i32 - 72).abs() <= 24 {
+            *source.get_pixel(x, y)
+        } else {
+            image::Luma([((x.wrapping_mul(3) ^ y.wrapping_mul(17)) & 255) as u8])
+        }
+    });
+    let identity = Matrix3::identity();
+    let center = Point2::new(72.0, 72.0);
+    let (large, _) = verify_round_trip_match_diagnostic(
+        &source,
+        &target,
+        &identity,
+        &identity,
+        center,
+        31,
+        PatchMatchGates::LEGACY,
+    );
+    assert!(large.is_none());
+    let local = verify_round_trip_match_local_consensus(
+        &source,
+        &target,
+        &identity,
+        &identity,
+        center,
+        PatchMatchGates::LEGACY,
+    )
+    .unwrap();
+    assert!((local.forward - center).norm() <= 1.0);
+    let flat = GrayImage::from_pixel(144, 144, image::Luma([120]));
+    assert!(
+        verify_round_trip_match_local_consensus(
+            &flat,
+            &flat,
+            &identity,
+            &identity,
+            center,
+            PatchMatchGates::LEGACY,
+        )
+        .is_none()
+    );
 }

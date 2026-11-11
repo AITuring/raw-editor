@@ -85,15 +85,19 @@ for (const dataset of manifest.datasets) {
     fail(`${dataset.id}: expected ${dataset.expectedSourceCount} inputs, found ${files.length}`);
   }
 
-  // Frozen regression subsets are the first N inputs in code-unit order, the
-  // same order tests/focus-stack-regression.mjs passes to the harness.
+  // Frozen regression subsets use the same sorted order that
+  // tests/focus-stack-regression.mjs passes to the harness. `first` keeps the
+  // historical first-N form; `start` + `count` names a contiguous slice.
   for (const subset of dataset.regressionSubsets ?? []) {
-    if (
-      typeof subset.id !== "string" ||
-      !Number.isInteger(subset.first) ||
-      subset.first < 2 ||
-      subset.first > dataset.expectedSourceCount
-    ) {
+    const validFirst =
+      Number.isInteger(subset.first) && subset.first >= 2 && subset.first <= dataset.expectedSourceCount;
+    const validRange =
+      Number.isInteger(subset.start) &&
+      subset.start >= 0 &&
+      Number.isInteger(subset.count) &&
+      subset.count >= 2 &&
+      subset.start + subset.count <= dataset.expectedSourceCount;
+    if (typeof subset.id !== "string" || (!validFirst && !validRange)) {
       fail(`${dataset.id}: invalid regression subset ${JSON.stringify(subset)}`);
     }
   }

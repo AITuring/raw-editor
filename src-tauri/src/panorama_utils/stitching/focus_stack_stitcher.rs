@@ -70,6 +70,7 @@ pub(super) fn focus_stack_stitcher_with_margin_policy<R: Runtime, F>(
     app_handle: AppHandle<R>,
     progress_event: &str,
     load_image: &mut F,
+    coverage_observation: &mut Option<crate::panorama_utils::mosaic::MosaicCoverageObservation>,
 ) -> Result<FocusStackTileRender, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
@@ -118,7 +119,7 @@ where
             progress_event,
             "Framing or lens change detected; refining registration and selecting sharp detail...",
         );
-        return crate::panorama_utils::mosaic::detail_preserving_mosaic(
+        return crate::panorama_utils::mosaic::detail_preserving_mosaic_observed(
             images,
             global_homographies,
             projection,
@@ -127,6 +128,8 @@ where
             app_handle,
             progress_event,
             load_image,
+            coverage_observation,
+            true,
         )
         .map(FocusStackTileRender::unattributed);
     }

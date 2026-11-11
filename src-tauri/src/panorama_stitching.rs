@@ -60,7 +60,10 @@ pub(crate) use crate::panorama_utils::shared::{FocusLayerWarp, FocusWarpBand};
 #[path = "panorama_feature_pairs.rs"]
 mod feature_pairs;
 
-use feature_pairs::{all_image_pairs, natural_path_cmp, pairs_to_match, pairs_to_match_for_images};
+use feature_pairs::{
+    all_image_pairs, natural_path_cmp, pairs_to_match, pairs_to_match_for_images,
+    pairs_to_match_for_images_with_plan,
+};
 
 #[path = "panorama_focus_feature_prep.rs"]
 mod focus_feature_prep;
@@ -201,14 +204,16 @@ mod capture_groups;
 use capture_groups::{
     FocusCaptureGroup, canonicalize_station_geometry_anchors, capture_groups_form_singleton_scan,
     focus_capture_groups, focus_capture_groups_with_grouping, focus_station_binding_evidence,
-    lock_focus_local_bracket_poses, order_focus_render_sources_by_capture_group,
+    lock_focus_local_bracket_poses, observe_singleton_scan,
+    order_focus_render_sources_by_capture_group,
 };
 
 mod run_control;
 
 use run_control::{
-    FocusRssGuard, PairMatchProgress, ensure_focus_memory_available, focus_stack_cache_key_inputs,
-    focus_stack_source_digests, memory_safe_panorama_render_scale, scalable_alignment_budget,
+    FocusRssGuard, PairMatchProgress, ensure_focus_memory_available,
+    focus_stack_cache_key_inputs_from_preflight, focus_stack_source_digests,
+    memory_safe_panorama_render_scale, scalable_alignment_budget,
     scalable_preparation_worker_count, source_digest_hex, stack_requires_bounded_memory,
 };
 #[cfg(test)]
@@ -223,20 +228,38 @@ mod options;
 pub(crate) use options::StitchOutcome;
 pub use options::{AlignmentMode, BlendMode};
 
+mod output_density;
 mod source_prep;
 
+#[cfg(test)]
+use source_prep::load_prepared_stack_source;
 use source_prep::{
     absolute_source_path, excluded_source_records, image_pair_has_mixed_focal_lengths,
     images_have_mixed_focal_lengths, is_auxiliary_stitch_file, is_generated_stitch_output,
-    load_prepared_stack_source, normalize_stack_raw_display_exposure, prepare_focus_rescue_image,
-    raw_display_channel_percentile, scaled_render_image_info, scaled_source_render_homographies,
-    selection_has_mixed_focal_lengths, shared_stack_raw_display_gain, source_to_render_rgb32f,
-    stack_raw_exposure_reference, undecodable_source_paths,
+    load_prepared_stack_source_with_preflight, normalize_stack_raw_display_exposure,
+    prepare_focus_rescue_image_from_analysis, raw_display_channel_percentile,
+    scaled_render_image_info, scaled_source_render_homographies, selection_has_mixed_focal_lengths,
+    shared_stack_raw_display_gain, source_to_render_rgb32f, stack_raw_exposure_reference,
+    undecodable_source_paths,
 };
+
+mod source_preflight;
+
+use source_preflight::SourcePreflight;
+
+mod native_fusion_cache;
+mod native_fusion_key;
+mod source_render_cache;
+mod tile_payload;
+
 #[cfg(test)]
 use source_prep::{
     focal_lengths_span_multiple_lenses, resize_rgb8_area_to_rgb32f, scaled_homographies,
     stack_raw_exposure_value,
+};
+use source_render_cache::{
+    SourceRenderCache, SourceRenderCacheKey, SourceRenderCacheStage, processing_fingerprint,
+    source_render_cache_max_bytes,
 };
 
 mod transform_math;
@@ -523,6 +546,8 @@ use virtual_tile_relations::{
 };
 
 mod virtual_tile_hypothesis;
+mod virtual_tile_scale_contract;
+use virtual_tile_scale_contract::measure_virtual_tile_scale_evidence;
 
 #[cfg(test)]
 use virtual_tile_hypothesis::{

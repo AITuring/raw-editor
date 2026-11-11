@@ -234,6 +234,7 @@ pub(super) fn arb_quality_gate_report() -> impl Strategy<Value = QualityGateRepo
     )
         .prop_map(
             |(verdict, roi_count, criteria, unmeasurable)| QualityGateReport {
+                legacy_native_evidence: None,
                 verdict,
                 roi_count,
                 criteria: criteria

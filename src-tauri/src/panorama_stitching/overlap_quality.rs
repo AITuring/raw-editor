@@ -191,6 +191,72 @@ pub(super) fn focus_overlap_quality_measurements_on_coverage(
     source_to_target: &Matrix3<f64>,
     coverages: Option<(&stitching::CoverageMask, &stitching::CoverageMask)>,
 ) -> Option<FocusOverlapQuality> {
+    overlap_quality_grid(source, target, source_to_target, coverages, None).or_else(|| {
+        // Keep successful legacy measurements byte-for-byte. Retry missing
+        // evidence on the geometric overlap, never on accepted match pixels.
+        let bounds = overlap_sampling_bounds(source, target, source_to_target)?;
+        // Mask sparsity alone must not change the established sample gate.
+        // Only a geometrically narrow intersection gets a denser retry.
+        if bounds[2] - bounds[0] > target.alignment_image.width() as f64 * 0.25
+            && bounds[3] - bounds[1] > target.alignment_image.height() as f64 * 0.25
+        {
+            return None;
+        }
+        overlap_quality_grid(source, target, source_to_target, coverages, Some(bounds))
+    })
+}
+
+fn overlap_sampling_bounds(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    h: &Matrix3<f64>,
+) -> Option<[f64; 4]> {
+    if !source.scale_factor.is_finite()
+        || source.scale_factor <= 0.0
+        || !target.scale_factor.is_finite()
+        || target.scale_factor <= 0.0
+    {
+        return None;
+    }
+    let w = source.alignment_image.width().checked_sub(1)? as f64 * source.scale_factor;
+    let v = source.alignment_image.height().checked_sub(1)? as f64 * source.scale_factor;
+    let mut bounds = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    let mut sign = 0.0_f64;
+    for (x, y) in [(0.0, 0.0), (w, 0.0), (w, v), (0.0, v)] {
+        let q = h * Point3::new(x, y, 1.0);
+        if !q.iter().all(|v| v.is_finite()) || q.z.abs() < 1e-12 {
+            return None;
+        }
+        if sign != 0.0 && sign != q.z.signum() {
+            return None;
+        }
+        sign = q.z.signum();
+        let x = q.x / q.z / target.scale_factor;
+        let y = q.y / q.z / target.scale_factor;
+        bounds[0] = bounds[0].min(x);
+        bounds[1] = bounds[1].min(y);
+        bounds[2] = bounds[2].max(x);
+        bounds[3] = bounds[3].max(y);
+    }
+    bounds[0] = bounds[0].max(4.0);
+    bounds[1] = bounds[1].max(4.0);
+    bounds[2] = bounds[2].min(target.alignment_image.width() as f64 - 5.0);
+    bounds[3] = bounds[3].min(target.alignment_image.height() as f64 - 5.0);
+    (bounds[2] > bounds[0] && bounds[3] > bounds[1]).then_some(bounds)
+}
+
+fn overlap_quality_grid(
+    source: &ImageInfo,
+    target: &ImageInfo,
+    source_to_target: &Matrix3<f64>,
+    coverages: Option<(&stitching::CoverageMask, &stitching::CoverageMask)>,
+    bounds: Option<[f64; 4]>,
+) -> Option<FocusOverlapQuality> {
     let inverse = source_to_target.try_inverse()?;
     let target_width = target.alignment_image.width();
     let target_height = target.alignment_image.height();
@@ -213,18 +279,26 @@ pub(super) fn focus_overlap_quality_measurements_on_coverage(
             y + radius,
         )
     };
-    let columns = 64u32;
-    let rows = 40u32;
+    // At most 2560 probes, at least one target pixel between retry probes.
+    let columns = bounds.map_or(64, |b| ((b[2] - b[0]).floor() as u32).min(64));
+    let rows = bounds.map_or(40, |b| ((b[3] - b[1]).floor() as u32).min(40));
     let mut source_values = Vec::new();
     let mut target_values = Vec::new();
     let mut source_edges = Vec::new();
     let mut target_edges = Vec::new();
     let mut edge_orientation_cosines = Vec::new();
     let mut edge_orientation_differences = Vec::new();
-    for row in 2..rows.saturating_sub(2) {
-        let target_y = (row as f64 + 0.5) * target_height as f64 / rows as f64;
-        for column in 2..columns.saturating_sub(2) {
-            let target_x = (column as f64 + 0.5) * target_width as f64 / columns as f64;
+    let margin = if bounds.is_some() { 0 } else { 2 };
+    for row in margin..rows.saturating_sub(margin) {
+        let target_y = bounds.map_or(
+            (row as f64 + 0.5) * target_height as f64 / rows as f64,
+            |b| b[1] + (row as f64 + 0.5) * (b[3] - b[1]) / rows as f64,
+        );
+        for column in margin..columns.saturating_sub(margin) {
+            let target_x = bounds.map_or(
+                (column as f64 + 0.5) * target_width as f64 / columns as f64,
+                |b| b[0] + (column as f64 + 0.5) * (b[2] - b[0]) / columns as f64,
+            );
             let target_full = Point2::new(
                 target_x * target.scale_factor,
                 target_y * target.scale_factor,

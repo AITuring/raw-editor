@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "scope": "Lanting45 explicit artwork framing: frozen painting-tone pixels, existing native QualityGate and source evidence. Real hardware reflections allowed; not a full-project release.",
+  "referencePath": "/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg",
+  "referenceSha": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+  "sourceCount": 45,
+  "outputSha": "230e48bbb964545adfce7bfa60f9a99e33e888d8abe22e0d78684bc458f7da0c",
+  "ownerSha": "cb4b8405b12a45445f3e09efe0578114abcaa8f9b9136512ad50a89225f65c67",
+  "coverageSha": "89044ccab72db4ae3f6a43a93d66d73309bc868e5b3c4d4518c352d7d4f89071",
+  "canvas": [31085, 11011],
+  "covered": 421256167,
+  "owned": 421256167,
+  "requiredCriteria": [
+    "local_scale_median",
+    "local_scale_pixel_ratio",
+    "effective_pixel_count",
+    "mtf50_normalized",
+    "gradient_energy_normalized",
+    "noise_sigma_ratio",
+    "roi_delta_e00",
+    "boundary_stroke_alignment",
+    "owner_sharpness_coverage"
+  ],
+  "paper": {
+    "minimumPoints": 1000,
+    "maximumBoundaryP95": 3,
+    "maximumBoundaryStep": 7,
+    "reflectionPolicy": "real hardware reflections allowed by user; paper domain remains primary"
+  },
+  "recordedLegacyGate": "pass",
+  "releaseReady": true,
+  "baselineBinding": "Frozen v60 pixels unchanged; v62 native evidence and v63 framing-aware CLI accepted with preserved NEF cold/hot baselines.",
+  "inputsSha": "00af0b142f22ef38138b078540b8156f75b5220557a93a5310d20caad120f4b1",
+  "acceptedNativeEvidence": {
+    "candidate": "v63-framing-integration",
+    "binarySha256": "eb9f99b7d0e489501a1457c751413ae91b6e6fb9862a6e76df269d50c0a49122",
+    "reportSha256": "adfa71544291b1ac7341fde90c562cc6aa5398480dc126db9b7d2dc0138ec659",
+    "roiCount": 8,
+    "unresolvedPixels": 0,
+    "captureStations": 44,
+    "sources": 45
+  }
+}

@@ -109,6 +109,110 @@ impl std::fmt::Debug for FocusSourceSampling {
 }
 
 impl FocusSourceSampling {
+    pub(crate) fn for_mosaic(
+        image: &ImageInfo,
+        homography: &Matrix3<f64>,
+        projection: Projection,
+    ) -> Self {
+        Self::new(image, homography, projection, None)
+    }
+
+    pub(crate) fn has_calibrated_footprint(&self) -> bool {
+        self.image.source_footprint.is_some()
+    }
+
+    /// Immutable prepared-source metadata used to validate native payloads.
+    pub(crate) fn snapshot_metadata(&self) -> (usize, &str, (u32, u32)) {
+        (self.image.id, &self.image.filename, self.image.dimensions())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(
+        image: &ImageInfo,
+        homography: &Matrix3<f64>,
+        projection: Projection,
+        focus_warp: Option<&FocusLayerWarp>,
+    ) -> Self {
+        Self::new(image, homography, projection, focus_warp)
+    }
+
+    /// Conservative retained storage, including the immutable source metadata
+    /// snapshot reached through the Arc. Shared snapshots may be charged more
+    /// than once; omitting their image buffers would understate cache memory.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let info = &self.image;
+        let mut bytes = std::mem::size_of::<Self>()
+            .saturating_add(
+                self.band_inverses
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<FocusBandInverse>()),
+            )
+            .saturating_add(std::mem::size_of::<ImageInfo>())
+            .saturating_add(2usize.saturating_mul(std::mem::size_of::<usize>()))
+            .saturating_add(info.filename.capacity())
+            .saturating_add(info.alignment_image.as_raw().capacity())
+            .saturating_add(
+                info.features
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<crate::panorama_utils::shared::Feature>()),
+            )
+            .saturating_add(
+                info.top_features
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<crate::panorama_utils::shared::Feature>()),
+            )
+            .saturating_add(
+                info.horizontal_edge_rows
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<f64>()),
+            )
+            .saturating_add(
+                info.vertical_edge_columns
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<f64>()),
+            );
+        if let Some(image) = info.full_image.as_ref() {
+            bytes = bytes.saturating_add(
+                image
+                    .as_raw()
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<f32>()),
+            );
+        }
+        if let Some(mask) = info.foreground_mask.as_ref() {
+            bytes = bytes.saturating_add(mask.as_raw().capacity());
+        }
+        bytes
+    }
+
+    /// Mapping identity for the per-run Quality_Gate reference cache. The
+    /// image snapshot is immutable and shared by clones; inverse matrices and
+    /// band selection must also participate (the compact Debug omits them).
+    pub(crate) fn reference_cache_fingerprint(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        std::sync::Arc::as_ptr(&self.image).hash(&mut hash);
+        std::mem::discriminant(&self.projection).hash(&mut hash);
+        for value in self.global_inverse.iter() {
+            value.to_bits().hash(&mut hash);
+        }
+        self.band_inverses.len().hash(&mut hash);
+        for (min_x, max_x, min_y, max_y, inverse, correction, axis, relax, foreground) in
+            &self.band_inverses
+        {
+            for value in [min_x, max_x, min_y, max_y] {
+                value.to_bits().hash(&mut hash);
+            }
+            for value in inverse.iter().chain(correction.iter()) {
+                value.to_bits().hash(&mut hash);
+            }
+            axis.hash(&mut hash);
+            relax.hash(&mut hash);
+            foreground.hash(&mut hash);
+        }
+        hash.finish()
+    }
+
     pub(super) fn new(
         image: &ImageInfo,
         homography: &Matrix3<f64>,

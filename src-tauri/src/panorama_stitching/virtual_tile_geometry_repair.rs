@@ -347,7 +347,18 @@ pub(super) fn refine_virtual_tile_joint_geometry(
                 points: matches[&(left, right)].points.clone(),
             })
             .collect::<Vec<_>>();
-        let fitted = joint_warp::fit(&proposal, &dimensions, &relations, 0)?;
+        // A cross-scale overlap narrower than one 64px station-field cell
+        // cannot constrain neighbouring free nodes well. Use the existing
+        // independent validation and all original geometry/output gates with
+        // a more regularized field; ordinary and wider relations retain the
+        // established fit exactly.
+        let narrow_cross_scale = report.accepted.iter().any(|r| r.scale_evidence.is_some())
+            && limits.iter().any(|&limit| limit < 64.0);
+        let fitted = if narrow_cross_scale {
+            joint_warp::fit_with_smoothness(&proposal, &dimensions, &relations, 0, 0.01)?
+        } else {
+            joint_warp::fit(&proposal, &dimensions, &relations, 0)?
+        };
         let mut verified = vec![Vec::new(); tiles.len()];
         for &(left, right) in &pairs {
             for &(a, b, error) in &matches[&(left, right)].native_verified_points {
@@ -361,7 +372,12 @@ pub(super) fn refine_virtual_tile_joint_geometry(
                 });
             }
         }
-        let mut bounded = joint_warp::materialize(
+        let materialize = if report.accepted.iter().any(|r| r.scale_evidence.is_some()) {
+            joint_warp::materialize_for_output_lattice
+        } else {
+            joint_warp::materialize
+        };
+        let mut bounded = materialize(
             &proposal,
             &fitted,
             &dimensions,
@@ -407,6 +423,11 @@ pub(super) fn refine_virtual_tile_joint_geometry(
                 return None;
             }
             let distribution = residual_distribution(bounded.validation_errors.clone());
+            if !distribution.median.is_finite()
+                || distribution.median > super::CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX
+            {
+                return None;
+            }
             let mut errors = bounded.validation_errors.clone();
             errors.sort_by(f64::total_cmp);
             closure.global_before_residual_median_px = Some(closure.residual_median_px);

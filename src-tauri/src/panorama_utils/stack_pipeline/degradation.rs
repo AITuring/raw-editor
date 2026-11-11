@@ -186,6 +186,8 @@ pub const DIAGNOSTICS_ROI_INVALID: &str = "diagnostics_roi_invalid";
 pub const ROI_NOT_SLANTED_EDGE: &str = "roi_not_slanted_edge";
 /// The ROI is not flat enough for a noise measurement.
 pub const ROI_NOT_FLAT: &str = "roi_not_flat";
+/// The ROI has no luminance energy in either side of a gradient comparison.
+pub const GRADIENT_REFERENCE_ZERO: &str = "gradient_reference_zero";
 /// The owner Source_RAW could not be decoded for the reference measurement.
 pub const OWNER_SOURCE_UNDECODABLE: &str = "owner_source_undecodable";
 /// Residual alignment error of the ROI pairing above 0.5 native pixels.
@@ -489,6 +491,7 @@ pub const FAILURE_REASONS: &[(&str, Severity)] = &[
 pub const UNMEASURABLE_REASONS: &[&str] = &[
     ROI_NOT_SLANTED_EDGE,
     ROI_NOT_FLAT,
+    GRADIENT_REFERENCE_ZERO,
     OWNER_SOURCE_UNDECODABLE,
     PAIRING_RESIDUAL_ALIGNMENT_EXCEEDED,
     BOUNDARY_NO_PAIRABLE_EDGE,

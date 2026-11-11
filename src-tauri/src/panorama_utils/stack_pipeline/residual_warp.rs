@@ -407,9 +407,50 @@ pub(crate) fn verify_round_trip_match_with_gates(
     half: i32,
     gates: PatchMatchGates,
 ) -> Option<RoundTripMatch> {
-    let forward_match =
-        probe_warped_patch(source, target, forward_transform, center, half, 7, gates).matched?;
-    let backward_match = probe_warped_patch(
+    verify_round_trip_match_diagnostic(
+        source,
+        target,
+        forward_transform,
+        backward_transform,
+        center,
+        half,
+        gates,
+    )
+    .0
+}
+
+/// The same measurement with a rejection stage for bounded native diagnostics.
+pub(crate) fn verify_round_trip_match_diagnostic(
+    source: &GrayImage,
+    target: &GrayImage,
+    forward_transform: &Matrix3<f64>,
+    backward_transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    half: i32,
+    gates: PatchMatchGates,
+) -> (Option<RoundTripMatch>, &'static str) {
+    let forward = probe_warped_patch(source, target, forward_transform, center, half, 7, gates);
+    let Some(forward_match) = forward.matched else {
+        return (
+            None,
+            if forward.best_correlation.is_none() {
+                "forward_unmeasurable"
+            } else if forward
+                .best_correlation
+                .is_some_and(|v| v < gates.min_correlation)
+            {
+                "forward_correlation"
+            } else if forward
+                .peak_margin
+                .is_some_and(|v| v < gates.min_peak_margin)
+            {
+                "forward_peak_margin"
+            } else {
+                "forward_boundary"
+            },
+        );
+    };
+    let backward = probe_warped_patch(
         target,
         source,
         backward_transform,
@@ -417,14 +458,76 @@ pub(crate) fn verify_round_trip_match_with_gates(
         half,
         7,
         gates,
-    )
-    .matched?;
+    );
+    let Some(backward_match) = backward.matched else {
+        return (
+            None,
+            if backward.best_correlation.is_none() {
+                "reverse_unmeasurable"
+            } else if backward
+                .best_correlation
+                .is_some_and(|v| v < gates.min_correlation)
+            {
+                "reverse_correlation"
+            } else if backward
+                .peak_margin
+                .is_some_and(|v| v < gates.min_peak_margin)
+            {
+                "reverse_peak_margin"
+            } else {
+                "reverse_boundary"
+            },
+        );
+    };
     let round_trip_error_px = (backward_match.target - center).norm();
-    (round_trip_error_px <= RESIDUAL_WARP_MAX_ROUND_TRIP_ERROR_PX).then_some(RoundTripMatch {
-        forward: forward_match.target,
-        backward: backward_match.target,
-        round_trip_error_px,
-    })
+    if round_trip_error_px > RESIDUAL_WARP_MAX_ROUND_TRIP_ERROR_PX {
+        return (None, "round_trip_error");
+    }
+    (
+        Some(RoundTripMatch {
+            forward: forward_match.target,
+            backward: backward_match.target,
+            round_trip_error_px,
+        }),
+        "accepted",
+    )
+}
+
+/// Native local-deformation retry for a large-patch correlation failure.
+/// Both smaller supports must independently pass the unchanged patch and
+/// round-trip gates and agree to one native pixel. A flat or repeated patch
+/// therefore remains rejected instead of inheriting a coarse prediction.
+pub(crate) fn verify_round_trip_match_local_consensus(
+    source: &GrayImage,
+    target: &GrayImage,
+    forward_transform: &Matrix3<f64>,
+    backward_transform: &Matrix3<f64>,
+    center: Point2<f64>,
+    gates: PatchMatchGates,
+) -> Option<RoundTripMatch> {
+    let larger = verify_round_trip_match_diagnostic(
+        source,
+        target,
+        forward_transform,
+        backward_transform,
+        center,
+        23,
+        gates,
+    )
+    .0?;
+    let smaller = verify_round_trip_match_diagnostic(
+        source,
+        target,
+        forward_transform,
+        backward_transform,
+        center,
+        15,
+        gates,
+    )
+    .0?;
+    ((larger.forward - smaller.forward).norm() <= 1.0
+        && (larger.backward - smaller.backward).norm() <= 1.0)
+        .then_some(larger)
 }
 
 fn sane_extent(value: f64) -> f64 {

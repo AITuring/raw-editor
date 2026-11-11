@@ -363,7 +363,7 @@ assert.match(
   'the Focus_Fuser must reuse the mosaic low-pass difference primitive rather than fork it',
 );
 assert.ok(
-  !/detail_preserving_mosaic\(/.test(focusFuser),
+  !/detail_preserving_mosaic(?:_observed)?\(/.test(focusFuser),
   'the Focus_Fuser must reuse the decision primitives without the mosaic cell-wise local warp',
 );
 assert.match(
@@ -599,7 +599,7 @@ assert.match(mosaic, /mask_covered_bounds\(&mask\)/, 'in-memory mosaic output mu
 assert.match(mosaic, /store\s*\.covered_bounds\(\)/, 'streaming mosaic output must preserve all real source coverage');
 assert.match(mosaic, /refine_native_layer\(/, 'the mosaic path must refine residual alignment at native resolution');
 assert.match(mosaic, /Render only ownership cells/, 'final rendering must skip rejected ownership cells');
-assert.match(mosaic, /every pixel has source ownership/, 'mosaic must retain an explicit full-coverage assertion');
+assert.match(mosaic, /if source_owned_pixels != source_covered_pixels/, 'streaming mosaic must reject covered pixels without real source owners');
 assert.match(
   mosaic,
   /streaming_group_tone_relations_from_analysis\(/,
@@ -613,7 +613,7 @@ assert.match(
 
 assert.match(
   stitching,
-  /detail_preserving_mosaic\(/,
+  /detail_preserving_mosaic(?:_observed)?\(/,
   'shifted focus stacks must use detail-preserving ownership rather than simple overwrite',
 );
 assert.match(stitching, /FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND/, 'seam colour correction must remain explicitly gated');
@@ -900,9 +900,16 @@ assert.ok(relationGateEnd > relationGateStart, 'production relation acceptance m
 const relationGateBody = panorama.slice(relationGateStart, relationGateEnd + 2);
 assert.match(
   relationGateBody,
-  /if !measurements\.scale_ratio\.is_finite\(\)\s*\|\| !\(STATION_RELATION_SCALE_RATIO_MIN\.\.=STATION_RELATION_SCALE_RATIO_MAX\)\s*\.contains\(&measurements\.scale_ratio\)\s*\{\s*reasons\.push\(degradation::STATION_RELATION_SCALE_OUT_OF_RANGE\);/,
-  'production relation acceptance must reject nonfinite/out-of-window scales using both approved constants',
+  /if !measurements\.scale_ratio\.is_finite\(\)\s*\|\| \(!\(STATION_RELATION_SCALE_RATIO_MIN\.\.=STATION_RELATION_SCALE_RATIO_MAX\)\s*\.contains\(&measurements\.scale_ratio\)\s*&& !measurements\s*\.scale_evidence\s*\.as_ref\(\)\s*\.is_some_and\(bounded_native_scale_is_accepted\)\)/,
+  'nonfinite scales fail; outside the unchanged legacy window requires bounded native evidence',
 );
+// Requirement 6.11 changes only the cross-station geometric scale contract.
+assert.match(panorama, /fn bounded_native_scale_is_accepted[\s\S]*?e\.fit_count >= 24[\s\S]*?e\.holdout_count >= 24/);
+assert.match(panorama, /within\(e\.minimum_scale, 0\.8, 1\.25\)/);
+assert.match(panorama, /within\(e\.maximum_scale, 0\.8, 1\.25\)/);
+assert.match(panorama, /within\(e\.scale_variation, 1\.0, 1\.10\)/);
+assert.match(panorama, /within\(e\.maximum_refit_scale_difference, 0\.0, 0\.01\)/);
+assert.match(panorama, /if evidence_kind == StationRelationEvidenceKind::VirtualTile \{\s*super::measure_virtual_tile_scale_evidence/);
 assert.equal(stationRelationMinSupport, 0.2, 'relation inlier hull must cover 20% of overlap');
 assert.equal(stationRelationMaxMeanDifference, 0.2, 'low-frequency mean difference is capped at 20%');
 assert.equal(stationRelationEdgeStrengthMin, 0.7, 'edge-strength ratio must not fall below 0.7');
@@ -1127,6 +1134,7 @@ const expectedTopLevelFields = [
   'residual_warp',
   'tone',
   'composition',
+  'performance',
   'quality_gate',
   'output',
   'resources',

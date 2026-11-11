@@ -24,6 +24,23 @@ pub(crate) const QUALITY_ROI_MAX_COUNT: usize = 256;
 
 pub(crate) const QUALITY_ROI_MIN_TARGET: usize = 32;
 
+/// High-bit marker used by the runtime adapter for ROIs selected from a
+/// station-level owner plane.  Ordinary connected-component labels are
+/// bounded by the canvas pixel count and never use this bit; keeping the
+/// marker in `region_label` avoids widening the persisted ROI shape while
+/// preserving the existing raw-owner constructors and cache keys.
+pub(crate) const STATION_LEVEL_ROI_MARKER: u32 = 1 << 31;
+
+pub(crate) fn station_level_roi_label(station_id: usize) -> Option<u32> {
+    let station = u32::try_from(station_id).ok()?;
+    (station < STATION_LEVEL_ROI_MARKER).then_some(STATION_LEVEL_ROI_MARKER | station)
+}
+
+pub(crate) fn station_level_roi_station_id(region_label: u32) -> Option<usize> {
+    (region_label & STATION_LEVEL_ROI_MARKER != 0)
+        .then_some((region_label & !STATION_LEVEL_ROI_MARKER) as usize)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct OwnerRegion {
     pub label: u32,
@@ -203,11 +220,28 @@ pub(crate) fn select_quality_rois(
     if !origin.0.is_finite() || !origin.1.is_finite() {
         return Err(degradation::DIAGNOSTICS_ROI_INVALID);
     }
+    // Prefer the contractual 512px evidence window. Focus ownership can
+    // fragment a real output into runs shorter than that window, so fall
+    // back through 256/128/64px windows while retaining the same owner ring,
+    // source mapping and metric thresholds. The 64px floor still leaves
+    // enough room for the 13px acutance support and the fixed 16px margin.
+    let mut side = QUALITY_ROI_SIDE;
     let mut step: u32 = 256;
-    let mut candidates = enumerate_quality_rois(regions, origin, step as usize);
+    let mut candidates = enumerate_quality_rois(regions, origin, step as usize, side);
     if candidates.len() < QUALITY_ROI_MIN_TARGET {
+        side = QUALITY_ROI_SIDE / 2;
         step = 128;
-        candidates = enumerate_quality_rois(regions, origin, step as usize);
+        candidates = enumerate_quality_rois(regions, origin, step as usize, side);
+    }
+    if candidates.len() < QUALITY_ROI_MIN_TARGET {
+        side = QUALITY_ROI_SIDE / 4;
+        step = 64;
+        candidates = enumerate_quality_rois(regions, origin, step as usize, side);
+    }
+    if candidates.len() < QUALITY_ROI_MIN_TARGET {
+        side = QUALITY_ROI_SIDE / 8;
+        step = 32;
+        candidates = enumerate_quality_rois(regions, origin, step as usize, side);
     }
     if candidates.is_empty() {
         return Err(degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE);
@@ -215,7 +249,7 @@ pub(crate) fn select_quality_rois(
     let mandatory_regions = regions
         .regions
         .iter()
-        .filter(|r| r.pixel_count >= 4 * u64::from(QUALITY_ROI_SIDE).pow(2))
+        .filter(|r| r.pixel_count >= 4 * u64::from(side).pow(2))
         .map(|r| r.label)
         .collect::<Vec<_>>();
     if mandatory_regions.len() > QUALITY_ROI_MAX_COUNT {
@@ -259,22 +293,23 @@ pub(super) fn enumerate_quality_rois(
     regions: &OwnerRegions,
     origin: (f64, f64),
     step: usize,
+    side: u32,
 ) -> Vec<QualityRoi> {
-    if regions.width < QUALITY_ROI_SIDE || regions.height < QUALITY_ROI_SIDE {
+    if side == 0 || regions.width < side || regions.height < side {
         return Vec::new();
     }
     let mut result = Vec::new();
-    for y in (0..=regions.height - QUALITY_ROI_SIDE).step_by(step) {
-        for x in (0..=regions.width - QUALITY_ROI_SIDE).step_by(step) {
+    for y in (0..=regions.height - side).step_by(step) {
+        for x in (0..=regions.width - side).step_by(step) {
             let label = regions.labels[(y * regions.width + x) as usize];
             if label == 0 {
                 continue;
             }
             let mut clearance = f64::INFINITY;
             let mut accepted = true;
-            'rows: for ry in y..y + QUALITY_ROI_SIDE {
+            'rows: for ry in y..y + side {
                 let start = (ry * regions.width + x) as usize;
-                for i in start..start + QUALITY_ROI_SIDE as usize {
+                for i in start..start + side as usize {
                     if regions.labels[i] != label
                         || regions.distance_to_boundary[i] < QUALITY_ROI_MARGIN
                     {
@@ -288,7 +323,7 @@ pub(super) fn enumerate_quality_rois(
                 result.push(QualityRoi {
                     x,
                     y,
-                    side: QUALITY_ROI_SIDE,
+                    side,
                     region_label: label,
                     owner: regions.regions[(label - 1) as usize].owner,
                     world_origin: (origin.0 + f64::from(x), origin.1 + f64::from(y)),

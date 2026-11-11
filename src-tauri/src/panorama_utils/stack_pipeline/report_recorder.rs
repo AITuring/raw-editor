@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use serde_json::Value;
 
@@ -65,12 +66,15 @@ pub(crate) struct StackReportRecorder {
     /// numbers.  `None` leaves `sha256_after` empty, which is what the panorama
     /// path and the unit tests want.
     source_digest_recheck: Option<SourceDigestRecheck>,
+    source_preflight_observation: Mutex<Option<SourcePreflightObservation>>,
+    started: Instant,
 }
 
 /// Maps Source_RAW paths to their current content digests in lower hex.  A path
 /// that cannot be read contributes an empty string: a re-check that is itself
 /// impossible must not hide the digest that *was* taken before the run.
 pub(crate) type SourceDigestRecheck = Box<dyn Fn(&[String]) -> Vec<String> + Send + Sync>;
+pub(crate) type SourcePreflightObservation = Box<dyn Fn() -> SourcePreflightReport + Send + Sync>;
 
 impl StackReportRecorder {
     pub(crate) fn new(pipeline_version: &str, directory: Option<PathBuf>) -> Self {
@@ -80,6 +84,8 @@ impl StackReportRecorder {
             written: AtomicBool::new(false),
             bridge_run_ledger: true,
             source_digest_recheck: None,
+            source_preflight_observation: Mutex::new(None),
+            started: Instant::now(),
         }
     }
 
@@ -87,6 +93,27 @@ impl StackReportRecorder {
     pub(crate) fn with_source_digest_recheck(mut self, recheck: SourceDigestRecheck) -> Self {
         self.source_digest_recheck = Some(recheck);
         self
+    }
+
+    pub(crate) fn with_source_preflight_observation(
+        self,
+        observation: SourcePreflightObservation,
+    ) -> Self {
+        *self
+            .source_preflight_observation
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(observation);
+        self
+    }
+
+    pub(crate) fn install_source_preflight_observation(
+        &self,
+        observation: SourcePreflightObservation,
+    ) {
+        *self
+            .source_preflight_observation
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(observation);
     }
 
     /// Test-only recorder that never reads the process-wide run ledger, so an
@@ -99,6 +126,8 @@ impl StackReportRecorder {
             written: AtomicBool::new(false),
             bridge_run_ledger: false,
             source_digest_recheck: None,
+            source_preflight_observation: Mutex::new(None),
+            started: Instant::now(),
         }
     }
 
@@ -116,7 +145,38 @@ impl StackReportRecorder {
     }
 
     pub(crate) fn set_selected_path(&self, selected_path: SelectedPath) {
-        self.update(|report| report.selected_path = selected_path);
+        self.update(|report| {
+            report.selected_path = selected_path;
+            // Keep the composition observation synchronized with late runtime
+            // fallbacks (for example a Virtual_Tile render failure).
+            report.composition.path_selection.selected_path = selected_path;
+            report.composition.path_selection.use_virtual_tiles = matches!(
+                selected_path,
+                SelectedPath::LayeredVirtualTile
+                    | SelectedPath::ProgressiveSeamTile
+                    | SelectedPath::StreamingMosaic
+            );
+        });
+    }
+
+    /// Record the configured and selected compositor paths at the same
+    /// boundary where `select_and_record_run_path` writes the stable
+    /// top-level `selected_path` field.
+    pub(crate) fn set_path_selection_observation(
+        &self,
+        configured_path: Option<SelectedPath>,
+        selected_path: SelectedPath,
+        use_virtual_tiles: bool,
+        fallback_reason: Option<String>,
+    ) {
+        self.update(|report| {
+            report.composition.path_selection = PathSelectionObservation {
+                configured_path,
+                selected_path,
+                use_virtual_tiles,
+                fallback_reason,
+            };
+        });
     }
 
     /// Used by the explicit terminating paths a later phase introduces; today
@@ -124,6 +184,50 @@ impl StackReportRecorder {
     #[allow(dead_code)]
     pub(crate) fn set_result(&self, result: StackRunResult) {
         self.update(|report| report.degradation.result = result);
+    }
+
+    pub(crate) fn record_preflight_seconds(&self, seconds: f64) {
+        self.update(|report| report.performance.stage_seconds.preflight_seconds = seconds);
+    }
+
+    pub(crate) fn record_prepare_seconds(&self, seconds: f64) {
+        self.update(|report| report.performance.stage_seconds.prepare_seconds = seconds);
+    }
+
+    pub(crate) fn record_matching_seconds(
+        &self,
+        seconds: f64,
+        candidate_pairs: usize,
+        verified_pairs: usize,
+    ) {
+        self.update(|report| {
+            report.performance.stage_seconds.matching_seconds = seconds;
+            report.performance.pairs = PairCountReport {
+                candidate_pairs,
+                verified_pairs,
+                ..Default::default()
+            };
+        });
+    }
+
+    pub(crate) fn record_matching_plan(&self, seconds: f64, plan: PairCountReport) {
+        self.update(|report| {
+            report.performance.stage_seconds.matching_seconds = seconds;
+            report.performance.pairs = plan;
+        });
+    }
+
+    pub(crate) fn record_ordering_seconds(&self, seconds: f64) {
+        self.update(|report| report.performance.stage_seconds.ordering_seconds = seconds);
+    }
+
+    pub(crate) fn record_render_seconds(&self, seconds: f64) {
+        self.update(|report| report.performance.stage_seconds.render_seconds = seconds);
+    }
+
+    fn record_total_seconds(&self) {
+        let seconds = self.started.elapsed().as_secs_f64();
+        self.update(|report| report.performance.stage_seconds.total_seconds = seconds);
     }
 
     /// Copy `ledger` into `degradation.entries` and let it refine
@@ -288,6 +392,16 @@ impl StackReportRecorder {
         // Every terminating path lands here, so this single call covers the
         // success, failure and cancellation re-check of requirement 4.8 / 12.8.
         self.recheck_source_digests();
+        let observation = self
+            .source_preflight_observation
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(observation) = observation {
+            let preflight = observation();
+            self.update(|report| report.performance.source_preflight = preflight);
+        }
+        self.record_total_seconds();
         self.update(|report| report.finished_at_epoch_ms = epoch_millis());
         let report = self.snapshot();
         let directory = self.directory.as_deref()?;

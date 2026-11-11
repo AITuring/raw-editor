@@ -165,6 +165,8 @@ pub(super) fn save_image_stack_output_for_result(
                         metadata.alpha_preserved,
                         metadata.icc,
                         output_path,
+                        metadata.dimensions,
+                        metadata.tiff_extra_samples,
                     )
                 {
                     eprintln!(

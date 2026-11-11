@@ -131,9 +131,9 @@ proptest! {
 
     // Feature: layered-camera-group-focus-stitching, Property 61: ROI 选取满足全部几何条件
     #[test]
-    fn property_61_roi_selection_is_region_complete(split in 544u32..1024u32) {
+    fn property_61_roi_selection_is_region_complete(split in 560u32..1024u32) {
         let width = 1024u32;
-        let height = 512u32;
+        let height = 1024u32;
         let owners = (0..width * height).map(|index| {
             let x = index % width;
             if x < split { 1u16 } else { 2u16 }
@@ -142,11 +142,11 @@ proptest! {
         let regions = label_owner_regions(&owners, &coverage)
             .expect("synthetic ownership must label");
         let selection = select_quality_rois(&regions, (0.0, 0.0))
-            .expect("at least one 512px ROI is measurable");
+            .expect("at least one bounded ROI is measurable");
         prop_assert!(!selection.rois.is_empty());
         prop_assert!(selection.rois.len() <= QUALITY_ROI_MAX_COUNT);
         for roi in selection.rois {
-            prop_assert_eq!(roi.side, QUALITY_ROI_SIDE);
+            prop_assert!(roi.side <= QUALITY_ROI_SIDE);
             let first = regions.labels[(roi.y * regions.width + roi.x) as usize];
             for y in roi.y..roi.y + roi.side {
                 for x in roi.x..roi.x + roi.side {
@@ -668,6 +668,7 @@ proptest! {
         let content_reasons = [
             degradation::ROI_NOT_SLANTED_EDGE,
             degradation::ROI_NOT_FLAT,
+            degradation::GRADIENT_REFERENCE_ZERO,
             degradation::BOUNDARY_NO_PAIRABLE_EDGE,
             degradation::SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED,
             degradation::SLANTED_EDGE_TOO_SHORT,
@@ -795,6 +796,7 @@ proptest! {
         y in -1000.0f64..1000.0,
     ) {
         let report = QualityGateReport {
+            legacy_native_evidence: None,
             verdict: QualityGateVerdict::Fail,
             roi_count: 1,
             criteria: vec![QualityGateCriterionRecord {
@@ -804,6 +806,14 @@ proptest! {
                 threshold_max: None,
                 measurable_count: 1,
                 unmeasurable_count: 0,
+                candidate_count: 1,
+                eligible_count: 1,
+                rejected_content_count: 0,
+                rejected_content_reasons: BTreeMap::new(),
+                rejected_content_examples: Vec::new(),
+                selection_mode: "property".to_string(),
+                unvisited_candidate_count: 0,
+                reference_roi_limit: 0,
                 content_not_applicable_count: 0,
                 technical_unmeasurable_count: 0,
                 verdict: QualityGateVerdict::Fail,
@@ -827,6 +837,7 @@ proptest! {
                 unresolved_pixel_count: 0,
                 effective_output_pixels: None,
                 effective_projected_pixels: None,
+                effective_source_domain: None,
             }],
             unmeasurable: vec![UnmeasurableRecord {
                 criterion: "noise_sigma_ratio".to_string(),

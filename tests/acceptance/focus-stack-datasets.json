@@ -98,7 +98,8 @@
       "expectedSourceCount": 45,
       "sourceBytes": 2560845422,
       "sourceAggregateSha256": "459477eb2eeabfe410665d8aef98a554035f8201d179e64b47ddf30ebc17f39f",
-      "baseline": false
+      "baseline": false,
+      "regressionSubsets": [{ "id": "sleeping-9-6479", "start": 18, "count": 9 }]
     },
     {
       "id": "fengying-main",

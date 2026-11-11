@@ -17,6 +17,17 @@ use super::{
     SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES, SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES,
 };
 
+/// Deterministic accounting for the two-stage candidate search. `base_pairs`
+/// are input/filename neighbours (or exhaustive pairs), `retrieval_pairs`
+/// are newly promoted compact-descriptor neighbours, and `final_pairs` is
+/// the set handed to full geometric verification.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct CandidatePairPlan {
+    pub(super) base_pairs: usize,
+    pub(super) retrieval_pairs: usize,
+    pub(super) final_pairs: usize,
+}
+
 pub(super) fn pairs_to_match(image_count: usize) -> Vec<(usize, usize)> {
     let neighbor_window = if image_count > SCALABLE_STACK_THRESHOLD {
         LARGE_STACK_NEIGHBOR_WINDOW
@@ -117,8 +128,23 @@ pub(super) fn pairs_to_match_for_images(
     images: &[ImageInfo],
     blend_mode: BlendMode,
 ) -> Vec<(usize, usize)> {
+    pairs_to_match_for_images_with_plan(images, blend_mode).0
+}
+
+pub(super) fn pairs_to_match_for_images_with_plan(
+    images: &[ImageInfo],
+    blend_mode: BlendMode,
+) -> (Vec<(usize, usize)>, CandidatePairPlan) {
     if images.len() <= SCALABLE_STACK_THRESHOLD {
-        return pairs_to_match(images.len());
+        let pairs = pairs_to_match(images.len());
+        return (
+            pairs.clone(),
+            CandidatePairPlan {
+                base_pairs: pairs.len(),
+                final_pairs: pairs.len(),
+                ..Default::default()
+            },
+        );
     }
     // The 65–96 image range is common for high-resolution artwork scans and is
     // still small enough for an exhaustive bounded-resolution pass.  A lens
@@ -128,12 +154,28 @@ pub(super) fn pairs_to_match_for_images(
     if (SCALE_ROBUST_EXHAUSTIVE_MIN_SOURCES..=SCALE_ROBUST_EXHAUSTIVE_MAX_SOURCES)
         .contains(&images.len())
     {
-        return all_image_pairs(images.len());
+        let pairs = all_image_pairs(images.len());
+        return (
+            pairs.clone(),
+            CandidatePairPlan {
+                base_pairs: pairs.len(),
+                final_pairs: pairs.len(),
+                ..Default::default()
+            },
+        );
     }
     if blend_mode == BlendMode::FocusStack
         && images.len() <= FOCUS_AUTO_ORDER_EXHAUSTIVE_MAX_SOURCES
     {
-        return all_image_pairs(images.len());
+        let pairs = all_image_pairs(images.len());
+        return (
+            pairs.clone(),
+            CandidatePairPlan {
+                base_pairs: pairs.len(),
+                final_pairs: pairs.len(),
+                ..Default::default()
+            },
+        );
     }
 
     let input_order = (0..images.len()).collect::<Vec<_>>();
@@ -152,8 +194,17 @@ pub(super) fn pairs_to_match_for_images(
     );
     let mut pairs = unique_pairs.into_iter().collect::<Vec<_>>();
     pairs.sort_unstable();
-    augment_large_stack_candidate_pairs(images, &mut pairs);
-    pairs
+    let base_pairs = pairs.len();
+    let retrieval_pairs = augment_large_stack_candidate_pairs(images, &mut pairs);
+    let final_pairs = pairs.len();
+    (
+        pairs,
+        CandidatePairPlan {
+            base_pairs,
+            retrieval_pairs,
+            final_pairs,
+        },
+    )
 }
 
 fn retrieval_feature_subset(features: &[Feature], limit: usize) -> Vec<Feature> {
@@ -180,16 +231,19 @@ fn retrieval_feature_subset(features: &[Feature], limit: usize) -> Vec<Feature> 
 /// switch can put the first useful bridge well outside the neighbour window.
 /// The retrieval pass only counts compact descriptor matches; full-resolution
 /// geometric verification still decides whether a pair is accepted.
-fn augment_large_stack_candidate_pairs(images: &[ImageInfo], pairs: &mut Vec<(usize, usize)>) {
+fn augment_large_stack_candidate_pairs(
+    images: &[ImageInfo],
+    pairs: &mut Vec<(usize, usize)>,
+) -> usize {
     if images.len() <= SCALABLE_STACK_THRESHOLD || images.len() < 2 {
-        return;
+        return 0;
     }
     let compact_features = images
         .iter()
         .map(|image| retrieval_feature_subset(&image.features, LARGE_STACK_RETRIEVAL_FEATURES))
         .collect::<Vec<_>>();
     if compact_features.iter().all(Vec::is_empty) {
-        return;
+        return 0;
     }
 
     let existing = pairs.iter().copied().collect::<HashSet<_>>();
@@ -205,7 +259,7 @@ fn augment_large_stack_candidate_pairs(images: &[ImageInfo], pairs: &mut Vec<(us
         })
         .collect::<Vec<_>>();
     if scores.is_empty() {
-        return;
+        return 0;
     }
 
     let mut by_image = vec![Vec::<(usize, usize)>::new(); images.len()];
@@ -233,7 +287,9 @@ fn augment_large_stack_candidate_pairs(images: &[ImageInfo], pairs: &mut Vec<(us
             }
         }
     }
+    let added = additions.len();
     pairs.extend(additions);
     pairs.sort_unstable();
     pairs.dedup();
+    added
 }

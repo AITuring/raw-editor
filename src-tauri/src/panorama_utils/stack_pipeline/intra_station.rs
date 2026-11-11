@@ -96,14 +96,20 @@ pub(crate) const INTRA_STATION_MATCH_RADIUS: i32 = 25;
 /// 需求 2.3 allows — and which still fits the patch buffer.
 pub(crate) const INTRA_STATION_SEARCH_SAMPLES: i32 = 7;
 
-/// Half side of the patch buffers handed to the matcher on the intra-station
-/// path (67x67).  The legacy mosaic path keeps its own 57x57.
+/// Half side of the intra-station measurement buffers (81x81). The matching
+/// window and translation search remain 51x51 and +/-7 patch samples; the
+/// legacy mosaic path keeps its own 57x57 buffer.
 ///
-/// One sample wider than `INTRA_STATION_MATCH_RADIUS + INTRA_STATION_SEARCH_SAMPLES`
-/// because bilinear sampling needs a neighbour: the matcher reserves the whole
-/// search support before it scores a hypothesis, and a support that lands exactly
-/// on the last row makes it decline every control point.
-pub(crate) const INTRA_STATION_PATCH_HALF: i32 = 33;
+/// The reverse probe is centred on the forward match, which can be almost
+/// `SEARCH_SAMPLES` away from the original centre. It must still reserve its
+/// whole `MATCH_RADIUS + SEARCH_SAMPLES` support, plus the neighbour required by
+/// bilinear interpolation. Therefore the buffer needs
+/// `MATCH_RADIUS + 2 * SEARCH_SAMPLES + 1` samples on each side. The old half=33
+/// only fitted the forward probe and silently made reverse measurements outside
+/// roughly one patch sample impossible, even though they were inside the search.
+/// This extra halo supplies reverse samples; it does not widen either search.
+pub(crate) const INTRA_STATION_PATCH_HALF: i32 =
+    INTRA_STATION_MATCH_RADIUS + 2 * INTRA_STATION_SEARCH_SAMPLES + 1;
 
 /// Half side of the legacy mosaic path's patch buffers.  Unchanged, because the
 /// comparison path's output has to stay byte identical.
@@ -400,10 +406,9 @@ pub(crate) fn match_focal_plane(a: &mut [f64], b: &mut [f64], side: usize) -> Fo
     outcome
 }
 
-/// Bidirectional consistency limit in native pixels.  需求 2.4 allows 1.0; the
-/// existing native refinement already held 0.40 and keeping the stricter value
-/// is allowed (it only rejects more matches).  The measured value goes into the
-/// report so the acceptance harness can see the real distribution.
+/// Bidirectional consistency limit in native pixels, as specified by 需求 2.4.
+/// The measured value goes into the report so the acceptance harness can see
+/// the real distribution.
 pub(crate) const INTRA_STATION_BIDIRECTIONAL_TOLERANCE_PX: f64 = 1.00;
 
 /// Neighbourhood consistency limit in native pixels (需求 2.5).

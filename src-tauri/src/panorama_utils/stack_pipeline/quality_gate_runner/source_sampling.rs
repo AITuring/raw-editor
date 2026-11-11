@@ -12,8 +12,9 @@ use image::Rgb;
 use image::Rgb32FImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
+use std::collections::BTreeMap;
 
-use super::{NativeReferenceMap, NativeSourceWarp, QualitySource, project};
+use super::{NativeReferenceMap, NativeSourceWarp, QualitySource, SourceLoader, project};
 
 pub(super) fn source_quad(source: &QualitySource) -> Option<[Point2<f64>; 4]> {
     let matrix = source.geometry.tile_to_world * source.geometry.member_to_anchor;
@@ -139,6 +140,7 @@ pub(super) fn source_roi_with_registration(
                 native_registration,
                 &inverse,
             )?;
+            let mapped = prefiltered_reference_point(mapped, source, native_registration)?;
             let max_x = f64::from(source.width().saturating_sub(1));
             let max_y = f64::from(source.height().saturating_sub(1));
             if !mapped.x.is_finite()
@@ -153,6 +155,10 @@ pub(super) fn source_roi_with_registration(
             let pixel = crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
                 source, mapped.x, mapped.y,
             );
+            let pixel = native_registration
+                .and_then(|native| native.mosaic_tone.as_ref())
+                .map(|tone| tone.apply(world, pixel))
+                .unwrap_or(pixel);
             result.put_pixel(x, y, pixel);
         }
     }
@@ -183,6 +189,257 @@ pub(super) fn source_roi_for_quality(
             source.native_warp.as_ref(),
         )
     }
+}
+
+/// Build a station-level reference ROI from the actual final raw-owner plane.
+///
+/// A focus station may switch between several Source_RAW members at a much
+/// finer scale than the final station geometry.  In that case a single raw
+/// source cannot represent the whole ROI.  This helper samples each pixel
+/// through the Source_RAW owner selected by the final ownership plane, while
+/// requiring every participating owner to belong to the ROI's one station.
+/// The caller may provide the already decoded origin owner to avoid a second
+/// decode; additional owners are retained in `images` for later ROIs, capped
+/// at 512 MiB. An oversized member is sampled once and dropped after its ROI
+/// pixels; it never bypasses that cache budget by remaining in the map.
+pub(crate) fn source_roi_for_station_quality(
+    images: &mut BTreeMap<u16, Rgb32FImage>,
+    primary_owner: u16,
+    primary_image: Option<&Rgb32FImage>,
+    ownership: &[u16],
+    canvas_width: u32,
+    roi: &QualityRoi,
+    station_id: usize,
+    sources: &BTreeMap<u16, &QualitySource>,
+    residual: &ResidualWarp,
+    load_source: &mut SourceLoader<'_>,
+) -> Result<Rgb32FImage, &'static str> {
+    source_roi_for_station_quality_with_budget(
+        images,
+        primary_owner,
+        primary_image,
+        ownership,
+        canvas_width,
+        roi,
+        station_id,
+        sources,
+        residual,
+        load_source,
+        512 * 1024 * 1024,
+    )
+}
+
+pub(super) fn source_roi_for_station_quality_with_budget(
+    images: &mut BTreeMap<u16, Rgb32FImage>,
+    primary_owner: u16,
+    primary_image: Option<&Rgb32FImage>,
+    ownership: &[u16],
+    canvas_width: u32,
+    roi: &QualityRoi,
+    station_id: usize,
+    sources: &BTreeMap<u16, &QualitySource>,
+    residual: &ResidualWarp,
+    load_source: &mut SourceLoader<'_>,
+    max_cache_bytes: usize,
+) -> Result<Rgb32FImage, &'static str> {
+    if canvas_width == 0 || ownership.len() % canvas_width as usize != 0 {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    let canvas_height = ownership.len() / canvas_width as usize;
+    let right = roi
+        .x
+        .checked_add(roi.side)
+        .ok_or(degradation::DIAGNOSTICS_ROI_INVALID)?;
+    let bottom = roi
+        .y
+        .checked_add(roi.side)
+        .ok_or(degradation::DIAGNOSTICS_ROI_INVALID)?;
+    if right > canvas_width || bottom > u32::try_from(canvas_height).unwrap_or(u32::MAX) {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+
+    // Clear previous stations even when their members were loaded by a dense
+    // ROI pass. More content-search windows must not retain all RAW frames.
+    images.retain(|owner, _| {
+        sources
+            .get(owner)
+            .is_some_and(|source| source.geometry.station_id == station_id)
+    });
+    let bytes = |image: &Rgb32FImage| {
+        image
+            .as_raw()
+            .len()
+            .saturating_mul(std::mem::size_of::<f32>())
+    };
+    let mut resident_bytes: usize = images.values().map(&bytes).sum();
+    while resident_bytes > max_cache_bytes {
+        let Some((_, image)) = images.pop_first() else {
+            break;
+        };
+        resident_bytes = resident_bytes.saturating_sub(bytes(&image));
+    }
+    let mut pixels_by_owner = BTreeMap::<u16, Vec<(u32, u32)>>::new();
+    for y in 0..roi.side {
+        for x in 0..roi.side {
+            let index = ((roi.y + y) * canvas_width + roi.x + x) as usize;
+            let owner = ownership
+                .get(index)
+                .copied()
+                .filter(|owner| *owner != 0)
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+            let source_info = sources
+                .get(&owner)
+                .copied()
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
+            if source_info.geometry.station_id != station_id {
+                return Err(degradation::OWNER_SOURCE_UNDECODABLE);
+            }
+            pixels_by_owner.entry(owner).or_default().push((x, y));
+        }
+    }
+    let mut reference = Rgb32FImage::new(roi.side, roi.side);
+    for (owner, pixels) in pixels_by_owner {
+        let source_info = sources[&owner];
+        let mut transient = None;
+        let image = if owner == primary_owner {
+            primary_image.ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
+        } else {
+            if !images.contains_key(&owner) {
+                let image =
+                    load_source(source_info).map_err(|_| degradation::OWNER_SOURCE_UNDECODABLE)?;
+                let image_bytes = bytes(&image);
+                if image_bytes > max_cache_bytes {
+                    transient = Some(image);
+                } else {
+                    while resident_bytes.saturating_add(image_bytes) > max_cache_bytes {
+                        let Some((_, evicted)) = images.pop_first() else {
+                            break;
+                        };
+                        resident_bytes = resident_bytes.saturating_sub(bytes(&evicted));
+                    }
+                    resident_bytes = resident_bytes.saturating_add(image_bytes);
+                    images.insert(owner, image);
+                }
+            }
+            transient
+                .as_ref()
+                .or_else(|| images.get(&owner))
+                .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?
+        };
+        for (x, y) in pixels {
+            let world = Point2::new(
+                roi.world_origin.0 + f64::from(x),
+                roi.world_origin.1 + f64::from(y),
+            );
+            let pixel = sample_quality_source_at_world(image, world, source_info, residual)?;
+            reference.put_pixel(x, y, pixel);
+        }
+    }
+    Ok(reference)
+}
+
+/// Measure output-to-source scale by following the final raw owner at each
+/// probe centre. A station-level ROI may cross several raw members, so a
+/// representative source's homography is not valid for the whole window.
+pub(crate) fn measure_station_local_scale(
+    roi: &QualityRoi,
+    ownership: &[u16],
+    canvas_width: u32,
+    station_id: usize,
+    sources: &BTreeMap<u16, &QualitySource>,
+    residual: &ResidualWarp,
+    acceptance_render_scale: f64,
+) -> Result<quality_gate::LocalScaleMeasurement, &'static str> {
+    if roi.side == 0
+        || canvas_width == 0
+        || ownership.len() % canvas_width as usize != 0
+        || !acceptance_render_scale.is_finite()
+        || acceptance_render_scale <= 0.0
+    {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    let canvas_height = ownership.len() / canvas_width as usize;
+    let mut scales = Vec::new();
+    let mut expected = 0usize;
+    for y in (0..roi.side).step_by(16) {
+        for x in (0..roi.side).step_by(16) {
+            expected += 1;
+            let output_x = roi.x.saturating_add(x);
+            let output_y = roi.y.saturating_add(y);
+            if output_x >= canvas_width || output_y as usize >= canvas_height {
+                continue;
+            }
+            let owner = ownership[output_y as usize * canvas_width as usize + output_x as usize];
+            let Some(source) = sources.get(&owner).copied() else {
+                continue;
+            };
+            if source.geometry.station_id != station_id {
+                continue;
+            }
+            let Some(inverse) =
+                (source.geometry.tile_to_world * source.geometry.member_to_anchor).try_inverse()
+            else {
+                continue;
+            };
+            let map = |world: Point2<f64>| {
+                if source.native_registration.is_some() {
+                    source_point_for_reference(
+                        world,
+                        &source.geometry,
+                        residual,
+                        source.native_registration.as_ref(),
+                        &inverse,
+                    )
+                } else {
+                    map_world_to_source_for_quality(
+                        world,
+                        &source.geometry,
+                        residual,
+                        &inverse,
+                        source.native_warp.as_ref(),
+                    )
+                }
+            };
+            let center = Point2::new(
+                roi.world_origin.0 + f64::from(x),
+                roi.world_origin.1 + f64::from(y),
+            );
+            let Ok(xp) = map(center + nalgebra::Vector2::new(0.5, 0.0)) else {
+                continue;
+            };
+            let Ok(xm) = map(center - nalgebra::Vector2::new(0.5, 0.0)) else {
+                continue;
+            };
+            let Ok(yp) = map(center + nalgebra::Vector2::new(0.0, 0.5)) else {
+                continue;
+            };
+            let Ok(ym) = map(center - nalgebra::Vector2::new(0.0, 0.5)) else {
+                continue;
+            };
+            let dx = xp - xm;
+            let dy = yp - ym;
+            let determinant = (dx.x * dy.y - dx.y * dy.x).abs();
+            if determinant.is_finite() && determinant > 1e-12 {
+                scales.push(1.0 / determinant.sqrt());
+            }
+        }
+    }
+    if scales.len() < expected.div_ceil(2) {
+        return Err(degradation::OWNER_SOURCE_UNDECODABLE);
+    }
+    scales.sort_by(f64::total_cmp);
+    let median = if scales.len() % 2 == 0 {
+        (scales[scales.len() / 2 - 1] + scales[scales.len() / 2]) * 0.5
+    } else {
+        scales[scales.len() / 2]
+    };
+    Ok(quality_gate::LocalScaleMeasurement {
+        median,
+        fraction_at_least_095: scales.iter().filter(|&&v| v >= 0.95).count() as f64
+            / scales.len() as f64,
+        samples: scales.len(),
+        diagnostic_render_scale: acceptance_render_scale < 1.0,
+    })
 }
 
 /// Replay the bounded per-station tone transform that was actually applied by
@@ -306,7 +563,12 @@ pub(crate) fn sample_quality_source_at_world(
     residual: &ResidualWarp,
 ) -> Result<Rgb<f32>, &'static str> {
     let geometry = &source_info.geometry;
-    if let Some(native_warp) = source_info.native_warp.as_ref() {
+    // Direct RAW registration is the provenance used by source_roi_for_quality
+    // and Local_Scale. It takes priority when both legacy native_warp and the
+    // current registration are present on a station member.
+    if source_info.native_registration.is_none()
+        && let Some(native_warp) = source_info.native_warp.as_ref()
+    {
         let station_inverse = native_warp
             .station_to_world
             .try_inverse()
@@ -329,7 +591,15 @@ pub(crate) fn sample_quality_source_at_world(
     let inverse = (geometry.tile_to_world * geometry.member_to_anchor)
         .try_inverse()
         .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)?;
-    let mapped = map_world_to_source_for_quality(world, geometry, residual, &inverse, None)?;
+    let mapped = source_point_for_reference(
+        world,
+        geometry,
+        residual,
+        source_info.native_registration.as_ref(),
+        &inverse,
+    )?;
+    let mapped =
+        prefiltered_reference_point(mapped, source, source_info.native_registration.as_ref())?;
     let max_x = f64::from(source.width().saturating_sub(1));
     let max_y = f64::from(source.height().saturating_sub(1));
     if !mapped.x.is_finite()
@@ -341,11 +611,15 @@ pub(crate) fn sample_quality_source_at_world(
     {
         return Err(degradation::OWNER_SOURCE_UNDECODABLE);
     }
-    Ok(
-        crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
-            source, mapped.x, mapped.y,
-        ),
-    )
+    let pixel = crate::panorama_utils::stitching::get_high_quality_interpolated_pixel(
+        source, mapped.x, mapped.y,
+    );
+    Ok(source_info
+        .native_registration
+        .as_ref()
+        .and_then(|native| native.mosaic_tone.as_ref())
+        .map(|tone| tone.apply(world, pixel))
+        .unwrap_or(pixel))
 }
 
 /// Read one integer station-layer pixel from the Source_RAW.  Native
@@ -505,4 +779,23 @@ pub(super) fn map_world_to_source_for_quality(
         Point2::new(unwarped.x + delta[0], unwarped.y + delta[1]),
     )
     .ok_or(degradation::OWNER_SOURCE_UNDECODABLE)
+}
+
+/// The same half-pixel pyramid centre and edge clamp used by LayerSampler.
+fn prefiltered_reference_point(
+    point: Point2<f64>,
+    source: &Rgb32FImage,
+    native: Option<&NativeReferenceMap>,
+) -> Result<Point2<f64>, &'static str> {
+    let divisor = native.map(|n| n.source_prefilter_divisor).unwrap_or(1.0);
+    if !divisor.is_finite() || divisor < 1.0 {
+        return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+    }
+    if divisor == 1.0 {
+        return Ok(point);
+    }
+    Ok(Point2::new(
+        ((point.x + 0.5) / divisor - 0.5).clamp(0.0, f64::from(source.width().saturating_sub(1))),
+        ((point.y + 0.5) / divisor - 0.5).clamp(0.0, f64::from(source.height().saturating_sub(1))),
+    ))
 }

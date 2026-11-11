@@ -16,6 +16,7 @@ use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Runtime;
 
+use super::source_preflight::SourcePreflight;
 use super::{MAX_RETAINED_STACK_PIXELS, SCALABLE_STACK_THRESHOLD};
 
 /// Owns the run-scoped RSS sampler and publishes its final sample even when a
@@ -255,6 +256,25 @@ pub(super) fn focus_stack_cache_key_inputs(image_paths: &[String]) -> FocusStack
     // identity so a change to proxy dimensions/filtering cannot reuse a stale
     // Virtual_Tile entry.  Source dimensions remain content-bound through the
     // digest set below.
+    FocusStackSourceDigests {
+        inputs: virtual_tile::CacheKeyInputs::new(
+            &focus_stack_cache_pipeline_version(image_paths.len()),
+            &sources,
+        ),
+        sha256_before: digests.into_iter().map(source_digest_hex).collect(),
+    }
+}
+
+pub(super) fn focus_stack_cache_key_inputs_from_preflight(
+    image_paths: &[String],
+    preflight: &SourcePreflight,
+) -> FocusStackSourceDigests {
+    let digests = preflight.sha256_before();
+    let sources = image_paths
+        .iter()
+        .zip(&digests)
+        .map(|(path, digest)| (path.clone(), digest.unwrap_or([0u8; 32])))
+        .collect::<Vec<_>>();
     FocusStackSourceDigests {
         inputs: virtual_tile::CacheKeyInputs::new(
             &focus_stack_cache_pipeline_version(image_paths.len()),

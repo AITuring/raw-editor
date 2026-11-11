@@ -202,6 +202,40 @@ pub(super) struct FocusCaptureGroup {
 const SOURCE_SCAN_SINGLETON_STATIONS_NUMERATOR: usize = 9;
 const SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR: usize = 10;
 
+/// Counts used by the path selector to explain why a Capture_Station set was
+/// (or was not) treated as a moving source scan.  Keeping this calculation in
+/// one place prevents the boolean selector and Stack_Report from drifting
+/// apart at the 9/10 boundary.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(super) struct SingletonScanObservation {
+    pub(super) singleton_station_count: usize,
+    pub(super) multi_frame_station_count: usize,
+    pub(super) singleton_ratio: f64,
+    pub(super) detected: bool,
+}
+
+pub(super) fn observe_singleton_scan(groups: &[FocusCaptureGroup]) -> SingletonScanObservation {
+    let singleton_station_count = groups
+        .iter()
+        .filter(|group| group.members.len() == 1)
+        .count();
+    let multi_frame_station_count = groups.len().saturating_sub(singleton_station_count);
+    let singleton_ratio = if groups.is_empty() {
+        0.0
+    } else {
+        singleton_station_count as f64 / groups.len() as f64
+    };
+    let detected = groups.len() > 1
+        && singleton_station_count * SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR
+            >= groups.len() * SOURCE_SCAN_SINGLETON_STATIONS_NUMERATOR;
+    SingletonScanObservation {
+        singleton_station_count,
+        multi_frame_station_count,
+        singleton_ratio,
+        detected,
+    }
+}
+
 /// Whether the stations describe a moving source scan rather than a layered
 /// focus grid. A scan has one frame per camera position, yet grouping can still
 /// pair an occasional near-duplicate frame into a two-member bracket. When
@@ -209,13 +243,7 @@ const SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR: usize = 10;
 /// most positions, so re-solving one Virtual_Tile per frame only adds cost and
 /// closure drift.
 pub(super) fn capture_groups_form_singleton_scan(groups: &[FocusCaptureGroup]) -> bool {
-    let singletons = groups
-        .iter()
-        .filter(|group| group.members.len() == 1)
-        .count();
-    groups.len() > 1
-        && singletons * SOURCE_SCAN_SINGLETON_STATIONS_DENOMINATOR
-            >= groups.len() * SOURCE_SCAN_SINGLETON_STATIONS_NUMERATOR
+    observe_singleton_scan(groups).detected
 }
 
 pub(super) fn focus_capture_groups(
@@ -518,6 +546,20 @@ mod tests {
         assert!(capture_groups_form_singleton_scan(&stations(&[
             1, 1, 1, 1, 1, 1, 1, 1, 1, 3
         ])));
+    }
+
+    #[test]
+    fn singleton_scan_observation_reports_the_boundary_counts() {
+        let observation = observe_singleton_scan(&stations(&[1, 1, 1, 1, 1, 1, 1, 1, 1, 3]));
+        assert_eq!(observation.singleton_station_count, 9);
+        assert_eq!(observation.multi_frame_station_count, 1);
+        assert_eq!(observation.singleton_ratio, 0.9);
+        assert!(observation.detected);
+
+        let observation = observe_singleton_scan(&stations(&[1, 1, 1, 1, 1, 1, 1, 1, 2, 2]));
+        assert_eq!(observation.singleton_station_count, 8);
+        assert_eq!(observation.multi_frame_station_count, 2);
+        assert!(!observation.detected);
     }
 
     #[test]

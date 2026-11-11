@@ -15,18 +15,21 @@ use image::Luma;
 use image::Rgb32FImage;
 use nalgebra::Matrix3;
 use nalgebra::Point3;
+use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Runtime;
 
 use super::{
-    Field, GRID_STEP, LayerSampler, NativeRefineMode, STREAMING_ANALYSIS_LONG_SIDE,
-    STREAMING_FLAT_TONE_SIGMA_CELLS, STREAMING_OWNERSHIP_FEATHER, STREAMING_TILE_SIZE,
-    StreamingLowFrequencyConsensus, StreamingMosaicStore, apply_streaming_seam_harmonization,
-    apply_streaming_source_owner_low_frequency_correction, copy_streaming_owned_tile_region,
-    copy_streaming_tile_region, fill_streaming_uncovered_tile_region, intra_station_frame_record,
+    Field, GRID_STEP, LayerSampler, MosaicCoverageObservation, NativeRefineMode,
+    STREAMING_ANALYSIS_LONG_SIDE, STREAMING_FLAT_TONE_SIGMA_CELLS, STREAMING_OWNERSHIP_FEATHER,
+    STREAMING_TILE_SIZE, StreamingLowFrequencyConsensus, StreamingMosaicStore,
+    apply_streaming_seam_harmonization, apply_streaming_source_owner_low_frequency_correction,
+    copy_streaming_owned_tile_region, copy_streaming_tile_region,
+    fill_streaming_uncovered_tile_region, intra_station_frame_record,
     materialize_streaming_focus_output, refine_layer_from_analysis, refine_native_layer_streaming,
     smooth_streaming_low_frequency_illumination, streaming_candidate_analysis,
     streaming_ownership_from_analysis, streaming_refinement_pair, streaming_seam_harmonization,
@@ -46,6 +49,8 @@ pub(super) fn detail_preserving_mosaic_streaming<R: Runtime, F>(
     offset_y: f64,
     width: u32,
     height: u32,
+    coverage_observation: &mut Option<MosaicCoverageObservation>,
+    retain_quality_evidence: bool,
 ) -> Result<Rgb32FImage, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
@@ -58,6 +63,15 @@ where
     // inverse world pose and native long side are what the other frames' records
     // are expressed against.
     let mut station_anchors = HashMap::<u8, (String, Option<Matrix3<f64>>, u32)>::new();
+    let diagnostics_dir =
+        std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR").map(PathBuf::from);
+    let mut overlap_diagnostics = Vec::new();
+    let mut tone_diagnostics = Vec::new();
+    let mut tone_replay = super::artwork_tone::ArtworkToneReplay::default();
+    let mut quality_capture =
+        (retain_quality_evidence && panorama_transition && projection == Projection::Planar)
+            .then(super::legacy_quality::LegacyQualityCapture::default);
+    let mut owner_overlap_gain = super::owner_overlap_gain::OwnerOverlapGain::default();
     println!(
         "  - Streaming detail-preserving mosaic canvas: {width}x{height}, tiles {}x{} of {}px",
         store.tile_columns, store.tile_rows, STREAMING_TILE_SIZE
@@ -227,6 +241,16 @@ where
             }
             let (candidate, candidate_mask) =
                 streaming_candidate_analysis(&sampler, analysis_width, analysis_height);
+            if panorama_transition && diagnostics_dir.is_some() {
+                overlap_diagnostics.extend(measure_source_overlap(
+                    source_owner_id,
+                    &base_analysis,
+                    &base_analysis_mask,
+                    &base_analysis_owner,
+                    &candidate,
+                    &candidate_mask,
+                ));
+            }
             // A focus bracket may contain several camera positions.  Once a
             // position has entered the mosaic, estimate its colour correction
             // only from overlap owned by that same position.  Comparing a
@@ -289,6 +313,49 @@ where
         } else {
             tone.clone()
         };
+        if panorama_transition
+            && std::env::var_os("RAW_EDITOR_MATCHED_ARTWORK_TONE").is_some()
+            && std::env::var_os("RAW_EDITOR_LEGACY_ARTWORK_TONE").is_none()
+            && std::env::var_os("RAW_EDITOR_SKIP_FLAT_TONE_CORRECTION").is_none()
+            && let Some((candidate, candidate_mask)) = overlap_candidate.as_ref()
+        {
+            let (matched, summary) = super::artwork_tone::artwork_tone(
+                &base_analysis,
+                &base_analysis_mask,
+                &base_analysis_owner,
+                candidate,
+                candidate_mask,
+                &write_tone,
+            );
+            tone_replay.record(
+                source_owner_id,
+                left,
+                top,
+                layer_scale,
+                &write_tone,
+                matched,
+            );
+            println!("    - Frozen artwork tone '{}': {summary}", info.filename);
+            if diagnostics_dir.is_some() {
+                tone_diagnostics.push(serde_json::json!({"source":info.filename,"owner":source_owner_id,"evidence":summary}));
+            }
+        }
+        if panorama_transition {
+            if let Some((candidate, candidate_mask)) = overlap_candidate.as_ref() {
+                owner_overlap_gain.observe(
+                    source_owner_id,
+                    &base_analysis,
+                    &base_analysis_mask,
+                    &base_analysis_owner,
+                    candidate,
+                    candidate_mask,
+                    &write_tone,
+                    left,
+                    top,
+                    layer_scale,
+                );
+            }
+        }
         // Accumulate only overlap-supported, low-frequency candidate
         // pixels.  This is deliberately before ownership writes: the
         // final correction compares the consensus target with the
@@ -327,6 +394,16 @@ where
         } else {
             STREAMING_OWNERSHIP_FEATHER
         };
+        if let Some(capture) = quality_capture.as_mut() {
+            capture.observe(
+                source_owner_id,
+                capture_group_id,
+                &sampler,
+                &write_tone,
+                right,
+                bottom,
+            );
+        }
         let soft_decision = image::imageops::blur(&decision, ownership_feather);
         let first_column = left / STREAMING_TILE_SIZE;
         let last_column = right / STREAMING_TILE_SIZE;
@@ -410,6 +487,22 @@ where
     let crop = store
         .covered_bounds()?
         .ok_or("The aligned stack has no covered pixels.")?;
+    let (source_covered_pixels, source_owned_pixels) = store.covered_and_owned_pixel_counts();
+    if source_owned_pixels != source_covered_pixels {
+        return Err(
+            "The streamed source coverage contains pixels without source ownership.".into(),
+        );
+    }
+    let coverage = store.materialize_coverage(crop);
+    if coverage
+        .as_raw()
+        .iter()
+        .filter(|&&pixel| pixel != 0)
+        .count() as u64
+        != source_covered_pixels
+    {
+        return Err("The streamed source coverage changed during materialization.".into());
+    }
     println!(
         "  - Streaming complete source-union bounds: {}x{} at ({}, {})",
         crop.2, crop.3, crop.0, crop.1
@@ -430,8 +523,28 @@ where
     } else {
         streaming_seam_harmonization(&store, crop, &[])?
     };
+    let tone_replay_summary = if panorama_transition {
+        Some(tone_replay.apply(&store, crop, &mut output)?)
+    } else {
+        None
+    };
+    if let Some(summary) = tone_replay_summary.as_ref() {
+        println!("  - Frozen tone replay: {summary}");
+    }
     if std::env::var_os("RAW_EDITOR_SKIP_STREAMING_ILLUMINATION").is_none() {
-        smooth_streaming_low_frequency_illumination(&mut output);
+        if panorama_transition {
+            if std::env::var_os("RAW_EDITOR_ENABLE_ARTWORK_ILLUMINATION").is_some() {
+                super::streaming_illumination::smooth_artwork_low_frequency_illumination(
+                    &mut output,
+                );
+            } else {
+                println!(
+                    "  - FlatArtwork illumination: source-overlap-only; no canvas material normalization"
+                );
+            }
+        } else {
+            smooth_streaming_low_frequency_illumination(&mut output);
+        }
     }
     if !panorama_transition
         && std::env::var_os("RAW_EDITOR_SKIP_FLAT_SEAM_HARMONIZATION").is_none()
@@ -439,9 +552,18 @@ where
     {
         apply_streaming_seam_harmonization(&mut output, gains, *scale);
     }
+    let mut owner_gain_summary = None;
+    let mut owner_gain_reference = None;
     if panorama_transition {
         if std::env::var_os("RAW_EDITOR_SKIP_SOURCE_OWNER_CORRECTION").is_none() {
-            apply_streaming_source_owner_low_frequency_correction(&store, crop, &mut output)?;
+            if std::env::var_os("RAW_EDITOR_LEGACY_SOURCE_OWNER_CORRECTION").is_some() {
+                apply_streaming_source_owner_low_frequency_correction(&store, crop, &mut output)?;
+            } else {
+                let (summary, reference) = owner_overlap_gain.apply(&store, crop, &mut output)?;
+                owner_gain_reference = Some(reference);
+                println!("  - Evidence constrained owner gain: {summary}");
+                owner_gain_summary = Some(summary);
+            }
         }
         if std::env::var_os("RAW_EDITOR_ENABLE_FLAT_ARTWORK_CONSENSUS").is_some() {
             low_frequency_consensus.apply(&mut output, crop);
@@ -449,10 +571,216 @@ where
     } else {
         low_frequency_consensus.apply(&mut output, crop);
     }
+    if let Some(directory) = diagnostics_dir {
+        std::fs::create_dir_all(&directory)
+            .map_err(|error| format!("Could not create streaming mosaic diagnostics: {error}"))?;
+        let scale = (f64::from(crop.2.max(crop.3)) / 2048.0).max(1.0);
+        let width = (f64::from(crop.2) / scale).ceil() as u32;
+        let height = (f64::from(crop.3) / scale).ceil() as u32;
+        let (_, diagnostic_coverage, diagnostic_owner) =
+            store.analysis_region(crop.0, crop.1, scale, width, height)?;
+        diagnostic_coverage
+            .save(directory.join("coverage.png"))
+            .map_err(|error| format!("Could not write streaming coverage diagnostic: {error}"))?;
+        diagnostic_owner
+            .save(directory.join("owner.png"))
+            .map_err(|error| format!("Could not write streaming owner diagnostic: {error}"))?;
+        let metadata = serde_json::json!({
+            "source_union_crop": [crop.0, crop.1, crop.2, crop.3],
+            "analysis_width": width,
+            "analysis_height": height,
+            "analysis_scale": scale,
+            "source_covered_pixels": source_covered_pixels,
+            "source_owned_pixels": source_owned_pixels,
+            "owner_gain": owner_gain_summary,
+            "tone_observations": tone_diagnostics,
+            "tone_replay": tone_replay_summary,
+            "matched_tone_enabled": std::env::var_os("RAW_EDITOR_MATCHED_ARTWORK_TONE").is_some(),
+            "canvas_material_normalization_enabled": std::env::var_os("RAW_EDITOR_ENABLE_ARTWORK_ILLUMINATION").is_some(),
+        });
+        std::fs::write(
+            directory.join("metadata.json"),
+            serde_json::to_vec_pretty(&metadata)
+                .map_err(|error| format!("Could not encode streaming diagnostics: {error}"))?,
+        )
+        .map_err(|error| format!("Could not write streaming diagnostics metadata: {error}"))?;
+        std::fs::write(
+            directory.join("source-overlap.json"),
+            serde_json::to_vec_pretty(&overlap_diagnostics)
+                .map_err(|error| format!("Could not encode source overlap diagnostics: {error}"))?,
+        )
+        .map_err(|error| format!("Could not write source overlap diagnostics: {error}"))?;
+    }
+    let mut coverage = coverage;
+    let mut publication_crop = None;
+    if panorama_transition && std::env::var_os("RAW_EDITOR_ARTWORK_FRAMED_OUTPUT").is_some() {
+        let frame = StreamingMosaicStore::largest_fully_covered_rect(&coverage)
+            .ok_or("The artwork has no fully covered publication frame.")?;
+        let frame_pixels = u64::from(frame.2) * u64::from(frame.3);
+        let source_canvas_pixels = u64::from(crop.2) * u64::from(crop.3);
+        if frame_pixels * 4 < source_covered_pixels * 3
+            || frame_pixels * 20 < source_canvas_pixels * 13
+        {
+            return Err(
+                "The complete artwork frame would discard too much source coverage.".into(),
+            );
+        }
+        output = image::imageops::crop_imm(&output, frame.0, frame.1, frame.2, frame.3).to_image();
+        coverage =
+            image::imageops::crop_imm(&coverage, frame.0, frame.1, frame.2, frame.3).to_image();
+        publication_crop = Some(frame);
+        println!(
+            "  - Framed artwork publication: {}x{} at ({}, {}), retained {} of {} covered source pixels",
+            frame.2, frame.3, frame.0, frame.1, frame_pixels, source_covered_pixels
+        );
+    }
+    let delivered_crop = publication_crop
+        .map(|frame| (crop.0 + frame.0, crop.1 + frame.1, frame.2, frame.3))
+        .unwrap_or(crop);
+    let quality = quality_capture
+        .map(|capture| {
+            capture.finish(
+                &store,
+                delivered_crop,
+                &coverage,
+                (offset_x, offset_y),
+                owner_gain_reference,
+                &mut |source| {
+                    let info = images
+                        .iter()
+                        .find(|info| info.filename == source.path)
+                        .ok_or("legacy evidence source missing from render manifest")?;
+                    load(info)
+                },
+            )
+        })
+        .transpose()?;
+    *coverage_observation = Some(MosaicCoverageObservation {
+        source_covered_pixels,
+        source_owned_pixels: Some(source_owned_pixels),
+        output_pixels: u64::from(crop.2) * u64::from(crop.3),
+        coverage: Some(coverage),
+        publication_crop,
+        quality,
+    });
     println!(
-        "  - Verified covered output: {}x{}; every pixel has source ownership",
+        "  - Verified source-union output: {}x{}; {} pixels covered and {} owned",
         output.width(),
-        output.height()
+        output.height(),
+        source_covered_pixels,
+        source_owned_pixels
     );
     Ok(output)
+}
+
+fn measure_source_overlap(
+    candidate_owner: u8,
+    base: &Rgb32FImage,
+    base_mask: &GrayImage,
+    owners: &GrayImage,
+    candidate: &Rgb32FImage,
+    candidate_mask: &GrayImage,
+) -> Vec<serde_json::Value> {
+    #[derive(Default)]
+    struct Count {
+        overlap: u64,
+        textured: u64,
+        matched: u64,
+        delta_sum: f64,
+        delta_abs_sum: f64,
+        quadrants: [u64; 4],
+    }
+    let mut counts = HashMap::<u8, Count>::new();
+    let (width, height) = base.dimensions();
+    if width < 7 || height < 7 {
+        return Vec::new();
+    }
+    for y in (3..height - 3).step_by(8) {
+        for x in (3..width - 3).step_by(8) {
+            if base_mask.get_pixel(x, y)[0] == 0 || candidate_mask.get_pixel(x, y)[0] == 0 {
+                continue;
+            }
+            let owner = owners.get_pixel(x, y)[0];
+            if owner == 0 || owner == candidate_owner {
+                continue;
+            }
+            let count = counts.entry(owner).or_default();
+            count.overlap += 1;
+            let mut a = [0.0_f64; 25];
+            let mut b = [0.0_f64; 25];
+            let mut valid = true;
+            let mut n = 0;
+            for dy in -2_i32..=2 {
+                for dx in -2_i32..=2 {
+                    let px = (x as i32 + dx) as u32;
+                    let py = (y as i32 + dy) as u32;
+                    if base_mask.get_pixel(px, py)[0] == 0
+                        || candidate_mask.get_pixel(px, py)[0] == 0
+                    {
+                        valid = false;
+                        break;
+                    }
+                    let luma = |pixel: &image::Rgb<f32>| {
+                        f64::from(pixel[0]) * 0.2126
+                            + f64::from(pixel[1]) * 0.7152
+                            + f64::from(pixel[2]) * 0.0722
+                    };
+                    a[n] = luma(base.get_pixel(px, py));
+                    b[n] = luma(candidate.get_pixel(px, py));
+                    n += 1;
+                }
+                if !valid {
+                    break;
+                }
+            }
+            if !valid || n != 25 {
+                continue;
+            }
+            let mean_a = a.iter().sum::<f64>() / 25.0;
+            let mean_b = b.iter().sum::<f64>() / 25.0;
+            if !(0.06..=0.93).contains(&mean_a) || !(0.06..=0.93).contains(&mean_b) {
+                continue;
+            }
+            let mut var_a = 0.0;
+            let mut var_b = 0.0;
+            let mut cross = 0.0;
+            for i in 0..25 {
+                let da = a[i] - mean_a;
+                let db = b[i] - mean_b;
+                var_a += da * da;
+                var_b += db * db;
+                cross += da * db;
+            }
+            if var_a < 0.0004 || var_b < 0.0004 {
+                continue;
+            }
+            count.textured += 1;
+            if cross / (var_a * var_b).sqrt() < 0.8 {
+                continue;
+            }
+            count.matched += 1;
+            let delta = mean_b - mean_a;
+            count.delta_sum += delta;
+            count.delta_abs_sum += delta.abs();
+            count.quadrants[usize::from(x >= width / 2) + 2 * usize::from(y >= height / 2)] += 1;
+        }
+    }
+    let mut result: Vec<_> = counts
+        .into_iter()
+        .map(|(base_owner, count)| {
+            json!({
+                "base_owner": base_owner,
+                "candidate_owner": candidate_owner,
+                "overlap_samples": count.overlap,
+                "textured_samples": count.textured,
+                "same_content_samples": count.matched,
+                "same_content_fraction_of_textured": if count.textured > 0 { count.matched as f64 / count.textured as f64 } else { 0.0 },
+                "mean_candidate_minus_base_luma": if count.matched > 0 { count.delta_sum / count.matched as f64 } else { 0.0 },
+                "mean_absolute_luma_difference": if count.matched > 0 { count.delta_abs_sum / count.matched as f64 } else { 0.0 },
+                "same_content_quadrants": count.quadrants,
+            })
+        })
+        .collect();
+    result.sort_by_key(|value| value["base_owner"].as_u64().unwrap_or(0));
+    result
 }

@@ -34,6 +34,15 @@ pub(crate) struct NativeResidualDisplacement {
 }
 
 impl NativeResidualDisplacement {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>().saturating_add(
+            self.field
+                .values
+                .capacity()
+                .saturating_mul(std::mem::size_of::<[f64; 2]>()),
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn from_test_field(field: Field<2>) -> Self {
         Self {

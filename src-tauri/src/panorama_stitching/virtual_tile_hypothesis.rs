@@ -217,7 +217,7 @@ pub(super) fn select_virtual_tile_relation_hypothesis(
         );
         let overlap_measure =
             coverages.overlap_measure(canonical.source_index, canonical.target_index);
-        let Some(candidate) = measure_station_relation_candidate(
+        let Some(mut candidate) = measure_station_relation_candidate(
             relation.inliers.max(points.len()),
             &canonical.homography,
             &points,
@@ -229,6 +229,14 @@ pub(super) fn select_virtual_tile_relation_hypothesis(
         ) else {
             continue;
         };
+        super::measure_virtual_tile_scale_evidence(
+            &mut candidate.measurements,
+            &canonical.homography,
+            &points,
+            tiles[canonical.source_index].dimensions(),
+            tiles[canonical.target_index].dimensions(),
+            overlap_measure,
+        );
         let correspondence_count = points.len();
         let sample_count = correspondence_count.min(64);
         let correspondence_sample = (0..sample_count)
@@ -337,6 +345,7 @@ pub(super) fn select_virtual_tile_relation_hypothesis(
         .map(|(index, hypothesis)| {
             let measurements = hypothesis.measured.measurements;
             stack_report::StationRelationHypothesisRecord {
+                scale_evidence: measurements.scale_evidence,
                 model: match hypothesis.model_rank {
                     0 => "similarity",
                     1 => "affine",

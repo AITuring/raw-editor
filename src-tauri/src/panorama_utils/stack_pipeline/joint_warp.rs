@@ -105,15 +105,50 @@ pub(crate) fn materialize(
     relations: &[Relation],
     verified: &[Vec<VerifiedSource>],
 ) -> Option<BoundedFit> {
+    materialize_with_density(
+        proposal, fit, dimensions, initial, limits, relations, verified, true,
+    )
+}
+
+/// Caller will plan output density separately from real native source maps.
+pub(crate) fn materialize_for_output_lattice(
+    proposal: &[Matrix3<f64>],
+    fit: &Fit,
+    dimensions: &[(u32, u32)],
+    initial: &[Matrix3<f64>],
+    limits: &[f64],
+    relations: &[Relation],
+    verified: &[Vec<VerifiedSource>],
+) -> Option<BoundedFit> {
+    materialize_with_density(
+        proposal, fit, dimensions, initial, limits, relations, verified, false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn materialize_with_density(
+    proposal: &[Matrix3<f64>],
+    fit: &Fit,
+    dimensions: &[(u32, u32)],
+    initial: &[Matrix3<f64>],
+    limits: &[f64],
+    relations: &[Relation],
+    verified: &[Vec<VerifiedSource>],
+    recover_density: bool,
+) -> Option<BoundedFit> {
     if verified.len() != proposal.len() {
         return None;
     }
-    let decomposition =
-        decompose(proposal, &fit.fields, dimensions, initial, limits).or_else(|| {
-            #[cfg(test)]
-            eprintln!("Joint materialization refused at projective/local decomposition");
-            None
-        })?;
+    let decomposition = (if recover_density {
+        decompose(proposal, &fit.fields, dimensions, initial, limits)
+    } else {
+        decomposition::decompose_geometry(proposal, &fit.fields, dimensions, initial, limits)
+    })
+    .or_else(|| {
+        #[cfg(test)]
+        eprintln!("Joint materialization refused at projective/local decomposition");
+        None
+    })?;
     let mut global_p95_by_station = vec![0.0f64; proposal.len()];
     for relation in relations {
         let mut errors = relation
@@ -484,7 +519,13 @@ fn prediction(row: &Row, values: &[f64]) -> f64 {
         .sum()
 }
 
-fn multiply(rows: &[Row], weights: &[f64], edges: &[(usize, usize)], x: &[f64]) -> Vec<f64> {
+fn multiply(
+    rows: &[Row],
+    weights: &[f64],
+    edges: &[(usize, usize)],
+    x: &[f64],
+    smoothness: f64,
+) -> Vec<f64> {
     let mut output = x.iter().map(|v| RIDGE * v).collect::<Vec<_>>();
     for (row, &weight) in rows.iter().zip(weights) {
         let value = weight * prediction(row, x);
@@ -493,7 +534,7 @@ fn multiply(rows: &[Row], weights: &[f64], edges: &[(usize, usize)], x: &[f64]) 
         }
     }
     for &(a, b) in edges {
-        let value = SMOOTHNESS * (x[a] - x[b]);
+        let value = smoothness * (x[a] - x[b]);
         output[a] += value;
         output[b] -= value;
     }
@@ -510,6 +551,7 @@ fn solve_axis(
     edges: &[(usize, usize)],
     axis: usize,
     x: &mut Vec<f64>,
+    smoothness: f64,
 ) -> Option<()> {
     let mut rhs = vec![0.0; x.len()];
     let mut diagonal = vec![RIDGE; x.len()];
@@ -520,10 +562,10 @@ fn solve_axis(
         }
     }
     for &(a, b) in edges {
-        diagonal[a] += SMOOTHNESS;
-        diagonal[b] += SMOOTHNESS;
+        diagonal[a] += smoothness;
+        diagonal[b] += smoothness;
     }
-    let ax = multiply(rows, weights, edges, x);
+    let ax = multiply(rows, weights, edges, x, smoothness);
     let mut residual = rhs.iter().zip(ax).map(|(b, a)| b - a).collect::<Vec<_>>();
     let mut z = residual
         .iter()
@@ -536,7 +578,7 @@ fn solve_axis(
         if dot(&residual, &residual).sqrt() < 1e-8 {
             break;
         }
-        let ad = multiply(rows, weights, edges, &direction);
+        let ad = multiply(rows, weights, edges, &direction, smoothness);
         let denominator = dot(&direction, &ad);
         if !denominator.is_finite() || denominator <= 0.0 {
             return None;
@@ -566,6 +608,19 @@ pub(crate) fn fit(
     relations: &[Relation],
     reference: usize,
 ) -> Option<Fit> {
+    fit_with_smoothness(poses, dimensions, relations, reference, SMOOTHNESS)
+}
+
+pub(crate) fn fit_with_smoothness(
+    poses: &[Matrix3<f64>],
+    dimensions: &[(u32, u32)],
+    relations: &[Relation],
+    reference: usize,
+    smoothness: f64,
+) -> Option<Fit> {
+    if !smoothness.is_finite() || smoothness <= 0.0 {
+        return None;
+    }
     if poses.len() != dimensions.len() || reference >= poses.len() || poses.len() < 2 {
         return None;
     }
@@ -687,7 +742,14 @@ pub(crate) fn fit(
     let mut coordinates = [vec![0.0; offset], vec![0.0; offset]];
     for _ in 0..8 {
         for axis in 0..2 {
-            solve_axis(&rows, &weights, &edges, axis, &mut coordinates[axis])?;
+            solve_axis(
+                &rows,
+                &weights,
+                &edges,
+                axis,
+                &mut coordinates[axis],
+                smoothness,
+            )?;
         }
         for (row, weight) in rows.iter().zip(&mut weights) {
             let error = (prediction(row, &coordinates[0]) - row.delta[0])

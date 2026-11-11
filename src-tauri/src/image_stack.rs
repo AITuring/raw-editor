@@ -55,7 +55,10 @@ use output_writer::{write_image_stack_output_for_run, write_image_stack_output_w
 mod test_output;
 
 #[cfg(test)]
-pub(crate) use test_output::{canonicalize_image_stack_result, write_srgb_jpeg, write_srgb_tiff};
+pub(crate) use test_output::{
+    canonicalize_image_stack_result, write_srgb_jpeg, write_srgb_tiff,
+    write_srgb_tiff_for_acceptance,
+};
 #[cfg(test)]
 use test_output::{
     default_image_stack_export_settings, encode_srgb_tiff, write_image_stack_output,

@@ -5,6 +5,7 @@
 
 use crate::panorama_utils::processing;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
+use crate::panorama_utils::stitching::FocusVirtualTileGeometry;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use std::cmp::Ordering;
@@ -320,22 +321,22 @@ pub(super) fn virtual_tile_source_match_proposals(
     left_group: &[&ImageInfo],
     right_group: &[&ImageInfo],
     pairwise_matches: &HashMap<(usize, usize), MatchInfo>,
-    source_to_world: &HashMap<usize, Matrix3<f64>>,
-    left_tile_to_world: &Matrix3<f64>,
-    right_tile_to_world: &Matrix3<f64>,
+    source_to_station: &HashMap<usize, Matrix3<f64>>,
+    left_geometry: &FocusVirtualTileGeometry,
+    right_geometry: &FocusVirtualTileGeometry,
     source_render_scale: f64,
 ) -> Vec<VirtualTileSourceMatchProposal> {
     if !source_render_scale.is_finite() || source_render_scale <= 0.0 {
         return Vec::new();
     }
-    let Some(right_world_to_tile) = right_tile_to_world.try_inverse() else {
+    let Some(right_station_to_tile) = right_geometry.tile_to_world.try_inverse() else {
         return Vec::new();
     };
     // `pairwise_matches` are measured in full-resolution Source_RAW pixels,
-    // while `source_to_world` is built from `scaled_source_render_homographies`
+    // while `source_to_station` is built from `scaled_source_render_homographies`
     // and therefore consumes render-scaled source pixels. Move the measured
     // relation into that same coordinate system before composing it with the
-    // station/world poses. At 1:1 this is the identity.
+    // station-local poses. At 1:1 this is the identity.
     let source_scale = Matrix3::new(
         source_render_scale,
         0.0,
@@ -352,14 +353,14 @@ pub(super) fn virtual_tile_source_match_proposals(
     };
     let mut proposals = Vec::new();
     for left in left_group {
-        let Some(left_world_to_source) = source_to_world
+        let Some(left_station_to_source) = source_to_station
             .get(&left.id)
             .and_then(|matrix| matrix.try_inverse())
         else {
             continue;
         };
         for right in right_group {
-            let Some(right_world) = source_to_world.get(&right.id) else {
+            let Some(right_station) = source_to_station.get(&right.id) else {
                 continue;
             };
             let key = (left.id.min(right.id), left.id.max(right.id));
@@ -386,11 +387,11 @@ pub(super) fn virtual_tile_source_match_proposals(
             };
             let source_to_target = source_scale * source_to_target * source_scale_inverse;
             let Some(left_to_right) = normalized_homography(
-                &(right_world_to_tile
-                    * *right_world
+                &(right_station_to_tile
+                    * *right_station
                     * source_to_target
-                    * left_world_to_source
-                    * *left_tile_to_world),
+                    * left_station_to_source
+                    * left_geometry.tile_to_world),
             ) else {
                 continue;
             };

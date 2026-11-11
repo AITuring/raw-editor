@@ -8,11 +8,13 @@
 
 #[cfg(test)]
 use std::collections::BTreeSet;
+use std::collections::{HashMap, VecDeque};
 
 #[cfg(test)]
 use image::Rgb;
 use image::{GrayImage, ImageBuffer, Rgb32FImage};
 use nalgebra::{Matrix3, Point2, Vector3};
+use std::hash::{Hash, Hasher};
 
 use super::degradation;
 use super::quality_gate::{self, QualityRoi, SourceGeometry};
@@ -48,9 +50,272 @@ pub(crate) struct QualitySource {
     pub native_registration: Option<NativeReferenceMap>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct QualityRoiCacheKey {
+    source_fingerprint: u64,
+    owner: u16,
+    x: u32,
+    y: u32,
+    side: u32,
+    region_label: u32,
+    world_x: u64,
+    world_y: u64,
+    boundary_clearance: u64,
+}
+
+impl QualityRoiCacheKey {
+    fn new(source: &QualitySource, roi: &QualityRoi) -> Self {
+        let mut source_hasher = std::collections::hash_map::DefaultHasher::new();
+        source.path.hash(&mut source_hasher);
+        source.owner.hash(&mut source_hasher);
+        source.dimensions.hash(&mut source_hasher);
+        source.geometry.station_id.hash(&mut source_hasher);
+        source
+            .geometry
+            .member_to_anchor
+            .iter()
+            .for_each(|value| value.to_bits().hash(&mut source_hasher));
+        source
+            .geometry
+            .tile_to_world
+            .iter()
+            .for_each(|value| value.to_bits().hash(&mut source_hasher));
+        source
+            .native_registration
+            .is_some()
+            .hash(&mut source_hasher);
+        source.native_warp.is_some().hash(&mut source_hasher);
+        Self {
+            source_fingerprint: source_hasher.finish(),
+            owner: roi.owner,
+            x: roi.x,
+            y: roi.y,
+            side: roi.side,
+            region_label: roi.region_label,
+            world_x: roi.world_origin.0.to_bits(),
+            world_y: roi.world_origin.1.to_bits(),
+            boundary_clearance: roi.boundary_clearance.to_bits(),
+        }
+    }
+}
+
+/// Bounded per-run cache for fully sampled Quality_Gate source ROIs.
+///
+/// The cache stores the post-tone reference ROI, so a second gate pass (for
+/// example after boundary repair) can reuse the evidence without decoding the
+/// owning RAW again.  It is deliberately byte-bounded and evicts the least
+/// recently used ROI first.
+pub(crate) struct QualityRoiCache {
+    entries: HashMap<QualityRoiCacheKey, Rgb32FImage>,
+    order: VecDeque<QualityRoiCacheKey>,
+    bytes: usize,
+    max_bytes: usize,
+    hits: usize,
+    misses: usize,
+    evictions: usize,
+    peak_bytes: usize,
+    input_fingerprint: Option<u64>,
+}
+
+/// Hash diagnostic structs without allocating their (potentially large)
+/// Debug strings. Source sampling has a compact Debug and is hashed separately.
+struct ReferenceFingerprintWriter<'a>(&'a mut std::collections::hash_map::DefaultHasher);
+
+impl std::fmt::Write for ReferenceFingerprintWriter<'_> {
+    fn write_str(&mut self, value: &str) -> std::fmt::Result {
+        self.0.write(value.as_bytes());
+        Ok(())
+    }
+}
+
+fn hash_reference_debug(
+    value: &impl std::fmt::Debug,
+    hash: &mut std::collections::hash_map::DefaultHasher,
+) {
+    let _ = std::fmt::write(
+        &mut ReferenceFingerprintWriter(hash),
+        format_args!("{value:?}"),
+    );
+}
+
+fn quality_reference_input_fingerprint(input: &QualityGateInput<'_>) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    input.coverage.dimensions().hash(&mut hash);
+    input.coverage.as_raw().hash(&mut hash);
+    // A station ROI's origin owner alone cannot identify its reference:
+    // repair may change an interior owner while preserving that origin.
+    input.ownership.hash(&mut hash);
+    input.world_origin.0.to_bits().hash(&mut hash);
+    input.world_origin.1.to_bits().hash(&mut hash);
+    for source in input.sources {
+        source.owner.hash(&mut hash);
+        source.path.hash(&mut hash);
+        source.dimensions.hash(&mut hash);
+        source.geometry.station_id.hash(&mut hash);
+        for value in source
+            .geometry
+            .member_to_anchor
+            .iter()
+            .chain(source.geometry.tile_to_world.iter())
+        {
+            value.to_bits().hash(&mut hash);
+        }
+        hash_reference_debug(&source.native_warp, &mut hash);
+        source.native_registration.is_some().hash(&mut hash);
+        if let Some(native) = &source.native_registration {
+            for value in native
+                .world_to_station
+                .iter()
+                .chain(native.station_to_world.iter())
+            {
+                value.to_bits().hash(&mut hash);
+            }
+            native
+                .mosaic_tone
+                .as_ref()
+                .map(|tone| tone.cache_fingerprint())
+                .hash(&mut hash);
+            native.source_prefilter_divisor.to_bits().hash(&mut hash);
+            native.station_origin.0.to_bits().hash(&mut hash);
+            native.station_origin.1.to_bits().hash(&mut hash);
+            native.refinement.translation.hash(&mut hash);
+            hash_reference_debug(&native.refinement.displacement, &mut hash);
+            native
+                .refinement
+                .source_sampling
+                .as_ref()
+                .map(|sampling| sampling.reference_cache_fingerprint())
+                .hash(&mut hash);
+            native.refinement.foreground_move.is_some().hash(&mut hash);
+            if let Some(moved) = &native.refinement.foreground_move {
+                moved.delta.hash(&mut hash);
+                moved.left.hash(&mut hash);
+                moved.top.hash(&mut hash);
+                moved.destinations.dimensions().hash(&mut hash);
+                moved.destinations.as_raw().hash(&mut hash);
+            }
+        }
+    }
+    hash_reference_debug(input.residual, &mut hash);
+    // Cached references are post-tone. Include only the actually replayed
+    // status/gain/offset, not report timings or other incidental metadata.
+    if let Some(tone) = super::tone::run_report_snapshot() {
+        true.hash(&mut hash);
+        std::mem::discriminant(&tone.status).hash(&mut hash);
+        for tile in tone.tiles {
+            tile.station_index.hash(&mut hash);
+            for value in tile.gain.into_iter().chain(tile.offset) {
+                value.to_bits().hash(&mut hash);
+            }
+        }
+    } else {
+        false.hash(&mut hash);
+    }
+    hash.finish()
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct QualityRoiCacheStats {
+    pub hits: usize,
+    pub misses: usize,
+    pub evictions: usize,
+    pub resident_bytes: usize,
+    pub resident_entries: usize,
+    pub peak_bytes: usize,
+}
+
+pub(crate) const QUALITY_ROI_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
+
+impl QualityRoiCache {
+    pub(crate) fn new(max_bytes: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+            bytes: 0,
+            max_bytes,
+            hits: 0,
+            misses: 0,
+            evictions: 0,
+            peak_bytes: 0,
+            input_fingerprint: None,
+        }
+    }
+
+    /// Bind one complete gate pass. Any ownership or reference-map change
+    /// invalidates retained ROIs before the first lookup; unchanged passes
+    /// preserve both cached pixels and cumulative hit/miss observations.
+    pub(crate) fn bind_input(&mut self, input: &QualityGateInput<'_>) {
+        let fingerprint = quality_reference_input_fingerprint(input);
+        if self.input_fingerprint != Some(fingerprint) {
+            self.entries.clear();
+            self.order.clear();
+            self.bytes = 0;
+            self.input_fingerprint = Some(fingerprint);
+        }
+    }
+
+    pub(crate) fn take(&mut self, source: &QualitySource, roi: &QualityRoi) -> Option<Rgb32FImage> {
+        let key = QualityRoiCacheKey::new(source, roi);
+        let value = self.entries.remove(&key);
+        if let Some(ref image) = value {
+            self.bytes = self
+                .bytes
+                .saturating_sub(image.as_raw().len() * std::mem::size_of::<f32>());
+            self.order.retain(|entry| entry != &key);
+            self.hits = self.hits.saturating_add(1);
+        } else if self.max_bytes != 0 {
+            self.misses = self.misses.saturating_add(1);
+        }
+        value
+    }
+
+    pub(crate) fn insert(&mut self, source: &QualitySource, roi: &QualityRoi, image: Rgb32FImage) {
+        let key = QualityRoiCacheKey::new(source, roi);
+        let bytes = image.as_raw().len() * std::mem::size_of::<f32>();
+        if self.max_bytes == 0 || bytes > self.max_bytes {
+            return;
+        }
+        if let Some(previous) = self.entries.remove(&key) {
+            self.bytes = self
+                .bytes
+                .saturating_sub(previous.as_raw().len() * std::mem::size_of::<f32>());
+            self.order.retain(|entry| entry != &key);
+        }
+        while self.bytes.saturating_add(bytes) > self.max_bytes {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            if let Some(previous) = self.entries.remove(&oldest) {
+                self.bytes = self
+                    .bytes
+                    .saturating_sub(previous.as_raw().len() * std::mem::size_of::<f32>());
+                self.evictions = self.evictions.saturating_add(1);
+            }
+        }
+        self.bytes = self.bytes.saturating_add(bytes);
+        self.peak_bytes = self.peak_bytes.max(self.bytes);
+        self.entries.insert(key, image);
+        self.order.push_back(key);
+    }
+
+    pub(crate) fn stats(&self) -> QualityRoiCacheStats {
+        QualityRoiCacheStats {
+            hits: self.hits,
+            misses: self.misses,
+            evictions: self.evictions,
+            resident_bytes: self.bytes,
+            resident_entries: self.entries.len(),
+            peak_bytes: self.peak_bytes,
+        }
+    }
+}
+
 /// Replays the actual station-canvas inverse refinement before the RAW inverse.
 #[derive(Debug, Clone)]
 pub(crate) struct NativeReferenceMap {
+    pub mosaic_tone: Option<crate::panorama_utils::mosaic::MosaicReferenceTone>,
+    /// Actual source pyramid divisor; source coordinates remain native for Jacobians.
+    pub source_prefilter_divisor: f64,
     pub world_to_station: Matrix3<f64>,
     pub station_to_world: Matrix3<f64>,
     pub refinement: crate::panorama_utils::stitching::FocusSourceRefinement,
@@ -110,16 +375,24 @@ pub(crate) use criteria::{
 #[cfg(test)]
 pub(crate) use criteria::{criterion_verdict, owner_sharpness_stats};
 
-mod source_sampling;
+pub(crate) mod source_sampling;
 
+pub(crate) use source_sampling::source_roi_for_station_quality;
 use source_sampling::{apply_run_tone_transform, source_quad, source_roi_for_quality};
-pub(crate) use source_sampling::{measure_source_local_scale, sample_quality_source_at_world};
+pub(crate) use source_sampling::{
+    measure_source_local_scale, measure_station_local_scale, sample_quality_source_at_world,
+};
 #[cfg(test)]
 use source_sampling::{source_roi, source_roi_with_registration};
 
 mod coverage;
+mod criterion_rois;
+mod native_coverage;
 
-pub(crate) use coverage::{accumulate_confidence_score, select_sparse_rois};
+pub(crate) use coverage::{
+    accumulate_confidence_score, select_sparse_rois, select_sparse_rois_with_evidence,
+    select_sparse_rois_with_evidence_side,
+};
 use coverage::{confidence_coverage_stats, effective_pixel_coverage_streaming};
 
 mod boundary_pairs;
@@ -136,7 +409,7 @@ pub(crate) use boundary_repair::repair_failed_boundary_samples;
 
 mod run_gate;
 
-pub(crate) use run_gate::run_quality_gate;
+pub(crate) use run_gate::{run_quality_gate, run_quality_gate_with_cache};
 
 #[cfg(test)]
 mod tone_owner_oracle;
@@ -392,6 +665,7 @@ pub(crate) fn classify_unmeasurable_reason(reason: &str) -> UnmeasurableCategory
         | degradation::SLANTED_EDGE_LINE_FIT_RESIDUAL_EXCEEDED
         | degradation::SLANTED_EDGE_TOO_SHORT
         | degradation::ROI_NOT_FLAT
+        | degradation::GRADIENT_REFERENCE_ZERO
         | degradation::BOUNDARY_NO_PAIRABLE_EDGE
         | degradation::BOUNDARY_LOW_CONTRAST
         | degradation::BOUNDARY_STROKE_NOT_UNIQUE
@@ -425,3 +699,31 @@ fn gradient_energy_ratio(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod focus_candidate_capture;
+
+/// Replay the actual render pyramid without changing the raw-sized cache entry.
+pub(crate) fn prefilter_source_reference(
+    mut image: Rgb32FImage,
+    source: &QualitySource,
+) -> Result<Rgb32FImage, String> {
+    let divisor = source
+        .native_registration
+        .as_ref()
+        .map(|n| n.source_prefilter_divisor)
+        .unwrap_or(1.0);
+    if !divisor.is_finite()
+        || divisor < 1.0
+        || divisor > 65536.0
+        || divisor.log2().fract().abs() > 1e-12
+    {
+        return Err("invalid native reference source prefilter divisor".into());
+    }
+    let mut level = 1.0;
+    while level < divisor {
+        image = super::super::stitching::downsample_rgb_half(&image);
+        level *= 2.0;
+    }
+    Ok(image)
+}

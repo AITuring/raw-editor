@@ -288,9 +288,11 @@ fn saved_output_metadata_matches_tiff_png_alpha_and_jpeg_files() {
             .expect("read TIFF metadata"),
         super::SavedOutputMetadata {
             format: "TIFF".to_string(),
+            dimensions: (12, 9),
             bit_depth: 16,
             alpha_preserved: true,
             icc: "sRGB".to_string(),
+            tiff_extra_samples: Some(vec![2]),
         }
     );
 
@@ -302,9 +304,11 @@ fn saved_output_metadata_matches_tiff_png_alpha_and_jpeg_files() {
             .expect("read PNG metadata"),
         super::SavedOutputMetadata {
             format: "PNG".to_string(),
+            dimensions: (12, 9),
             bit_depth: 16,
             alpha_preserved: true,
             icc: "sRGB".to_string(),
+            tiff_extra_samples: None,
         }
     );
 
@@ -317,9 +321,11 @@ fn saved_output_metadata_matches_tiff_png_alpha_and_jpeg_files() {
             .expect("read JPEG metadata"),
         super::SavedOutputMetadata {
             format: "JPEG".to_string(),
+            dimensions: (12, 9),
             bit_depth: 8,
             alpha_preserved: false,
             icc: "sRGB".to_string(),
+            tiff_extra_samples: None,
         }
     );
 }
@@ -378,6 +384,11 @@ fn saved_result_updates_report_for_all_formats_and_failed_save_leaves_it_unchang
             serde_json::from_str(&fs::read_to_string(&report_path).expect("read report"))
                 .expect("parse report");
         assert!(report.output.written);
+        assert_eq!((report.output.width, report.output.height), (10, 8));
+        assert_eq!(
+            report.output.artifact_validation,
+            crate::panorama_utils::stack_pipeline::report::OutputArtifactValidation::Pass
+        );
         assert_eq!(report.output.result_id, result_id);
         assert_eq!(report.output.format, format.label());
         assert_eq!(report.output.path, output_path.to_string_lossy());

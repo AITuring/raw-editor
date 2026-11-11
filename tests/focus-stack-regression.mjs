@@ -158,8 +158,8 @@ function parseLog(text) {
   const ownership = text.match(/Verified covered output: (\d+)x(\d+); every pixel has source ownership/);
   const report = text.match(/Stack report written to (\S+\.json)/);
   const seconds = text.match(/Stitching completed in ([\d.]+)s/);
-  // The harness checks a layered native report after every artifact is
-  // written; such a rejection is a tracked verdict, not a crashed run.
+  // Preserve the reason even when the native gate rejects after export.
+  // A rejection is always a hard failure, including without a baseline.
   const nativeRejection = text.match(/panicked at [^\n]*\n((?:native |missing or duplicate quality criterion)[^\n;]*)/);
   return {
     streamed,
@@ -255,7 +255,21 @@ function compareFloors(current, baseline, failures) {
 }
 
 function baselineKey(entry) {
-  return `${entry.dataset}|${entry.subset ?? ''}|${entry.scale}|${entry.previewOnly}`;
+  // Explicit publication framing has different composition and reference
+  // sampling from the complete source union. Historical entries retain their
+  // source-union key, including every existing NEF baseline and metric floor.
+  return `${entry.dataset}|${entry.subset ?? ''}|${entry.scale}|${entry.previewOnly}|${entry.publicationCropMode ?? 'source-union'}`;
+}
+
+function nativeSourceOwnershipVerified(report, inputs) {
+  const native = report?.quality_gate?.legacy_native_evidence;
+  const covered = report?.composition?.source_covered_pixels;
+  return Boolean(native?.unresolved_pixel_count === 0 &&
+    native.sources?.length === inputs.length &&
+    new Set(native.sources.map((source) => source.owner)).size === inputs.length &&
+    native.sources.every((source) => Number.isInteger(source.owner) && source.owner > 0 && inputs.includes(source.path)) &&
+    Number.isSafeInteger(covered) && covered > 0 &&
+    report.composition.source_owned_pixels === covered);
 }
 
 function readBaselines() {
@@ -286,6 +300,12 @@ function main() {
     const recorded = readJson(options.recordSummary);
     if (!recorded?.summary) throw new Error(`${options.recordSummary} is not a regression summary`);
     if (recorded.failures.length > 0) throw new Error('a failed run cannot become a baseline');
+    if (recorded.summary.nativeAcceptance?.startsWith('rejected:')) {
+      throw new Error('a native-rejected run cannot become a baseline');
+    }
+    if (!recorded.summary.previewOnly && recorded.summary.artifactContract !== 'pass') {
+      throw new Error('an unverified export cannot become a baseline');
+    }
     recordBaseline(recorded.summary);
     console.log(`focus-stack-regression: recorded ${recorded.runId} in ${path.relative(repoRoot, baselinePath)}`);
     return;
@@ -298,16 +318,24 @@ function main() {
     throw new Error(`${dataset.id}: expected ${dataset.expectedSourceCount} inputs, found ${files.length}`);
   }
   let limit = options.limit;
+  let subsetStart = 0;
   let subsetId = null;
   if (options.subset) {
     const subset = (dataset.regressionSubsets ?? []).find((candidate) => candidate.id === options.subset);
     if (!subset) throw new Error(`${dataset.id}: unknown subset ${options.subset}`);
     subsetId = subset.id;
-    limit = subset.first;
+    subsetStart = Number.isInteger(subset.start) ? subset.start : 0;
+    limit = Number.isInteger(subset.count) ? subset.count : subset.first;
   } else if (limit !== undefined) {
     subsetId = `first-${limit}`;
   }
-  const inputs = (limit ? files.slice(0, limit) : files).map((name) => path.join(directory, name));
+  const selectedFiles = limit === undefined ? files : files.slice(subsetStart, subsetStart + limit);
+  if (limit !== undefined && selectedFiles.length !== limit) {
+    throw new Error(
+      `${dataset.id}: subset ${subsetId ?? `first-${limit}`} selected ${selectedFiles.length} inputs, expected ${limit}`,
+    );
+  }
+  const inputs = selectedFiles.map((name) => path.join(directory, name));
   const scaleTag = `s${String(options.scale).replace('.', 'p')}`;
   const runPrefix = subsetId?.startsWith(dataset.id) ? [subsetId] : [dataset.id, subsetId];
   const runId = [...runPrefix, scaleTag, options.label].filter(Boolean).join('-');
@@ -395,15 +423,36 @@ function main() {
   const failures = [];
   const notices = [];
 
-  // A layered native rejection raised after every artifact was written is
-  // compared with the baseline below; any other non-zero exit is a crash.
-  const nativeRejectedAfterOutput = run.status !== 0 && log.nativeRejection && log.result && metrics;
-  if ((run.status !== 0 || !log.passed) && !nativeRejectedAfterOutput) {
+  if (log.nativeRejection) {
+    failures.push(`layered native acceptance failed: ${log.nativeRejection}`);
+  } else if (run.status !== 0 || !log.passed) {
     const cause = run.error ? `, ${run.error.message}` : run.signal ? `, signal ${run.signal}` : '';
     failures.push(`harness failed (exit ${run.status}${cause}); see ${logPath}`);
   }
   if (!log.result) failures.push('no focus-stack result line in the log');
   if (!metrics) failures.push('acceptance metrics were not written');
+  const artifactFailures = [];
+  if (!previewOnly) {
+    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+      artifactFailures.push('full-resolution TIFF is missing or empty');
+    }
+    const output = report?.output;
+    if (!output?.written || output.artifact_validation !== 'pass' ||
+        output.format !== 'TIFF' || path.resolve(output.path ?? '') !== outputPath) {
+      artifactFailures.push('the Stack_Report has no verified TIFF export at the requested path');
+    }
+    if (!log.result || output?.width !== log.result.width || output?.height !== log.result.height) {
+      artifactFailures.push('verified TIFF dimensions do not match the rendered result');
+    }
+    if (output?.bit_depth !== 16 || output?.icc !== 'sRGB') {
+      artifactFailures.push('the TIFF export is not verified as 16-bit with the expected sRGB profile');
+    }
+    if (env.RAW_EDITOR_STACK_ACCEPTANCE_COVERAGE_ALPHA &&
+        (!output?.alpha_preserved || JSON.stringify(output.tiff_extra_samples) !== '[2]')) {
+      artifactFailures.push('the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])');
+    }
+  }
+  failures.push(...artifactFailures);
   const missing = metrics?.inputs?.missing_from_order ?? [];
   if (missing.length > 0) failures.push(`inputs missing from the stitching order: ${missing.join(', ')}`);
   if (log.streamed.size > 0 && log.streamed.size !== inputs.length) {
@@ -440,12 +489,16 @@ function main() {
     inputs: inputs.length,
     orderedInputs: metrics?.inputs?.ordered ?? null,
     streamedSources: log.streamed.size || null,
-    ownershipVerified: log.ownershipVerified,
+    ownershipVerified: log.ownershipVerified || nativeSourceOwnershipVerified(report, inputs),
+    publicationCropMode: report?.composition?.publication_crop ? 'framed-artwork' : 'source-union',
     selectedPath: report?.selected_path ?? null,
     stationCount: report?.grouping?.station_count ?? null,
     qualityGate: report?.quality_gate?.verdict ?? null,
     toneStatus: report?.tone?.status ?? null,
-    nativeAcceptance: log.nativeRejection ? `rejected: ${log.nativeRejection}` : 'passed-or-not-applicable',
+    nativeAcceptance: log.nativeRejection ? `rejected: ${log.nativeRejection}`
+      : log.passed && run.status === 0 ? 'passed-or-not-applicable' : 'harness-failed',
+    artifactContract: previewOnly ? 'not-run-preview' : artifactFailures.length === 0 ? 'pass' : 'fail',
+    verifiedExport: report?.output ?? null,
     stitchSeconds: log.stitchSeconds,
     elapsedSeconds,
     digests,
@@ -455,18 +508,12 @@ function main() {
   const baselines = readBaselines();
   const baseline = baselines.baselines.find((entry) => baselineKey(entry) === baselineKey(summary));
   let verdict = 'no-baseline';
-  if (log.nativeRejection) {
-    notices.push(`layered native acceptance rejected the report: ${log.nativeRejection}`);
-  }
   // Deviations from the recorded baseline. `--rebaseline` accepts them for an
   // intended, visually reviewed behavior change; hard failures above still block.
   const baselineFailures = [];
   if (baseline) {
     if (baseline.ownershipVerified && !summary.ownershipVerified) {
       baselineFailures.push('per-pixel source ownership verification disappeared');
-    }
-    if (baseline.nativeAcceptance === 'passed-or-not-applicable' && log.nativeRejection) {
-      baselineFailures.push('layered native acceptance regressed from the baseline');
     }
     if (baseline.streamedSources && summary.streamedSources !== baseline.streamedSources) {
       baselineFailures.push(`streamed sources ${summary.streamedSources} != baseline ${baseline.streamedSources}`);
@@ -497,6 +544,7 @@ function main() {
     recordBaseline(summary);
     notices.push(`baseline recorded in ${path.relative(repoRoot, baselinePath)}`);
   }
+  if (failures.length > 0) verdict = 'failed';
 
   const result = { runId, verdict, failures, notices, summary, logPath };
   fs.writeFileSync(path.join(options.outDir, `${runId}.summary.json`), `${JSON.stringify(result, null, 2)}\n`);

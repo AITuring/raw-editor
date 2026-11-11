@@ -8,11 +8,14 @@ use image::DynamicImage;
 use image::ImageEncoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
-use image::codecs::tiff::TiffEncoder;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Seek;
 use std::io::Write;
+use tiff::encoder::TiffEncoder;
+use tiff::encoder::TiffValue;
+use tiff::encoder::colortype::{ColorType as TiffColorType, RGB8, RGB16};
+use tiff::tags::{ExtraSamples, Tag};
 
 use super::ImageStackOutputFormat;
 
@@ -52,6 +55,44 @@ fn lossless_pixels(image: &DynamicImage, bit_depth: u8) -> DynamicImage {
     }
 }
 
+fn encode_srgb_tiff_pixels<W, C>(
+    writer: W,
+    width: u32,
+    height: u32,
+    pixels: &[C::Inner],
+    has_alpha: bool,
+    profile: Option<&[u8]>,
+) -> Result<(), String>
+where
+    W: Write + Seek,
+    C: TiffColorType,
+    [C::Inner]: TiffValue,
+{
+    let mut encoder = TiffEncoder::new(writer)
+        .map_err(|error| format!("Failed to start image-stack TIFF encoder: {error}"))?;
+    let mut image = encoder
+        .new_image::<C>(width, height)
+        .map_err(|error| format!("Failed to configure image-stack TIFF: {error}"))?;
+    if has_alpha {
+        // Start with RGB and add exactly one unassociated sample. RGBA alone
+        // does not declare ExtraSamples, and RGBA plus this call has 5 samples.
+        image
+            .extra_samples(&[ExtraSamples::UnassociatedAlpha])
+            .map_err(|error| format!("Failed to declare image-stack TIFF alpha: {error}"))?;
+    }
+    if let Some(profile) = profile {
+        image
+            .encoder()
+            .write_tag(Tag::IccProfile, profile)
+            .map_err(|error| {
+                format!("Failed to attach the image-stack TIFF color profile: {error}")
+            })?;
+    }
+    image
+        .write_data(pixels)
+        .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
+}
+
 pub(super) fn encode_srgb_image_stack<W: Write + Seek>(
     image: &DynamicImage,
     writer: W,
@@ -68,16 +109,42 @@ pub(super) fn encode_srgb_image_stack<W: Write + Seek>(
     let profile = crate::color_management::srgb_v4_profile().to_vec();
     match output_format {
         ImageStackOutputFormat::Tiff => {
-            let mut encoder = TiffEncoder::new(writer);
-            if embed_color_profile {
-                encoder.set_icc_profile(profile).map_err(|error| {
-                    format!("Failed to attach the image-stack TIFF color profile: {error}")
-                })?;
+            let profile = embed_color_profile.then_some(profile.as_slice());
+            match lossless_pixels(image, bit_depth) {
+                DynamicImage::ImageRgb16(pixels) => encode_srgb_tiff_pixels::<_, RGB16>(
+                    writer,
+                    pixels.width(),
+                    pixels.height(),
+                    pixels.as_raw(),
+                    false,
+                    profile,
+                ),
+                DynamicImage::ImageRgba16(pixels) => encode_srgb_tiff_pixels::<_, RGB16>(
+                    writer,
+                    pixels.width(),
+                    pixels.height(),
+                    pixels.as_raw(),
+                    true,
+                    profile,
+                ),
+                DynamicImage::ImageRgb8(pixels) => encode_srgb_tiff_pixels::<_, RGB8>(
+                    writer,
+                    pixels.width(),
+                    pixels.height(),
+                    pixels.as_raw(),
+                    false,
+                    profile,
+                ),
+                DynamicImage::ImageRgba8(pixels) => encode_srgb_tiff_pixels::<_, RGB8>(
+                    writer,
+                    pixels.width(),
+                    pixels.height(),
+                    pixels.as_raw(),
+                    true,
+                    profile,
+                ),
+                _ => unreachable!("lossless_pixels always produces RGB or RGBA integer samples"),
             }
-            let image_to_encode = lossless_pixels(image, bit_depth);
-            image_to_encode
-                .write_with_encoder(encoder)
-                .map_err(|error| format!("Failed to encode image-stack TIFF: {error}"))
         }
         ImageStackOutputFormat::Png => {
             let mut encoder = PngEncoder::new(writer);
@@ -114,6 +181,10 @@ pub(super) fn encode_srgb_image_stack<W: Write + Seek>(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "output_encoding_tests.rs"]
+mod tests;
 
 #[cfg(not(target_os = "android"))]
 fn encode_srgb_jpeg_streaming(

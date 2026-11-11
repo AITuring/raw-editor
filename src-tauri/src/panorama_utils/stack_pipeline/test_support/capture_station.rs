@@ -36,23 +36,16 @@ use super::splitmix64;
 /// Side of an [`IntraStationLayerPair`], in native pixels.
 ///
 /// `(20..124).step_by(NATIVE_REFINE_STEP = 16)` gives 7 grid columns of which the
-/// 5 inner ones can hold a whole 67x67 patch buffer, so one pass measures 25
-/// control points: enough for an 8-neighbourhood to exist in the interior and
-/// cheap enough for a property test.
+/// 4 inner ones can hold a whole 81x81 patch buffer, so one pass measures 16
+/// control points before optional relocation: enough for an 8-neighbourhood to
+/// exist in the interior and cheap enough for a property test.
 pub const INTRA_STATION_PAIR_SIDE: u32 = 144;
 
-/// Largest residual displacement a bidirectional match can carry at all, in
-/// patch samples.
-///
-/// `refine_warped_patch` reserves the whole search support before it scores a
-/// hypothesis, so the reverse probe — centred on the forward match rather than on
-/// the patch centre — needs
-/// `INTRA_STATION_MATCH_RADIUS + INTRA_STATION_SEARCH_SAMPLES + |d| < INTRA_STATION_PATCH_HALF`.
-/// With 25 + 7 < 33 that leaves strictly less than one patch sample, i.e. less
-/// than `spacing` native pixels, for the displacement itself.  The generator keeps
-/// the drawn displacement inside it so the fixture measures control points instead
-/// of only failing to locate them.
-pub const INTRA_STATION_MAX_MEASURABLE_SAMPLES: f64 = 1.0;
+/// Baseline displacement range of the small-residual property fixture, in patch
+/// samples. This bounds the generated global shift, not the production matcher:
+/// the reverse halo now supports the entire forward search. Dedicated known-
+/// displacement regressions cover larger positive and negative translations.
+pub const INTRA_STATION_SMALL_RESIDUAL_SAMPLES: f64 = 1.0;
 
 /// A base/layer pair of one Capture_Station.
 pub struct IntraStationLayerPair {
@@ -131,10 +124,9 @@ pub(super) fn sample_rgb(image: &Rgb32FImage, x: f64, y: f64) -> Rgb<f32> {
 /// A base/layer pair whose displacement, displacement gradient, grain, defocus,
 /// anchor long side and content relationship are all drawn.
 ///
-/// The displacement stays below [`INTRA_STATION_MAX_MEASURABLE_SAMPLES`], because
-/// the fine pass runs at one patch sample per native pixel and a larger
-/// displacement cannot be measured in reverse at all — in production that pass
-/// sees the residual left by the coarse one, which is exactly this size.
+/// The baseline displacement stays below [`INTRA_STATION_SMALL_RESIDUAL_SAMPLES`]
+/// so these cases concentrate on the three acceptance gates after a coarse
+/// correction. This is a fixture choice, not a reverse-support limitation.
 ///
 /// `anchor_long_side` is drawn from a real artwork frame's long side and from a
 /// deliberately tiny one: 需求 2.6's ceiling is `0.01 ×` it, so only the tiny
@@ -278,6 +270,54 @@ pub fn arb_intra_station_verdict_pair() -> impl Strategy<Value = IntraStationLay
                 )
             },
         )
+}
+
+/// A coverage fixture whose coarse pass can measure the full reverse halo.
+///
+/// The ordinary 144px pair is deliberately too small for the 162px coarse
+/// buffer. Keep it for the inexpensive per-frame verdict cases, and mix in a
+/// larger pair specifically for the union-over-passes property. Both sides
+/// carry the same nonperiodic low-frequency structure and opposite phases of a
+/// four-native-pixel weave. In the spacing=2 pass the weave falls at Nyquist,
+/// where the existing shared binomial low-pass removes it; at spacing=1 it
+/// remains visible and produces competing peaks. A union must retain genuine
+/// coarse observations when the fine pass correctly rejects that ambiguity.
+/// This is an adversarial sampling/coverage fixture, not a model of RAW quality;
+/// ordinary random grain, displacement, noise and defocus cases remain in the
+/// same property. No accepted counts or displacement-field entries are injected.
+pub fn arb_intra_station_coverage_pair() -> impl Strategy<Value = IntraStationLayerPair> {
+    prop_oneof![
+        2 => arb_intra_station_verdict_pair(),
+        1 => any::<u64>().prop_map(coarse_only_coverage_pair),
+    ]
+}
+
+fn coarse_only_coverage_pair(seed: u64) -> IntraStationLayerPair {
+    let side = 208;
+    let shared = image::imageops::blur(&grain_texture(side, seed), 2.5);
+    let exposure = |phase: f32| {
+        Rgb32FImage::from_fn(side, side, |x, y| {
+            let original = *shared.get_pixel(x, y);
+            let weave = (0.22 * (std::f64::consts::FRAC_PI_2 * f64::from(x)).cos()
+                + 0.22 * (std::f64::consts::FRAC_PI_2 * f64::from(y)).cos())
+                as f32;
+            Rgb(std::array::from_fn(|channel| {
+                0.5 + (original[channel] - 0.5) * 0.5 + phase * weave
+            }))
+        })
+    };
+    let base = exposure(1.0);
+    let layer = exposure(-1.0);
+    IntraStationLayerPair {
+        base,
+        layer,
+        anchor_long_side: 9_504,
+        shift_px: (0.0, 0.0),
+        gradient_shift_px: 0.0,
+        noise_amplitude: 0.44,
+        defocus_sigma: 0.0,
+        unrelated: false,
+    }
 }
 
 // ---------------------------------------------------------------------------

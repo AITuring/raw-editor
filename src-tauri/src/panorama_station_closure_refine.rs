@@ -110,6 +110,9 @@ pub(super) fn refine_focus_group_projective_tree_poses_with_report_protected(
     closure_report.residual_median_px = 0.0;
     closure_report.residual_p95_px = 0.0;
     closure_report.max_direct_pair_p95_px = 0.0;
+    closure_report.balanced_retry_attempted = false;
+    closure_report.balanced_retry_accepted = false;
+    closure_report.before_retry_max_direct_pair_p95_px = None;
     closure_report.max_corner_correction_px = 0.0;
     closure_report.clamped_stations = 0;
     closure_report.fallback_reason = None;
@@ -696,6 +699,41 @@ pub(super) fn refine_focus_group_projective_tree_poses_with_report_protected(
     ) {
         ClosureAcceptance::Accepted => {}
         ClosureAcceptance::UnreliablePairP95(pair) => {
+            // The maximum-support tree is an initialization, not an extra
+            // independent observation. Its 16x protection can put nearly all
+            // closure error onto one otherwise valid redundant measurement.
+            // Before rejecting that measurement, allow one balanced solve
+            // against the SAME immutable direct relations. All displacement,
+            // convergence, residual and per-pair gates remain in force. In
+            // particular, never replace a measured edge with a transform
+            // composed from the path whose closure is being validated.
+            if !protected_tree_edges.is_empty() {
+                closure_report.balanced_retry_attempted = true;
+                closure_report.before_retry_max_direct_pair_p95_px = Some(pair.p95_px);
+                let mut balanced_report = closure_report.clone();
+                if let Some(balanced) =
+                    refine_focus_group_projective_tree_poses_with_report_protected(
+                        images,
+                        groups,
+                        group_edges,
+                        base_poses,
+                        reference_group,
+                        coordinate_scale,
+                        station_topology,
+                        minimum_independent_support,
+                        &BTreeSet::new(),
+                        &mut balanced_report,
+                    )
+                {
+                    if balanced_report.status == stack_report::ClosureStatus::Converged {
+                        balanced_report.balanced_retry_attempted = true;
+                        balanced_report.balanced_retry_accepted = true;
+                        balanced_report.before_retry_max_direct_pair_p95_px = Some(pair.p95_px);
+                        *closure_report = balanced_report;
+                        return Some(balanced);
+                    }
+                }
+            }
             let offending = closure_offending_pair_record(pair, station_topology);
             closure_report.status = stack_report::ClosureStatus::Unreliable;
             closure_report.fallback_reason =

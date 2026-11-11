@@ -4,6 +4,7 @@
 //! and renders, plane sampling and station membership ordering.
 
 use super::super::coordinates::Projection;
+use super::super::mosaic::MosaicCoverageObservation;
 use super::super::stack_pipeline::focus_fuser;
 use super::super::stack_pipeline::intra_station;
 use super::super::stack_pipeline::report::FusionReport;
@@ -43,6 +44,36 @@ pub fn focus_stack_stitcher<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    focus_stack_stitcher_observed(
+        images,
+        global_homographies,
+        projection,
+        focus_warp,
+        capture_group_ids,
+        sequence_gap_aware,
+        app_handle,
+        progress_event,
+        load_image,
+    )
+    .map(|(image, _)| image)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn focus_stack_stitcher_observed<R: Runtime, F>(
+    images: &[&ImageInfo],
+    global_homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    focus_warp: Option<&FocusLayerWarp>,
+    capture_group_ids: Option<&HashMap<usize, u8>>,
+    sequence_gap_aware: bool,
+    app_handle: AppHandle<R>,
+    progress_event: &str,
+    load_image: &mut F,
+) -> Result<(Rgb32FImage, Option<MosaicCoverageObservation>), String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    let mut observation = None;
     focus_stack_stitcher_with_margin_policy(
         images,
         global_homographies,
@@ -58,8 +89,9 @@ where
         app_handle,
         progress_event,
         load_image,
+        &mut observation,
     )
-    .map(FocusStackTileRender::into_image)
+    .map(|render| (render.into_image(), observation))
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +142,20 @@ pub(crate) struct FocusStackTileMasks {
 }
 
 impl FocusSourceRefinement {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let mut bytes = std::mem::size_of::<Self>();
+        if let Some(displacement) = self.displacement.as_ref() {
+            bytes = bytes.saturating_add(displacement.retained_bytes());
+        }
+        if let Some(sampling) = self.source_sampling.as_ref() {
+            bytes = bytes.saturating_add(sampling.retained_bytes());
+        }
+        if let Some(moved) = self.foreground_move.as_ref() {
+            bytes = bytes.saturating_add(moved.destinations.as_raw().capacity());
+        }
+        bytes
+    }
+
     pub(crate) fn inverse_canvas_point(&self, point: Point2<f64>) -> Point2<f64> {
         let mut point = point;
         if let Some(moved) = self.foreground_move.as_ref() {
@@ -150,6 +196,62 @@ pub(crate) struct FocusStackTileRender {
 }
 
 impl FocusStackTileRender {
+    /// Conservative allocated storage retained by a native fusion entry.
+    /// Includes every large pixel/mask/deformation plane and the source image
+    /// metadata held through sampling Arcs. Inline fields and shared snapshots
+    /// may be counted twice; this deliberately errs toward earlier eviction.
+    /// The estimate allocates no temporary planes and never clones the entry.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let mut bytes = std::mem::size_of::<Self>().saturating_add(
+            self.image
+                .as_raw()
+                .capacity()
+                .saturating_mul(std::mem::size_of::<f32>()),
+        );
+        if let Some(masks) = self.masks.as_ref() {
+            bytes = bytes
+                .saturating_add(masks.coverage.retained_bytes())
+                .saturating_add(masks.ownership.retained_bytes())
+                .saturating_add(masks.confidence.retained_bytes())
+                .saturating_add(masks.textured.capacity())
+                .saturating_add(masks.sharpness_evidence.retained_bytes())
+                .saturating_add(masks.native_displacements.capacity().saturating_mul(
+                    std::mem::size_of::<
+                        Option<crate::panorama_utils::mosaic::NativeResidualDisplacement>,
+                    >(),
+                ))
+                .saturating_add(
+                    masks
+                        .fusion
+                        .low_sharpness_regions
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<
+                            crate::panorama_utils::stack_pipeline::report::LowSharpnessRegionRecord,
+                        >()),
+                );
+            // std HashMap does not expose bucket allocation. Twice its item
+            // capacity plus per-slot control/pointer allowance is deliberately
+            // conservative for the current table, including unused slots.
+            bytes = bytes.saturating_add(
+                masks
+                    .source_refinements
+                    .capacity()
+                    .saturating_mul(2)
+                    .saturating_mul(
+                        std::mem::size_of::<(usize, FocusSourceRefinement)>()
+                            .saturating_add(std::mem::size_of::<usize>()),
+                    ),
+            );
+            for refinement in masks.source_refinements.values() {
+                bytes = bytes.saturating_add(refinement.retained_bytes());
+            }
+            for displacement in masks.native_displacements.iter().flatten() {
+                bytes = bytes.saturating_add(displacement.retained_bytes());
+            }
+        }
+        bytes
+    }
+
     pub(super) fn unattributed(image: Rgb32FImage) -> Self {
         Self {
             image,
@@ -184,6 +286,7 @@ pub(crate) fn focus_stack_stitcher_unfilled<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    let mut observation = None;
     focus_stack_stitcher_with_margin_policy(
         images,
         global_homographies,
@@ -196,6 +299,7 @@ where
         app_handle,
         progress_event,
         load_image,
+        &mut observation,
     )
 }
 
@@ -412,4 +516,132 @@ pub(crate) fn station_members_from_measured_group_join_evidence(
     recorded: &HashMap<String, IntraStationFrameRecord>,
 ) -> (Vec<StationMember>, Vec<GroupJoinRejection>) {
     station_members_from_frame_records(images, recorded)
+}
+
+#[cfg(test)]
+mod retained_storage_tests {
+    use super::*;
+    use crate::panorama_utils::mosaic::{Field, NativeResidualDisplacement};
+    use std::mem::size_of;
+    use std::path::PathBuf;
+
+    fn source() -> ImageInfo {
+        ImageInfo {
+            id: 0,
+            filename: "/fixture/source.NEF".into(),
+            width: 32,
+            height: 32,
+            alignment_image: GrayImage::new(32, 32),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: None,
+            source_footprint: None,
+            overview_reference: false,
+            features: Vec::new(),
+            top_features: Vec::new(),
+            foreground_range: None,
+            foreground_mask: Some(GrayImage::new(32, 32)),
+            horizontal_edge_rows: Vec::new(),
+            vertical_edge_columns: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn native_fusion_retained_bytes_charge_spare_pixel_capacity() {
+        let pixels = Vec::<f32>::with_capacity(4096);
+        let capacity = pixels.capacity();
+        let render =
+            FocusStackTileRender::unattributed(Rgb32FImage::from_raw(0, 0, pixels).unwrap());
+        assert_eq!(
+            render.retained_bytes(),
+            size_of::<FocusStackTileRender>() + capacity * size_of::<f32>()
+        );
+    }
+
+    #[test]
+    fn native_fusion_retained_bytes_include_all_mask_planes_and_evidence() {
+        let mut owners = Vec::with_capacity(4096);
+        owners.resize(1024, 1);
+        let mut coverage = Vec::with_capacity(4096);
+        coverage.resize(1024, 255);
+        let mut confidence = Vec::with_capacity(4096);
+        confidence.resize(1024, 1.0);
+        let mut textured = Vec::with_capacity(4096);
+        textured.resize(1024, 255);
+        let mut legend = Vec::with_capacity(16);
+        let mut path = PathBuf::with_capacity(8192);
+        path.push("/fixture/source.NEF");
+        let path_bytes = path.capacity();
+        legend.push(path);
+        let evidence = focus_fuser::StationFusion::new(32, 32, 1).sharpness_evidence();
+        let plane_bytes = owners.capacity() * size_of::<u16>()
+            + coverage.capacity()
+            + confidence.capacity() * size_of::<f32>()
+            + textured.capacity()
+            + legend.capacity() * size_of::<PathBuf>()
+            + path_bytes
+            + evidence.retained_bytes();
+        let render = FocusStackTileRender {
+            image: Rgb32FImage::new(32, 32),
+            masks: Some(FocusStackTileMasks {
+                source_refinements: HashMap::new(),
+                coverage: CoverageMask::from_bytes(32, 32, coverage).unwrap(),
+                ownership: OwnershipMap::new(32, 32, owners, legend).unwrap(),
+                confidence: ConfidenceMap::per_pixel(32, 32, confidence).unwrap(),
+                textured,
+                sharpness_evidence: evidence,
+                native_displacements: Vec::new(),
+                fusion: FusionReport::default(),
+            }),
+            sampling_origin: (0.0, 0.0),
+        };
+        assert!(
+            render.retained_bytes()
+                >= size_of::<FocusStackTileRender>() + 32 * 32 * 12 + plane_bytes
+        );
+        assert_eq!(
+            ConfidenceMap::zero(100_000, 100_000).retained_bytes(),
+            size_of::<ConfidenceMap>()
+        );
+    }
+
+    #[test]
+    fn native_fusion_retained_bytes_charge_sampling_snapshots_and_deformations() {
+        let sampling =
+            FocusSourceSampling::new(&source(), &Matrix3::identity(), Projection::Planar, None);
+        assert!(sampling.retained_bytes() >= 2 * 32 * 32 + size_of::<ImageInfo>());
+        let mut values = Vec::with_capacity(8192);
+        values.resize(4, [0.0, 0.0]);
+        let field_bytes = values.capacity() * size_of::<[f64; 2]>();
+        let displacement = NativeResidualDisplacement::from_test_field(Field {
+            width: 2,
+            height: 2,
+            step: 32.0,
+            values,
+        });
+        let refinement = FocusSourceRefinement {
+            source_sampling: Some(sampling),
+            displacement: Some(displacement),
+            foreground_move: Some(FocusForegroundMove {
+                delta: (1, 1),
+                left: 0,
+                top: 0,
+                destinations: GrayImage::new(64, 64),
+            }),
+            ..Default::default()
+        };
+        assert!(refinement.retained_bytes() >= field_bytes + 64 * 64 + 2 * 32 * 32);
+        let clone = refinement.clone();
+        // Cloning shares the sampling snapshot. Each independently retained
+        // entry still charges it; eviction accounting must not depend on the
+        // transient Arc strong count elsewhere in the pipeline.
+        assert_eq!(
+            clone.source_sampling.as_ref().unwrap().retained_bytes(),
+            refinement
+                .source_sampling
+                .as_ref()
+                .unwrap()
+                .retained_bytes()
+        );
+    }
 }

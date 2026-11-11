@@ -47,6 +47,12 @@ use streaming_harmonization::{
     streaming_seam_harmonization,
 };
 
+mod artwork_tone;
+mod legacy_quality;
+mod legacy_reference;
+pub(crate) use legacy_quality::LegacyQualityObservation;
+pub(crate) use legacy_reference::{MosaicGainReference, MosaicReferenceTone};
+mod owner_overlap_gain;
 mod streaming_illumination;
 
 use streaming_illumination::apply_streaming_source_owner_low_frequency_correction;
@@ -106,13 +112,23 @@ pub(crate) use station_registration::{
 
 mod in_memory_mosaic;
 
-pub(crate) use in_memory_mosaic::detail_preserving_mosaic;
 #[cfg(test)]
 use in_memory_mosaic::mask_covered_bounds;
+pub(crate) use in_memory_mosaic::{detail_preserving_mosaic, detail_preserving_mosaic_observed};
 
 mod streaming_mosaic;
 
 use streaming_mosaic::detail_preserving_mosaic_streaming;
+
+#[derive(Debug, Clone)]
+pub(crate) struct MosaicCoverageObservation {
+    pub source_covered_pixels: u64,
+    pub source_owned_pixels: Option<u64>,
+    pub output_pixels: u64,
+    pub coverage: Option<GrayImage>,
+    pub publication_crop: Option<(u32, u32, u32, u32)>,
+    pub quality: Option<LegacyQualityObservation>,
+}
 
 // Actual configured intra-station analysis long side. Keep both compositor
 // paths on the same source of truth so Stack_Report records what production

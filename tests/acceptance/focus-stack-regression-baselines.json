@@ -91,6 +91,111 @@
       "previewEdge": 1200,
       "previewOnly": false,
       "output": {
+        "width": 31085,
+        "height": 11011
+      },
+      "inputs": 45,
+      "orderedInputs": 45,
+      "streamedSources": 45,
+      "ownershipVerified": true,
+      "publicationCropMode": "framed-artwork",
+      "selectedPath": "legacy_single_layer_mosaic",
+      "stationCount": 44,
+      "qualityGate": "pass",
+      "toneStatus": "not_run",
+      "nativeAcceptance": "passed-or-not-applicable",
+      "artifactContract": "pass",
+      "verifiedExport": {
+        "alpha_preserved": true,
+        "artifact_validation": "pass",
+        "artifact_validation_error": null,
+        "bit_depth": 16,
+        "format": "TIFF",
+        "height": 11011,
+        "icc": "sRGB",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v63-framing-integration/lanting/run/lanting-s1-v63-framing-integration.tiff",
+        "preview": {
+          "path": "",
+          "max_roi_delta_e": 0
+        },
+        "result_id": "native-fixture-ef4429cb-8b7d-465b-9b3b-34328f2be64f",
+        "tiff_extra_samples": [
+          2
+        ],
+        "width": 31085,
+        "written": true
+      },
+      "digests": {
+        "preview": "e6064eed0b5e742e7d181b997d5f8e37edb22d9792b8131cb20e1cda28892c05",
+        "crops": {
+          "top-left": "7c96b1b5c519a2f69b17920659dfa53bb0037a3e14fdca93929937c72e0c1163",
+          "top-center": "89628deac7969b2cdb0c7b8fc130c4a44ea9b97f070487507a4ba4679bcef104",
+          "top-right": "19cd351e2afa2ca613fd1964abb94c7c911229918c04f5351ff09a7673ed5c3e",
+          "bottom-left": "c10dd408a9848309808b26e931f23fd29506af953220727917308bdc614752ea",
+          "bottom-center": "5a4e222acafd5877db63dedd9b8204e695c8c8161143c9b3122aba17963c8eeb",
+          "bottom-right": "60122fc5ff42f607947dbc17065f6bd6c423037db5e62b108224e4f0926d402a"
+        },
+        "appJpeg": "33dedcdf4c55d84275f6a82b4582de4fb90d0d207a376481476d4aaad994020d"
+      },
+      "metrics": {
+        "self": {
+          "contentTiles": 1064,
+          "sharpnessMedian": 0.15445127659815683,
+          "sharpnessP10": 0.08509272752717491,
+          "thirds": [
+            {
+              "band": "left",
+              "sharpnessMedian": 0.1655327828647312
+            },
+            {
+              "band": "center",
+              "sharpnessMedian": 0.14953476708400765
+            },
+            {
+              "band": "right",
+              "sharpnessMedian": 0.158183420887373
+            }
+          ]
+        },
+        "reference": {
+          "file": "DSC08854_FocusStack.jpg",
+          "inliers": 1767,
+          "localScale": 0.9993160311042846,
+          "contentTiles": 1034,
+          "ratioMedian": 0.9985974289863822,
+          "ratioP05": 0.7587519468705245,
+          "ratioP10": 0.8150559484907623,
+          "softTileFraction": 0.0183752417794971,
+          "lowContrastFraction": 0.010638297872340425,
+          "thirds": [
+            {
+              "band": "left",
+              "ratioMedian": 1.0430462438341659,
+              "ratioP10": 0.8337554486057072
+            },
+            {
+              "band": "center",
+              "ratioMedian": 0.9786016076508708,
+              "ratioP10": 0.7740530323194553
+            },
+            {
+              "band": "right",
+              "ratioMedian": 0.998153324123078,
+              "ratioP10": 0.8934767167472597
+            }
+          ]
+        }
+      },
+      "recordedAt": "2026-11-11",
+      "commit": "e6ffdf7a"
+    },
+    {
+      "dataset": "lanting",
+      "subset": null,
+      "scale": 1,
+      "previewEdge": 1200,
+      "previewOnly": false,
+      "output": {
         "width": 33821,
         "height": 13852
       },

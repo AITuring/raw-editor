@@ -26,6 +26,14 @@ pub(crate) struct Criterion {
     pub(super) measured: Vec<FailedMeasurementRecord>,
     pub(super) failed: Vec<FailedMeasurementRecord>,
     pub(super) unmeasurable: usize,
+    pub(super) candidate_count: usize,
+    pub(super) eligible_count: usize,
+    pub(super) rejected_content: usize,
+    pub(super) rejected_content_reasons: BTreeMap<String, usize>,
+    pub(super) rejected_content_examples: Vec<UnmeasurableRecord>,
+    pub(super) selection_mode: String,
+    pub(super) unvisited_candidate_count: usize,
+    pub(super) reference_roi_limit: usize,
     pub(super) content_not_applicable: usize,
     pub(super) technical_unmeasurable: usize,
     pub(super) unmeasurable_reasons: BTreeMap<String, usize>,
@@ -46,6 +54,7 @@ pub(crate) struct Criterion {
     pub(super) unresolved_pixel_count: u64,
     pub(super) effective_output_pixels: Option<u64>,
     pub(super) effective_projected_pixels: Option<u64>,
+    pub(super) effective_source_domain: Option<super::super::report::EffectiveSourceDomainRecord>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -153,6 +162,14 @@ impl Default for Criterion {
             measured: Vec::new(),
             failed: Vec::new(),
             unmeasurable: 0,
+            candidate_count: 0,
+            eligible_count: 0,
+            rejected_content: 0,
+            rejected_content_reasons: BTreeMap::new(),
+            rejected_content_examples: Vec::new(),
+            selection_mode: String::new(),
+            unvisited_candidate_count: 0,
+            reference_roi_limit: 0,
             content_not_applicable: 0,
             technical_unmeasurable: 0,
             unmeasurable_reasons: BTreeMap::new(),
@@ -170,6 +187,7 @@ impl Default for Criterion {
             unresolved_pixel_count: 0,
             effective_output_pixels: None,
             effective_projected_pixels: None,
+            effective_source_domain: None,
         }
     }
 }
@@ -250,6 +268,39 @@ impl Criterion {
             .or_default() += count;
     }
 
+    /// Record the criterion-specific candidate pool without changing the
+    /// historical measurable/unmeasurable counters. This lets large-plane
+    /// runs distinguish candidate rejection from technical decode failures.
+    pub(super) fn set_candidate_pool(
+        &mut self,
+        candidate_count: usize,
+        eligible_count: usize,
+        selection_mode: &'static str,
+    ) {
+        self.candidate_count = candidate_count;
+        self.eligible_count = eligible_count;
+        self.selection_mode = selection_mode.to_string();
+    }
+
+    pub(super) fn reject_content(&mut self, reason: &'static str, world: (f64, f64), count: usize) {
+        self.rejected_content = self.rejected_content.saturating_add(count);
+        *self
+            .rejected_content_reasons
+            .entry(reason.to_string())
+            .or_default() += count;
+        if self.rejected_content_examples.len() < 32 {
+            self.rejected_content_examples.push(UnmeasurableRecord {
+                criterion: self.name.to_string(),
+                world: WorldPoint {
+                    x: world.0,
+                    y: world.1,
+                },
+                reason: reason.to_string(),
+                category: UnmeasurableCategory::ContentNotApplicable,
+            });
+        }
+    }
+
     pub(in crate::panorama_utils::stack_pipeline) fn finish(
         self,
         _unmeasurable: &mut Vec<UnmeasurableRecord>,
@@ -272,6 +323,26 @@ impl Criterion {
             threshold_max: self.max,
             measurable_count: self.observed_count,
             unmeasurable_count: self.unmeasurable,
+            candidate_count: self.candidate_count,
+            eligible_count: self.eligible_count,
+            rejected_content_count: self
+                .rejected_content
+                .saturating_add(self.content_not_applicable),
+            rejected_content_reasons: {
+                let mut reasons = self.rejected_content_reasons;
+                for (reason, count) in &self.unmeasurable_reasons {
+                    if classify_unmeasurable_reason(reason)
+                        == UnmeasurableCategory::ContentNotApplicable
+                    {
+                        *reasons.entry(reason.clone()).or_default() += count;
+                    }
+                }
+                reasons
+            },
+            rejected_content_examples: self.rejected_content_examples,
+            selection_mode: self.selection_mode,
+            unvisited_candidate_count: self.unvisited_candidate_count,
+            reference_roi_limit: self.reference_roi_limit,
             content_not_applicable_count: self.content_not_applicable,
             technical_unmeasurable_count: self.technical_unmeasurable,
             verdict,
@@ -291,6 +362,7 @@ impl Criterion {
             unresolved_pixel_count: self.unresolved_pixel_count,
             effective_output_pixels: self.effective_output_pixels,
             effective_projected_pixels: self.effective_projected_pixels,
+            effective_source_domain: self.effective_source_domain,
         }
     }
 }

@@ -173,11 +173,10 @@ pub(super) static CONTROL_POINT_CURSOR: AtomicUsize = AtomicUsize::new(0);
 
 /// Cases Property 6 is configured with.
 ///
-/// One case measures 25 control points, each of which correlates two 51x51
+/// Each case uses a small control-point grid. Every point correlates two 51x51
 /// windows over 225 integer hypotheses and runs the focal-plane matched low-pass,
-/// so a case costs about a third of a second — the whole suite has a budget, and
-/// 24 independently drawn pairs cover the gate combinations (the coverage mask
-/// below turns that claim into an assertion) at a tenth of the cost of 240.
+/// so the suite bounds its case count as well as its image size. The coverage
+/// mask below verifies that the generated pairs reach the required verdicts.
 pub(super) const CONTROL_POINT_CASES: usize = 20;
 
 /// Every how many cases the whole-frame half of Property 6 runs.
@@ -195,26 +194,15 @@ proptest! {
     // 在测试里按需求写死）、按行优先顺序、用独立实现的中位数从同一批**实测量**重算出的
     // 集合。多接受一个点说明某道门没有起作用，多拒绝一个点说明某道门比需求更严。
     //
-    // 哪些判定**能**被触及是被 patch 几何决定的，不是测试的选择，实测如下：
+    // 反向探测以正向匹配点为中心，buffer 必须容纳
+    // `MATCH_RADIUS + SEARCH_SAMPLES + |d|` 以及插值邻点。旧 half=33 把可测位移
+    // 意外限制在约 1 sample；现在 half=40 覆盖完整正向搜索，不能再用这个旧缺陷解释
+    // 某道门为何未被触及。较大正负位移和搜索边缘由 intra_station/tests.rs 的真实 matcher
+    // 回归覆盖；这里保留小残差随机 fixture，以独立重算 2.4–2.6 的接线和接受集合。
     //
-    //   * `probe_warped_patch` 在打分之前要预留整个搜索支撑，而反向探测是以正向匹配点为
-    //     中心的，所以它要求
-    //     `MATCH_RADIUS(25) + SEARCH_SAMPLES(7) + |d| < PATCH_HALF(33)`，即 `|d|` 必须
-    //     小于 1 个 patch 采样（细遍 = 1.0 原生像素，粗遍 = 2.0 原生像素）。超过这个位移的
-    //     控制点根本形不成双向测量，会以 `NotLocated` 结束——生产里这没问题，因为细遍面对的
-    //     是粗遍改正后的残差。实测本 fixture 上 `|d|` 最大 1.20 原生像素（含亚像素细化的
-    //     过冲）。
-    //   * 因此需求 2.5 的 4.0 原生像素邻域容差**无法拒绝任何控制点**：同一遍里两个被接受的
-    //     控制点各自的位移都小于 1 个采样，其差恒小于 2×spacing ≤ 4.0。这是对生产实现的
-    //     一条实测结论，不是本属性的断言范围——集合相等仍然把这道门算在内，只是数据永远不会
-    //     落到它拒绝的那一侧。
-    //   * 需求 2.6 的上限是 0.01×锚点帧长边，真实 9504px 锚点帧上是 95 原生像素，比可测位移
-    //     大两个数量级，所以在真实尺寸下同样无法拒绝。生成器额外抽一个人为很小的锚点长边
-    //     （64 → 0.64 原生像素上限）来证明这道门确实接线正确并会拒绝，运行结束时断言它出现过。
-    //   * 需求 2.4 的 1.0 原生像素往返容差在原理上可达（反向偏移可到 ±7 个采样），但实测
-    //     闭合的往返最大只有 0.18 原生像素：真正在起作用的是同一条约束的"测不出来"那一半。
-    //
-    // 运行结束时断言"可达的"三种判定（接受、相似度门拒绝、需求 2.6 拒绝）都出现过。
+    // 生成器抽取小锚点长边 64，使 2.6 的 0.64px 上限落在 fixture 的位移范围内；另一个
+    // 长边 9504 验证真实尺寸下不会误拒绝正常位移。运行结束时要求接受、相似度拒绝、2.6
+    // 拒绝都出现，不再声称其它判定在生产中因 buffer 尺寸而不可达。
     //
     // 需求 2.7 的 `Indeterminate` 结论在整帧那一半断言：一层与底图无关时没有任何控制点被
     // 接受，两个中位数都无法形成，此时既不能回退也不能假装比较过——位移场必须逐位等于
@@ -242,7 +230,13 @@ proptest! {
         );
         prop_assert_eq!(intra_station::INTRA_STATION_MIN_CORRELATION, 0.70);
         prop_assert_eq!(intra_station::INTRA_STATION_MATCH_RADIUS, 25);
-        prop_assert_eq!(intra_station::INTRA_STATION_PATCH_HALF, 33);
+        prop_assert_eq!(intra_station::INTRA_STATION_PATCH_HALF, 40);
+        prop_assert!(
+            intra_station::INTRA_STATION_MATCH_RADIUS
+                + 2 * intra_station::INTRA_STATION_SEARCH_SAMPLES
+                < intra_station::INTRA_STATION_PATCH_HALF,
+            "the displaced reverse probe must retain its whole search support"
+        );
         prop_assert!(
             2 * intra_station::INTRA_STATION_MATCH_RADIUS + 1 >= REQUIRED_MIN_WINDOW_SIDE_PX,
             "需求 2.3 asks for a matching window of at least {REQUIRED_MIN_WINDOW_SIDE_PX} \
@@ -415,10 +409,8 @@ proptest! {
             }
         }
 
-        // The reachable verdicts must all have occurred, or the set equality
-        // above could hold for data that never reached a gate.  Which verdicts
-        // are reachable at all is a measured property of the patch geometry
-        // rather than a choice; see the note on the test.
+        // The fixture's required verdicts must all have occurred, or the set
+        // equality above could hold for data that never reached these gates.
         let required = ControlPointVerdict::Accepted.bit()
             | ControlPointVerdict::NotLocated.bit()
             | ControlPointVerdict::SymmetricError.bit();
@@ -468,9 +460,9 @@ pub(super) static LOCAL_FIELD_CURSOR: AtomicUsize = AtomicUsize::new(0);
 
 /// Cases Properties 7 and 8 are configured with.
 ///
-/// One case is a whole two-pass refinement of a 144x144 pair — 50 control points
-/// over the two passes, each correlating two 51x51 windows — measured at 25 ms,
-/// so the two properties together add about 5 s to the suite.
+/// A case runs both production passes. Small 144px verdict pairs bound cost;
+/// coverage cases additionally draw 208px pairs that fit the complete coarse
+/// reverse halo and exercise cells accepted only by that pass.
 pub(super) const REFINEMENT_VERDICT_CASES: usize = 100;
 
 proptest! {
@@ -640,8 +632,9 @@ proptest! {
     // 定义里的「含已接受局部匹配的控制点单元」是**整个 refinement** 接受过的单元，不是
     // 最后一遍 spacing 接受的单元：两遍接受的匹配都进入同一个位移场，所以一个被粗遍匹配
     // 上的单元无论细遍是否再次匹配上，都含有一个已接受的局部匹配。本属性因此同时观测
-    // 两个计数（并集与最后一遍），用并集重算覆盖率并断言生产报告的就是它；实测 40 次抽样
-    // 里有 9 次两者不同，运行结束时断言这种情形确实出现过，否则这条区分就是没有被触及的。
+    // 两个计数（并集与最后一遍），用并集重算覆盖率并断言生产报告的就是它。专用 208px
+    // fixture 能容纳完整粗遍 halo，并包含粗遍可测、细遍不适用的内容；运行结束时要求并集
+    // 确实大于最后一遍，否则这条区分没有被真实测量触及。
     //
     // 需求 2.5 的邻域门**不用**并集，那是单遍判定（粗遍的位移已经写进场里，细遍量的是残差，
     // 两者不可比）。这条区分在下面用 `ControlPointGrid` 自身断言：同一批粗/细网格，
@@ -650,7 +643,7 @@ proptest! {
     // **Validates: Requirements 2.8**
     #[test]
     fn inlier_area_coverage_is_the_union_over_passes_and_decides_the_failure(
-        pair in test_support::arb_intra_station_verdict_pair(),
+        pair in test_support::arb_intra_station_coverage_pair(),
     ) {
         let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
         prop_assert_eq!(

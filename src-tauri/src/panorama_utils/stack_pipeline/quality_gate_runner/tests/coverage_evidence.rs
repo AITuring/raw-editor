@@ -96,3 +96,45 @@ fn sparse_roi_cap_covers_the_full_canvas_and_late_source_owners() {
         select_sparse_rois(&coverage, &ownership, (10.0, -30.0))
     );
 }
+
+#[test]
+fn sparse_roi_uses_small_bounded_fallback_for_interleaved_focus_owners() {
+    let (width, height) = (2240, 1280);
+    let stripe_width = 112;
+    let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+    let ownership = (0..height)
+        .flat_map(|_| (0..width).map(move |x| ((x / stripe_width) % 2 + 1) as u16))
+        .collect::<Vec<_>>();
+
+    let selected = select_sparse_rois(&coverage, &ownership, (0.0, 0.0));
+
+    assert!(selected.len() >= quality_gate::QUALITY_MIN_MEASURABLE);
+    assert!(
+        selected
+            .iter()
+            .all(|roi| roi.side == quality_gate::QUALITY_ROI_SIDE / 8)
+    );
+}
+
+#[test]
+fn station_level_owner_evidence_recovers_roi_from_fragmented_raw_members() {
+    let (width, height) = (2240, 1280);
+    let stripe_width = 32;
+    let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+    let raw_ownership = (0..height)
+        .flat_map(|_| (0..width).map(move |x| ((x / stripe_width) % 2 + 1) as u16))
+        .collect::<Vec<_>>();
+    let station_evidence = vec![1u16; raw_ownership.len()];
+
+    let selected =
+        select_sparse_rois_with_evidence(&coverage, &raw_ownership, &station_evidence, (0.0, 0.0));
+
+    assert!(selected.len() >= quality_gate::QUALITY_MIN_MEASURABLE);
+    assert!(selected.iter().all(|roi| roi.side == 512));
+    assert!(selected.iter().any(|roi| roi.owner == 1));
+    assert!(
+        selected
+            .iter()
+            .any(|roi| { (roi.x..roi.x + roi.side).any(|x| (x / stripe_width) % 2 == 1) })
+    );
+}

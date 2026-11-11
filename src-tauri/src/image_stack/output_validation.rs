@@ -1,7 +1,8 @@
 //! Read-back validation of written image-stack files.
 //!
-//! Decodes the written file again and checks dimensions, colour type and the
-//! embedded profile before the output is published.
+//! Reads the written file's headers and checks dimensions, colour type and the
+//! embedded profile before publication. TIFF alpha must be declared explicitly
+//! in its IFD; a decoder guessing RGBA from four samples is not sufficient.
 
 use image::ColorType;
 use image::ImageDecoder;
@@ -17,13 +18,17 @@ use super::ImageStackOutputFormat;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SavedOutputMetadata {
     pub(super) format: String,
+    pub(super) dimensions: (u32, u32),
     pub(super) bit_depth: u8,
     pub(super) alpha_preserved: bool,
     pub(super) icc: String,
+    /// None for non-TIFF; an empty vector means TIFF RGB with no extra samples.
+    pub(super) tiff_extra_samples: Option<Vec<u16>>,
 }
 
 fn saved_output_metadata(
     output_format: ImageStackOutputFormat,
+    dimensions: (u32, u32),
     color_type: ColorType,
     icc_profile: Option<&[u8]>,
 ) -> Result<SavedOutputMetadata, String> {
@@ -49,9 +54,11 @@ fn saved_output_metadata(
     };
     Ok(SavedOutputMetadata {
         format: output_format.label().to_string(),
+        dimensions,
         bit_depth,
         alpha_preserved: color_type.has_alpha(),
         icc: icc.to_string(),
+        tiff_extra_samples: None,
     })
 }
 
@@ -108,7 +115,45 @@ fn validate_image_stack_decoder<D: ImageDecoder>(
             output_format.label()
         ));
     }
-    saved_output_metadata(output_format, color_type, saved_profile.as_deref())
+    saved_output_metadata(
+        output_format,
+        saved_dimensions,
+        color_type,
+        saved_profile.as_deref(),
+    )
+}
+
+/// Inspect only the IFD. No full-frame pixel buffer or RAW decode is needed.
+fn validated_tiff_extra_samples(output_path: &Path, alpha: bool) -> Result<Vec<u16>, String> {
+    use tiff::decoder::Decoder;
+    use tiff::tags::Tag;
+
+    let file = File::open(output_path)
+        .map_err(|error| format!("Failed to reopen the saved image-stack TIFF: {error}"))?;
+    let mut decoder = Decoder::new(BufReader::new(file))
+        .map_err(|error| format!("Failed to read the image-stack TIFF IFD: {error}"))?;
+    let samples = decoder
+        .get_tag_unsigned::<u16>(Tag::SamplesPerPixel)
+        .map_err(|error| format!("Invalid image-stack TIFF SamplesPerPixel: {error}"))?;
+    let extra = decoder
+        .find_tag_unsigned_vec::<u16>(Tag::ExtraSamples)
+        .map_err(|error| format!("Invalid image-stack TIFF ExtraSamples: {error}"))?;
+    let valid = if alpha {
+        samples == 4 && extra.as_deref() == Some(&[2])
+    } else {
+        samples == 3 && extra.is_none()
+    };
+    if !valid {
+        return Err(format!(
+            "Saved image-stack TIFF has an invalid alpha declaration: SamplesPerPixel={samples}, ExtraSamples={extra:?}; expected {}.",
+            if alpha {
+                "4 samples with ExtraSamples=[2] (unassociated alpha)"
+            } else {
+                "3 RGB samples without ExtraSamples"
+            }
+        ));
+    }
+    Ok(extra.unwrap_or_default())
 }
 
 pub(super) fn validate_image_stack_output(
@@ -130,16 +175,21 @@ pub(super) fn validate_image_stack_output(
             })
     };
     match output_format {
-        ImageStackOutputFormat::Tiff => validate_image_stack_decoder(
-            TiffDecoder::new(open()?).map_err(|error| {
-                format!("Failed to validate the saved image-stack TIFF: {error}")
-            })?,
-            dimensions,
-            output_format,
-            bit_depth,
-            alpha,
-            expect_color_profile,
-        ),
+        ImageStackOutputFormat::Tiff => {
+            let extra_samples = validated_tiff_extra_samples(output_path, alpha)?;
+            let mut metadata = validate_image_stack_decoder(
+                TiffDecoder::new(open()?).map_err(|error| {
+                    format!("Failed to validate the saved image-stack TIFF: {error}")
+                })?,
+                dimensions,
+                output_format,
+                bit_depth,
+                alpha,
+                expect_color_profile,
+            )?;
+            metadata.tiff_extra_samples = Some(extra_samples);
+            Ok(metadata)
+        }
         ImageStackOutputFormat::Png => validate_image_stack_decoder(
             PngDecoder::new(open()?).map_err(|error| {
                 format!("Failed to validate the saved image-stack PNG: {error}")
@@ -177,7 +227,7 @@ pub(super) fn read_image_stack_output_metadata(
                 )
             })
     };
-    let (_, color_type, icc_profile) = match output_format {
+    let (dimensions, color_type, icc_profile) = match output_format {
         ImageStackOutputFormat::Tiff => image_stack_decoder_parts(
             TiffDecoder::new(open()?)
                 .map_err(|error| format!("Failed to read the saved image-stack TIFF: {error}"))?,
@@ -194,5 +244,21 @@ pub(super) fn read_image_stack_output_metadata(
             output_format,
         )?,
     };
-    saved_output_metadata(output_format, color_type, icc_profile.as_deref())
+    let mut metadata = saved_output_metadata(
+        output_format,
+        dimensions,
+        color_type,
+        icc_profile.as_deref(),
+    )?;
+    if output_format == ImageStackOutputFormat::Tiff {
+        metadata.tiff_extra_samples = Some(validated_tiff_extra_samples(
+            output_path,
+            color_type.has_alpha(),
+        )?);
+    }
+    Ok(metadata)
 }
+
+#[cfg(test)]
+#[path = "output_validation_tests.rs"]
+mod tests;

@@ -35,9 +35,10 @@ use tauri::Runtime;
 use super::diagnostics;
 use super::{
     ANALYSIS_LONG_SIDE, Field, GRID_STEP, LONG_SEQUENCE_SELECTION_LONG_SIDE, LayerSampler,
-    NativeRefineMode, STREAMING_CANVAS_MIN_PIXELS, adjusted, detail_preserving_mosaic_streaming,
-    intra_station_frame_record, ownership, ownership_with_long_side, refine_layer,
-    refine_native_layer, station_member_median_sharpness, tone_field,
+    MosaicCoverageObservation, NativeRefineMode, STREAMING_CANVAS_MIN_PIXELS, adjusted,
+    detail_preserving_mosaic_streaming, intra_station_frame_record, ownership,
+    ownership_with_long_side, refine_layer, refine_native_layer, station_member_median_sharpness,
+    tone_field,
 };
 
 pub(super) fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
@@ -68,6 +69,35 @@ pub(crate) fn detail_preserving_mosaic<R: Runtime, F>(
     app: AppHandle<R>,
     event: &str,
     load: &mut F,
+) -> Result<Rgb32FImage, String>
+where
+    F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
+{
+    detail_preserving_mosaic_observed(
+        images,
+        homographies,
+        projection,
+        capture_group_ids,
+        sequence_gap_aware,
+        app,
+        event,
+        load,
+        &mut None,
+        false,
+    )
+}
+
+pub(crate) fn detail_preserving_mosaic_observed<R: Runtime, F>(
+    images: &[&ImageInfo],
+    homographies: &HashMap<usize, Matrix3<f64>>,
+    projection: Projection,
+    capture_group_ids: Option<&HashMap<usize, u8>>,
+    sequence_gap_aware: bool,
+    app: AppHandle<R>,
+    event: &str,
+    load: &mut F,
+    coverage_observation: &mut Option<MosaicCoverageObservation>,
+    retain_quality_evidence: bool,
 ) -> Result<Rgb32FImage, String>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
@@ -104,6 +134,8 @@ where
             offset_y,
             width,
             height,
+            coverage_observation,
+            retain_quality_evidence,
         );
     }
     let mut result = Rgb32FImage::new(width, height);
@@ -425,10 +457,22 @@ where
         mask_covered_bounds(&mask).ok_or("The aligned stack has no covered pixels.")?;
     let output =
         image::imageops::crop_imm(&result, crop_x, crop_y, crop_width, crop_height).to_image();
+    *coverage_observation = Some(MosaicCoverageObservation {
+        source_covered_pixels: covered as u64,
+        source_owned_pixels: None,
+        output_pixels: u64::from(crop_width) * u64::from(crop_height),
+        coverage: Some(
+            image::imageops::crop_imm(&mask, crop_x, crop_y, crop_width, crop_height).to_image(),
+        ),
+        publication_crop: None,
+        quality: None,
+    });
     println!(
-        "  - Verified covered output: {}x{}; every pixel has source ownership",
+        "  - Verified source-union output: {}x{}; {} of {} pixels covered",
         output.width(),
-        output.height()
+        output.height(),
+        covered,
+        u64::from(crop_width) * u64::from(crop_height)
     );
     Ok(output)
 }

@@ -49,6 +49,7 @@ pub(crate) fn single_source_discard(
 
 pub(crate) fn rejection_reasons(measurements: MeasurementsView) -> Vec<&'static str> {
     station_relation_rejection_reasons(&StationRelationMeasurements {
+        scale_evidence: None,
         inliers: measurements.inliers,
         median_error_px: measurements.median_error_px,
         scale_ratio: measurements.scale_ratio,
@@ -63,6 +64,7 @@ pub(crate) fn rejection_reasons(measurements: MeasurementsView) -> Vec<&'static 
 
 fn production_measurements(measurements: MeasurementsView) -> StationRelationMeasurements {
     StationRelationMeasurements {
+        scale_evidence: None,
         inliers: measurements.inliers,
         median_error_px: measurements.median_error_px,
         scale_ratio: measurements.scale_ratio,

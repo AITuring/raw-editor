@@ -72,6 +72,11 @@ fn task_7_31_patch_geometry_satisfies_window_and_search_bounds() {
         INTRA_STATION_SEARCH_SAMPLES,
         INTRA_STATION_PATCH_HALF
     ));
+    assert_eq!(INTRA_STATION_PATCH_HALF, 40);
+    assert!(
+        INTRA_STATION_MATCH_RADIUS + 2 * INTRA_STATION_SEARCH_SAMPLES < INTRA_STATION_PATCH_HALF,
+        "the reverse centre can move by the full forward search extent"
+    );
     assert!(!patch_support_fits(
         INTRA_STATION_SEARCH_RADIUS as i32,
         INTRA_STATION_SEARCH_SAMPLES,
@@ -80,6 +85,236 @@ fn task_7_31_patch_geometry_satisfies_window_and_search_bounds() {
     // The legacy mosaic geometry is untouched.
     assert_eq!(LEGACY_MOSAIC_PATCH_HALF, 28);
     assert!(patch_support_fits(10, 7, LEGACY_MOSAIC_PATCH_HALF));
+}
+
+// A continuous, aperiodic texture made from deterministic random lattice values.
+// Gaussian interpolation makes the signal smooth at both native spacings while
+// preserving a unique peak. A few summed sinusoids are unsuitable here: at
+// spacing=2 their repeated peaks can legitimately fail the second-peak gate.
+// Sampling the continuous fixture also avoids shifting an already quantised image.
+fn reverse_halo_texture(x: f64, y: f64) -> f64 {
+    let cx = (x / 4.0).floor() as i32;
+    let cy = (y / 4.0).floor() as i32;
+    let mut total = 0.0;
+    let mut weights = 0.0;
+    for iy in cy - 2..=cy + 2 {
+        for ix in cx - 2..=cx + 2 {
+            let mut hash = (ix as u32).wrapping_mul(0x9e37_79b9)
+                ^ (iy as u32).wrapping_mul(0x85eb_ca6b)
+                ^ 0x1234_5678;
+            hash = (hash ^ (hash >> 15)).wrapping_mul(0x7feb_352d);
+            hash = (hash ^ (hash >> 16)).wrapping_mul(0x846c_a68b);
+            let value = f64::from(hash ^ (hash >> 16)) / f64::from(u32::MAX);
+            let dx = x - f64::from(ix) * 4.0;
+            let dy = y - f64::from(iy) * 4.0;
+            let weight = (-(dx * dx + dy * dy) / 8.0).exp();
+            total += weight * value;
+            weights += weight;
+        }
+    }
+    64.0 + 128.0 * total / weights
+}
+
+fn reverse_halo_pair(half: i32, spacing: f64, displacement_px: [f64; 2]) -> (GrayImage, GrayImage) {
+    let side = (2 * half + 1) as usize;
+    let mut a = Vec::with_capacity(side * side);
+    let mut b = Vec::with_capacity(side * side);
+    for y in 0..side {
+        for x in 0..side {
+            let px = (x as f64 - f64::from(half)) * spacing;
+            let py = (y as f64 - f64::from(half)) * spacing;
+            a.push(reverse_halo_texture(px, py));
+            b.push(reverse_halo_texture(
+                px - displacement_px[0],
+                py - displacement_px[1],
+            ));
+        }
+    }
+    // Use the production focal matching and quantisation order as well as the
+    // production matcher: changing the halo must work on its actual inputs.
+    match_focal_plane(&mut a, &mut b, side);
+    let quantise = |values: &[f64]| {
+        GrayImage::from_fn(side as u32, side as u32, |x, y| {
+            image::Luma([values[y as usize * side + x as usize]
+                .round()
+                .clamp(0.0, 255.0) as u8])
+        })
+    };
+    (quantise(&a), quantise(&b))
+}
+
+#[test]
+fn reverse_halo_measures_both_signs_through_the_existing_search_extent() {
+    use crate::panorama_utils::registration::probe_warped_patch;
+    use nalgebra::{Matrix3, Point2, Vector2};
+
+    // Preserve the old buffer in the regression: forward can locate the true
+    // match, but reverse returns before scoring a single hypothesis.
+    const OLD_HALF: i32 = 33;
+    for spacing in [1.0, 2.0] {
+        for shift_px in [1.25, 3.25, 6.25 * spacing] {
+            for sign in [-1.0, 1.0] {
+                let expected = Vector2::new(sign * shift_px, -sign * shift_px);
+                let displacement = [expected.x, expected.y];
+                if shift_px > spacing {
+                    let (old_a, old_b) = reverse_halo_pair(OLD_HALF, spacing, displacement);
+                    let old_center = Point2::new(f64::from(OLD_HALF), f64::from(OLD_HALF));
+                    let old_probe = probe_warped_patch(
+                        &old_a,
+                        &old_b,
+                        &Matrix3::identity(),
+                        old_center,
+                        INTRA_STATION_MATCH_RADIUS,
+                        INTRA_STATION_SEARCH_SAMPLES,
+                        INTRA_STATION_PATCH_GATES,
+                    );
+                    let old_forward = old_probe.matched.unwrap_or_else(|| panic!(
+                        "old forward must locate spacing={spacing}, displacement={displacement:?}: {old_probe:?}"
+                    ));
+                    let old_reverse = probe_warped_patch(
+                        &old_b,
+                        &old_a,
+                        &Matrix3::identity(),
+                        old_forward.target,
+                        INTRA_STATION_MATCH_RADIUS,
+                        INTRA_STATION_SEARCH_SAMPLES,
+                        INTRA_STATION_PATCH_GATES,
+                    );
+                    assert!(old_reverse.matched.is_none());
+                    assert!(
+                        old_reverse.best_correlation.is_none(),
+                        "old reverse must fail its support check before scoring"
+                    );
+                }
+
+                let (a, b) = reverse_halo_pair(INTRA_STATION_PATCH_HALF, spacing, displacement);
+                let center = Point2::new(
+                    f64::from(INTRA_STATION_PATCH_HALF),
+                    f64::from(INTRA_STATION_PATCH_HALF),
+                );
+                let forward_probe = probe_warped_patch(
+                    &a,
+                    &b,
+                    &Matrix3::identity(),
+                    center,
+                    INTRA_STATION_MATCH_RADIUS,
+                    INTRA_STATION_SEARCH_SAMPLES,
+                    INTRA_STATION_PATCH_GATES,
+                );
+                let forward = forward_probe.matched.unwrap_or_else(|| panic!(
+                    "forward must locate spacing={spacing}, displacement={displacement:?}: {forward_probe:?}"
+                ));
+                let reverse_probe = probe_warped_patch(
+                    &b,
+                    &a,
+                    &Matrix3::identity(),
+                    forward.target,
+                    INTRA_STATION_MATCH_RADIUS,
+                    INTRA_STATION_SEARCH_SAMPLES,
+                    INTRA_STATION_PATCH_GATES,
+                );
+                let reverse = reverse_probe.matched.unwrap_or_else(|| panic!(
+                    "reverse must locate spacing={spacing}, displacement={displacement:?}, forward={forward:?}: {reverse_probe:?}"
+                ));
+                let measured_px = (forward.target - center) * spacing;
+                let reverse_px = (reverse.target - forward.target) * spacing;
+                assert!(
+                    (measured_px - expected).norm() < 0.25,
+                    "spacing={spacing}, expected={expected:?}, measured={measured_px:?}"
+                );
+                assert!(
+                    (reverse_px + expected).norm() < 0.25,
+                    "spacing={spacing}, expected reverse={:?}, measured={reverse_px:?}",
+                    -expected
+                );
+                let round_trip_px = (reverse.target - center).norm() * spacing;
+                assert!(bidirectional_consistent(round_trip_px));
+            }
+        }
+    }
+}
+
+#[test]
+fn reverse_halo_does_not_extend_search_or_accept_ambiguous_content() {
+    use crate::panorama_utils::registration::probe_warped_patch;
+    use nalgebra::{Matrix3, Point2};
+
+    let half = INTRA_STATION_PATCH_HALF;
+    let center = Point2::new(f64::from(half), f64::from(half));
+    let probe = |a: &GrayImage, b: &GrayImage| {
+        probe_warped_patch(
+            a,
+            b,
+            &Matrix3::identity(),
+            center,
+            INTRA_STATION_MATCH_RADIUS,
+            INTRA_STATION_SEARCH_SAMPLES,
+            INTRA_STATION_PATCH_GATES,
+        )
+    };
+
+    for shift in [-7.25, 7.25] {
+        let (a, b) = reverse_halo_pair(half, 1.0, [shift, 0.0]);
+        let outside = probe(&a, &b);
+        assert!(outside.best_correlation.is_some());
+        assert!(
+            outside.matched.is_none(),
+            "the search boundary must still reject {shift}"
+        );
+    }
+
+    let side = (2 * half + 1) as usize;
+    let mut repeated_a = Vec::with_capacity(side * side);
+    let mut repeated_b = Vec::with_capacity(side * side);
+    for y in 0..side {
+        for x in 0..side {
+            let wave = |x: f64, y: f64| {
+                128.0
+                    + 35.0 * (std::f64::consts::TAU * x / 4.0).sin()
+                    + 35.0 * (std::f64::consts::TAU * y / 4.0).cos()
+            };
+            repeated_a.push(wave(x as f64, y as f64));
+            repeated_b.push(wave(x as f64 - 0.25, y as f64 + 0.25));
+        }
+    }
+    match_focal_plane(&mut repeated_a, &mut repeated_b, side);
+    let quantise = |values: &[f64]| {
+        GrayImage::from_fn(side as u32, side as u32, |x, y| {
+            image::Luma([values[y as usize * side + x as usize]
+                .round()
+                .clamp(0.0, 255.0) as u8])
+        })
+    };
+    let repeated = probe(&quantise(&repeated_a), &quantise(&repeated_b));
+    assert!(repeated.matched.is_none());
+    assert!(
+        repeated
+            .peak_margin
+            .is_some_and(|margin| margin < INTRA_STATION_MIN_PEAK_MARGIN),
+        "periodic weave must retain competing peaks: {repeated:?}"
+    );
+
+    let mut unrelated_a = Vec::with_capacity(side * side);
+    let mut unrelated_b = Vec::with_capacity(side * side);
+    for y in 0..side {
+        for x in 0..side {
+            let x = x as f64 - f64::from(half);
+            let y = y as f64 - f64::from(half);
+            unrelated_a.push(reverse_halo_texture(x, y));
+            unrelated_b.push(
+                128.0 + 35.0 * (0.77 * x - 0.63 * y).sin() + 30.0 * (0.83 * y + 0.59 * x).cos(),
+            );
+        }
+    }
+    match_focal_plane(&mut unrelated_a, &mut unrelated_b, side);
+    let unrelated = probe(&quantise(&unrelated_a), &quantise(&unrelated_b));
+    assert!(unrelated.matched.is_none());
+    assert!(
+        unrelated
+            .best_correlation
+            .is_some_and(|ncc| ncc < INTRA_STATION_MIN_CORRELATION),
+        "an unrelated patch must stay below the unchanged NCC gate: {unrelated:?}"
+    );
 }
 
 #[test]

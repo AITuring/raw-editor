@@ -67,3 +67,5 @@ pub(crate) mod test_support;
 /// One property test per Correctness Property of the design document.
 #[cfg(test)]
 mod properties;
+
+pub(crate) mod cache_backing;

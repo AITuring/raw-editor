@@ -1,10 +1,14 @@
 //! Atomic Stack_Report file publication and post-output metadata updates.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde_json::value::RawValue;
+
 use super::report_document::StackReport;
 use super::report_schema_core::STACK_REPORT_DIR_NAME;
+use super::report_schema_metrics::OutputReport;
 
 /// Resolve `<app_cache_dir>/stack-reports` without forcing the caller to
 /// import `tauri::Manager`.
@@ -40,6 +44,10 @@ pub(crate) fn write_stack_report(
 
 fn write_stack_report_at(report: &StackReport, final_path: &Path) -> Result<PathBuf, String> {
     let json = report.to_json_string()?;
+    write_stack_report_json_at(&json, final_path)
+}
+
+fn write_stack_report_json_at(json: &str, final_path: &Path) -> Result<PathBuf, String> {
     let directory = final_path.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(directory).map_err(|error| {
         format!(
@@ -70,7 +78,7 @@ fn write_stack_report_at(report: &StackReport, final_path: &Path) -> Result<Path
 
 fn rewrite_stack_report<F>(report_path: &Path, apply: F) -> Result<(), String>
 where
-    F: FnOnce(&mut StackReport) -> Result<(), String>,
+    F: FnOnce(&mut OutputReport) -> Result<(), String>,
 {
     let json = fs::read_to_string(report_path).map_err(|error| {
         format!(
@@ -78,14 +86,48 @@ where
             report_path.display()
         )
     })?;
-    let mut report: StackReport = serde_json::from_str(&json).map_err(|error| {
+    // Never parse unrelated geometry/quality evidence through f64 and write
+    // it back during an export update: the decimal token can change by an ULP.
+    // RawValue also preserves evidence added by newer report producers.
+    type RawFields = BTreeMap<String, Box<RawValue>>;
+    let mut report: RawFields = serde_json::from_str(&json).map_err(|error| {
         format!(
             "Failed to parse the Stack_Report {}: {error}",
             report_path.display()
         )
     })?;
-    apply(&mut report)?;
-    write_stack_report_at(&report, report_path)?;
+    let raw_output = report
+        .remove("output")
+        .ok_or_else(|| "Stack_Report is missing its output record".to_string())?;
+    let mut output_fields: RawFields = serde_json::from_str(raw_output.get())
+        .map_err(|error| format!("Failed to read raw Stack_Report output fields: {error}"))?;
+    let mut output: OutputReport = serde_json::from_str(raw_output.get())
+        .map_err(|error| format!("Failed to parse Stack_Report output: {error}"))?;
+    let fields_of = |output: &OutputReport| -> Result<RawFields, String> {
+        let json = serde_json::to_string(output)
+            .map_err(|error| format!("Failed to serialize Stack_Report output: {error}"))?;
+        serde_json::from_str(&json)
+            .map_err(|error| format!("Failed to read serialized output fields: {error}"))
+    };
+    let before = fields_of(&output)?;
+    apply(&mut output)?;
+    for (key, value) in fields_of(&output)? {
+        if !output_fields.contains_key(&key)
+            || before.get(&key).map(|old| old.get()) != Some(value.get())
+        {
+            output_fields.insert(key, value);
+        }
+    }
+    // Keep unknown output fields and unchanged values (including preview
+    // evidence) verbatim too; only changed/new fields are serialized.
+    report.insert(
+        "output".into(),
+        serde_json::value::to_raw_value(&output_fields)
+            .map_err(|error| format!("Failed to serialize output field update: {error}"))?,
+    );
+    let rewritten = serde_json::to_string_pretty(&report)
+        .map_err(|error| format!("Failed to serialize raw Stack_Report fields: {error}"))?;
+    write_stack_report_json_at(&rewritten, report_path)?;
     Ok(())
 }
 
@@ -96,14 +138,14 @@ pub(crate) fn assign_stack_report_result_id(
     report_path: &Path,
     result_id: &str,
 ) -> Result<(), String> {
-    rewrite_stack_report(report_path, |report| {
-        if !report.output.result_id.is_empty() && report.output.result_id != result_id {
+    rewrite_stack_report(report_path, |output| {
+        if !output.result_id.is_empty() && output.result_id != result_id {
             return Err(format!(
                 "Stack_Report result ID '{}' does not match '{}'.",
-                report.output.result_id, result_id
+                output.result_id, result_id
             ));
         }
-        report.output.result_id = result_id.to_string();
+        output.result_id = result_id.to_string();
         Ok(())
     })
 }
@@ -119,20 +161,51 @@ pub(crate) fn update_stack_report_output(
     alpha_preserved: bool,
     icc: String,
     output_path: &Path,
+    dimensions: (u32, u32),
+    tiff_extra_samples: Option<Vec<u16>>,
 ) -> Result<(), String> {
-    rewrite_stack_report(report_path, |report| {
-        if report.output.result_id != result_id {
+    rewrite_stack_report(report_path, |output| {
+        if output.result_id != result_id {
             return Err(format!(
                 "Stack_Report result ID '{}' does not match '{}'.",
-                report.output.result_id, result_id
+                output.result_id, result_id
             ));
         }
-        report.output.written = true;
-        report.output.format = format;
-        report.output.path = output_path.to_string_lossy().into_owned();
-        report.output.bit_depth = bit_depth;
-        report.output.alpha_preserved = alpha_preserved;
-        report.output.icc = icc;
+        output.written = true;
+        output.format = format;
+        output.path = output_path.to_string_lossy().into_owned();
+        output.width = dimensions.0;
+        output.height = dimensions.1;
+        output.bit_depth = bit_depth;
+        output.alpha_preserved = alpha_preserved;
+        output.icc = icc;
+        output.tiff_extra_samples = tiff_extra_samples;
+        output.artifact_validation = super::OutputArtifactValidation::Pass;
+        output.artifact_validation_error = None;
         Ok(())
     })
 }
+
+/// Keep an acceptance export failure in its run report without presenting it
+/// as a published artifact. Production save failures leave earlier successful
+/// exports unchanged; the fixture calls this only for its one attempted output.
+#[cfg(test)]
+pub(crate) fn record_stack_report_artifact_failure(
+    report_path: &Path,
+    result_id: &str,
+    error: &str,
+) -> Result<(), String> {
+    rewrite_stack_report(report_path, |output| {
+        if output.result_id != result_id {
+            return Err("Stack_Report artifact failure result ID does not match".into());
+        }
+        output.written = false;
+        output.artifact_validation = super::OutputArtifactValidation::Fail;
+        output.artifact_validation_error = Some(error.to_string());
+        Ok(())
+    })
+}
+
+#[cfg(test)]
+#[path = "report_output_rewrite_tests.rs"]
+mod output_rewrite_tests;

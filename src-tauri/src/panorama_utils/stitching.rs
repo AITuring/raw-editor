@@ -96,11 +96,15 @@ use panorama_seam_band::{SeamBandBlend, blend_panorama_seam_band};
 
 mod layered_compositor;
 
+mod native_owner_geometry;
+pub(crate) use native_owner_geometry::{NativeOwnerGeometry, resolve_native_owner_geometry};
+
 #[cfg(test)]
 use layered_compositor::OwnershipCompositorSwitches;
 pub(crate) use layered_compositor::{
-    FocusTilePayload, FocusTileSource, FocusTileSources, LayeredOwnershipRender,
-    layered_final_sharpen_amount, layered_virtual_tile_compositor_with_ownership,
+    FocusTileLoadPurpose, FocusTilePayload, FocusTileSource, FocusTileSources,
+    LayeredOwnershipRender, layered_final_sharpen_amount,
+    layered_virtual_tile_compositor_with_ownership,
 };
 use layered_compositor::{
     TileCompositorFinishing, focus_tile_ownership_should_replace, ownership_compositor_switches,
@@ -108,6 +112,9 @@ use layered_compositor::{
 };
 
 mod tile_ownership_stitcher;
+
+#[cfg(test)]
+mod native_point_trace;
 
 use tile_ownership_stitcher::focus_tile_ownership_stitcher_with_finishing;
 
@@ -492,9 +499,12 @@ mod focus_seam_blend;
 
 use focus_seam_blend::blend_focus_seam_band;
 
+mod focus_stack_backing;
 mod focus_stack_entry;
+pub(crate) use focus_stack_backing::FocusStackBacking;
 
 pub use focus_stack_entry::focus_stack_stitcher;
+pub(crate) use focus_stack_entry::focus_stack_stitcher_observed;
 #[cfg(test)]
 use focus_stack_entry::station_members_from_frame_records;
 #[cfg(test)]

@@ -254,6 +254,7 @@ pub(super) fn virtual_tile_direct_station_match_with_structure(
     stack_report::StationRelationCandidateRecord,
 ) {
     let mut diagnostic = stack_report::StationRelationCandidateRecord {
+        previous_attempts: Vec::new(),
         left,
         right,
         left_tile: Default::default(),

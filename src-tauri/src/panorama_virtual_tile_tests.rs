@@ -198,6 +198,7 @@ fn sample_candidate_record() -> report::StationRelationCandidateRecord {
         rejection_reason: reason.to_string(),
     };
     report::StationRelationCandidateRecord {
+        previous_attempts: Vec::new(),
         left: 0,
         right: 1,
         left_tile: Default::default(),

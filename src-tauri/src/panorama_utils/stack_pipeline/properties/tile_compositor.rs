@@ -173,7 +173,7 @@ pub(super) fn render_layered_ownership(
 ) -> Result<stitching::LayeredOwnershipRender, String> {
     let app = tauri::test::mock_app();
     let refs = infos.iter().collect::<Vec<_>>();
-    let mut load = |info: &ImageInfo| {
+    let mut load = |info: &ImageInfo, _: stitching::FocusTileLoadPurpose| {
         sources
             .get(info.id)
             .cloned()

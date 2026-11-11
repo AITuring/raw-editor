@@ -546,7 +546,8 @@ pub(super) fn virtual_tile_relation_quality_plane(
 }
 
 /// Render one Capture_Station for station matching only and return its covered
-/// luminance plane and Coverage_Mask; the fused colour pixels are dropped.
+/// luminance plane and Coverage_Mask; complete fusion results use the shared
+/// byte-bounded cache so later composition preserves the exact source evidence.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn render_virtual_tile_match_plane<R: Runtime, F>(
     group: &[&ImageInfo],
@@ -558,22 +559,49 @@ pub(super) fn render_virtual_tile_match_plane<R: Runtime, F>(
     app_handle: AppHandle<R>,
     progress_event: &str,
     load_image: &mut F,
-) -> Result<(GrayImage, stitching::CoverageMask), String>
+    cache: &mut super::native_fusion_cache::NativeFusionCache,
+    source_key: &super::native_fusion_key::NativeFusionSourceKey,
+    processing_fingerprint: u64,
+    rss_sampler: Option<&super::FocusRssGuard>,
+) -> Result<
+    (
+        GrayImage,
+        stitching::CoverageMask,
+        super::output_density::StationDensitySamples,
+    ),
+    String,
+>
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
-    let rendered = stitching::focus_stack_stitcher_unfilled(
-        group,
+    super::ensure_focus_memory_available(rss_sampler)?;
+    let key = source_key.cache_key(
         homographies,
         projection,
         focus_warp,
-        None,
         station_index,
-        false,
-        app_handle,
-        progress_event,
-        load_image,
+        processing_fingerprint,
+    );
+    let rendered = cache.get_or_render(
+        station_index,
+        key,
+        super::native_fusion_cache::FusionStage::Matching,
+        || {
+            stitching::focus_stack_stitcher_unfilled(
+                group,
+                homographies,
+                projection,
+                focus_warp,
+                None,
+                station_index,
+                false,
+                app_handle,
+                progress_event,
+                load_image,
+            )
+        },
     )?;
+    super::ensure_focus_memory_available(rss_sampler)?;
     let rendered_dimensions = rendered.image.dimensions();
     if rendered_dimensions != (expected.width, expected.height) {
         return Err(format!(
@@ -595,7 +623,12 @@ where
         )?,
     };
     let gray = virtual_tile_covered_luminance(&rendered.image, &coverage);
-    Ok((gray, coverage))
+    let density_samples = super::output_density::native_density_samples(
+        rendered.masks.as_ref(),
+        rendered.sampling_origin,
+        group,
+    );
+    Ok((gray, coverage, density_samples))
 }
 
 /// Install one station's probe planes. The tile keeps the structural

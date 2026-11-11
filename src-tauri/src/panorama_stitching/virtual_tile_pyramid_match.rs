@@ -208,18 +208,39 @@ pub(super) fn virtual_tile_pyramid_station_match(
         ),
         &mut diagnostic,
     );
-    let relation = relation.into_iter().filter_map(|relation| {
+    let relation = relation.into_iter().flat_map(|relation| {
         match (
             &pyramid.native_refinement[left],
             &pyramid.native_refinement[right],
         ) {
-            (Some(left_native), Some(right_native)) => virtual_tile_native_station_polish(
-                left_native,
-                right_native,
-                &relation,
-                &mut diagnostic,
-            ),
-            _ => Some(relation),
+            (Some(left_native), Some(right_native)) => {
+                let Some(polished) = virtual_tile_native_station_polish(
+                    left_native,
+                    right_native,
+                    &relation,
+                    &mut diagnostic,
+                ) else {
+                    return Vec::new();
+                };
+                let mut hypotheses = vec![polished.clone()];
+                // A narrow overlap weakly constrains perspective. Compete
+                // with an affine fit on the same independently verified native
+                // points; the shared scale/holdout/region gate still decides.
+                if let Some(affine) = native_station_cross_scale_affine_candidate(
+                    &polished.points,
+                    left_native.0.dimensions(),
+                    right_native.0.dimensions(),
+                    &left_native.1,
+                    &right_native.1,
+                ) {
+                    hypotheses.push(MatchInfo {
+                        homography: affine,
+                        ..polished
+                    });
+                }
+                hypotheses
+            }
+            _ => vec![relation],
         }
     });
     (relation.collect(), diagnostic)
@@ -243,6 +264,37 @@ pub(super) fn native_station_affine_candidate(
             && homography_preserves_focus_orientation(affine, source_dimensions)
             && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
                 .contains(&homography_scale_ratio(affine).unwrap_or(f64::NAN))
+            && station_relation_spatial_support_with(
+                points,
+                affine,
+                source_dimensions,
+                target_dimensions,
+                StationOverlapMeasure::Covered {
+                    source,
+                    target,
+                    factor: 1,
+                },
+            ) >= STATION_RELATION_MIN_SPATIAL_SUPPORT
+    })
+}
+
+/// Proposal bound for cross-camera Virtual_Tile magnification. This does not
+/// accept the relation: the existing bounded scale evidence gate must still
+/// pass its independent holdout, four regions, and 81 Jacobian probes.
+fn native_station_cross_scale_affine_candidate(
+    points: &[(Point2<f64>, Point2<f64>)],
+    source_dimensions: (u32, u32),
+    target_dimensions: (u32, u32),
+    source: &stitching::CoverageMask,
+    target: &stitching::CoverageMask,
+) -> Option<Matrix3<f64>> {
+    if points.len() < STATION_RELATION_MIN_INLIERS {
+        return None;
+    }
+    robust_native_affine(points).filter(|affine| {
+        median_symmetric_error(affine, points) <= STATION_RELATION_MAX_MEDIAN_ERROR_PX
+            && homography_preserves_focus_orientation(affine, source_dimensions)
+            && (0.8..=1.25).contains(&homography_scale_ratio(affine).unwrap_or(f64::NAN))
             && station_relation_spatial_support_with(
                 points,
                 affine,
@@ -348,6 +400,77 @@ pub(super) fn native_station_regularized_candidate(
     None
 }
 
+/// Independent native probe locations, not copied from successful coarse matches.
+/// A sparse narrow overlap gets at most 2048 probes at >=32px separation.
+fn narrow_native_probe_grid(bounds: (f64, f64, f64, f64)) -> Vec<Point2<f64>> {
+    let (x0, y0, x1, y1) = bounds;
+    if ![x0, y0, x1, y1].iter().all(|v| v.is_finite()) || x1 <= x0 || y1 <= y0 {
+        return Vec::new();
+    }
+    let nx = (((x1 - x0) / 32.0).floor() as usize).min(64);
+    let ny = (((y1 - y0) / 32.0).floor() as usize).min(32);
+    let mut points = Vec::with_capacity(nx * ny);
+    for y in 0..ny {
+        for x in 0..nx {
+            points.push(Point2::new(
+                x0 + (x as f64 + 0.5) * (x1 - x0) / nx as f64,
+                y0 + (y as f64 + 0.5) * (y1 - y0) / ny as f64,
+            ));
+        }
+    }
+    points
+}
+
+#[cfg(test)]
+mod native_probe_tests {
+    use super::*;
+    #[test]
+    fn cross_scale_affine_is_only_a_bounded_proposal() {
+        let mask = stitching::CoverageMask::from_gray(GrayImage::from_pixel(
+            1024,
+            1024,
+            image::Luma([255]),
+        ));
+        let h = Matrix3::new(0.82, 0.0, 60.0, 0.0, 0.82, 60.0, 0.0, 0.0, 1.0);
+        let points = (128..896)
+            .step_by(64)
+            .flat_map(|y| {
+                (128..896).step_by(64).map(move |x| {
+                    let p = Point2::new(x as f64, y as f64);
+                    (p, transformed_point(&h, p).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            native_station_affine_candidate(&points, (1024, 1024), (1024, 1024), &mask, &mask)
+                .is_none()
+        );
+        let proposed = native_station_cross_scale_affine_candidate(
+            &points,
+            (1024, 1024),
+            (1024, 1024),
+            &mask,
+            &mask,
+        )
+        .unwrap();
+        assert!(median_symmetric_error(&proposed, &points) < 1e-6);
+    }
+    #[test]
+    fn narrow_native_probes_are_bounded_spatial_and_independent() {
+        let p = narrow_native_probe_grid((0.0, 5000.0, 8000.0, 5500.0));
+        assert_eq!(p.len(), 64 * 15);
+        let mut quadrants = [0; 4];
+        for v in &p {
+            quadrants[usize::from(v.x >= 4000.0) + 2 * usize::from(v.y >= 5250.0)] += 1;
+        }
+        assert!(quadrants.iter().all(|&n| n >= 24));
+        assert!(p[1].x - p[0].x >= 32.0);
+        assert!(narrow_native_probe_grid((0.0, 0.0, 1e6, 1e6)).len() <= 2048);
+        assert!(narrow_native_probe_grid((0.0, 0.0, f64::NAN, 1.0)).is_empty());
+        assert!(narrow_native_probe_grid((0.0, 0.0, 10.0, 10.0)).is_empty());
+    }
+}
+
 pub(super) fn virtual_tile_native_station_polish(
     left: &(GrayImage, stitching::CoverageMask),
     right: &(GrayImage, stitching::CoverageMask),
@@ -371,6 +494,17 @@ pub(super) fn virtual_tile_native_station_polish(
     };
     let inverse = seed.homography.try_inverse()?;
     let step = (seed.points.len() / 1000).max(1);
+    let predicted_bounds = super::virtual_tile_predicted_overlap_bounds(
+        &seed.homography,
+        left.0.dimensions(),
+        right.0.dimensions(),
+    );
+    let narrow_overlap = predicted_bounds.is_some_and(|bounds| {
+        bounds.2 - bounds.0 <= left.0.width() as f64 * 0.25
+            || bounds.3 - bounds.1 <= left.0.height() as f64 * 0.25
+    });
+    let cross_scale = !(STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
+        .contains(&homography_scale_ratio(&seed.homography).unwrap_or(f64::NAN));
     let supported = |mask: &stitching::CoverageMask, point: Point2<f64>| {
         let (w, h) = mask.dimensions();
         let radius = 40i32;
@@ -385,31 +519,95 @@ pub(super) fn virtual_tile_native_station_polish(
                     .all(|dx| mask.is_covered((x + dx) as u32, (y + dy) as u32))
             })
     };
-    let native_verified_points = seed
+    let measure = |probes: &[(Point2<f64>, Point2<f64>)], phase: &str| {
+        let outcomes = probes
+            .par_iter()
+            .map(|&(source, target)| {
+                if !supported(&left.1, source) {
+                    return ("source_coverage", None);
+                }
+                if !supported(&right.1, target) {
+                    return ("target_coverage", None);
+                }
+                let (measured, reason) = residual_warp::verify_round_trip_match_diagnostic(
+                    &left.0,
+                    &right.0,
+                    &seed.homography,
+                    &inverse,
+                    source,
+                    31,
+                    gates,
+                );
+                let (measured, accepted_stage) = match measured {
+                    Some(measured) => (measured, "accepted"),
+                    None if narrow_overlap && cross_scale && reason == "forward_correlation" => {
+                        let Some(measured) = residual_warp::verify_round_trip_match_local_consensus(
+                            &left.0,
+                            &right.0,
+                            &seed.homography,
+                            &inverse,
+                            source,
+                            gates,
+                        ) else {
+                            return (reason, None);
+                        };
+                        (measured, "local_consensus_accepted")
+                    }
+                    None => return (reason, None),
+                };
+                if !supported(&right.1, measured.forward) {
+                    return ("measured_coverage", None);
+                }
+                (
+                    accepted_stage,
+                    Some((source, measured.forward, measured.round_trip_error_px)),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+        for (stage, _) in &outcomes {
+            *counts.entry(stage).or_default() += 1;
+        }
+        eprintln!(
+            "NativeProbeAudit {}",
+            serde_json::json!({
+                "left":diagnostic.left,"right":diagnostic.right,"phase":phase,
+                "coarse_points":seed.points.len(),"probes":probes.len(),
+                "rejection_stages":counts
+            })
+        );
+        outcomes
+            .into_iter()
+            .filter_map(|(_, p)| p)
+            .collect::<Vec<_>>()
+    };
+    let probes = seed
         .points
-        .par_iter()
-        .enumerate()
-        .filter(|(index, _)| index % step == 0)
-        .filter_map(|(_, &(source, target))| {
-            if !supported(&left.1, source) || !supported(&right.1, target) {
-                return None;
-            }
-            let measured = residual_warp::verify_round_trip_match_with_gates(
-                &left.0,
-                &right.0,
-                &seed.homography,
-                &inverse,
-                source,
-                31,
-                gates,
-            )?;
-            supported(&right.1, measured.forward).then_some((
-                source,
-                measured.forward,
-                measured.round_trip_error_px,
-            ))
-        })
+        .iter()
+        .step_by(step)
+        .copied()
         .collect::<Vec<_>>();
+    let mut native_verified_points = measure(&probes, "coarse_seed_verification");
+    // Retry based on measured native evidence, not the number of coarse
+    // proposals. Failed proposals must not suppress nearby independent probes.
+    if native_verified_points.len() < 120 {
+        if let Some(bounds) = predicted_bounds {
+            if narrow_overlap {
+                let extra = narrow_native_probe_grid(bounds)
+                    .into_iter()
+                    .filter(|source| {
+                        !native_verified_points
+                            .iter()
+                            .any(|(p, _, _)| (p - source).norm_squared() < 32.0 * 32.0)
+                    })
+                    .filter_map(|source| {
+                        transformed_point(&seed.homography, source).map(|target| (source, target))
+                    })
+                    .collect::<Vec<_>>();
+                native_verified_points.extend(measure(&extra, "independent_native_grid"));
+            }
+        }
+    }
     let points = native_verified_points
         .iter()
         .map(|&(a, b, _)| (a, b))

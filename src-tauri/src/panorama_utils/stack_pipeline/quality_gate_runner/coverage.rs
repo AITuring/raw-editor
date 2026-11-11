@@ -33,6 +33,45 @@ pub(crate) fn select_sparse_rois(
     ownership: &[u16],
     origin: (f64, f64),
 ) -> Vec<QualityRoi> {
+    select_sparse_rois_with_evidence(coverage, ownership, ownership, origin)
+}
+
+/// Select Quality_Gate windows from a station-level evidence plane while
+/// retaining the raw owner at the window origin for Source_RAW provenance.
+///
+/// Focus ownership can switch between members of the same Capture_Station at
+/// a much finer granularity than the station's delivered geometry.  In that
+/// case the raw owner plane has no 64px interior even though the station plane
+/// is continuous.  The station evidence plane is only used for geometric
+/// eligibility; the returned ROI keeps the raw owner so source sampling and
+/// report provenance still use the existing Source_RAW path.
+pub(crate) fn select_sparse_rois_with_evidence(
+    coverage: &GrayImage,
+    ownership: &[u16],
+    evidence_ownership: &[u16],
+    origin: (f64, f64),
+) -> Vec<QualityRoi> {
+    select_sparse_rois_with_evidence_side(
+        coverage,
+        ownership,
+        evidence_ownership,
+        origin,
+        quality_gate::QUALITY_ROI_SIDE,
+    )
+}
+
+/// Select station evidence windows with a bounded primary side.  The public
+/// selector above keeps the historical 512px contract used by unit tests and
+/// ordinary source-owner gates; station-level acceptance can opt into the
+/// smaller 256px window because its evidence plane already collapses the raw
+/// focus members to one station identity.
+pub(crate) fn select_sparse_rois_with_evidence_side(
+    coverage: &GrayImage,
+    ownership: &[u16],
+    evidence_ownership: &[u16],
+    origin: (f64, f64),
+    primary_side: u32,
+) -> Vec<QualityRoi> {
     // Preserve the required 512px evidence window whenever the owner plane
     // contains enough such interiors.  Focus ownership is cell based, so a
     // valid run can have many sharp, source-owned regions smaller than 512px
@@ -41,24 +80,35 @@ pub(crate) fn select_sparse_rois(
     // a measurement of the delivered pixels.  The 256px fallback keeps the
     // same 16px owner/coverage ring and unchanged metric thresholds; it only
     // restores the minimum eight measurable interiors required by the gate.
-    let primary = sparse_rois_for_side(coverage, ownership, origin, quality_gate::QUALITY_ROI_SIDE);
+    let primary = sparse_rois_for_side(
+        coverage,
+        ownership,
+        evidence_ownership,
+        origin,
+        primary_side,
+    );
     if primary.len() >= quality_gate::QUALITY_MIN_MEASURABLE {
         return primary;
     }
     let mut best = primary;
-    // A 256px core is the first fallback.  Highly interleaved focus owners
+    // A 256px core is the first fallback. Highly interleaved focus owners
     // can still leave fewer than eight 256px interiors; continue at 128px so
     // the dense gradient criterion has auditable samples without changing
-    // its 0.95 threshold.  The 128px minimum remains large enough for the
-    // 13px acutance support and the fixed 16px owner ring.
+    // its 0.95 threshold. The 128px minimum remains large enough for the
+    // 13px acutance support and the fixed 16px owner ring. Real focus stacks
+    // can still have owner runs shorter than 128px after the final virtual
+    // tile warp, so keep a 64px evidence window as the last bounded fallback.
+    // It is still larger than the acutance support plus both owner margins;
+    // the quality thresholds and the per-pixel owner checks remain unchanged.
     for side in [
         quality_gate::QUALITY_ROI_SIDE / 2,
         quality_gate::QUALITY_ROI_SIDE / 4,
+        quality_gate::QUALITY_ROI_SIDE / 8,
     ] {
         if side < 2 {
             continue;
         }
-        let fallback = sparse_rois_for_side(coverage, ownership, origin, side);
+        let fallback = sparse_rois_for_side(coverage, ownership, evidence_ownership, origin, side);
         if fallback.len() > best.len() {
             best = fallback;
         }
@@ -72,29 +122,62 @@ pub(crate) fn select_sparse_rois(
 pub(super) fn sparse_rois_for_side(
     coverage: &GrayImage,
     ownership: &[u16],
+    evidence_ownership: &[u16],
     origin: (f64, f64),
     side: u32,
 ) -> Vec<QualityRoi> {
     let (width, height) = coverage.dimensions();
-    if side == 0 || width < side || height < side || ownership.len() != coverage.as_raw().len() {
+    if side == 0
+        || width < side
+        || height < side
+        || ownership.len() != coverage.as_raw().len()
+        || evidence_ownership.len() != coverage.as_raw().len()
+    {
         return Vec::new();
     }
     let step = (side as usize / 2).max(1);
     let margin = quality_gate::QUALITY_ROI_MARGIN as u32;
+
+    // Build compact horizontal runs once, then answer each candidate's
+    // core+margin query by checking one interval per row.  The previous
+    // implementation scanned every pixel in every candidate window; on a
+    // 7.6k x 3.1k scale=0.5 canvas that repeated tens of millions of pixel
+    // reads before Quality_Gate had even selected its first ROI.
+    let mut row_runs: Vec<Vec<(u32, u32, u16)>> = (0..height).map(|_| Vec::new()).collect();
+    for y in 0..height {
+        let mut run_start = 0u32;
+        let mut run_label = 0u16;
+        for x in 0..=width {
+            let label = if x < width {
+                let index = (y * width + x) as usize;
+                (coverage.as_raw()[index] != 0)
+                    .then_some(evidence_ownership[index])
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            if label == run_label {
+                continue;
+            }
+            if run_label != 0 {
+                row_runs[y as usize].push((run_start, x, run_label));
+            }
+            run_start = x;
+            run_label = label;
+        }
+    }
+    let row_has_run = |runs: &[(u32, u32, u16)], label: u16, left: u32, right: u32| {
+        runs.iter()
+            .any(|&(start, end, run_label)| run_label == label && start <= left && right <= end)
+    };
+
     let mut result = Vec::new();
     for y in (0..=height - side).step_by(step) {
         for x in (0..=width - side).step_by(step) {
-            let owner = ownership[(y * width + x) as usize];
-            if owner == 0 || coverage.get_pixel(x, y)[0] == 0 {
-                continue;
-            }
-            let same_owner = (y..y + side).all(|row| {
-                (x..x + side).all(|column| {
-                    let index = (row * width + column) as usize;
-                    coverage.as_raw()[index] != 0 && ownership[index] == owner
-                })
-            });
-            if !same_owner {
+            let index = (y * width + x) as usize;
+            let owner = ownership[index];
+            let evidence_owner = evidence_ownership[index];
+            if owner == 0 || evidence_owner == 0 || coverage.get_pixel(x, y)[0] == 0 {
                 continue;
             }
             // A candidate must have a 16px owner/coverage margin on all four
@@ -106,25 +189,12 @@ pub(super) fn sparse_rois_for_side(
                 && x + side + margin <= width
                 && y + side + margin <= height
                 && (y - margin..y + side + margin).all(|row| {
-                    (x - margin..x).all(|column| {
-                        let index = (row * width + column) as usize;
-                        coverage.as_raw()[index] != 0 && ownership[index] == owner
-                    }) && (x + side..x + side + margin).all(|column| {
-                        let index = (row * width + column) as usize;
-                        coverage.as_raw()[index] != 0 && ownership[index] == owner
-                    })
-                })
-                && (y - margin..y).all(|row| {
-                    (x..x + side).all(|column| {
-                        let index = (row * width + column) as usize;
-                        coverage.as_raw()[index] != 0 && ownership[index] == owner
-                    })
-                })
-                && (y + side..y + side + margin).all(|row| {
-                    (x..x + side).all(|column| {
-                        let index = (row * width + column) as usize;
-                        coverage.as_raw()[index] != 0 && ownership[index] == owner
-                    })
+                    row_has_run(
+                        &row_runs[row as usize],
+                        evidence_owner,
+                        x - margin,
+                        x + side + margin,
+                    )
                 });
             if !margin_ok {
                 continue;

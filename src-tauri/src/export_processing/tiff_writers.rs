@@ -22,9 +22,7 @@ use tiff::encoder::colortype::RGB8;
 #[cfg(not(target_os = "android"))]
 use tiff::encoder::colortype::RGB16;
 #[cfg(not(target_os = "android"))]
-use tiff::encoder::colortype::RGBA8;
-#[cfg(not(target_os = "android"))]
-use tiff::encoder::colortype::RGBA16;
+use tiff::tags::ExtraSamples;
 #[cfg(not(target_os = "android"))]
 use tiff::tags::Tag as TiffTag;
 
@@ -57,6 +55,7 @@ pub(crate) fn encode_rgb16_tiff_with_metadata(
         rgb16,
         embed_color_profile,
         export_metadata,
+        false,
     )
 }
 
@@ -86,6 +85,7 @@ pub(crate) fn encode_rgb8_tiff_with_metadata(
         rgb8,
         embed_color_profile,
         export_metadata,
+        false,
     )
 }
 
@@ -110,13 +110,14 @@ pub(crate) fn encode_rgba16_tiff_with_metadata(
             export_metadata,
         );
     }
-    encode_rgb_tiff_with_metadata::<RGBA16>(
+    encode_rgb_tiff_with_metadata::<RGB16>(
         output,
         width,
         height,
         rgba16,
         embed_color_profile,
         export_metadata,
+        true,
     )
 }
 
@@ -140,13 +141,14 @@ pub(crate) fn encode_rgba8_tiff_with_metadata(
             export_metadata,
         );
     }
-    encode_rgb_tiff_with_metadata::<RGBA8>(
+    encode_rgb_tiff_with_metadata::<RGB8>(
         output,
         width,
         height,
         rgba8,
         embed_color_profile,
         export_metadata,
+        true,
     )
 }
 
@@ -182,7 +184,7 @@ pub(crate) fn encode_rgb16_bigtiff_with_metadata(
     embed_color_profile: bool,
     _export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
-    encode_bigtiff_with_metadata::<RGB16>(output, width, height, rgb16, embed_color_profile)
+    encode_bigtiff_with_metadata::<RGB16>(output, width, height, rgb16, embed_color_profile, false)
 }
 
 /// 8-bit RGB BigTIFF writer for explicitly downgraded exports whose pixel
@@ -196,7 +198,7 @@ pub(crate) fn encode_rgb8_bigtiff_with_metadata(
     embed_color_profile: bool,
     _export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
-    encode_bigtiff_with_metadata::<RGB8>(output, width, height, rgb8, embed_color_profile)
+    encode_bigtiff_with_metadata::<RGB8>(output, width, height, rgb8, embed_color_profile, false)
 }
 
 /// 16-bit RGBA BigTIFF writer. Alpha is written as an unassociated fourth
@@ -210,7 +212,7 @@ pub(crate) fn encode_rgba16_bigtiff_with_metadata(
     embed_color_profile: bool,
     _export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
-    encode_bigtiff_with_metadata::<RGBA16>(output, width, height, rgba16, embed_color_profile)
+    encode_bigtiff_with_metadata::<RGB16>(output, width, height, rgba16, embed_color_profile, true)
 }
 
 /// 8-bit RGBA BigTIFF writer preserving the Coverage_Mask alpha channel.
@@ -223,7 +225,7 @@ pub(crate) fn encode_rgba8_bigtiff_with_metadata(
     embed_color_profile: bool,
     _export_metadata: Option<&ExifMetadata>,
 ) -> Result<(), String> {
-    encode_bigtiff_with_metadata::<RGBA8>(output, width, height, rgba8, embed_color_profile)
+    encode_bigtiff_with_metadata::<RGB8>(output, width, height, rgba8, embed_color_profile, true)
 }
 
 #[cfg(not(target_os = "android"))]
@@ -233,12 +235,13 @@ fn encode_bigtiff_with_metadata<C>(
     height: u32,
     data: &[C::Inner],
     embed_color_profile: bool,
+    has_alpha: bool,
 ) -> Result<(), String>
 where
     C: TiffColorType,
     [C::Inner]: TiffValue,
 {
-    let samples_per_pixel = C::BITS_PER_SAMPLE.len();
+    let samples_per_pixel = C::BITS_PER_SAMPLE.len() + usize::from(has_alpha);
     let expected_samples = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(samples_per_pixel))
@@ -255,6 +258,11 @@ where
     let mut image = encoder
         .new_image::<C>(width, height)
         .map_err(|error| format!("Failed to configure BigTIFF image: {error}"))?;
+    if has_alpha {
+        image
+            .extra_samples(&[ExtraSamples::UnassociatedAlpha])
+            .map_err(|error| format!("Failed to declare BigTIFF coverage alpha: {error}"))?;
+    }
     if embed_color_profile {
         image
             .encoder()
@@ -274,13 +282,15 @@ fn encode_rgb_tiff_with_metadata<C>(
     data: &[C::Inner],
     embed_color_profile: bool,
     export_metadata: Option<&ExifMetadata>,
+    has_alpha: bool,
 ) -> Result<(), String>
 where
     C: TiffColorType,
     [C::Inner]: TiffValue,
 {
-    // Three samples for RGB, four for RGB with the Coverage_Mask as alpha.
-    let samples_per_pixel = C::BITS_PER_SAMPLE.len();
+    // RGB is the base colour type. Declare alpha as an extra sample rather
+    // than selecting RGBA: tiff's RGBA colour type alone does not emit tag 338.
+    let samples_per_pixel = C::BITS_PER_SAMPLE.len() + usize::from(has_alpha);
     let expected_samples = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(samples_per_pixel))
@@ -345,6 +355,11 @@ where
     let mut image = encoder
         .new_image::<C>(width, height)
         .map_err(|error| format!("Failed to configure RGB TIFF image: {error}"))?;
+    if has_alpha {
+        image
+            .extra_samples(&[ExtraSamples::UnassociatedAlpha])
+            .map_err(|error| format!("Failed to declare TIFF coverage alpha: {error}"))?;
+    }
     if let Some(metadata) = export_metadata
         && has_writable_tiff_metadata_group(metadata, ExifTagGroup::GENERIC)
     {
@@ -372,3 +387,7 @@ where
         .write_data(data)
         .map_err(|error| format!("Failed to encode RGB TIFF pixels: {error}"))
 }
+
+#[cfg(all(test, not(target_os = "android")))]
+#[path = "tiff_writers_tests.rs"]
+mod tests;

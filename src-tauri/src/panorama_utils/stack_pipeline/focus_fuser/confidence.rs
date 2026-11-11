@@ -223,6 +223,14 @@ pub(crate) struct SharpnessEvidenceGrid {
 }
 
 impl SharpnessEvidenceGrid {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>().saturating_add(
+            self.cells
+                .capacity()
+                .saturating_mul(std::mem::size_of::<SharpnessCellEvidence>()),
+        )
+    }
+
     pub(crate) fn at_pixel(&self, x: u32, y: u32) -> Option<SharpnessCellEvidence> {
         let column = x / self.cell_size_px.max(1);
         let row = y / self.cell_size_px.max(1);

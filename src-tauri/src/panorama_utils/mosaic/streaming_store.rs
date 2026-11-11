@@ -262,6 +262,92 @@ impl StreamingMosaicStore {
         }))
     }
 
+    /// Count actual source-supported pixels from the final on-disk masks.
+    /// This is an observation only; the RGB materialisation remains unchanged.
+    pub(super) fn covered_and_owned_pixel_counts(&self) -> (u64, u64) {
+        let mut covered = 0u64;
+        let mut owned = 0u64;
+        for row in 0..self.tile_rows {
+            for column in 0..self.tile_columns {
+                let (_, _, width, height) = self.tile_extent(column, row);
+                let mask = self.read_mask_tile(column, row, width, height);
+                let owners = self.read_owner_tile(column, row, width, height);
+                for (&coverage, &owner) in mask.iter().zip(&owners) {
+                    if coverage != 0 {
+                        covered += 1;
+                        owned += u64::from(owner != 0);
+                    }
+                }
+            }
+        }
+        (covered, owned)
+    }
+
+    pub(super) fn materialize_coverage(&self, crop: (u32, u32, u32, u32)) -> GrayImage {
+        let (crop_left, crop_top, crop_width, crop_height) = crop;
+        let mut output = GrayImage::new(crop_width, crop_height);
+        for tile_row in 0..self.tile_rows {
+            for tile_column in 0..self.tile_columns {
+                let (tile_left, tile_top, tile_width, tile_height) =
+                    self.tile_extent(tile_column, tile_row);
+                let x_start = crop_left.max(tile_left);
+                let y_start = crop_top.max(tile_top);
+                let x_end = (crop_left + crop_width).min(tile_left + tile_width);
+                let y_end = (crop_top + crop_height).min(tile_top + tile_height);
+                if x_start >= x_end || y_start >= y_end {
+                    continue;
+                }
+                let mask = self.read_mask_tile(tile_column, tile_row, tile_width, tile_height);
+                for y in y_start..y_end {
+                    let source_start = (y - tile_top) as usize * tile_width as usize
+                        + (x_start - tile_left) as usize;
+                    let destination_start = (y - crop_top) as usize * crop_width as usize
+                        + (x_start - crop_left) as usize;
+                    let length = (x_end - x_start) as usize;
+                    output.as_mut()[destination_start..destination_start + length]
+                        .copy_from_slice(&mask[source_start..source_start + length]);
+                }
+            }
+        }
+        output
+    }
+
+    pub(super) fn largest_fully_covered_rect(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
+        let width = mask.width() as usize;
+        let mut heights = vec![0u32; width];
+        let mut stack = Vec::<(usize, u32)>::with_capacity(width);
+        let mut best = None::<(u64, u32, u32, u32, u32)>;
+        for y in 0..mask.height() {
+            for (x, height) in heights.iter_mut().enumerate() {
+                *height = if mask.as_raw()[y as usize * width + x] != 0 {
+                    *height + 1
+                } else {
+                    0
+                };
+            }
+            stack.clear();
+            for x in 0..=width {
+                let height = if x == width { 0 } else { heights[x] };
+                let mut left = x;
+                while let Some(&(start, previous_height)) = stack.last() {
+                    if previous_height <= height {
+                        break;
+                    }
+                    stack.pop();
+                    left = start;
+                    let area = (x - start) as u64 * u64::from(previous_height);
+                    if best.is_none_or(|(best_area, _, _, _, _)| area > best_area) {
+                        best = Some((area, start as u32, y + 1 - previous_height, x as u32, y + 1));
+                    }
+                }
+                if height != 0 && stack.last().is_none_or(|&(_, prior)| prior < height) {
+                    stack.push((left, height));
+                }
+            }
+        }
+        best.map(|(_, x0, y0, x1, y1)| (x0, y0, x1 - x0, y1 - y0))
+    }
+
     pub(super) fn materialize(&self, crop: (u32, u32, u32, u32)) -> Result<Rgb32FImage, String> {
         let (crop_left, crop_top, crop_width, crop_height) = crop;
         let mut output = Rgb32FImage::new(crop_width, crop_height);
@@ -547,12 +633,13 @@ pub(super) fn copy_streaming_owned_tile_region(
                 // focal stack would produce.  Keep a bounded contribution from
                 // every covered source instead of cutting at one graph-cell
                 // seam; the tone field has already matched its low frequency.
-                if blend_overlaps && covered[write_local_x as usize] != 0 {
+                let had_coverage = covered[write_local_x as usize] != 0;
+                if blend_overlaps && had_coverage {
                     alpha = 0.42;
                 } else if blend_overlaps {
                     alpha = 1.0;
                 }
-                if covered[write_local_x as usize] == 0 {
+                if !had_coverage {
                     row[start..start + 3].copy_from_slice(&adjusted_pixel.0);
                 } else {
                     for channel in 0..3 {
@@ -561,7 +648,7 @@ pub(super) fn copy_streaming_owned_tile_region(
                     }
                 }
                 covered[write_local_x as usize] = 255;
-                if alpha >= 0.5 {
+                if !had_coverage || alpha >= 0.5 {
                     owner[write_local_x as usize] = owner_id;
                 }
             }

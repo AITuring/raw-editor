@@ -28,10 +28,14 @@ fn verify_layered_native_acceptance(report: &stack_report::StackReport) -> Resul
             return Err(format!("missing or duplicate quality criterion: {name}"));
         }
         let criterion = matches[0];
-        let accepted = criterion.verdict == QualityGateVerdict::Pass
-            || (name == "mtf50_normalized"
-                && criterion.verdict == QualityGateVerdict::NotApplicable
-                && criterion.technical_unmeasurable_count == 0);
+        let criterion_specific_content_only = matches!(
+            name,
+            "mtf50_normalized" | "noise_sigma_ratio" | "boundary_stroke_alignment"
+        ) && criterion.verdict
+            == QualityGateVerdict::NotApplicable
+            && criterion.technical_unmeasurable_count == 0;
+        let accepted =
+            criterion.verdict == QualityGateVerdict::Pass || criterion_specific_content_only;
         if !accepted {
             return Err(format!("native quality criterion failed: {name}"));
         }
@@ -89,21 +93,90 @@ fn native_acceptance_rejects_degraded_tone_even_when_all_quality_criteria_pass()
         .unwrap()
         .technical_unmeasurable_count = 1;
     assert!(verify_layered_native_acceptance(&report).is_err());
+
+    // Content-specific NotApplicable is allowed by requirement 11.14(c),
+    // but a diagnostic render cannot establish native resolution acceptance.
+    report
+        .quality_gate
+        .criteria
+        .iter_mut()
+        .find(|c| c.name == "mtf50_normalized")
+        .unwrap()
+        .technical_unmeasurable_count = 0;
+    for name in ["local_scale_median", "local_scale_pixel_ratio"] {
+        let local = report
+            .quality_gate
+            .criteria
+            .iter_mut()
+            .find(|c| c.name == name)
+            .unwrap();
+        local.diagnostic = true;
+        local.verdict = stack_report::QualityGateVerdict::NotApplicable;
+        assert!(
+            verify_layered_native_acceptance(&report)
+                .unwrap_err()
+                .contains(name)
+        );
+        let local = report
+            .quality_gate
+            .criteria
+            .iter_mut()
+            .find(|c| c.name == name)
+            .unwrap();
+        local.diagnostic = false;
+        local.verdict = stack_report::QualityGateVerdict::Pass;
+    }
 }
 
 #[test]
 #[ignore = "renders one real station from the saved source alignment for native diagnostics"]
 fn real_saved_capture_station_from_env() {
+    use crate::formats::is_raw_file;
+    use crate::panorama_utils::stack_pipeline::{focus_fuser, intra_station, tone};
+
     let _scope = degradation::begin_run_scope();
-    let cache: serde_json::Value = serde_json::from_slice(
-        &fs::read(std::env::var("RAW_EDITOR_NATIVE_STATION_ALIGNMENT").unwrap()).unwrap(),
-    )
-    .unwrap();
+    // Match the production run boundary. Acquiring the scope serializes access;
+    // it does not clear evidence left by an earlier diagnostic in this process.
+    degradation::reset_run_ledger();
+    intra_station::reset_run_records();
+    focus_fuser::reset_run_records();
+    stitching::reset_final_world_owner_oracle();
+    residual_warp::reset_run_records();
+    tone::reset_run_records();
+    tone::reset_run_topology();
+    topology::reset_run_topology();
+    let started = Instant::now();
+    let alignment_path =
+        PathBuf::from(std::env::var("RAW_EDITOR_NATIVE_STATION_ALIGNMENT").unwrap());
+    let cache: serde_json::Value =
+        serde_json::from_slice(&fs::read(&alignment_path).unwrap()).unwrap();
     let station: usize = std::env::var("RAW_EDITOR_NATIVE_STATION_INDEX")
         .unwrap()
         .parse()
         .unwrap();
     let output = PathBuf::from(std::env::var("RAW_EDITOR_NATIVE_STATION_OUTPUT").unwrap());
+    let skip_artifacts =
+        std::env::var("RAW_EDITOR_NATIVE_STATION_SKIP_ARTIFACTS").is_ok_and(|value| value == "1");
+    let production_normalization =
+        std::env::var("RAW_EDITOR_NATIVE_STATION_PRODUCTION_NORMALIZATION")
+            .is_ok_and(|value| value == "1");
+    if production_normalization {
+        for incompatible in [
+            "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION",
+            "RAW_EDITOR_STACK_RAW_FIXED_GAIN",
+            "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION",
+        ] {
+            assert!(
+                std::env::var_os(incompatible).is_none(),
+                "production-normalized station diagnostics require the default shared policy; unset {incompatible}"
+            );
+        }
+    }
+    let native_prefilter_disabled =
+        std::env::var_os("RAW_EDITOR_STACK_DISABLE_NATIVE_PREFILTER").is_some();
+    let diagnostic_output = std::env::var_os("RAW_EDITOR_NATIVE_STATION_DIAGNOSTIC_JSON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| output.with_extension("diagnostic.json"));
     crate::sidecar_storage::initialize(
         PathBuf::from("/private/tmp/raw-editor-stack-sidecars").as_path(),
     )
@@ -192,8 +265,23 @@ fn real_saved_capture_station_from_env() {
     if std::env::var_os("RAW_EDITOR_NATIVE_STATION_NO_GENERIC_WARP").is_some() {
         warp.bands.retain(|band| band.physical_edge);
     }
+    // The production shared gain depends on all selected sources, including
+    // sources in other stations. Decode each preparation source once and retain
+    // only this station's small analysis planes, never all nine native images.
+    let preparation_ids = if production_normalization {
+        cache["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|source| source["id"].as_u64().unwrap() as usize)
+            .collect::<Vec<_>>()
+    } else {
+        ids.clone()
+    };
+    let mut display_highs = Vec::new();
+    let mut source_display_highs = Vec::new();
     let mut images = Vec::new();
-    for id in ids {
+    for &id in &preparation_ids {
         let source = cache["sources"]
             .as_array()
             .unwrap()
@@ -202,6 +290,23 @@ fn real_saved_capture_station_from_env() {
             .unwrap();
         let path = source["filename"].as_str().unwrap().to_string();
         let prepared = load_prepared_stack_source(&path, &settings, exposure).unwrap();
+        if production_normalization {
+            let raw = is_raw_file(&path);
+            let high = raw
+                .then(|| raw_display_channel_percentile(&prepared.image))
+                .flatten();
+            display_highs.extend(high);
+            source_display_highs.push(serde_json::json!({
+                "id": id,
+                "filename": path,
+                "is_raw": raw,
+                "display_channel_percentile_97": high,
+                "display_channel_percentile_97_f32_bits": high.map(f32::to_bits),
+            }));
+            if !ids.contains(&id) {
+                continue;
+            }
+        }
         let (w, h, scale) = processing::calculate_downscale_dimensions_capped(
             prepared.image.width(),
             prepared.image.height(),
@@ -234,6 +339,12 @@ fn real_saved_capture_station_from_env() {
             full_image: None,
         });
     }
+    // Preserve saved member ordering even when all-source normalization made
+    // preparation visit sources in the selection's original order.
+    images.sort_by_key(|info| ids.iter().position(|id| *id == info.id).unwrap());
+    let shared_display_gain = production_normalization
+        .then(|| shared_stack_raw_display_gain(&display_highs))
+        .flatten();
     if std::env::var_os("RAW_EDITOR_NATIVE_STATION_EDGE_DIAGNOSTICS").is_some() {
         for info in &images {
             println!(
@@ -275,9 +386,26 @@ fn real_saved_capture_station_from_env() {
     }
     let references = images.iter().collect::<Vec<_>>();
     let mut load = |info: &ImageInfo| {
-        load_prepared_stack_source(&info.filename, &settings, exposure).map(|p| p.image.to_rgb32f())
+        load_prepared_stack_source(&info.filename, &settings, exposure).map(|p| {
+            let mut rendered = p.image.to_rgb32f();
+            if production_normalization && is_raw_file(&info.filename) {
+                if let Some(gain) = shared_display_gain {
+                    rendered
+                        .as_mut()
+                        .par_iter_mut()
+                        .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
+                } else {
+                    // Match production's default-policy fallback when none of
+                    // the prepared sources supplies a usable channel percentile.
+                    normalize_stack_raw_display_exposure(&mut rendered);
+                }
+            }
+            rendered
+        })
     };
     let app = tauri::test::mock_app();
+    let preparation_seconds = started.elapsed().as_secs_f64();
+    let render_started = Instant::now();
     let rendered = stitching::focus_stack_stitcher_unfilled(
         &references,
         &local,
@@ -291,6 +419,110 @@ fn real_saved_capture_station_from_env() {
         &mut load,
     )
     .unwrap();
+    let render_seconds = render_started.elapsed().as_secs_f64();
+    let native_dimensions = rendered.image.dimensions();
+    let mask_evidence = rendered.masks.as_ref().map(|masks| {
+        let mut source_refinement_ids =
+            masks.source_refinements.keys().copied().collect::<Vec<_>>();
+        source_refinement_ids.sort_unstable();
+        serde_json::json!({
+            "dimensions": masks.coverage.dimensions(),
+            "covered_pixels": masks.coverage.covered_pixels(),
+            "covered_bounds": masks.coverage.covered_bounds(),
+            "owner_legend": masks.ownership.legend(),
+            "owned_pixel_counts": masks.ownership.owned_pixel_counts(),
+            "source_refinement_ids": source_refinement_ids,
+        })
+    });
+    let diagnostic = serde_json::json!({
+        "schema": 1,
+        "diagnostic_only": true,
+        "quality_gate": {
+            "verdict": "not_run",
+            "reason": "single_station_registration_diagnostic",
+        },
+        "alignment_path": alignment_path,
+        "source_identities": {
+            "provenance": "saved_alignment_metadata",
+            "sha256_verified": false,
+            "sources": cache["sources"],
+        },
+        "station": {
+            "index": station,
+            "capture_group": group,
+            "projection": "planar",
+            "alignment_long_side_limit": 2400,
+            "focus_warp_band_count": warp.bands.len(),
+            "physical_edge_band_count": warp.bands.iter().filter(|band| band.physical_edge).count(),
+            "generic_warp_removed": std::env::var_os("RAW_EDITOR_NATIVE_STATION_NO_GENERIC_WARP").is_some(),
+            "prepared_sources": images.iter().map(|info| serde_json::json!({
+                "id": info.id,
+                "filename": info.filename,
+                "width": info.width,
+                "height": info.height,
+                "scale_factor": info.scale_factor,
+            })).collect::<Vec<_>>(),
+        },
+        "normalization": {
+            "pixel_loader": "load_prepared_stack_source",
+            "physical_exposure_reference": exposure,
+            "production_normalization_requested": production_normalization,
+            "preparation_source_count": preparation_ids.len(),
+            "source_display_highs": source_display_highs,
+            "shared_display_gain_applied": shared_display_gain.is_some(),
+            "shared_display_gain": shared_display_gain,
+            "shared_display_gain_f32_bits": shared_display_gain.map(f32::to_bits),
+            "display_gain_clamp_applied": shared_display_gain.is_some(),
+            "per_source_display_fallback_enabled": production_normalization && shared_display_gain.is_none(),
+            "production_pixel_equivalence": false,
+            "production_pixel_equivalence_status": "not_verified",
+            "scope": "single_station_saved_alignment_replay_without_production_caches_or_full_pixel_comparison",
+        },
+        "native_prefilter": {
+            "disable_test_environment_variable_present": native_prefilter_disabled,
+            "active_policy": if native_prefilter_disabled { "point_sample" } else { "area_2x2_spacing_2" },
+            "scope": "intra_station_native_control_points",
+            "coarse_spacing_native_px": 2.0,
+            "area_sample_offsets_native_px": if native_prefilter_disabled { None } else { Some([-0.5, 0.5]) },
+            "spacing_1_policy": "unchanged_point_sample",
+            "legacy_mosaic_policy": "unchanged_point_sample",
+        },
+        "render": {
+            "dimensions": native_dimensions,
+            "sampling_origin": rendered.sampling_origin,
+            "mask_evidence": mask_evidence,
+            "artifacts_skipped": skip_artifacts,
+            "requested_artifact_path": output,
+        },
+        "timing": {
+            "preparation_seconds": preparation_seconds,
+            "render_seconds": render_seconds,
+        },
+        "intra_station": intra_station::run_records_snapshot(),
+        "focus_fuser": focus_fuser::run_records_snapshot(),
+        "degradation": degradation::run_ledger_snapshot(),
+    });
+    // Persist evidence before optional large artifacts, so an export failure
+    // cannot discard the registrar result. This is not a Stack_Report/QG pass.
+    fs::write(
+        &diagnostic_output,
+        serde_json::to_vec_pretty(&diagnostic).unwrap(),
+    )
+    .unwrap();
+    println!(
+        "Native station diagnostic JSON: {}",
+        diagnostic_output.display()
+    );
+    println!(
+        "Native station diagnostic only: {}x{} origin {:?}; {} generic/physical bands",
+        native_dimensions.0,
+        native_dimensions.1,
+        rendered.sampling_origin,
+        warp.bands.len()
+    );
+    if skip_artifacts {
+        return;
+    }
     if let Some(masks) = rendered.masks.as_ref() {
         let (width, height) = masks.coverage.dimensions();
         image::GrayImage::from_raw(width, height, masks.coverage.covered().to_vec())
@@ -316,10 +548,7 @@ fn real_saved_capture_station_from_env() {
             let Some(refinement) = masks.source_refinements.get(&info.id) else {
                 continue;
             };
-            let source = load_prepared_stack_source(&info.filename, &settings, exposure)
-                .unwrap()
-                .image
-                .to_rgb32f();
+            let source = load(info).unwrap();
             let patch = image::Rgb32FImage::from_fn(r[2], r[3], |x, y| {
                 let point = refinement
                     .inverse_canvas_point(Point2::new((r[0] + x) as f64, (r[1] + y) as f64));
@@ -351,13 +580,6 @@ fn real_saved_capture_station_from_env() {
         .resize(1800, 1800, image::imageops::FilterType::Lanczos3)
         .save(output.with_extension("preview.jpg"))
         .unwrap();
-    println!(
-        "Native station diagnostic only: {}x{} origin {:?}; {} generic/physical bands",
-        canonical.width(),
-        canonical.height(),
-        rendered.sampling_origin,
-        warp.bands.len()
-    );
 }
 
 #[test]
@@ -493,8 +715,12 @@ fn real_focus_stack_fixture_from_env() {
     if !preview_only {
         // Keep visual diagnostics even if a later large export runs out
         // of disk space. Export failure still fails this acceptance run.
-        crate::image_stack::write_srgb_tiff(&canonical, &output_path)
-            .expect("full-resolution color-managed TIFF result should be writable");
+        crate::image_stack::write_srgb_tiff_for_acceptance(
+            &canonical,
+            &output_path,
+            stack_report_path.as_deref(),
+        )
+        .unwrap_or_else(|error| panic!("native artifact export/validation failed: {error}"));
         crate::image_stack::write_srgb_jpeg(&canonical, &app_jpeg_path)
             .expect("full-resolution application JPEG should be writable");
     }

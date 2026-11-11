@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 
 use super::{Criterion, QualitySource, classify_unmeasurable_reason, project};
 
+const BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH: f64 = 0.15;
+
 /// Return the two-sided subpixel edge displacement at one ownership boundary.
 /// `normal` is either horizontal `(1,0)` or vertical `(0,1)` and is derived
 /// directly from the neighbouring ownership pixels, so no full label image is
@@ -59,6 +61,35 @@ pub(super) enum BoundaryCellObservation {
     },
 }
 
+/// Merge by the actual stroke-cell key, which can differ from the originating
+/// seam-cell key. The first measurable result (pass or fail) and any technical
+/// rejection are final; only content-ineligible candidates permit continued
+/// search. Strength is never a reason to replace a measured failure.
+pub(super) fn boundary_observation_can_replace(
+    current: &BoundaryCellObservation,
+    candidate: &BoundaryCellObservation,
+) -> bool {
+    let BoundaryCellObservation::Unmeasurable {
+        reason: current, ..
+    } = current
+    else {
+        return false;
+    };
+    if classify_unmeasurable_reason(current)
+        == super::super::report::UnmeasurableCategory::Technical
+    {
+        return false;
+    }
+    match candidate {
+        BoundaryCellObservation::Measured(_) => true,
+        BoundaryCellObservation::Unmeasurable { reason, .. } => {
+            classify_unmeasurable_reason(reason)
+                == super::super::report::UnmeasurableCategory::Technical
+                || boundary_rejection_priority(reason) > boundary_rejection_priority(current)
+        }
+    }
+}
+
 pub(super) fn boundary_edge_on_side_matching<F>(
     image: &Rgb32FImage,
     coverage: &GrayImage,
@@ -67,6 +98,7 @@ pub(super) fn boundary_edge_on_side_matching<F>(
     normal: (f64, f64),
     side: f64,
     distance: f64,
+    minimum_strength: f64,
     owner_matches: F,
 ) -> Result<BoundaryEdge, &'static str>
 where
@@ -99,8 +131,11 @@ where
             - luminance(*image.get_pixel((ix - 1) as u32, iy as u32));
         let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
             - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
+        if !gx.is_finite() || !gy.is_finite() {
+            return Err(degradation::DIAGNOSTICS_ROI_INVALID);
+        }
         let strength = gx.hypot(gy) * 0.5;
-        if strength < 0.15 {
+        if strength < minimum_strength {
             continue;
         }
         let tangent_alignment = (gx * tangent.0 + gy * tangent.1).abs() / gx.hypot(gy);
@@ -150,6 +185,7 @@ pub(super) fn boundary_edge_on_side(
         normal,
         side,
         distance,
+        BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH,
         |owner| owner == expected_owner,
     )
 }
@@ -198,6 +234,30 @@ pub(super) fn boundary_pair_error_for_stations(
     right_station: usize,
     owner_stations: &BTreeMap<u16, usize>,
 ) -> Result<(BoundaryEdge, BoundaryEdge), &'static str> {
+    boundary_pair_error_for_stations_with_threshold(
+        image,
+        coverage,
+        ownership,
+        seam,
+        normal,
+        left_station,
+        right_station,
+        owner_stations,
+        BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH,
+    )
+}
+
+fn boundary_pair_error_for_stations_with_threshold(
+    image: &Rgb32FImage,
+    coverage: &GrayImage,
+    ownership: &[u16],
+    seam: (f64, f64),
+    normal: (f64, f64),
+    left_station: usize,
+    right_station: usize,
+    owner_stations: &BTreeMap<u16, usize>,
+    minimum_strength: f64,
+) -> Result<(BoundaryEdge, BoundaryEdge), &'static str> {
     let distance = 4.0;
     let left = boundary_edge_on_side_matching(
         image,
@@ -207,6 +267,7 @@ pub(super) fn boundary_pair_error_for_stations(
         normal,
         -1.0,
         distance,
+        minimum_strength,
         |owner| owner_stations.get(&owner).copied() == Some(left_station),
     )?;
     let right = boundary_edge_on_side_matching(
@@ -217,6 +278,7 @@ pub(super) fn boundary_pair_error_for_stations(
         normal,
         1.0,
         distance,
+        minimum_strength,
         |owner| owner_stations.get(&owner).copied() == Some(right_station),
     )?;
     let left_length = left.gradient.0.hypot(left.gradient.1);
@@ -419,10 +481,13 @@ pub(super) fn measure_large_boundaries(
     sources: &[QualitySource],
     accepted_station_relations: &[(usize, usize)],
     residual: &ResidualWarp,
+    acceptance_render_scale: f64,
+    criterion_specific_pool: bool,
     criterion: &mut Criterion,
     unmeasurable: &mut Vec<UnmeasurableRecord>,
 ) {
     const SPATIAL_DEDUP_PX: u32 = 64;
+    const MAX_BOUNDARY_CELLS: usize = 2_048;
     let (width, height) = coverage.dimensions();
     let width_usize = width as usize;
     let source_by_owner = sources
@@ -444,6 +509,30 @@ pub(super) fn measure_large_boundaries(
         .collect::<std::collections::BTreeSet<_>>();
     let mut cells = BTreeMap::<(usize, usize, u32, u32), BoundaryCellObservation>::new();
     let mut provenance_unavailable = false;
+    // Raw focus ownership can switch thousands of times inside one
+    // Capture_Station.  Those transitions are not cross-station seams and
+    // cannot contribute evidence; reject them before the expensive edge
+    // resampling path below.  Unknown owners still pass through so the gate
+    // reports provenance_unavailable rather than silently dropping evidence.
+    let pairable_transition = |left_owner: u16, right_owner: u16| {
+        let (Some(left_source), Some(right_source)) = (
+            source_by_owner.get(&left_owner),
+            source_by_owner.get(&right_owner),
+        ) else {
+            return true;
+        };
+        let pair = (
+            left_source
+                .geometry
+                .station_id
+                .min(right_source.geometry.station_id),
+            left_source
+                .geometry
+                .station_id
+                .max(right_source.geometry.station_id),
+        );
+        pair.0 != pair.1 && accepted.contains(&pair)
+    };
     let mut visit = |x: u32, y: u32, normal: (f64, f64), left_owner: u16, right_owner: u16| {
         if left_owner == 0 || right_owner == 0 || left_owner == right_owner {
             return;
@@ -476,7 +565,34 @@ pub(super) fn measure_large_boundaries(
             x / SPATIAL_DEDUP_PX,
             y / SPATIAL_DEDUP_PX,
         );
-        let (key, observation) = match boundary_pair_error_for_stations(
+        // The spatial key is the observable unit of this criterion.  Avoid
+        // resampling every raw-owner transition that lands in the same 64px
+        // cell; the old code deduplicated only after the expensive source
+        // edge reconstruction, which made fragmented focus ownership turn a
+        // linear scan into minutes of repeated work.
+        if matches!(
+            cells.get(&seam_key),
+            Some(BoundaryCellObservation::Measured(_))
+        ) {
+            return;
+        }
+        // A technical provenance error is sticky. Searching another pixel in
+        // the same cell must not hide it behind a later measurable stroke.
+        if matches!(cells.get(&seam_key), Some(BoundaryCellObservation::Unmeasurable { reason, .. })
+            if classify_unmeasurable_reason(reason) == super::super::report::UnmeasurableCategory::Technical)
+        {
+            return;
+        }
+        if cells.len() >= MAX_BOUNDARY_CELLS && !cells.contains_key(&seam_key) {
+            return;
+        }
+        let minimum_strength = if acceptance_render_scale.is_finite() {
+            (BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH * acceptance_render_scale.clamp(0.5, 1.0))
+                .max(0.06)
+        } else {
+            BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH
+        };
+        let (key, observation) = match boundary_pair_error_for_stations_with_threshold(
             image,
             coverage,
             ownership,
@@ -485,6 +601,7 @@ pub(super) fn measure_large_boundaries(
             left_source.geometry.station_id,
             right_source.geometry.station_id,
             &station_by_owner,
+            minimum_strength,
         ) {
             Ok((left_edge, right_edge)) => {
                 let left_world = (
@@ -546,28 +663,11 @@ pub(super) fn measure_large_boundaries(
                 BoundaryCellObservation::Unmeasurable { world, reason },
             ),
         };
-        match (cells.get(&key), &observation) {
-            (
-                Some(BoundaryCellObservation::Measured(current)),
-                BoundaryCellObservation::Measured(candidate),
-            ) if candidate.strength > current.strength => {
-                cells.insert(key, observation);
-            }
-            (Some(BoundaryCellObservation::Measured(_)), _) => {}
-            (
-                Some(BoundaryCellObservation::Unmeasurable {
-                    reason: current, ..
-                }),
-                BoundaryCellObservation::Unmeasurable {
-                    reason: candidate, ..
-                },
-            ) if boundary_rejection_priority(candidate) > boundary_rejection_priority(current) => {
-                cells.insert(key, observation);
-            }
-            (_, BoundaryCellObservation::Measured(_)) | (None, _) => {
-                cells.insert(key, observation);
-            }
-            _ => {}
+        if cells
+            .get(&key)
+            .is_none_or(|current| boundary_observation_can_replace(current, &observation))
+        {
+            cells.insert(key, observation);
         }
     };
     for y in 0..height {
@@ -576,6 +676,7 @@ pub(super) fn measure_large_boundaries(
             if coverage.as_raw()[index] != 0
                 && coverage.as_raw()[index + 1] != 0
                 && ownership[index] != ownership[index + 1]
+                && pairable_transition(ownership[index], ownership[index + 1])
             {
                 visit(x, y, (1.0, 0.0), ownership[index], ownership[index + 1]);
             }
@@ -587,6 +688,7 @@ pub(super) fn measure_large_boundaries(
             if coverage.as_raw()[index] != 0
                 && coverage.as_raw()[index + width_usize] != 0
                 && ownership[index] != ownership[index + width_usize]
+                && pairable_transition(ownership[index], ownership[index + width_usize])
             {
                 visit(
                     x,
@@ -627,6 +729,16 @@ pub(super) fn measure_large_boundaries(
                 );
             }
             BoundaryCellObservation::Unmeasurable { world, reason } => {
+                if criterion_specific_pool
+                    && classify_unmeasurable_reason(reason)
+                        == super::super::report::UnmeasurableCategory::ContentNotApplicable
+                {
+                    // Search continued across every transition in this cell.
+                    // Only the final cell disposition is a rejected candidate,
+                    // not each of the thousands of tested seam pixels.
+                    criterion.reject_content(reason, world, 1);
+                    continue;
+                }
                 criterion.miss(reason);
                 unmeasurable.push(UnmeasurableRecord {
                     criterion: criterion.name.to_string(),
@@ -640,7 +752,11 @@ pub(super) fn measure_large_boundaries(
             }
         }
     }
-    if criterion.observed_count == 0 && criterion.unmeasurable == 0 {
+    if provenance_unavailable
+        || (!criterion_specific_pool
+            && criterion.observed_count == 0
+            && criterion.unmeasurable == 0)
+    {
         let reason = if provenance_unavailable {
             degradation::BOUNDARY_PROVENANCE_UNAVAILABLE
         } else {
@@ -657,4 +773,9 @@ pub(super) fn measure_large_boundaries(
             category: classify_unmeasurable_reason(reason),
         });
     }
+    criterion.set_candidate_pool(
+        criterion.observed_count + criterion.unmeasurable + criterion.rejected_content,
+        criterion.observed_count,
+        "station_boundary_streaming_candidates",
+    );
 }

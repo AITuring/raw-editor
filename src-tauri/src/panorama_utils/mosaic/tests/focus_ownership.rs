@@ -4,6 +4,51 @@
 use super::*;
 
 #[test]
+fn low_weight_first_streaming_write_gets_source_owner_without_changing_rgb() {
+    let source = Rgb32FImage::from_pixel(8, 8, Rgb([0.6, 0.5, 0.4]));
+    let info = image_info(0, &source);
+    let sampler = LayerSampler {
+        info: &info,
+        source: &source,
+        source_divisor: 1.0,
+        inverse: Matrix3::identity(),
+        native_mapping: None,
+        projection: Projection::Planar,
+        offset: (0.0, 0.0),
+        left: 0,
+        top: 0,
+        scale: 1.0,
+        residual: Field::new(8, 8, 4.0),
+    };
+    let mut tile = Rgb32FImage::new(8, 8);
+    let mut mask = GrayImage::new(8, 8);
+    let mut owner = GrayImage::new(8, 8);
+    let decision = GrayImage::from_pixel(4, 4, Luma([64]));
+    copy_streaming_owned_tile_region(
+        &mut tile,
+        &mut mask,
+        &mut owner,
+        1,
+        &sampler,
+        &Field::new(8, 8, 4.0),
+        &decision,
+        0,
+        0,
+        2,
+        2,
+        2,
+        2,
+        1.0,
+        8,
+        8,
+        false,
+    );
+    assert_eq!(mask.get_pixel(2, 2)[0], 255);
+    assert_eq!(owner.get_pixel(2, 2)[0], 1);
+    assert_eq!(tile.get_pixel(2, 2), source.get_pixel(2, 2));
+}
+
+#[test]
 fn focus_group_ownership_cannot_reclaim_another_camera_position() {
     let sharp = sharp_fixture();
     let base = image::imageops::blur(&sharp, 2.0);

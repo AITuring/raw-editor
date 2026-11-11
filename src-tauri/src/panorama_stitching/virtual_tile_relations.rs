@@ -42,16 +42,19 @@ pub(super) fn virtual_tile_prior_relation(
 
 pub(super) fn log_virtual_tile_candidate(
     diagnostic: &stack_report::StationRelationCandidateRecord,
-    accepted: bool,
 ) {
     println!(
-        "  - Virtual_Tile candidate {}->{}: seed={} level=1/{} of {:?} accepted={} prior_free_inliers={} repaired={} grid_probes={} measurable={} bidirectional={} cells={} radius={:.1}px residual_mag=[{:.2},{:.2},{:.2}] translation={}/{:.4}/{:?}/{} affine={}/{:.4}/{:?}/{} projective={}/{:.4}/{:?}/{} residual_model={} fit_inliers={} support={:.4} prefit_structural_orientation={} fitted_orientation={} stage={}",
+        "  - Virtual_Tile candidate {}->{}: seed={} level=1/{} of {:?} model_fitted={} gate_passed={} prior_free_inliers={} repaired={} grid_probes={} measurable={} bidirectional={} cells={} radius={:.1}px residual_mag=[{:.2},{:.2},{:.2}] translation={}/{:.4}/{:?}/{} affine={}/{:.4}/{:?}/{} projective={}/{:.4}/{:?}/{} residual_model={} fit_inliers={} support={:.4} prefit_structural_orientation={} fitted_orientation={} stage={}",
         diagnostic.left,
         diagnostic.right,
         diagnostic.seed,
         diagnostic.measurement_factor,
         diagnostic.pyramid_factors,
-        accepted,
+        diagnostic.model_fitted,
+        diagnostic
+            .hypotheses
+            .iter()
+            .any(|hypothesis| { hypothesis.selected && hypothesis.rejection_reasons.is_empty() }),
         diagnostic.prior_free_inliers,
         diagnostic.after_prior_repair,
         diagnostic.grid_probe_count,
@@ -212,7 +215,7 @@ pub(super) fn virtual_tile_measure_prior_relations(
             pyramid.solver_coverages(),
             tile_to_world,
         );
-        log_virtual_tile_candidate(&diagnostic, !relation.is_empty());
+        log_virtual_tile_candidate(&diagnostic);
         if !relation.is_empty() {
             relations.insert((left, right), relation);
         }
@@ -255,7 +258,7 @@ pub(super) fn virtual_tile_relation_measurements(
         quality_coverages,
     );
     let overlap_measure = coverages.overlap_measure(canonical.source_index, canonical.target_index);
-    let candidate = measure_station_relation_candidate(
+    let mut candidate = measure_station_relation_candidate(
         relation.inliers.max(points.len()),
         &canonical.homography,
         &points,
@@ -265,6 +268,14 @@ pub(super) fn virtual_tile_relation_measurements(
         dense_measurements,
         canonical.inverted,
     )?;
+    super::measure_virtual_tile_scale_evidence(
+        &mut candidate.measurements,
+        &canonical.homography,
+        &points,
+        tiles[canonical.source_index].dimensions(),
+        tiles[canonical.target_index].dimensions(),
+        overlap_measure,
+    );
     Some(candidate.measurements)
 }
 
@@ -360,7 +371,13 @@ pub(super) fn replace_virtual_tile_candidate_record(
             existing.left.max(existing.right),
         ) == key
     }) {
-        Some(existing) => *existing = record,
+        Some(existing) => {
+            let mut previous = std::mem::replace(existing, record);
+            let mut history = std::mem::take(&mut previous.previous_attempts);
+            history.push(previous);
+            history.append(&mut existing.previous_attempts);
+            existing.previous_attempts = history;
+        }
         None => records.push(record),
     }
 }

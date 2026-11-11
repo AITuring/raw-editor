@@ -15,6 +15,7 @@ mod virtual_tile_matching;
 mod virtual_tile_measurements;
 mod virtual_tile_residual_model;
 mod virtual_tile_solver_flow;
+mod virtual_tile_source_seeds;
 
 fn test_image(id: usize, filename: &str) -> ImageInfo {
     ImageInfo {

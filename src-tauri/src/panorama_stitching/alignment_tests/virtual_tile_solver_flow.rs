@@ -148,6 +148,56 @@ fn virtual_tile_no_fit_candidate_reports_unmeasured_without_inventing_reasons() 
 }
 
 #[test]
+fn station_candidate_failure_summary_is_order_independent_and_keeps_measurement_distinct() {
+    let (_, base) = virtual_tile_direct_station_match(
+        0,
+        1,
+        &[],
+        &[],
+        &HashMap::new(),
+        STATION_RELATION_MAX_MEDIAN_ERROR_PX,
+    );
+    let stages = [
+        "no_predicted_overlap",
+        "insufficient_jointly_covered_probes",
+        "insufficient_bidirectional_match_count",
+        "insufficient_grid_coverage",
+        "insufficient_prefit_hull_support",
+        "fitted_orientation_mismatch",
+    ];
+    let mut candidates = stages
+        .iter()
+        .enumerate()
+        .map(|(index, stage)| {
+            let mut candidate = base.clone();
+            candidate.left = index;
+            candidate.right = index + 1;
+            candidate.failure_stage = (*stage).to_string();
+            candidate.model_fitted = *stage == "fitted_orientation_mismatch";
+            candidate
+        })
+        .collect::<Vec<_>>();
+    let mut report = stack_report::StationRelationsReport::default();
+    report.candidates = candidates.clone();
+    report.summarize_candidate_measurements();
+    assert_eq!(report.unmeasured_count, stages.len() - 1);
+    assert_eq!(report.rejected_by_failure_stage.len(), stages.len());
+    assert!(report.rejected_by_reason.is_empty());
+    assert_eq!(report.rejected_count, 0); // Solver accounting is separate.
+
+    candidates.reverse();
+    let mut reversed = stack_report::StationRelationsReport::default();
+    reversed.candidates = candidates;
+    reversed.summarize_candidate_measurements();
+    assert_eq!(reversed.unmeasured_count, report.unmeasured_count);
+    assert_eq!(
+        reversed.rejected_by_failure_stage,
+        report.rejected_by_failure_stage
+    );
+    assert_eq!(reversed.rejected_by_reason, report.rejected_by_reason);
+}
+
+#[test]
 fn default_two_stage_flow_solves_ten_sources_as_three_fused_stations() {
     let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
     let images = (0..10)

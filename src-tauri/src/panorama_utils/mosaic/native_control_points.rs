@@ -43,9 +43,10 @@ pub(super) fn similarity_bucket(correlation: f64) -> Option<usize> {
 /// This exists so the correlation threshold can be stated as a measured
 /// accept-rate/precision tradeoff rather than as a number someone liked.  The
 /// precision proxy is the share of each correlation bucket that then closed the
-/// 需求 2.4 bidirectional round trip within 0.40 native pixels: a bucket whose
-/// forward peak is real closes the round trip, a bucket matching a repeated
-/// texture does not.
+/// 需求 2.4 bidirectional round trip within
+/// [`intra_station::INTRA_STATION_BIDIRECTIONAL_TOLERANCE_PX`] native pixels:
+/// a bucket whose forward peak is real closes the round trip, a bucket matching
+/// a repeated texture does not.
 #[derive(Debug, Clone, Default)]
 pub(super) struct SimilarityStats {
     /// Forward peak correlation of every control point whose patch pair carried
@@ -53,9 +54,11 @@ pub(super) struct SimilarityStats {
     pub(super) correlations: Vec<f64>,
     /// Per bucket, how many control points reached the reverse match.
     pub(super) bucket_total: [usize; SIMILARITY_BUCKETS],
+    /// Per bucket, how many reverse attempts produced a measured round trip.
+    pub(super) bucket_completed: [usize; SIMILARITY_BUCKETS],
     /// Per bucket, how many of those closed the round trip.
     pub(super) bucket_round_trip: [usize; SIMILARITY_BUCKETS],
-    /// Round trip in native pixels of every control point that reached the
+    /// Round trip in native pixels of every control point that completed the
     /// reverse match at or above [`SIMILARITY_REPORTED_FLOOR`], so the 需求 2.4
     /// tolerance can be read off a distribution instead of guessed.
     pub(super) accepted_round_trips: Vec<f64>,
@@ -71,27 +74,71 @@ pub(super) struct SimilarityStats {
     /// differ by, and how often the descent ran out of budget.
     pub(super) focal_passes: Vec<f64>,
     pub(super) focal_capped: usize,
+    pub(super) patch_unavailable: usize,
+    pub(super) forward_unmeasurable: usize,
+    pub(super) forward_correlation_rejected: usize,
+    pub(super) forward_peak_margin_rejected: usize,
+    pub(super) forward_other_rejected: usize,
+    pub(super) reverse_attempted: usize,
+    pub(super) reverse_completed: usize,
+    pub(super) reverse_rejected: usize,
+    pub(super) round_trip_rejected: usize,
+    pub(super) global_displacement_rejected: usize,
+    pub(super) neighbour_rejected: usize,
+    pub(super) accepted_before_neighbour: usize,
+    pub(super) accepted_after_neighbour: usize,
 }
 
 impl SimilarityStats {
     pub(super) fn absorb(&mut self, point: &NativeControlPoint) {
+        self.reverse_attempted += usize::from(point.reverse_attempted);
+        self.reverse_completed += usize::from(point.measured.is_some());
+        self.accepted_before_neighbour += usize::from(point.accepted.is_some());
+        match point.rejection {
+            Some(NativeControlPointRejection::PatchUnavailable) => self.patch_unavailable += 1,
+            Some(NativeControlPointRejection::ForwardUnmeasurable) => {
+                self.forward_unmeasurable += 1
+            }
+            Some(NativeControlPointRejection::ForwardCorrelation) => {
+                self.forward_correlation_rejected += 1
+            }
+            Some(NativeControlPointRejection::ForwardPeakMargin) => {
+                self.forward_peak_margin_rejected += 1
+            }
+            Some(NativeControlPointRejection::ForwardOther) => self.forward_other_rejected += 1,
+            Some(NativeControlPointRejection::ReverseMatch) => self.reverse_rejected += 1,
+            Some(NativeControlPointRejection::RoundTrip) => self.round_trip_rejected += 1,
+            Some(NativeControlPointRejection::GlobalDisplacement) => {
+                self.global_displacement_rejected += 1
+            }
+            None => {}
+        }
         if let Some(correlation) = point.best_correlation {
             self.correlations.push(correlation);
             if let Some(bucket) = similarity_bucket(correlation)
                 && point.reverse_attempted
             {
                 self.bucket_total[bucket] += 1;
-                if point.round_trip_closed {
-                    self.bucket_round_trip[bucket] += 1;
-                }
-                if correlation >= SIMILARITY_REPORTED_FLOOR {
-                    self.accepted_round_trips.push(point.round_trip_px);
-                    if let Some(margin) = point.peak_margin {
-                        self.accepted_peak_margins.push(margin);
+                // A failed reverse match leaves round_trip_px at its default
+                // zero. Only measured contains a completed bidirectional match.
+                if let Some((_, _, round_trip_px, _)) = point.measured {
+                    self.bucket_completed[bucket] += 1;
+                    if point.round_trip_closed {
+                        self.bucket_round_trip[bucket] += 1;
+                    }
+                    if correlation >= SIMILARITY_REPORTED_FLOOR {
+                        self.accepted_round_trips.push(round_trip_px);
+                        if let Some(margin) = point.peak_margin {
+                            self.accepted_peak_margins.push(margin);
+                        }
                     }
                 }
             }
         }
+        self.absorb_focal_plane(point);
+    }
+
+    fn absorb_focal_plane(&mut self, point: &NativeControlPoint) {
         if let Some(focal) = point.focal_plane {
             self.focal_ratio_before.push(focal.sharpness_ratio_before);
             self.focal_ratio_matched.push(focal.sharpness_ratio_matched);
@@ -101,11 +148,38 @@ impl SimilarityStats {
         }
     }
 
+    fn record_neighbour_verdict(&mut self, accepted: bool) {
+        if accepted {
+            self.accepted_after_neighbour += 1;
+        } else {
+            self.neighbour_rejected += 1;
+        }
+    }
+
+    fn gate_summary(&self) -> String {
+        format!(
+            "patch unavailable {}, forward unmeasurable/correlation/peak/other rejected {}/{}/{}/{}, reverse attempted/completed/rejected {}/{}/{}, roundtrip/global/neighbor rejected {}/{}/{}, accepted before/after neighbor {}/{}",
+            self.patch_unavailable,
+            self.forward_unmeasurable,
+            self.forward_correlation_rejected,
+            self.forward_peak_margin_rejected,
+            self.forward_other_rejected,
+            self.reverse_attempted,
+            self.reverse_completed,
+            self.reverse_rejected,
+            self.round_trip_rejected,
+            self.global_displacement_rejected,
+            self.neighbour_rejected,
+            self.accepted_before_neighbour,
+            self.accepted_after_neighbour,
+        )
+    }
+
     /// One log line: the correlation distribution, the measured round-trip pass
     /// rate per bucket and what the focal-plane match did.
     pub(super) fn summary(&mut self) -> String {
         if self.correlations.is_empty() {
-            return "no measurable patch pair".to_string();
+            return format!("no measurable patch pair; {}", self.gate_summary());
         }
         let percentile = |values: &mut Vec<f64>, fraction: f64| -> f64 {
             values.sort_by(|left, right| left.total_cmp(right));
@@ -119,9 +193,10 @@ impl SimilarityStats {
             .filter(|&bucket| self.bucket_total[bucket] > 0)
             .map(|bucket| {
                 format!(
-                    "{:.2}:{}/{}",
+                    "{:.2}:{}/{}/{}",
                     SIMILARITY_BUCKET_FLOOR + bucket as f64 * SIMILARITY_BUCKET_WIDTH,
                     self.bucket_round_trip[bucket],
+                    self.bucket_completed[bucket],
                     self.bucket_total[bucket]
                 )
             })
@@ -141,7 +216,9 @@ impl SimilarityStats {
             )
         };
         let round_trip = if self.accepted_round_trips.is_empty() {
-            String::new()
+            format!(
+                ", round trip at correlation >= {SIMILARITY_REPORTED_FLOOR:.2} unmeasured (0 completed matches)"
+            )
         } else {
             let total = self.accepted_round_trips.len();
             let round_trips = &mut self.accepted_round_trips;
@@ -154,12 +231,17 @@ impl SimilarityStats {
                 within(0.70),
                 within(1.00)
             );
-            let margin = percentile(&mut self.accepted_peak_margins, 0.10);
-            format!("{counted}, second-peak margin p10 {margin:.4}")
+            if self.accepted_peak_margins.is_empty() {
+                counted
+            } else {
+                let margin = percentile(&mut self.accepted_peak_margins, 0.10);
+                format!("{counted}, second-peak margin p10 {margin:.4}")
+            }
         };
         format!(
-            "correlation p10/p50/p90 {p10:.3}/{p50:.3}/{p90:.3} over {} pairs{focal}{round_trip}, round trip closure by bucket [{buckets}]",
-            self.correlations.len()
+            "correlation p10/p50/p90 {p10:.3}/{p50:.3}/{p90:.3} over {} pairs{focal}{round_trip}, round trip closed/completed/attempted by bucket [{buckets}]; {}",
+            self.correlations.len(),
+            self.gate_summary()
         )
     }
 
@@ -176,6 +258,38 @@ impl SimilarityStats {
                 intra_station::median_of(&mut self.focal_ratio_after)
             },
         )
+    }
+}
+
+/// Diagnostic classification only; none of these values participates in a gate.
+/// A rejected forward probe can fail several gates. Correlation and then peak
+/// margin take precedence; remaining failures (including search-boundary peaks)
+/// are reported as other, since PatchProbe does not expose their exact cause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum NativeControlPointRejection {
+    PatchUnavailable,
+    ForwardUnmeasurable,
+    ForwardCorrelation,
+    ForwardPeakMargin,
+    ForwardOther,
+    ReverseMatch,
+    RoundTrip,
+    GlobalDisplacement,
+}
+
+fn forward_rejection(
+    correlation: Option<f64>,
+    margin: Option<f64>,
+    min_correlation: f64,
+    min_margin: f64,
+) -> NativeControlPointRejection {
+    match correlation {
+        None => NativeControlPointRejection::ForwardUnmeasurable,
+        Some(value) if value < min_correlation => NativeControlPointRejection::ForwardCorrelation,
+        Some(_) if margin.is_some_and(|value| value < min_margin) => {
+            NativeControlPointRejection::ForwardPeakMargin
+        }
+        Some(_) => NativeControlPointRejection::ForwardOther,
     }
 }
 
@@ -196,8 +310,8 @@ pub(super) struct NativeControlPoint {
     /// Forward peak correlation, `None` when the patch pair carried no
     /// comparable signal at all.
     pub(super) best_correlation: Option<f64>,
-    /// `true` when the forward match cleared the similarity gates, so a reverse
-    /// match was run and the round trip is a real measurement.
+    /// `true` when the forward match cleared the similarity gates and a reverse
+    /// match was attempted. Only `measured.is_some()` proves completion.
     pub(super) reverse_attempted: bool,
     /// `true` when that round trip closed inside the 需求 2.4 tolerance.
     pub(super) round_trip_closed: bool,
@@ -215,6 +329,182 @@ pub(super) struct NativeControlPoint {
     pub(super) measured: Option<([f64; 2], f64, f64, f64)>,
     /// [`Self::measured`] once the 需求 2.4 and 需求 2.6 gates have passed.
     pub(super) accepted: Option<([f64; 2], f64, f64, f64)>,
+    pub(super) rejection: Option<NativeControlPointRejection>,
+}
+
+/// Diagnostic A/B switch only. Production cannot disable the coarse prefilter
+/// through its process environment.
+fn native_prefilter_disabled_for_tests() -> bool {
+    #[cfg(test)]
+    {
+        std::env::var_os("RAW_EDITOR_STACK_DISABLE_NATIVE_PREFILTER").is_some()
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
+fn uses_native_area_prefilter(mode: NativeRefineMode, spacing: f64) -> bool {
+    matches!(mode, NativeRefineMode::IntraStation { .. }) && spacing == 2.0
+}
+
+/// The samples actually read by `get_high_quality_interpolated_pixel`: an
+/// interior cubic stencil, its integer fast path, or a complete edge bilinear
+/// stencil. A footprint that would need clamping is unavailable here.
+fn interpolation_support(width: u32, height: u32, x: f64, y: f64) -> Option<(u32, u32, u32, u32)> {
+    if !x.is_finite() || !y.is_finite() || x < 0.0 || y < 0.0 {
+        return None;
+    }
+    if x >= f64::from(width) || y >= f64::from(height) {
+        return None;
+    }
+    let ix = x.floor() as u32;
+    let iy = y.floor() as u32;
+    if width >= 4
+        && height >= 4
+        && x >= 1.0
+        && y >= 1.0
+        && x < f64::from(width - 2)
+        && y < f64::from(height - 2)
+    {
+        if (x - f64::from(ix)).abs() < 1e-9 && (y - f64::from(iy)).abs() < 1e-9 {
+            Some((ix, ix, iy, iy))
+        } else {
+            Some((ix - 1, ix + 2, iy - 1, iy + 2))
+        }
+    } else if ix + 1 < width && iy + 1 < height {
+        Some((ix, ix + 1, iy, iy + 1))
+    } else {
+        None
+    }
+}
+
+/// At most four supports are visited by a single area sample. Only an entirely
+/// verified rectangle is remembered; testing membership in those rectangles
+/// skips duplicate pixels without ever scanning a bounding-box superset.
+#[derive(Default)]
+struct ValidatedSupports {
+    rectangles: [(u32, u32, u32, u32); 4],
+    len: usize,
+}
+
+impl ValidatedSupports {
+    fn validate(
+        &mut self,
+        support: (u32, u32, u32, u32),
+        mut verify: impl FnMut(u32, u32) -> Option<()>,
+    ) -> Option<()> {
+        let (left, right, top, bottom) = support;
+        for y in top..=bottom {
+            for x in left..=right {
+                if self.rectangles[..self.len]
+                    .iter()
+                    .any(|&(l, r, t, b)| x >= l && x <= r && y >= t && y <= b)
+                {
+                    continue;
+                }
+                verify(x, y)?;
+            }
+        }
+        self.rectangles[self.len] = support;
+        self.len += 1;
+        Some(())
+    }
+}
+
+fn coarse_base_support(
+    base: &NativeRefineBase<'_>,
+    gx: f64,
+    gy: f64,
+    seen: &mut ValidatedSupports,
+) -> Option<()> {
+    let support = interpolation_support(
+        base.image.width(),
+        base.image.height(),
+        gx - f64::from(base.left),
+        gy - f64::from(base.top),
+    )?;
+    seen.validate(support, |x, y| {
+        if base.mask.get_pixel(x, y)[0] == 0
+            || !base
+                .image
+                .get_pixel(x, y)
+                .0
+                .iter()
+                .all(|value| value.is_finite())
+        {
+            return None;
+        }
+        Some(())
+    })
+}
+
+fn coarse_source_support(
+    sampler: &LayerSampler<'_>,
+    x: f64,
+    y: f64,
+    seen: &mut ValidatedSupports,
+) -> Option<Point2<f64>> {
+    let source = sampler.source_point(x, y)?;
+    let divisor = sampler.source_divisor;
+    // Preserve the source pyramid's existing block-centre convention, but do
+    // not clamp an incomplete filtering footprint back onto the image edge.
+    let sx = (source.x + 0.5) / divisor - 0.5;
+    let sy = (source.y + 0.5) / divisor - 0.5;
+    let support = interpolation_support(sampler.source.width(), sampler.source.height(), sx, sy)?;
+    seen.validate(support, |px, py| {
+        let native = Point2::new(
+            (f64::from(px) + 0.5) * divisor - 0.5,
+            (f64::from(py) + 0.5) * divisor - 0.5,
+        );
+        let pixel = *sampler.source.get_pixel(px, py);
+        if !sampler.info.source_is_supported(native)
+            || !pixel.0.iter().all(|value| value.is_finite())
+            || super::sampling::is_lower_left_black_capture_border(
+                sampler.source,
+                f64::from(px),
+                f64::from(py),
+                pixel,
+            )
+        {
+            return None;
+        }
+        Some(())
+    })?;
+    Some(source)
+}
+
+/// Sample both sides on the same native canvas footprint. Four equal taps at
+/// +/-0.5 have unit weight and zero first moment, so averaging precedes the
+/// spacing=2 decimation without changing its centre. A missing interpolation
+/// contribution rejects the pair; zero fill or separate partial normalisation
+/// would alter geometry and invent support at owner/mask boundaries.
+fn native_patch_sample_pair(
+    base: &NativeRefineBase<'_>,
+    sampler: &LayerSampler<'_>,
+    x: f64,
+    y: f64,
+    area_prefilter: bool,
+) -> Option<(f64, f64)> {
+    let gx = f64::from(sampler.left) + x;
+    let gy = f64::from(sampler.top) + y;
+    if !area_prefilter {
+        // Keep native finest and every legacy sample exactly as before.
+        return Some((luma(base.masked(gx, gy)?), luma(sampler.sample(x, y)?)));
+    }
+    let mut pair = (0.0, 0.0);
+    let mut base_support = ValidatedSupports::default();
+    let mut source_support = ValidatedSupports::default();
+    for oy in [-0.5, 0.5] {
+        for ox in [-0.5, 0.5] {
+            coarse_base_support(base, gx + ox, gy + oy, &mut base_support)?;
+            let source = coarse_source_support(sampler, x + ox, y + oy, &mut source_support)?;
+            pair.0 += luma(base.masked(gx + ox, gy + oy)?) * 0.25;
+            pair.1 += luma(sampler.sample_mapped_source(source)?) * 0.25;
+        }
+    }
+    Some(pair)
 }
 
 /// Measure one control point: build the two patches, match both ways and apply
@@ -230,6 +520,34 @@ pub(super) fn measure_native_control_point(
     match_radius: i32,
     search_samples: i32,
 ) -> NativeControlPoint {
+    measure_native_control_point_with_sampling(
+        base,
+        sampler,
+        x,
+        y,
+        spacing,
+        mode,
+        match_radius,
+        search_samples,
+        native_patch_sample_pair,
+    )
+}
+
+// The production instantiation uses the sampler above; the test instantiation
+// supplies the frozen scalar oracle through the same matching and gate path.
+// This is statically dispatched, with no reference sampling in production.
+#[allow(clippy::too_many_arguments)]
+fn measure_native_control_point_with_sampling(
+    base: &NativeRefineBase<'_>,
+    sampler: &LayerSampler<'_>,
+    x: u32,
+    y: u32,
+    spacing: f64,
+    mode: NativeRefineMode,
+    match_radius: i32,
+    search_samples: i32,
+    sample_pair: impl Fn(&NativeRefineBase<'_>, &LayerSampler<'_>, f64, f64, bool) -> Option<(f64, f64)>,
+) -> NativeControlPoint {
     let lx = x as f64 * sampler.scale;
     let ly = y as f64 * sampler.scale;
     // 需求 2.8 measures coverage against the anchor frame's valid pixel area;
@@ -239,27 +557,27 @@ pub(super) fn measure_native_control_point(
     let centre_y = (sampler.top as f64 + ly) as u32;
     let mut measurement = NativeControlPoint {
         covered: base.covered(centre_x, centre_y),
+        rejection: Some(NativeControlPointRejection::PatchUnavailable),
         ..Default::default()
     };
     let patch_half = mode.patch_half();
     let side = (2 * patch_half + 1) as usize;
     let half = f64::from(patch_half);
+    let area_prefilter =
+        uses_native_area_prefilter(mode, spacing) && !native_prefilter_disabled_for_tests();
     let mut base_patch = vec![0.0f64; side * side];
     let mut candidate_patch = vec![0.0f64; side * side];
     for py in 0..side {
         for px in 0..side {
             let dx = (px as f64 - half) * spacing;
             let dy = (py as f64 - half) * spacing;
-            let gx = sampler.left as f64 + lx + dx;
-            let gy = sampler.top as f64 + ly + dy;
-            let Some(current) = base.masked(gx, gy) else {
+            let Some((current, candidate)) =
+                sample_pair(base, sampler, lx + dx, ly + dy, area_prefilter)
+            else {
                 return measurement;
             };
-            let Some(candidate) = sampler.sample(lx + dx, ly + dy) else {
-                return measurement;
-            };
-            base_patch[py * side + px] = luma(current) * 255.0;
-            candidate_patch[py * side + px] = luma(candidate) * 255.0;
+            base_patch[py * side + px] = current * 255.0;
+            candidate_patch[py * side + px] = candidate * 255.0;
         }
     }
     // A Capture_Station is a focus bracket: at this control point one of the two
@@ -297,12 +615,19 @@ pub(super) fn measure_native_control_point(
     measurement.best_correlation = forward.best_correlation;
     measurement.peak_margin = forward.peak_margin;
     let Some(found) = forward.matched else {
+        measurement.rejection = Some(forward_rejection(
+            forward.best_correlation,
+            forward.peak_margin,
+            gates.min_correlation,
+            gates.min_peak_margin,
+        ));
         return measurement;
     };
     // The mosaic path keeps its second, stricter correlation floor; the
     // intra-station path states its single floor in `gates` instead of gating
     // twice at two different values.
     if !mode.matches_focal_plane() && found.correlation < 0.90 {
+        measurement.rejection = Some(NativeControlPointRejection::ForwardCorrelation);
         return measurement;
     }
     measurement.reverse_attempted = true;
@@ -317,6 +642,7 @@ pub(super) fn measure_native_control_point(
     )
     .matched
     else {
+        measurement.rejection = Some(NativeControlPointRejection::ReverseMatch);
         return measurement;
     };
     // Both residuals are patch-sample distances; one sample step is `spacing`
@@ -344,23 +670,27 @@ pub(super) fn measure_native_control_point(
         NativeRefineMode::LegacyMosaic => {
             round_trip_patch <= intra_station::INTRA_STATION_BIDIRECTIONAL_TOLERANCE_PX
         }
-        // 需求 2.4 measures in native pixels and allows 1.0; the stricter 0.40
-        // of this path is kept and the measured value is reported.
+        // 需求 2.4 measures in native pixels and applies
+        // INTRA_STATION_BIDIRECTIONAL_TOLERANCE_PX (currently 1.0); report the
+        // measured distribution separately from this acceptance threshold.
         NativeRefineMode::IntraStation { .. } => {
             intra_station::bidirectional_consistent(round_trip_px)
         }
     };
     if !measurement.round_trip_closed {
+        measurement.rejection = Some(NativeControlPointRejection::RoundTrip);
         return measurement;
     }
     if let Some(anchor_long_side) = mode.anchor_long_side() {
         // 需求 2.6: an implausible displacement claim keeps the global model
         // here and counts as a rejected control point.
         if !intra_station::symmetric_error_accepted(global_error_px, anchor_long_side) {
+            measurement.rejection = Some(NativeControlPointRejection::GlobalDisplacement);
             return measurement;
         }
     }
     measurement.accepted = measurement.measured;
+    measurement.rejection = None;
     measurement
 }
 
@@ -519,11 +849,11 @@ pub(super) fn collect_native_observations(
             if measurement.covered {
                 pass.valid_cells += 1;
             }
+            pass.similarity.absorb(measurement);
             if !measurement.evaluated {
                 continue;
             }
             pass.evaluated += 1;
-            pass.similarity.absorb(measurement);
             pass.max_round_trip = pass.max_round_trip.max(measurement.round_trip_px);
             let Some((d, correlation, local_error_px, global_error_px)) = measurement.accepted
             else {
@@ -537,10 +867,12 @@ pub(super) fn collect_native_observations(
                     native,
                     pass.accepted_grid.neighbour_median(grid_column, grid_row),
                 ) {
+                    pass.similarity.record_neighbour_verdict(false);
                     continue;
                 }
                 pass.accepted_grid.accept(grid_column, grid_row, native);
             }
+            pass.similarity.record_neighbour_verdict(true);
             pass.global_errors.push(global_error_px);
             pass.local_errors.push(local_error_px);
             pass.observations.push((
@@ -551,3 +883,11 @@ pub(super) fn collect_native_observations(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "native_control_points_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "native_prefilter_tests.rs"]
+mod prefilter_tests;

@@ -181,8 +181,32 @@ pub(crate) enum StationRelationEvidenceKind {
     VirtualTile,
 }
 
+/// Additional evidence only for the bounded native Virtual_Tile scale contract.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StationScaleEvidenceRecord {
+    pub contract_version: u32,
+    /// Diagnostic mirror; the gate recomputes the decision from measurements.
+    pub passes: bool,
+    pub fit_count: usize,
+    pub holdout_count: usize,
+    pub holdout_median_error_px: Option<f64>,
+    pub holdout_spatial_support: Option<f64>,
+    pub region_counts: [usize; 4],
+    pub region_median_error_px: [Option<f64>; 4],
+    pub grid_probe_count: usize,
+    pub positive_jacobians: bool,
+    pub minimum_scale: Option<f64>,
+    pub maximum_scale: Option<f64>,
+    pub scale_variation: Option<f64>,
+    pub maximum_anisotropy: Option<f64>,
+    pub maximum_refit_scale_difference: Option<f64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct AcceptedStationRelationRecord {
+    /// bounded_native_magnification_v1; absent on the legacy near-unit path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_evidence: Option<StationScaleEvidenceRecord>,
     pub left: usize,
     pub right: usize,
     /// Authoritative requirement-6.1 provenance for this relation.
@@ -244,6 +268,9 @@ pub(crate) struct StationRelationCorrespondenceRecord {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StationRelationHypothesisRecord {
+    /// bounded_native_magnification_v1; absent on the legacy near-unit path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_evidence: Option<StationScaleEvidenceRecord>,
     pub model: String,
     pub selected: bool,
     pub inliers: usize,
@@ -513,6 +540,11 @@ pub(crate) struct StationRelationTileGeometryRecord {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StationRelationCandidateRecord {
+    /// Earlier attempts for the same unordered pair, in execution order.
+    /// Entries are flat snapshots without nested history. Search budgets bound
+    /// their count; retaining them does not promote a proposal to evidence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub previous_attempts: Vec<StationRelationCandidateRecord>,
     pub left: usize,
     pub right: usize,
     /// Native/effective coordinate geometry used by scale and hull checks.
@@ -653,7 +685,7 @@ impl StationRelationsReport {
         );
     }
 
-    /// Summarize the final candidate attempt independently of the measured
+    /// Summarize all candidate attempts independently of the measured
     /// Requirement 6 rejection reasons. A fitted model can still fail its
     /// support or orientation gate, or a later solver acceptance criterion.
     pub(crate) fn summarize_candidate_measurements(&mut self) {
@@ -672,7 +704,12 @@ impl StationRelationsReport {
                 if !summarized_non_invertible.insert(pair) {
                     continue;
                 }
-            } else if !candidate.model_fitted {
+            } else if !candidate.model_fitted
+                && !candidate
+                    .previous_attempts
+                    .iter()
+                    .any(|attempt| attempt.model_fitted)
+            {
                 self.unmeasured_count += 1;
             }
             let accepted = self.accepted.iter().any(|relation| {
@@ -682,7 +719,18 @@ impl StationRelationsReport {
             if !accepted {
                 *self
                     .rejected_by_failure_stage
-                    .entry(candidate.failure_stage.clone())
+                    .entry(
+                        if !candidate.model_fitted
+                            && candidate
+                                .previous_attempts
+                                .iter()
+                                .any(|attempt| attempt.model_fitted)
+                        {
+                            "measured_relation_not_accepted".to_string()
+                        } else {
+                            candidate.failure_stage.clone()
+                        },
+                    )
                     .or_default() += 1;
             }
         }
@@ -735,8 +783,17 @@ pub(crate) struct ClosureOffendingPairRecord {
     pub p95_px: f64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct NativeJointBeforePruneRecord {
+    pub relation_count: usize,
+    pub matrix_direct_pair_p95_px: f64,
+    pub accepted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ClosureReport {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_joint_before_prune: Option<NativeJointBeforePruneRecord>,
     pub status: ClosureStatus,
     pub spanning_tree_edges: usize,
     pub participating_constraints: usize,
@@ -745,6 +802,14 @@ pub(crate) struct ClosureReport {
     pub residual_median_px: f64,
     pub residual_p95_px: f64,
     pub max_direct_pair_p95_px: f64,
+    /// One retry without the spanning-tree-only weight multiplier, using the
+    /// same immutable direct measurements and unchanged acceptance gates.
+    #[serde(default)]
+    pub balanced_retry_attempted: bool,
+    #[serde(default)]
+    pub balanced_retry_accepted: bool,
+    #[serde(default)]
+    pub before_retry_max_direct_pair_p95_px: Option<f64>,
     pub max_corner_correction_px: f64,
     pub clamped_stations: usize,
     pub fallback_reason: Option<String>,
@@ -769,6 +834,7 @@ pub(crate) struct ClosureReport {
 impl Default for ClosureReport {
     fn default() -> Self {
         Self {
+            native_joint_before_prune: None,
             status: ClosureStatus::NotRun,
             spanning_tree_edges: 0,
             participating_constraints: 0,
@@ -777,6 +843,9 @@ impl Default for ClosureReport {
             residual_median_px: 0.0,
             residual_p95_px: 0.0,
             max_direct_pair_p95_px: 0.0,
+            balanced_retry_attempted: false,
+            balanced_retry_accepted: false,
+            before_retry_max_direct_pair_p95_px: None,
             max_corner_correction_px: 0.0,
             clamped_stations: 0,
             fallback_reason: None,

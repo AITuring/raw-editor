@@ -88,11 +88,12 @@ pub(crate) const OWNERSHIP_DISAGREEMENT_VETO: f64 = 0.2;
 mod cell_metrics;
 
 pub(crate) use cell_metrics::{
-    CellSamplingPlan, OwnershipGridGeometry, candidate_wins_cell,
-    cell_disagreement_with_seam_evidence, data_cost, mismatch_penalty,
+    CellSamplingPlan, cell_disagreement, normalized_sharpness, ownership_cell_size_px,
 };
-#[cfg(test)]
-pub(crate) use cell_metrics::{cell_disagreement, normalized_sharpness, ownership_cell_size_px};
+pub(crate) use cell_metrics::{
+    OwnershipGridGeometry, candidate_wins_cell, cell_disagreement_with_seam_evidence, data_cost,
+    mismatch_penalty,
+};
 #[cfg(test)]
 use cell_metrics::{sharpness_sample_step_px, sharpness_window_px};
 

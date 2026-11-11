@@ -30,7 +30,7 @@ impl Default for FeatureProviderReport {
 }
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
-pub(crate) const STACK_REPORT_SCHEMA: u32 = 3;
+pub(crate) const STACK_REPORT_SCHEMA: u32 = 7;
 
 /// 64 GiB Virtual_Tile cache budget (requirement 4.4).
 pub(crate) const VIRTUAL_TILE_CACHE_LIMIT_BYTES: u64 = 68_719_476_736;
@@ -72,6 +72,44 @@ impl SelectedPath {
             Self::StreamingMosaic => "streaming_mosaic",
             Self::LegacySingleLayerMosaic => "legacy_single_layer_mosaic",
             Self::SingleStation => "single_station",
+        }
+    }
+}
+
+/// Evidence captured while choosing the compositor.  This is intentionally
+/// separate from `selected_path`: the latter is the stable run result, while
+/// this record explains whether the configured path was changed by the
+/// source-scan guard.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct PathSelectionObservation {
+    /// The persisted setting after resolving it. `None` means no compositor
+    /// setting was written and the default was used.
+    #[serde(default)]
+    pub configured_path: Option<SelectedPath>,
+    /// The path selected at the compositor boundary, including single-station
+    /// and fallback paths. This mirrors the top-level field for consumers that
+    /// read composition metadata as a unit.
+    #[serde(default = "default_selected_path")]
+    pub selected_path: SelectedPath,
+    #[serde(default)]
+    pub use_virtual_tiles: bool,
+    /// Stable reason identifier when the source-scan guard changed the
+    /// configured path; absent when the configured path was used unchanged.
+    #[serde(default)]
+    pub fallback_reason: Option<String>,
+}
+
+fn default_selected_path() -> SelectedPath {
+    SelectedPath::LayeredVirtualTile
+}
+
+impl Default for PathSelectionObservation {
+    fn default() -> Self {
+        Self {
+            configured_path: None,
+            selected_path: SelectedPath::LayeredVirtualTile,
+            use_virtual_tiles: false,
+            fallback_reason: None,
         }
     }
 }
@@ -239,6 +277,20 @@ pub(crate) struct GroupingReport {
     pub isolated: Vec<ExcludedSourceRecord>,
     pub undecodable: Vec<ExcludedSourceRecord>,
     pub splits: Vec<StationSplitRecord>,
+    /// Counts and ratio used by the singleton source-scan guard.  This keeps
+    /// the runtime path decision auditable without changing its threshold.
+    #[serde(default)]
+    pub source_scan: SourceScanObservation,
+}
+
+/// Source grouping shape observed before compositor selection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SourceScanObservation {
+    pub singleton_station_count: usize,
+    pub multi_frame_station_count: usize,
+    pub singleton_ratio: f64,
+    pub detected: bool,
+    pub isolated_source_count: usize,
 }
 
 // ---------------------------------------------------------------------------
