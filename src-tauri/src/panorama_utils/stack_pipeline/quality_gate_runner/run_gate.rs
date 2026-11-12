@@ -555,13 +555,25 @@ pub(crate) fn run_quality_gate_with_cache(
     boundary.record_limit = 2_048;
     let boundary_started = Instant::now();
     if let Some(regions) = regions.as_ref() {
-        for left in &regions.regions {
-            for right in &regions.regions {
-                if left.label >= right.label || left.owner == right.owner {
+        // Only region pairs that touch can have a boundary; they come in the
+        // same (left label, right label) order as the nested loop over all
+        // regions, each with the start a whole-plane scan would find.
+        let owner_of = regions
+            .regions
+            .iter()
+            .map(|region| (region.label, region.owner))
+            .collect::<std::collections::HashMap<_, _>>();
+        for ((left_label, right_label), start) in quality_gate::touching_region_pairs(regions) {
+            {
+                if owner_of.get(&left_label) == owner_of.get(&right_label) {
                     continue;
                 }
-                let Ok(path) = quality_gate::trace_moore_boundary(regions, left.label, right.label)
-                else {
+                let Ok(path) = quality_gate::trace_moore_boundary_from(
+                    regions,
+                    left_label,
+                    right_label,
+                    Some(start),
+                ) else {
                     continue;
                 };
                 match quality_gate::measure_boundary_strokes_with_coverage(

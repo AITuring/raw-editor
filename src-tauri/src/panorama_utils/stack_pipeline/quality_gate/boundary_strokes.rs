@@ -28,10 +28,63 @@ pub(crate) struct BoundaryStrokeReport {
     pub max_error_px: f64,
 }
 
+/// Every pair of labelled regions that touch (8-connected), smaller label
+/// first, with the first pixel in row-major order of either region that has
+/// an 8-neighbour in the other: the start `trace_moore_boundary` would find
+/// by scanning the whole plane for that pair. One pass instead of one scan
+/// per pair; 枫鹰雉鸡 (104 sources) has thousands of region pairs and the
+/// per-pair scan of all of them did not finish in hours.
+pub(crate) fn touching_region_pairs(
+    labels: &OwnerRegions,
+) -> std::collections::BTreeMap<(u32, u32), (usize, usize)> {
+    let w = labels.width as usize;
+    let h = labels.height as usize;
+    let mut starts = std::collections::BTreeMap::new();
+    for y in 0..h {
+        for x in 0..w {
+            let label = labels.labels[y * w + x];
+            if label == 0 {
+                continue;
+            }
+            for dy in -1i32..=1 {
+                for dx in -1i32..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+                    if nx < 0 || ny < 0 || nx as usize >= w || ny as usize >= h {
+                        continue;
+                    }
+                    let other = labels.labels[ny as usize * w + nx as usize];
+                    if other == 0 || other == label {
+                        continue;
+                    }
+                    starts
+                        .entry((label.min(other), label.max(other)))
+                        .or_insert((x, y));
+                }
+            }
+        }
+    }
+    starts
+}
+
 pub(crate) fn trace_moore_boundary(
     labels: &OwnerRegions,
     left_label: u32,
     right_label: u32,
+) -> Result<Vec<(u32, u32)>, &'static str> {
+    trace_moore_boundary_from(labels, left_label, right_label, None)
+}
+
+/// [`trace_moore_boundary`] from a known start (see
+/// [`touching_region_pairs`]); `None` scans the plane for it.
+pub(crate) fn trace_moore_boundary_from(
+    labels: &OwnerRegions,
+    left_label: u32,
+    right_label: u32,
+    known_start: Option<(usize, usize)>,
 ) -> Result<Vec<(u32, u32)>, &'static str> {
     if left_label == 0 || right_label == 0 || left_label == right_label {
         return Err(degradation::BOUNDARY_NO_PAIRABLE_EDGE);
@@ -61,10 +114,13 @@ pub(crate) fn trace_moore_boundary(
                         }
             })
     };
-    let start = (0..h)
-        .flat_map(|y| (0..w).map(move |x| (x, y)))
-        .find(|&(x, y)| touches(x, y))
-        .ok_or(degradation::BOUNDARY_NO_PAIRABLE_EDGE)?;
+    let start = match known_start {
+        Some(start) => start,
+        None => (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .find(|&(x, y)| touches(x, y))
+            .ok_or(degradation::BOUNDARY_NO_PAIRABLE_EDGE)?,
+    };
     let dirs: [(i32, i32); 8] = [
         (1, 0),
         (1, 1),
@@ -459,4 +515,74 @@ pub(crate) fn measure_boundary_strokes_with_coverage(
         max_error_px: *errors.last().unwrap_or(&0.0),
         measurements,
     })
+}
+
+#[cfg(test)]
+mod touching_pair_tests {
+    use super::*;
+
+    fn regions(width: u32, height: u32, labels: Vec<u32>) -> OwnerRegions {
+        let count = labels.iter().copied().max().unwrap_or(0);
+        OwnerRegions {
+            width,
+            height,
+            labels,
+            regions: (1..=count)
+                .map(|label| super::super::roi_geometry::OwnerRegion {
+                    label,
+                    owner: label as u16,
+                    pixel_count: 0,
+                    first_pixel: (0, 0),
+                })
+                .collect(),
+            distance_to_boundary: vec![0.0; (width * height) as usize],
+        }
+    }
+
+    /// The known-start trace equals the whole-plane scan for every pair, and
+    /// pairs that do not touch are exactly the ones the scan rejects.
+    #[test]
+    fn known_starts_reproduce_the_plane_scan_for_every_pair() {
+        let (width, height) = (23u32, 17u32);
+        let mut state = 0x2545_f491_u32;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for _ in 0..40 {
+            // Blocky random labels 0..=6 so regions touch in varied shapes.
+            let labels = (0..height)
+                .flat_map(|y| (0..width).map(move |x| (x / 4, y / 3)))
+                .map(|_| 0)
+                .collect::<Vec<u32>>();
+            let mut labels = labels;
+            let blocks = (0..(width / 4 + 1) * (height / 3 + 1))
+                .map(|_| next() % 7)
+                .collect::<Vec<_>>();
+            for y in 0..height {
+                for x in 0..width {
+                    let jitter = next() % 5 == 0;
+                    let block = blocks[((y / 3) * (width / 4 + 1) + x / 4) as usize];
+                    labels[(y * width + x) as usize] = if jitter { next() % 7 } else { block };
+                }
+            }
+            let plane = regions(width, height, labels);
+            let starts = touching_region_pairs(&plane);
+            for left in 1..=6u32 {
+                for right in left + 1..=6u32 {
+                    let scanned = trace_moore_boundary(&plane, left, right);
+                    match starts.get(&(left, right)) {
+                        Some(&start) => assert_eq!(
+                            trace_moore_boundary_from(&plane, left, right, Some(start)),
+                            scanned,
+                            "pair {left}-{right}"
+                        ),
+                        None => assert!(scanned.is_err(), "pair {left}-{right} should not touch"),
+                    }
+                }
+            }
+        }
+    }
 }

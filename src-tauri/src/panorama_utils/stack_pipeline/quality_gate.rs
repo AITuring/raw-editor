@@ -104,7 +104,7 @@ pub(crate) use boundary_strokes::{
 };
 pub(crate) use boundary_strokes::{
     measure_boundary_strokes_with_coverage, paired_boundary_edge_error_with_coverage,
-    trace_moore_boundary,
+    touching_region_pairs, trace_moore_boundary, trace_moore_boundary_from,
 };
 
 #[cfg(test)]
