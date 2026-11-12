@@ -196,6 +196,26 @@ where
             .map(|info| info.id)
             .zip(gains)
             .collect::<HashMap<_, _>>();
+        // The joint planes are for frames shot differently (several folders
+        // or captures, or differing camera, exposure time, aperture or ISO,
+        // as in 枫鹰雉鸡). Frames shot alike keep the per-layer overlap tone
+        // and the uniform finish: on 兰亭 the planes moved its paper away
+        // from the reference (median RGB residual 15/7/6 against 6/1/1).
+        let settings = crate::panorama_utils::captures::scan_capture_settings(images);
+        println!(
+            "  - Focus scan: capture settings {} ({})",
+            if settings.uniform {
+                "uniform; one overlap-tone adjustment for all frames"
+            } else {
+                "differ; per-frame exposure planes"
+            },
+            settings.summary
+        );
+        let gains = if settings.uniform {
+            HashMap::new()
+        } else {
+            gains
+        };
         // Test-only A/B (`RAW_EDITOR_SKIP_FRAME_EXPOSURE`): keep the
         // per-layer overlap tone instead of the joint exposure planes.
         #[cfg(test)]

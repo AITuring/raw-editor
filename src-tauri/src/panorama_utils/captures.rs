@@ -178,6 +178,127 @@ pub(crate) fn processing_order(paths: &mut [String]) {
     }
 }
 
+/// Relative difference below which two recorded settings count as equal
+/// (cameras round exposure times and apertures when they record them).
+const SETTING_TOLERANCE: f64 = 0.01;
+
+/// Camera, exposure time (s), aperture (f-number) and ISO a frame records.
+#[derive(Clone, Debug, PartialEq)]
+struct ShotSettings {
+    camera: (String, String),
+    exposure_time: f64,
+    aperture: f64,
+    iso: f64,
+}
+
+impl ShotSettings {
+    fn matches(&self, other: &Self) -> bool {
+        let close = |a: f64, b: f64| (a - b).abs() <= SETTING_TOLERANCE * a.abs().max(b.abs());
+        self.camera == other.camera
+            && close(self.exposure_time, other.exposure_time)
+            && close(self.aperture, other.aperture)
+            && close(self.iso, other.iso)
+    }
+
+    fn describe(&self) -> String {
+        format!(
+            "{} {} {:.4}s f/{:.1} ISO {:.0}",
+            self.camera.0, self.camera.1, self.exposure_time, self.aperture, self.iso
+        )
+    }
+}
+
+fn shot_settings(path: &str) -> Option<ShotSettings> {
+    let bytes = crate::file_management::read_file_mapped(Path::new(path)).ok()?;
+    let metadata = crate::exif_processing::read_exif_data_from_bytes(path, &bytes);
+    let number = |text: &str| {
+        let text = text.trim().trim_start_matches("f/").trim_end_matches(" s");
+        let value = match text.split_once('/') {
+            Some((a, b)) => a.trim().parse::<f64>().ok()? / b.trim().parse::<f64>().ok()?,
+            None => text.parse::<f64>().ok()?,
+        };
+        (value.is_finite() && value > 0.0).then_some(value)
+    };
+    Some(ShotSettings {
+        camera: (
+            metadata.get("Make")?.clone(),
+            metadata.get("Model")?.clone(),
+        ),
+        exposure_time: number(metadata.get("ExposureTime")?)?,
+        aperture: number(metadata.get("FNumber")?)?,
+        iso: number(
+            metadata
+                .get("ISOSpeedRatings")
+                .or_else(|| metadata.get("PhotographicSensitivity"))
+                .or_else(|| metadata.get("ISOSpeed"))?,
+        )?,
+    })
+}
+
+/// The pre-composition scan of how the frames were shot.
+#[derive(Clone, Debug)]
+pub(crate) struct CaptureSettingsScan {
+    /// One folder, one capture, and every frame recorded with the same
+    /// camera, exposure time, aperture and ISO.
+    pub(crate) uniform: bool,
+    /// One line for the run log and diagnostics.
+    pub(crate) summary: String,
+}
+
+/// Scan the frames' recorded capture settings before composing. Frames shot
+/// alike need no per-frame exposure solve: their levels already agree, and
+/// the overlap tone settles what lighting leaves. Several folders, several
+/// captures, differing settings or a frame whose settings cannot be read all
+/// count as not uniform.
+pub(crate) fn scan_capture_settings(images: &[&ImageInfo]) -> CaptureSettingsScan {
+    let not_uniform = |summary: String| CaptureSettingsScan {
+        uniform: false,
+        summary,
+    };
+    let folders = images
+        .iter()
+        .map(|info| folder_of(&info.filename))
+        .collect::<HashSet<_>>()
+        .len();
+    if folders > 1 {
+        return not_uniform(format!("{folders} folders"));
+    }
+    let captures = capture_members(images).len();
+    if captures > 1 {
+        return not_uniform(format!("{captures} captures"));
+    }
+    let mut groups: Vec<(ShotSettings, usize)> = Vec::new();
+    let mut unreadable = 0;
+    for info in images {
+        match shot_settings(&info.filename) {
+            Some(settings) => match groups
+                .iter_mut()
+                .find(|(group, _)| group.matches(&settings))
+            {
+                Some((_, count)) => *count += 1,
+                None => groups.push((settings, 1)),
+            },
+            None => unreadable += 1,
+        }
+    }
+    if unreadable > 0 {
+        return not_uniform(format!(
+            "capture settings unreadable for {unreadable} of {} frames",
+            images.len()
+        ));
+    }
+    groups.sort_by(|a, b| b.1.cmp(&a.1));
+    let listed = groups
+        .iter()
+        .map(|(settings, count)| format!("{count} x {}", settings.describe()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    CaptureSettingsScan {
+        uniform: groups.len() == 1,
+        summary: format!("one folder, one capture; {listed}"),
+    }
+}
+
 /// Whether the sources lie in more than one folder: a selection put together
 /// from several shoots or several parts of one.
 pub(crate) fn spans_several_folders(images: &[&ImageInfo]) -> bool {
@@ -193,7 +314,7 @@ pub(crate) fn spans_several_folders(images: &[&ImageInfo]) -> bool {
 mod tests {
     use super::*;
 
-    fn info(id: usize, filename: &str) -> ImageInfo {
+    pub(super) fn info(id: usize, filename: &str) -> ImageInfo {
         ImageInfo {
             id,
             filename: filename.to_string(),
@@ -244,5 +365,87 @@ mod tests {
         ];
         let refs = images.iter().collect::<Vec<_>>();
         assert_eq!(composing_capture_ids(&refs), None);
+    }
+}
+
+#[cfg(test)]
+mod settings_scan_tests {
+    use super::*;
+
+    fn settings(time: f64, aperture: f64, iso: f64) -> ShotSettings {
+        ShotSettings {
+            camera: ("SONY".into(), "ILCE-7RM5".into()),
+            exposure_time: time,
+            aperture,
+            iso,
+        }
+    }
+
+    fn info(id: usize, filename: &str) -> ImageInfo {
+        super::tests::info(id, filename)
+    }
+
+    #[test]
+    fn recorded_rounding_counts_as_the_same_setting() {
+        assert!(settings(1.0 / 25.0, 5.0, 1250.0).matches(&settings(0.04, 5.0, 1250.0)));
+        assert!(settings(0.3333, 4.0, 1000.0).matches(&settings(1.0 / 3.0, 4.0, 1000.0)));
+    }
+
+    #[test]
+    fn a_different_exposure_aperture_iso_or_camera_differs() {
+        let base = settings(1.0 / 3.0, 4.0, 1000.0);
+        assert!(!base.matches(&settings(0.25, 4.0, 1000.0)));
+        assert!(!base.matches(&settings(1.0 / 3.0, 5.6, 1000.0)));
+        assert!(!base.matches(&settings(1.0 / 3.0, 4.0, 2000.0)));
+        let mut nikon = base.clone();
+        nikon.camera = ("NIKON CORPORATION".into(), "NIKON Z 7_2".into());
+        assert!(!base.matches(&nikon));
+    }
+
+    #[test]
+    fn several_folders_or_unreadable_settings_are_not_uniform() {
+        let a = info(0, "/missing/scan-a/1.ARW");
+        let b = info(1, "/missing/scan-b/2.ARW");
+        let scan = scan_capture_settings(&[&a, &b]);
+        assert!(!scan.uniform);
+        assert_eq!(scan.summary, "2 folders");
+        let c = info(2, "/missing/scan-a/3.ARW");
+        let scan = scan_capture_settings(&[&a, &c]);
+        assert!(!scan.uniform);
+        assert!(
+            scan.summary.starts_with("capture settings unreadable"),
+            "{}",
+            scan.summary
+        );
+    }
+}
+
+#[cfg(test)]
+mod settings_scan_real_probe {
+    /// `RAW_EDITOR_SCAN_SETTINGS_DIRS=<dir>[:<dir>...] cargo test -- --ignored scan_settings_of_real_folders`
+    #[test]
+    #[ignore]
+    fn scan_settings_of_real_folders() {
+        let dirs = std::env::var("RAW_EDITOR_SCAN_SETTINGS_DIRS")
+            .expect("set RAW_EDITOR_SCAN_SETTINGS_DIRS");
+        let mut images = Vec::new();
+        for dir in dirs.split(':') {
+            let mut paths = std::fs::read_dir(dir)
+                .unwrap()
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| {
+                    let name = path.file_name().unwrap().to_string_lossy().to_lowercase();
+                    (name.ends_with(".jpg") || name.ends_with(".nef") || name.ends_with(".arw"))
+                        && !name.contains("focusstack")
+                })
+                .collect::<Vec<_>>();
+            paths.sort();
+            for path in paths {
+                images.push(super::tests::info(images.len(), &path.to_string_lossy()));
+            }
+        }
+        let refs = images.iter().collect::<Vec<_>>();
+        let scan = super::scan_capture_settings(&refs);
+        println!("SCAN uniform={} {}", scan.uniform, scan.summary);
     }
 }
