@@ -169,7 +169,14 @@ function parseLog(text) {
   const lending = new Set();
   for (const match of text.matchAll(/Lending '(.+?)': covers no canvas/g)) lending.add(match[1]);
   const result = text.match(/focus-stack result: (\d+)x(\d+)/);
-  const ownership = text.match(/Verified covered output: (\d+)x(\d+); every pixel has source ownership/);
+  // The streaming compositor reports its exact counts; equal covered and owned
+  // counts are the same per-pixel ownership claim as the older wording.
+  const unionOwnership = text.match(/Verified source-union output: (\d+)x(\d+); (\d+) pixels covered and (\d+) owned/);
+  const ownership =
+    text.match(/Verified covered output: (\d+)x(\d+); every pixel has source ownership/) ??
+    (unionOwnership && unionOwnership[3] === unionOwnership[4] && Number(unionOwnership[3]) > 0
+      ? unionOwnership
+      : null);
   const report = text.match(/Stack report written to (\S+\.json)/);
   const seconds = text.match(/Stitching completed in ([\d.]+)s/);
   // Preserve the reason even when the native gate rejects after export.
@@ -279,12 +286,17 @@ function baselineKey(entry) {
 function nativeSourceOwnershipVerified(report, inputs) {
   const native = report?.quality_gate?.legacy_native_evidence;
   const covered = report?.composition?.source_covered_pixels;
-  return Boolean(native?.unresolved_pixel_count === 0 &&
+  return Boolean(
+    native?.unresolved_pixel_count === 0 &&
     native.sources?.length === inputs.length &&
     new Set(native.sources.map((source) => source.owner)).size === inputs.length &&
-    native.sources.every((source) => Number.isInteger(source.owner) && source.owner > 0 && inputs.includes(source.path)) &&
-    Number.isSafeInteger(covered) && covered > 0 &&
-    report.composition.source_owned_pixels === covered);
+    native.sources.every(
+      (source) => Number.isInteger(source.owner) && source.owner > 0 && inputs.includes(source.path),
+    ) &&
+    Number.isSafeInteger(covered) &&
+    covered > 0 &&
+    report.composition.source_owned_pixels === covered,
+  );
 }
 
 function readBaselines() {
@@ -458,8 +470,12 @@ function main() {
       artifactFailures.push('full-resolution TIFF is missing or empty');
     }
     const output = report?.output;
-    if (!output?.written || output.artifact_validation !== 'pass' ||
-        output.format !== 'TIFF' || path.resolve(output.path ?? '') !== outputPath) {
+    if (
+      !output?.written ||
+      output.artifact_validation !== 'pass' ||
+      output.format !== 'TIFF' ||
+      path.resolve(output.path ?? '') !== outputPath
+    ) {
       artifactFailures.push('the Stack_Report has no verified TIFF export at the requested path');
     }
     if (!log.result || output?.width !== log.result.width || output?.height !== log.result.height) {
@@ -468,8 +484,10 @@ function main() {
     if (output?.bit_depth !== 16 || output?.icc !== 'sRGB') {
       artifactFailures.push('the TIFF export is not verified as 16-bit with the expected sRGB profile');
     }
-    if (env.RAW_EDITOR_STACK_ACCEPTANCE_COVERAGE_ALPHA &&
-        (!output?.alpha_preserved || JSON.stringify(output.tiff_extra_samples) !== '[2]')) {
+    if (
+      env.RAW_EDITOR_STACK_ACCEPTANCE_COVERAGE_ALPHA &&
+      (!output?.alpha_preserved || JSON.stringify(output.tiff_extra_samples) !== '[2]')
+    ) {
       artifactFailures.push('the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])');
     }
   }
@@ -532,8 +550,11 @@ function main() {
     // error instead of the image, whatever the harness wrote.
     outcome: report?.degradation?.result ?? null,
     toneStatus: report?.tone?.status ?? null,
-    nativeAcceptance: log.nativeRejection ? `rejected: ${log.nativeRejection}`
-      : log.passed && run.status === 0 ? 'passed-or-not-applicable' : 'harness-failed',
+    nativeAcceptance: log.nativeRejection
+      ? `rejected: ${log.nativeRejection}`
+      : log.passed && run.status === 0
+        ? 'passed-or-not-applicable'
+        : 'harness-failed',
     artifactContract: previewOnly ? 'not-run-preview' : artifactFailures.length === 0 ? 'pass' : 'fail',
     verifiedExport: report?.output ?? null,
     stitchSeconds: log.stitchSeconds,
