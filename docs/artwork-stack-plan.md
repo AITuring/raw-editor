@@ -34,7 +34,7 @@
 ## 2. 现状盘点
 
 ### 2.1 代码线（阻塞并行的首要问题）
-**2026-11-12已解决：** 两条代码线已在`integrate/i1`合并、验证并快进合入`v1`，I1 = `b68c9e22`（集成二进制来自`c8fd7e6a`，SHA-256 `a282336d…`）。下表为S0开始前的盘点，保留作记录。`fix/stack-excluded-owner-report-nan`与`codex/layered-focus-modularize-2026-10-26`两个分支保留，worktree已删除。
+**2026-11-12已解决：** 两条代码线已在`integrate/i1`合并、验证并快进合入`v1`，I1 = `b68c9e22`（集成二进制来自`c8fd7e6a`，SHA-256 `a282336d…`）。2026-11-12又从`codex/layered-focus-modularize-2026-10-26`移植3项修复，形成基础版本`base-2026-11-12`，回归输出与I1逐字节相同，此后各lane从该标签开始（见总览ENG.7）。下表为S0开始前的盘点，保留作记录。`fix/stack-excluded-owner-report-nan`与`codex/layered-focus-modularize-2026-10-26`两个分支保留，worktree已删除。
 
 | 位置 | 内容 | 状态 |
 | --- | --- | --- |

@@ -57,11 +57,11 @@ v59的独立留出限制避免了错误修正，但其最终TIFF与v56完全相�
 
 纸面审计限定在参考图确定的画作区域，剔除深色笔墨和红印，再比较局部纸色与参考的残差。314组跨owner边界的P95为3，与1623组纸面内部比较相同；最大值均为7，唯一超过6码值诊断线的来源边界已单独抽取原生TIFF/参考裁片复看。这支持当前范围内未观察到突出的矩形色块，不是对每个像素或全部画质指标的证明；整体偏暖和参考局部纸色/阴影差异仍单列。
 
-已新增`tests/acceptance/lanting-paper-baseline.json`与`tests/focus-stack-lanting-guard.mjs`，冻结同45张、取景TIFF摘要、来源Coverage/owner、alpha/位深、画布和纸面诊断。在输出设置不变的纯性能候选中，任何TIFF或来源证据变化都必须拒绝，重新做画质验收。
+已新增`tests/acceptance/lanting-paper-baseline.json`与`tests/focus-stack-lanting-guard.mjs`，冻结同45张、取景TIFF摘要、来源Coverage/owner、alpha/位深、画布和纸面诊断。2026-11-12合同升为v3，改冻结为I1/基础版本像素（`22b5a371…`，31090×11008，covered=owned=421,257,787）；用户目视判断I1略好于v63，纸面跨owner阶跃P95上限由3放到4，恢复到3仍是L1首项。此上限是回归保护，不是QualityGate门槛。在输出设置不变的纯性能候选中，任何TIFF或来源证据变化都必须拒绝，重新做画质验收。
 
 ```sh
 npm run focus-stack-lanting:guard:check
-npm run focus-stack-lanting:guard -- tests/acceptance/lanting-paper-baseline.json output/acceptance/lanting-v63-framing-integration/lanting
+npm run focus-stack-lanting:guard -- tests/acceptance/lanting-paper-baseline.json output/acceptance/base-p1/lanting
 ```
 
 严格模式还要求现有QualityGate实际pass、足量ROI及完整判据证据。v60时legacy质量平面尚未接入，故当时严格模式拒绝，不能据文件存在或纸面诊断通过而宣称整体质量通过。

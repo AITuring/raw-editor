@@ -1,0 +1,144 @@
+{
+  "id": "base-p1-codex-port",
+  "date": "2026-11-12",
+  "task": "ENG.7 codex分支评估与移植",
+  "status": "accepted_as_base",
+  "base": "v1 d6ba959b (I1)",
+  "commits": [
+    "12963bb3 fix: isolate boundary gradient stencils (port of 1cc5e5a1)",
+    "ac34b909 fix: plan and commit Virtual_Tile prior repairs per cluster (port of 7e3a0488 repair part + c2cab5e7)",
+    "c0c1e5a9 fix: keep canonical edge-strength ratios independent of import order (port of fc22136f + 7e3a0488 tests)"
+  ],
+  "source_branch": "codex/layered-focus-modularize-2026-10-26 (12512982; merge-base 7f7cf327 2026-10-12; 33 commits)",
+  "branch_assessment": {
+    "already_in_v1": [
+      "75621c44",
+      "c7e04581",
+      "cfec9111",
+      "a7dbf47a",
+      "9103e908"
+    ],
+    "ported": [
+      "1cc5e5a1",
+      "7e3a0488 (cluster preflight, centre-bounded planning, selector/solver tests)",
+      "c2cab5e7",
+      "fc22136f"
+    ],
+    "not_ported_perf": {
+      "commits": [
+        "27c1fd60",
+        "255f422f",
+        "ffc1fee5",
+        "bc5de888",
+        "b28d628a"
+      ],
+      "reason": "local seam traversal/materialisation speedups written against the 2026-10-25 seam loop; v1 has since added the local-relation resample band, 128px evidence-backed relocation and 8px cleanup, so they need re-implementation rather than a port. Output-neutral by design; backlog under PF.9."
+    },
+    "superseded_refactors": "15 module-split commits (78a1155d..d8219d63); v1 did its own split on 2026-10-29 (523 vs 222 .rs files).",
+    "superseded_docs": [
+      "767580ff",
+      "fe47ea45",
+      "5b4b7e08",
+      "2c55f354",
+      "623a146d",
+      "12512982"
+    ]
+  },
+  "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+  "binary_commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba",
+  "library_tests": "1093 passed, 0 failed, 44 ignored (release; 1086 + 7 ported tests)",
+  "nine_nef": {
+    "cold": {
+      "status": "pass",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "same_as_v28": true,
+      "wall_seconds": 415.4
+    },
+    "hot": {
+      "status": "pass",
+      "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "same_as_v28": true,
+      "wall_seconds": 367.9
+    }
+  },
+  "ten": {
+    "langyuan-10": {
+      "status": "quality_accepted",
+      "qg": "pass",
+      "closure": "converged",
+      "tiff_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+      "same_as_i1": true
+    },
+    "wenyuan-10": {
+      "status": "quality_accepted",
+      "qg": "pass",
+      "closure": "converged",
+      "tiff_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+      "same_as_i1": true
+    }
+  },
+  "lanting45_scale1_framed": {
+    "qg": "pass",
+    "roi": 8,
+    "tiff_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+    "same_as_i1": true,
+    "paper_audit": {
+      "median_residual_rgb": [
+        6.0,
+        1.0,
+        1.0
+      ],
+      "source_boundary": {
+        "count": 506,
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 7.0,
+        "above_6": 2
+      },
+      "source_interior": {
+        "count": 1431,
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 7.5,
+        "above_6": 2
+      },
+      "zone_gray_mae_tiff_preview": {
+        "wall": 6.59,
+        "rail": 5.53,
+        "artwork": 4.05,
+        "bottom_frame": 5.41
+      }
+    },
+    "note": "zone MAE here is from a sips preview of the TIFF; I1g figures (6.57/5.55/3.93/5.48) used the app JPEG, so they differ slightly for the same TIFF.",
+    "guard": "tests/acceptance/lanting-paper-baseline.json v3 re-frozen on this output; strict and --regression-only both pass; paper P95 ceiling 3 -> 4 by user decision (option a)."
+  },
+  "qixu_scale0.1": {
+    "result": "rejected (QG fail), identical to I1g",
+    "non_pass": [
+      "boundary_stroke_alignment:fail",
+      "owner_sharpness_coverage:fail (0.889)"
+    ],
+    "output": [
+      4686,
+      2038
+    ],
+    "self_sharpness_median": 0.0533858475483179
+  },
+  "fengying_scale0.1": {
+    "result": "rejected (QG fail), identical to I1g",
+    "non_pass": [
+      "local_scale_pixel_ratio:fail",
+      "boundary_stroke_alignment:fail",
+      "owner_sharpness_coverage:insufficient_evidence"
+    ],
+    "unresolved_pixels": 112,
+    "output": [
+      3949,
+      3310
+    ],
+    "self_sharpness_median": 0.12972583627533246
+  },
+  "interpretation": "The ported fixes change behaviour only for asymmetric edge-strength gates under reversed import/group order, for prior-repair clusters with an out-of-bounds member, and for boundary samples whose gradient stencil crosses an owner/coverage edge. None of the regression sets hit a changed decision: every TIFF and QG verdict equals I1.",
+  "evidence_dir": "/Users/dp/Desktop/raw-editor/output/acceptance/base-p1 (gitignored, machine-local)",
+  "limits": "Listed runs only; runs were sequential and uncontended, but single timings are not performance results. No 84/126/45-full runs."
+}
