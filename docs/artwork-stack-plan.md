@@ -118,22 +118,26 @@
 | **L10 接缝诊断** | BR.5–BR.7 | 是 | 书画真实接痕标注与负例集 | `src/` 前端与诊断模块，与堆栈管线冲突少 |
 | **L11 书画几何** | N9.1 分段单应 / 受约束非刚性 | 先 test-only 研究 | 等 S2 指出哪些素材因纸面起伏失败 | 新模块为主 |
 
+**素材增多时（2026-11-12）**：lane 按代码区域划分，不按素材无限增加。新素材先走“接入”（T2.0）：登记 manifest、跑 D1、出诊断卡，再按诊断卡的实际路径和停止阶段归入已有的代码区域组（流式 mosaic 组：L1/L4/L5；站点求解组：L2/L3），作为该组队列里的一项。组内一次只有一个 lane 改代码，其余做诊断。
+
 同一套素材同一时间只归一个 lane。L4（祁序）和 L5（枫鹰）都依赖分支上的 focus-scan 代码，两者改到同一模块时要先在 lane 卡上登记。
 
-### 5.2 运行槽（内存与 CPU）
-
-- 所有真实素材运行必须先领运行槽，跑完释放。锁文件放在 `output/acceptance/.run-slots/`，记录 lane、数据集、scale、PID、开始时间和预估峰值 RSS。
-- **同时运行的预估峰值之和 ≤ 26 GiB。** 预估值取该数据集同 scale 的历史峰值；没有历史数据时按 24 GiB 计，也就是独占。
-- 已知峰值：9 张 NEF 约 8.5–12.5 GB，阆苑 10 张约 9.4–9.7 GB，文苑 10 张约 9.1 GB，兰亭 scale=1 约 9.7–11.4 GB。按此最多同时跑两个 scale=1 的中等任务。
-- 84/126/98 张和马远 PSD 的第一次运行（任何 scale）一律独占，先拿到峰值。
-- 编译也占 CPU 和内存：`cargo build --release` 期间不启动新的运行；同一时刻最多一个 lane 在做 release 编译。
-- **计时**：并行运行的耗时在报告里标 `contended: true`，只用于判断能否跑完，不作为性能结论。性能对比（L9、PF.x）只在独占槽里做，并沿用 PF.6 的交错轮次方法。
+### 5.2 资源槽（内存与 CPU）
+2026-11-12用户确认：复杂任务排队，同一时刻最多“一个开发、一个测试”，任何时候都不能占满整台机器。
+- **两个槽**：`build` 槽（编译、Rust 单元测试）和 `run` 槽（真实素材运行、回归矩阵）。各只有 1 个，所以同时最多一个编译加一个运行。需要两个槽的任务用 `exclusive`（同时占用两个）。
+- **只读和文档类任务不占槽**（读代码、写设计、整理报告、看已有输出），但不得编译或跑素材。
+- **资源上限**：`build` 最多 3 个编译作业，`run` 最多 5 个渲染线程，两者都以 `nice` 运行，10 核中至少留 2 核给系统和交互；`exclusive` 最多 8 线程 / 6 作业。上限对基线结果是否有影响，由 T0.5 先核对。
+- **内存**：`run` 槽单次预估峰值 ≤ 20 GiB（与一次编译同时也不超过 32 GiB）；预估超过 20 GiB、没有历史峰值、或第一次跑 84/98/126 张和马远 PSD，一律 `exclusive`。实测超过 24 GiB（§1.3 资源门）即判资源失败。
+- 已知峰值：9 张 NEF 约 8.5–12.5 GB，阆苑/文苑 10 张约 9–10 GB，兰亭 scale=1 约 9.7–11.4 GB，祁序/枫鹰 scale=0.1 约 14.8–15.5 GB。
+- **排队**：拿不到槽就阻塞等待，并显示当前占用者；槽状态和历史写在 `output/acceptance/.slots/`。
+- **计时**：`run` 槽运行期间如果 `build` 槽也在用，报告标 `contended: true`，耗时只用于判断能否跑完。性能对比（L9、PF.x）只在 `exclusive` 下做，沿用 PF.6 交错轮次。
+- **回归矩阵**用 `run` 槽；结果与预期不符时，先用 `exclusive` 重跑一次再判定，排除并发干扰（I1f 曾在并发下出现站点关系不一致）。
 
 ### 5.3 代码与分支
 - **基准分支是 `v1`**（2026-11-12用户确认）。当前基础版本为标签 `base-2026-11-12`；之后每次 L0 合入并冻结的 I(n+1) 都直接落在 `v1` 上。其他历史分支不再作为开发起点：`codex/layered-focus-modularize-2026-10-26` 仅作存档，`codex/accepted-stack-v28-baseline` 仅作 v28 参照，`backup/*` 为备份。
 
 - 每个改代码的 lane 在 `.worktrees/<lane>` 开 worktree，分支 `lane/<lane>/<topic>`，从 L0 最新冻结的集成提交开出，不从别的 lane 分支开。
-- 每个 worktree 使用自己的 `CARGO_TARGET_DIR`（放在 worktree 内），避免互相覆盖编译产物。每个约占数 GB 磁盘，计入 §5.5 配额。
+- **所有 worktree 共用一个编译目录** `CARGO_TARGET_DIR=/Users/dp/Desktop/raw-editor/src-tauri/target`（2026-11-12用户确认）。cargo 对该目录加锁，编译自然排队；编译只在 `build` 槽内进行。编完后立即把测试可执行文件复制到 `output/acceptance/binaries/<label>/` 冻结（含提交和源码清单），运行只使用冻结副本，别的 lane 再编译不会影响正在用的二进制。label 不可复用。
 - **热点文件**（§5.1 表中列出的文件，以及 `stitch_images.rs`、`stack_pipeline/report_schema_*.rs`）修改前，先在 lane 卡上登记“将修改的函数和原因”；L0 发现两个 lane 登记了同一函数时，安排先后。
 - lane 内禁止修改共享质量阈值、全局默认开关和其他素材的基线文件。确需修改时，在 lane 卡上提出，由 L0 汇总后请用户决定。
 - 合入只能通过 L0：lane 完成后提交合入请求（lane 卡里写明提交范围、受影响素材、本 lane 验证结果）；L0 rebase 到最新集成提交，跑 §6 回归矩阵，通过后合入并冻结新的集成二进制 I(n+1)，其他 lane 随后 rebase。
@@ -148,7 +152,7 @@
 
 ### 5.5 磁盘
 
-- 每个 lane 的输出和编译产物合计配额 20 GiB；全局剩余低于 40 GiB 时，L0 暂停所有新运行并请用户决定清理范围。
+- 共用编译目录约 30 GiB，由 L0 统一管理；每个 lane 的输出和冻结二进制合计配额 20 GiB；全局剩余低于 40 GiB 时，L0 暂停所有新运行并请用户决定清理范围。
 - 原生 TIFF（兰亭约 2.6 GiB）只保留每个等级的通过版本和最近一次失败版本，其他由 lane 在卡上列出后经 L0 清理。不删除 `docs/benchmarks/` 里的任何摘要。
 
 ### 5.6 进度记录
@@ -229,7 +233,7 @@ S2 的结论决定 S3 内部的优先级，以及 L9 是否必须提前（例如
 | 无参考图的素材（祁序、马远2、睡觉、文苑） | D4 全靠用户看 | 统一复看清单，按批次请用户确认 |
 | 多个 lane 同时改流式 mosaic | 合入冲突、回归无法归因 | 热点登记 + 一次只合入一个 lane |
 | 并行运行导致计时失真 | 性能结论不可信 | `contended` 标记；性能只在独占槽测 |
-| 用户复看速度跟不上 agent 产出 | 大量结果堆积在 D3 | L0 控制同时处于 D3 待看的素材数（建议不超过 3 套） |
+| 用户复看速度跟不上 agent 产出 | 大量结果堆积在 D3 | 同时等用户看的素材不超过 3 套（2026-11-12用户确认），L0 按批汇总；满 3 套时其余素材停在 D3，lane 转去做下一阶段的诊断 |
 
 ## 10. 给 lane agent 的任务说明模板
 
@@ -240,10 +244,11 @@ Lane: <L编号 名称>
 目标: <把 <dataset> 从 D<n> 推进到 D<n+1>，或具体任务>
 基础: 集成提交 <sha>，冻结二进制 <路径> (SHA-256 <...>)
 工作区: /Users/dp/Desktop/raw-editor/.worktrees/<lane>，分支 lane/<lane>/<topic>
-CARGO_TARGET_DIR: /Users/dp/Desktop/raw-editor/.worktrees/<lane>/target
+CARGO_TARGET_DIR: /Users/dp/Desktop/raw-editor/src-tauri/target（共用，只在 build 槽内编译）
+冻结二进制: /Users/dp/Desktop/raw-editor/output/acceptance/binaries/<label>/
 素材: /Users/dp/Downloads/书画拼图/<目录>（只读）
 输出: /Users/dp/Desktop/raw-editor/output/acceptance/<lane>/<dataset>-<版本>/
-运行槽: 运行前在 output/acceptance/.run-slots/ 登记，预估峰值 <GiB>
+资源槽: 编译用 build 槽，跑素材用 run 槽（预估峰值 <GiB>，>20 GiB 用 exclusive）
 已知情况: <诊断卡要点、历史版本、相关 benchmark 路径>
 禁止: 修改共享阈值/默认开关/其他素材基线；写入素材目录；直接合入 v1；修改 docs/project-progress.md
 热点文件: <本 lane 可能修改的文件>；修改前在 docs/artwork-lanes/<lane>.md 登记
@@ -262,3 +267,55 @@ CARGO_TARGET_DIR: /Users/dp/Desktop/raw-editor/.worktrees/<lane>/target
 - **PF.10**：融合部分缩为 OwnerHybrid，通用融合基线降为离线参考。
 - **N9.1**：从后续研究升为 S4 正式任务，启动条件见 §8。
 - **BR.4**：通用场景验收降级，不进入当前顺序。
+## 12. 任务清单（2026-11-12起）
+本节只列任务，不代表已经开始。状态和顺序的唯一入口仍是[总览](project-progress.md#next)；每个任务开始前由 L0 写 brief（§10），完成后由 L0 汇总。
+
+**并发规则（用户确认）**：同时最多一个开发任务占 `build` 槽、一个测试任务占 `run` 槽，复杂任务排队；只读/文档类任务不占槽。同时等用户看的素材不超过 3 套，按批汇总。基础版本为 `v1` 上的 `base-2026-11-12`。
+
+表头说明：**槽**指该任务需要的资源槽；**区域**是会修改的代码或文件，区域不重叠的任务互不影响；**并行**列出可以同时进行的任务。
+
+### 第 0 批：并行基础设施（N8.5 / S1），一个开发 agent，串行完成
+草稿：`scripts/stack-lab/` 下有未提交、未测试的 `common.py`、`slot.py`、`freeze.py`、`run.py`、`lanting_audit.py`，可作为 T0.1–T0.3 的起点，也可以重写。
+
+| 编号 | 任务 | 交付与完成标准 | 槽 | 区域 | 依赖 |
+| --- | --- | --- | --- | --- | --- |
+| T0.1 | 资源槽工具 | `slot.py build/run/exclusive/status`：阻塞排队、显示占用者、按 §5.2 施加线程/作业上限和 `nice`、记录历史。两个同类请求确实排队，`status` 正确 | 无 | `scripts/stack-lab/` | — |
+| T0.2 | 冻结二进制 | `freeze.py`：在 `build` 槽内用共用编译目录编译，复制到 `output/acceptance/binaries/<label>/`，写提交、SHA、源码清单和有无未提交修改；label 不可复用。用 `base-p1` 现有二进制冻结出 `base-2026-11-12` | build | 同上 | T0.1 |
+| T0.3 | 单次运行 | `run.py`：按 §5.4 的目录和字段写 `execution.json`/`analysis.json`（QG、未通过项、来源计数、峰值 RSS、wall、`contended`、TIFF SHA、内存门）；兰亭取景运行自动做纸面审计和保护检查 | run | 同上 | T0.1、T0.2 |
+| T0.4 | 回归矩阵 | `matrix.py` 和数据文件 `tests/acceptance/regression-matrix.json`：分快速/中等/扩展/全量四层，每条素材一行预期（TIFF SHA、QG、闭环、已知失败的失败特征）。中等层固定为 9 张冷/热、阆苑 10、文苑 10、兰亭 45（约 45 分钟），扩展层为祁序/枫鹰 0.1；新素材到 D5 后只加进全量层，中等层保持有界。不符时自动用 `exclusive` 重跑一次再判定 | run | 同上、`tests/acceptance/` | T0.3 |
+| T0.5 | 线程上限核对 | 9 张在 `RAYON_NUM_THREADS=5` 下的 TIFF 是否仍等于 v28。相同则 §5.2 上限可用于所有基线；不同则记为 N8.2 缺陷，基线运行改用 `exclusive` 默认线程，并请用户决定 | run | 只运行 | T0.3 |
+| T0.6 | lane 卡与复看队列 | `docs/artwork-lanes/README.md`（lane 卡模板、诊断卡模板、新素材接入步骤）和 `docs/artwork-lanes/review-queue.md`（待看素材 ≤3 套、每批的整图与原生裁片路径） | 无 | `docs/artwork-lanes/` | — |
+| T0.7 | 两槽演练 | 同时提交一次 `freeze`（build）和一次 9 张运行（run），再提交第二个 run 请求验证排队；核对上限、`contended` 标记、输出隔离和 TIFF。结果写入 N8.5 | build+run | 只运行 | T0.2–T0.5 |
+| T0.8 | 收尾 | 中等层用 `base-2026-11-12` 跑一遍作为矩阵基线；更新总览 N8.5 为完成 | run | 文档 | T0.7 |
+
+### 第 1 批：第 0 批完成后，四条线并行
+开发类（B、C、E）共用一个 `build` 槽，测试类（A，以及 B 的兰亭运行）共用一个 `run` 槽，由 T0.1 排队。
+
+| 编号 | 任务 | 交付与完成标准 | 槽 | 区域 | 并行 |
+| --- | --- | --- | --- | --- | --- |
+| T1.A | S2 全量摸底（N3.5） | 按 §7 顺序用 `base-2026-11-12` 跑 D1（scale 0.25），每套一张诊断卡；84/98/126 张和马远 PSD 首次用 `exclusive`。只跑不改代码 | run（部分 exclusive） | 只运行；写 `docs/artwork-lanes/S2.md` | B、C、D、E |
+| T1.B | L1 兰亭（N6.5） | 纸面跨 owner 阶跃 P95 从 4 降回 ≤3，边界 >6 处数不增加，QG 仍 pass，严格保护通过；视觉变化进复看队列 | build + run | `mosaic/streaming_mosaic.rs`、`streaming_illumination.rs`、`quality_gate_runner/*` | A、C、D、E |
+| T1.C | L8 置换检验与注册对照（PF.8 / PF.10） | 离线实验：用已保存的匹配点和代理图评估随机机位对的相似度分布，阆苑 0–2 为第一条边；只写 test-only 代码和报告，不改生产路径 | build（少量） | `processing/features.rs` 旁的新测试模块、`docs/` | A、B、D、E |
+| T1.D | N5.5 来源锁定修图设计 | 交互与数据合同设计文档：owner 覆盖层格式、可选来源的判定、撤销、导出与 Stack_Report 记录；不写代码 | 无 | `docs/` 新文件 | 全部 |
+| T1.E | L10 接缝诊断（BR.5–BR.7，可选） | 书画真实接痕标注与负例集，诊断准确率报告；默认不改像素 | build（少量） | `src/` 前端与诊断模块 | A–D |
+
+### 第 2 批：按诊断卡修复（S3），T1.A 出卡后开始
+| 编号 | 任务 | 规则 |
+| --- | --- | --- |
+| T2.0 | 新素材接入（以后每套新素材） | 登记 manifest → D1 → 诊断卡 → 归入代码区域组；不新增 lane |
+| T2.1 | 流式 mosaic 组：L1 兰亭 → L4 祁序 → L5 枫鹰 | 三者可同时诊断；改代码按顺序，前一个合入 `v1` 后下一个才开分支 |
+| T2.2 | 站点求解组：L2 阆苑 84、L3 文苑 126 | 同上；与 T2.1 不同区域，可以并行（仍受两个槽限制） |
+| T2.3 | 马远 2（L6）、睡觉 45（L7） | 按诊断卡归入 T2.1 或 T2.2 的队列 |
+| T2.4 | L9 必要性能（含未移植的 5 个接缝提速提交，PF.9） | 只在诊断卡显示超内存门或无法跑完时启动；接缝提速会改 `stitching/station_seam_*`，排在 T2.2 的队列里 |
+| T2.5 | 合入（L0） | 每次一个 lane：rebase 到 `v1` → 中等层（及受影响素材）→ 合入 → 冻结新的 I(n+1) 并更新矩阵预期 |
+| T2.6 | 复看批次（L0） | 待看 ≤3 套；满了以后其余素材停在 D3，lane 转去诊断下一套 |
+
+### 第 3 批：至少 3 套素材到 D5 之后
+| 编号 | 任务 |
+| --- | --- |
+| T3.1 | L11 书画几何（N9.1），仅当诊断卡显示纸面起伏导致失败 |
+| T3.2 | OwnerHybrid（笔画/印章硬 owner，纸面多频带） |
+| T3.3 | N5.5 来源锁定修图实现（依 T1.D 设计） |
+| T3.4 | 对齐复核视图与失败说明 UI |
+| T3.5 | N8.2 确定性矩阵（线程数、改名乱序、取消、内存超限、并发负载） |
+| T3.6 | ENG.3 桌面完整流程、ENG.4 发布 |
