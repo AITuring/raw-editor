@@ -266,7 +266,6 @@ pub(super) fn virtual_tile_relation_measurements(
         tiles[canonical.target_index].dimensions(),
         overlap_measure,
         dense_measurements,
-        canonical.inverted,
     )?;
     super::measure_virtual_tile_scale_evidence(
         &mut candidate.measurements,

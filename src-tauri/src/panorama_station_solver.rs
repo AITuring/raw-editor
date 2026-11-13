@@ -226,12 +226,11 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
                 transformed_point(source_local, source).zip(transformed_point(target_local, target))
             })
             .collect::<Vec<_>>();
-        let (key, transform, anchor_points, invert_dense_ratio) = if source_group < target_group {
+        let (key, transform, anchor_points) = if source_group < target_group {
             (
                 (source_group, target_group),
                 source_anchor_to_target_anchor,
                 anchor_points_in_measurement_direction,
-                false,
             )
         } else {
             let Some(inverse) = source_anchor_to_target_anchor.try_inverse() else {
@@ -244,7 +243,6 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
                     .into_iter()
                     .map(|(source, target)| (target, source))
                     .collect(),
-                true,
             )
         };
         // Acceptance evidence belongs to the immutable measured source pair,
@@ -286,7 +284,6 @@ pub(super) fn solve_station_poses_for_evidence_with_report(
             measurement_target_dimensions,
             overlap_measure,
             dense_measurements,
-            invert_dense_ratio,
         ) else {
             continue;
         };

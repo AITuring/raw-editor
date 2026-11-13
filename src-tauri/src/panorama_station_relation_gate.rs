@@ -465,7 +465,6 @@ pub(super) fn measure_station_relation_candidate(
     target_dimensions: (u32, u32),
     overlap_measure: Option<StationOverlapMeasure<'_>>,
     dense_measurements: Option<FocusOverlapQuality>,
-    invert_edge_strength_ratio: bool,
 ) -> Option<MeasuredStationRelationCandidate> {
     let median_error_px = median_symmetric_error(source_to_target, points);
     let precision = if median_error_px.is_finite() {
@@ -498,13 +497,10 @@ pub(super) fn measure_station_relation_candidate(
             )
         }
     });
-    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| {
-        if invert_edge_strength_ratio {
-            1.0 / strength
-        } else {
-            strength
-        }
-    });
+    // Dense measurements are taken in the canonical content-derived source
+    // direction, so the ratio is already canonical. Inverting it by import
+    // order would make the asymmetric edge-strength gate order dependent.
+    let edge_strength_ratio = photometric.map_or(f64::INFINITY, |(_, strength)| strength);
     Some(MeasuredStationRelationCandidate {
         measurements: StationRelationMeasurements {
             scale_evidence: None,

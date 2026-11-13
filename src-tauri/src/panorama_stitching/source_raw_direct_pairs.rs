@@ -162,7 +162,6 @@ pub(super) fn source_raw_direct_observation(
         right.dimensions(),
         Some(StationOverlapMeasure::Rectangles),
         dense,
-        false,
     );
     let mut rejection_reasons = measured
         .as_ref()
@@ -296,7 +295,6 @@ pub(super) fn source_raw_direct_consensus_clusters(
             images[right_group.anchor].dimensions(),
             Some(StationOverlapMeasure::Rectangles),
             dense,
-            false,
         );
         let mut reasons = measured
             .as_ref()

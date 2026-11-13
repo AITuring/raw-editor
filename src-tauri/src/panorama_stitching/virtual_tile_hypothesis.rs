@@ -225,7 +225,6 @@ pub(super) fn select_virtual_tile_relation_hypothesis(
             tiles[canonical.target_index].dimensions(),
             overlap_measure,
             dense_measurements,
-            canonical.inverted,
         ) else {
             continue;
         };

@@ -376,7 +376,6 @@ pub(super) fn finally_measure_models(
             pyramid.native_dimensions[target_station],
             Some(overlap),
             dense,
-            false,
         ) {
             let values = measured.measurements;
             model.median_symmetric_error_px = values.median_error_px;
