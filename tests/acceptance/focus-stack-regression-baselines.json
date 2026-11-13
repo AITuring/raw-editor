@@ -148,17 +148,19 @@
       "previewEdge": 1200,
       "previewOnly": false,
       "output": {
-        "width": 31085,
-        "height": 11011
+        "width": 31090,
+        "height": 11008
       },
       "inputs": 45,
       "orderedInputs": 45,
       "streamedSources": 45,
+      "lendingSources": null,
       "ownershipVerified": true,
       "publicationCropMode": "framed-artwork",
       "selectedPath": "legacy_single_layer_mosaic",
       "stationCount": 44,
       "qualityGate": "pass",
+      "outcome": "degraded",
       "toneStatus": "not_run",
       "nativeAcceptance": "passed-or-not-applicable",
       "artifactContract": "pass",
@@ -168,83 +170,83 @@
         "artifact_validation_error": null,
         "bit_depth": 16,
         "format": "TIFF",
-        "height": 11011,
+        "height": 11008,
         "icc": "sRGB",
-        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/lanting-v63-framing-integration/lanting/run/lanting-s1-v63-framing-integration.tiff",
+        "path": "/Users/dp/Desktop/raw-editor/output/acceptance/base-p1/lanting/run/lanting-s1-base-p1.tiff",
         "preview": {
           "path": "",
           "max_roi_delta_e": 0
         },
-        "result_id": "native-fixture-ef4429cb-8b7d-465b-9b3b-34328f2be64f",
+        "result_id": "native-fixture-1277eadc-2f47-4583-8d0d-3b780850de8c",
         "tiff_extra_samples": [
           2
         ],
-        "width": 31085,
+        "width": 31090,
         "written": true
       },
       "digests": {
-        "preview": "e6064eed0b5e742e7d181b997d5f8e37edb22d9792b8131cb20e1cda28892c05",
+        "preview": "75d1f45f8ef4fe22b5519435981787fa358e3ff2c8d739cd16611b31759360cb",
         "crops": {
-          "top-left": "7c96b1b5c519a2f69b17920659dfa53bb0037a3e14fdca93929937c72e0c1163",
-          "top-center": "89628deac7969b2cdb0c7b8fc130c4a44ea9b97f070487507a4ba4679bcef104",
-          "top-right": "19cd351e2afa2ca613fd1964abb94c7c911229918c04f5351ff09a7673ed5c3e",
-          "bottom-left": "c10dd408a9848309808b26e931f23fd29506af953220727917308bdc614752ea",
-          "bottom-center": "5a4e222acafd5877db63dedd9b8204e695c8c8161143c9b3122aba17963c8eeb",
-          "bottom-right": "60122fc5ff42f607947dbc17065f6bd6c423037db5e62b108224e4f0926d402a"
+          "top-left": "0cb5821ced9e6a480f41920928c454aae6489b513bb782a464246f61470d79b5",
+          "top-center": "27c155f24529e18b5b89b18a82d78f0b6d22eb3e040a1d65e570eefef6e81579",
+          "top-right": "142c3547da756c660c3e88b9cd9161638ee6f0b8b3d1d0588d2725f57acd2f77",
+          "bottom-left": "1b4448b856c097a067e43beb907a8a01ce4ab1c4eb142a8a4b711dc9151dcb16",
+          "bottom-center": "356dac120038b2ce0b0e8f010523221dd049b62486a3a9eedb26b7b138ef304d",
+          "bottom-right": "45a2a5d6a9dbb38f08c5a0db437eb6f65111d5b884b7b11b6c9963d119741d75"
         },
-        "appJpeg": "33dedcdf4c55d84275f6a82b4582de4fb90d0d207a376481476d4aaad994020d"
+        "appJpeg": "f0091bd4b2219a3856506364274fdccaf86132870e068ed512d1d2a6885e6d49"
       },
       "metrics": {
         "self": {
-          "contentTiles": 1064,
-          "sharpnessMedian": 0.15445127659815683,
-          "sharpnessP10": 0.08509272752717491,
+          "contentTiles": 1090,
+          "sharpnessMedian": 0.17157914567070395,
+          "sharpnessP10": 0.10214603839213539,
           "thirds": [
             {
               "band": "left",
-              "sharpnessMedian": 0.1655327828647312
+              "sharpnessMedian": 0.1759156741008625
             },
             {
               "band": "center",
-              "sharpnessMedian": 0.14953476708400765
+              "sharpnessMedian": 0.1632176675609557
             },
             {
               "band": "right",
-              "sharpnessMedian": 0.158183420887373
+              "sharpnessMedian": 0.17938654546141855
             }
           ]
         },
         "reference": {
           "file": "DSC08854_FocusStack.jpg",
-          "inliers": 1767,
-          "localScale": 0.9993160311042846,
-          "contentTiles": 1034,
-          "ratioMedian": 0.9985974289863822,
-          "ratioP05": 0.7587519468705245,
-          "ratioP10": 0.8150559484907623,
-          "softTileFraction": 0.0183752417794971,
-          "lowContrastFraction": 0.010638297872340425,
+          "inliers": 1780,
+          "localScale": 0.9995160544516668,
+          "contentTiles": 1037,
+          "ratioMedian": 1.0649946507460477,
+          "ratioP05": 0.9426395526555794,
+          "ratioP10": 0.9727676932257542,
+          "softTileFraction": 0.0028929604628736743,
+          "lowContrastFraction": 0,
           "thirds": [
             {
               "band": "left",
-              "ratioMedian": 1.0430462438341659,
-              "ratioP10": 0.8337554486057072
+              "ratioMedian": 1.081037310169121,
+              "ratioP10": 0.9909366555138724
             },
             {
               "band": "center",
-              "ratioMedian": 0.9786016076508708,
-              "ratioP10": 0.7740530323194553
+              "ratioMedian": 1.05525894080379,
+              "ratioP10": 0.9646284704081824
             },
             {
               "band": "right",
-              "ratioMedian": 0.998153324123078,
-              "ratioP10": 0.8934767167472597
+              "ratioMedian": 1.055911436103373,
+              "ratioP10": 0.964723717955353
             }
           ]
         }
       },
-      "recordedAt": "2026-11-11",
-      "commit": "e6ffdf7a"
+      "recordedAt": "2026-11-13",
+      "commit": "c0c1e5a9"
     },
     {
       "dataset": "lanting",
