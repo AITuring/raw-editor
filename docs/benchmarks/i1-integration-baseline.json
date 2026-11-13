@@ -1,0 +1,156 @@
+{
+  "id": "i1-integration-baseline",
+  "date": "2026-11-12",
+  "task": "ENG.6 (S0)",
+  "status": "integrated_strict",
+  "integration_commit": "c8fd7e6a5b50364c6b1a5667b5010fbdf36e8f6a",
+  "binary_sha256": "a282336decd8c2aa11032d6fd76a0d6f833c5e2db5da7d9494cd8a557e3e0660",
+  "source_files": 523,
+  "inputs": {
+    "wip_snapshot": "ae5f5268 + d981e20c (wip/v1-2026-11-11)",
+    "branch": "feat/stack-baselines a9b17583 (origin/v1 was 1052c63a)"
+  },
+  "library_tests": "1086 passed, 0 failed, 44 ignored (release)",
+  "user_decisions": [
+    "option A: keep both lines on the shared streaming path",
+    "capture-settings scan: differing settings -> per-frame exposure planes; uniform -> one adjustment",
+    "strict merge: 祁序/枫鹰 QG failures stay blocking"
+  ],
+  "nine_nef": {
+    "cold": "pass",
+    "hot": "pass",
+    "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "same_as_v28": true,
+    "note": "An I1f hot run concurrent with 枫鹰 (~14 GiB) diverged in station relation measurement (0->2/1->2 inliers); the isolated I1g hot run passed. Load-dependent nondeterminism, tracked under N8.2."
+  },
+  "langyuan-10": {
+    "status": "quality_accepted",
+    "closure": "converged",
+    "tiff_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+    "same_as_v47": true,
+    "quality_gate": "pass"
+  },
+  "wenyuan-10": {
+    "status": "quality_accepted",
+    "closure": "converged",
+    "tiff_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+    "same_as_v47": true,
+    "quality_gate": "pass"
+  },
+  "lanting45_scale1_framed": {
+    "capture_settings": "uniform (45 x SONY ILCE-7RM5 1/25s f/5 ISO1250)",
+    "quality_gate": {
+      "verdict": "pass",
+      "roi_count": 8,
+      "non_pass": [],
+      "unresolved_pixels": 0,
+      "detail_repairs": 97
+    },
+    "tiff_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+    "output": {
+      "width": 31090,
+      "height": 11008,
+      "bit_depth": 16,
+      "artifact_validation": "pass"
+    },
+    "paper_audit_vs_v63": {
+      "v63": {
+        "median_residual_rgb": [
+          7,
+          1,
+          2
+        ],
+        "p95_step": 3,
+        "boundary_above_6": 1,
+        "zone_gray_mae": {
+          "wall": 7.19,
+          "rail": 12.11,
+          "artwork": 4.61,
+          "bottom_frame": 6.28
+        }
+      },
+      "i1": {
+        "median_residual_rgb": [
+          6.0,
+          1.0,
+          1.0
+        ],
+        "p95_step": 4.0,
+        "boundary_above_6": 3,
+        "zone_gray_mae": {
+          "wall": 6.57,
+          "rail": 5.55,
+          "artwork": 3.93,
+          "bottom_frame": 5.48
+        }
+      }
+    },
+    "reference_ratio_median": 1.0649946507460477,
+    "reference_ratio_p10": 0.9727676932257542,
+    "peak_rss_bytes": 10318479360,
+    "rejected_variant": "joint per-frame exposure planes on 兰亭: median residual 15/7/6, zone MAE 13.3/12.8/8.6/9.4 (QG pass) -> excluded by the capture-settings scan",
+    "visual_acceptance": "pending user review of output/acceptance/i1f-review-lanting (I1g TIFF byte-identical to I1f)"
+  },
+  "fengying_scale0.1": {
+    "capture_settings": "differ (several folders)",
+    "output": {
+      "width": 3949,
+      "height": 3310
+    },
+    "branch_head_output": {
+      "width": 3949,
+      "height": 3310
+    },
+    "self_sharpness_median": 0.12972583627533246,
+    "branch_head_self_sharpness_median": 0.12084367938042255,
+    "quality_gate": {
+      "verdict": "fail",
+      "roi_count": 8,
+      "non_pass": [
+        "local_scale_pixel_ratio:fail",
+        "boundary_stroke_alignment:fail",
+        "owner_sharpness_coverage:insufficient_evidence"
+      ],
+      "unresolved_pixels": 112,
+      "detail_repairs": 52
+    },
+    "branch_head_quality_gate": "insufficient_evidence",
+    "peak_rss_bytes": 14202994688,
+    "consequence": "first measured QG fails; image-stack dialog rejects the result (strict merge). Owned by lane L4 (祁序) / L5 (枫鹰)."
+  },
+  "qixu_scale0.1": {
+    "capture_settings": "differ (several folders)",
+    "output": {
+      "width": 4686,
+      "height": 2038
+    },
+    "branch_head_output": {
+      "width": 4686,
+      "height": 2038
+    },
+    "self_sharpness_median": 0.0533858475483179,
+    "branch_head_self_sharpness_median": 0.04771555375525375,
+    "quality_gate": {
+      "verdict": "fail",
+      "roi_count": 8,
+      "non_pass": [
+        "boundary_stroke_alignment:fail",
+        "owner_sharpness_coverage:fail"
+      ],
+      "unresolved_pixels": 0,
+      "detail_repairs": 14
+    },
+    "branch_head_quality_gate": "not_run",
+    "peak_rss_bytes": 12935036928,
+    "consequence": "first measured QG fails; image-stack dialog rejects the result (strict merge). Owned by lane L4 (祁序) / L5 (枫鹰)."
+  },
+  "fixes_during_integration": [
+    "QG replay of focus-scan frame exposure planes and resampled prefilter (c0f641bd)",
+    "density prefilter limited to focus scans; station tiles keep the pyramid (040c79be)",
+    "several_captures source-scan fallback reason (33a8c646)",
+    "capture-settings scan (83ccc1e3)",
+    "boundary tracing only for touching region pairs; 枫鹰 QG no longer hangs (c8fd7e6a)",
+    "regression runner accepts the source-union ownership line (b68c9e22)"
+  ],
+  "limits": "Scope: the listed runs only; no 84/126/45-full runs; timings were contended and are not performance results. Machine-local outputs were removed after this summary."
+}
