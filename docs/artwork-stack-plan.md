@@ -130,6 +130,7 @@
 - **计时**：并行运行的耗时在报告里标 `contended: true`，只用于判断能否跑完，不作为性能结论。性能对比（L9、PF.x）只在独占槽里做，并沿用 PF.6 的交错轮次方法。
 
 ### 5.3 代码与分支
+- **基准分支是 `v1`**（2026-11-12用户确认）。当前基础版本为标签 `base-2026-11-12`；之后每次 L0 合入并冻结的 I(n+1) 都直接落在 `v1` 上。其他历史分支不再作为开发起点：`codex/layered-focus-modularize-2026-10-26` 仅作存档，`codex/accepted-stack-v28-baseline` 仅作 v28 参照，`backup/*` 为备份。
 
 - 每个改代码的 lane 在 `.worktrees/<lane>` 开 worktree，分支 `lane/<lane>/<topic>`，从 L0 最新冻结的集成提交开出，不从别的 lane 分支开。
 - 每个 worktree 使用自己的 `CARGO_TARGET_DIR`（放在 worktree 内），避免互相覆盖编译产物。每个约占数 GB 磁盘，计入 §5.5 配额。
