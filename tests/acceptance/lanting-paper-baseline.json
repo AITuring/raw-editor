@@ -38,11 +38,12 @@
   "acceptedNativeEvidence": {
     "candidate": "base-p1",
     "binarySha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
-    "reportSha256": "45c00a173e978376844010225ee06cbe161447bc78a7b568dddd22edd8d7ba18",
+    "reportSha256": "be273e10436ce09e397b0c87ba2808d3843c5af8e7dcd3961f79f917fdb8f147",
     "roiCount": 8,
     "unresolvedPixels": 0,
     "captureStations": 44,
     "sources": 45,
-    "detailRepairs": 97
+    "detailRepairs": 97,
+    "reportNote": "Hash after relocating the run from .worktrees/port-codex to output/acceptance/base-p1 (absolute paths rewritten); the report as written by the run hashed 45c00a173e978376844010225ee06cbe161447bc78a7b568dddd22edd8d7ba18."
   }
 }
