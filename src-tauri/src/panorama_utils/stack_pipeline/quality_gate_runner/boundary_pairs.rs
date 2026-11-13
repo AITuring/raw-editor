@@ -124,7 +124,25 @@ where
         let Some(owner) = ownership.get(index).copied() else {
             continue;
         };
-        if coverage.as_raw().get(index).copied().unwrap_or(0) == 0 || !owner_matches(owner) {
+        // The central-difference gradient reads the four neighbours as well,
+        // so every stencil pixel must be covered and owned by the same
+        // expected source; an opposite-owner neighbour would otherwise
+        // contaminate the measured edge.
+        let stencil = [
+            (ix, iy),
+            (ix - 1, iy),
+            (ix + 1, iy),
+            (ix, iy - 1),
+            (ix, iy + 1),
+        ];
+        if stencil.iter().any(|&(x, y)| {
+            let index = y as usize * width as usize + x as usize;
+            coverage.as_raw().get(index).copied().unwrap_or(0) == 0
+                || ownership
+                    .get(index)
+                    .copied()
+                    .is_none_or(|neighbour| neighbour != owner || !owner_matches(neighbour))
+        }) {
             continue;
         }
         let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))

@@ -343,3 +343,45 @@ fn coverage_and_source_provenance_are_required_for_pairability() {
     );
     assert_eq!(no_provenance.technical_unmeasurable_count, 1);
 }
+
+#[test]
+fn boundary_gradient_requires_a_fully_covered_single_owner_stencil() {
+    use super::super::boundary_pairs::boundary_edge_on_side;
+    let (width, height) = (32, 32);
+    let output = Rgb32FImage::from_fn(width, height, |x, y| {
+        let value = if x == 12 && y == 17 { 0.9 } else { 0.1 };
+        Rgb([value; 3])
+    });
+    let coverage = GrayImage::from_pixel(width, height, Luma([255]));
+    let ownership = vec![1u16; (width * height) as usize];
+    let sample = |coverage: &GrayImage, ownership: &[u16]| {
+        boundary_edge_on_side(
+            &output,
+            coverage,
+            ownership,
+            (16.0, 16.0),
+            (1.0, 0.0),
+            -1.0,
+            4.0,
+            1,
+        )
+    };
+
+    assert!(sample(&coverage, &ownership).is_ok());
+
+    let mut jagged_ownership = ownership.clone();
+    jagged_ownership[(17 * width + 12) as usize] = 2;
+    assert_eq!(
+        sample(&coverage, &jagged_ownership).unwrap_err(),
+        degradation::BOUNDARY_LOW_CONTRAST,
+        "an opposite-owner gradient neighbour must not contaminate the expected source"
+    );
+
+    let mut holed_coverage = coverage.clone();
+    holed_coverage.put_pixel(12, 17, Luma([0]));
+    assert_eq!(
+        sample(&holed_coverage, &ownership).unwrap_err(),
+        degradation::BOUNDARY_LOW_CONTRAST,
+        "an uncovered gradient neighbour must make the stencil unmeasurable"
+    );
+}
