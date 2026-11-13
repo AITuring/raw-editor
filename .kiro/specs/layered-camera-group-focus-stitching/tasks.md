@@ -3,6 +3,7 @@
 **2026-11-12 起，开发按本文件进行。** 本文件合并了原《书画推进计划》（已归档为 [docs/archive/artwork-stack-plan-2026-11-12.md](../../../docs/archive/artwork-stack-plan-2026-11-12.md)），包含目标、并行规则和任务清单。
 
 - 项目状态、验收证据和历史任务记录：[项目进度与任务总览](../../../docs/project-progress.md)（只记录结果，不再另设待办顺序）。
+  - [当前整体状态](../../../docs/project-progress.md#overview) · [堆栈PF与N0–N9任务](../../../docs/project-progress.md#stack) · [分区亮度与接缝诊断](../../../docs/project-progress.md#brightness) · [渲染与色彩](../../../docs/project-progress.md#render) · [工程与发布](../../../docs/project-progress.md#engineering) · [最新真实素材验收](../../../docs/project-progress.md#acceptance) · [专项文档导航](../../../docs/project-progress.md#documents)
 - 技术合同：本目录 [requirements.md](requirements.md) 与 [design.md](design.md)。
 - 2026-11-04 以前的 83 个任务勾选保存在[历史快照](../../../docs/archive/focus-stack-tasks-2026-11-04.md)，仅用于追溯。
 
