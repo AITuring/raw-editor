@@ -559,21 +559,26 @@ use virtual_tile_scale_contract::measure_virtual_tile_scale_evidence;
 
 #[cfg(test)]
 use virtual_tile_hypothesis::{
-    MeasuredVirtualTileHypothesis, virtual_tile_hypothesis_holdout_key,
-    virtual_tile_hypothesis_model_rank,
+    MeasuredVirtualTileHypothesis, VirtualTileHypothesisSelection,
+    virtual_tile_hypothesis_holdout_key, virtual_tile_hypothesis_model_rank,
 };
 use virtual_tile_hypothesis::{
     select_virtual_tile_relation_hypotheses, select_virtual_tile_relation_hypothesis,
     virtual_tile_hypothesis_matrix_key, virtual_tile_provisional_authoritative_candidate,
 };
+#[cfg(test)]
+use virtual_tile_relations::virtual_tile_relation_measurements;
 
 mod virtual_tile_geometry_repair;
 
-#[cfg(test)]
-use virtual_tile_geometry_repair::VirtualTilePriorRepair;
 use virtual_tile_geometry_repair::{
-    VirtualTilePriorProposal, apply_virtual_tile_prior_repair, plan_virtual_tile_prior_repairs,
-    refine_virtual_tile_joint_geometry, virtual_tile_prior_repair_is_bounded,
+    VirtualTilePriorProposal, VirtualTilePriorRepair, apply_virtual_tile_prior_repair,
+    plan_virtual_tile_prior_repairs_with_centres, refine_virtual_tile_joint_geometry,
+    virtual_tile_prior_repair_is_bounded, virtual_tile_prior_repair_measurements,
+};
+#[cfg(test)]
+use virtual_tile_geometry_repair::{
+    plan_virtual_tile_prior_repairs, virtual_tile_prior_repair_is_bounded_at_center,
 };
 
 mod source_raw_direct;

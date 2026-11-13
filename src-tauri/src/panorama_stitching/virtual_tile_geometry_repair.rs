@@ -7,7 +7,7 @@ use crate::panorama_utils::stack_pipeline::joint_warp;
 use crate::panorama_utils::stack_pipeline::report as stack_report;
 use crate::panorama_utils::stack_pipeline::residual_warp;
 use crate::panorama_utils::stack_pipeline::topology;
-use nalgebra::Matrix3;
+use nalgebra::{Matrix3, Point2};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -19,9 +19,10 @@ use super::{
     CLOSURE_OVERLAP_SHORT_SIDE_CORRECTION_RATIO, Dsu, FocusCaptureGroup, FocusLayerWarp, ImageInfo,
     MatchInfo, STATION_RELATION_MIN_INLIERS, STATION_RELATION_SCALE_RATIO_MAX,
     STATION_RELATION_SCALE_RATIO_MIN, homography_preserves_focus_orientation,
-    homography_scale_ratio, normalized_homography, projected_polygon_short_side,
-    residual_distribution, station_pose_candidate_has_bounded_local_scale,
-    station_relation_overlap_polygon, station_tree_edge_key, station_tree_position_key,
+    normalized_homography, projected_polygon_short_side, residual_distribution,
+    station_pose_candidate_has_bounded_local_scale, station_relation_overlap_polygon,
+    station_tree_edge_key, station_tree_position_key, transformed_point,
+    virtual_tile_repair_local_scale_ratio,
 };
 
 /// A densely verified prior-free relation between two stations whose rendering
@@ -42,6 +43,9 @@ pub(super) struct VirtualTilePriorProposal {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct VirtualTilePriorRepair {
     pub(super) station: usize,
+    /// Root of the unfixed cluster this repair moves; members of one cluster
+    /// are committed together or not at all.
+    pub(super) cluster_root: usize,
     pub(super) fixed_station: usize,
     pub(super) relation: (usize, usize),
     pub(super) relation_inliers: usize,
@@ -73,6 +77,33 @@ pub(super) fn virtual_tile_prior_repair_is_bounded(
 /// unfixed cluster so that the proposal's measured relation holds; a cluster is
 /// repaired at most once and a station therefore re-rendered at most once.
 /// Stations no proposal reaches keep their prior (and stay disconnected).
+/// Centre shift and local scale of `correction` at a station's world centre,
+/// the same measurements the render-time preflight bounds.
+pub(super) fn virtual_tile_prior_repair_measurements(
+    correction: &Matrix3<f64>,
+    station_world_center: Point2<f64>,
+) -> Option<(f64, f64)> {
+    let corrected_center = transformed_point(correction, station_world_center)?;
+    let center_shift_px = (corrected_center - station_world_center).norm();
+    let correction_scale_ratio =
+        virtual_tile_repair_local_scale_ratio(correction, station_world_center)?;
+    (center_shift_px.is_finite() && correction_scale_ratio.is_finite())
+        .then_some((center_shift_px, correction_scale_ratio))
+}
+
+pub(super) fn virtual_tile_prior_repair_is_bounded_at_center(
+    correction: &Matrix3<f64>,
+    station_world_center: Point2<f64>,
+) -> bool {
+    virtual_tile_prior_repair_measurements(correction, station_world_center).is_some_and(
+        |(center_shift_px, correction_scale_ratio)| {
+            virtual_tile_prior_repair_is_bounded(center_shift_px, correction_scale_ratio)
+        },
+    )
+}
+
+/// Test entry point with a fixed nominal station centre.
+#[cfg(test)]
 pub(super) fn plan_virtual_tile_prior_repairs(
     station_count: usize,
     authoritative_pairs: &[(usize, usize)],
@@ -80,7 +111,32 @@ pub(super) fn plan_virtual_tile_prior_repairs(
     tile_to_world: &[Matrix3<f64>],
     station_topology: &topology::StationTopology,
 ) -> Vec<VirtualTilePriorRepair> {
-    if station_count < 2 || tile_to_world.len() != station_count {
+    let station_world_centres = tile_to_world
+        .iter()
+        .filter_map(|pose| transformed_point(pose, Point2::new(500.0, 400.0)))
+        .collect::<Vec<_>>();
+    plan_virtual_tile_prior_repairs_with_centres(
+        station_count,
+        authoritative_pairs,
+        proposals,
+        tile_to_world,
+        &station_world_centres,
+        station_topology,
+    )
+}
+
+pub(super) fn plan_virtual_tile_prior_repairs_with_centres(
+    station_count: usize,
+    authoritative_pairs: &[(usize, usize)],
+    proposals: &[VirtualTilePriorProposal],
+    tile_to_world: &[Matrix3<f64>],
+    station_world_centres: &[Point2<f64>],
+    station_topology: &topology::StationTopology,
+) -> Vec<VirtualTilePriorRepair> {
+    if station_count < 2
+        || tile_to_world.len() != station_count
+        || station_world_centres.len() != station_count
+    {
         return Vec::new();
     }
     let mut clusters = Dsu::new(station_count);
@@ -180,21 +236,24 @@ pub(super) fn plan_virtual_tile_prior_repairs(
             continue;
         };
         if correction.try_inverse().is_none()
-            || !virtual_tile_prior_repair_is_bounded(
-                0.0,
-                homography_scale_ratio(&correction).unwrap_or(f64::NAN),
-            )
+            || members[&unfixed_root].iter().any(|&station| {
+                !virtual_tile_prior_repair_is_bounded_at_center(
+                    &correction,
+                    station_world_centres[station],
+                )
+            })
         {
-            // An inadmissible strongest proposal must not mark this cluster as
-            // repaired and suppress a weaker proposal that stays inside the
-            // unchanged repair envelope. The render-time check below still
-            // measures the actual centre shift before mutating source poses.
+            // Reject the proposal before this cluster is marked as repaired,
+            // so a weaker bounded proposal remains eligible. Every member is
+            // measured at its own world centre, matching the render-time
+            // preflight that commits the cluster atomically.
             continue;
         }
         corrections.insert(unfixed_root, correction);
         for &station in &members[&unfixed_root] {
             repairs.push(VirtualTilePriorRepair {
                 station,
+                cluster_root: unfixed_root,
                 fixed_station: fixed,
                 relation: (proposal.left, proposal.right),
                 relation_inliers: proposal.inliers,

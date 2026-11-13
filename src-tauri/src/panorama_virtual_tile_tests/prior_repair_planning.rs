@@ -414,13 +414,18 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let tile_to_world = sample_tile_to_world();
     let topology = line_topology(4);
     let authoritative = [(0, 1), (2, 3)];
-    let relation = sample_relation(-372.0, 9.0);
+    let expected_correction = translation(10.0, -4.0);
+    let relation_12 = tile_to_world[2].try_inverse().unwrap()
+        * expected_correction.try_inverse().unwrap()
+        * tile_to_world[1];
+    let relation_21 =
+        tile_to_world[1].try_inverse().unwrap() * expected_correction * tile_to_world[2];
 
     // The fixed station is the proposal's left: H(u→f) = (left→right)⁻¹.
     let repairs = plan_virtual_tile_prior_repairs(
         4,
         &authoritative,
-        &[prior_proposal(1, 2, relation, 50)],
+        &[prior_proposal(1, 2, relation_12, 50)],
         &tile_to_world,
         &topology,
     );
@@ -434,7 +439,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let correction = repairs[0].world_correction;
     assert_projectively_equal(
         &(correction * tile_to_world[2]),
-        &(tile_to_world[1] * relation.try_inverse().unwrap()),
+        &(tile_to_world[1] * relation_12.try_inverse().unwrap()),
         "left fixed",
     );
 
@@ -442,7 +447,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
     let repairs = plan_virtual_tile_prior_repairs(
         4,
         &authoritative,
-        &[prior_proposal(2, 1, relation, 50)],
+        &[prior_proposal(2, 1, relation_21, 50)],
         &tile_to_world,
         &topology,
     );
@@ -452,7 +457,7 @@ fn plan_virtual_tile_prior_repairs_moves_the_whole_unfixed_cluster_onto_the_prop
         && repair.world_correction == repairs[0].world_correction));
     assert_projectively_equal(
         &(repairs[0].world_correction * tile_to_world[2]),
-        &(tile_to_world[1] * relation),
+        &(tile_to_world[1] * relation_21),
         "right fixed",
     );
 }
@@ -635,5 +640,107 @@ fn plan_virtual_tile_prior_repairs_ignores_invalid_proposals_and_skips_singular_
         &(repairs[0].world_correction * tile_to_world[1]),
         &(tile_to_world[0] * relation.try_inverse().unwrap()),
         "valid fallback",
+    );
+}
+
+// Ported from codex/layered-focus-modularize-2026-10-26 (7e3a0488): atomic,
+// member-centre bounded prior repair planning.
+fn sample_station_world_centres(tile_to_world: &[Matrix3<f64>]) -> Vec<Point2<f64>> {
+    tile_to_world
+        .iter()
+        .map(|pose| transformed_point(pose, Point2::new(500.0, 400.0)).unwrap())
+        .collect()
+}
+
+#[test]
+fn prior_repair_preflight_falls_back_after_stronger_displacement_failure() {
+    let tile_to_world = vec![Matrix3::identity(), translation(400.0, 0.0)];
+    let centres = sample_station_world_centres(&tile_to_world);
+    let strong = prior_proposal(0, 1, Matrix3::identity(), 90);
+    let weak = prior_proposal(0, 1, translation(-380.0, 0.0), 50);
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        2,
+        &[],
+        &[weak, strong],
+        &tile_to_world,
+        &centres,
+        &line_topology(2),
+    );
+    assert_eq!(repaired_stations(&repairs), vec![1]);
+    assert_eq!(repairs[0].relation_inliers, 50);
+    assert_eq!(
+        virtual_tile_prior_repair_measurements(&repairs[0].world_correction, centres[1])
+            .unwrap()
+            .0,
+        20.0
+    );
+    assert_eq!(
+        plan_virtual_tile_prior_repairs_with_centres(
+            2,
+            &[],
+            &[strong, weak],
+            &tile_to_world,
+            &centres,
+            &line_topology(2),
+        ),
+        repairs,
+        "proposal order must not affect fallback or report order"
+    );
+}
+
+#[test]
+fn prior_repair_preflight_uses_member_centre_projective_scale() {
+    let tile_to_world = vec![Matrix3::identity(), Matrix3::identity()];
+    let centres = vec![Point2::new(0.0, 0.0), Point2::new(600.0, 400.0)];
+    let correction = Matrix3::new(1.5, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0005, 0.0, 1.0);
+    assert!(homography_scale_ratio(&correction).unwrap() > STATION_RELATION_SCALE_RATIO_MAX);
+    let (shift, scale) = virtual_tile_prior_repair_measurements(&correction, centres[1]).unwrap();
+    assert!(virtual_tile_prior_repair_is_bounded(shift, scale));
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        2,
+        &[],
+        &[prior_proposal(0, 1, correction.try_inverse().unwrap(), 70)],
+        &tile_to_world,
+        &centres,
+        &line_topology(2),
+    );
+    assert_eq!(repaired_stations(&repairs), vec![1]);
+    assert_projectively_equal(
+        &repairs[0].world_correction,
+        &correction,
+        "member-centre projective correction",
+    );
+}
+
+#[test]
+fn prior_repair_preflight_rejects_the_whole_cluster_when_one_member_fails() {
+    let tile_to_world = vec![Matrix3::identity(); 5];
+    let correction = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -0.0005, 0.0, 1.0);
+    let centres = vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(20.0, 100.0),
+        Point2::new(1_200.0, 100.0),
+        Point2::new(0.0, 0.0),
+        Point2::new(0.0, 0.0),
+    ];
+    assert!(virtual_tile_prior_repair_is_bounded_at_center(
+        &correction,
+        centres[1]
+    ));
+    assert!(!virtual_tile_prior_repair_is_bounded_at_center(
+        &correction,
+        centres[2]
+    ));
+    let repairs = plan_virtual_tile_prior_repairs_with_centres(
+        5,
+        &[(0, 3), (3, 4), (1, 2)],
+        &[prior_proposal(0, 1, correction.try_inverse().unwrap(), 80)],
+        &tile_to_world,
+        &centres,
+        &line_topology(5),
+    );
+    assert!(
+        repairs.is_empty(),
+        "no cluster member may be partially planned"
     );
 }

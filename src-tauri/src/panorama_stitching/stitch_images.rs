@@ -40,6 +40,7 @@ use nalgebra::Point3;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -59,8 +60,8 @@ use super::{
     STATION_RELATION_MIN_SPATIAL_SUPPORT, SourcePreflight, SourceRenderCache, SourceRenderCacheKey,
     SourceRenderCacheStage, StationEvidence, StitchOutcome, VIRTUAL_TILE_SEED_GLOBAL_COVERAGE,
     VIRTUAL_TILE_SEED_PRIOR_FREE, VIRTUAL_TILE_SEED_SOURCE_MATCH, VirtualTileMatchPyramid,
-    VirtualTilePriorProposal, absolute_source_path, add_capture_sequence_bridges,
-    apply_virtual_tile_prior_repair, build_focus_layer_warp,
+    VirtualTilePriorProposal, VirtualTilePriorRepair, absolute_source_path,
+    add_capture_sequence_bridges, apply_virtual_tile_prior_repair, build_focus_layer_warp,
     build_focus_stack_stitching_order_with_report, build_foreground_mask, build_stitching_order,
     canonical_match_direction, capture_groups_form_singleton_scan, composing_capture_gauge,
     detect_foreground_range, detect_vertical_edge_columns, ensure_focus_memory_available,
@@ -77,7 +78,7 @@ use super::{
     normalize_stack_raw_display_exposure, oblique_frames, observe_singleton_scan,
     optimize_focus_stack_global_homographies_with_reference,
     order_focus_render_sources_by_capture_group, pairs_to_match_for_images_with_plan,
-    patch_guided_match, plan_virtual_tile_prior_repairs,
+    patch_guided_match, plan_virtual_tile_prior_repairs_with_centres,
     populate_station_relation_candidate_geometry, pose_predicted_pairs,
     prepare_focus_rescue_image_from_analysis, processing_fingerprint,
     raw_display_channel_percentile, record_residual_warp_for_station_relations,
@@ -93,8 +94,8 @@ use super::{
     virtual_tile_authoritative_pairs, virtual_tile_global_similarity_proposals,
     virtual_tile_measure_prior_relations, virtual_tile_prior_free_candidate_pairs,
     virtual_tile_prior_free_relation, virtual_tile_prior_free_seed_fallback_allowed,
-    virtual_tile_prior_repair_is_bounded, virtual_tile_pyramid_factors,
-    virtual_tile_pyramid_station_match, virtual_tile_repair_local_scale_ratio,
+    virtual_tile_prior_repair_is_bounded, virtual_tile_prior_repair_measurements,
+    virtual_tile_pyramid_factors, virtual_tile_pyramid_station_match,
     virtual_tile_source_match_proposals,
 };
 #[cfg(test)]
@@ -2788,149 +2789,169 @@ fn stitch_images_attempt<R: Runtime>(
                             .iter()
                             .map(|tile| tile_homographies[&tile.id])
                             .collect::<Vec<_>>();
-                        let repairs = plan_virtual_tile_prior_repairs(
+                        let station_world_centres = geometries
+                            .iter()
+                            .zip(&station_tile_to_world)
+                            .map(|(geometry, tile_to_world)| {
+                                transformed_point(
+                                    tile_to_world,
+                                    Point2::new(
+                                        f64::from(geometry.width) * 0.5,
+                                        f64::from(geometry.height) * 0.5,
+                                    ),
+                                )
+                            })
+                            .collect::<Option<Vec<_>>>()
+                            .unwrap_or_default();
+                        let repairs = plan_virtual_tile_prior_repairs_with_centres(
                             tile_infos.len(),
                             &authoritative_pairs,
                             &proposals,
                             &station_tile_to_world,
+                            &station_world_centres,
                             station_topology,
                         );
                         let mut repaired = BTreeSet::new();
+                        let mut repair_clusters =
+                            BTreeMap::<usize, Vec<&VirtualTilePriorRepair>>::new();
                         for repair in &repairs {
-                            let station = repair.station;
-                            // Evaluate the complete correction on copies before
-                            // mutating the rendering priors.  A prior-free fit
-                            // can be internally coherent while still implying
-                            // an implausible world jump or scale change; such a
-                            // proposal must never reach the renderer.
+                            repair_clusters
+                                .entry(repair.cluster_root)
+                                .or_default()
+                                .push(repair);
+                        }
+                        for cluster_repairs in repair_clusters.values() {
+                            // Preflight every member on one copy. No rendering
+                            // prior is committed unless the entire cluster has
+                            // valid poses, geometry, centre shift and scale; a
+                            // partially moved cluster would split stations
+                            // that the authoritative relations hold together.
                             let mut candidate_homographies = station_render_homographies.clone();
                             let mut candidate_focus_warp = station_focus_warp.clone();
-                            if !apply_virtual_tile_prior_repair(
-                                group_slices[station],
-                                &repair.world_correction,
-                                &mut candidate_homographies,
-                                candidate_focus_warp.as_mut(),
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: a corrected source pose is not a valid planar pose"
-                                );
-                                continue;
-                            }
-                            let Some(candidate_geometry) =
-                                stitching::focus_stack_virtual_tile_geometry(
+                            let mut candidates = Vec::with_capacity(cluster_repairs.len());
+                            let mut rejected = None;
+                            for &repair in cluster_repairs {
+                                let station = repair.station;
+                                if !apply_virtual_tile_prior_repair(
                                     group_slices[station],
-                                    &candidate_homographies,
-                                    projection,
-                                    candidate_focus_warp.as_ref(),
-                                )
-                            else {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: corrected geometry is invalid"
-                                );
-                                continue;
-                            };
-                            let old_center = transformed_point(
-                                &station_tile_to_world[station],
-                                Point2::new(
-                                    f64::from(geometries[station].width) * 0.5,
-                                    f64::from(geometries[station].height) * 0.5,
-                                ),
-                            );
-                            let new_center = transformed_point(
-                                &candidate_geometry.tile_to_world,
-                                Point2::new(
-                                    f64::from(candidate_geometry.width) * 0.5,
-                                    f64::from(candidate_geometry.height) * 0.5,
-                                ),
-                            );
-                            let center_shift_px = old_center
-                                .zip(new_center)
-                                .map_or(f64::INFINITY, |(old, new)| (new - old).norm());
-                            let correction_scale_ratio = old_center
-                                .and_then(|center| {
-                                    virtual_tile_repair_local_scale_ratio(
-                                        &repair.world_correction,
-                                        center,
+                                    &repair.world_correction,
+                                    &mut candidate_homographies,
+                                    candidate_focus_warp.as_mut(),
+                                ) {
+                                    rejected = Some((
+                                        station,
+                                        "a corrected source pose is not a valid planar pose"
+                                            .to_string(),
+                                    ));
+                                    break;
+                                }
+                                let Some(candidate_geometry) =
+                                    stitching::focus_stack_virtual_tile_geometry(
+                                        group_slices[station],
+                                        &candidate_homographies,
+                                        projection,
+                                        candidate_focus_warp.as_ref(),
                                     )
-                                })
-                                .unwrap_or(f64::NAN);
-                            if !virtual_tile_prior_repair_is_bounded(
-                                center_shift_px,
-                                correction_scale_ratio,
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: correction is outside bounds (shift {center_shift_px:.1}px, scale {correction_scale_ratio:.4})"
-                                );
-                                continue;
-                            }
-                            if !apply_virtual_tile_prior_repair(
-                                group_slices[station],
-                                &repair.world_correction,
-                                &mut station_render_homographies,
-                                station_focus_warp.as_mut(),
-                            ) {
-                                println!(
-                                    "  - Virtual_Tile prior repair of station {station} rejected: a corrected source pose is not a valid planar pose"
-                                );
-                                continue;
-                            }
-                            let Some(geometry) = stitching::focus_stack_virtual_tile_geometry(
-                                group_slices[station],
-                                &station_render_homographies,
-                                projection,
-                                station_focus_warp.as_ref(),
-                            ) else {
-                                return Err(format!(
-                                    "Virtual tile station {station} has invalid bounds after its prior repair"
+                                else {
+                                    rejected = Some((
+                                        station,
+                                        "corrected geometry is invalid".to_string(),
+                                    ));
+                                    break;
+                                };
+                                let Some((center_shift_px, correction_scale_ratio)) =
+                                    station_world_centres.get(station).and_then(|&centre| {
+                                        virtual_tile_prior_repair_measurements(
+                                            &repair.world_correction,
+                                            centre,
+                                        )
+                                    })
+                                else {
+                                    rejected = Some((
+                                        station,
+                                        "correction measurements are invalid".to_string(),
+                                    ));
+                                    break;
+                                };
+                                if !virtual_tile_prior_repair_is_bounded(
+                                    center_shift_px,
+                                    correction_scale_ratio,
+                                ) {
+                                    rejected = Some((
+                                        station,
+                                        format!(
+                                            "correction is outside bounds (shift {center_shift_px:.1}px, scale {correction_scale_ratio:.4})"
+                                        ),
+                                    ));
+                                    break;
+                                }
+                                candidates.push((
+                                    repair,
+                                    candidate_geometry,
+                                    center_shift_px,
+                                    correction_scale_ratio,
                                 ));
-                            };
-                            println!(
-                                "  - Virtual_Tile prior repair: station {station} moved {center_shift_px:.1}px (scale {correction_scale_ratio:.4}) onto station {} via prior-free relation {}->{} ({} verified inliers); rendering it once more",
-                                repair.fixed_station,
-                                repair.relation.0,
-                                repair.relation.1,
-                                repair.relation_inliers,
-                            );
-                            geometries[station] = geometry;
-                            let tile = &mut tile_infos[station];
-                            tile.width = geometry.width;
-                            tile.height = geometry.height;
-                            tile_homographies.insert(tile.id, geometry.tile_to_world);
-                            let (gray, coverage, density_samples) =
-                                render_virtual_tile_match_plane(
-                                    group_slices[station],
-                                    &station_render_homographies,
-                                    projection,
-                                    station_focus_warp.as_ref(),
+                            }
+                            if let Some((station, reason)) = rejected {
+                                println!(
+                                    "  - Virtual_Tile prior repair cluster containing station {station} rejected atomically: {reason}"
+                                );
+                                continue;
+                            }
+                            station_render_homographies = candidate_homographies;
+                            station_focus_warp = candidate_focus_warp;
+                            for (repair, geometry, center_shift_px, correction_scale_ratio) in
+                                candidates
+                            {
+                                let station = repair.station;
+                                println!(
+                                    "  - Virtual_Tile prior repair: station {station} moved {center_shift_px:.1}px (scale {correction_scale_ratio:.4}) onto station {} via prior-free relation {}->{} ({} verified inliers); rendering it once more",
+                                    repair.fixed_station,
+                                    repair.relation.0,
+                                    repair.relation.1,
+                                    repair.relation_inliers,
+                                );
+                                geometries[station] = geometry;
+                                let tile = &mut tile_infos[station];
+                                tile.width = geometry.width;
+                                tile.height = geometry.height;
+                                tile_homographies.insert(tile.id, geometry.tile_to_world);
+                                let (gray, coverage, density_samples) =
+                                    render_virtual_tile_match_plane(
+                                        group_slices[station],
+                                        &station_render_homographies,
+                                        projection,
+                                        station_focus_warp.as_ref(),
+                                        station,
+                                        geometry,
+                                        app_handle.clone(),
+                                        progress_event,
+                                        &mut load_render_image,
+                                        &mut native_fusion_cache,
+                                        &native_source_keys[station],
+                                        render_processing_fingerprint(),
+                                        rss_sampler.as_ref(),
+                                    )?;
+                                station_density_samples[station] = density_samples;
+                                install_virtual_tile_match_planes(
+                                    tile,
+                                    &mut pyramid,
                                     station,
-                                    geometry,
-                                    app_handle.clone(),
-                                    progress_event,
-                                    &mut load_render_image,
-                                    &mut native_fusion_cache,
-                                    &native_source_keys[station],
-                                    render_processing_fingerprint(),
-                                    rss_sampler.as_ref(),
+                                    &gray,
+                                    &coverage,
+                                    &brief_pairs,
                                 )?;
-                            station_density_samples[station] = density_samples;
-                            install_virtual_tile_match_planes(
-                                tile,
-                                &mut pyramid,
-                                station,
-                                &gray,
-                                &coverage,
-                                &brief_pairs,
-                            )?;
-                            repaired.insert(station);
-                            prior_repair_records.push(stack_report::StationPriorRepairRecord {
-                                station,
-                                fixed_station: repair.fixed_station,
-                                relation_left: repair.relation.0,
-                                relation_right: repair.relation.1,
-                                relation_inliers: repair.relation_inliers,
-                                center_shift_px,
-                                correction_scale_ratio,
-                            });
+                                repaired.insert(station);
+                                prior_repair_records.push(stack_report::StationPriorRepairRecord {
+                                    station,
+                                    fixed_station: repair.fixed_station,
+                                    relation_left: repair.relation.0,
+                                    relation_right: repair.relation.1,
+                                    relation_inliers: repair.relation_inliers,
+                                    center_shift_px,
+                                    correction_scale_ratio,
+                                });
+                            }
                         }
                         if !repaired.is_empty() {
                             station_poses_replaced = true;
