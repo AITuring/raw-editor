@@ -7,6 +7,7 @@ The guard (tests/focus-stack-lanting-guard.mjs) expects exactly this layout:
 <dir>/{analysis.json, execution.json, run/, diagnostics/} and <dir>/../paper-tone-audit.json.
 Zone MAE uses a sips preview of the TIFF; it is a diagnostic, not a Quality Gate value.
 """
+import hashlib
 import json
 import os
 import statistics
@@ -15,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import DATA, MAIN, read, repo_root, write  # noqa: E402
+from common import DATA, MAIN, read, repo_root, sha, write  # noqa: E402
 
 W, H = 2048, 726
 ZONES = {'wall': (100, 480, 2, 16), 'rail': (180, 490, 16, 33), 'artwork': (40, 470, 35, 158), 'bottom_frame': (40, 470, 158, 178)}
@@ -108,7 +109,21 @@ def audit(run_dir):
     for zone, (x0, x1, y0, y1) in ZONES.items():
         idx = [y * 512 + x for y in range(y0, y1) for x in range(x0, x1)]
         summary['zone_gray_mae'][zone] = round(sum(abs(a[i] - b[i]) for i in idx) / len(idx), 2)
-    write(base / 'paper-tone-audit.json', {'summary': summary, 'points': points, 'edges': edges})
+    # Color conversion can differ under a restricted macOS process context.
+    # Keep the actual audit substrate bound to the measurements, not just the
+    # source JPEG/TIFF. Compare candidates only with identical reference bytes.
+    provenance = {
+        'method': 'lanting_paper_sips_ffmpeg_v1',
+        'script_sha256': sha(Path(__file__)),
+        'reference_sha256': sha(reference),
+        'output_sha256': sha(tiff),
+        'reference_preview_sha256': sha(base / 'reference-2048.jpg'),
+        'current_preview_sha256': sha(base / 'current-2048.jpg'),
+        'owner_sha256': sha(run_dir / 'diagnostics/owner.png'),
+        'reference_rgb_sha256': hashlib.sha256(ref).hexdigest(),
+        'current_rgb_sha256': hashlib.sha256(cur).hexdigest(),
+    }
+    write(base / 'paper-tone-audit.json', {'summary': summary, 'provenance': provenance, 'points': points, 'edges': edges})
     return summary
 
 

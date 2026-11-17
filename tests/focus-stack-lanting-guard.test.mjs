@@ -96,3 +96,34 @@ test('reported quality pass cannot conceal missing or unresolved native source e
     assert.equal(evaluateLantingGuard(contract, actual).pass, false);
   }
 });
+
+test('task 6 large-step ceiling fails closed on missing evidence or an increase', () => {
+  const c = structuredClone(contract);
+  c.paper.maximumBoundaryAbove6 = 2;
+  const a = valid();
+  a.paper.source_boundary.above_6 = 2;
+  assert.equal(evaluateLantingGuard(c, a).pass, true);
+  a.paper.source_boundary.above_6 = 3;
+  assert.deepEqual(evaluateLantingGuard(c, a).failures, ['paper_large_steps_regression']);
+  delete a.paper.source_boundary.above_6;
+  assert.equal(evaluateLantingGuard(c, a).pass, false);
+});
+
+test('task 6 audit binds the reference conversion and the measured image artifacts', () => {
+  const c = structuredClone(contract);
+  c.paper.referencePreviewSha = 'expected-reference-preview';
+  const a = valid();
+  a.paperReferencePreviewSha = c.paper.referencePreviewSha;
+  a.paperCurrentPreviewSha = 'current-preview';
+  a.paperProvenance = { reference_preview_sha256: a.paperReferencePreviewSha,
+    current_preview_sha256: a.paperCurrentPreviewSha, output_sha256: a.outputSha,
+    reference_sha256: a.referenceSha, owner_sha256: a.ownerSha };
+  assert.equal(evaluateLantingGuard(c, a).pass, true);
+  for (const field of Object.keys(a.paperProvenance)) {
+    const broken = structuredClone(a);
+    broken.paperProvenance[field] = 'different';
+    assert.deepEqual(evaluateLantingGuard(c, broken).failures, ['paper_audit_substrate_changed']);
+  }
+  a.paperReferencePreviewSha = 'sandbox-conversion';
+  assert.equal(evaluateLantingGuard(c, a).pass, false);
+});

@@ -27,6 +27,19 @@ export function evaluateLantingGuard(contract, actual, { regressionOnly = false 
     paper.source_boundary.p95 <= contract.paper.maximumBoundaryP95, 'paper_boundary_regression');
   require(Number.isFinite(paper?.source_boundary?.max) &&
     paper.source_boundary.max <= contract.paper.maximumBoundaryStep, 'paper_block_regression');
+  if (contract.paper.maximumBoundaryAbove6 !== undefined) {
+    require(Number.isInteger(paper?.source_boundary?.above_6) &&
+      paper.source_boundary.above_6 <= contract.paper.maximumBoundaryAbove6, 'paper_large_steps_regression');
+  }
+  if (contract.paper.referencePreviewSha !== undefined) {
+    require(actual.paperReferencePreviewSha === contract.paper.referencePreviewSha &&
+      actual.paperProvenance?.reference_preview_sha256 === actual.paperReferencePreviewSha &&
+      actual.paperProvenance?.output_sha256 === actual.outputSha &&
+      actual.paperProvenance?.reference_sha256 === actual.referenceSha &&
+      actual.paperProvenance?.owner_sha256 === actual.ownerSha &&
+      actual.paperProvenance?.current_preview_sha256 === actual.paperCurrentPreviewSha,
+    'paper_audit_substrate_changed');
+  }
   const gate = actual.qualityGate;
   const names = new Set(gate?.criteria?.map((c) => c.name) ?? []);
   const native = gate?.legacy_native_evidence;
@@ -121,6 +134,9 @@ async function main() {
     alphaPreserved: output.alpha_preserved,
     bitDepth: output.bit_depth,
     paper: paper.summary,
+    paperProvenance: paper.provenance,
+    paperReferencePreviewSha: await sha(resolve(base, '..', 'reference-2048.jpg')),
+    paperCurrentPreviewSha: await sha(resolve(base, '..', 'current-2048.jpg')),
     qualityGate: report.quality_gate,
   };
   if (analysis.output_sha256 !== actual.outputSha) throw new Error('TIFF hash differs from recorded analysis');

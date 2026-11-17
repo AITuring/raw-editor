@@ -8,10 +8,13 @@ const STEP: f64 = 512.0;
 const MAX_CELLS: usize = 65_536;
 const MAX_SAMPLES: usize = 32;
 const MAX_LOG_GAIN: f64 = 0.0769610411361284; // ln(1.08)
+type GainCells = BTreeMap<(u8, u32, u32), f64>;
 
 #[derive(Default)]
 struct Cell {
     values: Vec<f64>,
+    // Non-overlapping 5x5 patches alternate between fit and independent validation.
+    positions: Vec<(f64, f64, bool)>,
     quadrants: u8,
 }
 
@@ -89,6 +92,7 @@ impl OwnerOverlapGain {
                 let cell = self.cells.entry(key).or_default();
                 if cell.values.len() < MAX_SAMPLES {
                     cell.values.push(log_gain);
+                    cell.positions.push((wx, wy, ((x / 8 + y / 8) & 1) == 0));
                     let q = usize::from(wx % STEP >= STEP * 0.5)
                         + 2 * usize::from(wy % STEP >= STEP * 0.5);
                     cell.quadrants |= 1 << q;
@@ -130,7 +134,20 @@ impl OwnerOverlapGain {
         crop: (u32, u32, u32, u32),
         output: &mut Rgb32FImage,
     ) -> Result<(serde_json::Value, super::MosaicGainReference), String> {
-        let accepted = self.accepted();
+        let baseline = self.accepted();
+        let (accepted, refinement) = self.refined(&baseline);
+        #[cfg(test)]
+        if let Some(path) = std::env::var_os("RAW_EDITOR_TEST_OWNER_GAIN_DIAGNOSTICS") {
+            let cells: Vec<_> = self.cells.iter().map(|(key, cell)| {
+                serde_json::json!({"key":key,"values":cell.values,"positions":cell.positions,"quadrants":cell.quadrants})
+            }).collect();
+            std::fs::write(
+                path,
+                serde_json::to_vec(&serde_json::json!({"cells":cells,"refinement":refinement}))
+                    .map_err(|e| e.to_string())?,
+            )
+            .map_err(|e| format!("overlap diagnostics: {e}"))?;
+        }
         let scale = (f64::from(crop.2.max(crop.3)) / 2048.0).max(1.0);
         let w = (f64::from(crop.2) / scale).ceil() as u32;
         let h = (f64::from(crop.3) / scale).ceil() as u32;
@@ -166,7 +183,7 @@ impl OwnerOverlapGain {
                 }
             });
         Ok((
-            serde_json::json!({"method":"same_content_overlap_residual_gain","samples":self.samples,"candidate_pair_cells":self.cells.len(),"accepted_owner_cells":accepted.len(),"dropped_cells":self.dropped_cells,"max_gain":1.08,"min_gain":1.0/1.08,"cell_size_output_pixels":STEP,"support_radius_output_pixels":STEP*1.5,"unsupported_gain":1.0}),
+            serde_json::json!({"method":"heldout_overlap_graph_residual_gain_v1","samples":self.samples,"candidate_pair_cells":self.cells.len(),"accepted_owner_cells":accepted.len(),"dropped_cells":self.dropped_cells,"max_gain":1.08,"min_gain":1.0/1.08,"cell_size_output_pixels":STEP,"support_radius_output_pixels":STEP*1.5,"unsupported_gain":1.0,"refinement":refinement}),
             super::MosaicGainReference {
                 gains: std::sync::Arc::new(gains),
                 crop,
@@ -174,6 +191,99 @@ impl OwnerOverlapGain {
                 max_log: MAX_LOG_GAIN as f32,
             },
         ))
+    }
+
+    fn refined(&self, baseline: &GainCells) -> (GainCells, serde_json::Value) {
+        let mut regions = BTreeMap::<(u32, u32), Vec<(u8, u8, f64)>>::new();
+        let mut heldout = Vec::new();
+        for (&(a, b, x, y), cell) in &self.cells {
+            if cell.positions.len() != cell.values.len() || cell.quadrants.count_ones() < 2 {
+                continue;
+            }
+            let mut fit = Vec::new();
+            let mut validation = Vec::new();
+            for (&v, &(wx, wy, train)) in cell.values.iter().zip(&cell.positions) {
+                if train {
+                    fit.push(v);
+                } else {
+                    validation.push((a, b, wx, wy, v));
+                }
+            }
+            if fit.len() < 4 || validation.len() < 4 {
+                continue;
+            }
+            let r = median(&mut fit);
+            let mut deviation: Vec<_> = fit.iter().map(|v| (v - r).abs()).collect();
+            if median(&mut deviation) > 0.025 {
+                continue;
+            }
+            regions.entry((x, y)).or_default().push((a, b, r));
+            heldout.extend(validation);
+        }
+        let mut candidate = baseline.clone();
+        for (&(x, y), edges) in &regions {
+            let mut anchor = BTreeMap::new();
+            for &(a, b, _) in edges {
+                for owner in [a, b] {
+                    anchor.insert(owner, *baseline.get(&(owner, x, y)).unwrap_or(&0.0));
+                }
+            }
+            let mut values = anchor.clone();
+            // Solve g(candidate)-g(base)=measured residual. The ridge retains the
+            // original field's gauge and limits drift in weakly connected graphs.
+            // Damped Jacobi and sorted maps make the result independent of visits.
+            for _ in 0..64 {
+                let mut next = BTreeMap::new();
+                for (&owner, &old) in &values {
+                    let mut sum = 0.05 * anchor[&owner];
+                    let mut weight = 0.05;
+                    for &(a, b, r) in edges {
+                        if owner == a {
+                            sum += values[&b] + r;
+                            weight += 1.0;
+                        } else if owner == b {
+                            sum += values[&a] - r;
+                            weight += 1.0;
+                        }
+                    }
+                    next.insert(
+                        owner,
+                        (0.5 * old + 0.5 * sum / weight).clamp(-MAX_LOG_GAIN, MAX_LOG_GAIN),
+                    );
+                }
+                values = next;
+            }
+            for (owner, value) in values {
+                candidate.insert((owner, x, y), value);
+            }
+        }
+        let error = |cells: &GainCells| {
+            let mut residuals: Vec<_> = heldout
+                .iter()
+                .map(|&(a, b, x, y, r)| {
+                    (r - local_gain(cells, a, x, y) + local_gain(cells, b, x, y)).abs()
+                })
+                .collect();
+            residuals.sort_by(f64::total_cmp);
+            if residuals.is_empty() {
+                return [0.0; 3];
+            }
+            [
+                residuals.iter().sum::<f64>() / residuals.len() as f64,
+                residuals[residuals.len() / 2],
+                residuals[residuals.len() * 95 / 100],
+            ]
+        };
+        let before = error(baseline);
+        let after = error(&candidate);
+        // Judge the *interpolated* field on patches excluded from the fit, rather
+        // than the solved cell centres. No improvement means exact old pixels.
+        let accept = heldout.len() >= 8
+            && after[0] < before[0] * 0.95
+            && after[1] <= before[1]
+            && after[2] <= before[2];
+        let summary = serde_json::json!({"accepted":accept,"fit_pair_cells":regions.values().map(Vec::len).sum::<usize>(),"heldout_patches":heldout.len(),"baseline_abs_log_residual_mean_median_p95":before,"candidate_abs_log_residual_mean_median_p95":after,"fallback":"original_same_content_overlap_field"});
+        (if accept { candidate } else { baseline.clone() }, summary)
     }
 }
 
@@ -275,6 +385,7 @@ mod tests {
             Cell {
                 values: vec![0.15; 8],
                 quadrants: 1,
+                ..Cell::default()
             },
         );
         assert!(gain.accepted().is_empty());
@@ -289,8 +400,64 @@ mod tests {
             Cell {
                 values: vec![-0.15; 8],
                 quadrants: 3,
+                ..Cell::default()
             },
         );
         assert!(gain.accepted().is_empty());
+    }
+
+    fn pair(gain: &mut OwnerOverlapGain, a: u8, b: u8, fit: f64, validation: f64) {
+        let values = (0..16)
+            .map(|i| if i % 2 == 0 { fit } else { validation })
+            .collect();
+        gain.cells.insert(
+            (a, b, 0, 0),
+            Cell {
+                values,
+                positions: (0..16)
+                    .map(|i| (240.0 + i as f64, 256.0, i % 2 == 0))
+                    .collect(),
+                quadrants: 3,
+            },
+        );
+    }
+
+    #[test]
+    fn overlap_graph_closes_transitive_exposure_and_preserves_unsupported_regions() {
+        let mut gain = OwnerOverlapGain::default();
+        pair(&mut gain, 2, 1, 0.03, 0.03);
+        pair(&mut gain, 3, 2, 0.04, 0.04);
+        let baseline = gain.accepted();
+        let (refined, evidence) = gain.refined(&baseline);
+        assert_eq!(evidence["accepted"], true);
+        for (a, b, r) in [(2, 1, 0.03), (3, 2, 0.04)] {
+            assert!(
+                (local_gain(&refined, a, 256.0, 256.0) - local_gain(&refined, b, 256.0, 256.0) - r)
+                    .abs()
+                    < 0.002
+            );
+        }
+        assert_eq!(local_gain(&refined, 99, 256.0, 256.0), 0.0);
+        assert_eq!(local_gain(&refined, 2, 4096.0, 256.0), 0.0);
+        assert!(refined.values().all(|v| v.abs() <= MAX_LOG_GAIN));
+        let mut reverse = OwnerOverlapGain::default();
+        pair(&mut reverse, 3, 2, 0.04, 0.04);
+        pair(&mut reverse, 2, 1, 0.03, 0.03);
+        assert_eq!(reverse.refined(&reverse.accepted()).0, refined);
+    }
+
+    #[test]
+    fn overlap_graph_rejects_holdout_regression_and_keeps_exact_original_field() {
+        let mut gain = OwnerOverlapGain::default();
+        pair(&mut gain, 2, 1, 0.06, -0.06);
+        pair(&mut gain, 3, 2, 0.06, -0.06);
+        let baseline = gain.accepted();
+        let (refined, evidence) = gain.refined(&baseline);
+        assert_eq!(evidence["accepted"], false);
+        assert_eq!(refined, baseline);
+        assert_eq!(
+            OwnerOverlapGain::default().refined(&GainCells::new()).0,
+            GainCells::new()
+        );
     }
 }
