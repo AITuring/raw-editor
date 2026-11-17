@@ -1,0 +1,601 @@
+{
+  "id": "task-4-thread-budget-and-two-slots",
+  "date": "2026-11-17",
+  "status": "task_4_accepted",
+  "starting_commit": "6469b568",
+  "native_fix_commit": "e68d24dda7a850d2348f237d4a713933559e9702",
+  "initial_rehearsal": {
+    "asserted_global_and_pixel_checks": "pass",
+    "full_budget_audit": "gap_found",
+    "global_rayon_threads": 5,
+    "preparation_threads": 6,
+    "record": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/rehearsal.json"
+  },
+  "fix": "Preparation pool is capped by min(hardware threads, active Rayon pool, image and memory bounds); native executable probe is required for shared-run admission, legacy unverified binaries are exclusive.",
+  "accepted_legacy_baseline_unchanged": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+  "validated_binary": {
+    "label": "task-4-capped-r2",
+    "sha256": "5b1a692677423372ccfa4a270dc0be4c10b9b68aa658e209060d6d3dd632b0d9",
+    "commit": "e68d24dda7a850d2348f237d4a713933559e9702",
+    "resource_contract": {
+      "preparation_threads": 1,
+      "rayon_threads": 1,
+      "version": 1,
+      "status": "verified",
+      "probe_stdout": "\nrunning 1 test\ntest panorama_stitching::alignment_tests::source_preparation::stack_resource_budget_contract ... STACK_RESOURCE_CONTRACT {\"preparation_threads\":1,\"rayon_threads\":1,\"version\":1}\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1138 filtered out; finished in 0.00s\n\n"
+    }
+  },
+  "recompiled_binary": {
+    "label": "task-4-load-r2",
+    "sha256": "5b1a692677423372ccfa4a270dc0be4c10b9b68aa658e209060d6d3dd632b0d9",
+    "commit": "e68d24dda7a850d2348f237d4a713933559e9702",
+    "build_environment": {
+      "CARGO_TARGET_DIR": "/Users/dp/Desktop/raw-editor/src-tauri/target",
+      "CARGO_BUILD_JOBS": "3",
+      "RAYON_NUM_THREADS": "3",
+      "RUSTFLAGS": null,
+      "MACOSX_DEPLOYMENT_TARGET": null
+    },
+    "source_manifest_entries": 719
+  },
+  "rehearsal_checks": {
+    "real_compilation_and_native_run_overlap": true,
+    "queued_request_blocked": true,
+    "second_run_after_primary_releases_lock": true,
+    "output_and_alignment_cache_isolated": true,
+    "primary_contended": true,
+    "queued_contended_matches_overlap": true,
+    "both_native_rayon_threads_5": true,
+    "both_preparation_pools_within_5": true,
+    "both_tiff_equal_v28": true,
+    "default_budgets_and_qg_preserved": true,
+    "both_memory_gates_pass": true,
+    "accepted_binary_unchanged": true,
+    "protected_files_unchanged": true
+  },
+  "queue_wait_seconds": 454.2541399002075,
+  "slot_history": {
+    "primary": {
+      "slot": "run",
+      "lane": "task-4",
+      "what": "sleeping-9-6479 scale=1 primary-r2",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-4/scripts/stack-lab/run.py",
+        "--binary",
+        "task-4-capped-r2",
+        "--lane",
+        "task-4",
+        "--dataset",
+        "sleeping",
+        "--subset",
+        "sleeping-9-6479",
+        "--label",
+        "primary-r2",
+        "--out",
+        "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/r2/sleeping-9-6479-primary-r2"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-4",
+      "estimate_gib": 13.0,
+      "pid": 23164,
+      "started_epoch": 1794909948.75648,
+      "started": "2026-11-17T10:05:48.755847+00:00",
+      "state": "running",
+      "caps": {
+        "RAYON_NUM_THREADS": "5"
+      },
+      "contended_with": [],
+      "child_pid": 23167,
+      "exit_code": 0,
+      "ended_epoch": 1794910403.558275,
+      "minutes": 7.58003
+    },
+    "build": {
+      "slot": "build",
+      "lane": "task-4",
+      "what": "freeze task-4-load-r2",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-4/scripts/stack-lab/freeze.py",
+        "--label",
+        "task-4-load-r2",
+        "--lane",
+        "task-4",
+        "--worktree",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-4"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-4",
+      "estimate_gib": null,
+      "pid": 23173,
+      "started_epoch": 1794909949.179372,
+      "started": "2026-11-17T10:05:49.178776+00:00",
+      "state": "running",
+      "caps": {
+        "CARGO_BUILD_JOBS": "3"
+      },
+      "contended_with": [
+        "task-4: sleeping-9-6479 scale=1 primary-r2"
+      ],
+      "child_pid": 23180,
+      "exit_code": 0,
+      "ended_epoch": 1794910427.45224,
+      "minutes": 7.971214
+    },
+    "queued": {
+      "slot": "run",
+      "lane": "task-4",
+      "what": "sleeping-9-6479 scale=1 queued-r2",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-4/scripts/stack-lab/run.py",
+        "--binary",
+        "task-4-capped-r2",
+        "--lane",
+        "task-4",
+        "--dataset",
+        "sleeping",
+        "--subset",
+        "sleeping-9-6479",
+        "--label",
+        "queued-r2",
+        "--out",
+        "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/r2/sleeping-9-6479-queued-r2"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-4",
+      "estimate_gib": 13.0,
+      "pid": 23188,
+      "started_epoch": 1794910403.560317,
+      "started": "2026-11-17T10:05:49.397549+00:00",
+      "state": "running",
+      "caps": {
+        "RAYON_NUM_THREADS": "5"
+      },
+      "contended_with": [
+        "task-4: freeze task-4-load-r2"
+      ],
+      "child_pid": 26193,
+      "exit_code": 0,
+      "ended_epoch": 1794910823.854663,
+      "minutes": 7.004906
+    }
+  },
+  "snapshot": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/r2/three-request-snapshot.json",
+  "tool_tests": {
+    "passed": 35,
+    "failed": 0,
+    "seconds": 37.442,
+    "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/tool-tests-cap-35.log"
+  },
+  "quick": {
+    "status": "pass",
+    "commands": [
+      {
+        "command": [
+          "cargo",
+          "fmt",
+          "--manifest-path",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/src-tauri/Cargo.toml",
+          "--check"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 1.8109407424926758
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--manifest-path",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/src-tauri/Cargo.toml",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 14.45382809638977
+      },
+      {
+        "command": [
+          "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task-4-capped-r2/native-process-wrapper.py",
+          "--test-threads=3"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 152.09608793258667
+      },
+      {
+        "command": [
+          "node",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/tests/focus-stack-quality-contract.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.3002340793609619
+      },
+      {
+        "command": [
+          "node",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/tests/focus-stack-datasets-contract.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.2666900157928467
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/tests/focus-stack-regression-verdict.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 2.2831602096557617
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-4/tests/focus-stack-lanting-guard.test.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.1209249496459961
+      }
+    ],
+    "library_tests": {
+      "passed": 1095,
+      "failed": 0,
+      "ignored": 44
+    },
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/matrix-cap-verified-r2-quick/matrix.json"
+  },
+  "medium": {
+    "status": "pass",
+    "cases": [
+      {
+        "case": "nine-cold",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/r2/sleeping-9-6479-primary-r2",
+        "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "qg": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 8441266176,
+        "memory_gate_pass": true,
+        "wall_seconds": 453.95361328125,
+        "contended": true,
+        "native_rayon_threads": 5,
+        "preparation_threads": [
+          5
+        ],
+        "paper_audit": null,
+        "guard": null,
+        "report_sha256": "2e93f0d7fab9ea7cf1f0143296f685dd5f2cb4cc02f4f500faae29ea41b7962c",
+        "analysis_sha256": "4dd89360fe8ddc4223bd2c88952c6da12f3f3c4cfd9be32db8db0d3697818365"
+      },
+      {
+        "case": "nine-hot",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/r2/sleeping-9-6479-queued-r2",
+        "tiff_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "qg": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 9603481600,
+        "memory_gate_pass": true,
+        "wall_seconds": 419.45150685310364,
+        "contended": true,
+        "native_rayon_threads": 5,
+        "preparation_threads": [
+          5
+        ],
+        "paper_audit": null,
+        "guard": null,
+        "report_sha256": "6e4a03ea34f0b97ac5cc09e9515f1729eb1a513ab980daf175fc0a38c2d10f06",
+        "analysis_sha256": "9a5d840717fc4cff7e76618678e03c7ff16ee40dd7f09ec8f4edc8e4c5b35920"
+      },
+      {
+        "case": "langyuan-10",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/matrix-cap-verified-r2-medium/langyuan-10-attempt-1",
+        "tiff_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+        "qg": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11400,
+            "hits": 135
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 49756792,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 11491622912,
+        "memory_gate_pass": true,
+        "wall_seconds": 459.73863911628723,
+        "contended": true,
+        "native_rayon_threads": 5,
+        "preparation_threads": [
+          5
+        ],
+        "paper_audit": null,
+        "guard": null,
+        "report_sha256": "ed3f1a9803afc9dccb57a57c96cd5ece0b0724dcda46f74ecc7a11b4be6ce2b6",
+        "analysis_sha256": "8d63eb753db5eb432723826c7a87b7726c0cbf35cad323c98a02c4197d18f81a"
+      },
+      {
+        "case": "wenyuan-10",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/matrix-cap-verified-r2-medium/wenyuan-10-attempt-1",
+        "tiff_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+        "qg": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11340,
+            "hits": 107
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 50100684,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 11364794368,
+        "memory_gate_pass": true,
+        "wall_seconds": 474.17020893096924,
+        "contended": false,
+        "native_rayon_threads": 5,
+        "preparation_threads": [
+          5
+        ],
+        "paper_audit": null,
+        "guard": null,
+        "report_sha256": "0923266e8fae9ae3bdd8498632c576ad7570b726d316b4d32092fd1396464173",
+        "analysis_sha256": "bc0c81787843dee81b1d9109412804b6f9b14e6b8d9ccb4642d6ca39c09b6d5d"
+      },
+      {
+        "case": "lanting-framed",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4/matrix-cap-verified-r2-medium/lanting-framed-attempt-1/lanting",
+        "tiff_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+        "qg": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": 0,
+          "detail_repairs": 97
+        },
+        "closure": "not_run",
+        "performance": {
+          "raw_decode_count": 0,
+          "native_fusion_count": 0,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 12408,
+            "hits": 17
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 0,
+            "hits": 0
+          }
+        },
+        "peak_rss_bytes": 12751503360,
+        "memory_gate_pass": true,
+        "wall_seconds": 539.3535552024841,
+        "contended": false,
+        "native_rayon_threads": 5,
+        "preparation_threads": [
+          5
+        ],
+        "paper_audit": {
+          "paper_points": 1008,
+          "adjacent_comparisons": 1937,
+          "median_residual_rgb": [
+            6.0,
+            1.0,
+            1.0
+          ],
+          "median_adjacent_step": 1.0,
+          "p95_adjacent_step": 4.0,
+          "maximum_adjacent_step": 7.5,
+          "source_boundary": {
+            "count": 506,
+            "median": 1.0,
+            "p95": 4.0,
+            "max": 7.0,
+            "above_6": 2
+          },
+          "source_interior": {
+            "count": 1431,
+            "median": 1.0,
+            "p95": 4.0,
+            "max": 7.5,
+            "above_6": 2
+          },
+          "zone_gray_mae": {
+            "wall": 6.59,
+            "rail": 5.53,
+            "artwork": 4.05,
+            "bottom_frame": 5.41
+          }
+        },
+        "guard": {
+          "strict": {
+            "pass": true,
+            "failures": [],
+            "status": "quality_and_regression_pass",
+            "qualityPass": true,
+            "nativeEvidencePass": true,
+            "regressionOnly": false,
+            "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+            "reportSha": "f27cc3cb13034fe33af3fe85e8d524c76a9d91cf04b002bd7640c1c32c7f9160",
+            "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac"
+          },
+          "regression_only": {
+            "pass": true,
+            "failures": [],
+            "status": "quality_and_regression_pass",
+            "qualityPass": true,
+            "nativeEvidencePass": true,
+            "regressionOnly": true,
+            "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+            "reportSha": "f27cc3cb13034fe33af3fe85e8d524c76a9d91cf04b002bd7640c1c32c7f9160",
+            "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac"
+          }
+        },
+        "report_sha256": "f27cc3cb13034fe33af3fe85e8d524c76a9d91cf04b002bd7640c1c32c7f9160",
+        "analysis_sha256": "0a2cb85ab09aee682b0c47a5e4593b8df57b470e7cfb6ff0723eef36aabb78b3"
+      }
+    ],
+    "coverage": "Two real 9-NEF rehearsal runs plus the three remaining medium cases, all checked against unchanged formal expectations; no unexpected retry."
+  },
+  "highest_peak_rss_bytes": 12751503360,
+  "memory_gate_bytes": 25769803776,
+  "protected_files_sha256": {
+    ".vscode/settings.json": "2ac108a9cae907889bfd3e4d0f60a5ff35c2196b2b2ef8a18308e69ed4447f1c",
+    "tests/acceptance/focus-stack-datasets.json": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+    "tests/acceptance/focus-stack-regression-baselines.json": "63bfea716b7c04691eeac19d789dfbd28aa6624f7eec9820388fe5dd2604ab17",
+    "tests/acceptance/lanting-paper-baseline.json": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25"
+  },
+  "source_sha256": {
+    "src-tauri/src/panorama_stitching/run_control.rs": "df0579b287d168a67042f4c17f95edf5e15db7c4211ed6957da4b962199a1397",
+    "src-tauri/src/panorama_stitching/alignment_tests/source_preparation.rs": "4b208e82a556f21f5a88dd62939c3d20626e61e7e7f36fdedc0b39ac6ffbbe81",
+    "scripts/stack-lab/common.py": "180be18c9ee9b9af419688c9fad7d4460792b3f661f18ab31a44654d45d7d40a",
+    "scripts/stack-lab/freeze.py": "91a0bed6d5c9a636cbee315ddc765d5a48af8c197b55ffbb1fa9a38ba52723ed",
+    "scripts/stack-lab/lanting_audit.py": "f20fbe671f2a2af9cc85f8f63985e8b822e484454218214c0f3507eca5b64edf",
+    "scripts/stack-lab/matrix.py": "b90a92bc9f2a2e99d5f0ebaef703ee0192a21938d09a5edf57fc3c4174316b4a",
+    "scripts/stack-lab/monitor.py": "27a251f057db61299fe6468e7779b612583136a95a08702c12a5d3fe555bd53a",
+    "scripts/stack-lab/run.py": "4006f60461e6c4b9f484502a3b11439216b89118434331455e9ef850a1b58ef6",
+    "scripts/stack-lab/slot.py": "cd2ef31e8f4cd60e6ee8a9f16128312a808da24f0a59301266b81faddd121391"
+  },
+  "evidence_directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4",
+  "build_prerequisites": {
+    "runtime_sha256": "2b885992d3d6fa4130d39ec84a80d7504ff52750027c547bb22c86165f19406a",
+    "matches_main_runtime": true,
+    "worktree_runtime": "/Users/dp/Desktop/raw-editor/.worktrees/task-4/src-tauri/resources/libonnxruntime.dylib",
+    "provisioned_by": "existing build.rs download-and-SHA-verification path; Cargo dependency resolution uses --offline"
+  },
+  "limits": [
+    "No changes to shared quality thresholds or accepted TIFF expectations.",
+    "Five medium scopes only; no acceptance of large full datasets, every thread count or complete N8.2 matrix.",
+    "All raw timing remains descriptive; contended runs are not performance evidence.",
+    "New validated frozen version is required for shared slots; historical base remains immutable and is forced exclusive by current tools."
+  ]
+}

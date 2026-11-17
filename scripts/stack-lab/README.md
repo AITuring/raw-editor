@@ -37,9 +37,11 @@ freeze 自动占 build 槽，**从构建/采用到复制、核对、发布全过
 
 - `candidate-release-binary`：复制后的独立只读可执行文件；
 - `native-process-wrapper.py`：执行入口，输出 `NATIVE_PROCESS_USAGE`（RSS统一成bytes）；
-- `build.json`：label、二进制与wrapper SHA、原始提交、来源记录、源码清单和冻结时间。
+- `build.json`：label、二进制与wrapper SHA、原始提交、来源记录、源码清单和冻结时间；`resource_contract`记录实际二进制限额探针是否通过。
 
 label 仅允许1–128个字母/数字/`._-`，首字符为字母或数字。已有标签一律拒绝，包括并发重复请求；发布通过同一文件系统内的目录重命名完成，读者看不到半成品。失败和正常可处理的中断清除暂存目录；KILL 后可能留下隐藏暂存目录，不视作已发布版本。文件设为只读，工具层面禁止覆盖；这不阻止文件所有者主动修改文件权限。
+
+冻结时会在Rayon=1下实际执行`stack_resource_budget_contract`测试；只有全局池与独立预处理池都遵守预算才标为version=1/verified。缺少探针的历史版本可保留冻结，但标为unverified；探针失败则拒绝发布。探针线程数是验证环境，不是后续素材运行的实际线程数。
 
 任务2使用 `common.verify_binary(label)` 核对二进制及wrapper摘要后运行。任务1只验收资源槽与冻结；任务2的运行、矩阵和RSS门说明见下文，真实结果见 [任务2记录](../../docs/artwork-lanes/2-run-matrix.md)。
 
@@ -54,13 +56,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/stack-lab -v
 ## 单次素材运行（任务2）
 
 ```sh
-python3 scripts/stack-lab/run.py --binary base-2026-11-12 --lane task-2 --dataset sleeping --subset sleeping-9-6479 --label r1
-python3 scripts/stack-lab/run.py --binary base-2026-11-12 --lane task-2 --dataset lanting --framed --label r1
+python3 scripts/stack-lab/run.py --binary task-4-capped-r2 --lane task-2 --dataset sleeping --subset sleeping-9-6479 --label r1
+python3 scripts/stack-lab/run.py --binary task-4-capped-r2 --lane task-2 --dataset lanting --framed --label r1
 ```
 
 - 运行当前checkout的`tests/focus-stack-regression.mjs`，只用冻结的二进制与wrapper；每次输出到新目录，已有目录拒绝复用。没有更新或重设已验收基线的选项。
 - 输入与参考图只读，前后核对摘要；执行记录保存来源清单、冻结版本、输入/runner摘要、槽、环境、时间和退出码。来源清单按Node runner相同的全局排序→子集→倒序规则构造。
-- 已有历史峰值的9张、两套10张、兰亭，以及0.1祁序/枫鹰自动用run槽；未知范围、首次全量、预估>20GiB或`--exclusive`占独占槽。给未知范围手动提供较小估计不会取消独占要求。
+- 只有二进制限额合同已验证，且已有历史峰值的9张、两套10张、兰亭，以及0.1祁序/枫鹰，才自动用run槽；未知范围、首次全量、预估>20GiB或`--exclusive`占独占槽。给未知范围手动提供较小估计不会取消独占要求。旧冻结版本缺少限额验证时一律exclusive，也拒绝将其手动嵌入共享run槽。
 - `execution.json`记录过程，`analysis.json`记录QG、完整判据状态、来源计数、闭环、输出TIFF SHA、默认缓存预算/计数、内存与争用证据。多份报告中只接受唯一一份有实际QG判据的报告；不忽略有测量的冲突报告。
 - `ps`每0.5秒采样runner进程树RSS之和（KiB→bytes）；超过24GiB立刻终止命令进程组。采样失败也停止运行。最终峰值取采样值、原生`getrusage`及Stack_Report RSS的最大值；要求采样和原生usage都有证据。超过门限、证据缺失或监控错误都不能通过内存门。
 - 单次返回0仅表示原生质量/来源/输出/内存全部通过，或显式预览成功（预览状态为`rendered_without_quality_acceptance`，不计入原生验收）。拒绝、资源失败、分析错误返回非零。已启动的runner取消时写入中断状态并停止其进程组。
@@ -93,3 +95,5 @@ python3 scripts/stack-lab/matrix.py --tier full --binary base-2026-11-12 --label
 每个不符项自动通过exclusive重跑一次；两次分析与差异都保留，仍不符则矩阵返回1。独占重跑恢复一致时标`pass_after_exclusive_retry`，不抹掉首轮不符。矩阵取消停止当前任务，不启动后续或自动重跑。
 
 输出为`output/acceptance/<lane>/matrix-<label>-<tier>/matrix.json`及每个case的attempt目录；保存完整预期快照和预期文件SHA。可用`--case <id>`限定层内case，或`--matrix <copy.json>`验证独立预期；工具不会写回预期文件。复现负向验证时只改副本中一项TIFF SHA，预期是两轮实际运行后返回1，而不是修改正式基线。
+
+限额修复与旧版本兼容范围见 [任务4记录](../../docs/artwork-lanes/4-two-slots.md)。`base-2026-11-12`仍是像素比较基准；其旧预处理池不受全局Rayon上限约束，所以从本版本起实际运行自动独占。共享两槽场景使用经过探针与真实回归的新冻结版本。

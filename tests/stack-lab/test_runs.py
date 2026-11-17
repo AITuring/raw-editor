@@ -100,8 +100,17 @@ class RunsTest(fixtures.ToolsTest):
         self.assertEqual(code,0,err)
         self.assertEqual(json.loads((dest/'execution.json').read_text())['slot']['slot'],'exclusive')
 
+    def test_legacy_binary_cannot_be_manually_wrapped_in_shared_slot(self):
+        p=self.root/'output/acceptance/binaries/fixture/build.json'
+        d=json.loads(p.read_text());d.pop('resource_contract');p.chmod(0o644);p.write_text(json.dumps(d))
+        code,_,err=self.run_tool('slot.py','run','--estimate-gib','12','--',PYTHON,str(self.script/'run.py'),
+            '--binary','fixture','--lane','task-2','--dataset','sleeping','--label','legacy-shared')
+        self.assertNotEqual(code,0)
+        self.assertIn('requires exclusive',err)
+        self.assertFalse((self.root/'output/acceptance/task-2/sleeping-legacy-shared').exists())
+
     def test_freeze_rejects_a_failed_native_budget_probe(self):
-        self.artifact.write_text('#!/bin/sh\necho "STACK_RESOURCE_CONTRACT {\"version\":1,\"rayon_threads\":1,\"preparation_threads\":6}"\nexit 101\n')
+        self.artifact.write_text('#!' + PYTHON + '\nimport json\nprint("STACK_RESOURCE_CONTRACT "+json.dumps(dict(version=1,rayon_threads=1,preparation_threads=6)))\nprint("test result: ok. 1 passed; 0 failed")\n')
         self.artifact.chmod(0o755);self.evidence['sha256']=self.digest(self.artifact);self.write_evidence()
         code,_,_=self.adopt('bad-contract')
         self.assertNotEqual(code,0)
