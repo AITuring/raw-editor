@@ -1,0 +1,4713 @@
+{
+  "dataset": "qixu-2",
+  "label": "祁序2",
+  "date": "2026-11-17",
+  "started_at": "2026-11-17T11:23:33.959319+00:00",
+  "finished_at": "2026-11-17T11:57:28.231981+00:00",
+  "verified_at": "2026-11-17T16:20:19.908999+00:00",
+  "scope": "full registered dataset, scale=0.25, diagnostic only",
+  "binary": {
+    "label": "base-2026-11-12",
+    "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+  },
+  "execution": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/execution.json",
+    "sha256": "354c84540ef13fa8e437c6d006b9d6c1ee828ae5c6405900dfd9dd9c5ca0448a",
+    "bytes": 22025
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": true,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": false
+  },
+  "analysis": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/analysis.json",
+    "sha256": "d75119441143dcaf53e3d12bebc11eb53f0e124b297d575d3ff19d59c63ed297",
+    "bytes": 4181
+  },
+  "report": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-395eca3e-55ed-4288-af3d-0ad78750cb66.json",
+    "sha256": "6a7c6b6a98da44211b2c4e4433305f181c587d08084e94343f06947d8fef8109",
+    "bytes": 637143
+  },
+  "native_logs": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.log",
+      "sha256": "1dbca4ebffdfbc410b4b84c8e94c4a98c88676ad2d942ea9b0036f901ba5d34a",
+      "bytes": 1130056
+    }
+  ],
+  "inputs_sha256": "ff6a4b413381b867bf9e6f40c34999e4efc8532f37cd19ecba0123f80e310bdc",
+  "manifest_sha256": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+  "reference": null,
+  "source_counts": {
+    "excluded": 2,
+    "composited": 96
+  },
+  "unexpected_exclusions": [
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6708.NEF",
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6730.NEF"
+  ],
+  "sources": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6708.NEF",
+      "sha256": "9ecbb8d63f01419cc7b1bf48c88b38cc125e3ac516db22c948ce9b25379e3285",
+      "bytes": 56124646,
+      "classification": "excluded",
+      "reason": "native scan: could not be aligned with the selected set; excluded before solving scan again",
+      "station": null,
+      "ordered": false,
+      "report_source": false,
+      "decoded": null,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "1 image(s) could not be aligned with the selected set: DSC_6708.NEF."
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6709.NEF",
+      "sha256": "293210192a6d7a23bb0f3714580d42638cef4c2a613badc60c3deb9d9a911826",
+      "bytes": 58888475,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 48,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6710.NEF",
+      "sha256": "8bfc3d61971c501f1053b5a0b70be9cff2c477471df6cba5dde8b8f2544abe9f",
+      "bytes": 59186098,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 48,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF",
+      "sha256": "80cf41ccc789b390c67570a75770829789f25397dc5ef2a606a79b2ff797da53",
+      "bytes": 60172897,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            6118,
+            202,
+            48,
+            48
+          ],
+          "donor_source_id": 2,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF",
+      "sha256": "8784a3cb458cfa6f2aa6ace78160aa342b1ae2db3887977f451902c6a7d2db7a",
+      "bytes": 60279039,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            8614,
+            1018,
+            48,
+            48
+          ],
+          "donor_source_id": 3,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            6070,
+            1354,
+            48,
+            48
+          ],
+          "donor_source_id": 3,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            6166,
+            1546,
+            48,
+            48
+          ],
+          "donor_source_id": 3,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            8662,
+            1546,
+            48,
+            48
+          ],
+          "donor_source_id": 3,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6713.NEF",
+      "sha256": "6ee3463c577d40b04ddc632764c22c5f03b576ba8fda5aef1c281bac9ff21df1",
+      "bytes": 60217318,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6714.NEF",
+      "sha256": "dd136fd10cf5df9eb8e2da9d5da56a77a5364054882b907f8401e67f1f5819e4",
+      "bytes": 60057979,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            6070,
+            1930,
+            48,
+            48
+          ],
+          "donor_source_id": 5,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6714.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6714.NEF'<->'DSC_6729.NEF': scale 1.133, overlap 48.0%, NCC 0.265, edges 0.197/-0.056, samples 1077"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6715.NEF",
+      "sha256": "e8d8e4907402305f190368a1cfd076689477db96b388e89487a618a3bc96f5fa",
+      "bytes": 59654549,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6727.NEF'<->'DSC_6715.NEF': scale 0.868, overlap 12.0%, NCC 0.122, edges 0.120/-0.101, samples 252"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6716.NEF",
+      "sha256": "c8dedb30402b29ca58e11ccddea2e81385a9b945f60735d71be649ca4f6fa5dd",
+      "bytes": 59045006,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 22,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6716.NEF'<->'DSC_6729.NEF': scale 1.067, overlap 36.0%, NCC 0.239, edges 0.159/0.021, samples 821"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6717.NEF",
+      "sha256": "c55c741756fbb33638594028f64cd3fc9bbacafb48f354f92d8f8d0a26ae652f",
+      "bytes": 59564126,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 22,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6717.NEF'<->'DSC_6728.NEF': scale 1.128, overlap 36.0%, NCC 0.214, edges 0.030/0.013, samples 910",
+        "- Focus station relation rejected 'DSC_6727.NEF'<->'DSC_6717.NEF': scale 0.912, overlap 36.0%, NCC 0.323, edges 0.054/0.136, samples 846"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6718.NEF",
+      "sha256": "0ff248e271d44db56c352c677e121c983c90ca552803c2048f4869429771ff28",
+      "bytes": 59367537,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 22,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6719.NEF",
+      "sha256": "8e3e2c3beb455f86ceb332e28fd75a9aa9aa8eb8faa6133441c543e653424660",
+      "bytes": 58644122,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 36,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            7318,
+            2602,
+            48,
+            48
+          ],
+          "donor_source_id": 10,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6719.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6720.NEF",
+      "sha256": "d8f1e704020758fad93d427b020d2080c7cad0f91f044618b7b23d2138f6632d",
+      "bytes": 58993428,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 36,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6729.NEF'<->'DSC_6720.NEF': scale 1.025, overlap 8.0%, NCC 0.345, edges 0.063/0.276, samples 198"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6721.NEF",
+      "sha256": "6229f916c130ab0492ff3dc15766c6ffbe76bd240fd2a3692cae094898ff3da0",
+      "bytes": 58568855,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 42,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6722.NEF",
+      "sha256": "65291add9158c1f2df1ecc27b05fa41bdd0aece0799feb7f9d5e5e6fe6e6e8e0",
+      "bytes": 59000829,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 42,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6722.NEF'<->'DSC_6726.NEF': scale 1.074, overlap 32.0%, NCC 0.342, edges 0.304/0.727, samples 1004",
+        "- Focus station relation rejected 'DSC_6722.NEF'<->'DSC_6726.NEF': scale 1.068, overlap 32.0%, NCC 0.332, edges 0.286/0.721, samples 1003"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+      "sha256": "2c2a29e3ebcd142f950d07837ee5c364be503876660816c237db45ba31c9c53a",
+      "bytes": 57368441,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 47,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            7078,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            7606,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            7654,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            7990,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            8038,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            8134,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "replaced"
+        },
+        {
+          "delivered_rect": [
+            8230,
+            4522,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            8086,
+            4570,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            8134,
+            4570,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            6742,
+            4618,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            6790,
+            4666,
+            48,
+            48
+          ],
+          "donor_source_id": 14,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6725.NEF'<->'DSC_6723.NEF': scale 0.996, overlap 24.0%, NCC 0.320, edges 0.083/0.157, samples 702"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6724.NEF",
+      "sha256": "df75b71ac7fd8398c5191cde8ffa5d3c3f86d232811a477475c14f1ab31d5d81",
+      "bytes": 56800894,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 47,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6724.NEF'<->'DSC_6725.NEF': scale 1.023, overlap 24.0%, NCC 0.215, edges -0.001/0.240, samples 672",
+        "- Focus station relation rejected 'DSC_6725.NEF'<->'DSC_6724.NEF': scale 0.994, overlap 24.0%, NCC 0.240, edges 0.062/0.235, samples 762",
+        "- Focus geometry retry candidate rejected edge 'DSC_6724.NEF'<->'DSC_6725.NEF': scale 1.018, overlap 24.0%, NCC 0.211, edges -0.010/0.212, samples 672"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6725.NEF",
+      "sha256": "5359849875d961ed54db7c5d1c8c5cce1f7e3dafab9e5af89f3b87f8dbaf210b",
+      "bytes": 58096992,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 41,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            5446,
+            3850,
+            48,
+            48
+          ],
+          "donor_source_id": 16,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6725.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6724.NEF'<->'DSC_6725.NEF': scale 1.023, overlap 24.0%, NCC 0.215, edges -0.001/0.240, samples 672",
+        "- Focus station relation rejected 'DSC_6725.NEF'<->'DSC_6724.NEF': scale 0.994, overlap 24.0%, NCC 0.240, edges 0.062/0.235, samples 762",
+        "- Focus geometry retry candidate rejected edge 'DSC_6724.NEF'<->'DSC_6725.NEF': scale 1.018, overlap 24.0%, NCC 0.211, edges -0.010/0.212, samples 672",
+        "- Focus station relation rejected 'DSC_6725.NEF'<->'DSC_6723.NEF': scale 0.996, overlap 24.0%, NCC 0.320, edges 0.083/0.157, samples 702"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6726.NEF",
+      "sha256": "490bbfefaf7c46e4e3c762e26be0b700dea6bdd46f0b420795ac1a0d356d80f6",
+      "bytes": 57268625,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 41,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6722.NEF'<->'DSC_6726.NEF': scale 1.074, overlap 32.0%, NCC 0.342, edges 0.304/0.727, samples 1004",
+        "- Focus station relation rejected 'DSC_6722.NEF'<->'DSC_6726.NEF': scale 1.068, overlap 32.0%, NCC 0.332, edges 0.286/0.721, samples 1003"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6727.NEF",
+      "sha256": "ffcca4ad19838c83da9350b1b7d035cc1fd6051fb9527c57a9e8dfa145aabea3",
+      "bytes": 57314256,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 30,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            5350,
+            2650,
+            48,
+            48
+          ],
+          "donor_source_id": 18,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6727.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6727.NEF'<->'DSC_6715.NEF': scale 0.868, overlap 12.0%, NCC 0.122, edges 0.120/-0.101, samples 252",
+        "- Focus station relation rejected 'DSC_6727.NEF'<->'DSC_6717.NEF': scale 0.912, overlap 36.0%, NCC 0.323, edges 0.054/0.136, samples 846"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6728.NEF",
+      "sha256": "f786aa86662566a8633627861a3c1dde843041142431a6df725dd1b33a80714c",
+      "bytes": 56417179,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 30,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6728.NEF'<->'DSC_6729.NEF': scale 0.949, overlap 24.0%, NCC 0.242, edges 0.191/0.568, samples 826",
+        "- Focus station relation rejected 'DSC_6717.NEF'<->'DSC_6728.NEF': scale 1.128, overlap 36.0%, NCC 0.214, edges 0.030/0.013, samples 910",
+        "- Focus geometry retry candidate rejected edge 'DSC_6728.NEF'<->'DSC_6729.NEF': scale 0.953, overlap 24.0%, NCC 0.215, edges 0.197/0.541, samples 826",
+        "- Focus station relation rejected 'DSC_6728.NEF'<->'DSC_6741.NEF': scale 1.070, overlap 32.0%, NCC 0.062, edges 0.111/-0.024, samples 660",
+        "- Focus station relation rejected 'DSC_6728.NEF'<->'DSC_6742.NEF': scale 1.145, overlap 24.0%, NCC 0.268, edges 0.071/0.018, samples 503"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6729.NEF",
+      "sha256": "e23e055bce92f24d6ad0a64181c09718dff33b34bbbb7a288df618474349fe0a",
+      "bytes": 56534099,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 16,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6728.NEF'<->'DSC_6729.NEF': scale 0.949, overlap 24.0%, NCC 0.242, edges 0.191/0.568, samples 826",
+        "- Focus geometry retry candidate rejected edge 'DSC_6729.NEF'<->'DSC_6730.NEF': scale 1.037, overlap 52.0%, NCC 0.557, edges -0.118/0.084, samples 2160",
+        "- Focus station relation rejected 'DSC_6731.NEF'<->'DSC_6729.NEF': scale 1.001, overlap 32.0%, NCC 0.327, edges 0.014/0.169, samples 1066",
+        "- Focus geometry retry candidate rejected edge 'DSC_6728.NEF'<->'DSC_6729.NEF': scale 0.953, overlap 24.0%, NCC 0.215, edges 0.197/0.541, samples 826",
+        "- Focus geometry retry candidate rejected edge 'DSC_6729.NEF'<->'DSC_6730.NEF': scale 1.007, overlap 64.0%, NCC 0.657, edges -0.125/0.188, samples 2160",
+        "- Focus station relation rejected 'DSC_6731.NEF'<->'DSC_6729.NEF': scale 1.030, overlap 32.0%, NCC 0.395, edges 0.038/0.452, samples 1063",
+        "- Focus station relation rejected 'DSC_6714.NEF'<->'DSC_6729.NEF': scale 1.133, overlap 48.0%, NCC 0.265, edges 0.197/-0.056, samples 1077",
+        "- Focus station relation rejected 'DSC_6716.NEF'<->'DSC_6729.NEF': scale 1.067, overlap 36.0%, NCC 0.239, edges 0.159/0.021, samples 821",
+        "- Focus station relation rejected 'DSC_6729.NEF'<->'DSC_6741.NEF': scale 1.124, overlap 24.0%, NCC 0.230, edges 0.066/-0.071, samples 636",
+        "- Focus station relation rejected 'DSC_6729.NEF'<->'DSC_6720.NEF': scale 1.025, overlap 8.0%, NCC 0.345, edges 0.063/0.276, samples 198"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6730.NEF",
+      "sha256": "177f633ed3e42190cec3cc3f6a8edd39baf288f4f00c9c78a06a7de2db32349d",
+      "bytes": 56485391,
+      "classification": "excluded",
+      "reason": "focus scan skipped as mostly soft (49% cells); absent from primary Streaming and recorded detail repair donors",
+      "station": 15,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6729.NEF'<->'DSC_6730.NEF': scale 1.037, overlap 52.0%, NCC 0.557, edges -0.118/0.084, samples 2160",
+        "- Focus geometry retry candidate rejected edge 'DSC_6730.NEF'<->'DSC_6731.NEF': scale 0.964, overlap 24.0%, NCC 0.291, edges 0.241/0.600, samples 1062",
+        "- Focus station relation rejected 'DSC_6732.NEF'<->'DSC_6730.NEF': scale 1.041, overlap 48.0%, NCC 0.399, edges 0.104/0.705, samples 1140",
+        "- Focus geometry retry candidate rejected edge 'DSC_6729.NEF'<->'DSC_6730.NEF': scale 1.007, overlap 64.0%, NCC 0.657, edges -0.125/0.188, samples 2160",
+        "- Focus geometry retry candidate rejected edge 'DSC_6730.NEF'<->'DSC_6731.NEF': scale 0.964, overlap 24.0%, NCC 0.294, edges 0.245/0.501, samples 1062",
+        "- Focus station relation rejected 'DSC_6732.NEF'<->'DSC_6730.NEF': scale 1.041, overlap 48.0%, NCC 0.392, edges 0.107/0.763, samples 1140",
+        "- Focus station relation rejected 'DSC_6730.NEF'<->'DSC_6736.NEF': scale 1.015, overlap 20.0%, NCC 0.285, edges 0.440/0.726, samples 486",
+        "- Focus station relation rejected 'DSC_6730.NEF'<->'DSC_6737.NEF': scale 1.062, overlap 32.0%, NCC 0.284, edges 0.262/0.382, samples 901",
+        "- Focus scan: leaving out 1 mostly soft frame(s): DSC_6730.NEF (49% of its cells soft)"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6731.NEF",
+      "sha256": "28347b98209adbbcad9cd2aa34cabfb3667e8565b209c6a5011f1853e1a56a96",
+      "bytes": 57521392,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6730.NEF'<->'DSC_6731.NEF': scale 0.964, overlap 24.0%, NCC 0.291, edges 0.241/0.600, samples 1062",
+        "- Focus station relation rejected 'DSC_6731.NEF'<->'DSC_6729.NEF': scale 1.001, overlap 32.0%, NCC 0.327, edges 0.014/0.169, samples 1066",
+        "- Focus geometry retry candidate rejected edge 'DSC_6730.NEF'<->'DSC_6731.NEF': scale 0.964, overlap 24.0%, NCC 0.294, edges 0.245/0.501, samples 1062",
+        "- Focus station relation rejected 'DSC_6731.NEF'<->'DSC_6729.NEF': scale 1.030, overlap 32.0%, NCC 0.395, edges 0.038/0.452, samples 1063"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6732.NEF",
+      "sha256": "4177584d3008e9cea61333bc33177a9ee64c27aca6243cbf1af9eec18132a13c",
+      "bytes": 58519247,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            5398,
+            394,
+            48,
+            48
+          ],
+          "donor_source_id": 23,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6732.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6732.NEF'<->'DSC_6730.NEF': scale 1.041, overlap 48.0%, NCC 0.399, edges 0.104/0.705, samples 1140",
+        "- Focus station relation rejected 'DSC_6732.NEF'<->'DSC_6730.NEF': scale 1.041, overlap 48.0%, NCC 0.392, edges 0.107/0.763, samples 1140"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6733.NEF",
+      "sha256": "e9d13dc631702d887cfcd1849da56372d50e2dadadb0ee6b6fcbccec27e9a362",
+      "bytes": 58379292,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6733.NEF'<->'DSC_6737.NEF': scale 1.099, overlap 36.0%, NCC 0.279, edges 0.380/0.660, samples 705",
+        "- Focus station relation rejected 'DSC_6733.NEF'<->'DSC_6737.NEF': scale 1.099, overlap 36.0%, NCC 0.278, edges 0.393/0.613, samples 705"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+      "sha256": "db16c6b0acc99a7c919ddd0b4af69b6b22666e07106cfa9c32aa882417f28b68",
+      "bytes": 57947811,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            6166,
+            202,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5110,
+            250,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5446,
+            250,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            4774,
+            298,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5302,
+            298,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5878,
+            298,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5974,
+            298,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5590,
+            394,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            5206,
+            442,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            4006,
+            874,
+            48,
+            48
+          ],
+          "donor_source_id": 25,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6735.NEF",
+      "sha256": "86724a29e69d30df5417db88dfb7a0cfef041af1c9c1e777d27a45be84ab98fa",
+      "bytes": 58044539,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6735.NEF': scale 0.911, overlap 32.0%, NCC 0.332, edges 0.114/0.572, samples 650"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6736.NEF",
+      "sha256": "4742ee11f33c7a76aecb648a5cdc46c5ff508d406b486af5771f2d2411781d84",
+      "bytes": 58373433,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.046, overlap 36.0%, NCC 0.384, edges 0.339/0.533, samples 1393",
+        "- Focus station relation rejected 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.046, overlap 36.0%, NCC 0.384, edges 0.339/0.533, samples 1393",
+        "- Focus geometry retry candidate rejected edge 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.047, overlap 36.0%, NCC 0.389, edges 0.370/0.551, samples 1395",
+        "- Focus station relation rejected 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.047, overlap 36.0%, NCC 0.389, edges 0.370/0.551, samples 1395",
+        "- Focus station relation rejected 'DSC_6730.NEF'<->'DSC_6736.NEF': scale 1.015, overlap 20.0%, NCC 0.285, edges 0.440/0.726, samples 486"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6737.NEF",
+      "sha256": "8a9bd21f60306df9cb4a6c882cc4e784a385a49fe6a8a29331169ec911f26592",
+      "bytes": 56962842,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.046, overlap 36.0%, NCC 0.384, edges 0.339/0.533, samples 1393",
+        "- Focus station relation rejected 'DSC_6733.NEF'<->'DSC_6737.NEF': scale 1.099, overlap 36.0%, NCC 0.279, edges 0.380/0.660, samples 705",
+        "- Focus station relation rejected 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.046, overlap 36.0%, NCC 0.384, edges 0.339/0.533, samples 1393",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6737.NEF': scale 1.001, overlap 36.0%, NCC 0.317, edges 0.283/0.575, samples 931",
+        "- Focus station relation rejected 'DSC_6752.NEF'<->'DSC_6737.NEF': scale 0.968, overlap 48.0%, NCC 0.342, edges 0.233/0.391, samples 1273",
+        "- Focus geometry retry candidate rejected edge 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.047, overlap 36.0%, NCC 0.389, edges 0.370/0.551, samples 1395",
+        "- Focus station relation rejected 'DSC_6733.NEF'<->'DSC_6737.NEF': scale 1.099, overlap 36.0%, NCC 0.278, edges 0.393/0.613, samples 705",
+        "- Focus station relation rejected 'DSC_6736.NEF'<->'DSC_6737.NEF': scale 1.047, overlap 36.0%, NCC 0.389, edges 0.370/0.551, samples 1395",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6737.NEF': scale 0.987, overlap 36.0%, NCC 0.304, edges 0.270/0.432, samples 932",
+        "- Focus station relation rejected 'DSC_6752.NEF'<->'DSC_6737.NEF': scale 0.953, overlap 48.0%, NCC 0.299, edges 0.194/0.182, samples 1275",
+        "- Focus station relation rejected 'DSC_6730.NEF'<->'DSC_6737.NEF': scale 1.062, overlap 32.0%, NCC 0.284, edges 0.262/0.382, samples 901"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6738.NEF",
+      "sha256": "617aacbf924ab58dca7bbc947c5489bcdaf36f3b548425b26fd091f4b0143f65",
+      "bytes": 57916292,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            4726,
+            2122,
+            48,
+            48
+          ],
+          "donor_source_id": 29,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6738.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6738.NEF'<->'DSC_6750.NEF': scale 1.083, overlap 24.0%, NCC 0.246, edges -0.081/-0.026, samples 686"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6739.NEF",
+      "sha256": "a16fa20ac7f7c6d16dd1a7f49ccbf88004f188921ed71da463faa8e27935e976",
+      "bytes": 58276546,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            5974,
+            1498,
+            48,
+            48
+          ],
+          "donor_source_id": 30,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6739.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6739.NEF'<->'DSC_6749.NEF': scale 1.123, overlap 24.0%, NCC 0.287, edges 0.030/0.061, samples 686"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6740.NEF",
+      "sha256": "05b0b37672b1f7f6919f193dd4e79d8429c409d63748fa0c3e2c63ecdf6e78e5",
+      "bytes": 57792069,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 23,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6740.NEF'<->'DSC_6741.NEF': scale 0.985, overlap 56.0%, NCC 0.247, edges -0.187/-0.004, samples 2159",
+        "- Focus geometry retry candidate rejected edge 'DSC_6740.NEF'<->'DSC_6741.NEF': scale 1.007, overlap 60.0%, NCC 0.364, edges -0.161/-0.012, samples 2160",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6740.NEF': scale 1.003, overlap 36.0%, NCC 0.279, edges 0.101/0.039, samples 772",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6740.NEF': scale 0.953, overlap 48.0%, NCC 0.235, edges 0.014/0.072, samples 1223",
+        "- Focus station relation rejected 'DSC_6747.NEF'<->'DSC_6740.NEF': scale 0.893, overlap 24.0%, NCC 0.066, edges -0.041/0.140, samples 569"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6741.NEF",
+      "sha256": "f5ca4db0d2e54a4a26e4fd263ca77592f8d9a835cd151628e65cfaeb8150813d",
+      "bytes": 57586641,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 25,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6740.NEF'<->'DSC_6741.NEF': scale 0.985, overlap 56.0%, NCC 0.247, edges -0.187/-0.004, samples 2159",
+        "- Focus geometry retry candidate rejected edge 'DSC_6741.NEF'<->'DSC_6742.NEF': scale 1.070, overlap 24.0%, NCC 0.439, edges 0.224/0.473, samples 1023",
+        "- Focus station relation rejected 'DSC_6741.NEF'<->'DSC_6743.NEF': scale 1.069, overlap 24.0%, NCC 0.388, edges 0.258/0.487, samples 1140",
+        "- Focus geometry retry candidate rejected edge 'DSC_6740.NEF'<->'DSC_6741.NEF': scale 1.007, overlap 60.0%, NCC 0.364, edges -0.161/-0.012, samples 2160",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6741.NEF': scale 1.010, overlap 36.0%, NCC 0.332, edges 0.046/0.053, samples 751",
+        "- Focus station relation rejected 'DSC_6729.NEF'<->'DSC_6741.NEF': scale 1.124, overlap 24.0%, NCC 0.230, edges 0.066/-0.071, samples 636",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6741.NEF': scale 0.960, overlap 48.0%, NCC 0.342, edges 0.144/0.116, samples 1204",
+        "- Focus station relation rejected 'DSC_6728.NEF'<->'DSC_6741.NEF': scale 1.070, overlap 32.0%, NCC 0.062, edges 0.111/-0.024, samples 660",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6741.NEF': scale 0.900, overlap 24.0%, NCC 0.332, edges -0.026/0.111, samples 540",
+        "- Focus station relation rejected 'DSC_6741.NEF'<->'DSC_6743.NEF': scale 1.069, overlap 24.0%, NCC 0.387, edges 0.236/0.478, samples 1140"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6742.NEF",
+      "sha256": "c9cc968a14c5f2a63084c1e037055c521ee1f4a885dff0c4c16cd88491f11249",
+      "bytes": 58469029,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 37,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            5638,
+            2938,
+            48,
+            48
+          ],
+          "donor_source_id": 33,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6742.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6741.NEF'<->'DSC_6742.NEF': scale 1.070, overlap 24.0%, NCC 0.439, edges 0.224/0.473, samples 1023",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6742.NEF': scale 1.027, overlap 24.0%, NCC 0.212, edges 0.101/0.283, samples 649",
+        "- Focus station relation rejected 'DSC_6728.NEF'<->'DSC_6742.NEF': scale 1.145, overlap 24.0%, NCC 0.268, edges 0.071/0.018, samples 503"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6743.NEF",
+      "sha256": "cb37845136ae6110ac3625dc2920cf8fafb329617e4b7dae22d5689da23f460c",
+      "bytes": 57683576,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 37,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6741.NEF'<->'DSC_6743.NEF': scale 1.069, overlap 24.0%, NCC 0.388, edges 0.258/0.487, samples 1140",
+        "- Focus station relation rejected 'DSC_6747.NEF'<->'DSC_6743.NEF': scale 0.960, overlap 32.0%, NCC 0.364, edges 0.106/0.396, samples 1076",
+        "- Focus station relation rejected 'DSC_6741.NEF'<->'DSC_6743.NEF': scale 1.069, overlap 24.0%, NCC 0.387, edges 0.236/0.478, samples 1140"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6744.NEF",
+      "sha256": "72fbbe7d7d7d7af8d718b635e41aaa2a1bfadd129917d69ddba39a7268be62e1",
+      "bytes": 58561764,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 45,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6744.NEF'<->'DSC_6747.NEF': scale 0.980, overlap 24.0%, NCC 0.364, edges 0.194/0.425, samples 560",
+        "- Focus station relation rejected 'DSC_6744.NEF'<->'DSC_6747.NEF': scale 0.979, overlap 24.0%, NCC 0.347, edges 0.122/0.394, samples 560"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6745.NEF",
+      "sha256": "419c25a2fd39b17945dd283c47a45ed346ec4522491fa23a8bf196154cf8a1bc",
+      "bytes": 58599960,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 45,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF",
+      "sha256": "0221b1630beec91fe0a418befb1a7551cf990f312b4d15695490de1bd0fb2ae2",
+      "bytes": 58519950,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 43,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            3286,
+            4090,
+            48,
+            48
+          ],
+          "donor_source_id": 37,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            4150,
+            4378,
+            48,
+            48
+          ],
+          "donor_source_id": 37,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            4198,
+            4378,
+            48,
+            48
+          ],
+          "donor_source_id": 37,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6746.NEF'<->'DSC_6759.NEF': scale 0.912, overlap 24.0%, NCC 0.054, edges -0.017/-0.021, samples 641",
+        "- Focus station relation rejected 'DSC_6761.NEF'<->'DSC_6746.NEF': scale 1.025, overlap 48.0%, NCC -0.053, edges 0.031/0.044, samples 1339"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6747.NEF",
+      "sha256": "b19455384645bda6b567b6d799ef30a747dac7b4eb5b73d7c39f615fe71f6a5c",
+      "bytes": 57973784,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 34,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6747.NEF'<->'DSC_6743.NEF': scale 0.960, overlap 32.0%, NCC 0.364, edges 0.106/0.396, samples 1076",
+        "- Focus station relation rejected 'DSC_6744.NEF'<->'DSC_6747.NEF': scale 0.980, overlap 24.0%, NCC 0.364, edges 0.194/0.425, samples 560",
+        "- Focus station relation rejected 'DSC_6747.NEF'<->'DSC_6740.NEF': scale 0.893, overlap 24.0%, NCC 0.066, edges -0.041/0.140, samples 569",
+        "- Focus station relation rejected 'DSC_6744.NEF'<->'DSC_6747.NEF': scale 0.979, overlap 24.0%, NCC 0.347, edges 0.122/0.394, samples 560"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6748.NEF",
+      "sha256": "959148467e2e584aef623d63968f2878ac3da7a0bf2a2199d657c87bf79e1209",
+      "bytes": 57254986,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 34,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            3382,
+            2458,
+            48,
+            48
+          ],
+          "donor_source_id": 39,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6748.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6748.NEF'<->'DSC_6749.NEF': scale 0.942, overlap 48.0%, NCC 0.374, edges 0.285/0.501, samples 1161",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6762.NEF': scale 1.004, overlap 36.0%, NCC 0.145, edges 0.011/-0.015, samples 800",
+        "- Focus geometry retry candidate rejected edge 'DSC_6748.NEF'<->'DSC_6749.NEF': scale 0.938, overlap 48.0%, NCC 0.367, edges 0.344/0.544, samples 1159",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6741.NEF': scale 0.900, overlap 24.0%, NCC 0.332, edges -0.026/0.111, samples 540",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6762.NEF': scale 1.040, overlap 36.0%, NCC 0.117, edges 0.031/0.084, samples 780"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6749.NEF",
+      "sha256": "3f1eb4be072bb778288604f984698eea06c516d38adea8d2a8a3b553d9493449",
+      "bytes": 57829655,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 26,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6748.NEF'<->'DSC_6749.NEF': scale 0.942, overlap 48.0%, NCC 0.374, edges 0.285/0.501, samples 1161",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6757.NEF': scale 0.917, overlap 36.0%, NCC 0.123, edges 0.033/-0.063, samples 871",
+        "- Focus geometry retry candidate rejected edge 'DSC_6748.NEF'<->'DSC_6749.NEF': scale 0.938, overlap 48.0%, NCC 0.367, edges 0.344/0.544, samples 1159",
+        "- Focus station relation rejected 'DSC_6739.NEF'<->'DSC_6749.NEF': scale 1.123, overlap 24.0%, NCC 0.287, edges 0.030/0.061, samples 686",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6740.NEF': scale 0.953, overlap 48.0%, NCC 0.235, edges 0.014/0.072, samples 1223",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6741.NEF': scale 0.960, overlap 48.0%, NCC 0.342, edges 0.144/0.116, samples 1204",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6742.NEF': scale 1.027, overlap 24.0%, NCC 0.212, edges 0.101/0.283, samples 649"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6750.NEF",
+      "sha256": "8e02df950a0ab3b132520be614a7466cef4cee667bcf7eb2b5c133360e77d64c",
+      "bytes": 57974288,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 26,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6750.NEF'<->'DSC_6751.NEF': scale 0.957, overlap 36.0%, NCC 0.369, edges 0.323/0.460, samples 1180",
+        "- Focus station relation rejected 'DSC_6738.NEF'<->'DSC_6750.NEF': scale 1.083, overlap 24.0%, NCC 0.246, edges -0.081/-0.026, samples 686",
+        "- Focus station relation rejected 'DSC_6759.NEF'<->'DSC_6750.NEF': scale 0.988, overlap 36.0%, NCC 0.161, edges 0.024/-0.080, samples 934",
+        "- Focus geometry retry candidate rejected edge 'DSC_6750.NEF'<->'DSC_6751.NEF': scale 0.955, overlap 36.0%, NCC 0.368, edges 0.299/0.458, samples 1180",
+        "- Focus station relation rejected 'DSC_6757.NEF'<->'DSC_6750.NEF': scale 1.040, overlap 36.0%, NCC 0.183, edges 0.010/-0.027, samples 1094",
+        "- Focus station relation rejected 'DSC_6758.NEF'<->'DSC_6750.NEF': scale 1.036, overlap 36.0%, NCC 0.183, edges 0.038/0.027, samples 1119",
+        "- Focus station relation rejected 'DSC_6759.NEF'<->'DSC_6750.NEF': scale 0.954, overlap 36.0%, NCC 0.131, edges 0.012/-0.032, samples 919"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6751.NEF",
+      "sha256": "4cafc3b9bff07a19dcc6e0e2d48ec7cfc052c2ad481ddbe11d0773e734960a70",
+      "bytes": 58215679,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6750.NEF'<->'DSC_6751.NEF': scale 0.957, overlap 36.0%, NCC 0.369, edges 0.323/0.460, samples 1180",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6757.NEF': scale 0.966, overlap 48.0%, NCC 0.139, edges 0.012/0.053, samples 1254",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6758.NEF': scale 0.969, overlap 48.0%, NCC 0.080, edges -0.057/-0.046, samples 1248",
+        "- Focus geometry retry candidate rejected edge 'DSC_6750.NEF'<->'DSC_6751.NEF': scale 0.955, overlap 36.0%, NCC 0.368, edges 0.299/0.458, samples 1180",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6735.NEF': scale 0.911, overlap 32.0%, NCC 0.332, edges 0.114/0.572, samples 650",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6757.NEF': scale 1.004, overlap 48.0%, NCC 0.140, edges 0.081/-0.072, samples 1287",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6758.NEF': scale 1.008, overlap 48.0%, NCC 0.049, edges -0.035/0.025, samples 1277",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6740.NEF': scale 1.003, overlap 36.0%, NCC 0.279, edges 0.101/0.039, samples 772",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6741.NEF': scale 1.010, overlap 36.0%, NCC 0.332, edges 0.046/0.053, samples 751"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6752.NEF",
+      "sha256": "14b277123f070615ed391d0cae1c5a78f639e07e685ceb1a660e0eef6b207f84",
+      "bytes": 59315778,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6752.NEF'<->'DSC_6753.NEF': scale 0.969, overlap 48.0%, NCC 0.371, edges 0.099/0.515, samples 1361",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6752.NEF': scale 1.032, overlap 48.0%, NCC 0.425, edges 0.110/0.450, samples 1440",
+        "- Focus station relation rejected 'DSC_6752.NEF'<->'DSC_6737.NEF': scale 0.968, overlap 48.0%, NCC 0.342, edges 0.233/0.391, samples 1273",
+        "- Focus geometry retry candidate rejected edge 'DSC_6752.NEF'<->'DSC_6753.NEF': scale 0.967, overlap 48.0%, NCC 0.348, edges 0.043/0.309, samples 1357",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6752.NEF': scale 1.034, overlap 48.0%, NCC 0.401, edges 0.097/0.305, samples 1440",
+        "- Focus station relation rejected 'DSC_6752.NEF'<->'DSC_6737.NEF': scale 0.953, overlap 48.0%, NCC 0.299, edges 0.194/0.182, samples 1275"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6753.NEF",
+      "sha256": "7137997a648fb6edc57d05223675966489bc7bcbedc53b6bf2b05983c28c430d",
+      "bytes": 58053225,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6752.NEF'<->'DSC_6753.NEF': scale 0.969, overlap 48.0%, NCC 0.371, edges 0.099/0.515, samples 1361",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6737.NEF': scale 1.001, overlap 36.0%, NCC 0.317, edges 0.283/0.575, samples 931",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6752.NEF': scale 1.032, overlap 48.0%, NCC 0.425, edges 0.110/0.450, samples 1440",
+        "- Focus geometry retry candidate rejected edge 'DSC_6752.NEF'<->'DSC_6753.NEF': scale 0.967, overlap 48.0%, NCC 0.348, edges 0.043/0.309, samples 1357",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6737.NEF': scale 0.987, overlap 36.0%, NCC 0.304, edges 0.270/0.432, samples 932",
+        "- Focus station relation rejected 'DSC_6753.NEF'<->'DSC_6752.NEF': scale 1.034, overlap 48.0%, NCC 0.401, edges 0.097/0.305, samples 1440"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6754.NEF",
+      "sha256": "124519afb54a68bcce0615b6b015c717ca67191b7c17460f69fdaf5b5355f580",
+      "bytes": 57389176,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            4870,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 45,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6754.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            4966,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 45,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6754.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+      "sha256": "c5036c1ead4bf30766bd5dcacda3233086f6a5f623a511117d994c2b94de8a96",
+      "bytes": 58420487,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": null,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            4774,
+            442,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3670,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3718,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3766,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3814,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3862,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3142,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            3142,
+            1210,
+            48,
+            48
+          ],
+          "donor_source_id": 46,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6755.NEF'<->'DSC_6756.NEF': scale 1.048, overlap 48.0%, NCC 0.685, edges -0.116/0.093, samples 1786",
+        "- Focus geometry retry candidate rejected edge 'DSC_6755.NEF'<->'DSC_6756.NEF': scale 1.065, overlap 48.0%, NCC 0.546, edges -0.117/-0.132, samples 1800"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6756.NEF",
+      "sha256": "3d98d57fdd12623e65306a8492b4d7d3fd1c824bfefe8224087aa4c6863ab350",
+      "bytes": 58236080,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 5,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            4294,
+            442,
+            48,
+            48
+          ],
+          "donor_source_id": 47,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6756.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6755.NEF'<->'DSC_6756.NEF': scale 1.048, overlap 48.0%, NCC 0.685, edges -0.116/0.093, samples 1786",
+        "- Focus geometry retry candidate rejected edge 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.046, overlap 36.0%, NCC 0.404, edges 0.106/0.664, samples 1224",
+        "- Focus station relation rejected 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.046, overlap 36.0%, NCC 0.404, edges 0.106/0.664, samples 1224",
+        "- Focus geometry retry candidate rejected edge 'DSC_6755.NEF'<->'DSC_6756.NEF': scale 1.065, overlap 48.0%, NCC 0.546, edges -0.117/-0.132, samples 1800",
+        "- Focus geometry retry candidate rejected edge 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.047, overlap 36.0%, NCC 0.416, edges 0.130/0.690, samples 1237",
+        "- Focus station relation rejected 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.047, overlap 36.0%, NCC 0.416, edges 0.130/0.690, samples 1237"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6757.NEF",
+      "sha256": "eda154100bffd1be8e887ac4eeceb7c7c3eb2a0b9e382a650071fc1e8fa23da4",
+      "bytes": 58740164,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 17,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.046, overlap 36.0%, NCC 0.404, edges 0.106/0.664, samples 1224",
+        "- Focus geometry retry candidate rejected edge 'DSC_6757.NEF'<->'DSC_6758.NEF': scale 1.004, overlap 56.0%, NCC 0.581, edges -0.149/0.020, samples 2160",
+        "- Focus station relation rejected 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.046, overlap 36.0%, NCC 0.404, edges 0.106/0.664, samples 1224",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6757.NEF': scale 0.966, overlap 48.0%, NCC 0.139, edges 0.012/0.053, samples 1254",
+        "- Focus station relation rejected 'DSC_6749.NEF'<->'DSC_6757.NEF': scale 0.917, overlap 36.0%, NCC 0.123, edges 0.033/-0.063, samples 871",
+        "- Focus geometry retry candidate rejected edge 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.047, overlap 36.0%, NCC 0.416, edges 0.130/0.690, samples 1237",
+        "- Focus geometry retry candidate rejected edge 'DSC_6757.NEF'<->'DSC_6758.NEF': scale 1.005, overlap 52.0%, NCC 0.577, edges -0.141/0.099, samples 2160",
+        "- Focus station relation rejected 'DSC_6756.NEF'<->'DSC_6757.NEF': scale 1.047, overlap 36.0%, NCC 0.416, edges 0.130/0.690, samples 1237",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6757.NEF': scale 1.004, overlap 48.0%, NCC 0.140, edges 0.081/-0.072, samples 1287",
+        "- Focus station relation rejected 'DSC_6757.NEF'<->'DSC_6750.NEF': scale 1.040, overlap 36.0%, NCC 0.183, edges 0.010/-0.027, samples 1094"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6758.NEF",
+      "sha256": "d3aa300e973802e779ead38960676c72fe5dd8526200505f96e774ea87e32cf0",
+      "bytes": 59510576,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 18,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6757.NEF'<->'DSC_6758.NEF': scale 1.004, overlap 56.0%, NCC 0.581, edges -0.149/0.020, samples 2160",
+        "- Focus geometry retry candidate rejected edge 'DSC_6758.NEF'<->'DSC_6759.NEF': scale 1.085, overlap 24.0%, NCC 0.244, edges 0.009/-0.180, samples 783",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6758.NEF': scale 0.969, overlap 48.0%, NCC 0.080, edges -0.057/-0.046, samples 1248",
+        "- Focus geometry retry candidate rejected edge 'DSC_6757.NEF'<->'DSC_6758.NEF': scale 1.005, overlap 52.0%, NCC 0.577, edges -0.141/0.099, samples 2160",
+        "- Focus geometry retry candidate rejected edge 'DSC_6758.NEF'<->'DSC_6759.NEF': scale 1.085, overlap 24.0%, NCC 0.228, edges 0.012/-0.072, samples 789",
+        "- Focus station relation rejected 'DSC_6751.NEF'<->'DSC_6758.NEF': scale 1.008, overlap 48.0%, NCC 0.049, edges -0.035/0.025, samples 1277",
+        "- Focus station relation rejected 'DSC_6758.NEF'<->'DSC_6750.NEF': scale 1.036, overlap 36.0%, NCC 0.183, edges 0.038/0.027, samples 1119"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6759.NEF",
+      "sha256": "8f6d3ff1f5fad35c2db92d4ff103b9224e57bbf828cc895252cfc994d51893a5",
+      "bytes": 59076096,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 33,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6758.NEF'<->'DSC_6759.NEF': scale 1.085, overlap 24.0%, NCC 0.244, edges 0.009/-0.180, samples 783",
+        "- Focus station relation rejected 'DSC_6759.NEF'<->'DSC_6750.NEF': scale 0.988, overlap 36.0%, NCC 0.161, edges 0.024/-0.080, samples 934",
+        "- Focus geometry retry candidate rejected edge 'DSC_6758.NEF'<->'DSC_6759.NEF': scale 1.085, overlap 24.0%, NCC 0.228, edges 0.012/-0.072, samples 789",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6759.NEF': scale 0.994, overlap 16.0%, NCC 0.130, edges 0.024/-0.008, samples 419",
+        "- Focus station relation rejected 'DSC_6759.NEF'<->'DSC_6750.NEF': scale 0.954, overlap 36.0%, NCC 0.131, edges 0.012/-0.032, samples 919",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6759.NEF': scale 0.944, overlap 32.0%, NCC 0.305, edges 0.127/-0.019, samples 880",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6759.NEF': scale 0.857, overlap 28.0%, NCC 0.048, edges 0.196/0.343, samples 567",
+        "- Focus station relation rejected 'DSC_6746.NEF'<->'DSC_6759.NEF': scale 0.912, overlap 24.0%, NCC 0.054, edges -0.017/-0.021, samples 641"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6760.NEF",
+      "sha256": "9fca9e8a8f11031e49b1ac385e391a5e8b54da459e4c4db6393f4e5b39f2a84f",
+      "bytes": 59258764,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 33,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6760.NEF': scale 0.864, overlap 32.0%, NCC 0.143, edges 0.149/0.187, samples 575",
+        "- Focus station relation rejected 'DSC_6762.NEF'<->'DSC_6760.NEF': scale 0.940, overlap 24.0%, NCC 0.336, edges 0.259/0.370, samples 1052",
+        "- Focus station relation rejected 'DSC_6761.NEF'<->'DSC_6760.NEF': scale 0.935, overlap 24.0%, NCC 0.383, edges 0.222/0.438, samples 1003"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6761.NEF",
+      "sha256": "1990c4167b240ecd3e99fdf53c81b3b2da0d03ad0952d5fee768cfde8ee9ee88",
+      "bytes": 60447242,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 44,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6761.NEF'<->'DSC_6760.NEF': scale 0.935, overlap 24.0%, NCC 0.383, edges 0.222/0.438, samples 1003",
+        "- Focus station relation rejected 'DSC_6761.NEF'<->'DSC_6746.NEF': scale 1.025, overlap 48.0%, NCC -0.053, edges 0.031/0.044, samples 1339"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6762.NEF",
+      "sha256": "0a68fe70338efe49625fb5ca14b9b54681cd216cc68a6a7cad6326b709d17e12",
+      "bytes": 59654543,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 44,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6762.NEF'<->'DSC_6763.NEF': scale 1.107, overlap 44.0%, NCC 0.270, edges 0.335/0.618, samples 1137",
+        "- Focus station relation rejected 'DSC_6762.NEF'<->'DSC_6760.NEF': scale 0.940, overlap 24.0%, NCC 0.336, edges 0.259/0.370, samples 1052",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6762.NEF': scale 1.004, overlap 36.0%, NCC 0.145, edges 0.011/-0.015, samples 800",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6762.NEF': scale 0.920, overlap 44.0%, NCC 0.403, edges 0.352/0.659, samples 1079",
+        "- Focus geometry retry candidate rejected edge 'DSC_6762.NEF'<->'DSC_6763.NEF': scale 1.116, overlap 44.0%, NCC 0.279, edges 0.356/0.724, samples 1137",
+        "- Focus station relation rejected 'DSC_6748.NEF'<->'DSC_6762.NEF': scale 1.040, overlap 36.0%, NCC 0.117, edges 0.031/0.084, samples 780",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6762.NEF': scale 0.913, overlap 44.0%, NCC 0.389, edges 0.295/0.674, samples 1080"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6763.NEF",
+      "sha256": "a64da312d92c6ad391ace5fae785659e8b1b0c865f9243a4a1ce088c3ef33903",
+      "bytes": 57105554,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 39,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6762.NEF'<->'DSC_6763.NEF': scale 1.107, overlap 44.0%, NCC 0.270, edges 0.335/0.618, samples 1137",
+        "- Focus geometry retry candidate rejected edge 'DSC_6762.NEF'<->'DSC_6763.NEF': scale 1.116, overlap 44.0%, NCC 0.279, edges 0.356/0.724, samples 1137",
+        "- Focus station relation rejected 'DSC_6763.NEF'<->'DSC_6783.NEF': scale 1.161, overlap 24.0%, NCC 0.056, edges 0.069/0.206, samples 459"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6764.NEF",
+      "sha256": "0c684f7ff1fc6bd97c681fe94fc8d3cf8a37c0e3e17e6f493c4ff0fa6cd19e5a",
+      "bytes": 57470634,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 39,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6760.NEF': scale 0.864, overlap 32.0%, NCC 0.143, edges 0.149/0.187, samples 575",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6762.NEF': scale 0.920, overlap 44.0%, NCC 0.403, edges 0.352/0.659, samples 1079",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6764.NEF': scale 0.976, overlap 24.0%, NCC 0.129, edges 0.026/0.192, samples 442",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6759.NEF': scale 0.857, overlap 28.0%, NCC 0.048, edges 0.196/0.343, samples 567",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6781.NEF': scale 1.121, overlap 32.0%, NCC 0.122, edges 0.117/0.079, samples 560",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6762.NEF': scale 0.913, overlap 44.0%, NCC 0.389, edges 0.295/0.674, samples 1080"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6765.NEF",
+      "sha256": "6b7ac1955c5b505f8efe5b5f9b4c644e3f4af3de7e7697cbfd2002bdac75c1b8",
+      "bytes": 57400650,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 39,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6765.NEF'<->'DSC_6766.NEF': scale 0.908, overlap 32.0%, NCC 0.189, edges 0.007/0.235, samples 715",
+        "- Focus station relation rejected 'DSC_6765.NEF'<->'DSC_6781.NEF': scale 1.104, overlap 32.0%, NCC 0.058, edges 0.060/-0.014, samples 566",
+        "- Focus geometry retry candidate rejected edge 'DSC_6765.NEF'<->'DSC_6766.NEF': scale 0.903, overlap 32.0%, NCC 0.292, edges 0.164/0.430, samples 715"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6766.NEF",
+      "sha256": "a4e37e6ed5b7ad3def004cb96caa02175347871f90c7961ecfff82119cc17e30",
+      "bytes": 57881065,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 29,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6765.NEF'<->'DSC_6766.NEF': scale 0.908, overlap 32.0%, NCC 0.189, edges 0.007/0.235, samples 715",
+        "- Focus geometry retry candidate rejected edge 'DSC_6765.NEF'<->'DSC_6766.NEF': scale 0.903, overlap 32.0%, NCC 0.292, edges 0.164/0.430, samples 715"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6767.NEF",
+      "sha256": "6267bf9aba6528bea842e63d008c46fea078c5d0900cbad5245a5e3a57aa290f",
+      "bytes": 59058715,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 29,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6767.NEF'<->'DSC_6768.NEF': scale 0.948, overlap 36.0%, NCC 0.309, edges 0.154/0.278, samples 1241",
+        "- Focus geometry retry candidate rejected edge 'DSC_6767.NEF'<->'DSC_6768.NEF': scale 0.951, overlap 36.0%, NCC 0.314, edges 0.147/0.265, samples 1245",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6767.NEF': scale 0.970, overlap 16.0%, NCC 0.257, edges 0.069/0.368, samples 304",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6777.NEF': scale 1.132, overlap 32.0%, NCC 0.241, edges 0.058/0.018, samples 779",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6778.NEF': scale 1.137, overlap 24.0%, NCC 0.142, edges 0.032/0.106, samples 838",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6759.NEF': scale 0.944, overlap 32.0%, NCC 0.305, edges 0.127/-0.019, samples 880"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6768.NEF",
+      "sha256": "aa80d4a67765320a93a181b072dfc268403b0dbe5ab6dd96fdff191dd066bf7d",
+      "bytes": 58515310,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 19,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6767.NEF'<->'DSC_6768.NEF': scale 0.948, overlap 36.0%, NCC 0.309, edges 0.154/0.278, samples 1241",
+        "- Focus geometry retry candidate rejected edge 'DSC_6767.NEF'<->'DSC_6768.NEF': scale 0.951, overlap 36.0%, NCC 0.314, edges 0.147/0.265, samples 1245",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6792.NEF': scale 1.164, overlap 12.0%, NCC 0.276, edges -0.131/-0.032, samples 242",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6768.NEF': scale 0.857, overlap 24.0%, NCC 0.155, edges 0.062/0.033, samples 634",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6778.NEF': scale 1.195, overlap 16.0%, NCC 0.127, edges -0.085/0.147, samples 381",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6759.NEF': scale 0.994, overlap 16.0%, NCC 0.130, edges 0.024/-0.008, samples 419"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6769.NEF",
+      "sha256": "0e3990b1129715d5ae399620c3213062c131b10c461ffb9a0c6459b527383bd6",
+      "bytes": 59146872,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 19,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6772.NEF': scale 1.020, overlap 16.0%, NCC 0.434, edges 0.121/0.750, samples 364",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6772.NEF': scale 1.028, overlap 16.0%, NCC 0.432, edges 0.115/0.754, samples 364",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6799.NEF': scale 1.181, overlap 12.0%, NCC 0.293, edges -0.112/0.081, samples 156",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6774.NEF': scale 1.087, overlap 32.0%, NCC 0.424, edges 0.132/0.220, samples 759",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6790.NEF': scale 1.191, overlap 16.0%, NCC 0.049, edges -0.030/0.186, samples 220",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6804.NEF': scale 1.230, overlap 16.0%, NCC 0.328, edges -0.027/0.210, samples 198",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6776.NEF': scale 1.173, overlap 24.0%, NCC 0.291, edges 0.239/0.130, samples 757"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6770.NEF",
+      "sha256": "936fa06654d8940bbc71c52a81d2d2b4a2fd029aeeec710c0e2b5155d9979704",
+      "bytes": 57362011,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6791.NEF'<->'DSC_6770.NEF': scale 0.844, overlap 8.0%, NCC 0.144, edges -0.118/-0.085, samples 175",
+        "- Focus station relation rejected 'DSC_6770.NEF'<->'DSC_6799.NEF': scale 1.240, overlap 20.0%, NCC 0.183, edges -0.030/0.057, samples 385",
+        "- Focus station relation rejected 'DSC_6770.NEF'<->'DSC_6792.NEF': scale 1.210, overlap 32.0%, NCC 0.153, edges 0.007/0.007, samples 454",
+        "- Focus station relation rejected 'DSC_6791.NEF'<->'DSC_6770.NEF': scale 0.830, overlap 8.0%, NCC 0.185, edges 0.111/-0.159, samples 174",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6770.NEF': scale 0.808, overlap 8.0%, NCC 0.162, edges 0.019/-0.253, samples 148"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6771.NEF",
+      "sha256": "d47c7f9a40b4990c4ffba5a9bfcd539dbfbface67a3aa0e3587185957167135b",
+      "bytes": 58313693,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            2086,
+            1162,
+            48,
+            48
+          ],
+          "donor_source_id": 62,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6771.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6771.NEF': scale 0.823, overlap 12.0%, NCC 0.235, edges 0.197/0.319, samples 225",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6771.NEF': scale 0.819, overlap 12.0%, NCC 0.095, edges -0.027/0.599, samples 186"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6772.NEF",
+      "sha256": "4f1b7bbe9a0560e2957ac87e45519d9a8c31ec8ac7cb21cf5ddb3f78fad470c5",
+      "bytes": 57953340,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6772.NEF': scale 1.020, overlap 16.0%, NCC 0.434, edges 0.121/0.750, samples 364",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6772.NEF': scale 1.028, overlap 16.0%, NCC 0.432, edges 0.115/0.754, samples 364",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6772.NEF': scale 0.868, overlap 12.0%, NCC 0.035, edges -0.007/0.369, samples 2369"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6773.NEF",
+      "sha256": "fa2443b392781f5b3047b2cdfcb22a2aea7fbc964aaf661ea85dd33ec99528bf",
+      "bytes": 58191672,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6773.NEF': scale 0.902, overlap 36.0%, NCC 0.259, edges -0.039/0.232, samples 1091",
+        "- Focus station relation rejected 'DSC_6773.NEF'<->'DSC_6799.NEF': scale 1.141, overlap 36.0%, NCC 0.295, edges 0.040/0.094, samples 1152",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6773.NEF': scale 0.895, overlap 36.0%, NCC 0.275, edges -0.058/0.196, samples 1088",
+        "- Focus station relation rejected 'DSC_6790.NEF'<->'DSC_6773.NEF': scale 0.874, overlap 24.0%, NCC 0.297, edges 0.028/0.168, samples 466",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6773.NEF': scale 0.845, overlap 12.0%, NCC 0.364, edges 0.026/0.244, samples 318"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6774.NEF",
+      "sha256": "dc9900732d04a40f249097a467ebde355282e66195206fe47a008e9eab528e48",
+      "bytes": 56857511,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6774.NEF': scale 0.900, overlap 36.0%, NCC 0.425, edges -0.073/-0.031, samples 1006",
+        "- Focus station relation rejected 'DSC_6794.NEF'<->'DSC_6774.NEF': scale 0.981, overlap 36.0%, NCC 0.235, edges 0.033/-0.001, samples 1099",
+        "- Focus station relation rejected 'DSC_6798.NEF'<->'DSC_6774.NEF': scale 1.001, overlap 36.0%, NCC 0.245, edges 0.025/0.014, samples 1088",
+        "- Focus station relation rejected 'DSC_6800.NEF'<->'DSC_6774.NEF': scale 0.944, overlap 48.0%, NCC 0.280, edges 0.122/0.018, samples 1556",
+        "- Focus station relation rejected 'DSC_6774.NEF'<->'DSC_6792.NEF': scale 1.053, overlap 48.0%, NCC 0.355, edges 0.119/0.064, samples 1560",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6774.NEF': scale 1.087, overlap 32.0%, NCC 0.424, edges 0.132/0.220, samples 759"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6775.NEF",
+      "sha256": "88c428e2a81e6e6a0e12e8aa87ccdd12d3e4a5c89c0732656ee965dcb74f5f39",
+      "bytes": 58665290,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6775.NEF'<->'DSC_6776.NEF': scale 1.070, overlap 36.0%, NCC 0.438, edges 0.267/0.607, samples 1105",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6800.NEF': scale 1.058, overlap 48.0%, NCC 0.272, edges -0.044/0.021, samples 1565",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6801.NEF': scale 1.052, overlap 48.0%, NCC 0.307, edges 0.253/-0.037, samples 1588",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6776.NEF': scale 1.070, overlap 36.0%, NCC 0.438, edges 0.267/0.607, samples 1105",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6789.NEF': scale 1.119, overlap 24.0%, NCC 0.282, edges 0.065/-0.018, samples 667",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6790.NEF': scale 1.081, overlap 36.0%, NCC 0.373, edges 0.068/0.049, samples 1129",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6804.NEF': scale 1.116, overlap 36.0%, NCC 0.335, edges 0.092/0.017, samples 1068",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6788.NEF': scale 1.116, overlap 24.0%, NCC 0.324, edges 0.070/0.006, samples 695",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6767.NEF': scale 0.970, overlap 16.0%, NCC 0.257, edges 0.069/0.368, samples 304"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6776.NEF",
+      "sha256": "8f12b80d7227a4b5e900350839b33d85008d8fd8c00b4afc0a1c6dde03ae5cc2",
+      "bytes": 58496357,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 24,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6775.NEF'<->'DSC_6776.NEF': scale 1.070, overlap 36.0%, NCC 0.438, edges 0.267/0.607, samples 1105",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6776.NEF': scale 1.030, overlap 24.0%, NCC 0.192, edges 0.039/0.067, samples 697",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6776.NEF': scale 1.070, overlap 36.0%, NCC 0.438, edges 0.267/0.607, samples 1105",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6804.NEF': scale 1.037, overlap 48.0%, NCC 0.325, edges 0.026/0.043, samples 1271",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6771.NEF': scale 0.823, overlap 12.0%, NCC 0.235, edges 0.197/0.319, samples 225",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6799.NEF': scale 0.995, overlap 24.0%, NCC 0.218, edges 0.019/0.040, samples 528",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6776.NEF': scale 1.028, overlap 24.0%, NCC 0.178, edges 0.046/-0.068, samples 697",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6776.NEF': scale 1.173, overlap 24.0%, NCC 0.291, edges 0.239/0.130, samples 757",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6791.NEF': scale 1.016, overlap 48.0%, NCC 0.388, edges 0.169/-0.001, samples 1075",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6804.NEF': scale 1.038, overlap 48.0%, NCC 0.322, edges 0.077/0.003, samples 1272",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6788.NEF': scale 1.038, overlap 48.0%, NCC 0.369, edges 0.028/0.037, samples 1277",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6805.NEF': scale 1.098, overlap 36.0%, NCC 0.436, edges 0.019/0.055, samples 986"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6777.NEF",
+      "sha256": "b7e9b8006492ea98bb81220a79419b4fa89aa3a19d194862165e4fa31f071301",
+      "bytes": 58422289,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 27,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6772.NEF': scale 0.868, overlap 12.0%, NCC 0.035, edges -0.007/0.369, samples 2369",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6771.NEF': scale 0.819, overlap 12.0%, NCC 0.095, edges -0.027/0.599, samples 186",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6800.NEF': scale 0.981, overlap 24.0%, NCC 0.360, edges 0.012/-0.082, samples 540",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6792.NEF': scale 0.966, overlap 24.0%, NCC 0.432, edges 0.042/-0.147, samples 563",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6768.NEF': scale 0.857, overlap 24.0%, NCC 0.155, edges 0.062/0.033, samples 634",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6790.NEF': scale 0.999, overlap 48.0%, NCC 0.295, edges -0.048/0.039, samples 1137",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6777.NEF': scale 0.976, overlap 48.0%, NCC 0.234, edges 0.047/0.036, samples 1400",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6777.NEF': scale 0.973, overlap 48.0%, NCC 0.235, edges 0.103/0.086, samples 1470",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6777.NEF': scale 1.132, overlap 32.0%, NCC 0.241, edges 0.058/0.018, samples 779",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6805.NEF': scale 1.091, overlap 44.0%, NCC 0.417, edges 0.165/0.390, samples 1086",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6777.NEF': scale 0.979, overlap 48.0%, NCC 0.369, edges 0.237/0.548, samples 1309",
+        "- Focus station relation rejected 'DSC_6787.NEF'<->'DSC_6777.NEF': scale 0.914, overlap 24.0%, NCC 0.146, edges 0.079/0.312, samples 712"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6778.NEF",
+      "sha256": "6ff257e260d5ca5b340fa92e3316ce82d8c06f601c82e24ce54153b1f843c9bd",
+      "bytes": 58691886,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 32,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6777.NEF'<->'DSC_6778.NEF': scale 1.006, overlap 48.0%, NCC 0.361, edges 0.206/0.507, samples 1330",
+        "- Focus station relation rejected 'DSC_6802.NEF'<->'DSC_6778.NEF': scale 0.994, overlap 28.0%, NCC 0.277, edges 0.006/-0.004, samples 680",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6778.NEF': scale 1.006, overlap 48.0%, NCC 0.361, edges 0.206/0.507, samples 1330",
+        "- Focus geometry retry candidate rejected edge 'DSC_6777.NEF'<->'DSC_6778.NEF': scale 1.008, overlap 48.0%, NCC 0.358, edges 0.235/0.510, samples 1332",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6778.NEF': scale 1.195, overlap 16.0%, NCC 0.127, edges -0.085/0.147, samples 381",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6778.NEF': scale 0.986, overlap 24.0%, NCC 0.235, edges 0.031/0.098, samples 661",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6778.NEF': scale 0.981, overlap 36.0%, NCC 0.236, edges 0.022/0.171, samples 905",
+        "- Focus station relation rejected 'DSC_6767.NEF'<->'DSC_6778.NEF': scale 1.137, overlap 24.0%, NCC 0.142, edges 0.032/0.106, samples 838",
+        "- Focus station relation rejected 'DSC_6785.NEF'<->'DSC_6778.NEF': scale 0.881, overlap 24.0%, NCC 0.368, edges 0.210/0.598, samples 553"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6779.NEF",
+      "sha256": "fdb88ce4ac2e539ec933a552b3ae691130399aa33b30e6f34a26e3c117831c35",
+      "bytes": 59020788,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 32,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6786.NEF': scale 1.080, overlap 48.0%, NCC 0.402, edges 0.247/0.407, samples 1152",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6784.NEF': scale 1.137, overlap 24.0%, NCC 0.346, edges 0.175/0.518, samples 587",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6790.NEF': scale 0.978, overlap 24.0%, NCC 0.193, edges 0.043/0.080, samples 498",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6777.NEF': scale 0.979, overlap 48.0%, NCC 0.369, edges 0.237/0.548, samples 1309",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6805.NEF': scale 1.068, overlap 48.0%, NCC 0.418, edges 0.232/0.428, samples 1494",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6787.NEF': scale 1.077, overlap 48.0%, NCC 0.414, edges 0.251/0.523, samples 1139",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6764.NEF': scale 0.976, overlap 24.0%, NCC 0.129, edges 0.026/0.192, samples 442"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6780.NEF",
+      "sha256": "6e103c4202501c326c58145585098b763fce1c4d75ccca140025436b1778f57f",
+      "bytes": 58548792,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 38,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6783.NEF'<->'DSC_6780.NEF': scale 0.947, overlap 48.0%, NCC 0.412, edges 0.188/0.447, samples 1680",
+        "- Focus station relation rejected 'DSC_6783.NEF'<->'DSC_6780.NEF': scale 0.947, overlap 48.0%, NCC 0.430, edges 0.191/0.489, samples 1680"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6781.NEF",
+      "sha256": "442ee16e636e82d2f5b9c54c8d0c90cf867ad01e69f3bfc7d2be393aefb5f745",
+      "bytes": 57957155,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 38,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6765.NEF'<->'DSC_6781.NEF': scale 1.104, overlap 32.0%, NCC 0.058, edges 0.060/-0.014, samples 566",
+        "- Focus station relation rejected 'DSC_6781.NEF'<->'DSC_6805.NEF': scale 1.008, overlap 36.0%, NCC 0.303, edges 0.142/0.670, samples 866",
+        "- Focus station relation rejected 'DSC_6764.NEF'<->'DSC_6781.NEF': scale 1.121, overlap 32.0%, NCC 0.122, edges 0.117/0.079, samples 560"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6782.NEF",
+      "sha256": "3abcb92a97998c053d942ce92491fe5af9284467a3be2acabad90938cba50be9",
+      "bytes": 55573724,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 46,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            1174,
+            4282,
+            48,
+            48
+          ],
+          "donor_source_id": 73,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6782.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6782.NEF': scale 1.033, overlap 36.0%, NCC 0.384, edges 0.037/0.756, samples 767",
+        "- Focus station relation rejected 'DSC_6782.NEF'<->'DSC_6805.NEF': scale 0.973, overlap 24.0%, NCC 0.056, edges 0.084/0.636, samples 504",
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6782.NEF': scale 1.030, overlap 36.0%, NCC 0.372, edges 0.057/0.746, samples 769"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6783.NEF",
+      "sha256": "0d0d1858b3f67ac51606d479eb3aead6cd35749357a9b5bceaf1447518e52a24",
+      "bytes": 56739455,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 46,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            1030,
+            4138,
+            48,
+            48
+          ],
+          "donor_source_id": 74,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6783.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            838,
+            4234,
+            48,
+            48
+          ],
+          "donor_source_id": 74,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6783.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6783.NEF'<->'DSC_6780.NEF': scale 0.947, overlap 48.0%, NCC 0.412, edges 0.188/0.447, samples 1680",
+        "- Focus station relation rejected 'DSC_6783.NEF'<->'DSC_6780.NEF': scale 0.947, overlap 48.0%, NCC 0.430, edges 0.191/0.489, samples 1680",
+        "- Focus station relation rejected 'DSC_6763.NEF'<->'DSC_6783.NEF': scale 1.161, overlap 24.0%, NCC 0.056, edges 0.069/0.206, samples 459"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6784.NEF",
+      "sha256": "ba8aaedb6053e02759a10f37c26f0bad52b8ee79e7381cf386431cee429deafe",
+      "bytes": 57120943,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 40,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6784.NEF': scale 1.137, overlap 24.0%, NCC 0.346, edges 0.175/0.518, samples 587"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6785.NEF",
+      "sha256": "d258ca6a00f7ae2a9069e383249ff32c3459ae0ade326bbdc7395ee3309abea7",
+      "bytes": 59368201,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 40,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6785.NEF'<->'DSC_6786.NEF': scale 0.961, overlap 36.0%, NCC 0.193, edges 0.173/0.394, samples 1298",
+        "- Focus geometry retry candidate rejected edge 'DSC_6785.NEF'<->'DSC_6786.NEF': scale 0.959, overlap 36.0%, NCC 0.192, edges 0.155/0.341, samples 1298",
+        "- Focus station relation rejected 'DSC_6785.NEF'<->'DSC_6778.NEF': scale 0.881, overlap 24.0%, NCC 0.368, edges 0.210/0.598, samples 553"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6786.NEF",
+      "sha256": "a93b5dbdd1a0d20b3194a1efb1f21efc3e396571a8e91730efe31e1ad83a4d4d",
+      "bytes": 57978968,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 35,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6785.NEF'<->'DSC_6786.NEF': scale 0.961, overlap 36.0%, NCC 0.193, edges 0.173/0.394, samples 1298",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6786.NEF': scale 1.080, overlap 48.0%, NCC 0.402, edges 0.247/0.407, samples 1152",
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6782.NEF': scale 1.033, overlap 36.0%, NCC 0.384, edges 0.037/0.756, samples 767",
+        "- Focus geometry retry candidate rejected edge 'DSC_6785.NEF'<->'DSC_6786.NEF': scale 0.959, overlap 36.0%, NCC 0.192, edges 0.155/0.341, samples 1298",
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6805.NEF': scale 0.989, overlap 64.0%, NCC 0.417, edges 0.472/0.847, samples 1874",
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6782.NEF': scale 1.030, overlap 36.0%, NCC 0.372, edges 0.057/0.746, samples 769"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6787.NEF",
+      "sha256": "993f9abe95ab65ed5e0419d21a8feffee3173fc7aeb195f22e65a4da66bd688c",
+      "bytes": 59185740,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 35,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6787.NEF'<->'DSC_6788.NEF': scale 0.939, overlap 40.0%, NCC 0.364, edges 0.376/0.511, samples 1133",
+        "- Focus station relation rejected 'DSC_6787.NEF'<->'DSC_6803.NEF': scale 0.937, overlap 24.0%, NCC 0.445, edges 0.365/0.434, samples 724",
+        "- Focus geometry retry candidate rejected edge 'DSC_6787.NEF'<->'DSC_6788.NEF': scale 0.938, overlap 40.0%, NCC 0.362, edges 0.381/0.523, samples 1133",
+        "- Focus station relation rejected 'DSC_6787.NEF'<->'DSC_6777.NEF': scale 0.914, overlap 24.0%, NCC 0.146, edges 0.079/0.312, samples 712",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6787.NEF': scale 1.077, overlap 48.0%, NCC 0.414, edges 0.251/0.523, samples 1139"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6788.NEF",
+      "sha256": "bdb7fc67bb16c698d476448c8edd998b5d384d9276ebaea50bc0cb059af81e30",
+      "bytes": 60478298,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 28,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6787.NEF'<->'DSC_6788.NEF': scale 0.939, overlap 40.0%, NCC 0.364, edges 0.376/0.511, samples 1133",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6777.NEF': scale 0.976, overlap 48.0%, NCC 0.225, edges 0.103/0.037, samples 1472",
+        "- Focus geometry retry candidate rejected edge 'DSC_6787.NEF'<->'DSC_6788.NEF': scale 0.938, overlap 40.0%, NCC 0.362, edges 0.381/0.523, samples 1133",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6788.NEF': scale 1.116, overlap 24.0%, NCC 0.324, edges 0.070/0.006, samples 695",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6788.NEF': scale 1.038, overlap 48.0%, NCC 0.369, edges 0.028/0.037, samples 1277",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6777.NEF': scale 0.973, overlap 48.0%, NCC 0.235, edges 0.103/0.086, samples 1470",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6805.NEF': scale 1.059, overlap 48.0%, NCC 0.315, edges 0.318/0.704, samples 1461",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6778.NEF': scale 0.981, overlap 36.0%, NCC 0.236, edges 0.022/0.171, samples 905"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6789.NEF",
+      "sha256": "d0f896f602d0d9a11121c5d8821df8cdad822724a66baa201642ad4aed399818",
+      "bytes": 59317290,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 28,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6789.NEF': scale 1.119, overlap 24.0%, NCC 0.282, edges 0.065/-0.018, samples 667"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6790.NEF",
+      "sha256": "0759c57f5ea99c864831ec54090c253529b2e74cc2a1fcb067c031a5508ffa3d",
+      "bytes": 60270144,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 20,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6790.NEF'<->'DSC_6773.NEF': scale 0.874, overlap 24.0%, NCC 0.297, edges 0.028/0.168, samples 466",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6790.NEF': scale 1.081, overlap 36.0%, NCC 0.373, edges 0.068/0.049, samples 1129",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6790.NEF': scale 1.191, overlap 16.0%, NCC 0.049, edges -0.030/0.186, samples 220",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6790.NEF': scale 0.999, overlap 48.0%, NCC 0.295, edges -0.048/0.039, samples 1137",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6790.NEF': scale 0.978, overlap 24.0%, NCC 0.193, edges 0.043/0.080, samples 498"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6791.NEF",
+      "sha256": "a0357b46b8156c735121fbeab5a028a884217503d9d6ed40ce815d34405ea600",
+      "bytes": 59916892,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 20,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6791.NEF'<->'DSC_6770.NEF': scale 0.844, overlap 8.0%, NCC 0.144, edges -0.118/-0.085, samples 175",
+        "- Focus station relation rejected 'DSC_6791.NEF'<->'DSC_6770.NEF': scale 0.830, overlap 8.0%, NCC 0.185, edges 0.111/-0.159, samples 174",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6791.NEF': scale 1.016, overlap 48.0%, NCC 0.388, edges 0.169/-0.001, samples 1075"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6792.NEF",
+      "sha256": "1a16064947e521ccb12b63ae2aef71cc082697887b95eb71c53d4ac170ff7da2",
+      "bytes": 59234742,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6770.NEF'<->'DSC_6792.NEF': scale 1.210, overlap 32.0%, NCC 0.153, edges 0.007/0.007, samples 454",
+        "- Focus station relation rejected 'DSC_6774.NEF'<->'DSC_6792.NEF': scale 1.053, overlap 48.0%, NCC 0.355, edges 0.119/0.064, samples 1560",
+        "- Focus station relation rejected 'DSC_6768.NEF'<->'DSC_6792.NEF': scale 1.164, overlap 12.0%, NCC 0.276, edges -0.131/-0.032, samples 242",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6792.NEF': scale 0.966, overlap 24.0%, NCC 0.432, edges 0.042/-0.147, samples 563"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6793.NEF",
+      "sha256": "f524c75b48a692dae25c58542a6d42591cc52e79012e51f23365c8e4200c6441",
+      "bytes": 59241842,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6794.NEF",
+      "sha256": "035693d1ac8da07da18cb1f1d4f0aa8e6ce1cbd4532d5a72ec9fdd552415f5e8",
+      "bytes": 60092081,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6794.NEF'<->'DSC_6774.NEF': scale 0.981, overlap 36.0%, NCC 0.235, edges 0.033/-0.001, samples 1099"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+      "sha256": "8643b83a481b24397de55cc1e20d422044d54b99ae9165d53a372041f5c7a6ed",
+      "bytes": 58635474,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [
+        {
+          "delivered_rect": [
+            2278,
+            490,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1798,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1846,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1942,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1990,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            2086,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            2278,
+            538,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1558,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1654,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1750,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1846,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1894,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1942,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            2278,
+            586,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1414,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1462,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1654,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1750,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1798,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1990,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            2230,
+            634,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1222,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1318,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1366,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1414,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1462,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1798,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1894,
+            682,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1222,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1270,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1318,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1366,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1414,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1462,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1510,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1606,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1654,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1702,
+            730,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            934,
+            778,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1462,
+            778,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1510,
+            778,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            886,
+            826,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            934,
+            826,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1366,
+            826,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            1414,
+            826,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        },
+        {
+          "delivered_rect": [
+            982,
+            922,
+            48,
+            48
+          ],
+          "donor_source_id": 86,
+          "donor_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF",
+          "outcome": "repaired"
+        }
+      ],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF",
+      "sha256": "a6ef39fdd50fd1b93a76344cb62b1f8fa16e8220b1a4b19f2022b59e302ad5ff",
+      "bytes": 61033680,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6797.NEF",
+      "sha256": "1832342aace861b36319fcfe6f1a481c2b4ba31a810b75102b41099df67606ec",
+      "bytes": 59887009,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6798.NEF",
+      "sha256": "a040d7924e486fee0c378de5bac4438c6d6398633e21da4bd7bc6917e9bcec47",
+      "bytes": 61087934,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6798.NEF'<->'DSC_6774.NEF': scale 1.001, overlap 36.0%, NCC 0.245, edges 0.025/0.014, samples 1088"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6799.NEF",
+      "sha256": "7275e668715c3dbe6c969b00a95c27a95977477b92a9fe3c19425277b56a8276",
+      "bytes": 58913036,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6773.NEF'<->'DSC_6799.NEF': scale 1.141, overlap 36.0%, NCC 0.295, edges 0.040/0.094, samples 1152",
+        "- Focus station relation rejected 'DSC_6770.NEF'<->'DSC_6799.NEF': scale 1.240, overlap 20.0%, NCC 0.183, edges -0.030/0.057, samples 385",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6799.NEF': scale 1.181, overlap 12.0%, NCC 0.293, edges -0.112/0.081, samples 156",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6799.NEF': scale 0.995, overlap 24.0%, NCC 0.218, edges 0.019/0.040, samples 528"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6800.NEF",
+      "sha256": "2844a8ff1af7a31423d286ae31fb4ee8af69a4c1793da3f26c2b4f3065ce11d0",
+      "bytes": 59808390,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6800.NEF': scale 1.058, overlap 48.0%, NCC 0.272, edges -0.044/0.021, samples 1565",
+        "- Focus station relation rejected 'DSC_6800.NEF'<->'DSC_6774.NEF': scale 0.944, overlap 48.0%, NCC 0.280, edges 0.122/0.018, samples 1556",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6800.NEF': scale 0.981, overlap 24.0%, NCC 0.360, edges 0.012/-0.082, samples 540"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6801.NEF",
+      "sha256": "b311086bb17a783272bf89253a243bba9ab02da182ba9c7a689f28443d719c0f",
+      "bytes": 59072134,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6773.NEF': scale 0.902, overlap 36.0%, NCC 0.259, edges -0.039/0.232, samples 1091",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6801.NEF': scale 1.052, overlap 48.0%, NCC 0.307, edges 0.253/-0.037, samples 1588",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6776.NEF': scale 1.030, overlap 24.0%, NCC 0.192, edges 0.039/0.067, samples 697",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6773.NEF': scale 0.895, overlap 36.0%, NCC 0.275, edges -0.058/0.196, samples 1088",
+        "- Focus station relation rejected 'DSC_6801.NEF'<->'DSC_6776.NEF': scale 1.028, overlap 24.0%, NCC 0.178, edges 0.046/-0.068, samples 697"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6802.NEF",
+      "sha256": "d60a863897e351c60c008712807d5b948f29cd5dec178feb9f6a12a73d7eb4be",
+      "bytes": 59119559,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 21,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6802.NEF'<->'DSC_6777.NEF': scale 0.987, overlap 48.0%, NCC 0.254, edges 0.085/0.021, samples 1433",
+        "- Focus station relation rejected 'DSC_6802.NEF'<->'DSC_6778.NEF': scale 0.994, overlap 28.0%, NCC 0.277, edges 0.006/-0.004, samples 680"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6803.NEF",
+      "sha256": "cdfee5fa0d16043013c49746f5187fbc895e502f91351d056a33ed4d441c4015",
+      "bytes": 60171805,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 21,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6787.NEF'<->'DSC_6803.NEF': scale 0.937, overlap 24.0%, NCC 0.445, edges 0.365/0.434, samples 724",
+        "- Focus station relation rejected 'DSC_6803.NEF'<->'DSC_6805.NEF': scale 1.065, overlap 32.0%, NCC 0.443, edges 0.251/0.691, samples 1028"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6804.NEF",
+      "sha256": "cad463895fa82fdcad2069acf54e0a3bbb0dd22229afeb4d05a19a005102545b",
+      "bytes": 60117914,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 21,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6804.NEF'<->'DSC_6805.NEF': scale 1.064, overlap 32.0%, NCC 0.357, edges 0.276/0.699, samples 1026",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6774.NEF': scale 0.900, overlap 36.0%, NCC 0.425, edges -0.073/-0.031, samples 1006",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6804.NEF': scale 1.037, overlap 48.0%, NCC 0.325, edges 0.026/0.043, samples 1271",
+        "- Focus geometry retry candidate rejected edge 'DSC_6804.NEF'<->'DSC_6805.NEF': scale 1.062, overlap 32.0%, NCC 0.346, edges 0.294/0.667, samples 1026",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6773.NEF': scale 0.845, overlap 12.0%, NCC 0.364, edges 0.026/0.244, samples 318",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6770.NEF': scale 0.808, overlap 8.0%, NCC 0.162, edges 0.019/-0.253, samples 148",
+        "- Focus station relation rejected 'DSC_6775.NEF'<->'DSC_6804.NEF': scale 1.116, overlap 36.0%, NCC 0.335, edges 0.092/0.017, samples 1068",
+        "- Focus station relation rejected 'DSC_6769.NEF'<->'DSC_6804.NEF': scale 1.230, overlap 16.0%, NCC 0.328, edges -0.027/0.210, samples 198",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6804.NEF': scale 1.038, overlap 48.0%, NCC 0.322, edges 0.077/0.003, samples 1272",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6777.NEF': scale 0.976, overlap 48.0%, NCC 0.234, edges 0.047/0.036, samples 1400",
+        "- Focus station relation rejected 'DSC_6804.NEF'<->'DSC_6778.NEF': scale 0.986, overlap 24.0%, NCC 0.235, edges 0.031/0.098, samples 661"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6805.NEF",
+      "sha256": "5f5ab8fd9f4dc653b3e2a65dd7e1f24c475d0dd18873ab87d037168811eb6637",
+      "bytes": 58663708,
+      "classification": "composited",
+      "reason": "native log: Streaming projected region",
+      "station": 31,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_6804.NEF'<->'DSC_6805.NEF': scale 1.064, overlap 32.0%, NCC 0.357, edges 0.276/0.699, samples 1026",
+        "- Focus geometry retry candidate rejected edge 'DSC_6804.NEF'<->'DSC_6805.NEF': scale 1.062, overlap 32.0%, NCC 0.346, edges 0.294/0.667, samples 1026",
+        "- Focus station relation rejected 'DSC_6803.NEF'<->'DSC_6805.NEF': scale 1.065, overlap 32.0%, NCC 0.443, edges 0.251/0.691, samples 1028",
+        "- Focus station relation rejected 'DSC_6776.NEF'<->'DSC_6805.NEF': scale 1.098, overlap 36.0%, NCC 0.436, edges 0.019/0.055, samples 986",
+        "- Focus station relation rejected 'DSC_6777.NEF'<->'DSC_6805.NEF': scale 1.091, overlap 44.0%, NCC 0.417, edges 0.165/0.390, samples 1086",
+        "- Focus station relation rejected 'DSC_6788.NEF'<->'DSC_6805.NEF': scale 1.059, overlap 48.0%, NCC 0.315, edges 0.318/0.704, samples 1461",
+        "- Focus station relation rejected 'DSC_6779.NEF'<->'DSC_6805.NEF': scale 1.068, overlap 48.0%, NCC 0.418, edges 0.232/0.428, samples 1494",
+        "- Focus station relation rejected 'DSC_6786.NEF'<->'DSC_6805.NEF': scale 0.989, overlap 64.0%, NCC 0.417, edges 0.472/0.847, samples 1874",
+        "- Focus station relation rejected 'DSC_6781.NEF'<->'DSC_6805.NEF': scale 1.008, overlap 36.0%, NCC 0.303, edges 0.142/0.670, samples 866",
+        "- Focus station relation rejected 'DSC_6782.NEF'<->'DSC_6805.NEF': scale 0.973, overlap 24.0%, NCC 0.056, edges 0.084/0.636, samples 504"
+      ]
+    }
+  ],
+  "selected_path": "legacy_single_layer_mosaic",
+  "station_count": 49,
+  "path_selection": {
+    "configured_path": null,
+    "selected_path": "legacy_single_layer_mosaic",
+    "use_virtual_tiles": false,
+    "fallback_reason": "isolated_source"
+  },
+  "output_density": {
+    "status": "not_run",
+    "factor": 1.0,
+    "pixel_count_multiplier": 1.0,
+    "canvas_pixels": 0,
+    "output_plane_lower_bound_bytes": 0,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 0,
+    "sampling_contract": "",
+    "source_count": 0,
+    "sample_count": 0,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 0,
+    "worst_station_index": null,
+    "worst_source_id": null,
+    "worst_station_point": null,
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null,
+    "minimum_scale": null,
+    "p01_scale": null,
+    "median_scale": null,
+    "bypass_reason": null
+  },
+  "grouping_isolated": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF",
+      "reason": "grouping_no_overlap_evidence"
+    }
+  ],
+  "grouping_undecodable": [],
+  "grouping_source_scan": {
+    "singleton_station_count": 11,
+    "multi_frame_station_count": 38,
+    "singleton_ratio": 0.22448979591836735,
+    "detected": false,
+    "isolated_source_count": 1
+  },
+  "closure": {
+    "status": "not_run",
+    "spanning_tree_edges": 0,
+    "participating_constraints": 0,
+    "constraint_weights": [],
+    "iterations": 0,
+    "residual_median_px": 0.0,
+    "residual_p95_px": 0.0,
+    "max_direct_pair_p95_px": 0.0,
+    "balanced_retry_attempted": false,
+    "balanced_retry_accepted": false,
+    "before_retry_max_direct_pair_p95_px": null,
+    "max_corner_correction_px": 0.0,
+    "clamped_stations": 0,
+    "fallback_reason": null,
+    "offending_pair": null,
+    "geometry_model": "homography",
+    "global_before_residual_median_px": null,
+    "global_before_residual_p95_px": null,
+    "nonlinear_validation": [],
+    "rejected_nonlinear_constraints": [],
+    "nonlinear_initialization_constraints": 0,
+    "nonlinear_refit_passes": 0
+  },
+  "failure_chain": {
+    "selected_path": "legacy_single_layer_mosaic",
+    "candidates_recorded": 0,
+    "model_fitted_records": 0,
+    "accepted_relations": 0,
+    "rejected_count": 0,
+    "unmeasured_count": 0,
+    "rejected_by_failure_stage": {},
+    "rejected_by_reason": {},
+    "candidate_stage_histogram": {},
+    "hypothesis_rejection_reason_occurrences": {},
+    "source_raw_pair_diagnostics_count": 0,
+    "source_raw_direct_diagnostics_count": 0,
+    "connectivity": {
+      "components": 0,
+      "component_members": [],
+      "component_member_counts": []
+    },
+    "note": "Candidate records, final relation counts and hypothesis reason occurrences have different denominators and can repeat a pair. Empty legacy station diagnostics do not prove no registration failure. Shared-gate/proposal stages without explicit records are unavailable.",
+    "proposal_count": null,
+    "shared_gate_attempt_count": null,
+    "station_chain_availability": "not instrumented for legacy source matching",
+    "accepted_source_pairs_count": 616,
+    "alignment_cache": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/source-alignment.json",
+      "schema": 2,
+      "match_records": 616
+    },
+    "diagnostic_categories": {
+      "no_overlap": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "support": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "bidirectional": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "grid": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "scale": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "hull": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "orientation": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "closure": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      }
+    }
+  },
+  "quality_gate": {
+    "verdict": "fail",
+    "roi_count": 8,
+    "criteria": {
+      "local_scale_median": "not_applicable",
+      "local_scale_pixel_ratio": "fail",
+      "effective_pixel_count": "pass",
+      "mtf50_normalized": "not_applicable",
+      "gradient_energy_normalized": "pass",
+      "noise_sigma_ratio": "fail",
+      "roi_delta_e00": "pass",
+      "boundary_stroke_alignment": "fail",
+      "owner_sharpness_coverage": "fail"
+    },
+    "non_pass": [
+      "local_scale_median:not_applicable",
+      "local_scale_pixel_ratio:fail",
+      "mtf50_normalized:not_applicable",
+      "noise_sigma_ratio:fail",
+      "boundary_stroke_alignment:fail",
+      "owner_sharpness_coverage:fail"
+    ],
+    "unresolved_pixels": 0,
+    "detail_repairs": 99
+  },
+  "failed_criteria": [
+    {
+      "name": "local_scale_pixel_ratio",
+      "verdict": "fail",
+      "threshold": 0.99,
+      "threshold_min": null,
+      "threshold_max": null,
+      "failed": [
+        {
+          "world": {
+            "x": -6186.0,
+            "y": -2255.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF"
+        }
+      ],
+      "measured": [
+        {
+          "world": {
+            "x": 726.0,
+            "y": -3407.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF"
+        },
+        {
+          "world": {
+            "x": 598.0,
+            "y": -1999.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6715.NEF"
+        },
+        {
+          "world": {
+            "x": 1366.0,
+            "y": -1359.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6717.NEF"
+        },
+        {
+          "world": {
+            "x": -938.0,
+            "y": -1103.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6727.NEF"
+        },
+        {
+          "world": {
+            "x": -1834.0,
+            "y": -1999.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6739.NEF"
+        },
+        {
+          "world": {
+            "x": -4394.0,
+            "y": -1743.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6769.NEF"
+        },
+        {
+          "world": {
+            "x": -4522.0,
+            "y": -2767.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6772.NEF"
+        },
+        {
+          "world": {
+            "x": -6186.0,
+            "y": -2255.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF"
+        }
+      ],
+      "unmeasurable_reasons": {},
+      "unresolved_pixel_count": 0,
+      "selection_mode": "station_evidence_shared_roi"
+    },
+    {
+      "name": "noise_sigma_ratio",
+      "verdict": "fail",
+      "threshold": 0.85,
+      "threshold_min": 0.85,
+      "threshold_max": 1.15,
+      "failed": [
+        {
+          "world": {
+            "x": -5354.0,
+            "y": -2895.0
+          },
+          "measured": 1.2391777415832053,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF"
+        }
+      ],
+      "measured": [
+        {
+          "world": {
+            "x": 406.0,
+            "y": -3471.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF"
+        },
+        {
+          "world": {
+            "x": 470.0,
+            "y": -3471.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF"
+        },
+        {
+          "world": {
+            "x": -1322.0,
+            "y": -2511.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6733.NEF"
+        },
+        {
+          "world": {
+            "x": -1386.0,
+            "y": -2447.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6733.NEF"
+        },
+        {
+          "world": {
+            "x": -1322.0,
+            "y": -3343.0
+          },
+          "measured": 0.998591113583036,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6735.NEF"
+        },
+        {
+          "world": {
+            "x": -746.0,
+            "y": -3343.0
+          },
+          "measured": 0.9342527227156153,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6735.NEF"
+        },
+        {
+          "world": {
+            "x": -5354.0,
+            "y": -2895.0
+          },
+          "measured": 1.2391777415832053,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF"
+        },
+        {
+          "world": {
+            "x": -4010.0,
+            "y": -2767.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6771.NEF"
+        },
+        {
+          "world": {
+            "x": 1430.0,
+            "y": -2127.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6715.NEF"
+        },
+        {
+          "world": {
+            "x": -1514.0,
+            "y": -2127.0
+          },
+          "measured": 0.9945269092756448,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6737.NEF"
+        },
+        {
+          "world": {
+            "x": -4266.0,
+            "y": -1807.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6769.NEF"
+        },
+        {
+          "world": {
+            "x": -3050.0,
+            "y": -1551.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6750.NEF"
+        },
+        {
+          "world": {
+            "x": -874.0,
+            "y": -1295.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6727.NEF"
+        },
+        {
+          "world": {
+            "x": -5034.0,
+            "y": -911.0
+          },
+          "measured": 0.9993931050639377,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6778.NEF"
+        },
+        {
+          "world": {
+            "x": 1302.0,
+            "y": -719.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6720.NEF"
+        },
+        {
+          "world": {
+            "x": -2538.0,
+            "y": -911.0
+          },
+          "measured": 0.9918726929917314,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6743.NEF"
+        },
+        {
+          "world": {
+            "x": -4778.0,
+            "y": -335.0
+          },
+          "measured": 0.9993523300015534,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6764.NEF"
+        },
+        {
+          "world": {
+            "x": -6186.0,
+            "y": -207.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6785.NEF"
+        },
+        {
+          "world": {
+            "x": -810.0,
+            "y": -463.0
+          },
+          "measured": 0.9947276233410716,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6725.NEF"
+        },
+        {
+          "world": {
+            "x": 1302.0,
+            "y": -527.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6722.NEF"
+        },
+        {
+          "world": {
+            "x": -3050.0,
+            "y": -271.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF"
+        },
+        {
+          "world": {
+            "x": -3690.0,
+            "y": -271.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6761.NEF"
+        },
+        {
+          "world": {
+            "x": -2218.0,
+            "y": -271.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6744.NEF"
+        },
+        {
+          "world": {
+            "x": 1046.0,
+            "y": 49.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6709.NEF"
+        }
+      ],
+      "unmeasurable_reasons": {},
+      "unresolved_pixel_count": 0,
+      "selection_mode": "station_flat_patch_search_128"
+    },
+    {
+      "name": "boundary_stroke_alignment",
+      "verdict": "fail",
+      "threshold": 1.5,
+      "threshold_min": null,
+      "threshold_max": 3.0,
+      "failed": [
+        {
+          "world": {
+            "x": -5888.0,
+            "y": -2507.5
+          },
+          "measured": 3.0,
+          "owner_path": "station:7/station:8;owner:87/owner:88;samples:-5886.0,-2511.0|-5889.0,-2503.0"
+        }
+      ],
+      "measured": [
+        {
+          "world": {
+            "x": 1244.0,
+            "y": -2086.5
+          },
+          "measured": 1.0,
+          "owner_path": "station:1/station:10;owner:4/owner:7;samples:1244.0,-2090.0|1245.0,-2082.0"
+        },
+        {
+          "world": {
+            "x": -1364.5,
+            "y": -3043.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:2/station:3;owner:26/owner:24;samples:-1368.0,-3041.0|-1360.0,-3042.0"
+        },
+        {
+          "world": {
+            "x": -757.5,
+            "y": -3107.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:2/station:3;owner:27/owner:24;samples:-761.0,-3105.0|-753.0,-3106.0"
+        },
+        {
+          "world": {
+            "x": -627.5,
+            "y": -3123.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:2/station:3;owner:24/owner:27;samples:-631.0,-3121.0|-623.0,-3122.0"
+        },
+        {
+          "world": {
+            "x": -2247.5,
+            "y": -2921.0
+          },
+          "measured": 0.0,
+          "owner_path": "station:3/station:5;owner:46/owner:26;samples:-2251.0,-2919.0|-2243.0,-2919.0"
+        },
+        {
+          "world": {
+            "x": -2166.5,
+            "y": -2935.0
+          },
+          "measured": 0.0,
+          "owner_path": "station:3/station:5;owner:46/owner:26;samples:-2170.0,-2933.0|-2162.0,-2933.0"
+        },
+        {
+          "world": {
+            "x": -4066.5,
+            "y": -2848.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:4/station:9;owner:65/owner:63;samples:-4070.0,-2846.0|-4062.0,-2847.0"
+        },
+        {
+          "world": {
+            "x": -6026.5,
+            "y": -2511.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:7/station:8;owner:88/owner:86;samples:-6030.0,-2509.0|-6022.0,-2510.0"
+        },
+        {
+          "world": {
+            "x": -5888.0,
+            "y": -2507.5
+          },
+          "measured": 3.0,
+          "owner_path": "station:7/station:8;owner:87/owner:88;samples:-5886.0,-2511.0|-5889.0,-2503.0"
+        },
+        {
+          "world": {
+            "x": -5548.5,
+            "y": -2623.0
+          },
+          "measured": 2.0,
+          "owner_path": "station:7/station:8;owner:87/owner:88;samples:-5552.0,-2621.0|-5544.0,-2623.0"
+        },
+        {
+          "world": {
+            "x": -5404.5,
+            "y": -2657.0
+          },
+          "measured": 2.0,
+          "owner_path": "station:7/station:8;owner:86/owner:88;samples:-5408.0,-2655.0|-5400.0,-2657.0"
+        },
+        {
+          "world": {
+            "x": -5264.5,
+            "y": -2662.0
+          },
+          "measured": 2.0,
+          "owner_path": "station:7/station:8;owner:88/owner:87;samples:-5268.0,-2660.0|-5260.0,-2662.0"
+        },
+        {
+          "world": {
+            "x": -4656.5,
+            "y": -2813.0
+          },
+          "measured": 1.0,
+          "owner_path": "station:7/station:8;owner:88/owner:87;samples:-4660.0,-2811.0|-4652.0,-2812.0"
+        }
+      ],
+      "unmeasurable_reasons": {},
+      "unresolved_pixel_count": 0,
+      "selection_mode": "station_boundary_streaming_candidates"
+    },
+    {
+      "name": "owner_sharpness_coverage",
+      "verdict": "fail",
+      "threshold": 0.99,
+      "threshold_min": null,
+      "threshold_max": null,
+      "failed": [
+        {
+          "world": {
+            "x": -6826.0,
+            "y": -3535.0
+          },
+          "measured": 0.8734524133971383,
+          "owner_path": ""
+        }
+      ],
+      "measured": [
+        {
+          "world": {
+            "x": -6826.0,
+            "y": -3535.0
+          },
+          "measured": 0.8734524133971383,
+          "owner_path": ""
+        }
+      ],
+      "unmeasurable_reasons": {},
+      "unresolved_pixel_count": 0,
+      "selection_mode": ""
+    }
+  ],
+  "detail_repair_donor_counts": {
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6711.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6734.NEF": 10,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6732.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6756.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF": 8,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6795.NEF": 46,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6754.NEF": 2,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6712.NEF": 4,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6771.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6739.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6714.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6738.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6748.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6719.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6727.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6742.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6725.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF": 3,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6783.NEF": 2,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6782.NEF": 1,
+    "/Users/dp/Downloads/书画拼图/祁序2/DSC_6723.NEF": 11
+  },
+  "degradation": {
+    "entries": [
+      {
+        "reason": "scan_unaligned_sources_skipped",
+        "severity": "degraded",
+        "detail": {
+          "paths": [
+            "/Users/dp/Downloads/书画拼图/祁序2/DSC_6708.NEF"
+          ]
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 1,
+          "motion_ratio": 0.02384785669482744,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 6,
+          "motion_ratio": 0.03655417692352874,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 8,
+          "motion_ratio": 0.021554022077109262,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 11,
+          "motion_ratio": 0.03244722555386711,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 11,
+          "motion_ratio": 0.024721457855518745,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 12,
+          "motion_ratio": 0.04872194064220098,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 16,
+          "motion_ratio": 0.027908781127397895,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 17,
+          "motion_ratio": 0.02086522043198355,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 21,
+          "motion_ratio": 0.021468660509888802,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 30,
+          "motion_ratio": 0.02323356861973171,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 37,
+          "motion_ratio": 0.029905337578653757,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 38,
+          "motion_ratio": 0.0224091892176398,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 40,
+          "motion_ratio": 0.02009096314173813,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 43,
+          "motion_ratio": 0.02652069205039721,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 44,
+          "motion_ratio": 0.023308726241063647,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 46,
+          "motion_ratio": 0.04659180541692282,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 46,
+          "motion_ratio": 0.0432895967139451,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 47,
+          "motion_ratio": 0.026991540018241916,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_no_overlap_evidence",
+        "severity": "degraded",
+        "detail": {
+          "path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6755.NEF"
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 6
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 7
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 11
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 12
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 13
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 20
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 21
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 28
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 31
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 32
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 35
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 38
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 46
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "minimum_patches": 4,
+          "stage": "mosaic_local_registration",
+          "supported_patches": 0
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "minimum_patches": 4,
+          "stage": "mosaic_local_registration",
+          "supported_patches": 0
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 3017,
+          "global_baseline_samples": 2088,
+          "global_median_symmetric_error_px": 0.1767766952966369,
+          "local_baseline_samples": 3017,
+          "local_median_symmetric_error_px": 0.1767766952966369,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 2606,
+          "global_baseline_samples": 1703,
+          "global_median_symmetric_error_px": 0.1767766952966369,
+          "local_baseline_samples": 2604,
+          "local_median_symmetric_error_px": 0.1767766952966369,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 358,
+          "evaluated_control_points": 358,
+          "inlier_area_coverage": 0.17088305489260144,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 359,
+          "evaluated_control_points": 359,
+          "inlier_area_coverage": 0.16566682048915554,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 115,
+          "evaluated_control_points": 315,
+          "inlier_area_coverage": 0.11318897637795276,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 37,
+          "evaluated_control_points": 37,
+          "inlier_area_coverage": 0.07156673114119923,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 102,
+          "evaluated_control_points": 102,
+          "inlier_area_coverage": 0.1802120141342756,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 189,
+          "global_baseline_samples": 27,
+          "global_median_symmetric_error_px": 0.125,
+          "local_baseline_samples": 189,
+          "local_median_symmetric_error_px": 0.13975424859373686,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 158,
+          "evaluated_control_points": 158,
+          "inlier_area_coverage": 0.1302555647155812,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 1,
+          "global_baseline_samples": 1,
+          "global_median_symmetric_error_px": 0.2795084971874737,
+          "local_baseline_samples": 1,
+          "local_median_symmetric_error_px": 0.3644344934278313,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 1,
+          "evaluated_control_points": 2,
+          "inlier_area_coverage": 0.004081632653061224,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 931,
+          "global_baseline_samples": 571,
+          "global_median_symmetric_error_px": 0.1767766952966369,
+          "local_baseline_samples": 904,
+          "local_median_symmetric_error_px": 0.1767766952966369,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 134,
+          "evaluated_control_points": 338,
+          "inlier_area_coverage": 0.08256315465187924,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "minimum_patches": 4,
+          "stage": "mosaic_local_registration",
+          "supported_patches": 0
+        }
+      },
+      {
+        "reason": "intra_station_local_fallback",
+        "severity": "degraded",
+        "detail": {
+          "minimum_patches": 4,
+          "stage": "mosaic_local_registration",
+          "supported_patches": 0
+        }
+      },
+      {
+        "reason": "intra_station_local_baseline_indeterminate",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "global_baseline_samples": 0,
+          "global_median_symmetric_error_px": 0.0,
+          "local_baseline_samples": 0,
+          "local_median_symmetric_error_px": 0.0,
+          "minimum_baseline_samples": 6,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "intra_station_registration_failed",
+        "severity": "degraded",
+        "detail": {
+          "accepted_control_points": 0,
+          "evaluated_control_points": 0,
+          "inlier_area_coverage": 0.0,
+          "minimum_inlier_area_coverage": 0.2,
+          "stage": "intra_station_native_refinement"
+        }
+      },
+      {
+        "reason": "scan_soft_region",
+        "severity": "degraded",
+        "detail": {
+          "list": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1-stack-reports/soft-regions-b196769a-d550-4722-9cad-e81b9efbc8f7.json",
+          "output_size": [
+            8869,
+            4911
+          ],
+          "overview": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1-stack-reports/soft-regions-b196769a-d550-4722-9cad-e81b9efbc8f7.png",
+          "regions": [
+            {
+              "best_source_gain": 1.990403932906197,
+              "cells": 3,
+              "height": 96,
+              "kind": "sharper_source_unused",
+              "relative_detail": 0.5405130864631326,
+              "width": 144,
+              "x": 3286,
+              "y": 4282
+            },
+            {
+              "best_source_gain": 1.0509521678754414,
+              "cells": 3,
+              "height": 48,
+              "kind": "sources_soft",
+              "relative_detail": 0.5390118484420438,
+              "width": 144,
+              "x": 8710,
+              "y": 4378
+            }
+          ],
+          "sources_soft": 1
+        }
+      },
+      {
+        "reason": "quality_gate_criterion_failed",
+        "severity": "rejected",
+        "detail": {
+          "criteria": [
+            {
+              "failed": [
+                {
+                  "measured": 0.0,
+                  "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF",
+                  "world": {
+                    "x": -6186.0,
+                    "y": -2255.0
+                  }
+                }
+              ],
+              "failed_count": 1,
+              "measurable_count": 8,
+              "name": "local_scale_pixel_ratio",
+              "unmeasurable_count": 0,
+              "verdict": "fail"
+            },
+            {
+              "failed": [
+                {
+                  "measured": 1.2391777415832053,
+                  "owner_path": "/Users/dp/Downloads/书画拼图/祁序2/DSC_6796.NEF",
+                  "world": {
+                    "x": -5354.0,
+                    "y": -2895.0
+                  }
+                }
+              ],
+              "failed_count": 1,
+              "measurable_count": 24,
+              "name": "noise_sigma_ratio",
+              "unmeasurable_count": 0,
+              "verdict": "fail"
+            },
+            {
+              "failed": [
+                {
+                  "measured": 3.0,
+                  "owner_path": "station:7/station:8;owner:87/owner:88;samples:-5886.0,-2511.0|-5889.0,-2503.0",
+                  "world": {
+                    "x": -5888.0,
+                    "y": -2507.5
+                  }
+                }
+              ],
+              "failed_count": 1,
+              "measurable_count": 13,
+              "name": "boundary_stroke_alignment",
+              "unmeasurable_count": 0,
+              "verdict": "fail"
+            },
+            {
+              "failed": [
+                {
+                  "measured": 0.8734524133971383,
+                  "owner_path": "",
+                  "world": {
+                    "x": -6826.0,
+                    "y": -3535.0
+                  }
+                }
+              ],
+              "failed_count": 1,
+              "measurable_count": 1,
+              "name": "owner_sharpness_coverage",
+              "unmeasurable_count": 0,
+              "verdict": "fail"
+            }
+          ],
+          "roi_count": 8,
+          "unmeasurable": [],
+          "verdict": "fail"
+        }
+      }
+    ],
+    "result": "rejected"
+  },
+  "tone_summary": {
+    "status": "not_run",
+    "boundary_delta_e": {
+      "max": 0.0,
+      "threshold": 1.5,
+      "violations": []
+    },
+    "correction_model": "station_affine",
+    "geometry_active_relation_count": 0
+  },
+  "performance": {
+    "raw_decode_count": 474,
+    "native_fusion_count": 0,
+    "source_cache": {
+      "max_bytes": 536870912,
+      "peak_bytes": 511847850,
+      "hits": 22
+    },
+    "native_cache": {
+      "max_bytes": 1073741824,
+      "peak_bytes": 0,
+      "hits": 0
+    }
+  },
+  "performance_stages": {
+    "preflight_seconds": 0.775621459,
+    "prepare_seconds": 122.916972209,
+    "matching_seconds": 13.76575625,
+    "ordering_seconds": 337.297517667,
+    "render_seconds": 977.360191667,
+    "total_seconds": 1452.452650541
+  },
+  "native_fusion_cache": {
+    "backing": {
+      "max_bytes": 4294967296,
+      "resident_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0,
+      "writes": 0,
+      "read_bytes": 0,
+      "written_bytes": 0,
+      "read_seconds": 0.0,
+      "write_seconds": 0.0,
+      "failures": 0,
+      "evictions": 0
+    },
+    "max_bytes": 1073741824,
+    "hits": 0,
+    "misses": 0,
+    "matching_hits": 0,
+    "matching_misses": 0,
+    "composition_hits": 0,
+    "composition_misses": 0,
+    "fusion_count": 0,
+    "fusion_seconds": 0.0,
+    "failed_fusions": 0,
+    "evictions": 0,
+    "invalidations": 0,
+    "oversized_bypasses": 0,
+    "unattributed_bypasses": 0,
+    "state_snapshot_bypasses": 0,
+    "resident_bytes": 0,
+    "resident_entries": 0,
+    "peak_bytes": 0,
+    "peak_entries": 0,
+    "peak_memory_entries": 0
+  },
+  "source_preflight": {
+    "source_count": 97,
+    "stat_count": 97,
+    "file_map_count": 97,
+    "hash_count": 97,
+    "exif_parse_count": 97,
+    "preflight_reuse_count": 474,
+    "raw_decode_count": 474,
+    "failed_count": 0
+  },
+  "resource": {
+    "slot": {
+      "slot": "exclusive",
+      "lane": "task-5",
+      "what": "qixu-2 scale=0.25 baseline-r1",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-5/scripts/stack-lab/run.py",
+        "--binary",
+        "base-2026-11-12",
+        "--lane",
+        "task-5",
+        "--dataset",
+        "qixu-2",
+        "--scale",
+        "0.25",
+        "--label",
+        "baseline-r1",
+        "--exclusive"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-5",
+      "estimate_gib": null,
+      "pid": 43984,
+      "started_epoch": 1794914611.4116108,
+      "started": "2026-11-17T11:23:31.410422+00:00",
+      "state": "running",
+      "caps": {
+        "RAYON_NUM_THREADS": "8",
+        "CARGO_BUILD_JOBS": "6"
+      },
+      "contended_with": [],
+      "child_pid": 43989
+    },
+    "peak_rss_bytes": 14889549824,
+    "memory_gate_pass": true,
+    "memory": {
+      "threshold_bytes": 25769803776,
+      "measurements": {
+        "process_tree_sampled": 14745370624,
+        "native_getrusage": 14889549824,
+        "native_report": 14745305088
+      },
+      "sample_count": 3824,
+      "monitor_error": null,
+      "threshold_exceeded": false
+    },
+    "wall_seconds": 2034.2726619243622,
+    "contended": false,
+    "exit_code": 1,
+    "runner_failures": [
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "inputs missing from the stitching order: DSC_6708.NEF",
+      "streaming compositor used 96/98 inputs (0 lending detail only); absent: DSC_6708.NEF, DSC_6730.NEF",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "state": "rejected",
+    "native_rayon_threads": 8,
+    "preparation_threads": [
+      6,
+      6
+    ]
+  },
+  "output": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 4911,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-395eca3e-55ed-4288-af3d-0ad78750cb66",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 8869,
+    "written": true
+  },
+  "output_sha256": "f52ad8c1de4a0fa0d4d793bc419d2b52e5aa5b20cc15bdb5aa5c08e4c9f92a72",
+  "previews": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.preview.jpg",
+      "sha256": "e2313ef9d82a3997d8046a9b1d4b6ad831fa7c38c4d50ba31fb3e5c01134f0d3",
+      "bytes": 73884,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 664
+      }
+    }
+  ],
+  "crop_previews": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.bottom-center.jpg",
+      "sha256": "47682e9bf6bd0462e983f91661aaf6d943880c004b80b930181bad879b540ab1",
+      "bytes": 110687,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.bottom-left.jpg",
+      "sha256": "b81701e54b5cb837a3813f759b84da4e7f7b63d545f7b0bf48de1a7018966862",
+      "bytes": 104002,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.bottom-right.jpg",
+      "sha256": "e88c6c17369764226da19a4680517dc2ed261da4428f9d62299b12d7d9396be8",
+      "bytes": 134321,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.top-center.jpg",
+      "sha256": "109bc54215370634b9800b0c0de2646b94f839a0b32ee57426fff1bc648b472b",
+      "bytes": 117714,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.top-left.jpg",
+      "sha256": "ac80e84c7220e677be441d88d59ca8e0ecbb7130b8632cb92edb2aaa78e6c439",
+      "bytes": 94817,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.top-right.jpg",
+      "sha256": "f0ce71a89726c4d5d0fb06c6a1e797ac5b3e7797c336bc9b6e522bc61ff40983",
+      "bytes": 128310,
+      "dimensions": {
+        "pixelWidth": 1200,
+        "pixelHeight": 997
+      }
+    }
+  ],
+  "last_log_lines": [
+    "  - Calibrated stack lens geometry: /Users/dp/Downloads/书画拼图/祁序2/DSC_6722.NEF (8256x5504 -> 8258x5507)",
+    "  - Calibrated stack lens geometry: /Users/dp/Downloads/书画拼图/祁序2/DSC_6746.NEF (8256x5504 -> 8258x5507)",
+    "  - Calibrated stack lens geometry: /Users/dp/Downloads/书画拼图/祁序2/DSC_6761.NEF (8256x5504 -> 8258x5507)",
+    "  - Calibrated stack lens geometry: /Users/dp/Downloads/书画拼图/祁序2/DSC_6744.NEF (8256x5504 -> 8258x5507)",
+    "  - Calibrated stack lens geometry: /Users/dp/Downloads/书画拼图/祁序2/DSC_6709.NEF (8256x5504 -> 8258x5507)",
+    "Stitching completed in 977.36s",
+    "",
+    "  - Stack report written to /Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-395eca3e-55ed-4288-af3d-0ad78750cb66.json",
+    "acceptance metrics: /Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.metrics.json (reference ratio median Null)",
+    "focus-stack result: 8869x4911",
+    "full: /Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.tiff",
+    "app JPEG: /Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.app.jpg",
+    "preview: /Users/dp/Desktop/raw-editor/output/acceptance/task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1.preview.jpg",
+    "ok",
+    "",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1136 filtered out; finished in 2033.91s",
+    "",
+    "NATIVE_PROCESS_USAGE {\"method\": \"getrusage(RUSAGE_CHILDREN), one frozen Rust child\", \"max_rss_bytes\": 14889549824, \"wall_seconds\": 2033.9868049591314, \"user_seconds\": 11385.301297, \"system_seconds\": 118.523221, \"child_exit_code\": 0}"
+  ],
+  "native_errors": [],
+  "review": {
+    "stop_stage": "97张重求解完成后，legacy流式主合成96张、99处细节转移/替换、QG和25% RGBA16 TIFF/预览导出完成；最终degradation=rejected、QG fail。",
+    "visual_notes": "已实际查看1200×664预览：主体仍偏暗，有纵向深浅带状过渡（预览约x=600–800、y=100–580，对应25%输出约x=4435–5913、y=740–4290；只作缩略观察，成因需原生和源图对照）。外缘阶梯/黑色透明背景属于source-union，不自动当作内部缺洞。机器失败含local_scale_pixel_ratio在DSC_6796、world=(-6186,-2255)测值0；noise_sigma_ratio同源world=(-5354,-2895)为1.2391777415832053>1.15；boundary_stroke_alignment失败采样world=(-5888,-2507.5)为3px。world_origin=(-6826,-3535)，这些位置对应25%输出约(640,1280)、(1472,640)、(938,1027.5)；保留world域原值，不外推原生。 owner_sharpness_coverage=0.8734524133971383<0.99。",
+    "region_group": "流式mosaic组（任务11）；跨帧几何、owner选择、局部噪声与细节修复需结合。",
+    "task_7": "建议基于本次616条source匹配边/对齐缓存检查非相邻机位假边分布；完整source proposal/shared gate计数在legacy报告缺失。",
+    "task_8": "建议离线比较结构验证召回与局部配准；先按失败ROI、source/owner和修复矩形定位，不直接推断换provider即可解决。",
+    "task_15": "2034.27秒完成，峰值13.867GiB且内存门通过；本轮无超门/无法结束证据，不启动。",
+    "grade": "达到D1的scale=0.25诊断范围；QG fail且不是原生输出，未达D2/D3/D4/D5。",
+    "source_conclusion": "98张输入=96张主合成+2张排除；DSC_6708无法对齐，DSC_6730在49%软区筛除且未出现在最终99处repair donor中。无仅供细节的额外帧，donor均已在96张主合成中。原始输入前后SHA保持。正式standalone manifest未登记这些排除，runner的来源/首份report判断仍拒绝，人工诊断不覆盖这些门禁。",
+    "next_step": "任务11归流式mosaic组，依赖任务6；保留本次失败。与祁序1一样，Node首份中间report（98张、not_run、未导出）和最终实测report（97张、QG fail、已验证TIFF）存在选择差异；工具/报告观测缺口另列，不改runner或质量预期。"
+  },
+  "notes": [
+    "Scale 0.25 output cannot establish D2/D3 or full-resolution quality.",
+    "Each source has one top-level classification; detail_only excludes composited.",
+    "Station fusion input is pipeline participation, not proof that every frame owns final pixels.",
+    "No user D4 confirmation; diagnostic previews are not entered into the review queue."
+  ]
+}

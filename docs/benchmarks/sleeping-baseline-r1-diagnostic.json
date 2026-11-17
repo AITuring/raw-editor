@@ -1,0 +1,1621 @@
+{
+  "dataset": "sleeping",
+  "label": "睡觉",
+  "date": "2026-11-17",
+  "started_at": "2026-11-17T10:57:47.696146+00:00",
+  "finished_at": "2026-11-17T11:07:48.309254+00:00",
+  "verified_at": "2026-11-17T16:20:18.703396+00:00",
+  "scope": "full registered dataset, scale=0.25, diagnostic only",
+  "binary": {
+    "label": "base-2026-11-12",
+    "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+  },
+  "execution": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/execution.json",
+    "sha256": "0a0c92d6d377233055f6c4e5ecb017ab709e1be982351407594e25dff049155a",
+    "bytes": 11814
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": false,
+    "report_source_digests": true
+  },
+  "analysis": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/analysis.json",
+    "sha256": "121ca3ccac65c4b9e0663c1548a99cd872b1677d5f80e537830229602a786351",
+    "bytes": 3429
+  },
+  "report": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/run/sleeping-s0p25-task-5-baseline-r1-stack-reports/stack-report-bc8d2ebb-c4d7-4a1e-80af-94ce4520cc44.json",
+    "sha256": "dbd9b4f4578deba70f52f96184b5b5e60076ccc6c395f06a8505192b39f95c82",
+    "bytes": 8982225
+  },
+  "native_logs": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/run/sleeping-s0p25-task-5-baseline-r1.log",
+      "sha256": "0e13ccce59516986e56dc532e4902376b451a38ac3181509400cc8e5ea7b9e18",
+      "bytes": 495053
+    }
+  ],
+  "inputs_sha256": "f3ab1237ccedf7c23c5e34bc0d53c43bcac210de33c070538304859ebe9681df",
+  "manifest_sha256": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+  "reference": null,
+  "source_counts": {
+    "prepared_station_input": 45
+  },
+  "unexpected_exclusions": [],
+  "sources": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6461.NEF",
+      "sha256": "7be20cc8c5680a01ce0b3f5a420c16f0cfd9baeec41bd9569f35a60f79e92af9",
+      "bytes": 57640337,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6462.NEF",
+      "sha256": "dd0a91221d1eda413f2fe2dc88c9dbacf35d29168a347dbac0f96dc7c0fc4a2a",
+      "bytes": 56843326,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6462.NEF': Local, 3946 inliers of 4536 control points, coverage 0.814, rejected 0.130, median symmetric error 0.27px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6463.NEF",
+      "sha256": "8163bfe0706c055a6cfae16d7836a079bb08e686f66a50bf32fdf48a76e24bcf",
+      "bytes": 56661611,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6464.NEF",
+      "sha256": "f3fdc04d06f7224c3e7340ecbb8090895f998b75ecad75861a5dc85933a47d4a",
+      "bytes": 58079682,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6464.NEF': Local, 3864 inliers of 4565 control points, coverage 0.812, rejected 0.154, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6465.NEF",
+      "sha256": "c895df6738d38303928c14ffb5c317e04f8ed194dc490dbdf601b372f2fab651",
+      "bytes": 58125096,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6465.NEF': Local, 3986 inliers of 4565 control points, coverage 0.837, rejected 0.127, median symmetric error 0.20px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6466.NEF",
+      "sha256": "521e45e999f6170bc032a7f1b187bff89947ca234919e6f5b55ff47e6eb9812e",
+      "bytes": 57506753,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6466.NEF': Local, 4023 inliers of 4620 control points, coverage 0.845, rejected 0.129, median symmetric error 0.20px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6467.NEF",
+      "sha256": "d7b285b550c3432399edbda0f6ffcae8e266b42908b698849dbacdcf51e8c2ed",
+      "bytes": 56838286,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6467.NEF'<->'DSC_6487.NEF': scale 1.267, overlap 8.0%, NCC 0.754, edges 0.140/0.341, samples 1702"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6468.NEF",
+      "sha256": "20ed60449b8c8841f8d0d7508cd994e1ecb7ead1800381ebc904bbb4395d5920",
+      "bytes": 57923544,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6468.NEF'<->'DSC_6483.NEF': scale 1.269, overlap 8.0%, NCC 0.797, edges 0.223/0.686, samples 1703",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6468.NEF': Local, 4038 inliers of 4497 control points, coverage 0.833, rejected 0.102, median symmetric error 0.23px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6469.NEF",
+      "sha256": "817215c93adfd2dce4318fe520ad009233826a786fb7787480c9cf75d96aa154",
+      "bytes": 56005357,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6470.NEF",
+      "sha256": "823736acdbe015d8dad262484375764d007b374a427e86c1330348a1d77e91d4",
+      "bytes": 56285802,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6471.NEF",
+      "sha256": "95e3aa924ba2f123b6beb454bab53c4ab0b66a09a76b2eaf0b7655b53a8f3151",
+      "bytes": 56129277,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6471.NEF': Local, 4247 inliers of 4482 control points, coverage 0.892, rejected 0.052, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6472.NEF",
+      "sha256": "6bb119ac3dc37215aae0f4f002a2f7b166bf4ecce56480d77ce902d69f4e2a25",
+      "bytes": 56209517,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6472.NEF': Local, 4365 inliers of 4565 control points, coverage 0.901, rejected 0.044, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6473.NEF",
+      "sha256": "09ad7d52415f3ae679341df12d5f385665d92637f2b409a18849e6990f1356c5",
+      "bytes": 55993986,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6473.NEF': Local, 4322 inliers of 4565 control points, coverage 0.911, rejected 0.053, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6474.NEF",
+      "sha256": "98f86b5a86a1744301038dca3bb5ce7e02f3310b7ad57e8c2b005903f8a2324f",
+      "bytes": 57967518,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6474.NEF'<->'DSC_6495.NEF': scale 0.854, overlap 8.0%, NCC 0.923, edges 0.375/0.550, samples 2493"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6475.NEF",
+      "sha256": "581f9c44a9ffe870eea8941c49e42ae3ee25902ef9057522e5b33aed7bbb5b39",
+      "bytes": 57477383,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6505.NEF'<->'DSC_6475.NEF': scale 1.284, overlap 8.0%, NCC 0.750, edges 0.157/0.740, samples 2235",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6475.NEF': Local, 3961 inliers of 4434 control points, coverage 0.825, rejected 0.107, median symmetric error 0.14px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6476.NEF",
+      "sha256": "e0ebb63fb1ab79acf3721033431a18db92016a001a10a9f38923d7ade05e922d",
+      "bytes": 57651089,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6476.NEF': Local, 4006 inliers of 4513 control points, coverage 0.827, rejected 0.112, median symmetric error 0.18px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6477.NEF",
+      "sha256": "8f0d6dbb86ba9b72f2d72179f37a145b71db2c2d79c4f1f84e671bb69129cef7",
+      "bytes": 57191852,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6477.NEF': Local, 4067 inliers of 4535 control points, coverage 0.839, rejected 0.103, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6478.NEF",
+      "sha256": "8498dbbb1800e4d191864378ad9c7d1f687f4a4395c1eff616ba30cced591b2c",
+      "bytes": 56969603,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6478.NEF': Local, 4044 inliers of 4423 control points, coverage 0.855, rejected 0.086, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+      "sha256": "7a9cbc2aabebe01831dc4bfdcee45b297289e27ff7902b9e54f26c034670ddd1",
+      "bytes": 57222728,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+      "sha256": "1d55f8e4127ae2306e4a2b44fca5b622774f321fac44d8527a493e66eed3cdf2",
+      "bytes": 57310152,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF': Local, 4076 inliers of 4317 control points, coverage 0.888, rejected 0.056, median symmetric error 0.23px, control point spacing 23.9px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+      "sha256": "87b2192d3012874d3b2544faafc6cd5b1ce73eef50029ae1d738f5d317285063",
+      "bytes": 57330421,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF': Local, 4117 inliers of 4548 control points, coverage 0.850, rejected 0.095, median symmetric error 0.23px, control point spacing 23.9px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+      "sha256": "88eecd3773fb3ed098a6c1d72f2a85953c27b2edff0025a5b1c23aabe84e1c2d",
+      "bytes": 57184738,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6489.NEF'<->'DSC_6482.NEF': scale 1.218, overlap 24.0%, NCC 0.957, edges 0.423/0.818, samples 483",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF': Local, 3844 inliers of 4455 control points, coverage 0.803, rejected 0.137, median symmetric error 0.26px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+      "sha256": "03c4e037115749bf1ae8ab76c11717ee1a4a83f740f488b73168ae181bbf0fc8",
+      "bytes": 57058613,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6468.NEF'<->'DSC_6483.NEF': scale 1.269, overlap 8.0%, NCC 0.797, edges 0.223/0.686, samples 1703"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+      "sha256": "f4b3a245ffcf4e22509f21c5cabdd9daf87e04bbc279ca5a97a5dd501eeb3030",
+      "bytes": 56523359,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6497.NEF'<->'DSC_6484.NEF': scale 1.241, overlap 12.0%, NCC 0.937, edges 0.445/0.897, samples 277",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF': Local, 4151 inliers of 4541 control points, coverage 0.857, rejected 0.086, median symmetric error 0.32px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+      "sha256": "fd1091c92b039dcaf003d89825619bb56c55a5bf20d70b92209341c2046890e2",
+      "bytes": 56997262,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF': Local, 4228 inliers of 4565 control points, coverage 0.888, rejected 0.074, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+      "sha256": "b41c2a565daa01d7b70f9e13d42c14d7ef0b4a627e38de6e50020e564fedc505",
+      "bytes": 57022157,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6497.NEF'<->'DSC_6486.NEF': scale 1.240, overlap 12.0%, NCC 0.914, edges 0.285/0.650, samples 207"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+      "sha256": "9549596ec4ce447fe65d185d1a81a2e93ee0969a53bba66b2cf0d6f33d0b0191",
+      "bytes": 56616395,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6467.NEF'<->'DSC_6487.NEF': scale 1.267, overlap 8.0%, NCC 0.754, edges 0.140/0.341, samples 1702",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF': Local, 3774 inliers of 4482 control points, coverage 0.809, rejected 0.158, median symmetric error 0.23px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6488.NEF",
+      "sha256": "afe0af8068a69891ded6eb5374af8eeac309327752e547fbb3ee5d0cc576b07d",
+      "bytes": 56237840,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6489.NEF",
+      "sha256": "baee26e32cc99d40cda33b3c2e08ec66bcdaabbab555051e377e9e07808aad98",
+      "bytes": 55693374,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6489.NEF'<->'DSC_6482.NEF': scale 1.218, overlap 24.0%, NCC 0.957, edges 0.423/0.818, samples 483",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6489.NEF': Local, 4137 inliers of 4496 control points, coverage 0.854, rejected 0.080, median symmetric error 0.46px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6490.NEF",
+      "sha256": "65696847230267e37711a383d16a77a5f449cc622ab86ca87214ed8fe5374ce2",
+      "bytes": 56309987,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6490.NEF': Local, 4351 inliers of 4620 control points, coverage 0.898, rejected 0.058, median symmetric error 0.28px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6491.NEF",
+      "sha256": "f939803b36a5b4faa54f3ddbf2fd1c5c51d6685bd2c62cf135c4cdc25d732c96",
+      "bytes": 55710305,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6491.NEF': Local, 4422 inliers of 4620 control points, coverage 0.929, rejected 0.043, median symmetric error 0.28px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6492.NEF",
+      "sha256": "2921b30805fb20b5e807e546b450f801bf08f657d86bc660ffa2942d60576278",
+      "bytes": 55943763,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6492.NEF': Local, 4366 inliers of 4536 control points, coverage 0.917, rejected 0.037, median symmetric error 0.28px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6493.NEF",
+      "sha256": "64738bef0d39308bbeede08c0244d8989f5aa24be23ada3d64e4f7b6e487fc80",
+      "bytes": 56860848,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 5,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6494.NEF",
+      "sha256": "997117b004ea95f162bb8dc5a29278b3702062c59f641d0bcbfca3f23cef6d70",
+      "bytes": 56748539,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 5,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6494.NEF': Local, 4242 inliers of 4565 control points, coverage 0.891, rejected 0.071, median symmetric error 0.28px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6495.NEF",
+      "sha256": "6a89a8c480514622e98045dc9adfe90f37d4d740bcbb678a364391909f22a9e3",
+      "bytes": 56915692,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6474.NEF'<->'DSC_6495.NEF': scale 0.854, overlap 8.0%, NCC 0.923, edges 0.375/0.550, samples 2493"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6496.NEF",
+      "sha256": "e53769cbed63ad9f618bcc618b93c223558cfe744f8d2eb7ed3054a86db1dd35",
+      "bytes": 56567416,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6496.NEF': Local, 3854 inliers of 4399 control points, coverage 0.810, rejected 0.124, median symmetric error 0.40px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6497.NEF",
+      "sha256": "2a47fee853c71344af4692bfb95d35eae1bcb8c8a28524210f717f26a92cf0af",
+      "bytes": 57178136,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6497.NEF'<->'DSC_6484.NEF': scale 1.241, overlap 12.0%, NCC 0.937, edges 0.445/0.897, samples 277",
+        "- Focus station relation rejected 'DSC_6497.NEF'<->'DSC_6486.NEF': scale 1.240, overlap 12.0%, NCC 0.914, edges 0.285/0.650, samples 207",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6497.NEF': Local, 4172 inliers of 4552 control points, coverage 0.876, rejected 0.083, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6498.NEF",
+      "sha256": "9812fd3d3433d823f0fed6aa9697c36e6e9c0dbc1195db6463c7698ba2e60b43",
+      "bytes": 56105950,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6499.NEF",
+      "sha256": "40feb2545e2a9a5427945839150563a88653317d9f153218b577befa0975ff40",
+      "bytes": 56756715,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6499.NEF': Local, 3976 inliers of 4428 control points, coverage 0.845, rejected 0.102, median symmetric error 0.28px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6500.NEF",
+      "sha256": "92c373f036099f07664adf46b1e697b043ee78823f2ac64af22239a7a3d66f9d",
+      "bytes": 57241994,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6500.NEF': Local, 4194 inliers of 4620 control points, coverage 0.881, rejected 0.092, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6501.NEF",
+      "sha256": "0bce1e271eac1d116138fd261e4dbbe4ee5f2950929da36999dcf59e3c69f083",
+      "bytes": 57279064,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6502.NEF",
+      "sha256": "8a4b1a6b8c032710ccb24132d95447ad06e2f3940174ee19f288da653eb7036c",
+      "bytes": 57634345,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6502.NEF': Local, 3826 inliers of 4419 control points, coverage 0.790, rejected 0.134, median symmetric error 0.26px, control point spacing 23.9px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6503.NEF",
+      "sha256": "af09d4a561b87fd9e003e1978f3f62e76542f469a6d16b2294f8dd34464b7a42",
+      "bytes": 56752525,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6503.NEF': Local, 3883 inliers of 4476 control points, coverage 0.801, rejected 0.132, median symmetric error 0.23px, control point spacing 23.9px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6504.NEF",
+      "sha256": "a3c032a7a5f9d665460b4bbc8a8e9f8034ced5b1131ab902bf8bf437cb266ee8",
+      "bytes": 57084451,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/睡觉/DSC_6505.NEF",
+      "sha256": "e3ae5b9cb627c620ddb6402a2d72e2e7eca65071d144c2b0163e80ea8e388b5e",
+      "bytes": 57058634,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_6505.NEF'<->'DSC_6475.NEF': scale 1.284, overlap 8.0%, NCC 0.750, edges 0.157/0.740, samples 2235",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/睡觉/DSC_6505.NEF': Local, 3596 inliers of 4536 control points, coverage 0.742, rejected 0.207, median symmetric error 0.36px, control point spacing 23.7px"
+      ]
+    }
+  ],
+  "selected_path": "layered_virtual_tile",
+  "station_count": 15,
+  "path_selection": {
+    "configured_path": null,
+    "selected_path": "layered_virtual_tile",
+    "use_virtual_tiles": true,
+    "fallback_reason": null
+  },
+  "output_density": {
+    "status": "rejected",
+    "factor": 1.37890625,
+    "pixel_count_multiplier": 1.9013824462890625,
+    "canvas_pixels": 0,
+    "output_plane_lower_bound_bytes": 0,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 45,
+    "sample_count": 124386,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 3318,
+    "worst_station_index": 14,
+    "worst_source_id": 21,
+    "worst_station_point": [
+      129.0,
+      1345.0
+    ],
+    "direct_pair_p95_output_px": 3.500500400619984,
+    "residual_median_output_px": 0.41463193061341885,
+    "max_corner_correction_output_px": 5.112098209613919,
+    "minimum_scale": 0.7253261115764642,
+    "p01_scale": 0.7322722436856487,
+    "median_scale": 0.9028795124886823,
+    "bypass_reason": "output_pixel_closure_limit_exceeded"
+  },
+  "grouping_isolated": [],
+  "grouping_undecodable": [],
+  "grouping_source_scan": {
+    "singleton_station_count": 0,
+    "multi_frame_station_count": 15,
+    "singleton_ratio": 0.0,
+    "detected": false,
+    "isolated_source_count": 0
+  },
+  "closure": {
+    "native_joint_before_prune": {
+      "relation_count": 70,
+      "matrix_direct_pair_p95_px": 8.527495066284688,
+      "accepted": false
+    },
+    "status": "converged",
+    "spanning_tree_edges": 14,
+    "participating_constraints": 66,
+    "constraint_weights": [],
+    "iterations": 13,
+    "residual_median_px": 0.3006962442975502,
+    "residual_p95_px": 1.1958410643007271,
+    "max_direct_pair_p95_px": 2.5386065228292236,
+    "balanced_retry_attempted": true,
+    "balanced_retry_accepted": true,
+    "before_retry_max_direct_pair_p95_px": 5.62968207791258,
+    "max_corner_correction_px": 3.7073573418163264,
+    "clamped_stations": 0,
+    "fallback_reason": null,
+    "offending_pair": null,
+    "geometry_model": "homography",
+    "global_before_residual_median_px": null,
+    "global_before_residual_p95_px": null,
+    "nonlinear_validation": [],
+    "rejected_nonlinear_constraints": [],
+    "nonlinear_initialization_constraints": 0,
+    "nonlinear_refit_passes": 0
+  },
+  "failure_chain": {
+    "selected_path": "layered_virtual_tile",
+    "candidates_recorded": 105,
+    "model_fitted_records": 73,
+    "accepted_relations": 66,
+    "rejected_count": 39,
+    "unmeasured_count": 32,
+    "rejected_by_failure_stage": {
+      "fitted": 6,
+      "insufficient_matches_after_model_quota": 1,
+      "insufficient_measurable_patches": 30,
+      "no_predicted_overlap": 2
+    },
+    "rejected_by_reason": {
+      "closure_unreliable_pair_p95": 4,
+      "station_relation_scale_out_of_range": 2
+    },
+    "candidate_stage_histogram": {
+      "fitted": 72,
+      "insufficient_matches_after_model_quota": 1,
+      "insufficient_measurable_patches": 30,
+      "no_predicted_overlap": 2
+    },
+    "hypothesis_rejection_reason_occurrences": {
+      "station_relation_low_spatial_support": 59,
+      "station_relation_scale_out_of_range": 77,
+      "station_relation_edge_orientation_mismatch": 8,
+      "station_relation_high_reprojection_error": 4
+    },
+    "source_raw_pair_diagnostics_count": 0,
+    "source_raw_direct_diagnostics_count": 0,
+    "connectivity": {
+      "components": 1,
+      "component_members": [
+        [
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6461.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6462.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6463.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6464.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6465.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6466.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6467.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6468.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6469.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6470.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6471.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6472.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6473.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6474.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6475.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6476.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6477.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6478.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6479.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6480.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6481.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6482.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6483.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6484.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6485.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6486.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6487.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6488.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6489.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6490.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6491.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6492.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6493.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6494.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6495.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6496.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6497.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6498.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6499.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6500.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6501.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6502.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6503.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6504.NEF",
+          "/Users/dp/Downloads/书画拼图/睡觉/DSC_6505.NEF"
+        ]
+      ],
+      "component_member_counts": [
+        45
+      ]
+    },
+    "note": "Candidate records, final relation counts and hypothesis reason occurrences have different denominators and can repeat a pair. Empty legacy station diagnostics do not prove no registration failure. Shared-gate/proposal stages without explicit records are unavailable.",
+    "proposal_count": null,
+    "shared_gate_attempt_count": null,
+    "station_chain_availability": "station candidate records only; source proposal/shared gate totals unavailable",
+    "accepted_source_pairs_count": null,
+    "alignment_cache": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/source-alignment.json",
+      "schema": 2,
+      "match_records": 671
+    },
+    "diagnostic_categories": {
+      "no_overlap": {
+        "rejected_by_failure_stage": {
+          "no_predicted_overlap": 2
+        },
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {
+          "no_predicted_overlap": 2
+        },
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "support": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_low_spatial_support": 59
+        }
+      },
+      "bidirectional": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "grid": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "scale": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {
+          "station_relation_scale_out_of_range": 2
+        },
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_scale_out_of_range": 77
+        }
+      },
+      "hull": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "orientation": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_edge_orientation_mismatch": 8
+        }
+      },
+      "closure": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {
+          "closure_unreliable_pair_p95": 4
+        },
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      }
+    }
+  },
+  "quality_gate": {
+    "verdict": "not_run",
+    "roi_count": 0,
+    "criteria": {},
+    "non_pass": [],
+    "unresolved_pixels": null,
+    "detail_repairs": 0
+  },
+  "failed_criteria": [],
+  "detail_repair_donor_counts": {},
+  "degradation": {
+    "entries": [
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.026623788634262978,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.022247150000820178,
+          "position": 5
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.02916380177658615,
+          "position": 6
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 1,
+          "motion_ratio": 0.02277188053656059,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 1,
+          "motion_ratio": 0.032511695384930914,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 2,
+          "motion_ratio": 0.022510264455564283,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 2,
+          "motion_ratio": 0.023079606532762337,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 2,
+          "motion_ratio": 0.025545804709098247,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 3,
+          "motion_ratio": 0.029484083489840187,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 3,
+          "motion_ratio": 0.03341160481334438,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 3,
+          "motion_ratio": 0.02604590238753823,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 4,
+          "motion_ratio": 0.03978035993733077,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 5,
+          "motion_ratio": 0.023403590838094963,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 6,
+          "motion_ratio": 0.02092810632715692,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 6,
+          "motion_ratio": 0.023185549637020113,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 7,
+          "motion_ratio": 0.021810000508681544,
+          "position": 2
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 1
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 444
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 276
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 463
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 184
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 158
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 327
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 55
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 294
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 85
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 59
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 145
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 332
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 400
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 431
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 409
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.170813797013937,
+          "inliers": 52,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.05733782269184549,
+          "median_edge_orientation_difference_degrees": 4.078721481336934,
+          "median_error_px": 0.43437138735930525,
+          "preserves_convex_orientation": true,
+          "right": 14,
+          "scale_ratio": 0.8145768844003998,
+          "spatial_support": 0.5094358396073099
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.956693306946613,
+          "inliers": 69,
+          "left": 11,
+          "low_frequency_mean_relative_difference": 0.01626648973379191,
+          "median_edge_orientation_difference_degrees": 3.45581495396656,
+          "median_error_px": 0.4919703156857803,
+          "preserves_convex_orientation": true,
+          "right": 12,
+          "scale_ratio": 1.0612994750176143,
+          "spatial_support": 0.42789265122917725
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 7,
+          "left_column": 1,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 8.154460259426434,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 7,
+          "left_column": 1,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 8.527495066284688,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 2,
+          "left_column": 1,
+          "left_row": 1,
+          "limit_px": 3.0,
+          "p95_px": 8.046524039115049,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 2,
+          "left_column": 1,
+          "left_row": 1,
+          "limit_px": 3.0,
+          "p95_px": 8.462101013529816,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 0,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 7.143820066261749,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 0,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 7.512788472931819,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 1,
+          "left_row": 2,
+          "limit_px": 3.0,
+          "p95_px": 6.879303651190306,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 1,
+          "left_row": 2,
+          "limit_px": 3.0,
+          "p95_px": 7.2564886557956845,
+          "right": 10,
+          "right_column": 1,
+          "right_row": 4
+        }
+      }
+    ],
+    "result": "rejected"
+  },
+  "tone_summary": {
+    "status": "not_run",
+    "boundary_delta_e": {
+      "max": 0.0,
+      "threshold": 1.5,
+      "violations": []
+    },
+    "correction_model": "station_affine",
+    "geometry_active_relation_count": 0
+  },
+  "performance": {
+    "raw_decode_count": 90,
+    "native_fusion_count": 0,
+    "source_cache": {
+      "max_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0
+    },
+    "native_cache": {
+      "max_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0
+    }
+  },
+  "performance_stages": {
+    "preflight_seconds": 0.37232125,
+    "prepare_seconds": 56.807996708,
+    "matching_seconds": 28.75843225,
+    "ordering_seconds": 2.141266542,
+    "render_seconds": 0.0,
+    "total_seconds": 599.895768416
+  },
+  "native_fusion_cache": {
+    "backing": {
+      "max_bytes": 0,
+      "resident_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0,
+      "writes": 0,
+      "read_bytes": 0,
+      "written_bytes": 0,
+      "read_seconds": 0.0,
+      "write_seconds": 0.0,
+      "failures": 0,
+      "evictions": 0
+    },
+    "max_bytes": 0,
+    "hits": 0,
+    "misses": 0,
+    "matching_hits": 0,
+    "matching_misses": 0,
+    "composition_hits": 0,
+    "composition_misses": 0,
+    "fusion_count": 0,
+    "fusion_seconds": 0.0,
+    "failed_fusions": 0,
+    "evictions": 0,
+    "invalidations": 0,
+    "oversized_bypasses": 0,
+    "unattributed_bypasses": 0,
+    "state_snapshot_bypasses": 0,
+    "resident_bytes": 0,
+    "resident_entries": 0,
+    "peak_bytes": 0,
+    "peak_entries": 0,
+    "peak_memory_entries": 0
+  },
+  "source_preflight": {
+    "source_count": 45,
+    "stat_count": 45,
+    "file_map_count": 45,
+    "hash_count": 45,
+    "exif_parse_count": 45,
+    "preflight_reuse_count": 90,
+    "raw_decode_count": 90,
+    "failed_count": 0
+  },
+  "resource": {
+    "slot": {
+      "slot": "exclusive",
+      "lane": "task-5",
+      "what": "sleeping scale=0.25 baseline-r1",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-5/scripts/stack-lab/run.py",
+        "--binary",
+        "base-2026-11-12",
+        "--lane",
+        "task-5",
+        "--dataset",
+        "sleeping",
+        "--scale",
+        "0.25",
+        "--label",
+        "baseline-r1",
+        "--exclusive"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-5",
+      "estimate_gib": null,
+      "pid": 37478,
+      "started_epoch": 1794913066.5751412,
+      "started": "2026-11-17T10:57:46.574199+00:00",
+      "state": "running",
+      "caps": {
+        "RAYON_NUM_THREADS": "8",
+        "CARGO_BUILD_JOBS": "6"
+      },
+      "contended_with": [],
+      "child_pid": 37483
+    },
+    "peak_rss_bytes": 13151518720,
+    "memory_gate_pass": true,
+    "memory": {
+      "threshold_bytes": 25769803776,
+      "measurements": {
+        "process_tree_sampled": 13072400384,
+        "native_getrusage": 13151518720,
+        "native_report": 13090488320
+      },
+      "sample_count": 1129,
+      "monitor_error": null,
+      "threshold_exceeded": false
+    },
+    "wall_seconds": 600.613107919693,
+    "contended": false,
+    "exit_code": 1,
+    "runner_failures": [
+      "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/run/sleeping-s0p25-task-5-baseline-r1.log",
+      "no focus-stack result line in the log",
+      "acceptance metrics were not written",
+      "full-resolution TIFF is missing or empty",
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "state": "rejected",
+    "native_rayon_threads": 8,
+    "preparation_threads": [
+      6
+    ]
+  },
+  "output": {
+    "written": false,
+    "format": "",
+    "path": "",
+    "width": 0,
+    "height": 0,
+    "bit_depth": 16,
+    "alpha_preserved": false,
+    "icc": "sRGB",
+    "tiff_extra_samples": null,
+    "artifact_validation": "not_run",
+    "artifact_validation_error": null,
+    "result_id": "",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    }
+  },
+  "output_sha256": null,
+  "previews": [],
+  "crop_previews": [],
+  "last_log_lines": [
+    "  - Focus capture-group planar geometry seeded from 14 pixel-verified relation(s)",
+    "  - Seam-only local transforms: 20",
+    "  - Authoritative Virtual_Tile station solve accepted 66 relation(s)",
+    "  - Stack report written to /Users/dp/Desktop/raw-editor/output/acceptance/task-5/sleeping-baseline-r1/run/sleeping-s0p25-task-5-baseline-r1-stack-reports/stack-report-bc8d2ebb-c4d7-4a1e-80af-94ce4520cc44.json",
+    "",
+    "thread 'panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env' (41580066) panicked at src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs:632:6:",
+    "the provided focus-stack images should align and blend: \"output density 1.378906 exceeds closure output-pixel limits: direct P95 3.500500, median 0.414632, corner 5.112098\"",
+    "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+    "FAILED",
+    "",
+    "failures:",
+    "",
+    "failures:",
+    "    panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env",
+    "",
+    "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1136 filtered out; finished in 600.23s",
+    "",
+    "NATIVE_PROCESS_USAGE {\"method\": \"getrusage(RUSAGE_CHILDREN), one frozen Rust child\", \"max_rss_bytes\": 13151518720, \"wall_seconds\": 600.3198063748423, \"user_seconds\": 3655.052995, \"system_seconds\": 24.726001, \"child_exit_code\": 101}"
+  ],
+  "native_errors": [
+    "thread 'panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env' (41580066) panicked at src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs:632:6:\nthe provided focus-stack images should align and blend: \"output density 1.378906 exceeds closure output-pixel limits: direct P95 3.500500, median 0.414632, corner 5.112098\""
+  ],
+  "review": {
+    "stop_stage": "15机位内融合及关系求解完成，基础域closure=converged；output_density的输出像素闭环门拒绝，未进入最终合成/QG/预览导出。",
+    "visual_notes": "未生成预览，无法给出可见软区/接缝的成片坐标。数值阻断为factor=1.37890625后direct_pair_p95_output_px=3.500500400619984>3；基础域max_direct_pair_p95_px=2.5386065228292236。密度探针worst_station_index=14、worst_source_id=21、worst_station_point=[129,1345]仅是station域密度证据，不能当作已证实的最坏闭环pair或可见成片问题位置。",
+    "region_group": "站点求解组（任务16）；输出密度/坐标单位与闭环余量优先，与马远2的同类阻断一起调查。",
+    "task_7": "作为假边/支持域对照的辅助实验；当前不能把单次输出门失败归咎于固定阈值。",
+    "task_8": "可对照尺度/支持域/方向被拒关系；先确认输出像素门与渲染尺度的合同，不据此断言provider替换能修复。",
+    "task_15": "600.61秒正常结束，峰值12.248GiB且内存门通过；无超门或无法结束证据，本轮不启动。",
+    "grade": "未达D1（几何门拒绝，无预览）；未达D2–D5。",
+    "source_conclusion": "45张均解码并登记15机位，输入SHA/参考/二进制检查通过；prepared_station_input不代表最终成片像素。无最终合成，未凭空排除源图。",
+    "next_step": "任务16进入站点求解组，保留本次失败；已有9张scale=1通过仅保护该子集，不能覆盖这45张全量。"
+  },
+  "notes": [
+    "Scale 0.25 output cannot establish D2/D3 or full-resolution quality.",
+    "Each source has one top-level classification; detail_only excludes composited.",
+    "Station fusion input is pipeline participation, not proof that every frame owns final pixels.",
+    "No user D4 confirmation; diagnostic previews are not entered into the review queue."
+  ]
+}

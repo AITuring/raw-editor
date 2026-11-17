@@ -1,0 +1,2569 @@
+{
+  "dataset": "mayuan-2",
+  "label": "马远2",
+  "date": "2026-11-17",
+  "started_at": "2026-11-17T10:48:23.935539+00:00",
+  "finished_at": "2026-11-17T10:57:45.425927+00:00",
+  "verified_at": "2026-11-17T16:20:18.617457+00:00",
+  "scope": "full registered dataset, scale=0.25, diagnostic only",
+  "binary": {
+    "label": "base-2026-11-12",
+    "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+  },
+  "execution": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/execution.json",
+    "sha256": "e61f8db439b5eb75d7ce6adffd12d685c9e820ec0bd9b212a7f5dcebc2569f28",
+    "bytes": 12244
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": false,
+    "report_source_digests": true
+  },
+  "analysis": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/analysis.json",
+    "sha256": "f6c9a6a4d836918c3e2c9e3e1b72a209c5b0a8559eb2c8a37ae3dd3c7e0dcfde",
+    "bytes": 3429
+  },
+  "report": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/run/mayuan-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-dba85ff6-15c2-48d8-bede-c07efc9d62fc.json",
+    "sha256": "c5647e8a7c000e63105d05e6ec357a2a47f84dafde04a466bab745ea095292d8",
+    "bytes": 13692589
+  },
+  "native_logs": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/run/mayuan-2-s0p25-task-5-baseline-r1.log",
+      "sha256": "21f3801bd599a4d922e59d5a26106f5460b82973d8418856722bc5fc48947bc6",
+      "bytes": 708482
+    }
+  ],
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "manifest_sha256": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+  "reference": null,
+  "source_counts": {
+    "prepared_station_input": 47
+  },
+  "unexpected_exclusions": [],
+  "sources": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5330.NEF",
+      "sha256": "991165ea71dc1a6953badede05a8c982c29eeafd2974a316e2bcb67779e674a0",
+      "bytes": 60400060,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5436.NEF'<->'DSC_5330.NEF': scale 0.738, overlap 24.0%, NCC 0.834, edges 0.831/0.819, samples 519",
+        "- Focus station relation rejected 'DSC_5330.NEF'<->'DSC_5429.NEF': scale 1.366, overlap 12.0%, NCC 0.864, edges 0.334/0.940, samples 460"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5331.NEF",
+      "sha256": "cd861410c5311b7a43ca322261db0194579066ef133d37076c211699d7892d6d",
+      "bytes": 60514519,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5425.NEF'<->'DSC_5331.NEF': scale 0.793, overlap 24.0%, NCC 0.801, edges 0.511/0.696, samples 865",
+        "- Focus station relation rejected 'DSC_5331.NEF'<->'DSC_5429.NEF': scale 1.365, overlap 12.0%, NCC 0.718, edges 0.651/0.862, samples 470",
+        "- Focus station relation rejected 'DSC_5331.NEF'<->'DSC_5440.NEF': scale 1.446, overlap 8.0%, NCC 0.892, edges 0.756/0.912, samples 319"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5332.NEF",
+      "sha256": "2aa00909bf07205f17643fa92a2345ef4644539016b760be7591e9c94ac5431c",
+      "bytes": 59994360,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5434.NEF'<->'DSC_5332.NEF': scale 0.800, overlap 40.0%, NCC 0.925, edges 0.762/0.876, samples 1116",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5332.NEF': scale 0.855, overlap 36.0%, NCC 0.868, edges 0.455/0.728, samples 1851",
+        "- Focus station relation rejected 'DSC_5432.NEF'<->'DSC_5332.NEF': scale 0.778, overlap 36.0%, NCC 0.719, edges 0.667/0.854, samples 971",
+        "- Focus station relation rejected 'DSC_5436.NEF'<->'DSC_5332.NEF': scale 0.742, overlap 16.0%, NCC 0.768, edges 0.801/0.780, samples 522",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5332.NEF': scale 0.755, overlap 12.0%, NCC 0.576, edges 0.389/0.589, samples 244",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5332.NEF': Local, 2917 inliers of 4325 control points, coverage 0.608, rejected 0.326, median symmetric error 0.26px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5333.NEF",
+      "sha256": "7d4ffeb348c26a65f66642960878eb36077a6163c80034982d40de2695227c07",
+      "bytes": 60733666,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 2,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5434.NEF': scale 1.257, overlap 36.0%, NCC 0.938, edges 0.650/0.909, samples 1588",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5422.NEF': scale 1.172, overlap 36.0%, NCC 0.997, edges 0.751/0.794, samples 2160",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5423.NEF': scale 1.167, overlap 36.0%, NCC 0.996, edges 0.762/0.854, samples 2160",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5431.NEF': scale 1.298, overlap 36.0%, NCC 0.879, edges 0.724/0.824, samples 1497",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5425.NEF': scale 1.258, overlap 24.0%, NCC 0.992, edges 0.616/0.723, samples 1300",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5439.NEF': scale 1.443, overlap 8.0%, NCC 0.905, edges 0.554/0.913, samples 275",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5428.NEF': scale 1.328, overlap 12.0%, NCC 0.959, edges 0.290/0.657, samples 447",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5333.NEF': Local, 2974 inliers of 4303 control points, coverage 0.622, rejected 0.309, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5334.NEF",
+      "sha256": "afeb4984ebe2fe6085d521e978f862cb8a3d63f9be456922f2da30d95900d12c",
+      "bytes": 60736932,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 4,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5420.NEF'<->'DSC_5334.NEF': scale 0.857, overlap 36.0%, NCC 0.822, edges 0.583/0.711, samples 1863",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5334.NEF': Local, 3145 inliers of 4329 control points, coverage 0.656, rejected 0.274, median symmetric error 0.23px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5335.NEF",
+      "sha256": "ff04349325e1b0d066876c68537ce010c79eb76d2e9de8e25f798b088dc3b556",
+      "bytes": 59435199,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5421.NEF': scale 1.088, overlap 48.0%, NCC 0.985, edges 0.651/0.850, samples 1320",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5423.NEF': scale 1.081, overlap 36.0%, NCC 0.986, edges 0.617/0.827, samples 1380",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5432.NEF': scale 1.193, overlap 48.0%, NCC 0.867, edges 0.633/0.893, samples 1812",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5436.NEF': scale 1.259, overlap 24.0%, NCC 0.870, edges 0.683/0.882, samples 1324",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5424.NEF': scale 1.177, overlap 36.0%, NCC 0.996, edges 0.697/0.745, samples 2160",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5428.NEF': scale 1.230, overlap 36.0%, NCC 0.994, edges 0.429/0.694, samples 1620"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5336.NEF",
+      "sha256": "0f208d6ed45624d08705534978698b5bf23486d51eca6d781872c23b5f8b4462",
+      "bytes": 58905476,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5336.NEF'<->'DSC_5433.NEF': scale 1.156, overlap 24.0%, NCC 0.788, edges 0.510/0.923, samples 660",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5336.NEF': Local, 3677 inliers of 4381 control points, coverage 0.767, rejected 0.161, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5337.NEF",
+      "sha256": "a778796ad4ad9df15c2488c40d1ef18c475807d14f5ca24ff47bba2ba76fd3e1",
+      "bytes": 58351379,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5337.NEF': Local, 3464 inliers of 4356 control points, coverage 0.724, rejected 0.205, median symmetric error 0.34px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5338.NEF",
+      "sha256": "218a044fdd7bb74f8c12c7f24e90b58a64ad6b64f2679fddd34cebcb5d7c7d0e",
+      "bytes": 59194828,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 10,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5338.NEF'<->'DSC_5429.NEF': scale 1.254, overlap 36.0%, NCC 0.829, edges 0.614/0.837, samples 1402",
+        "- Focus station relation rejected 'DSC_5338.NEF'<->'DSC_5438.NEF': scale 1.318, overlap 24.0%, NCC 0.826, edges 0.712/0.840, samples 938",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5338.NEF': Local, 3728 inliers of 4363 control points, coverage 0.777, rejected 0.146, median symmetric error 0.28px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5340.NEF",
+      "sha256": "a190648ab9acd087b22ddbadb9b55be1dde18767d0f9f5ae9d271e7a94a2605b",
+      "bytes": 60023754,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5420.NEF': scale 1.037, overlap 32.0%, NCC 0.957, edges 0.388/0.839, samples 524",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5426.NEF': scale 1.118, overlap 36.0%, NCC 0.978, edges 0.492/0.579, samples 1692",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5438.NEF': scale 1.272, overlap 24.0%, NCC 0.887, edges 0.456/0.764, samples 1246",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5428.NEF': scale 1.175, overlap 36.0%, NCC 0.995, edges 0.651/0.773, samples 2160"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5341.NEF",
+      "sha256": "eb71f2f0112ba468383ad1731b4a3e923339f30eefeee0447225e7e6f946cf75",
+      "bytes": 60123877,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 12,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5435.NEF': scale 1.112, overlap 12.0%, NCC 0.805, edges 0.611/0.876, samples 164",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5421.NEF': scale 1.034, overlap 24.0%, NCC 0.940, edges 0.474/0.907, samples 523",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5432.NEF': scale 1.134, overlap 44.0%, NCC 0.828, edges 0.609/0.729, samples 1083",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5436.NEF': scale 1.198, overlap 36.0%, NCC 0.823, edges 0.617/0.806, samples 1071",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5430.NEF': scale 1.193, overlap 36.0%, NCC 0.926, edges 0.664/0.718, samples 1899",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5341.NEF': Local, 3743 inliers of 4282 control points, coverage 0.794, rejected 0.126, median symmetric error 0.28px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5342.NEF",
+      "sha256": "1b6317d49a247f7defcff4549466030e539db5aec0656a711986ae308653e694",
+      "bytes": 60398482,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5434.NEF'<->'DSC_5342.NEF': scale 0.919, overlap 16.0%, NCC 0.429, edges 0.208/0.526, samples 2135",
+        "- Focus station relation rejected 'DSC_5426.NEF'<->'DSC_5342.NEF': scale 0.919, overlap 36.0%, NCC 0.647, edges 0.376/0.698, samples 724",
+        "- Focus station relation rejected 'DSC_5429.NEF'<->'DSC_5342.NEF': scale 0.847, overlap 36.0%, NCC 0.896, edges 0.490/0.627, samples 1530",
+        "- Focus station relation rejected 'DSC_5342.NEF'<->'DSC_5440.NEF': scale 1.247, overlap 36.0%, NCC 0.958, edges 0.347/0.413, samples 2160"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5343.NEF",
+      "sha256": "107b481a2c64c32c323ab9db8c6996a9f951c6e2eb80787c452b6a5991432a68",
+      "bytes": 60012130,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 14,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5343.NEF': scale 0.991, overlap 12.0%, NCC 0.695, edges 0.656/0.924, samples 245",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5343.NEF': scale 0.997, overlap 12.0%, NCC 0.437, edges 0.497/0.884, samples 280",
+        "- Focus station relation rejected 'DSC_5431.NEF'<->'DSC_5343.NEF': scale 0.886, overlap 36.0%, NCC 0.266, edges 0.524/0.729, samples 844",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5343.NEF': scale 0.850, overlap 36.0%, NCC 0.835, edges 0.308/0.467, samples 1210",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5343.NEF': scale 0.878, overlap 24.0%, NCC 0.785, edges 0.415/0.735, samples 868",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5343.NEF': Local, 3319 inliers of 4254 control points, coverage 0.714, rejected 0.220, median symmetric error 0.27px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5344.NEF",
+      "sha256": "a816faa8145d48c4c204bae2f1631aecd9e40bd5d47b31def00a14be17affe89",
+      "bytes": 60505950,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5435.NEF'<->'DSC_5344.NEF': scale 0.917, overlap 16.0%, NCC 0.412, edges 0.220/0.698, samples 2118",
+        "- Focus station relation rejected 'DSC_5431.NEF'<->'DSC_5344.NEF': scale 0.888, overlap 36.0%, NCC 0.552, edges 0.534/0.688, samples 847",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5344.NEF': scale 0.851, overlap 36.0%, NCC 0.733, edges 0.399/0.436, samples 1271",
+        "- Focus station relation rejected 'DSC_5424.NEF'<->'DSC_5344.NEF': scale 0.913, overlap 24.0%, NCC 0.658, edges 0.512/0.731, samples 700",
+        "- Focus station relation rejected 'DSC_5344.NEF'<->'DSC_5440.NEF': scale 1.244, overlap 36.0%, NCC 0.957, edges 0.349/0.468, samples 2160"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5345.NEF",
+      "sha256": "09773aa7ea661034b6906293696b2e4aaf585e7afa295bf737359e0481f96531",
+      "bytes": 60489320,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 13,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5345.NEF': scale 0.997, overlap 12.0%, NCC 0.833, edges 0.740/0.748, samples 247",
+        "- Focus station relation rejected 'DSC_5420.NEF'<->'DSC_5345.NEF': scale 0.998, overlap 12.0%, NCC 0.746, edges 0.384/0.862, samples 245",
+        "- Focus station relation rejected 'DSC_5430.NEF'<->'DSC_5345.NEF': scale 0.860, overlap 36.0%, NCC 0.910, edges 0.727/0.610, samples 1488",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5345.NEF': scale 0.883, overlap 24.0%, NCC 0.857, edges 0.725/0.732, samples 823",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5345.NEF': Local, 3301 inliers of 4326 control points, coverage 0.702, rejected 0.237, median symmetric error 0.27px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5346.NEF",
+      "sha256": "2bb3ce9f844bd06a111711ed5178c40d60c3bfa12dcd62f018b1be07a4295925",
+      "bytes": 59675726,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5346.NEF': scale 0.941, overlap 36.0%, NCC 0.861, edges 0.716/0.890, samples 766",
+        "- Focus station relation rejected 'DSC_5424.NEF'<->'DSC_5346.NEF': scale 0.859, overlap 32.0%, NCC 0.745, edges 0.570/0.844, samples 968"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5347.NEF",
+      "sha256": "9af6f629612f9874ca44501cb2aec844998880e23dd6bd4187a7ad5fed239a6c",
+      "bytes": 59567236,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5433.NEF': scale 1.157, overlap 24.0%, NCC 0.913, edges 0.360/0.793, samples 1042",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5432.NEF': scale 1.186, overlap 60.0%, NCC 0.782, edges 0.705/0.833, samples 1980",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5429.NEF': scale 1.256, overlap 36.0%, NCC 0.706, edges 0.574/0.780, samples 1456",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5428.NEF': scale 1.227, overlap 24.0%, NCC 0.582, edges 0.367/0.823, samples 906",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5347.NEF': Local, 3416 inliers of 4351 control points, coverage 0.726, rejected 0.215, median symmetric error 0.25px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5348.NEF",
+      "sha256": "66dcc852463fc5a0d86dc90bef06ed08225427d2a4d06e81e92a9b75b91d98c3",
+      "bytes": 60054107,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5422.NEF': scale 1.083, overlap 36.0%, NCC 0.742, edges 0.825/0.861, samples 938",
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5436.NEF': scale 1.254, overlap 36.0%, NCC 0.958, edges 0.375/0.623, samples 2160",
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5439.NEF': scale 1.331, overlap 36.0%, NCC 0.953, edges 0.578/0.432, samples 1538",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5348.NEF': Local, 3387 inliers of 4300 control points, coverage 0.713, rejected 0.212, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5349.NEF",
+      "sha256": "0bb0e28fabce1a9fe263125088d3c86ae341f99b36cde00101ae111b44917866",
+      "bytes": 58994003,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 8,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5349.NEF': Local, 3298 inliers of 4311 control points, coverage 0.697, rejected 0.235, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5350.NEF",
+      "sha256": "a8de257f3380381a95a6ea031f2ff640bef140cd1f77c6c3acb4b16b2876f630",
+      "bytes": 60537010,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5350.NEF': scale 0.745, overlap 32.0%, NCC 0.857, edges 0.380/0.612, samples 864",
+        "- Focus station relation rejected 'DSC_5426.NEF'<->'DSC_5350.NEF': scale 0.807, overlap 36.0%, NCC 0.916, edges 0.431/0.748, samples 596",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5350.NEF': scale 0.770, overlap 8.0%, NCC 0.199, edges 0.738/0.679, samples 178"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5351.NEF",
+      "sha256": "470a214ead5cf7290610c4c4aa5b35366fe288973dee446e8bfea5afa796862d",
+      "bytes": 60266371,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 3,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5433.NEF': scale 1.240, overlap 48.0%, NCC 0.972, edges 0.511/0.596, samples 2160",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5422.NEF': scale 1.161, overlap 36.0%, NCC 0.923, edges 0.691/0.910, samples 1633",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5420.NEF': scale 1.159, overlap 36.0%, NCC 0.927, edges 0.726/0.861, samples 1651",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5431.NEF': scale 1.283, overlap 48.0%, NCC 0.827, edges 0.610/0.738, samples 1703",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5429.NEF': scale 1.347, overlap 12.0%, NCC 0.968, edges 0.472/0.809, samples 480",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5438.NEF': scale 1.413, overlap 12.0%, NCC 0.936, edges 0.377/0.602, samples 464",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5351.NEF': Local, 2974 inliers of 4310 control points, coverage 0.629, rejected 0.310, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5352.NEF",
+      "sha256": "9c9c6821760573475fb734c54d81b6dffbfd414190c30f2c2fcac9f5d8673522",
+      "bytes": 60319899,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": []
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5353.NEF",
+      "sha256": "cc780979f91d3da22dbb0415605a568fef61a6e42f652d4524d20d6885b9f3c5",
+      "bytes": 60650672,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5433.NEF': scale 1.242, overlap 48.0%, NCC 0.973, edges 0.542/0.644, samples 2160",
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5422.NEF': scale 1.162, overlap 36.0%, NCC 0.923, edges 0.765/0.927, samples 1630",
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5420.NEF': scale 1.160, overlap 36.0%, NCC 0.927, edges 0.729/0.897, samples 1649",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5353.NEF': Local, 2858 inliers of 4342 control points, coverage 0.600, rejected 0.342, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5354.NEF",
+      "sha256": "fec25eaf491dfe47f7fb321b38455c7861cafd02eb5270fab560e2687e2da800",
+      "bytes": 60127234,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5432.NEF': scale 1.265, overlap 48.0%, NCC 0.830, edges 0.615/0.788, samples 1740",
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5430.NEF': scale 1.331, overlap 8.0%, NCC 0.953, edges 0.535/0.784, samples 480",
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5439.NEF': scale 1.414, overlap 12.0%, NCC 0.898, edges 0.520/0.584, samples 404",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5354.NEF': Local, 2861 inliers of 4408 control points, coverage 0.593, rejected 0.351, median symmetric error 0.23px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5355.NEF",
+      "sha256": "03c1a4caaabdf402cd2e5b9bcb1c462c5ebde813a42daa2b85d3c866bcab933a",
+      "bytes": 60203968,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 1,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_5355.NEF'<->'DSC_5419.NEF': scale 1.166, overlap 36.0%, NCC 0.913, edges 0.428/0.824, samples 1629",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5355.NEF': scale 0.750, overlap 24.0%, NCC 0.854, edges 0.530/0.604, samples 799",
+        "- Focus station relation rejected 'DSC_5425.NEF'<->'DSC_5355.NEF': scale 0.816, overlap 24.0%, NCC 0.868, edges 0.550/0.689, samples 530",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5355.NEF': Local, 2641 inliers of 4340 control points, coverage 0.549, rejected 0.391, median symmetric error 0.23px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5419.NEF",
+      "sha256": "0fda8efabd486c5e910ec0b06119a68d2444bb3e07e2728077ba2e8f174d4c90",
+      "bytes": 59145379,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_5355.NEF'<->'DSC_5419.NEF': scale 1.166, overlap 36.0%, NCC 0.913, edges 0.428/0.824, samples 1629"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5420.NEF",
+      "sha256": "a96257734cd9a65cc3f69ca95fac89aad4d873dde1750d01d8c9a66e0320d85e",
+      "bytes": 59268866,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5420.NEF': scale 1.160, overlap 36.0%, NCC 0.927, edges 0.729/0.897, samples 1649",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5420.NEF': scale 1.159, overlap 36.0%, NCC 0.927, edges 0.726/0.861, samples 1651",
+        "- Focus station relation rejected 'DSC_5420.NEF'<->'DSC_5334.NEF': scale 0.857, overlap 36.0%, NCC 0.822, edges 0.583/0.711, samples 1863",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5420.NEF': scale 1.037, overlap 32.0%, NCC 0.957, edges 0.388/0.839, samples 524",
+        "- Focus station relation rejected 'DSC_5420.NEF'<->'DSC_5345.NEF': scale 0.998, overlap 12.0%, NCC 0.746, edges 0.384/0.862, samples 245",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5420.NEF': Local, 3530 inliers of 4236 control points, coverage 0.751, rejected 0.167, median symmetric error 0.27px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5421.NEF",
+      "sha256": "c0c23568eecbc573aece3c279c11ec51fec6b29aa9881de5617c53d71de62db2",
+      "bytes": 59189734,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 5,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5421.NEF': scale 1.088, overlap 48.0%, NCC 0.985, edges 0.651/0.850, samples 1320",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5421.NEF': scale 1.034, overlap 24.0%, NCC 0.940, edges 0.474/0.907, samples 523"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5422.NEF",
+      "sha256": "abde6acc53449b685d8dc268b7e2ceb1aca57a9642721b03ec3482efbfeacc4d",
+      "bytes": 59763952,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 5,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5422.NEF': scale 1.162, overlap 36.0%, NCC 0.923, edges 0.765/0.927, samples 1630",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5422.NEF': scale 1.172, overlap 36.0%, NCC 0.997, edges 0.751/0.794, samples 2160",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5422.NEF': scale 1.161, overlap 36.0%, NCC 0.923, edges 0.691/0.910, samples 1633",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5332.NEF': scale 0.855, overlap 36.0%, NCC 0.868, edges 0.455/0.728, samples 1851",
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5422.NEF': scale 1.083, overlap 36.0%, NCC 0.742, edges 0.825/0.861, samples 938",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5345.NEF': scale 0.997, overlap 12.0%, NCC 0.833, edges 0.740/0.748, samples 247",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5343.NEF': scale 0.991, overlap 12.0%, NCC 0.695, edges 0.656/0.924, samples 245",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5438.NEF': scale 1.225, overlap 8.0%, NCC 0.729, edges 0.442/0.745, samples 140",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5422.NEF': Local, 3177 inliers of 4299 control points, coverage 0.673, rejected 0.261, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5423.NEF",
+      "sha256": "87312ff3a54934693c5d2ea23aed61c31ff918a532a1dc17ba16f712a73c4006",
+      "bytes": 59434449,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 6,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5423.NEF': scale 1.167, overlap 36.0%, NCC 0.996, edges 0.762/0.854, samples 2160",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5346.NEF': scale 0.941, overlap 36.0%, NCC 0.861, edges 0.716/0.890, samples 766",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5423.NEF': scale 1.081, overlap 36.0%, NCC 0.986, edges 0.617/0.827, samples 1380",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5343.NEF': scale 0.997, overlap 12.0%, NCC 0.437, edges 0.497/0.884, samples 280",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5429.NEF': scale 1.170, overlap 12.0%, NCC 0.402, edges 0.220/0.870, samples 311",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5440.NEF': scale 1.243, overlap 8.0%, NCC 0.695, edges 0.672/0.702, samples 175",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5423.NEF': Local, 3168 inliers of 4148 control points, coverage 0.668, rejected 0.236, median symmetric error 0.27px, control point spacing 23.9px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5424.NEF",
+      "sha256": "940825e30906a6adeba14e7d3bc96e381bfd03f8cbeea753f76777f5481eaf37",
+      "bytes": 59141892,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5424.NEF'<->'DSC_5346.NEF': scale 0.859, overlap 32.0%, NCC 0.745, edges 0.570/0.844, samples 968",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5424.NEF': scale 1.177, overlap 36.0%, NCC 0.996, edges 0.697/0.745, samples 2160",
+        "- Focus station relation rejected 'DSC_5424.NEF'<->'DSC_5344.NEF': scale 0.913, overlap 24.0%, NCC 0.658, edges 0.512/0.731, samples 700"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5425.NEF",
+      "sha256": "18a9a07300e24aa51b108a5e6a590459d534496631386984d16c24e9f6bdb7f0",
+      "bytes": 59565635,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5425.NEF'<->'DSC_5355.NEF': scale 0.816, overlap 24.0%, NCC 0.868, edges 0.550/0.689, samples 530",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5425.NEF': scale 1.258, overlap 24.0%, NCC 0.992, edges 0.616/0.723, samples 1300",
+        "- Focus station relation rejected 'DSC_5425.NEF'<->'DSC_5331.NEF': scale 0.793, overlap 24.0%, NCC 0.801, edges 0.511/0.696, samples 865",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5425.NEF': Local, 3939 inliers of 4286 control points, coverage 0.836, rejected 0.081, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5426.NEF",
+      "sha256": "b0137d17c7fa3579151dc1130231a30d94caa8a011dad0f7dff93b7e33ea827b",
+      "bytes": 58723201,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 11,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5426.NEF'<->'DSC_5350.NEF': scale 0.807, overlap 36.0%, NCC 0.916, edges 0.431/0.748, samples 596",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5426.NEF': scale 1.118, overlap 36.0%, NCC 0.978, edges 0.492/0.579, samples 1692",
+        "- Focus station relation rejected 'DSC_5426.NEF'<->'DSC_5342.NEF': scale 0.919, overlap 36.0%, NCC 0.647, edges 0.376/0.698, samples 724",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5426.NEF': Local, 3356 inliers of 4298 control points, coverage 0.713, rejected 0.219, median symmetric error 0.36px, control point spacing 23.8px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5427.NEF",
+      "sha256": "89d6859d40c543fc3f73bdae8f6670eae94230318ee3e3afa71694da1d93e541",
+      "bytes": 60077447,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 17,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5350.NEF': scale 0.770, overlap 8.0%, NCC 0.199, edges 0.738/0.679, samples 178",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5332.NEF': scale 0.755, overlap 12.0%, NCC 0.576, edges 0.389/0.589, samples 244",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5345.NEF': scale 0.883, overlap 24.0%, NCC 0.857, edges 0.725/0.732, samples 823",
+        "- Focus station relation rejected 'DSC_5427.NEF'<->'DSC_5343.NEF': scale 0.878, overlap 24.0%, NCC 0.785, edges 0.415/0.735, samples 868"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5428.NEF",
+      "sha256": "8569e8af70af44fb4ff6f5ff3e58baea77f42187569f6f32cd957fe9bb1cf075",
+      "bytes": 59697885,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 17,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5428.NEF': scale 1.328, overlap 12.0%, NCC 0.959, edges 0.290/0.657, samples 447",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5428.NEF': scale 1.227, overlap 24.0%, NCC 0.582, edges 0.367/0.823, samples 906",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5428.NEF': scale 1.230, overlap 36.0%, NCC 0.994, edges 0.429/0.694, samples 1620",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5428.NEF': scale 1.175, overlap 36.0%, NCC 0.995, edges 0.651/0.773, samples 2160",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5428.NEF': Local, 3937 inliers of 4347 control points, coverage 0.847, rejected 0.094, median symmetric error 0.31px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5429.NEF",
+      "sha256": "efbcde9b861f3998f30f78b0e87fb943c5e10149d97717104ac262222b58f375",
+      "bytes": 58784900,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 15,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5330.NEF'<->'DSC_5429.NEF': scale 1.366, overlap 12.0%, NCC 0.864, edges 0.334/0.940, samples 460",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5429.NEF': scale 1.347, overlap 12.0%, NCC 0.968, edges 0.472/0.809, samples 480",
+        "- Focus station relation rejected 'DSC_5331.NEF'<->'DSC_5429.NEF': scale 1.365, overlap 12.0%, NCC 0.718, edges 0.651/0.862, samples 470",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5429.NEF': scale 1.170, overlap 12.0%, NCC 0.402, edges 0.220/0.870, samples 311",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5429.NEF': scale 1.256, overlap 36.0%, NCC 0.706, edges 0.574/0.780, samples 1456",
+        "- Focus station relation rejected 'DSC_5338.NEF'<->'DSC_5429.NEF': scale 1.254, overlap 36.0%, NCC 0.829, edges 0.614/0.837, samples 1402",
+        "- Focus station relation rejected 'DSC_5429.NEF'<->'DSC_5342.NEF': scale 0.847, overlap 36.0%, NCC 0.896, edges 0.490/0.627, samples 1530"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5430.NEF",
+      "sha256": "bfc4940ffd997f9e2c85d4d0789f68afa5615f4bbd455c22aa40d8834f9778f3",
+      "bytes": 58938702,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 15,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5430.NEF': scale 1.331, overlap 8.0%, NCC 0.953, edges 0.535/0.784, samples 480",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5430.NEF': scale 1.193, overlap 36.0%, NCC 0.926, edges 0.664/0.718, samples 1899",
+        "- Focus station relation rejected 'DSC_5430.NEF'<->'DSC_5345.NEF': scale 0.860, overlap 36.0%, NCC 0.910, edges 0.727/0.610, samples 1488",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5430.NEF': Local, 4018 inliers of 4289 control points, coverage 0.853, rejected 0.063, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5431.NEF",
+      "sha256": "ebae97fdb9fc2b2d20adabd77b2e53a1e5dd3f57f7e19f1596e7d5dbe7aef8dc",
+      "bytes": 58207233,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5431.NEF': scale 1.298, overlap 36.0%, NCC 0.879, edges 0.724/0.824, samples 1497",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5431.NEF': scale 1.283, overlap 48.0%, NCC 0.827, edges 0.610/0.738, samples 1703",
+        "- Focus station relation rejected 'DSC_5431.NEF'<->'DSC_5344.NEF': scale 0.888, overlap 36.0%, NCC 0.552, edges 0.534/0.688, samples 847",
+        "- Focus station relation rejected 'DSC_5431.NEF'<->'DSC_5343.NEF': scale 0.886, overlap 36.0%, NCC 0.266, edges 0.524/0.729, samples 844"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5432.NEF",
+      "sha256": "7a851caf3ab9ba2785d48efa1f9c73a2f4d9289c64336108e4398e33f668d9e1",
+      "bytes": 57908036,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 7,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_5432.NEF'<->'DSC_5433.NEF': scale 0.974, overlap 48.0%, NCC 0.190, edges 0.157/0.863, samples 949",
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5432.NEF': scale 1.265, overlap 48.0%, NCC 0.830, edges 0.615/0.788, samples 1740",
+        "- Focus station relation rejected 'DSC_5432.NEF'<->'DSC_5332.NEF': scale 0.778, overlap 36.0%, NCC 0.719, edges 0.667/0.854, samples 971",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5432.NEF': scale 1.186, overlap 60.0%, NCC 0.782, edges 0.705/0.833, samples 1980",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5432.NEF': scale 1.193, overlap 48.0%, NCC 0.867, edges 0.633/0.893, samples 1812",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5432.NEF': scale 1.134, overlap 44.0%, NCC 0.828, edges 0.609/0.729, samples 1083",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5432.NEF': Local, 3972 inliers of 4240 control points, coverage 0.862, rejected 0.063, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5433.NEF",
+      "sha256": "2c10acc5707c9bf91a7958e740f5e2d63978e55967f920d8eec4067698e3de5d",
+      "bytes": 59421521,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus geometry retry candidate rejected edge 'DSC_5432.NEF'<->'DSC_5433.NEF': scale 0.974, overlap 48.0%, NCC 0.190, edges 0.157/0.863, samples 949",
+        "- Focus station relation rejected 'DSC_5353.NEF'<->'DSC_5433.NEF': scale 1.242, overlap 48.0%, NCC 0.973, edges 0.542/0.644, samples 2160",
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5433.NEF': scale 1.240, overlap 48.0%, NCC 0.972, edges 0.511/0.596, samples 2160",
+        "- Focus station relation rejected 'DSC_5347.NEF'<->'DSC_5433.NEF': scale 1.157, overlap 24.0%, NCC 0.913, edges 0.360/0.793, samples 1042",
+        "- Focus station relation rejected 'DSC_5336.NEF'<->'DSC_5433.NEF': scale 1.156, overlap 24.0%, NCC 0.788, edges 0.510/0.923, samples 660"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5434.NEF",
+      "sha256": "b52d67494754daf79a5c5d0b26ea6c1c57396f6f1ebfbd8fb540a2b5d42d2c96",
+      "bytes": 59773343,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5434.NEF': scale 1.257, overlap 36.0%, NCC 0.938, edges 0.650/0.909, samples 1588",
+        "- Focus station relation rejected 'DSC_5434.NEF'<->'DSC_5332.NEF': scale 0.800, overlap 40.0%, NCC 0.925, edges 0.762/0.876, samples 1116",
+        "- Focus station relation rejected 'DSC_5434.NEF'<->'DSC_5342.NEF': scale 0.919, overlap 16.0%, NCC 0.429, edges 0.208/0.526, samples 2135",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5434.NEF': Local, 2782 inliers of 4148 control points, coverage 0.605, rejected 0.329, median symmetric error 0.31px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5435.NEF",
+      "sha256": "9a3e5f4b07f2e5b0e4dd7b543095edce53c639e959875ac5178c81d1179c0279",
+      "bytes": 59972601,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 0,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5435.NEF': scale 1.112, overlap 12.0%, NCC 0.805, edges 0.611/0.876, samples 164",
+        "- Focus station relation rejected 'DSC_5435.NEF'<->'DSC_5344.NEF': scale 0.917, overlap 16.0%, NCC 0.412, edges 0.220/0.698, samples 2118",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5435.NEF': Local, 3156 inliers of 4334 control points, coverage 0.661, rejected 0.272, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5436.NEF",
+      "sha256": "a1e3a4d4b5051fab6f248c4796ef4941f9dae7bab1c38a38813579f28da7e5ea",
+      "bytes": 59540022,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5436.NEF'<->'DSC_5330.NEF': scale 0.738, overlap 24.0%, NCC 0.834, edges 0.831/0.819, samples 519",
+        "- Focus station relation rejected 'DSC_5436.NEF'<->'DSC_5332.NEF': scale 0.742, overlap 16.0%, NCC 0.768, edges 0.801/0.780, samples 522",
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5436.NEF': scale 1.254, overlap 36.0%, NCC 0.958, edges 0.375/0.623, samples 2160",
+        "- Focus station relation rejected 'DSC_5335.NEF'<->'DSC_5436.NEF': scale 1.259, overlap 24.0%, NCC 0.870, edges 0.683/0.882, samples 1324",
+        "- Focus station relation rejected 'DSC_5341.NEF'<->'DSC_5436.NEF': scale 1.198, overlap 36.0%, NCC 0.823, edges 0.617/0.806, samples 1071"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5437.NEF",
+      "sha256": "9f53a7a7fef533383e9f558eed75d104494abdeec99bfe382f42e8fcec46334d",
+      "bytes": 59676624,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 9,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5355.NEF': scale 0.750, overlap 24.0%, NCC 0.854, edges 0.530/0.604, samples 799",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5350.NEF': scale 0.745, overlap 32.0%, NCC 0.857, edges 0.380/0.612, samples 864",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5344.NEF': scale 0.851, overlap 36.0%, NCC 0.733, edges 0.399/0.436, samples 1271",
+        "- Focus station relation rejected 'DSC_5437.NEF'<->'DSC_5343.NEF': scale 0.850, overlap 36.0%, NCC 0.835, edges 0.308/0.467, samples 1210",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5437.NEF': Local, 3853 inliers of 4380 control points, coverage 0.805, rejected 0.120, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5438.NEF",
+      "sha256": "6e1b88e3cf313d98ceb109721591bd9ccd87922a026728aa004a63768dc1aedb",
+      "bytes": 60438784,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 16,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5351.NEF'<->'DSC_5438.NEF': scale 1.413, overlap 12.0%, NCC 0.936, edges 0.377/0.602, samples 464",
+        "- Focus station relation rejected 'DSC_5422.NEF'<->'DSC_5438.NEF': scale 1.225, overlap 8.0%, NCC 0.729, edges 0.442/0.745, samples 140",
+        "- Focus station relation rejected 'DSC_5338.NEF'<->'DSC_5438.NEF': scale 1.318, overlap 24.0%, NCC 0.826, edges 0.712/0.840, samples 938",
+        "- Focus station relation rejected 'DSC_5340.NEF'<->'DSC_5438.NEF': scale 1.272, overlap 24.0%, NCC 0.887, edges 0.456/0.764, samples 1246"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5439.NEF",
+      "sha256": "571763dbe26763fc290c8292cff9b77e09ee72f062848040d6f9fd68cdec0248",
+      "bytes": 60124030,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 16,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5354.NEF'<->'DSC_5439.NEF': scale 1.414, overlap 12.0%, NCC 0.898, edges 0.520/0.584, samples 404",
+        "- Focus station relation rejected 'DSC_5333.NEF'<->'DSC_5439.NEF': scale 1.443, overlap 8.0%, NCC 0.905, edges 0.554/0.913, samples 275",
+        "- Focus station relation rejected 'DSC_5348.NEF'<->'DSC_5439.NEF': scale 1.331, overlap 36.0%, NCC 0.953, edges 0.578/0.432, samples 1538",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5439.NEF': Local, 3988 inliers of 4366 control points, coverage 0.839, rejected 0.087, median symmetric error 0.23px, control point spacing 23.6px"
+      ]
+    },
+    {
+      "path": "/Users/dp/Downloads/书画拼图/马远2/DSC_5440.NEF",
+      "sha256": "920de1dd676212d6c5a9d23dd3171edc65a1a68b98f501f7463a0aab806218a7",
+      "bytes": 59549553,
+      "classification": "prepared_station_input",
+      "reason": "decoded source registered in Capture_Station; run stopped before output, no final pixel contribution claimed",
+      "station": 16,
+      "ordered": true,
+      "report_source": true,
+      "decoded": true,
+      "expected_skipped": false,
+      "detail_repair_rects": [],
+      "native_reason_lines": [
+        "- Focus station relation rejected 'DSC_5331.NEF'<->'DSC_5440.NEF': scale 1.446, overlap 8.0%, NCC 0.892, edges 0.756/0.912, samples 319",
+        "- Focus station relation rejected 'DSC_5423.NEF'<->'DSC_5440.NEF': scale 1.243, overlap 8.0%, NCC 0.695, edges 0.672/0.702, samples 175",
+        "- Focus station relation rejected 'DSC_5344.NEF'<->'DSC_5440.NEF': scale 1.244, overlap 36.0%, NCC 0.957, edges 0.349/0.468, samples 2160",
+        "- Focus station relation rejected 'DSC_5342.NEF'<->'DSC_5440.NEF': scale 1.247, overlap 36.0%, NCC 0.958, edges 0.347/0.413, samples 2160",
+        "- Intra-station registration '/Users/dp/Downloads/书画拼图/马远2/DSC_5440.NEF': Local, 3914 inliers of 4382 control points, coverage 0.810, rejected 0.107, median symmetric error 0.27px, control point spacing 23.7px"
+      ]
+    }
+  ],
+  "selected_path": "layered_virtual_tile",
+  "station_count": 18,
+  "path_selection": {
+    "configured_path": null,
+    "selected_path": "layered_virtual_tile",
+    "use_virtual_tiles": true,
+    "fallback_reason": null
+  },
+  "output_density": {
+    "status": "rejected",
+    "factor": 1.1767578125,
+    "pixel_count_multiplier": 1.3847589492797852,
+    "canvas_pixels": 0,
+    "output_plane_lower_bound_bytes": 0,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 47,
+    "sample_count": 124543,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 3281,
+    "worst_station_index": 17,
+    "worst_source_id": 33,
+    "worst_station_point": [
+      2049.0,
+      33.0
+    ],
+    "direct_pair_p95_output_px": 3.0650559059906275,
+    "residual_median_output_px": 0.5253280743027332,
+    "max_corner_correction_output_px": 5.466575463579199,
+    "minimum_scale": 0.8504955088348083,
+    "p01_scale": 0.8694860280443775,
+    "median_scale": 1.05552753496831,
+    "bypass_reason": "output_pixel_closure_limit_exceeded"
+  },
+  "grouping_isolated": [],
+  "grouping_undecodable": [],
+  "grouping_source_scan": {
+    "singleton_station_count": 0,
+    "multi_frame_station_count": 18,
+    "singleton_ratio": 0.0,
+    "detected": false,
+    "isolated_source_count": 0
+  },
+  "closure": {
+    "native_joint_before_prune": {
+      "relation_count": 82,
+      "matrix_direct_pair_p95_px": 11.35754415585512,
+      "accepted": false
+    },
+    "status": "converged",
+    "spanning_tree_edges": 17,
+    "participating_constraints": 66,
+    "constraint_weights": [],
+    "iterations": 2,
+    "residual_median_px": 0.4464198739302894,
+    "residual_p95_px": 1.463788660846438,
+    "max_direct_pair_p95_px": 2.6046616163770975,
+    "balanced_retry_attempted": true,
+    "balanced_retry_accepted": true,
+    "before_retry_max_direct_pair_p95_px": 5.4857488288739615,
+    "max_corner_correction_px": 4.64545499975527,
+    "clamped_stations": 0,
+    "fallback_reason": null,
+    "offending_pair": null,
+    "geometry_model": "homography",
+    "global_before_residual_median_px": null,
+    "global_before_residual_p95_px": null,
+    "nonlinear_validation": [],
+    "rejected_nonlinear_constraints": [],
+    "nonlinear_initialization_constraints": 0,
+    "nonlinear_refit_passes": 0
+  },
+  "failure_chain": {
+    "selected_path": "layered_virtual_tile",
+    "candidates_recorded": 153,
+    "model_fitted_records": 109,
+    "accepted_relations": 66,
+    "rejected_count": 87,
+    "unmeasured_count": 44,
+    "rejected_by_failure_stage": {
+      "fitted": 43,
+      "insufficient_bidirectional_matches": 9,
+      "insufficient_grid_coverage": 1,
+      "insufficient_measurable_patches": 34
+    },
+    "rejected_by_reason": {
+      "closure_unreliable_pair_p95": 16,
+      "station_relation_scale_out_of_range": 27
+    },
+    "candidate_stage_histogram": {
+      "fitted": 109,
+      "insufficient_measurable_patches": 34,
+      "insufficient_bidirectional_matches": 9,
+      "insufficient_grid_coverage": 1
+    },
+    "hypothesis_rejection_reason_occurrences": {
+      "station_relation_scale_out_of_range": 246,
+      "station_relation_low_spatial_support": 86,
+      "station_relation_edge_strength_mismatch": 3,
+      "station_relation_edge_orientation_mismatch": 32,
+      "station_relation_high_reprojection_error": 1
+    },
+    "source_raw_pair_diagnostics_count": 0,
+    "source_raw_direct_diagnostics_count": 0,
+    "connectivity": {
+      "components": 1,
+      "component_members": [
+        [
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5330.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5331.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5332.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5333.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5334.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5335.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5336.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5337.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5338.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5340.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5341.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5342.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5343.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5344.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5345.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5346.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5347.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5348.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5349.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5350.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5351.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5352.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5353.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5354.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5355.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5419.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5420.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5421.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5422.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5423.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5424.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5425.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5426.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5427.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5428.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5429.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5430.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5431.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5432.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5433.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5434.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5435.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5436.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5437.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5438.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5439.NEF",
+          "/Users/dp/Downloads/书画拼图/马远2/DSC_5440.NEF"
+        ]
+      ],
+      "component_member_counts": [
+        47
+      ]
+    },
+    "note": "Candidate records, final relation counts and hypothesis reason occurrences have different denominators and can repeat a pair. Empty legacy station diagnostics do not prove no registration failure. Shared-gate/proposal stages without explicit records are unavailable.",
+    "proposal_count": null,
+    "shared_gate_attempt_count": null,
+    "station_chain_availability": "station candidate records only; source proposal/shared gate totals unavailable",
+    "accepted_source_pairs_count": null,
+    "alignment_cache": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/source-alignment.json",
+      "schema": 2,
+      "match_records": 1003
+    },
+    "diagnostic_categories": {
+      "no_overlap": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "support": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_low_spatial_support": 86
+        }
+      },
+      "bidirectional": {
+        "rejected_by_failure_stage": {
+          "insufficient_bidirectional_matches": 9
+        },
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {
+          "insufficient_bidirectional_matches": 9
+        },
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "grid": {
+        "rejected_by_failure_stage": {
+          "insufficient_grid_coverage": 1
+        },
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {
+          "insufficient_grid_coverage": 1
+        },
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "scale": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {
+          "station_relation_scale_out_of_range": 27
+        },
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_scale_out_of_range": 246
+        }
+      },
+      "hull": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      },
+      "orientation": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {},
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {
+          "station_relation_edge_orientation_mismatch": 32
+        }
+      },
+      "closure": {
+        "rejected_by_failure_stage": {},
+        "rejected_by_reason": {
+          "closure_unreliable_pair_p95": 16
+        },
+        "candidate_stage_histogram": {},
+        "hypothesis_rejection_reason_occurrences": {}
+      }
+    }
+  },
+  "quality_gate": {
+    "verdict": "not_run",
+    "roi_count": 0,
+    "criteria": {},
+    "non_pass": [],
+    "unresolved_pixels": null,
+    "detail_repairs": 0
+  },
+  "failed_criteria": [],
+  "detail_repair_donor_counts": {},
+  "degradation": {
+    "entries": [
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 0,
+          "motion_ratio": 0.026879879524546423,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 2,
+          "motion_ratio": 0.021002778184034787,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 3,
+          "motion_ratio": 0.033687824217165124,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 4,
+          "motion_ratio": 0.025924554478920264,
+          "position": 3
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 5,
+          "motion_ratio": 0.022234790324260442,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 6,
+          "motion_ratio": 0.022537717785298648,
+          "position": 2
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 6,
+          "motion_ratio": 0.028797518025357113,
+          "position": 4
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 10,
+          "motion_ratio": 0.023026141034356497,
+          "position": 1
+        }
+      },
+      {
+        "reason": "grouping_accumulated_motion",
+        "severity": "degraded",
+        "detail": {
+          "component": 11,
+          "motion_ratio": 0.028176966447259606,
+          "position": 1
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 0
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 1
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 3
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 7
+        }
+      },
+      {
+        "reason": "topology_index_ambiguous",
+        "severity": "degraded",
+        "detail": {
+          "station_index": 15
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 347
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 253
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 707
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 287
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 682
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 611
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 629
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 697
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 503
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 502
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 347
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 318
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 438
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 128
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 103
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 211
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 152
+        }
+      },
+      {
+        "reason": "fusion_low_sharpness_region",
+        "severity": "degraded",
+        "detail": {
+          "regions": 586
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7694328510125977,
+          "inliers": 188,
+          "left": 1,
+          "low_frequency_mean_relative_difference": 0.04412266623393223,
+          "median_edge_orientation_difference_degrees": 4.616511151296122,
+          "median_error_px": 0.6802771579561794,
+          "preserves_convex_orientation": true,
+          "right": 7,
+          "scale_ratio": 1.2686352443822038,
+          "spatial_support": 0.6201778595522845
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.3889435543579771,
+          "inliers": 102,
+          "left": 1,
+          "low_frequency_mean_relative_difference": 0.06304219540850248,
+          "median_edge_orientation_difference_degrees": 5.890842093371009,
+          "median_error_px": 0.42769825866612415,
+          "preserves_convex_orientation": true,
+          "right": 9,
+          "scale_ratio": 0.7593934161760465,
+          "spatial_support": 0.40564918496367686
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.3043062053917789,
+          "inliers": 71,
+          "left": 1,
+          "low_frequency_mean_relative_difference": 0.042644327123827576,
+          "median_edge_orientation_difference_degrees": 5.493604788578592,
+          "median_error_px": 0.5361663111201294,
+          "preserves_convex_orientation": true,
+          "right": 11,
+          "scale_ratio": 0.7878463810574771,
+          "spatial_support": 0.45445250621746097
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7562994009979437,
+          "inliers": 155,
+          "left": 2,
+          "low_frequency_mean_relative_difference": 0.031158857546432467,
+          "median_edge_orientation_difference_degrees": 4.9359748021739485,
+          "median_error_px": 0.6062346902905955,
+          "preserves_convex_orientation": true,
+          "right": 7,
+          "scale_ratio": 1.266105860089596,
+          "spatial_support": 0.5657323922592578
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7217690928345817,
+          "inliers": 85,
+          "left": 2,
+          "low_frequency_mean_relative_difference": 0.02497573182478783,
+          "median_edge_orientation_difference_degrees": 5.880328273680051,
+          "median_error_px": 0.4170277647197775,
+          "preserves_convex_orientation": true,
+          "right": 9,
+          "scale_ratio": 1.3170917749522648,
+          "spatial_support": 0.517418785829781
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.3341836750090053,
+          "inliers": 87,
+          "left": 2,
+          "low_frequency_mean_relative_difference": 0.030784109626925273,
+          "median_edge_orientation_difference_degrees": 5.0825089558670085,
+          "median_error_px": 0.8419451757193817,
+          "preserves_convex_orientation": true,
+          "right": 11,
+          "scale_ratio": 0.7902283784424495,
+          "spatial_support": 0.5663075406659699
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7558849138171769,
+          "inliers": 182,
+          "left": 3,
+          "low_frequency_mean_relative_difference": 0.045593353308598976,
+          "median_edge_orientation_difference_degrees": 4.642022982129506,
+          "median_error_px": 0.7229553791640301,
+          "preserves_convex_orientation": true,
+          "right": 7,
+          "scale_ratio": 1.269935952393606,
+          "spatial_support": 0.598767721481127
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.343577507533737,
+          "inliers": 113,
+          "left": 3,
+          "low_frequency_mean_relative_difference": 0.06532045121068328,
+          "median_edge_orientation_difference_degrees": 5.383145342663805,
+          "median_error_px": 0.497604298202027,
+          "preserves_convex_orientation": true,
+          "right": 9,
+          "scale_ratio": 0.759266573935972,
+          "spatial_support": 0.436211289843518
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.3412564373113036,
+          "inliers": 63,
+          "left": 3,
+          "low_frequency_mean_relative_difference": 0.04392198113911961,
+          "median_edge_orientation_difference_degrees": 5.310892929497923,
+          "median_error_px": 0.5376620279204536,
+          "preserves_convex_orientation": true,
+          "right": 11,
+          "scale_ratio": 0.7859627039791159,
+          "spatial_support": 0.390834522631535
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7622351532113304,
+          "inliers": 156,
+          "left": 4,
+          "low_frequency_mean_relative_difference": 0.027823744785315272,
+          "median_edge_orientation_difference_degrees": 5.022931773905872,
+          "median_error_px": 0.5944357723422735,
+          "preserves_convex_orientation": true,
+          "right": 7,
+          "scale_ratio": 1.2648997512194433,
+          "spatial_support": 0.5640448524127832
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7267220793260134,
+          "inliers": 82,
+          "left": 4,
+          "low_frequency_mean_relative_difference": 0.022863846228639826,
+          "median_edge_orientation_difference_degrees": 5.590895111278461,
+          "median_error_px": 0.36254006844099584,
+          "preserves_convex_orientation": true,
+          "right": 9,
+          "scale_ratio": 1.3152119132450044,
+          "spatial_support": 0.5123624026750628
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7583324381709744,
+          "inliers": 89,
+          "left": 4,
+          "low_frequency_mean_relative_difference": 0.026252432010437404,
+          "median_edge_orientation_difference_degrees": 4.252142895011349,
+          "median_error_px": 0.8096281244233149,
+          "preserves_convex_orientation": true,
+          "right": 11,
+          "scale_ratio": 1.264246304407877,
+          "spatial_support": 0.5601416506023215
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7797053766287367,
+          "inliers": 115,
+          "left": 8,
+          "low_frequency_mean_relative_difference": 0.04360559088780196,
+          "median_edge_orientation_difference_degrees": 4.663328101474847,
+          "median_error_px": 0.4226411202577312,
+          "preserves_convex_orientation": true,
+          "right": 15,
+          "scale_ratio": 1.254079874777316,
+          "spatial_support": 0.5613513763317595
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7545065773624053,
+          "inliers": 100,
+          "left": 8,
+          "low_frequency_mean_relative_difference": 0.03686789936310997,
+          "median_edge_orientation_difference_degrees": 3.4341784473434758,
+          "median_error_px": 0.8920533910608369,
+          "preserves_convex_orientation": true,
+          "right": 16,
+          "scale_ratio": 1.2978764876471902,
+          "spatial_support": 0.5357067857069472
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7472367394746658,
+          "inliers": 30,
+          "left": 8,
+          "low_frequency_mean_relative_difference": 0.04662986905483838,
+          "median_edge_orientation_difference_degrees": 5.755217606852781,
+          "median_error_px": 0.28959180901195003,
+          "preserves_convex_orientation": true,
+          "right": 17,
+          "scale_ratio": 1.2475341911244628,
+          "spatial_support": 0.3279789264073792
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.1054466299030945,
+          "inliers": 73,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.005627207115491102,
+          "median_edge_orientation_difference_degrees": 3.15174197352651,
+          "median_error_px": 0.27655829495733725,
+          "preserves_convex_orientation": true,
+          "right": 13,
+          "scale_ratio": 0.934236915694464,
+          "spatial_support": 0.5412994570089822
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.9309479615268981,
+          "inliers": 73,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.002842509627611021,
+          "median_edge_orientation_difference_degrees": 3.932808915204145,
+          "median_error_px": 0.22929421071291772,
+          "preserves_convex_orientation": true,
+          "right": 14,
+          "scale_ratio": 1.0707601648051654,
+          "spatial_support": 0.5206992321516092
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.7731943407751819,
+          "inliers": 57,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.030511042950856326,
+          "median_edge_orientation_difference_degrees": 6.01459719697228,
+          "median_error_px": 0.38106424286931184,
+          "preserves_convex_orientation": true,
+          "right": 15,
+          "scale_ratio": 1.2543464258196586,
+          "spatial_support": 0.48309063893016346
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.3825206505592371,
+          "inliers": 53,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.021612865965075834,
+          "median_edge_orientation_difference_degrees": 4.534057660154884,
+          "median_error_px": 0.3737621545337316,
+          "preserves_convex_orientation": true,
+          "right": 16,
+          "scale_ratio": 0.7712350976212655,
+          "spatial_support": 0.4779640860982281
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.2457899857535273,
+          "inliers": 54,
+          "left": 10,
+          "low_frequency_mean_relative_difference": 0.02790150781657289,
+          "median_edge_orientation_difference_degrees": 4.719026337506109,
+          "median_error_px": 0.5730954679169109,
+          "preserves_convex_orientation": true,
+          "right": 17,
+          "scale_ratio": 0.8019778350173973,
+          "spatial_support": 0.6282562165236492
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.9031538495351087,
+          "inliers": 76,
+          "left": 11,
+          "low_frequency_mean_relative_difference": 0.010151957168006917,
+          "median_edge_orientation_difference_degrees": 2.9131482759027683,
+          "median_error_px": 0.4978463229440274,
+          "preserves_convex_orientation": true,
+          "right": 13,
+          "scale_ratio": 1.0981496055493507,
+          "spatial_support": 0.5691896262205361
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.1385681468716164,
+          "inliers": 74,
+          "left": 11,
+          "low_frequency_mean_relative_difference": 0.013493295265663735,
+          "median_edge_orientation_difference_degrees": 3.7223640200166233,
+          "median_error_px": 0.4227367328723809,
+          "preserves_convex_orientation": true,
+          "right": 14,
+          "scale_ratio": 0.9106485107425794,
+          "spatial_support": 0.5299654473966401
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.9364067103657859,
+          "inliers": 57,
+          "left": 11,
+          "low_frequency_mean_relative_difference": 0.016208681047326187,
+          "median_edge_orientation_difference_degrees": 2.695674626280325,
+          "median_error_px": 0.4031031570913638,
+          "preserves_convex_orientation": true,
+          "right": 15,
+          "scale_ratio": 1.067170091225285,
+          "spatial_support": 0.5287301712988625
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.8999623565974489,
+          "inliers": 54,
+          "left": 11,
+          "low_frequency_mean_relative_difference": 0.005420214032681066,
+          "median_edge_orientation_difference_degrees": 3.2803425671303375,
+          "median_error_px": 0.44623470175250846,
+          "preserves_convex_orientation": true,
+          "right": 16,
+          "scale_ratio": 1.1040968264639572,
+          "spatial_support": 0.5641238635839217
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.8267857528525538,
+          "inliers": 85,
+          "left": 12,
+          "low_frequency_mean_relative_difference": 0.020236987661536365,
+          "median_edge_orientation_difference_degrees": 3.9081908996519013,
+          "median_error_px": 0.4030719258862236,
+          "preserves_convex_orientation": true,
+          "right": 15,
+          "scale_ratio": 1.197274697218757,
+          "spatial_support": 0.4965980485827615
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 0.8568539579813036,
+          "inliers": 45,
+          "left": 13,
+          "low_frequency_mean_relative_difference": 0.03164787916379337,
+          "median_edge_orientation_difference_degrees": 3.58595010838968,
+          "median_error_px": 0.40092652548134444,
+          "preserves_convex_orientation": true,
+          "right": 17,
+          "scale_ratio": 1.1606172854786818,
+          "spatial_support": 0.42851755844713185
+        }
+      },
+      {
+        "reason": "station_relation_scale_out_of_range",
+        "severity": "degraded",
+        "detail": {
+          "consensus_error_px": 0.0,
+          "edge_strength_ratio": 1.2538506023295084,
+          "inliers": 44,
+          "left": 14,
+          "low_frequency_mean_relative_difference": 0.04424312093502254,
+          "median_edge_orientation_difference_degrees": 3.5771215683683764,
+          "median_error_px": 0.40732803615174257,
+          "preserves_convex_orientation": true,
+          "right": 17,
+          "scale_ratio": 0.8626795225099024,
+          "spatial_support": 0.40402335584943205
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 15,
+          "left_column": 0,
+          "left_row": 11,
+          "limit_px": 3.0,
+          "p95_px": 11.443009987492717,
+          "right": 17,
+          "right_column": 0,
+          "right_row": 12
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 15,
+          "left_column": 0,
+          "left_row": 11,
+          "limit_px": 3.0,
+          "p95_px": 11.35754415585512,
+          "right": 17,
+          "right_column": 0,
+          "right_row": 12
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 6,
+          "left_column": 0,
+          "left_row": 4,
+          "limit_px": 3.0,
+          "p95_px": 8.865336052743388,
+          "right": 11,
+          "right_column": 0,
+          "right_row": 9
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 6,
+          "left_column": 0,
+          "left_row": 4,
+          "limit_px": 3.0,
+          "p95_px": 9.077685220991329,
+          "right": 11,
+          "right_column": 0,
+          "right_row": 9
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 0,
+          "left_row": 6,
+          "limit_px": 3.0,
+          "p95_px": 8.535500485993598,
+          "right": 11,
+          "right_column": 0,
+          "right_row": 9
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 0,
+          "left_row": 6,
+          "limit_px": 3.0,
+          "p95_px": 8.76822528029619,
+          "right": 11,
+          "right_column": 0,
+          "right_row": 9
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 6,
+          "left_column": 0,
+          "left_row": 4,
+          "limit_px": 3.0,
+          "p95_px": 8.406738279409376,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 6,
+          "left_column": 0,
+          "left_row": 4,
+          "limit_px": 3.0,
+          "p95_px": 8.552866035606337,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 7,
+          "left_column": 0,
+          "left_row": 7,
+          "limit_px": 3.0,
+          "p95_px": 8.366894281105623,
+          "right": 15,
+          "right_column": 0,
+          "right_row": 11
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 7,
+          "left_column": 0,
+          "left_row": 7,
+          "limit_px": 3.0,
+          "p95_px": 8.531566460166077,
+          "right": 15,
+          "right_column": 0,
+          "right_row": 11
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 8.009131977851393,
+          "right": 14,
+          "right_column": 1,
+          "right_row": 3
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 8.46558286659043,
+          "right": 14,
+          "right_column": 1,
+          "right_row": 3
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 4,
+          "left_column": 0,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 7.837111187961856,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 2,
+          "left_column": 0,
+          "left_row": 2,
+          "limit_px": 3.0,
+          "p95_px": 8.140437710457148,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 4,
+          "left_column": 0,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 8.028300938238472,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 4,
+          "left_column": 0,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 8.146731388620939,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 0,
+          "left_row": 6,
+          "limit_px": 3.0,
+          "p95_px": 7.780505355574971,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 5,
+          "left_column": 0,
+          "left_row": 6,
+          "limit_px": 3.0,
+          "p95_px": 7.823886713176761,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 2,
+          "left_column": 0,
+          "left_row": 2,
+          "limit_px": 3.0,
+          "p95_px": 7.494856163845347,
+          "right": 6,
+          "right_column": 0,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 2,
+          "left_column": 0,
+          "left_row": 2,
+          "limit_px": 3.0,
+          "p95_px": 7.786617094133235,
+          "right": 6,
+          "right_column": 0,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 4,
+          "left_column": 0,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 7.216312175215028,
+          "right": 6,
+          "right_column": 0,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 4,
+          "left_column": 0,
+          "left_row": 3,
+          "limit_px": 3.0,
+          "p95_px": 7.441555209444562,
+          "right": 6,
+          "right_column": 0,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 6.872586889501183,
+          "right": 13,
+          "right_column": 1,
+          "right_row": 2
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 7.353864791483821,
+          "right": 13,
+          "right_column": 1,
+          "right_row": 2
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 8,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 6.642828734409017,
+          "right": 13,
+          "right_column": 1,
+          "right_row": 2
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 8,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 6.921232374690465,
+          "right": 13,
+          "right_column": 1,
+          "right_row": 2
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 8,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 6.234181802406413,
+          "right": 14,
+          "right_column": 1,
+          "right_row": 3
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 8,
+          "left_column": 1,
+          "left_row": 0,
+          "limit_px": 3.0,
+          "p95_px": 6.550419081510499,
+          "right": 14,
+          "right_column": 1,
+          "right_row": 3
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 6.258870332672269,
+          "right": 16,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 12,
+          "left_column": 0,
+          "left_row": 10,
+          "limit_px": 3.0,
+          "p95_px": 6.434128151166144,
+          "right": 16,
+          "right_column": 1,
+          "right_row": 4
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 9,
+          "left_column": 1,
+          "left_row": 1,
+          "limit_px": 3.0,
+          "p95_px": 5.321652161162834,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      },
+      {
+        "reason": "closure_unreliable_pair_p95",
+        "severity": "degraded",
+        "detail": {
+          "left": 9,
+          "left_column": 1,
+          "left_row": 1,
+          "limit_px": 3.0,
+          "p95_px": 5.618545991527019,
+          "right": 10,
+          "right_column": 0,
+          "right_row": 8
+        }
+      }
+    ],
+    "result": "rejected"
+  },
+  "tone_summary": {
+    "status": "not_run",
+    "boundary_delta_e": {
+      "max": 0.0,
+      "threshold": 1.5,
+      "violations": []
+    },
+    "correction_model": "station_affine",
+    "geometry_active_relation_count": 0
+  },
+  "performance": {
+    "raw_decode_count": 94,
+    "native_fusion_count": 0,
+    "source_cache": {
+      "max_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0
+    },
+    "native_cache": {
+      "max_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0
+    }
+  },
+  "performance_stages": {
+    "preflight_seconds": 0.405647584,
+    "prepare_seconds": 60.145733084,
+    "matching_seconds": 41.595237,
+    "ordering_seconds": 2.286661458,
+    "render_seconds": 0.0,
+    "total_seconds": 560.618368791
+  },
+  "native_fusion_cache": {
+    "backing": {
+      "max_bytes": 0,
+      "resident_bytes": 0,
+      "peak_bytes": 0,
+      "hits": 0,
+      "writes": 0,
+      "read_bytes": 0,
+      "written_bytes": 0,
+      "read_seconds": 0.0,
+      "write_seconds": 0.0,
+      "failures": 0,
+      "evictions": 0
+    },
+    "max_bytes": 0,
+    "hits": 0,
+    "misses": 0,
+    "matching_hits": 0,
+    "matching_misses": 0,
+    "composition_hits": 0,
+    "composition_misses": 0,
+    "fusion_count": 0,
+    "fusion_seconds": 0.0,
+    "failed_fusions": 0,
+    "evictions": 0,
+    "invalidations": 0,
+    "oversized_bypasses": 0,
+    "unattributed_bypasses": 0,
+    "state_snapshot_bypasses": 0,
+    "resident_bytes": 0,
+    "resident_entries": 0,
+    "peak_bytes": 0,
+    "peak_entries": 0,
+    "peak_memory_entries": 0
+  },
+  "source_preflight": {
+    "source_count": 47,
+    "stat_count": 47,
+    "file_map_count": 47,
+    "hash_count": 47,
+    "exif_parse_count": 47,
+    "preflight_reuse_count": 94,
+    "raw_decode_count": 94,
+    "failed_count": 0
+  },
+  "resource": {
+    "slot": {
+      "slot": "exclusive",
+      "lane": "task-5",
+      "what": "mayuan-2 scale=0.25 baseline-r1",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/Users/dp/Desktop/raw-editor/.worktrees/task-5/scripts/stack-lab/run.py",
+        "--binary",
+        "base-2026-11-12",
+        "--lane",
+        "task-5",
+        "--dataset",
+        "mayuan-2",
+        "--scale",
+        "0.25",
+        "--label",
+        "baseline-r1",
+        "--exclusive"
+      ],
+      "cwd": "/Users/dp/Desktop/raw-editor/.worktrees/task-5",
+      "estimate_gib": null,
+      "pid": 35169,
+      "started_epoch": 1794912502.7251961,
+      "started": "2026-11-17T10:48:22.724286+00:00",
+      "state": "running",
+      "caps": {
+        "RAYON_NUM_THREADS": "8",
+        "CARGO_BUILD_JOBS": "6"
+      },
+      "contended_with": [],
+      "child_pid": 35174
+    },
+    "peak_rss_bytes": 13684703232,
+    "memory_gate_pass": true,
+    "memory": {
+      "threshold_bytes": 25769803776,
+      "measurements": {
+        "process_tree_sampled": 13684703232,
+        "native_getrusage": 13671481344,
+        "native_report": 13618462720
+      },
+      "sample_count": 1054,
+      "monitor_error": null,
+      "threshold_exceeded": false
+    },
+    "wall_seconds": 561.4903879165649,
+    "contended": false,
+    "exit_code": 1,
+    "runner_failures": [
+      "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/run/mayuan-2-s0p25-task-5-baseline-r1.log",
+      "no focus-stack result line in the log",
+      "acceptance metrics were not written",
+      "full-resolution TIFF is missing or empty",
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "state": "rejected",
+    "native_rayon_threads": 8,
+    "preparation_threads": [
+      6
+    ]
+  },
+  "output": {
+    "written": false,
+    "format": "",
+    "path": "",
+    "width": 0,
+    "height": 0,
+    "bit_depth": 16,
+    "alpha_preserved": false,
+    "icc": "sRGB",
+    "tiff_extra_samples": null,
+    "artifact_validation": "not_run",
+    "artifact_validation_error": null,
+    "result_id": "",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    }
+  },
+  "output_sha256": null,
+  "previews": [],
+  "crop_previews": [],
+  "last_log_lines": [
+    "  - Focus capture-group planar geometry seeded from 17 pixel-verified relation(s)",
+    "  - Seam-only local transforms: 16",
+    "  - Authoritative Virtual_Tile station solve accepted 66 relation(s)",
+    "  - Stack report written to /Users/dp/Desktop/raw-editor/output/acceptance/task-5/mayuan-2-baseline-r1/run/mayuan-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-dba85ff6-15c2-48d8-bede-c07efc9d62fc.json",
+    "",
+    "thread 'panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env' (41560644) panicked at src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs:632:6:",
+    "the provided focus-stack images should align and blend: \"output density 1.176758 exceeds closure output-pixel limits: direct P95 3.065056, median 0.525328, corner 5.466575\"",
+    "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+    "FAILED",
+    "",
+    "failures:",
+    "",
+    "failures:",
+    "    panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env",
+    "",
+    "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1136 filtered out; finished in 560.98s",
+    "",
+    "NATIVE_PROCESS_USAGE {\"method\": \"getrusage(RUSAGE_CHILDREN), one frozen Rust child\", \"max_rss_bytes\": 13671481344, \"wall_seconds\": 561.1209388331044, \"user_seconds\": 3399.57613, \"system_seconds\": 21.832153, \"child_exit_code\": 101}"
+  ],
+  "native_errors": [
+    "thread 'panorama_stitching::acceptance_tests::focus_stack_fixture::real_focus_stack_fixture_from_env' (41560644) panicked at src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs:632:6:\nthe provided focus-stack images should align and blend: \"output density 1.176758 exceeds closure output-pixel limits: direct P95 3.065056, median 0.525328, corner 5.466575\""
+  ],
+  "review": {
+    "stop_stage": "18机位内融合及机位关系求解完成，closure基础域converged；输出密度换算的output-pixel closure门拒绝，未进入最终合成/QG/预览导出。",
+    "visual_notes": "未生成预览，不能定位可见接缝或声称已目视通过。数值阻断为output_density.factor=1.1767578125后direct_pair_p95_output_px=3.0650559059906275>3；report记录worst_station_index=17、worst_source_id=33、worst_station_point=[2049,33]。该坐标是station域的密度探针位置，**不是已证实的最坏闭环pair或成片瑕疵坐标**。基础闭环max_direct_pair_p95_px=2.6046616163770975，换算后超门，不能用基础域converged覆盖拒绝。",
+    "region_group": "站点求解组（任务16）；先核查输出密度与闭环单位换算、关系误差和证据支持。",
+    "task_7": "建议作为关系证据诊断的辅助实验；目前连通不等于无假边，单次数据不能断言固定阈值应改。",
+    "task_8": "可用于复核被拒关系的尺度/支持/方向召回；当前首要阻断是输出像素闭环门，尚不能证明更换provider即可解决。",
+    "task_15": "本次561.49秒结束，峰值12.745GiB且内存门通过；没有超门或无法结束证据，不据此启动。",
+    "grade": "未达D1（几何门拒绝，无预览）；未达D2–D5。",
+    "source_conclusion": "47张均解码并登记到18机位，输入与参考/二进制检查通过；无最终合成，47张仅记prepared_station_input，不虚构成片参与像素，也没有证据支持任意排除一张。",
+    "next_step": "任务16归站点求解组；保留本次失败版本，先修输出密度/闭环阻断后重跑同范围，不放宽3px门限。"
+  },
+  "notes": [
+    "Scale 0.25 output cannot establish D2/D3 or full-resolution quality.",
+    "Each source has one top-level classification; detail_only excludes composited.",
+    "Station fusion input is pipeline participation, not proof that every frame owns final pixels.",
+    "No user D4 confirmation; diagnostic previews are not entered into the review queue."
+  ]
+}

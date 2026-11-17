@@ -1,0 +1,350 @@
+{
+  "task": 5,
+  "date": "2026-11-18",
+  "started_epoch": 1794912502.637234,
+  "ended_epoch": 1794932211.0912158,
+  "starting_commit": "1da9fd4481536df9c8eb88e18906d86500a9285c",
+  "status": "diagnostics_verified",
+  "cases": [
+    {
+      "id": "mayuan-2",
+      "card": "docs/artwork-lanes/S2-mayuan-2.md",
+      "card_sha256": "3807dea66b4e09017244225e0038a04e57526ba04339dda9e274e8e7179c218f",
+      "diagnostic": "docs/benchmarks/mayuan-2-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "5a1b740cad235d806ab994b9bbf8c413c0a418bd3dd68d755385c36a211de4f8",
+      "source_count": 47,
+      "source_counts": {
+        "prepared_station_input": 47
+      },
+      "status": "rejected",
+      "path": "layered_virtual_tile",
+      "stations": 18,
+      "qg": {
+        "verdict": "not_run",
+        "roi_count": 0,
+        "criteria": {},
+        "non_pass": [],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "peak_rss_bytes": 13684703232,
+      "wall_seconds": 561.4903879165649,
+      "memory_gate_pass": true,
+      "reason": "18机位内融合及机位关系求解完成，closure基础域converged；输出密度换算的output-pixel closure门拒绝，未进入最终合成/QG/预览导出。",
+      "grade": "未达D1（几何门拒绝，无预览）；未达D2–D5。",
+      "region_group": "站点求解组（任务16）；先核查输出密度与闭环单位换算、关系误差和证据支持。"
+    },
+    {
+      "id": "sleeping",
+      "card": "docs/artwork-lanes/S2-sleeping.md",
+      "card_sha256": "4f20fd1be25ef6f2fd56e5b959fd7a410b303dfa164f2384446c7ae51a937d37",
+      "diagnostic": "docs/benchmarks/sleeping-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "c5d78780771973dd3c6dd732c18ac78914d7751bbc9acde4028129598b0079dd",
+      "source_count": 45,
+      "source_counts": {
+        "prepared_station_input": 45
+      },
+      "status": "rejected",
+      "path": "layered_virtual_tile",
+      "stations": 15,
+      "qg": {
+        "verdict": "not_run",
+        "roi_count": 0,
+        "criteria": {},
+        "non_pass": [],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "peak_rss_bytes": 13151518720,
+      "wall_seconds": 600.613107919693,
+      "memory_gate_pass": true,
+      "reason": "15机位内融合及关系求解完成，基础域closure=converged；output_density的输出像素闭环门拒绝，未进入最终合成/QG/预览导出。",
+      "grade": "未达D1（几何门拒绝，无预览）；未达D2–D5。",
+      "region_group": "站点求解组（任务16）；输出密度/坐标单位与闭环余量优先，与马远2的同类阻断一起调查。"
+    },
+    {
+      "id": "qixu-1",
+      "card": "docs/artwork-lanes/S2-qixu-1.md",
+      "card_sha256": "cc9661b45598915fcdba982131df91474871a30fa809c0f0c95bf821bb1fa3b1",
+      "diagnostic": "docs/benchmarks/qixu-1-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "f917ff7be3a969ed764402199926e147b62305d5efb97ebc8b8a28d016c1e2ef",
+      "source_count": 75,
+      "source_counts": {
+        "excluded": 4,
+        "composited": 70,
+        "detail_only": 1
+      },
+      "status": "rejected",
+      "path": "legacy_single_layer_mosaic",
+      "stations": 37,
+      "qg": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "local_scale_pixel_ratio:fail",
+          "mtf50_normalized:not_applicable",
+          "boundary_stroke_alignment:fail",
+          "owner_sharpness_coverage:fail"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 30
+      },
+      "peak_rss_bytes": 15116599296,
+      "wall_seconds": 938.2737998962402,
+      "memory_gate_pass": true,
+      "reason": "legacy流式合成、30处细节转移/替换、来源归属、QG、25% RGBA16 TIFF与预览均完成；最终degradation=rejected，QG fail。正式runner另对未声明排除/70条Streaming计数拒绝，未修改预期。",
+      "grade": "达到D1的scale=0.25诊断范围（有预览、75张均可解释）；QG失败且非原生，未达D2/D3/D4/D5。",
+      "region_group": "流式mosaic组（任务11）；质量、来源筛除与细节donor观测一并跟进。"
+    },
+    {
+      "id": "qixu-2",
+      "card": "docs/artwork-lanes/S2-qixu-2.md",
+      "card_sha256": "1b07e43e71c6c0eaf1f49853050a929d3ecb1a881bdfa45cb6cfe0e25eca8dab",
+      "diagnostic": "docs/benchmarks/qixu-2-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "9adeac716381f58040f0a13140f4674adcea64296d2ffa4fd9d756e05801e0ee",
+      "source_count": 98,
+      "source_counts": {
+        "excluded": 2,
+        "composited": 96
+      },
+      "status": "rejected",
+      "path": "legacy_single_layer_mosaic",
+      "stations": 49,
+      "qg": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "fail",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "local_scale_pixel_ratio:fail",
+          "mtf50_normalized:not_applicable",
+          "noise_sigma_ratio:fail",
+          "boundary_stroke_alignment:fail",
+          "owner_sharpness_coverage:fail"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 99
+      },
+      "peak_rss_bytes": 14889549824,
+      "wall_seconds": 2034.2726619243622,
+      "memory_gate_pass": true,
+      "reason": "97张重求解完成后，legacy流式主合成96张、99处细节转移/替换、QG和25% RGBA16 TIFF/预览导出完成；最终degradation=rejected、QG fail。",
+      "grade": "达到D1的scale=0.25诊断范围；QG fail且不是原生输出，未达D2/D3/D4/D5。",
+      "region_group": "流式mosaic组（任务11）；跨帧几何、owner选择、局部噪声与细节修复需结合。"
+    },
+    {
+      "id": "fengying",
+      "card": "docs/artwork-lanes/S2-fengying.md",
+      "card_sha256": "688fcd72916b24861b755f2db5d7486aae39fabe50a9f0cdaa15002472699ee2",
+      "diagnostic": "docs/benchmarks/fengying-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "21d08b0b5694f02ab85abecbd72d66042e7be7d6b4cc7befdf284b3be06c7c19",
+      "source_count": 110,
+      "source_counts": {
+        "composited": 104,
+        "excluded": 6
+      },
+      "status": "rejected",
+      "path": "legacy_single_layer_mosaic",
+      "stations": 74,
+      "qg": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "pass",
+          "owner_sharpness_coverage": "fail"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "local_scale_pixel_ratio:fail",
+          "mtf50_normalized:not_applicable",
+          "owner_sharpness_coverage:fail"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 409
+      },
+      "peak_rss_bytes": 16731160576,
+      "wall_seconds": 1741.598888874054,
+      "memory_gate_pass": true,
+      "reason": "104张姿态求解、legacy主合成、409处细节转移/替换、QG及25% RGBA16 TIFF/预览完成；最终QG fail、degradation rejected。",
+      "grade": "达到D1的scale=0.25诊断范围；QG fail，未达D2/D3/D4/D5。",
+      "region_group": "流式mosaic组（任务12），关注owner清晰度、局部尺度、曝光/反光与低频色调；边界描线本轮pass也不代表没有可见明暗块。"
+    },
+    {
+      "id": "langyuan",
+      "card": "docs/artwork-lanes/S2-langyuan.md",
+      "card_sha256": "b185b6a1a5bb909fcf8d11da6d162613fe409d6e79be38c2b061bdad6c89a88a",
+      "diagnostic": "docs/benchmarks/langyuan-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "1702d231b0a04752c098a0beebeebb89bc42ca627437af91e02392b00106688c",
+      "source_count": 84,
+      "source_counts": {
+        "station_fusion_input": 84
+      },
+      "status": "rejected",
+      "path": "layered_virtual_tile",
+      "stations": 28,
+      "qg": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "local_scale_pixel_ratio:fail",
+          "mtf50_normalized:not_applicable",
+          "boundary_stroke_alignment:fail"
+        ],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "peak_rss_bytes": 15481438208,
+      "wall_seconds": 4242.286269903183,
+      "memory_gate_pass": true,
+      "reason": "28机位、单连通分量、55条接受关系，基础域closure converged；最终owner合成与QG完成（fail），25% TIFF及预览已验证写出。随后仅用于对照的PS参考图指标配准不足40内点，acceptance_metrics阶段panic/exit101，未写metrics和最终result行。QG失败与导出后参考指标失败分别保留，不混同为TIFF无效。",
+      "grade": "具备D1管线预览范围（84张分组/融合输入可追踪）；每帧最终owned像素数仍缺实测字段，不能授予原生D2/D3/D4/D5。QG fail和参考指标panic保持拒绝。",
+      "region_group": "站点求解组（任务13），重点是全量姿态/残差场、局部尺度与边界；另有导出后参考指标观测失败。"
+    },
+    {
+      "id": "wenyuan",
+      "card": "docs/artwork-lanes/S2-wenyuan.md",
+      "card_sha256": "6ffe8ecc17d9d2cce876603adc585617896db56a205acb6bf3ae3958b69361f9",
+      "diagnostic": "docs/benchmarks/wenyuan-baseline-r1-diagnostic.json",
+      "diagnostic_sha256": "65fd7180f5b975bcc59584479129fb85ab8b115b43e723907e522a1921bddf56",
+      "source_count": 126,
+      "source_counts": {
+        "station_fusion_input": 121,
+        "excluded": 1,
+        "singleton_tile_input": 4
+      },
+      "status": "rejected",
+      "path": "layered_virtual_tile",
+      "stations": 43,
+      "qg": {
+        "verdict": "pass",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "mtf50_normalized:not_applicable",
+          "noise_sigma_ratio:not_applicable",
+          "boundary_stroke_alignment:not_applicable"
+        ],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "peak_rss_bytes": 15111585792,
+      "wall_seconds": 9558.558820962906,
+      "memory_gate_pass": true,
+      "reason": "43机位、162接受关系、单连通分量与基础域闭环完成，最终owner合成/接缝求解/QG及25% TIFF、预览、metrics均已写出。QG汇总pass，但native fixture逐判据验收在local_scale_median=not_applicable处panic/exit101；tone另为degraded。analysis仍rejected，不改入口合同或预期。",
+      "grade": "具备D1管线预览范围（125张参与、1张有明确排除原因）；QG汇总pass不覆盖native fixture拒绝及tone degraded，且只有scale=0.25，不授D2/D3/D4/D5。逐帧最终owned计数仍有观测缺口。",
+      "region_group": "站点求解组（任务14），并需流式/色调组支持；全量姿态/残差、tone和验收入口范围共同核查。"
+    }
+  ],
+  "input_count": 585,
+  "binary": {
+    "label": "base-2026-11-12",
+    "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+  },
+  "protected_files_sha256": {
+    ".vscode/settings.json": "2ac108a9cae907889bfd3e4d0f60a5ff35c2196b2b2ef8a18308e69ed4447f1c",
+    "tests/acceptance/focus-stack-datasets.json": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+    "tests/acceptance/focus-stack-regression-baselines.json": "63bfea716b7c04691eeac19d789dfbd28aa6624f7eec9820388fe5dd2604ab17",
+    "tests/acceptance/lanting-paper-baseline.json": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25"
+  },
+  "preflight": {
+    "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/preflight-r2.log",
+    "sha256": "694a5247837b639eb0073d4b7b44ec6fe4c4f73c59a7d4ffef81ba0b58d5f127",
+    "scope": "require-data and hash-inputs; exit 0"
+  },
+  "live_exclusive_snapshot": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/exclusive-live-snapshot.json",
+  "limits": [
+    "Diagnostic completion only; failures retained, no new native quality acceptance.",
+    "Scale 0.25 and exclusive Rayon 8 only; no full determinism claim.",
+    "No production code, thresholds, official source exclusions or accepted image baselines modified."
+  ],
+  "outcomes": {
+    "geometry_blocked_without_preview": [
+      "mayuan-2",
+      "sleeping"
+    ],
+    "qg_fail": [
+      "qixu-1",
+      "qixu-2",
+      "fengying",
+      "langyuan"
+    ],
+    "qg_pass_but_native_fixture_rejected": [
+      "wenyuan"
+    ],
+    "new_native_acceptance": false,
+    "memory_gate_pass_count": 7
+  },
+  "resource_configuration": {
+    "slot": "exclusive",
+    "rayon_threads": 8,
+    "preparation_threads_cap": 8,
+    "shared_budget_verification": "legacy binary unverified, exclusive required"
+  },
+  "region_assignments": {
+    "station_solver": [
+      "mayuan-2",
+      "sleeping",
+      "langyuan",
+      "wenyuan"
+    ],
+    "streaming_mosaic": [
+      "qixu-1",
+      "qixu-2",
+      "fengying"
+    ],
+    "performance_hard_trigger_cases": []
+  }
+}
