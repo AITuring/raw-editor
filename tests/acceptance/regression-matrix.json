@@ -1,0 +1,307 @@
+{
+  "version": 1,
+  "baseline": {
+    "label": "base-2026-11-12",
+    "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "evidence": "docs/benchmarks/base-p1-codex-port.json"
+  },
+  "notes": [
+    "Tiers are independent selections, not cumulative.",
+    "Cold/hot are independent processes with independent alignment cache paths; OS page cache is not cleared.",
+    "Known failure matching is regression consistency, never image quality acceptance.",
+    "Only Lanting45 currently has a full input D3+ baseline; full excludes unaccepted 84/126/45-full and deferred PSD."
+  ],
+  "cases": [
+    {
+      "id": "nine-cold",
+      "dataset": "sleeping",
+      "scale": 1,
+      "tiers": [
+        "medium"
+      ],
+      "expected": {
+        "status": "quality_accepted",
+        "exit_code": 0,
+        "selected_path": "layered_virtual_tile",
+        "station_count": 3,
+        "quality_gate.verdict": "pass",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "closure": "converged",
+        "outcome": "degraded",
+        "output.width": 15897,
+        "output.height": 6720,
+        "sources.inputs": 9,
+        "sources.report_sources": 9,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "checks.runner_failures_empty": true,
+        "checks.output_contract": true,
+        "performance.raw_decode_count": 18,
+        "performance.native_fusion_count": 6,
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+      },
+      "subset": "sleeping-9-6479"
+    },
+    {
+      "id": "nine-hot",
+      "dataset": "sleeping",
+      "scale": 1,
+      "tiers": [
+        "medium"
+      ],
+      "expected": {
+        "status": "quality_accepted",
+        "exit_code": 0,
+        "selected_path": "layered_virtual_tile",
+        "station_count": 3,
+        "quality_gate.verdict": "pass",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "closure": "converged",
+        "outcome": "degraded",
+        "output.width": 15897,
+        "output.height": 6720,
+        "sources.inputs": 9,
+        "sources.report_sources": 9,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "checks.runner_failures_empty": true,
+        "checks.output_contract": true,
+        "performance.raw_decode_count": 18,
+        "performance.native_fusion_count": 6,
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+      },
+      "subset": "sleeping-9-6479"
+    },
+    {
+      "id": "langyuan-10",
+      "dataset": "langyuan",
+      "scale": 1,
+      "tiers": [
+        "medium"
+      ],
+      "expected": {
+        "status": "quality_accepted",
+        "exit_code": 0,
+        "selected_path": "layered_virtual_tile",
+        "station_count": 3,
+        "quality_gate.verdict": "pass",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "closure": "converged",
+        "outcome": "degraded",
+        "output.width": 10154,
+        "output.height": 12569,
+        "sources.inputs": 10,
+        "sources.report_sources": 10,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "checks.runner_failures_empty": true,
+        "checks.output_contract": true,
+        "performance.raw_decode_count": 20,
+        "performance.native_fusion_count": 6,
+        "output_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934"
+      },
+      "subset": "langyuan-10"
+    },
+    {
+      "id": "wenyuan-10",
+      "dataset": "wenyuan",
+      "scale": 1,
+      "tiers": [
+        "medium"
+      ],
+      "expected": {
+        "status": "quality_accepted",
+        "exit_code": 0,
+        "selected_path": "layered_virtual_tile",
+        "station_count": 3,
+        "quality_gate.verdict": "pass",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "closure": "converged",
+        "outcome": "degraded",
+        "output.width": 9764,
+        "output.height": 9827,
+        "sources.inputs": 10,
+        "sources.report_sources": 10,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "checks.runner_failures_empty": true,
+        "checks.output_contract": true,
+        "performance.raw_decode_count": 20,
+        "performance.native_fusion_count": 6,
+        "output_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b"
+      },
+      "subset": "wenyuan-10"
+    },
+    {
+      "id": "lanting-framed",
+      "dataset": "lanting",
+      "scale": 1,
+      "tiers": [
+        "medium",
+        "full"
+      ],
+      "expected": {
+        "status": "quality_accepted",
+        "exit_code": 0,
+        "selected_path": "legacy_single_layer_mosaic",
+        "station_count": 44,
+        "quality_gate.verdict": "pass",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "closure": "not_run",
+        "outcome": "degraded",
+        "output.width": 31090,
+        "output.height": 11008,
+        "sources.inputs": 45,
+        "sources.report_sources": 45,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "checks.runner_failures_empty": true,
+        "checks.output_contract": true,
+        "performance.raw_decode_count": 0,
+        "performance.native_fusion_count": 0,
+        "output_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+        "guard.strict.pass": true,
+        "guard.regression_only.pass": true
+      },
+      "framed": true
+    },
+    {
+      "id": "qixu-0p1",
+      "dataset": "qixu",
+      "scale": 0.1,
+      "tiers": [
+        "extended"
+      ],
+      "expected": {
+        "status": "rejected",
+        "exit_code": 1,
+        "selected_path": "legacy_single_layer_mosaic",
+        "station_count": 87,
+        "quality_gate.verdict": "fail",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "closure": "not_run",
+        "outcome": "rejected",
+        "output.width": 4686,
+        "output.height": 2038,
+        "sources.inputs": 173,
+        "sources.report_sources": 169,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "output_sha256": "f1e94143c74b72e8dcb8b9996c1e0816b2728c11f1f5ae438fb896ef2d0f9bf6",
+        "runner_failures": [
+          "the Stack_Report has no verified TIFF export at the requested path",
+          "verified TIFF dimensions do not match the rendered result",
+          "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+          "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+        ]
+      },
+      "known_failure": true
+    },
+    {
+      "id": "fengying-0p1",
+      "dataset": "fengying",
+      "scale": 0.1,
+      "tiers": [
+        "extended"
+      ],
+      "expected": {
+        "status": "rejected",
+        "exit_code": 1,
+        "selected_path": "legacy_single_layer_mosaic",
+        "station_count": 74,
+        "quality_gate.verdict": "fail",
+        "quality_gate.roi_count": 8,
+        "quality_gate.criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "insufficient_evidence"
+        },
+        "closure": "not_run",
+        "outcome": "rejected",
+        "output.width": 3949,
+        "output.height": 3310,
+        "sources.inputs": 110,
+        "sources.report_sources": 104,
+        "performance.source_cache.max_bytes": 536870912,
+        "performance.native_cache.max_bytes": 1073741824,
+        "output_sha256": "114e22789b258f88164d9cc5b4520bcf29ae897c9670520037dc7450b27534f5",
+        "runner_failures": [
+          "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+        ]
+      },
+      "known_failure": true
+    }
+  ]
+}

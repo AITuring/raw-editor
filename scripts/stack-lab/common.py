@@ -4,7 +4,6 @@ All paths are absolute so the scripts behave the same from the main checkout
 and from any `.worktrees/<lane>` worktree.
 """
 import fcntl
-import fnmatch
 import hashlib
 import json
 import os
@@ -23,7 +22,8 @@ ACCEPTANCE = MAIN / 'output/acceptance'
 SLOTS = ACCEPTANCE / '.slots'
 BINARIES = ACCEPTANCE / 'binaries'
 SHARED_TARGET = MAIN / 'src-tauri/target'
-MATRIX = MAIN / 'tests/acceptance/regression-matrix.json'
+CHECKOUT = Path(__file__).resolve().parents[2]
+MATRIX = CHECKOUT / 'tests/acceptance/regression-matrix.json'
 GIB = 1024 ** 3
 # Per-run memory gate from plan §1.3 (the Lanting 25,769,803,776 B threshold).
 MEMORY_GATE_BYTES = 25_769_803_776
@@ -92,7 +92,7 @@ def verify_binary(label):
 
 
 def dataset_entry(dataset_id):
-    manifest = read(MAIN / 'tests/acceptance/focus-stack-datasets.json')
+    manifest = read(CHECKOUT / 'tests/acceptance/focus-stack-datasets.json')
     return next(item for item in manifest['datasets'] if item['id'] == dataset_id)
 
 
@@ -103,15 +103,18 @@ def dataset_files(dataset_id, subset=None):
     for folder in folders:
         files += sorted(
             path for path in folder.iterdir()
-            if path.is_file() and path.suffix.lower() in entry['sourceExtensions']
-            and not any(fnmatch.fnmatch(path.name, pattern) for pattern in entry.get('excludePatterns', []))
+            if path.is_file() and not path.is_symlink() and path.suffix.lower() in entry['sourceExtensions']
+            and not any(re.fullmatch(re.escape(pattern).replace(r'\*', '.*'), path.name, flags=re.IGNORECASE) for pattern in entry.get('excludePatterns', []))
         )
+    files.sort(key=str)
     if len(files) != entry['expectedSourceCount']:
         raise SystemExit(f'{dataset_id}: {len(files)} sources, manifest expects {entry["expectedSourceCount"]}')
     if subset:
         sub = next(item for item in entry['regressionSubsets'] if item['id'] == subset)
         start = sub.get('start', 0)
         files = files[start:start + sub.get('count', sub.get('first'))]
+    if entry.get('inputOrder') == 'reverse':
+        files.reverse()
     return entry, files
 
 

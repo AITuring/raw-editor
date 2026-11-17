@@ -101,20 +101,21 @@
 
 ### 第 0 批：并行基础设施（N8.5）
 
-先完成本批，之后的任务才按 §6 的槽和目录规则运行。任务1的资源槽与冻结工具已验收，使用方式见 [stack-lab说明](../../../scripts/stack-lab/README.md)。任务2的 `run.py`、`lanting_audit.py` 仍是未提交、未验收草稿；矩阵和真实线程演练待任务2–4。
+先完成本批，之后的任务才按 §6 的槽和目录规则运行。任务1的资源槽与冻结工具已验收，使用方式见 [stack-lab说明](../../../scripts/stack-lab/README.md)。任务2的单次运行、矩阵与内存门已验收；模板和完整两槽演练仍待任务3–4。
 
 - [x] 1. 资源槽与冻结二进制工具（2026-11-17）
   - 目标：`slot.py build|run|exclusive|status` 与 `freeze.py --label <label> [--worktree <path>] [--adopt <exe>]`，行为按 §6.1、§6.2。
   - 修改：`scripts/stack-lab/slot.py`、`freeze.py`、`common.py`。
   - 资源：`build` 槽（冻结一次）。依赖：无。冲突：无。
   - 完成标准：两个同类请求确实排队，`status` 显示占用者；上限与 `nice` 生效；用 `output/acceptance/base-p1/candidate-release-binary` 冻结出 `binaries/base-2026-11-12`，SHA 与 base-p1 一致；label 重复时拒绝。
-  - 验收：17项隔离进程测试通过；真实base冻结SHA与原记录一致、原始提交及523项清单保留；真实Cargo编译/冻结、执行入口及3项定向冒烟通过。见 [任务卡](../../../docs/artwork-lanes/1-resource-freeze.md)及[机器摘要](../../../docs/benchmarks/task-1-resource-freeze.json)。任务2–4仍未完成，不宣称已验证真实素材线程确定性。
+  - 验收：17项隔离进程测试通过；真实base冻结SHA与原记录一致、原始提交及523项清单保留；真实Cargo编译/冻结、执行入口及3项定向冒烟通过。见 [任务卡](../../../docs/artwork-lanes/1-resource-freeze.md)及[机器摘要](../../../docs/benchmarks/task-1-resource-freeze.json)。此条仅验收任务1；后续状态见各条，不宣称已完成完整线程确定性演练。
 
-- [ ] 2. 单次运行与回归矩阵脚本
+- [x] 2. 单次运行与回归矩阵脚本（2026-11-17）
   - 目标：`run.py`（一次素材运行，自动排队 `run` 槽，写 `execution.json`/`analysis.json`：QG、未通过项、来源计数、峰值 RSS、内存门、wall、`contended`、TIFF SHA；兰亭取景运行附纸面审计和严格保护）和 `matrix.py --tier quick|medium|extended|full`。
   - 修改：`scripts/stack-lab/run.py`、`matrix.py`、`lanting_audit.py`，新数据文件 `tests/acceptance/regression-matrix.json`（每套素材一行预期：TIFF SHA、QG、闭环、已知失败的失败特征）。
   - 资源：`run` 槽。依赖：1。冲突：无。
   - 完成标准：对 `base-2026-11-12` 跑一遍中等层，全部与 [base-p1 摘要](../../../docs/benchmarks/base-p1-codex-port.json) 一致；故意给错一条预期时矩阵报失败并自动用 `exclusive` 重跑。
+  - 验收：32项工具测试、快速层7项、中等层5/5通过；5份TIFF均与冻结基线相同，兰亭严格保护通过。独立副本故意写错SHA，两轮真实运行（run→exclusive）均保留该差异，矩阵按预期返回1。7次运行最大RSS10.371GiB≤24GiB，最终产物复核通过。见[任务卡](../../../docs/artwork-lanes/2-run-matrix.md)及[机器摘要](../../../docs/benchmarks/task-2-run-matrix.json)。任务3–4仍未完成。
 
 - [ ] 3. lane 卡与复看队列模板
   - 目标：`docs/artwork-lanes/README.md`（lane 卡模板、诊断卡模板、新素材接入步骤）和 `docs/artwork-lanes/review-queue.md`（待看 ≤3 套、按批记录）。

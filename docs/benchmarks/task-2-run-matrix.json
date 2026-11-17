@@ -1,0 +1,568 @@
+{
+  "id": "task-2-run-matrix",
+  "date": "2026-11-17",
+  "status": "task_2_accepted",
+  "starting_commit": "29371c0c",
+  "binary_label": "base-2026-11-12",
+  "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+  "production_image_code_changed": false,
+  "existing_pixel_baselines_changed": false,
+  "tool_tests": {
+    "passed": 32,
+    "failed": 0,
+    "seconds": 26.132,
+    "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/tool-tests-final.log",
+    "log_sha256": "a7d0ed41d00ff6cdcbd2eca9931189309b201f3f819c56fb00a4d77a15b3dd9a"
+  },
+  "quick": {
+    "status": "pass",
+    "commands": [
+      {
+        "command": [
+          "cargo",
+          "fmt",
+          "--manifest-path",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/src-tauri/Cargo.toml",
+          "--check"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 2.1350553035736084
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--manifest-path",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/src-tauri/Cargo.toml",
+          "--offline"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 20.412388801574707
+      },
+      {
+        "command": [
+          "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/base-2026-11-12/native-process-wrapper.py",
+          "--test-threads=3"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 193.0359947681427
+      },
+      {
+        "command": [
+          "node",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/tests/focus-stack-quality-contract.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.390704870223999
+      },
+      {
+        "command": [
+          "node",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/tests/focus-stack-datasets-contract.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.2668728828430176
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/tests/focus-stack-regression-verdict.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 2.346069812774658
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "/Users/dp/Desktop/raw-editor/.worktrees/task-2/tests/focus-stack-lanting-guard.test.mjs"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 0.10899686813354492
+      }
+    ],
+    "library_tests": {
+      "passed": 1093,
+      "failed": 0,
+      "ignored": 44
+    },
+    "cargo_check_existing_warnings": 190,
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-quick/matrix.json"
+  },
+  "medium": {
+    "status": "pass",
+    "cases": [
+      {
+        "case": "nine-cold",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/nine-cold-attempt-1",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 9552347136,
+        "memory_gate_pass": true,
+        "wall_seconds": 513.6256148815155,
+        "contended": true,
+        "contended_with": [
+          "task-2: quick 1/7",
+          "task-2: quick 2/7",
+          "task-2: quick 3/7",
+          "task-2: quick 4/7",
+          "task-2: quick 5/7",
+          "task-2: quick 6/7",
+          "task-2: quick 7/7"
+        ],
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "paper_audit": null,
+        "guard": null,
+        "final_checks": {
+          "inputs_unchanged": true,
+          "reference_unchanged": true,
+          "binary_unchanged": true,
+          "memory_gate_pass": true,
+          "runner_exit_zero": true,
+          "native_child_exit_zero": true,
+          "runner_summary_present": true,
+          "runner_failures_empty": true,
+          "quality_gate_pass": true,
+          "output_contract": true,
+          "report_source_digests": true
+        }
+      },
+      {
+        "case": "nine-hot",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/nine-hot-attempt-1",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 10205511680,
+        "memory_gate_pass": true,
+        "wall_seconds": 437.83104491233826,
+        "contended": false,
+        "contended_with": [],
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "paper_audit": null,
+        "guard": null,
+        "final_checks": {
+          "inputs_unchanged": true,
+          "reference_unchanged": true,
+          "binary_unchanged": true,
+          "memory_gate_pass": true,
+          "runner_exit_zero": true,
+          "native_child_exit_zero": true,
+          "runner_summary_present": true,
+          "runner_failures_empty": true,
+          "quality_gate_pass": true,
+          "output_contract": true,
+          "report_source_digests": true
+        }
+      },
+      {
+        "case": "langyuan-10",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/langyuan-10-attempt-1",
+        "output_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11400,
+            "hits": 135
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 49756792,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 10261479424,
+        "memory_gate_pass": true,
+        "wall_seconds": 505.734352350235,
+        "contended": false,
+        "contended_with": [],
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "paper_audit": null,
+        "guard": null,
+        "final_checks": {
+          "inputs_unchanged": true,
+          "reference_unchanged": true,
+          "binary_unchanged": true,
+          "memory_gate_pass": true,
+          "runner_exit_zero": true,
+          "native_child_exit_zero": true,
+          "runner_summary_present": true,
+          "runner_failures_empty": true,
+          "quality_gate_pass": true,
+          "output_contract": true,
+          "report_source_digests": true
+        }
+      },
+      {
+        "case": "wenyuan-10",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/wenyuan-10-attempt-1",
+        "output_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11340,
+            "hits": 107
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 50100684,
+            "hits": 15
+          }
+        },
+        "peak_rss_bytes": 11135664128,
+        "memory_gate_pass": true,
+        "wall_seconds": 489.1900999546051,
+        "contended": false,
+        "contended_with": [],
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "paper_audit": null,
+        "guard": null,
+        "final_checks": {
+          "inputs_unchanged": true,
+          "reference_unchanged": true,
+          "binary_unchanged": true,
+          "memory_gate_pass": true,
+          "runner_exit_zero": true,
+          "native_child_exit_zero": true,
+          "runner_summary_present": true,
+          "runner_failures_empty": true,
+          "quality_gate_pass": true,
+          "output_contract": true,
+          "report_source_digests": true
+        }
+      },
+      {
+        "case": "lanting-framed",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/lanting-framed-attempt-1/lanting",
+        "output_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": 0,
+          "detail_repairs": 97
+        },
+        "closure": "not_run",
+        "performance": {
+          "raw_decode_count": 0,
+          "native_fusion_count": 0,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 12408,
+            "hits": 17
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 0,
+            "hits": 0
+          }
+        },
+        "peak_rss_bytes": 9878290432,
+        "memory_gate_pass": true,
+        "wall_seconds": 564.0892989635468,
+        "contended": false,
+        "contended_with": [],
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "paper_audit": {
+          "paper_points": 1008,
+          "adjacent_comparisons": 1937,
+          "median_residual_rgb": [
+            6.0,
+            1.0,
+            1.0
+          ],
+          "median_adjacent_step": 1.0,
+          "p95_adjacent_step": 4.0,
+          "maximum_adjacent_step": 7.5,
+          "source_boundary": {
+            "count": 506,
+            "median": 1.0,
+            "p95": 4.0,
+            "max": 7.0,
+            "above_6": 2
+          },
+          "source_interior": {
+            "count": 1431,
+            "median": 1.0,
+            "p95": 4.0,
+            "max": 7.5,
+            "above_6": 2
+          },
+          "zone_gray_mae": {
+            "wall": 6.59,
+            "rail": 5.53,
+            "artwork": 4.05,
+            "bottom_frame": 5.41
+          }
+        },
+        "guard": {
+          "strict": {
+            "pass": true,
+            "failures": [],
+            "status": "quality_and_regression_pass",
+            "qualityPass": true,
+            "nativeEvidencePass": true,
+            "regressionOnly": false,
+            "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+            "reportSha": "0e929bbb8021d88fbec305d3fb8e6f90fd417f531710d3af6f3d88d262f57db4",
+            "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac"
+          },
+          "regression_only": {
+            "pass": true,
+            "failures": [],
+            "status": "quality_and_regression_pass",
+            "qualityPass": true,
+            "nativeEvidencePass": true,
+            "regressionOnly": true,
+            "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+            "reportSha": "0e929bbb8021d88fbec305d3fb8e6f90fd417f531710d3af6f3d88d262f57db4",
+            "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac"
+          }
+        },
+        "final_checks": {
+          "inputs_unchanged": true,
+          "reference_unchanged": true,
+          "binary_unchanged": true,
+          "memory_gate_pass": true,
+          "runner_exit_zero": true,
+          "native_child_exit_zero": true,
+          "runner_summary_present": true,
+          "runner_failures_empty": true,
+          "quality_gate_pass": true,
+          "output_contract": true,
+          "report_source_digests": true,
+          "lanting_guard": true
+        }
+      }
+    ],
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-r1-medium/matrix.json"
+  },
+  "intentional_wrong_expectation": {
+    "validation_passed": true,
+    "expected_matrix_status": "fail",
+    "actual_matrix_status": "fail",
+    "expected_command_exit_code": 1,
+    "actual_command_exit_code": 1,
+    "injected_field": "output_sha256",
+    "injected_value": "0000000000000000000000000000000000000000000000000000000000000000",
+    "attempts": [
+      {
+        "attempt": 1,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-negative-r1-medium/nine-cold-attempt-1",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "memory_gate_pass": true,
+        "peak_rss_bytes": 10658414592,
+        "slot": "run",
+        "caps": {
+          "RAYON_NUM_THREADS": "5"
+        },
+        "mismatches": [
+          {
+            "field": "output_sha256",
+            "expected": "0000000000000000000000000000000000000000000000000000000000000000",
+            "actual": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+          }
+        ]
+      },
+      {
+        "attempt": 2,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-negative-r1-medium/nine-cold-attempt-2",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "memory_gate_pass": true,
+        "peak_rss_bytes": 9810411520,
+        "slot": "exclusive",
+        "caps": {
+          "RAYON_NUM_THREADS": "8",
+          "CARGO_BUILD_JOBS": "6"
+        },
+        "mismatches": [
+          {
+            "field": "output_sha256",
+            "expected": "0000000000000000000000000000000000000000000000000000000000000000",
+            "actual": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+          }
+        ]
+      }
+    ],
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/matrix-negative-r1-medium/matrix.json"
+  },
+  "memory_threshold_bytes": 25769803776,
+  "highest_verified_peak_rss_bytes": 11135664128,
+  "final_artifact_verification": {
+    "status": "verified",
+    "runs": 7,
+    "selected_expectations_match_final_matrix": true,
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-2/final-verification.json",
+    "report_sha256": "0fbdbc61d4826832ff1af8905be1992aafe59747fd3024f95cf7de3c16af00a9"
+  },
+  "source_sha256": {
+    "scripts/stack-lab/common.py": "180be18c9ee9b9af419688c9fad7d4460792b3f661f18ab31a44654d45d7d40a",
+    "scripts/stack-lab/freeze.py": "b00915169ccef38a5b9009fd185cf3696180ff093a386ddbc85da034937f0b1f",
+    "scripts/stack-lab/lanting_audit.py": "f20fbe671f2a2af9cc85f8f63985e8b822e484454218214c0f3507eca5b64edf",
+    "scripts/stack-lab/matrix.py": "b90a92bc9f2a2e99d5f0ebaef703ee0192a21938d09a5edf57fc3c4174316b4a",
+    "scripts/stack-lab/monitor.py": "27a251f057db61299fe6468e7779b612583136a95a08702c12a5d3fe555bd53a",
+    "scripts/stack-lab/run.py": "7aeabf5a124ea422b9b3ff9cfa226eae8e1e559f6a17ea40d0afcaffb880e1db",
+    "scripts/stack-lab/slot.py": "cd2ef31e8f4cd60e6ee8a9f16128312a808da24f0a59301266b81faddd121391"
+  },
+  "protected_files_sha256": {
+    ".vscode/settings.json": "2ac108a9cae907889bfd3e4d0f60a5ff35c2196b2b2ef8a18308e69ed4447f1c",
+    "tests/acceptance/focus-stack-regression-baselines.json": "63bfea716b7c04691eeac19d789dfbd28aa6624f7eec9820388fe5dd2604ab17",
+    "tests/acceptance/lanting-paper-baseline.json": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+    "tests/acceptance/focus-stack-datasets.json": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173"
+  },
+  "limits": [
+    "Only tooling, regression expectations, tests and documentation changed; no production image algorithm or quality threshold changes.",
+    "Real checks covered quick, all five medium cases, and two real attempts for the intentional wrong TIFF expectation.",
+    "Extended/full tier selection was dry-run validated; Qixu/Fengying and unaccepted large full datasets were not rerun.",
+    "Cold/hot are separate processes and independent alignment caches; OS page cache was not cleared.",
+    "Contended intervals are recorded and no performance regression or speedup conclusion is drawn.",
+    "Task 3 and the complete Task 4 build/run/queue rehearsal remain pending."
+  ]
+}
