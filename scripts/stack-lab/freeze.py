@@ -11,6 +11,7 @@ Labels are immutable; failed attempts clean up their unpublished directory.
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -94,6 +95,24 @@ def adopt_provenance(root, artifact):
                 provenance_sha256=sha(evidence_path)), digest
 
 
+def resource_contract(binary):
+    """Probe the actual executable; historical binaries cannot claim the new cap."""
+    env = dict(os.environ, RAYON_NUM_THREADS='1')
+    result = subprocess.run([str(binary),
+        'panorama_stitching::alignment_tests::source_preparation::stack_resource_budget_contract',
+        '--exact', '--nocapture', '--test-threads=1'], env=env, capture_output=True, text=True, timeout=30)
+    marker = re.search(r'STACK_RESOURCE_CONTRACT (\{[^\n]+\})', result.stdout, re.MULTILINE)
+    if marker:
+        contract = json.loads(marker.group(1))
+        if (result.returncode != 0 or '1 passed' not in result.stdout or contract.get('version') != 1
+                or contract.get('rayon_threads') != 1 or contract.get('preparation_threads') != 1):
+            raise ValueError('native resource-budget probe failed; refusing to freeze')
+        return dict(contract, status='verified', probe_stdout=result.stdout)
+    if result.returncode != 0:
+        raise ValueError('resource-budget probe exited unsuccessfully')
+    return {'version': None, 'status': 'unverified_legacy', 'reason': 'no native resource-budget probe'}
+
+
 def compile_artifact(root, destination):
     commit = git(root, 'rev-parse', 'HEAD').decode().strip()
     before = snapshot(root)
@@ -154,7 +173,8 @@ def freeze(args, root):
         build = dict(provenance, label=args.label, sha256=expected, worktree=str(root),
                      artifact=str(artifact), frozen_at=datetime.now(timezone.utc).isoformat(),
                      frozen_by_commit=git(root, 'rev-parse', 'HEAD').decode().strip(),
-                     wrapper_sha256=sha(wrapper), slot=os.environ['STACK_LAB_SLOT'])
+                     wrapper_sha256=sha(wrapper), slot=os.environ['STACK_LAB_SLOT'],
+                     resource_contract=resource_contract(binary))
         write(staging / 'build.json', build)
         (staging / 'build.json').chmod(0o444)
         # All freeze clients serialize through the same build lock, including adoption.

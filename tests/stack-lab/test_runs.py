@@ -70,6 +70,9 @@ class RunsTest(fixtures.ToolsTest):
         (self.root / 'tests/acceptance/focus-stack-datasets.json').write_text(json.dumps(self.manifest))
         (self.root / 'tests/focus-stack-regression.mjs').write_text(FAKE_RUNNER)
         self.env['RAW_EDITOR_FOCUS_STACK_DATA_ROOT'] = str(self.data)
+        self.artifact.write_text('#!' + PYTHON + '\n' + "import os,json,sys\nif '--exact' in sys.argv:\n n=int(os.environ['RAYON_NUM_THREADS']);print('test probe ... STACK_RESOURCE_CONTRACT '+json.dumps(dict(version=1,rayon_threads=n,preparation_threads=n)));print('test result: ok. 1 passed; 0 failed')\nelse: print('frozen fixture')\n")
+        self.artifact.chmod(0o755)
+        self.evidence['sha256']=self.digest(self.artifact);self.write_evidence()
         self.assertEqual(self.adopt('fixture')[0], 0)
         self.expected = {'status':'quality_accepted','closure':'converged','exit_code':0,'quality_gate.verdict':'pass',
             'quality_gate.roi_count':8,'output_sha256':hashlib.sha256(b'tiff fixture').hexdigest(),
@@ -90,10 +93,25 @@ class RunsTest(fixtures.ToolsTest):
     def matrix(self, label='m1'):
         return self.run_tool('matrix.py','--tier','medium','--binary','fixture','--lane','task-2','--label',label)
 
+    def test_unverified_legacy_binary_is_forced_exclusive(self):
+        p=self.root/'output/acceptance/binaries/fixture/build.json'
+        d=json.loads(p.read_text());d.pop('resource_contract');p.chmod(0o644);p.write_text(json.dumps(d))
+        (code,_,err),dest=self.run_one('legacy')
+        self.assertEqual(code,0,err)
+        self.assertEqual(json.loads((dest/'execution.json').read_text())['slot']['slot'],'exclusive')
+
+    def test_freeze_rejects_a_failed_native_budget_probe(self):
+        self.artifact.write_text('#!/bin/sh\necho "STACK_RESOURCE_CONTRACT {\"version\":1,\"rayon_threads\":1,\"preparation_threads\":6}"\nexit 101\n')
+        self.artifact.chmod(0o755);self.evidence['sha256']=self.digest(self.artifact);self.write_evidence()
+        code,_,_=self.adopt('bad-contract')
+        self.assertNotEqual(code,0)
+        self.assertFalse((self.root/'output/acceptance/binaries/bad-contract').exists())
+
     def test_single_run_integrity_memory_summary_and_exit(self):
         (code, _, err), dest = self.run_one()
         self.assertEqual(code, 0, err)
         execution=json.loads((dest/'execution.json').read_text());actual=json.loads((dest/'analysis.json').read_text())
+        self.assertEqual(execution['resource_contract']['status'],'verified')
         self.assertEqual(actual['status'],'quality_accepted')
         self.assertTrue(actual['memory_gate_pass'])
         self.assertGreater(actual['peak_rss_bytes'],0)

@@ -129,13 +129,21 @@ pub(super) fn bounded_preparation_worker_count(
         .min(MAX_SCALABLE_PREPARATION_WORKERS)
 }
 
-pub(super) fn scalable_preparation_worker_count(image_count: usize) -> usize {
-    let available_threads = std::thread::available_parallelism()
+pub(super) fn preparation_thread_budget() -> usize {
+    std::thread::available_parallelism()
         .map(|threads| threads.get())
-        .unwrap_or(1);
+        .unwrap_or(1)
+        .min(rayon::current_num_threads().max(1))
+}
+
+pub(super) fn scalable_preparation_worker_count(image_count: usize) -> usize {
     let mut system = sysinfo::System::new();
     system.refresh_memory();
-    bounded_preparation_worker_count(image_count, available_threads, system.available_memory())
+    bounded_preparation_worker_count(
+        image_count,
+        preparation_thread_budget(),
+        system.available_memory(),
+    )
 }
 
 pub(super) fn memory_safe_panorama_render_scale(width: u32, height: u32) -> f64 {

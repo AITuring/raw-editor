@@ -248,7 +248,7 @@ def run(args):
         command += ['--preview-only']
     slot = read(Path(os.environ['STACK_LAB_HOLDER']))
     execution = dict(schema=1, dataset=args.dataset, subset=args.subset, scale=args.scale, framed=args.framed,
-                     preview_only=args.preview_only, lane=args.lane, label=args.label, binary=args.binary,
+                     resource_contract=build.get('resource_contract'), preview_only=args.preview_only, lane=args.lane, label=args.label, binary=args.binary,
                      binary_sha256=build['sha256'], commit=build['commit'], inputs=inputs, inputs_sha256=sha_of(inputs),
                      reference=reference, command=command, runner_root=str(root), runner_sha256=sha(root / 'tests/focus-stack-regression.mjs'),
                      manifest_sha256=sha(root / 'tests/acceptance/focus-stack-datasets.json'), slot=slot,
@@ -285,15 +285,18 @@ def main(argv=None):
     try:
         args = parse(argv)
         destination(args)
-        verify_binary(args.binary)
+        _, build = verify_binary(args.binary)
+        verified_budget = (build.get('resource_contract') or {}).get('version') == 1 and (build.get('resource_contract') or {}).get('status') == 'verified'
         current = os.environ.get('STACK_LAB_HOLDER')
         if current:
             slot = read(Path(current))
             if slot['pid'] != os.getppid() or slot.get('slot') not in ('run', 'exclusive'):
                 raise ValueError('run must be the direct child of its run/exclusive slot supervisor')
+            if not verified_budget and slot['slot'] != 'exclusive':
+                raise ValueError('legacy/unverified native thread budget requires exclusive slot')
             return run(args)
         peak = estimate(args)
-        mode = 'exclusive' if args.exclusive or historical_estimate(args) is None or peak is None or peak > 20 else 'run'
+        mode = 'exclusive' if not verified_budget or args.exclusive or historical_estimate(args) is None or peak is None or peak > 20 else 'run'
         command = [sys.executable, str(HERE / 'slot.py'), mode, '--lane', args.lane, '--what',
                    f'{args.subset or args.dataset} scale={args.scale:g} {args.label}']
         if peak is not None:

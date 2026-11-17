@@ -80,6 +80,38 @@ fn scalable_preparation_workers_are_bounded_by_images_cpu_and_memory() {
 }
 
 #[test]
+fn preparation_thread_budget_respects_the_active_rayon_pool() {
+    let hardware = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    for threads in [1, 2, 5, 8] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        pool.install(|| {
+            assert_eq!(
+                super::super::run_control::preparation_thread_budget(),
+                threads.min(hardware)
+            );
+        });
+    }
+}
+
+#[test]
+fn stack_resource_budget_contract() {
+    let global = rayon::current_num_threads();
+    let preparation = super::super::run_control::scalable_preparation_worker_count(9);
+    assert!(preparation > 0 && preparation <= global);
+    println!(
+        "STACK_RESOURCE_CONTRACT {}",
+        serde_json::json!({
+            "version": 1, "rayon_threads": global, "preparation_threads": preparation
+        })
+    );
+}
+
+#[test]
 fn oversized_panorama_canvas_is_scaled_to_the_memory_budget() {
     assert_eq!(memory_safe_panorama_render_scale(12_000, 8_000), 1.0);
     let scale = memory_safe_panorama_render_scale(248_296, 9_843);
