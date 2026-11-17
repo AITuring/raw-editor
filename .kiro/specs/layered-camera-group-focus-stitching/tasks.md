@@ -35,11 +35,11 @@
 
 ## 2. 当前缺陷
 
-基于 `base-2026-11-12` 的实测（[base-p1 摘要](../../../docs/benchmarks/base-p1-codex-port.json)、[I1 摘要](../../../docs/benchmarks/i1-integration-baseline.json)）。
+起点基于 `base-2026-11-12` 的实测，后续任务5/6结果在对应行更新（[base-p1 摘要](../../../docs/benchmarks/base-p1-codex-port.json)、[I1 摘要](../../../docs/benchmarks/i1-integration-baseline.json)）。
 
 | # | 缺陷 | 证据 | 影响 | 对应任务 |
 | --- | --- | --- | --- | --- |
-| 1 | 兰亭纸面跨来源接缝变差 | 跨 owner 阶跃 P95=4（v63 为 3），最大 7；保护合同按用户决定暂放到 4 | 局部可见色阶 | 6、19 |
+| 1 | 兰亭接缝机器指标已恢复，视觉待确认 | 任务6 r2：跨owner P95 4→3、max7→6、>6处2→0；QG/严格保护和中等层通过，复看包已提交 | 已达D3，用户整图及关键裁片确认仍待完成 | 6（完成）、19 |
 | 2 | 祁序仍未通过验收 | 原联合0.1的owner覆盖0.889、边界失败；本轮祁序1/2分别0.25均QG fail，2另有噪声比失败，排除与细节donor均已登记 | 原生全量未验收 | 11 |
 | 3 | 枫鹰仍未通过验收 | 原0.1尺度比/边界失败、owner证据不足、112未解析；本轮0.25尺度比/owner失败、边界pass、未解析0，6张渲染JPEG按预期排除。尺度/线程不同，不推断原生改善 | 原生全量未验收 | 12 |
 | 4 | 全量原生仍未验收 | 已完成base下7次scale=0.25全量诊断；几何/质量阻断和资源数据见[任务5摘要](../../../docs/benchmarks/task-5-full-baseline.json)，不等于scale=1通过 | 已能按实际阻断归组，仍不能据此交付原生成片 | 5.1–5.6、11–16 |
@@ -84,7 +84,7 @@
 
 | 数据集              | 输入         | 当前等级（base-2026-11-12） | 已知情况                                                                                         |
 | ------------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------------------ |
-| lanting 兰亭        | 45 JPEG      | D3                          | QG pass/8ROI；用户目视 I1 略好于 v63（未作 D4 确认）；纸面跨 owner 阶跃 P95=4，目标 ≤3；有参考图 |
+| lanting 兰亭        | 45 JPEG      | D3（任务6 r2） | task6原生两次TIFF一致；QG pass/8ROI、v4严格保护通过；跨owner P95=3、>6=0；R20261118-1整图+6对原生裁片待用户确认，未记D4/D5 |
 | langyuan 阆苑女仙   | 84 NEF       | 前 10 张 D3                 | 10 张两次一致；输出 P95 距 3px 门槛约 0.012px；84 张未跑                                         |
 | wenyuan 文苑图      | 126 NEF      | 前 10 张 D3                 | 126 张未跑，最大的一套                                                                           |
 | qixu 祁序（1+2）    | 75 + 98 NEF  | 联合 0.1 能出图，QG fail    | owner 清晰度覆盖 0.889、边界描线失败；两次拍摄相隔两天；无参考图                                 |
@@ -146,10 +146,11 @@
   - [x] 5.5 阆苑84张（`exclusive`；[诊断卡](../../../docs/artwork-lanes/S2-langyuan.md)）
   - [x] 5.6 文苑126张（`exclusive`；[诊断卡](../../../docs/artwork-lanes/S2-wenyuan.md)）
 
-- [ ] 6. 兰亭纸面接缝（N6.5，流式 mosaic 组）
+- [x] 6. 兰亭纸面接缝（N6.5，流式 mosaic 组，2026-11-18）
   - 目标：纸面跨 owner 阶跃 P95 从 4 降回 ≤3，边界 >6 处数不增加，QG 仍 pass，严格保护通过；视觉变化进入复看队列。
   - 修改：`mosaic/streaming_mosaic.rs`、`streaming_illumination.rs`、`quality_gate_runner/*`。
   - 资源：`build` + `run`。依赖：1、2。冲突：任务 11、12（同区域）。
+  - 验收：同位重叠图直接拟合渲染增益基，独立holdout与旧场回退、8%限幅；纸面P95 4→3、max7→6、>6处2→0，QG pass/8ROI、unresolved0，输入/owner/coverage/canvas保持。快速7组、Rust1098/0/44、最新Node19项、中等5/5均过；r2同冻结二进制两次原生TIFF相同，中等最大RSS10.726GiB。只更新本素材v4加严合同及矩阵行，其他素材/旧锐度floor/共享QG阈值不变。已本地合入；[任务卡](../../../docs/artwork-lanes/6-paper-seams.md)、[机器摘要](../../../docs/benchmarks/lanting-task-6-paper-seams.json)、[复看队列](../../../docs/artwork-lanes/review-queue.md)R20261118-1待看1/3，仍D3，不自授D4/D5。
 
 - [ ] 7. 置换检验离线实验（PF.8）
   - 目标：用已保存的匹配点和代理图，统计随机不相邻机位对能达到的相似度分布，与现有固定门槛对照，看能否识别重复题字/人物造成的假边；阆苑 0–2 为第一条测试边。只写 test-only 代码和报告，不改生产路径。
@@ -263,7 +264,7 @@ L0 合入前必跑；任务提交合入请求前至少跑快速层和受影响�
 
 | 层级 | 内容                                                                                                                                                      | 估计耗时   |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 快速 | `cargo fmt --check`、`cargo check`、Rust 库测试（当前 1095 项）、`focus-stack-quality:check`、`datasets:check`、`regression:check`、`lanting:guard:check` | 十几分钟   |
+| 快速 | `cargo fmt --check`、`cargo check`、Rust 库测试（当前 1098 通过/44 忽略）、`focus-stack-quality:check`、`datasets:check`、`regression:check`、`lanting:guard:check` | 十几分钟   |
 | 中等 | 9 张冷/热（TIFF=v28）；阆苑 10、文苑 10（TIFF=当前冻结摘要）；兰亭 45 取景 + 严格保护                                                                     | 约 45 分钟 |
 | 扩展 | 祁序联合、枫鹰 scale 0.1（已知失败，核对失败特征不变或变好）                                                                                              | 约 80 分钟 |
 | 全量 | 已达 D3 及以上的全量素材                                                                                                                                  | 随素材增加 |

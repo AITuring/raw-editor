@@ -10,7 +10,7 @@
 
 | 批次 | 素材与输入范围 | 成片版本/TIFF SHA | 入队前等级 | 状态 | 整图路径 | 关键原生裁片及坐标 | 卡片/证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| R20261118-1 | 兰亭45张完整/scale=1/显式取景 | task-6-paper-r2 / `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02` | D3（本素材v4严格保护已过；集成中等层待跑） | 待看，不计D4 | `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/after-whole.jpg` | C1–C6各512×512、RGBA16；表及逐像素证明见下 | [任务6](6-paper-seams.md) / [复看包](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md) |
+| R20261118-1 | 兰亭45张完整/scale=1/显式取景 | task-6-paper-r2 / `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02` | D3（v4严格保护及中等层5/5已过） | 待看，不计D4 | `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/after-whole.jpg` | C1–C6各512×512、RGBA16；表及逐像素证明见下 | [任务6](6-paper-seams.md) / [复看包](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md) |
 
 ## 批次 R20261118-1：兰亭纸面接缝修复
 
@@ -21,7 +21,7 @@
 - 整图与全部原生裁片：[打开复看包](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md)。候选整图 `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/after-whole.jpg` SHA `27b5e096c4d09e124aefcf7fb41c1d55600b8b540e07871e2c907da8dce750c4`；仅缩略预览，不能代替下面的1:1裁片。
 - 对照：I1/任务4字节一致TIFF SHA `22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac`；原始只读参考 `/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg` SHA `9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2`。
 - 需看：整图纸面和色调；C1–C3来源边界与印章；C4细笔画；C5印章/织纹；C6真实硬件反光保留。机器纸面P95 4→3，max7→6，>6处2→0；纸面RGB残差仍6/1/1。画面MAE artwork4.05→3.99，bottom5.41→5.23，wall6.59→6.66，rail5.53→5.57，非所有区都下降。
-- 原始r2/v3拒绝只因预期TIFF摘要变化，记录未改写；本素材v4严格保护另存 `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/r2-v4-strict.json`，通过。v4未改其他素材或共享质量阈值，旧sharpness floor未重设。集成中等层仍待跑。
+- 原始r2/v3拒绝只因预期TIFF摘要变化，记录未改写；本素材v4严格保护另存 `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/r2-v4-strict.json`，通过。v4未改其他素材或共享质量阈值，旧sharpness floor未重设。集成中等层5/5通过；兰亭同冻结二进制两次TIFF及纸面审计一致。
 
 | 裁片 / output x,y,w,h | 基线原生TIFF（来源SHA见上） | 候选原生TIFF（来源SHA见上） |
 | --- | --- | --- |
@@ -35,7 +35,7 @@
 - 所有PNG路径、SHA、逐字节RGBA证明和ICC摘要：[manifest.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/manifest.json)。PNG与裁片均512×512、16位、无重采样；1-based裁切坐标与0-based窗口已由独立解码校验。
 - 用户记录：尚无。整图/关键裁片/颜色/细节/接缝均待用户确认；不自授D4；未回复不视为通过。
 - Agent初看：整图与C1–C6 before/after均已打开；这些位置未见明显新光晕、笔画断裂或真实反光丢失；这不是用户确认。
-- 结论适用范围：仅上述输入与r2 TIFF，不覆盖其他素材、任意未取景模式或桌面打包；后续完成中等层并集成，视觉结论另记。
+- 结论适用范围：仅上述输入与r2 TIFF，不覆盖其他素材、任意未取景模式或桌面打包；中等层5/5已通过，由L0本地集成；视觉结论另记。
 
 ## 入队与关闭规则
 

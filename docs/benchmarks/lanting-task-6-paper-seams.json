@@ -1,6 +1,6 @@
 {
   "task": 6,
-  "status": "machine_target_and_quick_pass_medium_pending_visual_pending",
+  "status": "scoped_machine_acceptance_pass_visual_D4_pending",
   "target": {
     "maximum_boundary_p95": 3,
     "maximum_boundary_above_6": 2,
@@ -308,7 +308,7 @@
       "peak_rss_bytes": 11103862784,
       "memory_gate_pass": true,
       "target_met": true,
-      "decision": "D3 for this native scoped result under v4; medium integration matrix and user D4 remain pending"
+      "decision": "Scoped D3 machine acceptance confirmed by v4 strict guard and independent medium repeat; user D4 remains pending."
     }
   ],
   "quick": {
@@ -320,7 +320,7 @@
     "targeted_tests_passed": 6,
     "post_binding_node_checks": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/post-binding-node.log"
   },
-  "canonical_contract_changed": "v4 prepared on task branch only, expected own-material pixel change; P95 tightened to3, above6 ceiling0, old v3 retained in priorBaseline/git",
+  "canonical_contract_changed": "Own Lanting v4 only: new expected TIFF, P95 ceiling3, above6 ceiling0 and reference preview binding. All other material expectations and old sharpness-floor baselines unchanged.",
   "visual_review": {
     "status": "pending_user_review",
     "D4": false,
@@ -427,5 +427,356 @@
     "removed_bytes": 2737925158,
     "old_analysis_unchanged": true,
     "retained_analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1-exclusive/lanting/analysis.json"
+  },
+  "medium": {
+    "status": "pass",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/matrix.json",
+    "matrix_sha256": "3e824c1e715b81151bd86db3bc1b2c34b08be3c7b4b1275a827b981c6873fb49",
+    "expected_sha256": "f4c31adb350f8fab1b0692516581c2abfad4fad661c773ddf2e7ee1f2c67f897",
+    "cases": [
+      {
+        "case": "nine-cold",
+        "status": "pass",
+        "attempts": 1,
+        "mismatches": 0,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/nine-cold-attempt-1",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "peak_rss_bytes": 9701015552,
+        "memory_gate_pass": true,
+        "contended": false,
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        }
+      },
+      {
+        "case": "nine-hot",
+        "status": "pass",
+        "attempts": 1,
+        "mismatches": 0,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/nine-hot-attempt-1",
+        "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "peak_rss_bytes": 10001268736,
+        "memory_gate_pass": true,
+        "contended": false,
+        "performance": {
+          "raw_decode_count": 18,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 10152,
+            "hits": 113
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 46547620,
+            "hits": 15
+          }
+        }
+      },
+      {
+        "case": "langyuan-10",
+        "status": "pass",
+        "attempts": 1,
+        "mismatches": 0,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/langyuan-10-attempt-1",
+        "output_sha256": "0011ce0acca721135e76179a99a4521fa42591fa23a7246e4e2a00a7adc3f934",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "peak_rss_bytes": 11292901376,
+        "memory_gate_pass": true,
+        "contended": false,
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11400,
+            "hits": 135
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 49756792,
+            "hits": 15
+          }
+        }
+      },
+      {
+        "case": "wenyuan-10",
+        "status": "pass",
+        "attempts": 1,
+        "mismatches": 0,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/wenyuan-10-attempt-1",
+        "output_sha256": "8ce0afa00b4fce60701f7aec506421279424fe0c24e554cebc16e45868194e7b",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": null,
+          "detail_repairs": 0
+        },
+        "closure": "converged",
+        "peak_rss_bytes": 11516854272,
+        "memory_gate_pass": true,
+        "contended": false,
+        "performance": {
+          "raw_decode_count": 20,
+          "native_fusion_count": 6,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 11340,
+            "hits": 107
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 50100684,
+            "hits": 15
+          }
+        }
+      },
+      {
+        "case": "lanting-framed",
+        "status": "pass",
+        "attempts": 1,
+        "mismatches": 0,
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/lanting-framed-attempt-1/lanting",
+        "output_sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
+        "quality_gate": {
+          "verdict": "pass",
+          "roi_count": 8,
+          "criteria": {
+            "local_scale_median": "pass",
+            "local_scale_pixel_ratio": "pass",
+            "effective_pixel_count": "pass",
+            "mtf50_normalized": "not_applicable",
+            "gradient_energy_normalized": "pass",
+            "noise_sigma_ratio": "pass",
+            "roi_delta_e00": "pass",
+            "boundary_stroke_alignment": "not_applicable",
+            "owner_sharpness_coverage": "pass"
+          },
+          "non_pass": [
+            "mtf50_normalized:not_applicable",
+            "boundary_stroke_alignment:not_applicable"
+          ],
+          "unresolved_pixels": 0,
+          "detail_repairs": 101
+        },
+        "closure": "not_run",
+        "peak_rss_bytes": 10738925568,
+        "memory_gate_pass": true,
+        "contended": false,
+        "performance": {
+          "raw_decode_count": 0,
+          "native_fusion_count": 0,
+          "source_cache": {
+            "max_bytes": 536870912,
+            "peak_bytes": 12408,
+            "hits": 17
+          },
+          "native_cache": {
+            "max_bytes": 1073741824,
+            "peak_bytes": 0,
+            "hits": 0
+          }
+        }
+      }
+    ],
+    "exclusive_retries": 0
+  },
+  "r2_reproducibility": {
+    "same_frozen_binary_sha256": "de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522",
+    "initial_run": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r2/lanting",
+    "independent_repeat": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-medium/lanting-framed-attempt-1/lanting",
+    "same_tiff": true,
+    "same_paper_audit": true,
+    "output_sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
+    "strict": {
+      "pass": true,
+      "failures": [],
+      "status": "quality_and_regression_pass",
+      "qualityPass": true,
+      "nativeEvidencePass": true,
+      "regressionOnly": false,
+      "contractSha": "63b6c62a165063fb42e8b178de1823da58c0a074e78c4e05452178b5dfdb7667",
+      "reportSha": "03fa61c4fd6e596e1655de6b4b642719e6ff2d2b5d252fa14980effe38d0f7f9",
+      "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+    },
+    "regression_only": {
+      "pass": true,
+      "failures": [],
+      "status": "quality_and_regression_pass",
+      "qualityPass": true,
+      "nativeEvidencePass": true,
+      "regressionOnly": true,
+      "contractSha": "63b6c62a165063fb42e8b178de1823da58c0a074e78c4e05452178b5dfdb7667",
+      "reportSha": "03fa61c4fd6e596e1655de6b4b642719e6ff2d2b5d252fa14980effe38d0f7f9",
+      "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+    },
+    "input_and_native_source_binding_checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "memory_gate_pass": true,
+      "runner_exit_zero": true,
+      "native_child_exit_zero": true,
+      "runner_summary_present": true,
+      "runner_failures_empty": true,
+      "quality_gate_pass": true,
+      "output_contract": true,
+      "report_source_digests": true,
+      "lanting_guard": true
+    }
+  },
+  "r2_native_peak_rss_max_bytes": 11516854272,
+  "all_task6_observed_native_peak_rss_max_bytes": 12517588992,
+  "source_manifest_verification": {
+    "frozen_binary_verified": true,
+    "source_manifest_entries": 719,
+    "current_native_source_matches_frozen": true,
+    "changed_native_files_from_v1": [
+      "src-tauri/src/panorama_utils/mosaic/owner_overlap_gain.rs"
+    ],
+    "ignored_runtime_sha256": "2b885992d3d6fa4130d39ec84a80d7504ff52750027c547bb22c86165f19406a"
+  },
+  "source_overlap_comparison": {
+    "raw_overlap_cells_equal": true,
+    "pair_cells": 13399,
+    "canonical_json_cells_sha256": "c2f0049843eb5b4bbd763065494430bfb4dcd88178e3d49c370b55ecf946d200",
+    "r1_refinement": {
+      "accepted": true,
+      "baseline_abs_log_residual_mean_median_p95": [
+        0.015208465402088395,
+        0.009368199890676769,
+        0.04987124885092545
+      ],
+      "candidate_abs_log_residual_mean_median_p95": [
+        0.01391654614892706,
+        0.008146334081868987,
+        0.04882097397827215
+      ],
+      "fallback": "original_same_content_overlap_field",
+      "fit_pair_cells": 8085,
+      "heldout_patches": 90948
+    },
+    "r2_refinement": {
+      "accepted": true,
+      "baseline_abs_log_residual_mean_median_p95": [
+        0.015208465402088395,
+        0.009368199890676769,
+        0.04987124885092545
+      ],
+      "candidate_abs_log_residual_mean_median_p95": [
+        0.013669801401096086,
+        0.008013448745215528,
+        0.047601884830106064
+      ],
+      "fallback": "original_same_content_overlap_field",
+      "fit_pair_cells": 8085,
+      "fit_patches": 91165,
+      "heldout_patches": 90948,
+      "solver": "bounded_coordinate_descent_on_rendered_gain_basis"
+    }
+  },
+  "post_compat_node_tests": {
+    "passed": 19,
+    "failed": 0,
+    "guard_tests": 9,
+    "runner_tests": 10,
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/post-compat-node.log"
+  },
+  "integration": {
+    "status": "ready_for_local_v1_integration",
+    "push_requested": false,
+    "D4": false,
+    "D5": false
   }
 }

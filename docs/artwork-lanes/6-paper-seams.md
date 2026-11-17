@@ -1,7 +1,7 @@
 # 任务6：兰亭纸面接缝
 
 - 起点：v1 `53348b36`；工作区`.worktrees/task-6`，分支`lane/task-6/paper-seams`；同一执行者与L0，不启动并行agent。
-- 状态：r2受影响素材机器目标、快速层及本素材v4严格保护通过；中等层待跑，用户复看待确认，不计D4。
+- 状态：实现、受影响素材、快速层及中等层全部通过，L0接受该任务范围并本地集成；用户复看待确认，仅D3，不计D4/D5。
 - 目标：兰亭45张、显式取景、scale=1；纸面跨owner阶跃P95≤3，>6处数不超过同工具基线，QG pass/8ROI；输入/参考/owner/coverage/canvas不退化，RSS≤24GiB；视觉变化进入复看队列。
 - 保护：原始TIFF SHA `22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac`；原始合同与其摘要保存在starting-state.json，不覆盖主工作区基线。
 - 修改区域：流式mosaic的owner_overlap_gain.rs（同位重叠残差联合校正）、必要的独立验证/诊断；不修改共享QualityGate阈值、全局开关、源图、其他素材基线。未改全局热点stitch_images.rs/report_schema。
@@ -62,3 +62,12 @@ r1独占复跑已完成：TIFF与首轮相同（`731073bd…`）；QG pass/8ROI�
 9张冷跑已0项不符：TIFF仍v28 `718a903d…`、RAW18/fusion6、默认512MiB/1GiB预算、QG和RSS门均通过。热跑及后三例继续。
 
 发现新guard CLI对旧合同也无条件读取新缩略文件，会使旧合法目录缺图时被拒绝。新增合成CLI plumbing fixture实际复现（`legacy-cli-before-fix.log` exit1），然后改为仅在合同声明referencePreviewSha时读取；不改变v4分支的严格判定，不改Rust或任何运行预期。19项Node测试（guard9/runner10）通过，真实r2的v4严格保护再次通过（`r2-v4-strict-compat.json`）。这不重跑或伪造原生图像检查。
+
+### 集成验收（2026-11-18）
+
+- `git rebase v1`确认工作分支基于最新v1，无需改动；`matrix.py --tier medium --binary task-6-paper-r2 --lane task-6 --label r2`：**5/5通过，均首轮0项不符，无独占重试**。
+- 9张冷/热均TIFF=v28、RAW18/fusion6；阆苑10、文苑10均闭环converged、QG pass且TIFF保持原冻结值；所有素材输入/参考/来源/二进制/缓存/内存门通过。中等层最大RSS11,516,854,272B（10.726GiB）。
+- 兰亭第二次完整45张与首次r2同一二进制、相同TIFF SHA `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02`，纸面审计全字段相同：P95=3、max=6、>6=0；v4 strict与regression-only均pass；owner/coverage/input/canvas保持。重复运行目录`matrix-r2-medium/lanting-framed-attempt-1/lanting`，不改写首次旧v3拒绝。
+- 最新Node19项全过；冻结原生719项构建输入与最终工作树完全一致，原生仅改owner_overlap_gain.rs；运行时SHA保持。r1/r2的原始13399对格样本逐项相同，改善不是采样漂移。
+- L0结论：任务6规定的实现/机器验证/视觉入队条件已满足；本地合入v1后以同一已验证可执行文件发布`task-6-paper-verified`冻结label（保留72af6ea0原构建提交，另记冻结提交，不伪称重建）。原始v3、r1失败及首次r2像素变化拒绝均保留。未请求push、不打包桌面应用。
+- 复看包R20261118-1已实际提交，待看1/3；agent已看整图及6对原生裁片，但用户尚未确认，所以仅D3，不记D4/D5。第1批下一项为任务7离线置换检验；其他全量素材及未取景路径不从本次外推。
